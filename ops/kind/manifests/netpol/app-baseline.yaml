@@ -1,0 +1,122 @@
+# Базовые политики прикладного неймспейса. Файл не содержит namespace и применяется
+# к каждому неймспейсу с label nomnom.dev/tier=app (см. scripts/policies.sh).
+#
+# Бизнес-API: ingress только от Envoy Proxy internal gateway; прямой ingress от других
+# приложений и egress к чужим backend'ам запрещены default deny.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# DNS — кластерный CoreDNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Синхронные вызовы бизнес-API других приложений — только через internal gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-internal-gateway
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: internal
+              gateway.envoyproxy.io/owning-gateway-namespace: nomnom-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Бизнес-API принимает трафик только от Envoy Proxy internal gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-business-api-from-internal-gateway
+spec:
+  podSelector:
+    matchLabels:
+      nomnom.dev/business-api: "true"
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: internal
+              gateway.envoyproxy.io/owning-gateway-namespace: nomnom-gateway
+      ports:
+        - protocol: TCP
+          port: grpc
+---
+# Технические подключения: отправка telemetry в Alloy (OTLP gRPC/HTTP, Pyroscope).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-telemetry-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+        - protocol: TCP
+          port: 4040
+---
+# Технические подключения: scrape Prometheus-compatible endpoint с именем порта metrics.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics-scrape-from-alloy
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy
+      ports:
+        - protocol: TCP
+          port: metrics

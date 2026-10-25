@@ -1,0 +1,110 @@
+# Internal gateway: Gateway API — декларативные ресурсы, Envoy Gateway — controller,
+# Envoy Proxy — data plane. Proxy pods и Service internal-gateway создаются controller
+# в envoy-gateway-system.
+#
+# Реестр маршрутов — GRPCRoute в nomnom-gateway: единственное место, где логический gRPC API
+# сопоставляется с Kubernetes Service. Порядок публикации RPC описан в ops/kind/README.md.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: internal-gateway
+  namespace: nomnom-gateway
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        # Стабильное имя для INTERNAL_GATEWAY_ADDR; gateway доступен только внутри кластера.
+        name: internal-gateway
+        type: ClusterIP
+      envoyDeployment:
+        # Одна реплика в тестовом окружении; production-окружение задаёт несколько реплик
+        # на разных узлах.
+        replicas: 1
+        pod:
+          labels:
+            nomnom.dev/component: internal-gateway
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: nomnom-internal
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: internal-gateway
+    namespace: nomnom-gateway
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: internal
+  namespace: nomnom-gateway
+spec:
+  gatewayClassName: nomnom-internal
+  listeners:
+    # gRPC поверх HTTP/2 cleartext внутри кластера.
+    - name: grpc
+      protocol: HTTP
+      port: 8080
+      allowedRoutes:
+        # Маршруты централизованы в nomnom-gateway; backend-неймспейсы выдают ReferenceGrant.
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: GRPCRoute
+---
+# Транспортные политики по умолчанию для всех маршрутов gateway.
+# Встроенный request timeout Envoy Gateway (15s) обрезал бы длинные gRPC deadlines,
+# поэтому задан явный верхний предел; фактический deadline определяет grpc-timeout клиента.
+# Retries по умолчанию не включены.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: internal-gateway-defaults
+  namespace: nomnom-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: internal
+  timeout:
+    http:
+      requestTimeout: 300s
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: orders-v1
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.orders.v1.OrdersService
+      backendRefs:
+        - name: orders
+          namespace: nomnom-orders
+          port: 8081
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-internal-gateway
+  namespace: nomnom-orders
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      namespace: nomnom-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: orders

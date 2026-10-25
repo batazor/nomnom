@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# Проверки схемы «синхронные вызовы бизнес-API только через internal gateway».
+# Фаза A выполняется без NetworkPolicy, фаза B — с ними; по завершении политики остаются.
+# Проверки, которым нужны бизнес-RPC, инфраструктура или BFF, выводятся как BLOCKED.
+source "$(dirname "$0")/lib.sh"
+
+require_command kubectl jq
+assert_test_context
+
+# Прямые вызовы реальных gRPC-методов backend'ов в обход gateway (h2c, бизнес-порт grpc).
+RESTAURANTS="http://restaurants.nomnom-restaurants.svc.cluster.local:8082/nomnom.restaurants.v1.RestaurantsService/GetRestaurant"
+ORDERS="http://orders.nomnom-orders.svc.cluster.local:8081/nomnom.orders.v1.OrdersService/ListCustomerOrders"
+GATEWAY="http://${INTERNAL_GATEWAY_ADDR}"
+mkdir -p "${ARTIFACTS_DIR}"
+REPORT="${ARTIFACTS_DIR}/verify-report.txt"
+: >"${REPORT}"
+failures=0
+
+pass() { printf 'PASS     %s\n' "$*" | tee -a "${REPORT}" >&2; }
+fail() {
+  printf 'FAIL     %s\n' "$*" | tee -a "${REPORT}" >&2
+  failures=$((failures + 1))
+}
+blocked() { printf 'BLOCKED  %s\n' "$*" | tee -a "${REPORT}" >&2; }
+section() { printf '\n== %s\n' "$*" | tee -a "${REPORT}" >&2; }
+
+# expect <description> <expected> <actual>
+expect() {
+  if [[ "$3" == "$2" ]]; then
+    pass "$1"
+  else
+    fail "$1 (expected '$2', got '$3')"
+  fi
+}
+
+# http <namespace> <url> → "<curl exit code> <HTTP status>": gRPC-вызов с пустым protobuf
+# request по h2c, как у gRPC-клиента. HTTP 200 означает, что ответил backend; grpc-status
+# приходит в trailers и здесь не проверяется.
+# Коды curl: 0 — ответ получен, 6 — DNS, 7 — connection refused, 28 — timeout (silent drop).
+http() {
+  local namespace="$1" url="$2" status rc=0
+  status="$(k -n "${namespace}" exec deploy/net-probe -- sh -c \
+    "printf '\\000\\000\\000\\000\\000' | curl -sS -o /dev/null -w '%{http_code}' \
+      --connect-timeout 3 --max-time 5 --http2-prior-knowledge -X POST \
+      -H 'content-type: application/grpc' -H 'te: trailers' --data-binary @- '${url}'" 2>/dev/null)" || rc=$?
+  printf '%s %s\n' "${rc}" "${status:-000}"
+}
+
+# Вызов неизвестного gRPC-метода через gateway: HTTP/2 без TLS, как у gRPC-клиента.
+# Envoy отвечает на gRPC-запрос локальным ответом в gRPC-формате: HTTP 200 и grpc-status
+# в заголовках (12 — UNIMPLEMENTED). Результат: "<curl exit code> <HTTP status> <grpc-status>".
+grpc_unknown() {
+  local result rc=0
+  result="$(k -n "$1" exec deploy/net-probe -- \
+    curl -sS -o /dev/null -w '%{http_code} %header{grpc-status}' --connect-timeout 3 --max-time 5 \
+    --http2-prior-knowledge -X POST -H 'content-type: application/grpc' -H 'te: trailers' --data-binary '' \
+    "${GATEWAY}/nomnom.unknown.v1.UnknownService/Call" 2>/dev/null)" || rc=$?
+  # shellcheck disable=SC2086 # нормализация пробелов: при timeout grpc-status пуст
+  printf '%s %s\n' "${rc}" "$(echo ${result:-000})"
+}
+
+# Вызов существующего Orders RPC с пустым protobuf request. До подключения
+# production SubjectResolver backend ожидаемо возвращает UNAUTHENTICATED (16);
+# этот ответ доказывает, что GRPCRoute дошёл до реального gRPC server.
+grpc_orders() {
+  local result rc=0
+  result="$(k -n "$1" exec deploy/net-probe -- sh -c \
+    "printf '\\000\\000\\000\\000\\000' | curl -sS -o /dev/null -w '%{http_code} %header{grpc-status}' \
+      --connect-timeout 3 --max-time 5 --http2-prior-knowledge -X POST \
+      -H 'content-type: application/grpc' -H 'te: trailers' --data-binary @- \
+      '${GATEWAY}/nomnom.orders.v1.OrdersService/ListCustomerOrders'" 2>/dev/null)" || rc=$?
+  # shellcheck disable=SC2086 # нормализация пробелов: при timeout grpc-status пуст
+  printf '%s %s\n' "${rc}" "$(echo ${result:-000})"
+}
+
+resolves() {
+  k -n "$1" exec deploy/net-probe -- nslookup "$2" >/dev/null 2>&1 && echo yes || echo no
+}
+
+hubble_drops() { # source pod, destination pod IP → число DROPPED flows за последние 5 минут
+  local source="$1" destination="$2" total=0 count pod
+  for pod in $(k -n kube-system get pods -l k8s-app=cilium -o name); do
+    count="$(k -n kube-system exec "${pod}" -c cilium-agent -- \
+      hubble observe --verdict DROPPED --since 5m --from-pod "${source}" --to-ip "${destination}" -o jsonpb 2>/dev/null |
+      jq -s 'length')"
+    total=$((total + ${count:-0}))
+  done
+  printf '%s\n' "${total}"
+}
+
+# --- Фаза A: без NetworkPolicy -----------------------------------------------------------
+section "A. Без NetworkPolicy прямые вызовы проходят"
+"${KIND_DIR}/scripts/policies.sh" delete >/dev/null
+sleep 3
+expect "A1 orders → restaurants напрямую" "0 200" "$(http nomnom-orders "${RESTAURANTS}")"
+expect "A2 outsider → restaurants напрямую" "0 200" "$(http nomnom-outsider "${RESTAURANTS}")"
+expect "A3 orders → gateway" "0 200 12" "$(grpc_unknown nomnom-orders)"
+
+# --- Фаза B: с NetworkPolicy -------------------------------------------------------------
+restarts_before="$(k get pods -A -o json |
+  jq -c '[.items[] | {pod: (.metadata.namespace + "/" + .metadata.name), restarts: ([.status.containerStatuses[]?.restartCount] | add)}]')"
+policy_applied_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+"${KIND_DIR}/scripts/policies.sh" apply >/dev/null
+log "waiting for policy enforcement"
+deadline=$((SECONDS + 60))
+until [[ "$(http nomnom-orders "${RESTAURANTS}")" == "28 "* ]] || ((SECONDS >= deadline)); do
+  sleep 2
+done
+
+section "1. Вызов бизнес-API через gateway"
+expect "1.1 Orders RPC доходит до backend и требует identity" "0 200 16" \
+  "$(grpc_orders nomnom-restaurants)"
+
+section "2. Прямой вызов блокируется политикой (A/B)"
+expect "2.1 условие: restaurants Available" True \
+  "$(k -n nomnom-restaurants get deployment restaurants -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')"
+expect "2.2 условие: имя restaurants резолвится из orders" yes \
+  "$(resolves nomnom-orders restaurants.nomnom-restaurants.svc.cluster.local)"
+expect "2.3 условие: gateway доступен из orders в этом прогоне" "0 200 12" "$(grpc_unknown nomnom-orders)"
+expect "2.4 Orders RPC через gateway проходит под политиками" "0 200 16" \
+  "$(grpc_orders nomnom-restaurants)"
+expect "2.5 orders → restaurants напрямую: silent drop (timeout, не DNS и не refused)" "28 000" \
+  "$(http nomnom-orders "${RESTAURANTS}")"
+expect "2.6 restaurants → orders напрямую: silent drop" "28 000" "$(http nomnom-restaurants "${ORDERS}")"
+expect "2.7 outsider → restaurants: ingress backend закрыт" "28 000" "$(http nomnom-outsider "${RESTAURANTS}")"
+expect "2.8 outsider → gateway: ingress gateway только из прикладных неймспейсов" "28 000" \
+  "$(grpc_unknown nomnom-outsider)"
+restaurants_ip="$(k -n nomnom-restaurants get pod -l app.kubernetes.io/name=restaurants -o jsonpath='{.items[0].status.podIP}')"
+for namespace in nomnom-orders nomnom-outsider; do
+  source_pod="${namespace}/$(k -n "${namespace}" get pod -l app.kubernetes.io/name=net-probe -o jsonpath='{.items[0].metadata.name}')"
+  drops="$(hubble_drops "${source_pod}" "${restaurants_ip}")"
+  if ((drops > 0)); then
+    pass "2.9 Hubble: ${drops} DROPPED flows ${source_pod} → restaurants"
+  else
+    fail "2.9 Hubble: нет DROPPED flows ${source_pod} → restaurants"
+  fi
+done
+
+section "3. Неизвестный маршрут"
+expect "3.1 неизвестный gRPC-сервис через gateway: grpc-status 12 (UNIMPLEMENTED)" "0 200 12" \
+  "$(grpc_unknown nomnom-restaurants)"
+
+section "4–5. Trace context, deadlines, retries"
+blocked "4 traceparent caller → backend: нет telemetry capture и authenticated caller"
+blocked "5 deadlines и cancellation через gateway: нет long-running authenticated RPC"
+blocked "5a retries: в реестре нет методов, для которых они включены"
+
+section "6. Инфраструктурные подключения под политиками"
+expect "6.1 DNS из orders под политиками" yes "$(resolves nomnom-orders kubernetes.default.svc.cluster.local)"
+blocked "6.2 Kafka, Temporal, PostgreSQL, MongoDB, Alloy не развёрнуты: приложения их ещё не используют"
+
+section "6a. Kubelet-пробы и системные компоненты под политиками"
+sleep 20
+for namespace in "${APP_NAMESPACES[@]}" "${GATEWAY_SYSTEM_NAMESPACE}" kube-system; do
+  if [[ -n "$(k -n "${namespace}" get deployment -o name)" ]]; then
+    if k -n "${namespace}" wait deployment --all --for=condition=Available --timeout=60s >/dev/null; then
+      pass "6a.1 deployments ${namespace} Available"
+    else
+      fail "6a.1 deployments ${namespace} Available"
+    fi
+  fi
+done
+restarts_after="$(k get pods -A -o json |
+  jq -c '[.items[] | {pod: (.metadata.namespace + "/" + .metadata.name), restarts: ([.status.containerStatuses[]?.restartCount] | add)}]')"
+grown="$(jq -n --argjson before "${restarts_before}" --argjson after "${restarts_after}" \
+  '[$after[] | . as $p | select(($before | map(select(.pod == $p.pod)) | .[0].restarts // $p.restarts) != $p.restarts) | .pod]')"
+expect "6a.2 рестарты pod не выросли после применения политик" "[]" "$(jq -c . <<<"${grown}")"
+unhealthy="$(k get events -A --field-selector reason=Unhealthy -o json |
+  jq --arg since "${policy_applied_at}" '[.items[] | select((.lastTimestamp // .eventTime // "") > $since)] | length')"
+expect "6a.3 нет проваленных kubelet-проб после применения политик (Envoy Proxy, CoreDNS, Cilium)" 0 "${unhealthy}"
+# Runtime contract (ADR 17): startup/liveness/readiness на техническом порту metrics,
+# deployments при этом Available (6a.1) и без проваленных проб (6a.3).
+for app in orders restaurants delivery payments; do
+  probes="$(k -n "nomnom-${app}" get deployment "${app}" -o json |
+    jq -c '.spec.template.spec.containers[0] | [
+      .startupProbe.httpGet.path, .livenessProbe.httpGet.path, .readinessProbe.httpGet.path,
+      .startupProbe.httpGet.port, .livenessProbe.httpGet.port, .readinessProbe.httpGet.port]')"
+  expect "6a.4 probes ${app} на /health/* порта metrics" \
+    '["/health/startup","/health/live","/health/ready","metrics","metrics","metrics"]' "${probes}"
+done
+
+section "E2E через публичный API BFF"
+blocked "образ BFF не определён (ADR 10); NodePort 30080 → 127.0.0.1:${BFF_HOST_PORT} подготовлен"
+
+printf '\nfailures: %s, report: %s\n' "${failures}" "${REPORT}" >&2
+((failures == 0))

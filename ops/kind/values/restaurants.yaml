@@ -1,0 +1,13 @@
+# Values тестового kind-окружения для chart boundaries/restaurants/ops/helm (ADR 12).
+# image.repository и image.tag задаёт Skaffold (setValueTemplates) тегом локальной сборки.
+image:
+  # Образ загружен через kind load; Never гарантирует запуск именно собранной версии.
+  pullPolicy: Never
+
+podLabels:
+  # Pod предоставляет бизнес-API: ingress только от internal gateway (NetworkPolicy).
+  nomnom.dev/business-api: "true"
+
+env:
+  # Единственный адрес для синхронных вызовов бизнес-API других приложений.
+  INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080

@@ -1,0 +1,57 @@
+# Неймспейсы тестового окружения. Политики выбирают их по label nomnom.dev/tier.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-orders
+  labels:
+    nomnom.dev/tier: app
+    nomnom.dev/app: orders
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-restaurants
+  labels:
+    nomnom.dev/tier: app
+    nomnom.dev/app: restaurants
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-delivery
+  labels:
+    nomnom.dev/tier: app
+    nomnom.dev/app: delivery
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-payments
+  labels:
+    nomnom.dev/tier: app
+    nomnom.dev/app: payments
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-bff
+  labels:
+    nomnom.dev/tier: app
+    nomnom.dev/app: bff
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-gateway
+  labels:
+    nomnom.dev/tier: gateway
+---
+# Неймспейс вне прикладного контура: проверяет, что ingress-политики backend и gateway
+# не зависят от egress-ограничений вызывающей стороны.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-outsider
+  labels:
+    nomnom.dev/tier: outsider

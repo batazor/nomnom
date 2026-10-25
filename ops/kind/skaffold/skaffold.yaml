@@ -1,0 +1,147 @@
+# Skaffold-описание тестового kind-окружения. Запускается из этого каталога (пути
+# относительны рабочему каталогу Skaffold), kube-context передаётся флагом --kube-context.
+# Версии charts закреплены здесь: Skaffold не подставляет environment в remoteChart/version.
+# Остальные версии (kind, node image, Skaffold, Gateway API CRD, образы) — в ../versions.env.
+#
+#   platform — CNI (Cilium + Hubble) и controller internal gateway (Envoy Gateway + Gateway API CRD);
+#   apps     — образы bounded contexts, их Helm charts, internal gateway и pod проверок.
+apiVersion: skaffold/v4beta14
+kind: Config
+metadata:
+  name: platform
+deploy:
+  statusCheckDeadlineSeconds: 600
+  helm:
+    releases:
+      # Параметры для kind по официальной инструкции Cilium; kube-proxy сохраняется.
+      - name: cilium
+        remoteChart: oci://quay.io/cilium/charts/cilium
+        version: 1.20.4
+        namespace: kube-system
+        wait: true
+        setValues:
+          image.pullPolicy: IfNotPresent
+          ipam.mode: kubernetes
+          operator.replicas: 1
+          hubble.enabled: true
+          hubble.relay.enabled: false
+          hubble.ui.enabled: false
+      - name: envoy-gateway
+        remoteChart: oci://docker.io/envoyproxy/gateway-helm
+        version: v1.9.2
+        namespace: envoy-gateway-system
+        createNamespace: true
+        wait: true
+    hooks:
+      after:
+        # Установленные chart Envoy Gateway CRD должны совпадать с закреплённой версией Gateway API.
+        - host:
+            command:
+              - sh
+              - -c
+              - |
+                set -eu
+                bundle="$(kubectl --context "$SKAFFOLD_KUBE_CONTEXT" get crd grpcroutes.gateway.networking.k8s.io \
+                  -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}')"
+                test "$bundle" = "$GATEWAY_API_VERSION" || {
+                  echo "Gateway API CRD $bundle installed, versions.env expects $GATEWAY_API_VERSION" >&2
+                  exit 1
+                }
+                kubectl --context "$SKAFFOLD_KUBE_CONTEXT" label namespace envoy-gateway-system \
+                  nomnom.dev/tier=gateway-data-plane --overwrite
+---
+apiVersion: skaffold/v4beta14
+kind: Config
+metadata:
+  name: apps
+requires:
+  - configs: [platform]
+build:
+  local:
+    push: false
+    useBuildkit: true
+  # Локальная сборка без push: Skaffold тегирует образ его image ID, поэтому кластер
+  # запускает именно собранную версию; в kind образы загружаются без registry.
+  tagPolicy:
+    inputDigest: {}
+  artifacts:
+    - image: nomnom/orders
+      context: ../../../boundaries/orders
+      docker:
+        target: runtime
+    - image: nomnom/restaurants
+      context: ../../../boundaries/restaurants
+      docker:
+        target: runtime
+    - image: nomnom/delivery
+      context: ../../../boundaries/delivery
+      docker:
+        target: runtime
+    - image: nomnom/payments
+      context: ../../../boundaries/payments
+      docker:
+        target: runtime
+manifests:
+  rawYaml:
+    - ../manifests/base/namespaces.yaml
+    - ../manifests/gateway/gateway.yaml
+    - ../manifests/fixtures/net-probe.yaml
+deploy:
+  statusCheckDeadlineSeconds: 300
+  kubectl:
+    hooks:
+      after:
+        # Skaffold status check не знает conditions Gateway API: ждём их явно.
+        - host:
+            command:
+              - sh
+              - -c
+              - |
+                set -eu
+                k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
+                k wait gatewayclass/nomnom-internal --for=condition=Accepted --timeout=300s
+                k -n nomnom-gateway wait gateway/internal --for=condition=Accepted --timeout=300s
+                k -n nomnom-gateway wait gateway/internal --for=condition=Programmed --timeout=300s
+                k -n nomnom-gateway wait grpcroute/orders-v1 --timeout=300s \
+                  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True
+                k -n nomnom-gateway wait backendtrafficpolicy --all --timeout=300s \
+                  --for=jsonpath='{.status.ancestors[0].conditions[?(@.type=="Accepted")].status}'=True
+                k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
+                  -l gateway.envoyproxy.io/owning-gateway-name=internal
+                test "$(k -n envoy-gateway-system get service internal-gateway -o jsonpath='{.spec.type}')" = ClusterIP
+  # Bounded contexts ставятся собственными charts (ADR 12) с values тестового окружения.
+  # BFF chart не устанавливается: образ BFF ещё не определён (ADR 10).
+  helm:
+    releases:
+      - name: orders
+        chartPath: ../../../boundaries/orders/ops/helm
+        namespace: nomnom-orders
+        createNamespace: true
+        valuesFiles: [../values/orders.yaml]
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
+      - name: restaurants
+        chartPath: ../../../boundaries/restaurants/ops/helm
+        namespace: nomnom-restaurants
+        createNamespace: true
+        valuesFiles: [../values/restaurants.yaml]
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
+      - name: delivery
+        chartPath: ../../../boundaries/delivery/ops/helm
+        namespace: nomnom-delivery
+        createNamespace: true
+        valuesFiles: [../values/delivery.yaml]
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_delivery}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_delivery}}"
+      - name: payments
+        chartPath: ../../../boundaries/payments/ops/helm
+        namespace: nomnom-payments
+        createNamespace: true
+        valuesFiles: [../values/payments.yaml]
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_payments}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_payments}}"

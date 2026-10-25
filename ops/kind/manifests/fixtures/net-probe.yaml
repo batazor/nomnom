@@ -1,0 +1,104 @@
+# Тестовые pod для сетевых проверок (curl, nslookup). В неймспейсах приложений они получают
+# те же NetworkPolicy, что и приложения; outsider находится вне прикладного контура.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: net-probe
+  namespace: nomnom-orders
+  labels:
+    app.kubernetes.io/name: net-probe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: net-probe
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: net-probe
+    spec:
+      terminationGracePeriodSeconds: 1
+      automountServiceAccountToken: false
+      containers:
+        - name: net-probe
+          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          env:
+            - name: INTERNAL_GATEWAY_ADDR
+              value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: net-probe
+  namespace: nomnom-restaurants
+  labels:
+    app.kubernetes.io/name: net-probe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: net-probe
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: net-probe
+    spec:
+      terminationGracePeriodSeconds: 1
+      automountServiceAccountToken: false
+      containers:
+        - name: net-probe
+          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          env:
+            - name: INTERNAL_GATEWAY_ADDR
+              value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: net-probe
+  namespace: nomnom-outsider
+  labels:
+    app.kubernetes.io/name: net-probe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: net-probe
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: net-probe
+    spec:
+      terminationGracePeriodSeconds: 1
+      automountServiceAccountToken: false
+      containers:
+        - name: net-probe
+          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          env:
+            - name: INTERNAL_GATEWAY_ADDR
+              value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,19 @@
+# Тестовый кластер из одного узла: kind снимает taint control-plane, workloads запускаются на нём.
+# Имя и node image передаются из scripts/cluster.sh.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  # CNI устанавливается отдельно (Cilium), чтобы NetworkPolicy реально применялись.
+  disableDefaultCNI: true
+  ipFamily: ipv4
+  podSubnet: 10.244.0.0/16
+  serviceSubnet: 10.96.0.0/16
+  apiServerAddress: 127.0.0.1
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Публичный API BFF: NodePort 30080 → host 127.0.0.1:${BFF_HOST_PORT}.
+      - containerPort: 30080
+        hostPort: __BFF_HOST_PORT__
+        listenAddress: 127.0.0.1
+        protocol: TCP
