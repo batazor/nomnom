@@ -16,6 +16,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/slices/order/applications/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
@@ -93,9 +94,41 @@ func handle[E any, PE interface {
 		if err != nil {
 			return err
 		}
-		_, err = call(ctx, toCommand(envelope, PE(event)))
+		out, err := call(ctx, toCommand(envelope, PE(event)))
+		if err == nil && isDuplicate(out) {
+			messaging.MarkDuplicate(ctx)
+		}
 		return classify(err)
 	})
+}
+
+// isDuplicate reports an Inbox duplicate of the reflecting use cases, whose
+// Result has the shape of fulfillment.Reflection.
+func isDuplicate(out any) bool {
+	type reflection = struct {
+		Outcome          fulfillment.Outcome
+		WorkflowNotified bool
+	}
+	switch r := out.(type) {
+	case confirmorder.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case rejectorder.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case recordpreparationstarted.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case recordorderready.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case recordcourierassignment.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case recordpickup.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case recorddeliverycompletion.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case recorddeliveryfailure.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	default:
+		return false
+	}
 }
 
 // classify maps application and domain errors to the consumer error classes.

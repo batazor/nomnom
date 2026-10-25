@@ -32,8 +32,6 @@ import (
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
 )
 
-const poisonTopic = "orders.v1.consumer-poison"
-
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type consumer struct {
@@ -65,19 +63,21 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 	}
 
 	pubSub := gochannel.NewGoChannel(gochannel.Config{BlockPublishUntilSubscriberAck: true}, watermill.NopLogger{})
-	subscription, err := pubSub.Subscribe(context.Background(), poisonTopic)
-	require.NoError(t, err)
 	poison := make(chan *message.Message, 10)
-	go func() {
-		for msg := range subscription {
-			msg.Ack()
-			poison <- msg
-		}
-	}()
+	for _, stream := range []string{ordermessaging.RestaurantOrderEventsTopic, ordermessaging.DeliveryEventsTopic} {
+		subscription, err := pubSub.Subscribe(context.Background(), messaging.DeadLetterTopic(stream))
+		require.NoError(t, err)
+		go func() {
+			for msg := range subscription {
+				msg.Ack()
+				poison <- msg
+			}
+		}()
+	}
 
 	router, err := messaging.NewConsumerRouter(messaging.ConsumerConfig{
-		PoisonTopic: poisonTopic,
-		Retry:       messaging.RetryPolicy{MaxRetries: 1, InitialInterval: time.Millisecond, MaxInterval: time.Millisecond},
+		ConsumerGroup: "orders",
+		Retry:         messaging.RetryPolicy{MaxRetries: 1, InitialInterval: time.Millisecond, MaxInterval: time.Millisecond},
 	}, pubSub, pubSub, ordermessaging.Streams(handlers), nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -116,7 +116,7 @@ func (c consumer) poisoned(t *testing.T) *message.Message {
 	case msg := <-c.poison:
 		return msg
 	case <-time.After(5 * time.Second):
-		t.Fatal("no message in poison topic")
+		t.Fatal("no message in DLQ")
 		return nil
 	}
 }
@@ -125,7 +125,7 @@ func (c consumer) noPoison(t *testing.T) {
 	t.Helper()
 	select {
 	case msg := <-c.poison:
-		t.Fatalf("unexpected poison message %s: %s", msg.UUID, msg.Metadata.Get("reason_poisoned"))
+		t.Fatalf("unexpected poison message %s: %s", msg.UUID, msg.Metadata.Get(messaging.ReasonDeadLetteredMetadata))
 	case <-time.After(50 * time.Millisecond):
 	}
 }
@@ -193,7 +193,7 @@ func TestPreparationDelayedIsRelayedToWorkflow(t *testing.T) {
 	c.noPoison(t)
 }
 
-func TestUnknownOrderGoesToPoison(t *testing.T) {
+func TestUnknownOrderGoesToDLQ(t *testing.T) {
 	c := startConsumer(t)
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.RestaurantOrderReady{OrderId: "missing"})
@@ -202,16 +202,16 @@ func TestUnknownOrderGoesToPoison(t *testing.T) {
 	assert.Zero(t, c.store.InboxSize(), "rolled back transaction keeps no Inbox record")
 }
 
-func TestEventOfAnotherStreamGoesToPoison(t *testing.T) {
+func TestEventOfAnotherStreamGoesToDLQ(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &deliveryv1.DeliveryPickedUp{OrderId: "order-1"})
 
-	assert.Equal(t, ordermessaging.RestaurantOrderEventsTopic, c.poisoned(t).Metadata.Get("topic_poisoned"))
+	assert.Equal(t, ordermessaging.RestaurantOrderEventsTopic, c.poisoned(t).Metadata.Get(messaging.TopicDeadLetteredMetadata))
 	assert.Empty(t, c.workflow.Notifications())
 }
 
-func TestInvalidCommandGoesToPoison(t *testing.T) {
+func TestInvalidCommandGoesToDLQ(t *testing.T) {
 	c := startConsumer(t)
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.PreparationDelayed{OrderId: "order-1"})

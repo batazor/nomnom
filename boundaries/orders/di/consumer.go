@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -22,7 +23,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	orderdi "nomnom/orders/slices/order/di"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
@@ -32,7 +33,7 @@ import (
 // слайса order; Shutdown закрывает Router, дожидаясь начатых сообщений.
 type KafkaConsumer struct {
 	cfg   config.Config
-	store *memory.Store
+	store orderdi.Store
 
 	dial          func(ctx context.Context, options client.Options) (client.Client, error)
 	newSubscriber func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error)
@@ -46,9 +47,8 @@ type KafkaConsumer struct {
 	done       chan error
 }
 
-// NewKafkaConsumer собирает consumer поверх store процесса. До PostgreSQL store
-// in-memory и не разделяется с API и worker'ом.
-func NewKafkaConsumer(cfg config.Config, store *memory.Store) *KafkaConsumer {
+// NewKafkaConsumer собирает consumer поверх общего store orders (PostgreSQL).
+func NewKafkaConsumer(cfg config.Config, store orderdi.Store) *KafkaConsumer {
 	return &KafkaConsumer{
 		cfg:   cfg,
 		store: store,
@@ -57,15 +57,16 @@ func NewKafkaConsumer(cfg config.Config, store *memory.Store) *KafkaConsumer {
 			return messaging.NewSubscriber(cfg, logger)
 		},
 		newPoison: func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
-			return messaging.NewPoisonPublisher(cfg, logger)
+			return messaging.NewDeadLetterPublisher(cfg, logger)
 		},
-		logger: watermill.NewStdLogger(false, false),
+		// slog.Default writes through the standard log package, as the process does.
+		logger: watermill.NewSlogLogger(slog.Default()),
 		done:   make(chan error, 1),
 	}
 }
 
 // ConsumerHandlers собирает application handlers, которые читают Kafka.
-func ConsumerHandlers(store *memory.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
+func ConsumerHandlers(store orderdi.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
 	return ordermessaging.Handlers{
 		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
@@ -98,9 +99,9 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 	workflow := fulfillorder.NewClient(temporal, NewFulfillmentPolicy(c.cfg.Fulfillment))
 	streams := ordermessaging.Streams(ConsumerHandlers(c.store, workflow))
 	c.router, err = messaging.NewConsumerRouter(messaging.ConsumerConfig{
-		PoisonTopic:  c.cfg.Kafka.PoisonTopic,
-		Retry:        messaging.DefaultRetryPolicy,
-		CloseTimeout: c.cfg.Shutdown.DrainTimeout,
+		ConsumerGroup: c.cfg.Kafka.ConsumerGroup,
+		Retry:         messaging.DefaultRetryPolicy,
+		CloseTimeout:  c.cfg.Shutdown.DrainTimeout,
 	}, c.subscriber, c.poison, streams, c.logger)
 	if err != nil {
 		return errors.Join(err, c.closeResources())

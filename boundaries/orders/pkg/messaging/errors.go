@@ -12,6 +12,9 @@ const (
 	ClassPermanent Class = "permanent"
 	// ClassBusiness errors are acked: the outcome is logged, not retried.
 	ClassBusiness Class = "business"
+	// ClassDeserialization marks records the GuardedUnmarshaler could not decode;
+	// they go to the DLQ before any handler.
+	ClassDeserialization Class = "deserialization"
 )
 
 var (

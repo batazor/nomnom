@@ -78,7 +78,7 @@ func (w *flakyWorkflow) kindsOf(id order.ID) []fulfillment.Kind {
 
 // TestKafkaConsumerAgainstKafka: Kafka → Watermill → EventGroupProcessor → Inbox →
 // handler на реальном брокере: ack после commit, повторная доставка, порядок по
-// ключу aggregate_id в топике с несколькими partitions, retry и poison topic.
+// ключу aggregate_id в топике с несколькими partitions, retry, DLQ стрима и битый record, который не блокирует partition.
 func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	ctx := context.Background()
 	brokers := startKafka(t)
@@ -87,14 +87,17 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		Brokers:       brokers,
 		ClientID:      "orders-consumer-test",
 		ConsumerGroup: "orders",
-		PoisonTopic:   "orders.v1.consumer-poison",
+		InitialOffset: config.KafkaOffsetOldest,
 	}
-	createTopics(t, brokers, ordermessaging.RestaurantOrderEventsTopic, ordermessaging.DeliveryEventsTopic, cfg.PoisonTopic)
+	createTopics(t, brokers,
+		ordermessaging.RestaurantOrderEventsTopic, messaging.DeadLetterTopic(ordermessaging.RestaurantOrderEventsTopic),
+		ordermessaging.DeliveryEventsTopic, messaging.DeadLetterTopic(ordermessaging.DeliveryEventsTopic))
 
 	store := memory.NewStore()
 	for _, o := range []*order.Order{
 		ordertest.New(t, "order-accepted"),
 		ordertest.New(t, "order-retry"),
+		ordertest.New(t, "order-after-broken"),
 		ordertest.New(t, "order-b", ordertest.WithState(order.StateConfirmed)),
 		ordertest.New(t, "order-c", ordertest.WithState(order.StateConfirmed)),
 	} {
@@ -105,12 +108,12 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	logger := watermill.NopLogger{}
 	subscriber, err := messaging.NewSubscriber(cfg, logger)
 	require.NoError(t, err)
-	poisonPublisher, err := messaging.NewPoisonPublisher(cfg, logger)
+	poisonPublisher, err := messaging.NewDeadLetterPublisher(cfg, logger)
 	require.NoError(t, err)
 	router, err := messaging.NewConsumerRouter(messaging.ConsumerConfig{
-		PoisonTopic:  cfg.PoisonTopic,
-		Retry:        messaging.RetryPolicy{MaxRetries: 3, InitialInterval: 10 * time.Millisecond, MaxInterval: 50 * time.Millisecond},
-		CloseTimeout: 10 * time.Second,
+		ConsumerGroup: cfg.ConsumerGroup,
+		Retry:         messaging.RetryPolicy{MaxRetries: 3, InitialInterval: 10 * time.Millisecond, MaxInterval: 50 * time.Millisecond},
+		CloseTimeout:  10 * time.Second,
 	}, subscriber, poisonPublisher, ordermessaging.Streams(handlersOf(store, workflow)), logger)
 	require.NoError(t, err)
 	runCtx, cancel := context.WithCancel(ctx)
@@ -163,21 +166,35 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		eventually(t, func() bool { return len(workflow.kindsOf("order-retry")) == 1 })
 	})
 
-	t.Run("unknown event type goes to the poison topic", func(t *testing.T) {
+	t.Run("broken record goes to the DLQ without blocking its partition", func(t *testing.T) {
+		raw(t, brokers, ordermessaging.RestaurantOrderEventsTopic, "kitchen-broken", []byte{0xff, 0x00})
+		publish(ordermessaging.RestaurantOrderEventsTopic, "kitchen-broken", "event-after-broken", &restaurantsv1.RestaurantOrderReady{OrderId: "order-after-broken"})
+
+		select {
+		case msg := <-poison:
+			assert.NotEmpty(t, msg.Metadata.Get(messaging.DeserializationErrorMetadata))
+			assert.Equal(t, []byte{0xff, 0x00}, []byte(msg.Payload))
+		case <-time.After(30 * time.Second):
+			t.Fatal("broken record is not in the DLQ")
+		}
+		eventually(t, func() bool { return len(workflow.kindsOf("order-after-broken")) == 1 })
+	})
+
+	t.Run("unknown event type goes to the DLQ", func(t *testing.T) {
 		publish(ordermessaging.RestaurantOrderEventsTopic, "kitchen-x", "event-unknown", &deliveryv1.DeliveryPickedUp{OrderId: "order-accepted"})
 
 		select {
 		case msg := <-poison:
 			assert.Equal(t, "event-unknown", msg.UUID)
-			assert.Equal(t, ordermessaging.RestaurantOrderEventsTopic, msg.Metadata.Get("topic_poisoned"))
+			assert.Equal(t, ordermessaging.RestaurantOrderEventsTopic, msg.Metadata.Get(messaging.TopicDeadLetteredMetadata))
 		case <-time.After(30 * time.Second):
-			t.Fatal("no message in poison topic")
+			t.Fatal("no message in DLQ")
 		}
 	})
 
 	select {
 	case msg := <-poison:
-		t.Fatalf("unexpected poison message %s: %s", msg.UUID, msg.Metadata.Get("reason_poisoned"))
+		t.Fatalf("unexpected dead letter %s: %s", msg.UUID, msg.Metadata.Get(messaging.ReasonDeadLetteredMetadata))
 	default:
 	}
 }
@@ -275,13 +292,25 @@ func publisher(t *testing.T, brokers []string) func(topic, aggregateID, eventID 
 	}
 }
 
+// raw produces a record as a broken publisher would: no envelope headers.
+func raw(t *testing.T, brokers []string, topic, key string, value []byte) {
+	t.Helper()
+	cfg := sarama.NewConfig()
+	cfg.Producer.Return.Successes = true
+	producer, err := sarama.NewSyncProducer(brokers, cfg)
+	require.NoError(t, err)
+	defer func() { _ = producer.Close() }()
+	_, _, err = producer.SendMessage(&sarama.ProducerMessage{Topic: topic, Key: sarama.StringEncoder(key), Value: sarama.ByteEncoder(value)})
+	require.NoError(t, err)
+}
+
 func consumePoison(t *testing.T, cfg config.KafkaConfig) <-chan *message.Message {
 	t.Helper()
 	cfg.ConsumerGroup = "poison-reader"
 	subscriber, err := messaging.NewSubscriber(cfg, watermill.NopLogger{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subscriber.Close() })
-	messages, err := subscriber.Subscribe(context.Background(), cfg.PoisonTopic)
+	messages, err := subscriber.Subscribe(context.Background(), messaging.DeadLetterTopic(ordermessaging.RestaurantOrderEventsTopic))
 	require.NoError(t, err)
 
 	poison := make(chan *message.Message, 10)

@@ -1,12 +1,20 @@
 # Kafka consumer orders (ADR 28): отдельный release того же chart.
 #   helm upgrade --install orders-consumer ops/helm -f ops/helm/values-consumer.yaml
-# Brokers, consumer group и poison topic (KAFKA__BROKERS, KAFKA__CONSUMER_GROUP,
-# KAFKA__POISON_TOPIC), адрес и namespace Temporal (TEMPORAL__HOST_PORT, TEMPORAL__NAMESPACE)
+# Brokers (KAFKA__BROKERS), адрес и namespace Temporal (TEMPORAL__HOST_PORT, TEMPORAL__NAMESPACE)
 # задаются values окружения через env.
 component: consumer
 
 command:
   - /orders-consumer
+
+# service.name процесса — и Kafka ClientID (квоты и диагностика брокера), и OTel resource.
+# Группа orders читает стримы с начала: события по существующим Order должны быть отражены,
+# повтор истории идемпотентен через Inbox (ADR 28).
+env:
+  OTEL_SERVICE_NAME: orders-consumer
+  KAFKA__CLIENT_ID: orders-consumer
+  KAFKA__CONSUMER_GROUP: orders
+  KAFKA__INITIAL_OFFSET: oldest
 
 # Consumer не обслуживает бизнес-API: без Service и бизнес-порта, только metrics и probes.
 service:

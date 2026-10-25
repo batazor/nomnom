@@ -350,8 +350,8 @@ Duplicate не считается бизнес-ошибкой и не уходи
 
 | Класс | Источник | Действие |
 | --- | --- | --- |
-| Transient (DB, network) | infrastructure / application | nack → retry с backoff и лимитом |
-| Deserialization, unknown `event_type`, permanent | infrastructure | poison topic (DLQ) + ack |
+| Transient (DB, network) | infrastructure / application | retry с backoff и лимитом, затем nack — partition ждёт повторной доставки |
+| Deserialization, unknown `event_type`, permanent | infrastructure | `<stream>.dlq` + ack |
 | Business error | domain / application | ack; результат — outbox-событие или лог, не retry |
 | Duplicate (Inbox) | application | ack, no-op |
 
@@ -488,7 +488,7 @@ Consumer и Temporal Activity авторизуются как собственн
 
 Для Outbox publisher labels — `event_type` и boundary. Head-of-line blocking и рост возраста самой старой неопубликованной записи сопровождаются alert'ами. Publisher логирует `event_id`, `event_type` и результат публикации.
 
-Watermill-consumers добавляют consumer lag и poison count; trace context восстанавливается из headers OpenTelemetry middleware ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#observability)).
+Watermill-consumers публикуют `nomnom.messaging.*` и `nomnom.inbox.duplicates` ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#observability)), consumer lag — на стороне брокера; trace context восстанавливается из headers OpenTelemetry middleware ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#observability)).
 
 Допустимые metric labels — низкокардинальные: `consumer`, `event_type`, boundary, результат обработки и класс ошибки. `event_id` и `aggregate_id` не используются как metric labels. Счётчики бизнес-результатов меняются только при фактическом применении события, а не при duplicate, по [общим правилам метрик](observability.md#метрики).
 

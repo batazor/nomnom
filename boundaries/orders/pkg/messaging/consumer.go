@@ -20,7 +20,17 @@ type Stream struct {
 	Handlers []cqrs.GroupEventHandler
 }
 
-// RetryPolicy bounds the redelivery of transient failures.
+// DeadLetterTopic is the DLQ of a stream topic.
+func DeadLetterTopic(topic string) string { return topic + ".dlq" }
+
+// Dead-letter metadata, compatible with the Watermill PoisonQueue middleware.
+const (
+	ReasonDeadLetteredMetadata = "reason_poisoned"
+	TopicDeadLetteredMetadata  = "topic_poisoned"
+	GroupDeadLetteredMetadata  = "consumer_group_poisoned"
+)
+
+// RetryPolicy bounds the in-process redelivery of transient failures.
 type RetryPolicy struct {
 	MaxRetries      int
 	InitialInterval time.Duration
@@ -34,30 +44,36 @@ var DefaultRetryPolicy = RetryPolicy{
 }
 
 type ConsumerConfig struct {
-	PoisonTopic  string
-	Retry        RetryPolicy
-	CloseTimeout time.Duration
+	// ConsumerGroup is recorded on dead letters: several contexts may consume
+	// one stream and share its DLQ.
+	ConsumerGroup string
+	Retry         RetryPolicy
+	CloseTimeout  time.Duration
 }
 
 // NewConsumerRouter builds the Watermill router of the consumer process: one
-// EventGroupProcessor handler group per stream and the error policy of ADR 28:
+// EventGroupProcessor handler group per stream and the middleware chain of
+// ADR 28, outermost first:
 //
-//	transient         → retry with backoff; exhausted → poison topic + ack
-//	permanent/unknown → poison topic + ack
-//	business          → ack, logged
-//	nil (incl. Inbox duplicate) → ack
+//	Recoverer → OpenTelemetry/metrics → deserialization guard → Retry → dead letter → unknown event_type → handler
+//
+//	deserialization error, permanent, unknown → <stream>.dlq + ack
+//	transient → Retry with backoff; exhausted → nack, the partition waits and Kafka redelivers
+//	business → ack, logged
+//	nil, including an Inbox duplicate → ack
 func NewConsumerRouter(
 	cfg ConsumerConfig,
 	subscriber message.Subscriber,
-	poison message.Publisher,
+	deadLetters message.Publisher,
 	streams []Stream,
 	logger watermill.LoggerAdapter,
 ) (*message.Router, error) {
-	if cfg.PoisonTopic == "" {
-		return nil, fmt.Errorf("poison topic must not be empty")
-	}
 	if logger == nil {
 		logger = watermill.NopLogger{}
+	}
+	tel, err := newTelemetry()
+	if err != nil {
+		return nil, fmt.Errorf("create consumer telemetry: %w", err)
 	}
 
 	router, err := message.NewRouter(message.RouterConfig{CloseTimeout: cfg.CloseTimeout}, logger)
@@ -65,10 +81,7 @@ func NewConsumerRouter(
 		return nil, fmt.Errorf("create router: %w", err)
 	}
 
-	poisonQueue, err := middleware.PoisonQueue(poison, cfg.PoisonTopic)
-	if err != nil {
-		return nil, fmt.Errorf("create poison queue middleware: %w", err)
-	}
+	dlq := deadLetterQueue{publisher: deadLetters, group: cfg.ConsumerGroup, telemetry: tel, logger: logger}
 	retry := middleware.Retry{
 		MaxRetries:      cfg.Retry.MaxRetries,
 		InitialInterval: cfg.Retry.InitialInterval,
@@ -93,7 +106,15 @@ func NewConsumerRouter(
 	}
 
 	// The first middleware is the outermost one.
-	router.AddMiddleware(poisonQueue, retry.Middleware, rejectUnknownEvents(known))
+	router.AddMiddleware(
+		middleware.Recoverer,
+		tel.middleware,
+		dlq.guard,
+		retry.Middleware,
+		tel.countAttempts,
+		dlq.permanent,
+		rejectUnknownEvents(known),
+	)
 
 	processor, err := cqrs.NewEventGroupProcessorWithConfig(router, cqrs.EventGroupProcessorConfig{
 		GenerateSubscribeTopic: func(params cqrs.EventGroupProcessorGenerateSubscribeTopicParams) (string, error) {
@@ -109,6 +130,7 @@ func NewConsumerRouter(
 		OnHandle: func(params cqrs.EventGroupProcessorOnHandleParams) error {
 			err := params.Handler.Handle(params.Message.Context(), params.Event)
 			if Classify(err) == ClassBusiness {
+				observe(params.Message.Context(), ClassBusiness)
 				logger.Info("integration event refused by application, acked", watermill.LogFields{
 					"event_id":   params.Message.Metadata.Get(EventIDMetadata),
 					"event_type": params.EventName,
@@ -133,8 +155,61 @@ func NewConsumerRouter(
 	return router, nil
 }
 
+// deadLetterQueue publishes rejected messages to <stream>.dlq and acks them.
+type deadLetterQueue struct {
+	publisher message.Publisher
+	group     string
+	telemetry *telemetry
+	logger    watermill.LoggerAdapter
+}
+
+// guard sends records the GuardedUnmarshaler could not decode to the DLQ
+// before any handler sees them, so a broken record never blocks the partition.
+func (q deadLetterQueue) guard(next message.HandlerFunc) message.HandlerFunc {
+	return func(msg *message.Message) ([]*message.Message, error) {
+		if reason := msg.Metadata.Get(DeserializationErrorMetadata); reason != "" {
+			return nil, q.send(msg, ClassDeserialization, reason)
+		}
+		return next(msg)
+	}
+}
+
+// permanent sends messages whose handler failed permanently to the DLQ;
+// transient errors pass through to Retry.
+func (q deadLetterQueue) permanent(next message.HandlerFunc) message.HandlerFunc {
+	return func(msg *message.Message) ([]*message.Message, error) {
+		produced, err := next(msg)
+		if err == nil || Classify(err) != ClassPermanent {
+			return produced, err
+		}
+		return nil, q.send(msg, ClassPermanent, err.Error())
+	}
+}
+
+// send returns nil after the DLQ accepted the message, which acks it; a failed
+// publication is returned, so the message is redelivered instead of lost.
+func (q deadLetterQueue) send(msg *message.Message, class Class, detail string) error {
+	topic := message.SubscribeTopicFromCtx(msg.Context())
+	letter := msg.Copy()
+	letter.Metadata.Set(ReasonDeadLetteredMetadata, detail)
+	letter.Metadata.Set(TopicDeadLetteredMetadata, topic)
+	letter.Metadata.Set(GroupDeadLetteredMetadata, q.group)
+	if err := q.publisher.Publish(DeadLetterTopic(topic), letter); err != nil {
+		return fmt.Errorf("publish %s to %s: %w", msg.UUID, DeadLetterTopic(topic), err)
+	}
+	q.telemetry.poisoned(msg, class)
+	q.logger.Error("integration event sent to DLQ", nil, watermill.LogFields{
+		"message_uuid": msg.UUID,
+		"event_type":   msg.Metadata.Get(EventTypeMetadata),
+		"topic":        topic,
+		"error_class":  class,
+		"detail":       detail,
+	})
+	return nil
+}
+
 // rejectUnknownEvents turns an event_type that no handler of the stream
-// consumes into a permanent error, so it reaches the poison topic at once.
+// consumes into a permanent error, so it reaches the DLQ at once.
 func rejectUnknownEvents(known map[string]map[string]bool) message.HandlerMiddleware {
 	return func(next message.HandlerFunc) message.HandlerFunc {
 		return func(msg *message.Message) ([]*message.Message, error) {

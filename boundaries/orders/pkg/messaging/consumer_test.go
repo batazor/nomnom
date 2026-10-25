@@ -19,10 +19,7 @@ import (
 	"nomnom/orders/pkg/messaging"
 )
 
-const (
-	topic       = "source.v1.stream"
-	poisonTopic = "orders.v1.consumer-poison"
-)
+const topic = "source.v1.stream"
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
@@ -36,9 +33,9 @@ type harness struct {
 func start(t *testing.T, fn func(context.Context, *wrapperspb.StringValue) error) harness {
 	t.Helper()
 	pubSub := gochannel.NewGoChannel(gochannel.Config{BlockPublishUntilSubscriberAck: true}, watermill.NopLogger{})
-	subscription, err := pubSub.Subscribe(context.Background(), poisonTopic)
+	subscription, err := pubSub.Subscribe(context.Background(), messaging.DeadLetterTopic(topic))
 	require.NoError(t, err)
-	// Poison publication also blocks until ack, so poison is acked as it arrives.
+	// DLQ publication also blocks until ack, so dead letters are acked as they arrive.
 	poison := make(chan *message.Message, 10)
 	go func() {
 		for msg := range subscription {
@@ -48,8 +45,8 @@ func start(t *testing.T, fn func(context.Context, *wrapperspb.StringValue) error
 	}()
 
 	router, err := messaging.NewConsumerRouter(messaging.ConsumerConfig{
-		PoisonTopic: poisonTopic,
-		Retry:       messaging.RetryPolicy{MaxRetries: 2, InitialInterval: time.Millisecond, MaxInterval: time.Millisecond},
+		ConsumerGroup: "orders",
+		Retry:         messaging.RetryPolicy{MaxRetries: 2, InitialInterval: time.Millisecond, MaxInterval: time.Millisecond},
 	}, pubSub, pubSub, []messaging.Stream{{
 		Group:    "test",
 		Topic:    topic,
@@ -98,7 +95,7 @@ func (h harness) poisoned(t *testing.T) *message.Message {
 	case msg := <-h.poison:
 		return msg
 	case <-time.After(5 * time.Second):
-		t.Fatal("no message in poison topic")
+		t.Fatal("no message in DLQ")
 		return nil
 	}
 }
@@ -107,7 +104,7 @@ func (h harness) noPoison(t *testing.T) {
 	t.Helper()
 	select {
 	case msg := <-h.poison:
-		t.Fatalf("unexpected poison message %s: %s", msg.UUID, msg.Metadata.Get("reason_poisoned"))
+		t.Fatalf("unexpected dead letter %s: %s", msg.UUID, msg.Metadata.Get(messaging.ReasonDeadLetteredMetadata))
 	case <-time.After(50 * time.Millisecond):
 	}
 }
@@ -144,20 +141,60 @@ func TestTransientErrorIsRetried(t *testing.T) {
 	h.noPoison(t)
 }
 
-func TestExhaustedTransientErrorGoesToPoison(t *testing.T) {
+// An exhausted transient failure is nacked, not dead-lettered: the partition
+// waits and the message is redelivered until the dependency recovers.
+func TestExhaustedTransientErrorIsNackedForRedelivery(t *testing.T) {
 	var calls atomic.Int32
+	recovered := make(chan struct{})
 	h := start(t, func(context.Context, *wrapperspb.StringValue) error {
-		calls.Add(1)
-		return errors.New("database unavailable")
+		// MaxRetries 2: three attempts per delivery; the second delivery succeeds.
+		if calls.Add(1) <= 3 {
+			return errors.New("database unavailable")
+		}
+		close(recovered)
+		return nil
 	})
 
 	h.publish(t, event(t, "event-1", wrapperspb.String("x")))
 
-	assert.Equal(t, "event-1", h.poisoned(t).UUID)
-	assert.Equal(t, int32(3), calls.Load())
+	<-recovered
+	assert.Equal(t, int32(4), calls.Load())
+	h.noPoison(t)
 }
 
-func TestPermanentErrorGoesToPoisonWithoutRetry(t *testing.T) {
+func TestDeserializationErrorGoesToDLQBeforeHandler(t *testing.T) {
+	var calls atomic.Int32
+	h := start(t, func(context.Context, *wrapperspb.StringValue) error {
+		calls.Add(1)
+		return nil
+	})
+	msg := event(t, "event-1", wrapperspb.String("x"))
+	msg.Metadata.Set(messaging.DeserializationErrorMetadata, "envelope event_id is required")
+
+	h.publish(t, msg)
+
+	letter := h.poisoned(t)
+	assert.Equal(t, "envelope event_id is required", letter.Metadata.Get(messaging.ReasonDeadLetteredMetadata))
+	assert.Equal(t, "orders", letter.Metadata.Get(messaging.GroupDeadLetteredMetadata))
+	assert.Zero(t, calls.Load())
+}
+
+func TestPanicIsRecoveredAndRetried(t *testing.T) {
+	var calls atomic.Int32
+	h := start(t, func(context.Context, *wrapperspb.StringValue) error {
+		if calls.Add(1) == 1 {
+			panic("boom")
+		}
+		return nil
+	})
+
+	h.publish(t, event(t, "event-1", wrapperspb.String("x")))
+
+	assert.Equal(t, int32(2), calls.Load())
+	h.noPoison(t)
+}
+
+func TestPermanentErrorGoesToDLQWithoutRetry(t *testing.T) {
 	var calls atomic.Int32
 	h := start(t, func(context.Context, *wrapperspb.StringValue) error {
 		calls.Add(1)
@@ -168,7 +205,7 @@ func TestPermanentErrorGoesToPoisonWithoutRetry(t *testing.T) {
 
 	poisoned := h.poisoned(t)
 	assert.Equal(t, "event-1", poisoned.UUID)
-	assert.Equal(t, topic, poisoned.Metadata.Get("topic_poisoned"))
+	assert.Equal(t, topic, poisoned.Metadata.Get(messaging.TopicDeadLetteredMetadata))
 	assert.Equal(t, int32(1), calls.Load())
 }
 
@@ -185,7 +222,7 @@ func TestBusinessErrorIsAckedWithoutRetry(t *testing.T) {
 	h.noPoison(t)
 }
 
-func TestUnknownEventTypeGoesToPoison(t *testing.T) {
+func TestUnknownEventTypeGoesToDLQ(t *testing.T) {
 	var calls atomic.Int32
 	h := start(t, func(context.Context, *wrapperspb.StringValue) error {
 		calls.Add(1)
@@ -198,7 +235,7 @@ func TestUnknownEventTypeGoesToPoison(t *testing.T) {
 	assert.Zero(t, calls.Load())
 }
 
-func TestUndecodablePayloadGoesToPoison(t *testing.T) {
+func TestUndecodablePayloadGoesToDLQ(t *testing.T) {
 	h := start(t, func(context.Context, *wrapperspb.StringValue) error { return nil })
 	msg := event(t, "event-1", wrapperspb.String("x"))
 	msg.Payload = []byte{0xff, 0xff, 0xff}
@@ -208,7 +245,7 @@ func TestUndecodablePayloadGoesToPoison(t *testing.T) {
 	assert.Equal(t, "event-1", h.poisoned(t).UUID)
 }
 
-func TestMissingEnvelopeGoesToPoison(t *testing.T) {
+func TestMissingEnvelopeGoesToDLQ(t *testing.T) {
 	h := start(t, func(ctx context.Context, _ *wrapperspb.StringValue) error {
 		_, err := messaging.EnvelopeFromMessage(cqrs.OriginalMessageFromCtx(ctx))
 		return err

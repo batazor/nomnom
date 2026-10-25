@@ -14,13 +14,15 @@ import (
 )
 
 const (
-	EventIDMetadata      = "event_id"
+	EventIDMetadata = "event_id"
+	// PartitionKeyMetadata is the order_id of orders events. The Kafka key is
+	// aggregate_id (AggregateIDMetadata); for the Order aggregate both are equal.
 	PartitionKeyMetadata = "order_id"
 )
 
 // NewEventMessage builds the transport representation required by the Inbox
-// and ordering ADRs: UUID and event_id are identical, and order_id is the Kafka
-// partition key.
+// and ordering ADRs: UUID and event_id are identical, and order_id is the
+// aggregate_id that keys the Kafka partition.
 func NewEventMessage(eventID, orderID string, payload []byte) (*message.Message, error) {
 	if eventID == "" {
 		return nil, fmt.Errorf("event id must not be empty")
@@ -32,22 +34,26 @@ func NewEventMessage(eventID, orderID string, payload []byte) (*message.Message,
 	msg := message.NewMessage(eventID, payload)
 	msg.Metadata.Set(EventIDMetadata, eventID)
 	msg.Metadata.Set(PartitionKeyMetadata, orderID)
+	msg.Metadata.Set(AggregateIDMetadata, orderID)
 	return msg, nil
 }
 
+// NewPublisher publishes Integration Events keyed by aggregate_id, so events of
+// one aggregate stay in one partition. The Forwarder publishes the original
+// message after unwrapping its Outbox envelope, so the key is read from there.
 func NewPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (*watermillkafka.Publisher, error) {
 	return newPublisher(cfg, logger, func(_ string, msg *message.Message) (string, error) {
-		key := msg.Metadata.Get(PartitionKeyMetadata)
+		key := msg.Metadata.Get(AggregateIDMetadata)
 		if key == "" {
-			return "", fmt.Errorf("message %q has no %s metadata", msg.UUID, PartitionKeyMetadata)
+			return "", fmt.Errorf("message %q has no %s metadata", msg.UUID, AggregateIDMetadata)
 		}
 		return key, nil
 	})
 }
 
-// NewPoisonPublisher publishes messages rejected by the consumer to the poison
-// topic, keyed by the aggregate_id of the source stream when it is known.
-func NewPoisonPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (*watermillkafka.Publisher, error) {
+// NewDeadLetterPublisher publishes messages rejected by the consumer to the DLQ
+// of their stream, keyed by aggregate_id when the record carried one.
+func NewDeadLetterPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (*watermillkafka.Publisher, error) {
 	return newPublisher(cfg, logger, func(_ string, msg *message.Message) (string, error) {
 		if key := msg.Metadata.Get(AggregateIDMetadata); key != "" {
 			return key, nil
@@ -73,6 +79,8 @@ func newPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter, key wa
 		Brokers:               cfg.Brokers,
 		Marshaler:             marshaler,
 		OverwriteSaramaConfig: saramaConfig,
+		// otelsarama: producer spans and traceparent in Kafka headers.
+		Tracer: watermillkafka.NewOTELSaramaTracer(),
 	}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create kafka publisher: %w", err)
@@ -87,14 +95,20 @@ func NewSubscriber(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (*wat
 
 	saramaConfig := watermillkafka.DefaultSaramaSubscriberConfig()
 	saramaConfig.ClientID = cfg.ClientID
+	// Without committed offsets the group starts where KafkaConfig.InitialOffset
+	// says: oldest replays the whole stream through the Inbox.
 	saramaConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
+	if cfg.InitialOffset == config.KafkaOffsetNewest {
+		saramaConfig.Consumer.Offsets.Initial = sarama.OffsetNewest
+	}
 	saramaConfig.Consumer.Group.Rebalance.Strategy = sarama.NewBalanceStrategySticky()
 
 	subscriber, err := watermillkafka.NewSubscriber(watermillkafka.SubscriberConfig{
 		Brokers:               cfg.Brokers,
 		ConsumerGroup:         cfg.ConsumerGroup,
-		Unmarshaler:           watermillkafka.DefaultMarshaler{},
+		Unmarshaler:           GuardedUnmarshaler{},
 		OverwriteSaramaConfig: saramaConfig,
+		Tracer:                watermillkafka.NewOTELSaramaTracer(),
 	}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create kafka subscriber: %w", err)

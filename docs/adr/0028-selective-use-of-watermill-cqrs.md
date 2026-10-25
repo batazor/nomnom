@@ -47,6 +47,14 @@ Kafka → Watermill Subscriber → EventProcessor → Watermill handler (infrast
 
 Другие языки используют свои consumer-реализации по тем же правилам: dispatch по `event_type`, Inbox, ack после commit, классификация ошибок.
 
+### Kafka-клиент
+
+- Официальный `watermill-kafka/v3` поверх IBM/sarama. Community-реализации на franz-go (`dubyte/watermill-kafka-franz` и форки) без измеренной причины не используются; это open option.
+- `sarama.Config.ClientID` — `service.name` процесса (например, `orders-consumer`), а не дефолт `watermill`: по нему брокер применяет квоты и ведёт диагностику.
+- Дефолт Watermill `Consumer.Offsets.Initial = OffsetOldest`: новая consumer group читает стрим с начала. Для каждой группы это решается явно (`oldest` — replay истории, например для новой проекции; `newest` — только новые события) и документируется. Иначе первый деплой нового consumer'а переобработает всю историю через Inbox. Группа `orders` — `oldest`: события по уже существующим `Order` должны быть отражены, повтор идемпотентен.
+- Трассировка Kafka-слоя — `Tracer: kafka.NewOTELSaramaTracer()` в `PublisherConfig` и `SubscriberConfig` (otelsarama: spans и `traceparent` в headers). Metadata ↔ headers маппит `DefaultMarshaler`; header `_watermill_message_uuid` зарезервирован и в envelope не используется. Publishers на других языках его не ставят, поэтому UUID входящего сообщения — `event_id`.
+- Partitioning — `kafka.NewWithPartitioningMarshaler`, ключ — `aggregate_id` из metadata. Forwarder публикует исходное сообщение после unwrap своего envelope, поэтому ключ читается уже из него.
+
 ### Marshaler
 
 Используется custom `CommandEventMarshaler`:
@@ -70,12 +78,27 @@ Kafka → Watermill Subscriber → EventProcessor → Watermill handler (infrast
 
 | Класс | Источник | Действие handler'а |
 | --- | --- | --- |
-| Transient (DB, network) | infrastructure / application | nack → Retry middleware с backoff и лимитом |
-| Deserialization, unknown `event_type`, permanent | infrastructure | poison topic (DLQ) + ack |
+| Deserialization (битый record, невалидный envelope) | subscriber unmarshaler | `<stream>.dlq` + ack до любого handler |
+| Unknown `event_type`, permanent | infrastructure | `<stream>.dlq` + ack |
+| Transient (DB, network) | infrastructure / application | Retry middleware с backoff и лимитом; после исчерпания — nack: partition ждёт, Kafka доставляет повторно |
 | Business error | domain / application | ack; результат — через outbox-событие или лог, не retry |
 | Duplicate (Inbox) | application | ack, no-op |
 
-Watermill не превращает business errors в бесконечный transport retry. Процедура восстановления из DLQ определяется отдельно.
+Watermill не превращает business errors в бесконечный transport retry. Исчерпанный transient не уходит в DLQ: зависимость (БД, Temporal) временно недоступна, а не сообщение плохое; head-of-line blocking виден по `nomnom.messaging.retry.attempts` и consumer lag. DLQ — топик `<stream>.dlq` на каждый stream; в metadata — причина, исходный топик и consumer group, потому что один стрим могут читать несколько контекстов. Процедура восстановления из DLQ определяется отдельно.
+
+#### Десериализация
+
+Ошибка `Unmarshal` в sarama-subscriber'е — fail-fast: сообщение не ack'ается, offset не коммитится, partition стоит. Поэтому `Unmarshaler` никогда не возвращает ошибку: невалидный record становится сообщением с raw payload и metadata `deserialization_error=…`, которое deserialization guard направляет в `<stream>.dlq` и ack'ает. Это проверяется тестом: битый record не блокирует partition. У будущего franz-go клиента для этого есть `OnUnmarshalError`, у sarama-версии — нет.
+
+#### Порядок middleware
+
+Снаружи внутрь:
+
+```text
+Recoverer (panic → error) → OpenTelemetry/metrics → deserialization guard → Retry → dead letter (permanent → <stream>.dlq) → unknown event_type → handler
+```
+
+`CircuitBreaker` — опционально на handlers с внешними зависимостями вне UoW (SpiceDB, gateway); решение при реализации.
 
 ### Outbox — единственный путь публикации
 
@@ -99,7 +122,10 @@ Queries выполняются напрямую: `Query Handler → Read Reposit
 
 ### Observability
 
-OpenTelemetry middleware восстанавливает trace context из headers. Метрики: processing duration, failures по классу ошибки, retry/redelivery, consumer lag, duplicates (Inbox), poison count. `event_id` и `aggregate_id` в labels не используются ([ADR 9](0009-использовать-opentelemetry-и-grafana-observability-stack.md)).
+- OpenTelemetry middleware продолжает trace context из headers (W3C `traceparent`); spans Kafka-клиента — otelsarama.
+- Метрики (имена — инвентарь `ops/grafana/inventory`, секция messaging): `nomnom.messaging.process.duration` (s), `nomnom.messaging.message.age` (s, now − `occurred_at`), `nomnom.messaging.retry.attempts`, `nomnom.messaging.poison.messages`, `nomnom.inbox.duplicates`. Атрибуты — `handler_name`, `event_type`, `stream`; `error_class` — только при неуспехе. `event_id` и `aggregate_id` в labels не используются ([ADR 9](0009-использовать-opentelemetry-и-grafana-observability-stack.md)). Consumer lag измеряется на стороне брокера.
+- Логи Watermill — `watermill.NewSlogLogger`, в формате логов сервиса.
+- Forwarder — с Watermill 1.5.3 имя handler'а задаётся: `orders-outbox-forwarder`, чтобы `handler_name` в `handler_execution_time_seconds` отличал forwarder от consumer handlers.
 
 ### Тестирование
 

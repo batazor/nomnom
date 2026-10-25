@@ -26,10 +26,11 @@ Kafka → Subscriber → EventGroupProcessor → watermill_handler → mapper �
 
 | Ошибка | Класс | Действие |
 | --- | --- | --- |
-| `application.ErrInvalidInput`, `order.ErrOrderNotFound`, битый envelope/payload, неизвестный `event_type` | permanent | poison topic `kafka.poison_topic` + ack |
+| Битый record, невалидный envelope (`GuardedUnmarshaler`) | deserialization | `<stream>.dlq` + ack до handler |
+| `application.ErrInvalidInput`, `order.ErrOrderNotFound`, битый Protobuf payload, неизвестный `event_type` | permanent | `<stream>.dlq` + ack |
 | `order.InvalidTransition`, `order.GuardFailed` | business | ack, лог |
-| Прочие (store, Temporal) | transient | retry с backoff (`messaging.DefaultRetryPolicy`); после лимита — poison |
-| Duplicate по Inbox | — | ack, no-op (workflow уведомляется повторно с тем же `event_id`) |
+| Прочие (store, Temporal) | transient | retry с backoff (`messaging.DefaultRetryPolicy`), затем nack и повторная доставка |
+| Duplicate по Inbox | — | ack, no-op, `nomnom.inbox.duplicates` (workflow уведомляется повторно с тем же `event_id`) |
 
 ## Тесты
 
