@@ -8,7 +8,7 @@
 ### Requirement: Worker исполняет Order Fulfillment Workflow отдельным процессом
 **ID:** FR-422
 
-`orders` SHALL иметь отдельный entrypoint `cmd/orders-worker`, который регистрирует workflow и Activities `fulfillorder` и опрашивает task queue `orders` в namespace из конфигурации. Worker MUST следовать runtime contract `pkg/lifecycle`: ready только после начала poll, при SIGTERM — not ready, readiness delay и остановка poll с ожиданием начатых Activities в пределах drain timeout.
+`orders` SHALL иметь отдельный entrypoint `cmd/orders-worker`, который регистрирует workflow и Activities слайса `fulfillment` (`slices/fulfillment/infrastructure/temporal`) и опрашивает task queue `orders` в namespace из конфигурации. Worker MUST следовать runtime contract `pkg/lifecycle`: ready только после начала poll, при SIGTERM — not ready, readiness delay и остановка poll с ожиданием начатых Activities в пределах drain timeout.
 
 #### Scenario: Worker исполняет заказ end-to-end
 **ID:** AC-446

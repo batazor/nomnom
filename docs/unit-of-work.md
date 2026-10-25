@@ -421,14 +421,14 @@ Application-слой всех четырёх boundaries уже реализов�
 | `recordcourierrelease` | Да | Inbox + назначение курьера в `orders` + DELETE relationships SpiceDB до commit; `Order` и workflow не меняются |
 | `completeorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
 | `failorcancelorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
-| `fulfillorder` | Нет | Workflow; Activities вызывают handlers |
+| `fulfillment` (Temporal-адаптер) | Нет | Workflow; Activities вызывают handlers |
 | `getorder`, `listcustomerorders` | Нет | CQRS queries |
 
 ### `restaurants`
 
 | Slice | UoW | Состав транзакции |
 | --- | --- | --- |
-| `accept-order`, `reject-order`, `start-preparing-order`, `mark-order-ready` | Да | `Kitchen Order` + Outbox |
+| `accept-order`, `reject-order`, `start-preparation`, `mark-ready-for-pickup` | Да | `Restaurant Order` + Outbox |
 | `open-restaurant`, `close-restaurant`, `set-menu-item-availability` | Если публикуют бизнес-факт | Документ + Outbox |
 | `receive-order-request` | Если публикует событие или хранит idempotency key отдельно | `Kitchen Order` + [idempotency] + [Outbox] |
 | `register-restaurant`, `update-restaurant`, `create-menu`, `add-menu-item`, `update-menu-item`, `cancel-restaurant-order` | Нет по умолчанию | Single-document; UoW, только если document boundaries потребуют нескольких документов или Outbox |
