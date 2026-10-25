@@ -1,6 +1,7 @@
 // Package recordcourierassignment records Courier Assignment for the Delivery
-// of an Order and keeps the relationships order#courier and order#delivery of
-// the assigned courier in the same Inbox unit of work.
+// of an Order and keeps the relationship order#delivery in the same Inbox unit
+// of work. The courier sees the Order through delivery->act_as_courier, which
+// delivery owns; orders keeps the assignment as business data.
 package recordcourierassignment
 
 import (
@@ -35,11 +36,11 @@ type Result struct {
 	WorkflowNotified bool
 }
 
-// Relationships writes order#courier and order#delivery of next and deletes
-// those of displaced (the set parts) in one atomic request, returning the
-// revision of the write. Repeating the request is idempotent.
+// Relationships writes order#delivery of deliveryID and deletes that of
+// displacedDeliveryID (when set) in one atomic request, returning the revision
+// of the write. Repeating the request is idempotent.
 type Relationships interface {
-	AssignCourier(ctx context.Context, orderID order.ID, next, displaced order.CourierAssignment) (application.AuthorizationRevision, error)
+	LinkDelivery(ctx context.Context, orderID order.ID, deliveryID, displacedDeliveryID string) (application.AuthorizationRevision, error)
 }
 
 type Handler struct {
@@ -72,7 +73,8 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		OccurredAt: in.OccurredAt,
 	}
 	// The fact is recorded once; a later event of the same Order is a
-	// reassignment and only replaces the relationships.
+	// reassignment and only replaces the assignment and, for another
+	// Delivery, order#delivery.
 	reflection, err := h.reflector.ReflectWith(ctx, fact, func(current *order.Order) error {
 		_, err := current.RecordCourierAssignment(in.OccurredAt)
 		return err
@@ -84,8 +86,10 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 
 // assign runs before the Inbox commit: a failed relationship write rolls the
 // event back and redelivery repeats it. Whether the event supersedes the
-// stored assignment and what it displaces is decided by order.CourierAssignment;
-// the use case only writes and stores the result.
+// stored assignment and which Delivery it links or displaces is decided by
+// order.CourierAssignment; the use case only writes and stores the result. A
+// reassignment within the linked Delivery writes nothing to SpiceDB and keeps
+// the stored revision.
 func (h Handler) assign(ctx context.Context, in Input) error {
 	if in.DeliveryID == "" || in.CourierID == "" {
 		return nil
@@ -95,16 +99,15 @@ func (h Handler) assign(ctx context.Context, in Input) error {
 	if err != nil {
 		return fmt.Errorf("read courier assignment: %w", err)
 	}
-	var displaced order.CourierAssignment
-	if found {
-		if !next.Supersedes(stored) {
-			return nil
-		}
-		displaced = next.Displaced(stored)
+	if found && !next.Supersedes(stored) {
+		return nil
 	}
-	revision, err := h.relationships.AssignCourier(ctx, in.OrderID, next, displaced)
-	if err != nil {
-		return fmt.Errorf("write courier relationships: %w", err)
+	var revision application.AuthorizationRevision
+	if !found || !next.LinksDelivery(stored) {
+		revision, err = h.relationships.LinkDelivery(ctx, in.OrderID, next.DeliveryID, next.DisplacedDelivery(stored))
+		if err != nil {
+			return fmt.Errorf("write order#delivery: %w", err)
+		}
 	}
 	if err := h.assignments.RememberCourierAssignment(ctx, in.OrderID, next, string(revision)); err != nil {
 		return fmt.Errorf("remember courier assignment: %w", err)

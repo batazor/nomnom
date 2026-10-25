@@ -23,14 +23,20 @@ func TestCourierAssignmentSupersedesOnlyNotOlderVersions(t *testing.T) {
 	assert.False(t, stored.Supersedes(released), "a release keeps its version and orders older assignments")
 }
 
-func TestCourierAssignmentDisplacesOnlyDifferentParts(t *testing.T) {
+// AC-519: a reassignment within the same Delivery changes no relationship; a
+// change of Delivery displaces the previous one.
+func TestCourierAssignmentConcernsOnlyTheDeliveryRelation(t *testing.T) {
 	next := CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-2"}
 
-	assert.Equal(t, CourierAssignment{CourierID: "courier-1"}, next.Displaced(CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}))
-	assert.Equal(t, CourierAssignment{DeliveryID: "delivery-0", CourierID: "courier-1"}, next.Displaced(CourierAssignment{DeliveryID: "delivery-0", CourierID: "courier-1"}))
-	assert.Zero(t, next.Displaced(next), "the same assignment displaces nothing")
-	assert.Zero(t, next.Displaced(CourierAssignment{DeliveryID: "delivery-1"}), "a released assignment has no courier to displace")
-	assert.Zero(t, next.Displaced(CourierAssignment{}))
+	assert.True(t, next.LinksDelivery(CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}), "reassignment within the Delivery")
+	assert.True(t, next.LinksDelivery(next), "redelivery")
+	assert.False(t, next.LinksDelivery(CourierAssignment{DeliveryID: "delivery-1"}), "a release may precede the link")
+	assert.False(t, next.LinksDelivery(CourierAssignment{DeliveryID: "delivery-0", CourierID: "courier-1"}))
+	assert.False(t, next.LinksDelivery(CourierAssignment{}))
+
+	assert.Equal(t, "delivery-0", next.DisplacedDelivery(CourierAssignment{DeliveryID: "delivery-0", CourierID: "courier-1"}))
+	assert.Empty(t, next.DisplacedDelivery(CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}))
+	assert.Empty(t, next.DisplacedDelivery(CourierAssignment{}))
 }
 
 func TestCourierAssignmentReleaseKeepsItsTimeAndVersion(t *testing.T) {
@@ -69,8 +75,8 @@ func TestCourierAssignmentHoldsRelations(t *testing.T) {
 	cancel := CourierRelease{DeliveryID: "delivery-1", DeliveryCancelled: true}
 	unassign := CourierRelease{DeliveryID: "delivery-1", CourierID: "courier-1"}
 
-	assert.True(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}.HoldsRelationsOf(unassign))
-	assert.False(t, CourierAssignment{DeliveryID: "delivery-1"}.HoldsRelationsOf(unassign), "an already released courier")
+	assert.False(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}.HoldsRelationsOf(unassign), "delivery revokes the courier")
+	assert.True(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}.HoldsRelationsOf(cancel))
 	assert.True(t, CourierAssignment{DeliveryID: "delivery-1"}.HoldsRelationsOf(cancel), "the delivery relation of a cancelled Delivery")
 	assert.False(t, CourierAssignment{}.HoldsRelationsOf(cancel))
 }

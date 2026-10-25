@@ -1,8 +1,10 @@
-// Package recordcourierrelease removes the courier relationships of an Order
-// when delivery ends a Courier Assignment without a replacement
-// (CourierUnassignedFromDelivery) or cancels the Delivery (DeliveryCancelled).
-// The Order and the fulfillment workflow are not touched: neither fact is a
-// fulfillment fact of orders.
+// Package recordcourierrelease records the end of a Courier Assignment: an
+// unassignment without a replacement (CourierUnassignedFromDelivery) only
+// clears the courier of the stored assignment, because delivery revokes the
+// access of the courier (delivery#courier); a cancelled Delivery
+// (DeliveryCancelled) also deletes order#delivery. The Order and the
+// fulfillment workflow are not touched: neither fact is a fulfillment fact of
+// orders.
 package recordcourierrelease
 
 import (
@@ -52,11 +54,11 @@ type Result struct {
 	Outcome fulfillment.Outcome
 }
 
-// Relationships deletes order#courier of released (when it has a courier)
-// and, when withDelivery, order#delivery in one atomic request and returns
-// the revision of the write. Repeating the request is idempotent.
+// Relationships deletes order#delivery of deliveryID and returns the revision
+// of the write. Deleting an absent relationship is a no-op, so a repeat is
+// idempotent.
 type Relationships interface {
-	ReleaseCourier(ctx context.Context, orderID order.ID, released order.CourierAssignment, withDelivery bool) (application.AuthorizationRevision, error)
+	UnlinkDelivery(ctx context.Context, orderID order.ID, deliveryID string) (application.AuthorizationRevision, error)
 }
 
 type Handler struct {
@@ -115,8 +117,8 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 
 // release applies the event to the stored assignment; order.CourierAssignment
 // decides whether the event is stale (another Delivery or an older Delivery
-// version), which relationships it removes and what assignment is kept.
-// Without a stored assignment nothing is deleted. In every applied case the
+// version), whether it removes order#delivery (only a cancellation) and what
+// assignment is kept. Without a stored assignment nothing is deleted. In every applied case the
 // release is remembered with its version, so an older assignment handled
 // afterwards is skipped by Record Courier Assignment.
 func (h Handler) release(ctx context.Context, in Input) (fulfillment.Outcome, error) {
@@ -140,8 +142,8 @@ func (h Handler) release(ctx context.Context, in Input) (fulfillment.Outcome, er
 		}
 		outcome = OutcomeReleased
 		if stored.HoldsRelationsOf(release) {
-			if revision, err = h.relationships.ReleaseCourier(ctx, in.OrderID, stored, in.DeliveryCancelled); err != nil {
-				return "", fmt.Errorf("delete courier relationships: %w", err)
+			if revision, err = h.relationships.UnlinkDelivery(ctx, in.OrderID, stored.DeliveryID); err != nil {
+				return "", fmt.Errorf("delete order#delivery: %w", err)
 			}
 		}
 	}

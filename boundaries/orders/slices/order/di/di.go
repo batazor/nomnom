@@ -141,19 +141,19 @@ func NewAuthorizer(cfg config.SpiceDBConfig, revisions spicedb.RevisionReader) (
 	return spicedb.NewAuthorizer(client, revisions, cfg.Timeout), func() { _ = client.Close() }, nil
 }
 
-// CourierRelationships — writer order#courier и order#delivery процесса
-// orders-consumer: назначение (Record Courier Assignment) и снятие без замены
-// или отмена Delivery (Record Courier Release).
+// CourierRelationships — writer order#delivery процесса orders-consumer:
+// назначение (Record Courier Assignment) и отмена Delivery (Record Courier
+// Release). Доступ курьера к заказу отзывает delivery (delivery#courier).
 type CourierRelationships interface {
 	recordcourierassignment.Relationships
 	recordcourierrelease.Relationships
 }
 
-// NewCourierRelationships подключает consumer к SpiceDB: связи курьера пишутся
+// NewCourierRelationships подключает consumer к SpiceDB: order#delivery пишется
 // в Inbox unit of work до commit, поэтому без SPICEDB__ENDPOINT процесс не стартует.
 func NewCourierRelationships(cfg config.SpiceDBConfig) (CourierRelationships, func(), error) {
 	if strings.TrimSpace(cfg.Endpoint) == "" {
-		return nil, nil, fmt.Errorf("%s is required: orders-consumer writes courier relationships to SpiceDB", config.EnvSpiceDBEndpoint)
+		return nil, nil, fmt.Errorf("%s is required: orders-consumer writes order#delivery to SpiceDB", config.EnvSpiceDBEndpoint)
 	}
 	client, err := spicedb.Dial(cfg)
 	if err != nil {

@@ -30,18 +30,26 @@ func (a CourierAssignment) Supersedes(stored CourierAssignment) bool {
 	return stored.DeliveryVersion <= a.DeliveryVersion
 }
 
-// Displaced returns the parts of previous that the assignment replaces: its
-// courier and its delivery when they are set and differ. The same assignment
-// displaces nothing.
-func (a CourierAssignment) Displaced(previous CourierAssignment) CourierAssignment {
-	var displaced CourierAssignment
-	if previous.CourierID != "" && previous.CourierID != a.CourierID {
-		displaced.CourierID = previous.CourierID
-	}
+// The Order is linked to its Delivery by the order#delivery relationship; the
+// access of the courier follows delivery->act_as_courier, which delivery owns.
+// The assignment therefore concerns only the delivery relation.
+
+// LinksDelivery reports whether previous already links the Order to the
+// Delivery of the assignment: an active assignment of the same Delivery. A
+// reassignment within it changes no relationship. A released or remembered
+// ahead assignment may not have written the relation, so the assignment links
+// the Delivery again (idempotently).
+func (a CourierAssignment) LinksDelivery(previous CourierAssignment) bool {
+	return previous.CourierID != "" && previous.DeliveryID == a.DeliveryID
+}
+
+// DisplacedDelivery returns the Delivery of previous that the assignment
+// replaces, or "" when previous has none or the same one.
+func (a CourierAssignment) DisplacedDelivery(previous CourierAssignment) string {
 	if previous.DeliveryID != "" && previous.DeliveryID != a.DeliveryID {
-		displaced.DeliveryID = previous.DeliveryID
+		return previous.DeliveryID
 	}
-	return displaced
+	return ""
 }
 
 // CourierRelease is the end of a Courier Assignment reported by delivery: an
@@ -79,10 +87,11 @@ func (a CourierAssignment) Release(release CourierRelease) (CourierAssignment, b
 	return release.Kept(), true
 }
 
-// HoldsRelationsOf reports whether releasing the assignment removes
-// relationships: its courier, or its delivery when the Delivery is cancelled.
+// HoldsRelationsOf reports whether the release removes a relationship of the
+// assignment: only a cancelled Delivery unlinks order#delivery. An
+// unassignment changes business data only; delivery revokes the courier.
 func (a CourierAssignment) HoldsRelationsOf(release CourierRelease) bool {
-	return a.CourierID != "" || (release.DeliveryCancelled && a.DeliveryID != "")
+	return release.DeliveryCancelled && a.DeliveryID != ""
 }
 
 // CourierAssignments is the persistence contract of the Courier Assignment of

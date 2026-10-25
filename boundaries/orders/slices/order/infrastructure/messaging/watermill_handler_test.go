@@ -13,7 +13,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
@@ -189,27 +188,27 @@ func TestDeliveryStreamKeepsOrderOfOneAggregate(t *testing.T) {
 	c.noPoison(t)
 }
 
-func courierCanView(c consumer, courierID string) bool {
-	return c.authorizer.Check(context.Background(), application.AccessCheck{
-		Subject:    application.Subject{Kind: application.SubjectUser, ID: courierID},
-		Permission: "view",
-		Resource:   application.Resource{Type: "order", ID: "order-1"},
-	}) == nil
+func linkedDelivery(c consumer) string {
+	deliveryID, _ := c.authorizer.DeliveryOf("order-1")
+	return deliveryID
 }
 
-// AC-534, AC-535: CourierUnassignedFromDelivery and DeliveryCancelled revoke
-// the courier relationships without notifying the workflow.
-func TestCourierReleaseEventsRevokeCourierAccess(t *testing.T) {
+// AC-518, AC-534, AC-535: the assignment links order#delivery,
+// CourierUnassignedFromDelivery keeps it and DeliveryCancelled deletes it,
+// without notifying the workflow.
+func TestCourierEventsKeepDeliveryLink(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed)))
 	assigned := &deliveryv1.CourierAssignedToDelivery{OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1"}
 
 	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-1", 1, assigned)
-	require.True(t, courierCanView(c, "courier-1"))
+	require.Equal(t, "delivery-1", linkedDelivery(c))
 	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-2", 2,
 		&deliveryv1.CourierUnassignedFromDelivery{OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1"})
-	assert.False(t, courierCanView(c, "courier-1"))
+	assert.Equal(t, "delivery-1", linkedDelivery(c), "delivery revokes the courier")
+	assert.Equal(t, 1, c.authorizer.DeliveryWrites())
 	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-3", 3,
 		&deliveryv1.DeliveryCancelled{OrderId: "order-1", DeliveryId: "delivery-1", Reason: "customer request"})
+	assert.Empty(t, linkedDelivery(c))
 
 	stored, found, err := c.store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)

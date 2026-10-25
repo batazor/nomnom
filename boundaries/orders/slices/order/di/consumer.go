@@ -40,7 +40,7 @@ type Consumer struct {
 
 // Handlers собирает application handlers, которые читают Kafka, под
 // декоратором телеметрии use cases. Record Courier Assignment и Record Courier
-// Release пишут связи курьера в SpiceDB внутри своего Inbox unit of work.
+// Release пишут order#delivery в SpiceDB внутри своего Inbox unit of work.
 func (c Consumer) Handlers(workflow fulfillment.Notifier) ordermessaging.Handlers {
 	store, relationships, uc := c.Store, c.Relationships, c.Telemetry
 	return ordermessaging.Handlers{
