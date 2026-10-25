@@ -32,3 +32,31 @@ Reconciler SHALL удалять `order#customer` relationship, для котор
 
 - **WHEN** `Order` есть в PostgreSQL, а relationship `order#customer` отсутствует
 - **THEN** после прохода reconciler relationship существует и customer имеет `view` на заказ
+
+### Requirement: Reconciliation охватывает все relations заказа
+**ID:** FR-470
+
+Reconciler SHALL сверять `order#customer`, `order#restaurant`, `order#courier` и `order#delivery` с колонками `customer_id`, `restaurant_id`, `courier_id`, `delivery_id` строки `orders` тем же алгоритмом: orphan или stale relationship удаляется после двух проходов с интервалом не меньше grace, missing восстанавливается `TOUCH` с обновлением `authorization_revision`. Заказ без курьера MUST NOT получать relationship `courier`/`delivery`.
+
+#### Scenario: Business-сторона назначения
+**ID:** AC-523
+
+- **WHEN** store сохраняет назначение и reconciler читает subjects relation
+- **THEN** заказ без назначения не имеет subject `courier`, после назначения subject — текущий курьер
+
+#### Scenario: Stale курьер
+**ID:** AC-524
+
+- **WHEN** в графе остался прежний курьер, а relationships текущего курьера, delivery и ресторана потеряны
+- **THEN** первый проход восстанавливает missing, а прежний курьер удаляется после grace
+
+### Requirement: Снятый курьер отсутствует для reconciliation
+**ID:** FR-477
+
+Reconciler SHALL считать relation `courier` (и `delivery` после отмены Delivery) отсутствующей, когда Record Courier Release очистил колонку: оставшийся в SpiceDB subject MUST удаляться как orphan после grace.
+
+#### Scenario: Остаток снятого курьера
+**ID:** AC-538
+
+- **WHEN** `order#courier` остался в SpiceDB, а `courier_id` заказа `NULL`
+- **THEN** reconciler удаляет relationship после двух проходов с интервалом ≥ grace
