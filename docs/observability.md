@@ -94,6 +94,8 @@ Grafana обращается к Tempo, Mimir, Loki и Pyroscope как к отд
 
 Producer внедряет `traceparent` и `tracestate` в Kafka headers, consumer извлекает их до создания span обработки. В `orders` OpenTelemetry propagator записывает W3C-поля в `message.Metadata`; Kafka marshaler Watermill переносит metadata в Kafka headers, а subscriber выполняет обратное отображение. Имена и кодировка служебных metadata фиксируются тестами совместимости, чтобы промежуточный код не потерял и не переименовал контекст.
 
+Через Outbox trace продолжается во всех контекстах одинаково: при записи события в Outbox сохраняется `traceparent` (и `tracestate`, где он есть) текущего span — обычно span use case. Relay или Forwarder публикует запись в PRODUCER span `send <topic>`, дочернем к сохранённому контексту, и header `traceparent` несёт этот producer span. Consumer создаёт CONSUMER span `process <topic>` дочерним к header и уже в нём — span use case и обращений к хранилищу. Некорректный `traceparent` начинает новый trace. Реализации: `orders` — `messaging.InjectTraceContext`/`ExtractTraceContext` (`pkg/messaging/propagation.go`) и otelsarama; `restaurants` — `KafkaPublisher` и consumer (`pkg/infrastructure/kafka`); `payments` — relay (`infrastructure/messaging`), consumer нет; `delivery` — relay (`infrastructure/outbox`), consumer нет.
+
 Связь spans выбирается по семантике обработки; актуальные OpenTelemetry messaging conventions используют span links как общее правило связи creation context с receive/process:
 
 - для одного сообщения и одной непосредственной обработки допустима parent-child связь consumer span с контекстом сообщения, но это частный случай, а не default проекта;
@@ -191,6 +193,8 @@ Overview отвечает на вопросы incident: работает ли с
 | `trace_id`, `span_id` | Добавляются из активного tracing context; вне span отсутствуют, а не заполняются фиктивным значением. |
 | Поля операции | Стабильное имя операции, результат и разрешённые идентификаторы поиска. |
 | Поля ошибки | Тип/код ошибки и безопасное сообщение; stack trace добавляется отдельным структурированным полем по правилам runtime. |
+
+Общие соглашения реализаций (`orders` — `pkg/telemetry/logging.go`, `payments` — `pkg/telemetry/logs.py`, `restaurants` — `pkg/telemetry/logger.ts`, `delivery` — `pkg/telemetry/log.rs`): ключи плоские с точками, как resource attributes (`service.name`, `deployment.environment.name`); `severity` — `DEBUG` | `INFO` | `WARN` | `ERROR` | `FATAL`; операция — `operation` (и `outcome`, где есть результат); ошибка — `error.type` (стабильный код или класс), `error.message` (после redaction), stack — отдельным полем (`error.stack` или `exception`). Логи библиотек (gRPC, Watermill, Temporal, librdkafka, sqlx) идут через тот же logger. Уровень `orders` задаёт `LOG__LEVEL`. Alloy читает stdout pods и переводит запись в OTLP (`ops/kind/manifests/observability/alloy.yaml`): `service.*` — resource, `severity`, `trace_id`, `span_id` — поля записи.
 
 Индекс Loki содержит только небольшой ограниченный набор вроде `service_namespace`, `service_name`, `deployment_environment_name` и `severity`. Версия, instance, trace ID, request ID, order ID и user ID остаются полями или structured metadata. Кардинальность и размер structured metadata контролируются отдельно.
 
