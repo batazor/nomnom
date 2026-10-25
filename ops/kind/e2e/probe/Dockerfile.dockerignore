@@ -1,0 +1,5 @@
+*
+!buf.yaml
+!buf.lock
+!boundaries/*/infrastructure/grpc/nomnom
+!ops/kind/e2e/probe/proto

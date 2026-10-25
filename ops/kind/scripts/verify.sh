@@ -77,29 +77,8 @@ until [[ "$(probe_grpc nomnom-orders/net-probe "${RESTAURANTS}")" == "28 "* ]] |
   sleep 2
 done
 
-section "1. Вызов бизнес-API через gateway"
-expect "1.1 Orders RPC доходит до backend и требует identity" "0 16 caller identity is not authenticated" \
-  "$(probe_grpc nomnom-restaurants/net-probe "${ORDERS_VIA_GATEWAY}")"
-
-# Команды Order Fulfillment (orders-worker) опубликованы точными методами. Token
-# grpc-caller выпущен для audience nomnom.orders, поэтому backend отвечает
-# UNAUTHENTICATED (16) — ответ backend'а, а не UNIMPLEMENTED (12) от Envoy.
-for method in ReceiveOrderRequest CancelRestaurantOrder; do
-  expect "1.2 restaurants ${method} через gateway доходит до backend" \
-    "0 16 verified caller identity is required" \
-    "$(probe_grpc nomnom-bff/grpc-caller "${GATEWAY}/nomnom.restaurants.v1.RestaurantsService/${method}")"
-done
-for method in CreateDelivery ReplanDelivery CancelDelivery; do
-  expect "1.3 delivery ${method} через gateway доходит до backend" \
-    "0 16 verified caller identity is required" \
-    "$(probe_grpc nomnom-bff/grpc-caller "${GATEWAY}/nomnom.delivery.v1.DeliveryService/${method}")"
-done
-for method in CreatePayment AuthorizePayment CapturePayment CancelAuthorization RefundPayment; do
-  expect "1.4 payments ${method} через gateway доходит до backend" "0 16 invalid caller identity" \
-    "$(probe_grpc nomnom-bff/grpc-caller "${GATEWAY}/nomnom.payments.v1.PaymentsService/${method}")"
-done
-expect "1.5 неопубликованная команда кухни (AcceptRestaurantOrder): UNIMPLEMENTED от gateway" "0 12" \
-  "$(probe_grpc nomnom-bff/grpc-caller "${GATEWAY}/nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder")"
+# Секции 1 и 3 (реестр маршрутов gateway: вызов доходит до backend'а, незарегистрированный
+# получает UNIMPLEMENTED) перенесены в Chainsaw: ops/kind/e2e/gateway.
 
 section "2. Прямой вызов блокируется политикой (A/B)"
 expect "2.1 условие: restaurants Available" True \
@@ -125,10 +104,6 @@ for namespace in nomnom-orders nomnom-outsider; do
     fail "2.9 Hubble: нет DROPPED flows ${source_pod} → restaurants"
   fi
 done
-
-section "3. Неизвестный маршрут"
-expect "3.1 неизвестный gRPC-сервис через gateway: grpc-status 12 (UNIMPLEMENTED)" "0 12" \
-  "$(probe_grpc nomnom-restaurants/net-probe "${UNKNOWN_SERVICE}")"
 
 section "4–5. Metadata, status, trace context, deadlines, retries"
 # Без token backend отвечает UNAUTHENTICATED (1.1); с token — ответ SpiceDB: authorization

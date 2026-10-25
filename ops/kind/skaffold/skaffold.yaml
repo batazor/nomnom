@@ -102,6 +102,12 @@ build:
       context: ../../../boundaries/bff
       docker:
         target: runtime
+    # Образ проверок kind E2E (e2e/probe): контекст — корень репозитория ради proto всех
+    # контекстов, лишнее отсекает e2e/probe/Dockerfile.dockerignore.
+    - image: nomnom/e2e-probe
+      context: ../../..
+      docker:
+        dockerfile: ops/kind/e2e/probe/Dockerfile
 manifests:
   # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) применяет только before-hook:
   # rawYaml добавляет pod template label skaffold.dev/run-id, и каждый deploy перезапускал бы

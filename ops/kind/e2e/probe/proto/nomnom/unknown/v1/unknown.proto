@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+// Сервис, которого нет в реестре gateway: проверка, что незарегистрированный вызов
+// получает UNIMPLEMENTED от Envoy и не доходит ни до одного backend'а.
+package nomnom.unknown.v1;
+
+service UnknownService {
+  rpc Call(CallRequest) returns (CallResponse);
+}
+
+message CallRequest {}
+
+message CallResponse {}

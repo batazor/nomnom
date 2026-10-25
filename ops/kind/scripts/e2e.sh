@@ -21,4 +21,5 @@ trap on_exit EXIT
 "${scripts}/cluster.sh" create
 (cd "${KIND_DIR}/skaffold" && GATEWAY_API_VERSION="${GATEWAY_API_VERSION}" \
   skaffold run --kube-context "${KUBE_CONTEXT}" --status-check=true)
-"${scripts}/verify.sh"
+# Тот же набор проверок, что make kind-test: verify.sh и Chainsaw (ops/kind/e2e).
+make -C "${KIND_DIR}/../.." kind-test

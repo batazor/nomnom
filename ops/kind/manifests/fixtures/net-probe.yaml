@@ -204,9 +204,9 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: grpc-caller
-          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          # Образ проверок kind E2E (e2e/probe): grpcurl и descriptor sets контрактов.
+          image: nomnom/e2e-probe
           imagePullPolicy: IfNotPresent
-          command: ["sleep", "infinity"]
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
