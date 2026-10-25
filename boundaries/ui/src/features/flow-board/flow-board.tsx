@@ -15,6 +15,7 @@ import { SidePanel } from "../../shared/ui";
 import { RestaurantPicker } from "../browse-restaurants";
 import { OrderDetails } from "../view-order";
 import { RestaurantOrdering } from "../view-restaurant";
+import { BoardDragProvider, useDragSource, useDropTarget } from "./board-dnd";
 import { useBoardOrders } from "./board-orders";
 import { CourierColumn } from "./courier-column";
 import { KitchenColumn } from "./kitchen-column";
@@ -50,7 +51,9 @@ const columnTitle: Record<Column, MessageKey> = {
 export function FlowBoard() {
   return (
     <BoardRefreshProvider>
-      <Board />
+      <BoardDragProvider>
+        <Board />
+      </BoardDragProvider>
     </BoardRefreshProvider>
   );
 }
@@ -134,13 +137,14 @@ function Board() {
               key={customerRestaurantId}
               onPlaced={placed}
               restaurantId={customerRestaurantId}
+              ticket={(submit) => <OrderTicket submit={submit} />}
             />
           ) : (
             <p className="board-empty">{t("board.customer.pick")}</p>
           )}
         </BoardColumn>
 
-        <BoardColumn column="kitchen">
+        <KitchenDropColumn>
           {canRunKitchen ? (
             <KitchenColumn
               demoRestaurants={
@@ -153,7 +157,7 @@ function Board() {
           ) : (
             <p className="board-empty">{t(neededKey)}</p>
           )}
-        </BoardColumn>
+        </KitchenDropColumn>
 
         <BoardColumn column="courier">
           {canDeliver ? (
@@ -181,11 +185,36 @@ function Board() {
   );
 }
 
+// The assembled cart, ready to be carried to the kitchen; dropping it there
+// sends the checkout form, the same as its button.
+function OrderTicket({ submit }: { submit: () => void }) {
+  const { t } = useI18n();
+  const drag = useDragSource({ kind: "ticket", submit });
+  return (
+    <div className="board-ticket" {...drag}>
+      <span aria-hidden="true" className="board-grip" />
+      {t("board.dnd.ticket")}
+    </div>
+  );
+}
+
+// The kitchen column takes the customer's ticket: the order is placed.
+function KitchenDropColumn({ children }: { children: ReactNode }) {
+  const drop = useDropTarget("ticket", (cargo) => cargo.submit());
+  return (
+    <BoardColumn column="kitchen" drop={drop}>
+      {children}
+    </BoardColumn>
+  );
+}
+
 function BoardColumn({
   column,
+  drop,
   children,
 }: {
   column: Column;
+  drop?: ReturnType<typeof useDropTarget>;
   children: ReactNode;
 }) {
   const { t } = useI18n();
@@ -194,6 +223,7 @@ function BoardColumn({
       aria-labelledby={`board-column-${column}-title`}
       className="board-column"
       data-column={column}
+      {...drop}
     >
       <header className="board-column-header">
         <h2 id={`board-column-${column}-title`}>{t(columnTitle[column])}</h2>

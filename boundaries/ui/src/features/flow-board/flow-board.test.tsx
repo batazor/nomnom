@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { HttpResponse } from "msw";
@@ -54,6 +60,17 @@ async function placeOrder(user: ReturnType<typeof userEvent.setup>) {
   );
   await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
   return screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
+}
+
+// jsdom has no DataTransfer; the board only marks and reads the drag type.
+function dataTransfer() {
+  const data = new Map<string, string>();
+  return {
+    effectAllowed: "all",
+    dropEffect: "none",
+    setData: (type: string, value: string) => data.set(type, value),
+    getData: (type: string) => data.get(type) ?? "",
+  };
 }
 
 // The kitchen card of the order the board highlights.
@@ -139,6 +156,46 @@ describe("flow board", () => {
     ).toBeVisible();
     expect(within(courier).getByText("На линии")).toBeVisible();
   }, 15_000);
+
+  it("carries the order by dragging: cart to kitchen, kitchen to courier", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить в корзину: Манго и клейкий рис",
+      }),
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Адрес доставки" }),
+      "ул. Морская, 4",
+    );
+
+    // The cart ticket dropped on the kitchen places the order.
+    const ticket = screen.getByText("Перетащите заказ на кухню");
+    fireEvent.dragStart(ticket, { dataTransfer: dataTransfer() });
+    expect(column("Кухня")).toHaveAttribute("data-drop", "ready");
+    fireEvent.drop(column("Кухня"), { dataTransfer: dataTransfer() });
+    await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
+
+    const accept = await waitFor(selectedKitchenCard);
+    await user.click(within(accept).getByRole("button", { name: "Принять" }));
+
+    // The accepted order dropped on the courier: online and taken.
+    const card = await waitFor(() => {
+      const found = selectedKitchenCard();
+      expect(found).toHaveAttribute("draggable", "true");
+      return found;
+    });
+    const courier = column("Курьер");
+    fireEvent.dragStart(card, { dataTransfer: dataTransfer() });
+    const target = courier.querySelector<HTMLElement>("[data-drop]");
+    if (!target) throw new Error("Courier column does not accept the order");
+    fireEvent.drop(target, { dataTransfer: dataTransfer() });
+
+    expect(await within(courier).findByText("Текущая доставка")).toBeVisible();
+    expect(within(courier).getByText("На доставке")).toBeVisible();
+  });
 
   it("opens the order details in a side panel", async () => {
     const user = userEvent.setup();

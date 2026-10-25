@@ -52,6 +52,7 @@ query BoardCourier {
     offers {
       id
       deliveryId
+      orderId
       pickupAddress
       dropoffAddress
       expiresAt
@@ -73,6 +74,7 @@ mutation SetCourierAvailability($availability: CourierAvailability!) {
       offers {
         id
         deliveryId
+        orderId
         pickupAddress
         dropoffAddress
         expiresAt
@@ -96,6 +98,7 @@ mutation AcceptDeliveryOffer($offerId: ID!) {
       offers {
         id
         deliveryId
+        orderId
         pickupAddress
         dropoffAddress
         expiresAt
@@ -122,6 +125,7 @@ mutation ApplyCourierDeliveryAction(
       offers {
         id
         deliveryId
+        orderId
         pickupAddress
         dropoffAddress
         expiresAt

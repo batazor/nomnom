@@ -211,6 +211,7 @@ export function createFulfillment({
               .map((delivery) => ({
                 id: delivery.offerId,
                 deliveryId: delivery.id,
+                orderId: delivery.orderId,
                 pickupAddress: delivery.pickupAddress,
                 dropoffAddress: delivery.dropoffAddress,
                 expiresAt,

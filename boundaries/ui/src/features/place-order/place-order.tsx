@@ -1,4 +1,4 @@
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { useMutation } from "urql";
 
 import { PlaceOrderDocument } from "../../shared/graphql/generated/graphql";
@@ -30,11 +30,15 @@ export function PlaceOrder({
   lines,
   onItemProblems,
   onPlaced,
+  ticket,
 }: {
   restaurantId: string;
   lines: readonly OrderLine[];
   onItemProblems: (problems: ItemProblems) => void;
   onPlaced: (orderId: string) => void;
+  // Rendered above the submit button while the cart has lines; submit sends
+  // the form exactly as the button does.
+  ticket?: (submit: () => void) => ReactNode;
 }) {
   const { t } = useI18n();
   const [, placeOrder] = useMutation(PlaceOrderDocument);
@@ -43,6 +47,7 @@ export function PlaceOrder({
   const [state, setState] = useState<CheckoutState>({ kind: "idle" });
   const attempt = useRef<Attempt | null>(null);
   const addressInput = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement>(null);
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -102,6 +107,7 @@ export function PlaceOrder({
   return (
     <form
       aria-labelledby="checkout-title"
+      ref={form}
       className="checkout"
       noValidate
       onSubmit={submit}
@@ -138,6 +144,10 @@ export function PlaceOrder({
           {t("checkout.transportError")}
         </p>
       ) : null}
+
+      {ticket && lines.length > 0
+        ? ticket(() => form.current?.requestSubmit())
+        : null}
 
       <Button fullWidth isPending={state.kind === "sending"} type="submit">
         {state.kind === "transportError"

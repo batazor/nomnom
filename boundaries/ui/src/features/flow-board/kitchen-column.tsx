@@ -14,6 +14,7 @@ import type { MessageKey } from "../../shared/i18n/messages";
 import { AsRole, type DemoRestaurant } from "../../shared/session/roles";
 import { Button } from "../../shared/ui";
 import { RestaurantOpening } from "../manage-restaurant";
+import { useDragSource } from "./board-dnd";
 import { useBoardRefresh, usePolling } from "./use-polling";
 
 type KitchenOrder = NonNullable<BoardKitchenQuery["kitchen"]>["orders"][number];
@@ -224,11 +225,19 @@ function KitchenOrderCard({
     refreshBoard();
   }
 
+  // An accepted order has a delivery, so the courier can take it.
+  const drag = useDragSource(
+    order.stage === "RECEIVED"
+      ? null
+      : { kind: "order", orderId: order.orderId },
+  );
+
   return (
     <article
       className="board-card"
       data-selected={selected}
       data-stage={order.stage}
+      {...drag}
     >
       <button className="board-card-head" onClick={onSelect} type="button">
         <span className="board-card-title">
