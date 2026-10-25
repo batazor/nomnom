@@ -45,3 +45,5 @@ Grafana Cloud промотирует `service_name` и `service_namespace` в la
 2026-10-25: Alloy v1.21.2 с этим config принял OTLP/HTTP, отправил точку `service.namespace=nomnom` в OTLP gateway `prod-eu-west-2` (`otelcol_exporter_sent_metric_points_total` = 1, без ошибок) и отфильтровал точку другого namespace.
 
 2026-10-25, kind + `make kind-deploy GRAFANA_CLOUD=1`: Alloy в `nomnom-observability`, `orders` и `orders-consumer` экспортируют в stack `bestnomnom` 22 series (`go_*`, `process_cpu_time_seconds_total`, `target_info`; jobs `nomnom/orders`, `nomnom/orders-consumer`).
+
+2026-10-25, `make grafana-cloud-push`: 5 overview dashboards в folder `nomnom`, повторный push обновляет их без ошибок. Все 34 запроса 19 живых панелей `Orders / Overview` выполнены против `grafanacloud-prom` без ошибок; данные есть у Runtime (GOMAXPROCS, CPU, Memory, Heap, Allocation rate, Goroutines). Панели gRPC, Kafka и Inbox пусты: в kind не было запросов и сообщений. `target_info` без `service_version` и `instance` (процессы не задают `service.version` и `service.instance.id`), поэтому переменные `version` и `service_instance` содержат только All.
