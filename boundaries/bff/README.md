@@ -51,7 +51,7 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order
 | `RequestOrderCancellation`: `NOT_FOUND`, `PERMISSION_DENIED` | error `NOT_FOUND` |
 | остальные сбои | error `UNAVAILABLE` без внутренних деталей |
 
-Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — раздел 7 `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
+Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — тест `bff-end-to-end` в `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
 
 ### Слайс `catalog`
 

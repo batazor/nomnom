@@ -1,0 +1,188 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+# BFF насквозь (ADR 32): access token → user assertion → orders.
+#
+# BFF наружу не опубликован; внешнего клиента изображает net-probe из nomnom-outsider, которому
+# тест на время прогона открывает ingress к BFF (fixtures/allow-bff-from-outsider.yaml).
+# Egress BFF ограничен базовыми политиками (DNS, internal gateway, telemetry). Access token
+# выпускает тестовый identity provider (ключ tests/identity/fixtures, только для kind), user
+# assertion — ключ BFF из Secret bff-assertion-key (tls.key, до cert-manager — key.pem); оба
+# подписывает scripts/mint-jwt.py.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: bff-end-to-end
+spec:
+  description: >
+    BFF Available и изолирован политиками; bffInfo без token; order(id) без Authorization —
+    Unauthenticated (AC-576), с access token для отсутствующего заказа — null без ошибок
+    (AC-575), orders принимает user assertion BFF; тот же assertion от другого workload
+    отклоняется (UNAUTHENTICATED: grpc-caller не делегат).
+  bindings:
+    - name: started
+      value: (time_now_utc())
+    - name: customer
+      value: (join('', ['kind-e2e-', random('[0-9a-f]{8}')]))
+    - name: missing_order
+      value: (random('[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'))
+    - name: graphql
+      value: http://bff.nomnom-bff.svc.cluster.local:3010/graphql
+  steps:
+    - name: policies applied
+      use:
+        template: ../templates/netpol-applied.yaml
+    - name: 7.1-7.2 BFF Available with probes on Router /health/*
+      try:
+        - assert:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: bff
+                namespace: nomnom-bff
+              spec:
+                template:
+                  spec:
+                    (containers[0]):
+                      livenessProbe: {httpGet: {path: /health/live}}
+                      readinessProbe: {httpGet: {path: /health/ready}}
+              status:
+                (conditions[?type == 'Available'].status): ['True']
+    - name: 7.3 nomnom-bff → orders directly is closed
+      use:
+        template: ../templates/tcp-connect.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-bff}
+            - {name: from, value: grpc-caller}
+            - {name: host, value: orders.nomnom-orders.svc.cluster.local}
+            - {name: port, value: 8081}
+            - {name: expect, value: closed}
+    - name: 7.4 nomnom-bff → PostgreSQL orders is closed
+      use:
+        template: ../templates/tcp-connect.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-bff}
+            - {name: from, value: grpc-caller}
+            - {name: host, value: postgres-orders.nomnom-data.svc.cluster.local}
+            - {name: port, value: 5432}
+            - {name: expect, value: closed}
+    - name: BFF reachable for the external client
+      try:
+        # Chainsaw удаляет fixture в конце теста.
+        - apply:
+            file: ../../manifests/fixtures/allow-bff-from-outsider.yaml
+        - sleep:
+            duration: 2s
+    - name: 7.5-7.7 GraphQL
+      try:
+        - script:
+            env:
+              - name: URL
+                value: ($graphql)
+              - name: BODY
+                value: "(to_string({query: '{ bffInfo { name version } }'}))"
+            content: >-
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -d "$BODY"
+            check:
+              ($error): ~
+              (to_string(json_parse($stdout))): '{"data":{"bffInfo":{"name":"nomnom-bff","version":"0.1.0"}}}'
+        - script:
+            env:
+              - name: URL
+                value: ($graphql)
+              - name: BODY
+                value: "(to_string({query: join('', ['{ order(id: \"', $missing_order, '\") { id status } }'])}))"
+            content: >-
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -d "$BODY"
+            check:
+              ($error): ~
+              (json_parse($stdout).data.order): ~
+              (json_parse($stdout).errors[].extensions.errors[].extensions.code): [Unauthenticated]
+        - script:
+            env:
+              - name: CUSTOMER
+                value: ($customer)
+            content: python3 -I ../../scripts/mint-jwt.py access-token ../../../../tests/identity/fixtures/idp-signing-key.pem ../../../../tests/identity/fixtures/idp-jwks.json ../../../../tests/identity/fixtures/idp-vectors.json "$CUSTOMER"
+            outputs:
+              - name: token
+                value: (trim_space($stdout))
+        - script:
+            env:
+              - name: URL
+                value: ($graphql)
+              - name: TOKEN
+                value: ($token)
+              - name: BODY
+                value: "(to_string({query: join('', ['{ order(id: \"', $missing_order, '\") { id status } }'])}))"
+            content: >-
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d "$BODY"
+            check:
+              ($error): ~
+              (to_string(json_parse($stdout))): '{"data":{"order":null}}'
+    - name: 7.8 orders accepted the BFF user assertion
+      try:
+        - sleep:
+            duration: 2s
+        - script:
+            env:
+              - name: SINCE
+                value: ($started)
+            content: kubectl -n nomnom-orders logs deploy/orders --since-time="$SINCE"
+            check:
+              ($error): ~
+              # Лог orders — JSON по записи на строку.
+              (split(trim_space($stdout), '\n')[?starts_with(@, '{')] | map(&json_parse(@), @)[?message == 'user assertion accepted' && delegate == 'bff'] | length(@) > `0`): true
+    - name: 7.9-7.10 same user assertion from another workload
+      try:
+        - script:
+            env:
+              # Ключ выпускает cert-manager (tls.key, PKCS#8); прежний bootstrap хранил его в key.pem.
+              - name: KEY
+                value: (x_k8s_get($client, 'v1', 'Secret', 'nomnom-bff', 'bff-assertion-key').data | base64_decode("tls.key" || "key.pem"))
+              - name: CUSTOMER
+                value: ($customer)
+            content: python3 -I ../../scripts/mint-jwt.py user-assertion env:KEY nomnom-bff-kind nomnom.orders "$CUSTOMER"
+            outputs:
+              - name: assertion
+                value: (trim_space($stdout))
+        # grpc-caller допущен allowlist orders, но не делегат: assertion с подписью BFF,
+        # aud nomnom.orders и sub покупателя от него отклоняется.
+        - script:
+            env:
+              - name: ASSERTION
+                value: ($assertion)
+              - name: REQUEST
+                value: "(to_string({order_id: $missing_order}))"
+            content: |
+              kubectl -n nomnom-bff exec deploy/grpc-caller -- sh -c '
+                grpcurl -plaintext -max-time 5 -format-error \
+                  -protoset /protos/nomnom.binpb -protoset /protos/googleapis.binpb \
+                  -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/nomnom.orders)" \
+                  -H "x-nomnom-user-assertion: $0" -d "$1" \
+                  internal-gateway.envoy-gateway-system.svc.cluster.local:8080 nomnom.orders.v1.OrdersService/GetOrder 2>&1 || true
+              ' "$ASSERTION" "$REQUEST"
+            check:
+              ($error): ~
+              (json_parse($stdout).code): 16
+        - sleep:
+            duration: 2s
+        - script:
+            env:
+              - name: SINCE
+                value: ($started)
+            content: kubectl -n nomnom-orders logs deploy/orders --since-time="$SINCE"
+            check:
+              ($error): ~
+              # Запись «caller identity rejected» с error.message
+              # «user assertion from grpc-caller: service is not an allowed delegate».
+              (split(trim_space($stdout), '\n')[?contains(@, 'caller identity rejected') && contains(@, 'user assertion from grpc-caller') && contains(@, 'service is not an allowed delegate')] | length(@) > `0`): true
+  catch:
+    - podLogs:
+        namespace: nomnom-bff
+        selector: app.kubernetes.io/name=bff
+        tail: 30
+    - podLogs:
+        namespace: nomnom-orders
+        selector: app.kubernetes.io/name=orders
+        tail: 30

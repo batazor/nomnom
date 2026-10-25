@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/configuration-chainsaw-v1alpha1.json
-# Kind E2E на Kyverno Chainsaw: тесты работают с уже развёрнутым окружением (make kind-deploy)
-# и не создают своих ресурсов в неймспейсах приложений.
+# Kind E2E на Kyverno Chainsaw: тесты работают с уже развёрнутым окружением (make kind-deploy).
+# Свои ресурсы — только временные fixtures (manifests/fixtures), Chainsaw удаляет их в конце
+# теста; NetworkPolicy окружения после прогона остаются применёнными.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Configuration
 metadata:

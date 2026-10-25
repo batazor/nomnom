@@ -10,8 +10,8 @@ serviceAccount:
   name: bff
 
 # ADR 15: контексты вызываются только через internal gateway; egress BFF ограничен базовыми
-# политиками неймспейса (manifests/netpol/app-baseline.yaml). Публикации наружу нет:
-# проверки обращаются к BFF через kubectl port-forward.
+# политиками неймспейса (manifests/netpol/app-baseline). Публикации наружу нет: проверка
+# ops/kind/e2e/bff на время прогона открывает ingress к BFF из nomnom-outsider.
 internalGateway:
   address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
 

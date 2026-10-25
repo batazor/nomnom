@@ -1,12 +1,16 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
-# Вызов gRPC-метода через internal gateway настоящим клиентом (grpcurl с descriptor sets
-# контрактов, образ e2e/probe) из fixture grpc-caller — изнутри nomnom-bff, под его
-# NetworkPolicy и с projected token ServiceAccount grpc-caller (ADR 27).
+# Вызов gRPC-метода настоящим клиентом (grpcurl с descriptor sets контрактов, образ e2e/probe)
+# изнутри pod fixture (manifests/fixtures/net-probe.yaml) — из его неймспейса и под его
+# NetworkPolicy. По умолчанию вызывающий — grpc-caller в nomnom-bff с projected token
+# ServiceAccount grpc-caller (ADR 27), адрес — internal gateway.
 #
-# Bindings (обязательные, кроме request): method — <полное имя сервиса>/<метод>;
-# authorize — передавать ли token; code и message — ожидаемый ответ (message пуст у
-# локального ответа Envoy); request — JSON сообщения, по умолчанию {}. Bindings
-# шаблона перекрывают bindings сценария, поэтому значений по умолчанию у ожидаемых полей нет.
+# Bindings (обязательные): method — <полное имя сервиса>/<метод>; authorize — передавать ли
+# token (он есть только у grpc-caller); code и message — ожидаемый ответ (message пуст у
+# локального ответа Envoy) или список допустимых значений. Необязательные: request — JSON
+# сообщения ({}); from_namespace и from — неймспейс и Deployment вызывающего; address —
+# host:port получателя; header — дополнительный заголовок «name: value»; max_time — deadline
+# вызова в секундах; reason — ожидаемый reason google.rpc.ErrorInfo в details ответа.
+# Bindings шаблона перекрывают bindings сценария: сценарий передаёт свои значения через with.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: StepTemplate
 metadata:
@@ -15,32 +19,55 @@ spec:
   bindings:
     - name: request
       value: '{}'
-    - name: gateway
+    - name: from_namespace
+      value: nomnom-bff
+    - name: from
+      value: grpc-caller
+    - name: address
       value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+    - name: header
+      value: ''
+    - name: max_time
+      value: '5'
+    - name: reason
+      value: ''
   try:
     - script:
         env:
+          - name: FROM_NAMESPACE
+            value: ($from_namespace)
+          - name: FROM
+            value: ($from)
           - name: METHOD
             value: ($method)
           - name: REQUEST
             value: ($request)
           - name: AUTHORIZE
             value: (to_string($authorize))
-          - name: GATEWAY
-            value: ($gateway)
-        # Ответ с ошибкой grpcurl печатает в stderr как JSON {code, message} (-format-error);
-        # 2>&1 внутри pod отделяет его от служебных строк kubectl exec.
+          - name: ADDRESS
+            value: ($address)
+          - name: HEADER
+            value: ($header)
+          - name: MAX_TIME
+            value: (to_string($max_time))
+        # Ответ с ошибкой grpcurl печатает в stderr как JSON {code, message, details}
+        # (-format-error); 2>&1 внутри pod отделяет его от служебных строк kubectl exec.
         content: |
-          kubectl -n nomnom-bff exec deploy/grpc-caller -- sh -c '
-            request=$1 gateway=$2 method=$3
+          kubectl -n "$FROM_NAMESPACE" exec "deploy/$FROM" -- sh -c '
+            request=$1 address=$2 method=$3 header=$4 max_time=$5
             set --
             [ "$0" = true ] && set -- -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/nomnom.orders)"
-            grpcurl -plaintext -max-time 5 -format-error \
-              -protoset /protos/nomnom.binpb -protoset /protos/fixtures.binpb \
-              "$@" -d "$request" "$gateway" "$method" 2>&1 || true
-          ' "$AUTHORIZE" "$REQUEST" "$GATEWAY" "$METHOD"
+            [ -n "$header" ] && set -- "$@" -H "$header"
+            grpcurl -plaintext -max-time "$max_time" -format-error \
+              -protoset /protos/nomnom.binpb -protoset /protos/fixtures.binpb -protoset /protos/googleapis.binpb \
+              "$@" -d "$request" "$address" "$method" 2>&1 || true
+          ' "$AUTHORIZE" "$REQUEST" "$ADDRESS" "$METHOD" "$HEADER" "$MAX_TIME"
+        # code и message — значение или список допустимых значений (ответ сверяется с одним из
+        # них); фактический ответ виден в STDOUT шага.
         check:
           ($error): ~
-          (json_parse($stdout).code): ($code)
+          # Числа из YAML и из JSON ответа — разные типы: коды сравниваются строками.
+          (contains(map(&to_string(@), to_array($code)), to_string(json_parse($stdout).code))): true
           # Локальный ответ Envoy (UNIMPLEMENTED) приходит без message.
-          (json_parse($stdout).message || ''): ($message)
+          (contains(to_array($message), json_parse($stdout).message || '')): true
+          ($reason == '' || contains(json_parse($stdout).details[].reason || `[]`, $reason)): true

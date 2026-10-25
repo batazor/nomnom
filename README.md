@@ -82,7 +82,7 @@ make kind-e2e      # полный неинтерактивный прогон с
 make kind-up       # кластер, CNI и gateway
 make kind-deploy   # Skaffold: сборка и загрузка образов, gateway, charts приложений, readiness
 make kind-dev      # Skaffold dev loop
-make kind-test     # проверки gateway и NetworkPolicy
+make kind-test     # тесты Chainsaw: gateway, NetworkPolicy, инфраструктура, BFF
 make kind-down     # удаление кластера
 ```
 

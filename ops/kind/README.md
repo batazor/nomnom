@@ -7,7 +7,8 @@ internal gateway, NetworkPolicy, kubelet probes и установки Helm chart
 
 ## Требования
 
-Docker, `kind` и `skaffold` версий из [`versions.env`](versions.env), `kubectl`, Helm 3.8+ (OCI charts), `jq`.
+Docker, `kind` и `skaffold` версий из [`versions.env`](versions.env), `kubectl`, Helm 3.8+ (OCI charts), `jq`;
+для проверок — Go (Chainsaw запускается через `go run`), `python3` и `openssl` (тестовые JWT).
 
 ## Команды
 
@@ -18,7 +19,8 @@ make kind-e2e       # весь цикл для CI: кластер → skaffold r
 make kind-up        # single-node кластер, предзагрузка образов платформы, Cilium + Hubble, Envoy Gateway
 make kind-deploy    # skaffold run: сборка образов, загрузка в kind, gateway, charts приложений, readiness
 make kind-dev       # skaffold dev: пересборка и передеплой при изменении исходников
-make kind-test      # проверки; NetworkPolicy применяются внутри (фаза A без них, фаза B с ними)
+make kind-test      # тесты Chainsaw; NetworkPolicy применяются внутри (фаза A без них, фаза B с ними)
+make kind-policies  # применить NetworkPolicy (kubectl apply -k manifests/netpol); kind-policies-delete — удалить
 make kind-diagnostics
 make kind-down
 ```
@@ -27,11 +29,10 @@ make kind-down
 | --- | --- | --- |
 | `KIND_CLUSTER_NAME` | `nomnom-test` | имя кластера; контекст всегда `kind-${KIND_CLUSTER_NAME}` |
 | `BFF_HOST_PORT` | `18080` | host-порт для NodePort `30080` будущего публичного API BFF (сейчас BFF не публикуется) |
-| `BFF_FORWARD_PORT` | `18090` | локальный порт `kubectl port-forward` к BFF в проверке 7 |
 | `KIND_KEEP` | `0` | `1` — не удалять кластер после `make kind-e2e` |
 | `PRELOAD_PLATFORM_IMAGES` | `1` | загружать образы платформы из Docker-кеша хоста вместо pull на узле |
 
-Все команды явно используют контекст `kind-${KIND_CLUSTER_NAME}`. Отчёт проверок и
+Все команды явно используют контекст `kind-${KIND_CLUSTER_NAME}`. Отчёт проверок (JUnit) и
 диагностика сохраняются в `ops/kind/.artifacts/`.
 
 ## Как устроено
@@ -73,7 +74,7 @@ make kind-down
   `delivery-postgres`, ключ `dsn`), а init container `delivery-migrate` применяет миграции до
   старта процесса.
 - [`manifests/observability/trace-capture.yaml`](manifests/observability/trace-capture.yaml) —
-  приёмник traces проверки 4.2 в `nomnom-observability`: OpenTelemetry Collector с OTLP gRPC
+  приёмник traces проверок `e2e/calls` в `nomnom-observability`: OpenTelemetry Collector с OTLP gRPC
   `:4317` и debug exporter в stdout. Traces не хранятся и не заменяют Alloy
   ([ADR 9](../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md));
   `orders` отправляет в него traces через `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` из
@@ -85,7 +86,8 @@ make kind-down
   `nomnom/bff` ([`boundaries/bff/Dockerfile`](../../boundaries/bff/Dockerfile): Cosmo Router с
   закреплённым SHA-256) и последний release `bff` в `nomnom-bff` с [`values/bff.yaml`](values/bff.yaml):
   ServiceAccount `bff`, контексты только через internal gateway, projected tokens `nomnom.orders` и
-  `nomnom.restaurants`. Наружу BFF не опубликован; проверка обращается к нему через port-forward.
+  `nomnom.restaurants`. Наружу BFF не опубликован; проверка `e2e/bff` на время прогона открывает
+  ingress к нему из `nomnom-outsider` (`manifests/fixtures/allow-bff-from-outsider.yaml`).
   `scripts/bff-identity.sh` в `before`-hook рядом с `identity-jwks.sh`:
   - создаёт ключ подписи user assertions один раз на кластер — Secret `bff-assertion-key`
     (`nomnom-bff`, kid `nomnom-bff-kind`); ключ хранится только в Secret;
@@ -99,9 +101,12 @@ make kind-down
   На кластере, где ServiceAccount `bff` создала прежняя фикстура, скрипт передаёт его release `bff`.
   Фикстура `grpc-caller` теперь работает под своим ServiceAccount `nomnom-bff/grpc-caller`: он
   допущен allowlist `orders`, но не делегат.
-- `scripts/verify.sh` выполняет проверки, `scripts/diagnostics.sh` собирает pod logs, events,
-  состояние Gateway API, `cilium-dbg status` и DROPPED flows Hubble; `scripts/e2e.sh`
-  связывает шаги и собирает диагностику при ошибке.
+- NetworkPolicy — kustomization [`manifests/netpol`](manifests/netpol/kustomization.yaml):
+  базовые политики `app-baseline/` без namespace, overlays `namespaces/<неймспейс>` для каждого
+  неймспейса приложения, политики инфраструктуры и gateways.
+- Проверки — тесты Chainsaw в [`e2e/`](e2e/) (раздел «Проверки»); `scripts/diagnostics.sh`
+  собирает pod logs, events, состояние Gateway API, `cilium-dbg status` и DROPPED flows Hubble;
+  `scripts/e2e.sh` связывает шаги и собирает диагностику при ошибке.
 
 ## Версии
 
@@ -117,11 +122,11 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 
 | Неймспейс | Содержимое |
 | --- | --- |
-| `nomnom-orders`, `nomnom-restaurants`, `nomnom-delivery`, `nomnom-payments` | приложения из Helm charts; в `orders` и `restaurants` — pod проверок `net-probe` (curl) |
-| `nomnom-bff` | BFF (release `bff`, ServiceAccount `bff`), Secret `bff-assertion-key`, ConfigMap `idp-jwks`; pod проверок `grpc-caller` (curl, ServiceAccount `grpc-caller`) |
+| `nomnom-orders`, `nomnom-restaurants`, `nomnom-delivery`, `nomnom-payments` | приложения из Helm charts; pod проверок `net-probe` (образ `e2e/probe`) |
+| `nomnom-bff` | BFF (release `bff`, ServiceAccount `bff`), Secret `bff-assertion-key`, ConfigMap `idp-jwks`; pod проверок `grpc-caller` (образ `e2e/probe`, ServiceAccount `grpc-caller`) |
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
-| `nomnom-outsider` | pod `net-probe` вне прикладного контура для ingress-проверок |
+| `nomnom-outsider` | pod `net-probe` вне прикладного контура: ingress-проверки и внешний клиент BFF |
 | `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | `trace-capture` всегда; Alloy — только с `GRAFANA_CLOUD=1` |
@@ -182,45 +187,55 @@ curl --cacert "$(ops/kind/scripts/local-ca.sh)" --resolve webhooks.nomnom.localh
 
 ## Проверки
 
-`make kind-test` запускает `scripts/verify.sh` и тесты Chainsaw из `e2e/`
-([ADR 33](../../docs/adr/0033-kind-e2e-on-kyverno-chainsaw-and-grpcurl.md)). Проверки
-переносятся из `verify.sh` в Chainsaw по секциям; новые пишутся сразу в Chainsaw.
+`make kind-test` запускает тесты Kyverno Chainsaw из `e2e/`
+([ADR 33](../../docs/adr/0033-kind-e2e-on-kyverno-chainsaw-and-grpcurl.md)) против уже
+развёрнутого окружения; отчёт JUnit — `.artifacts/chainsaw-report.xml`, диагностика при ошибке —
+`catch` тестов в выводе.
 
-### Chainsaw (`e2e/`)
+Вызовы идут из pod fixtures ([`manifests/fixtures/net-probe.yaml`](manifests/fixtures/net-probe.yaml),
+образ `e2e/probe`) в нужном неймспейсе и под его NetworkPolicy: `net-probe` в неймспейсах
+приложений и в `nomnom-outsider`, `grpc-caller` в `nomnom-bff` с projected token. Клиенты —
+`grpcurl` с descriptor sets всех контрактов и `google/rpc`, `nc`, `nslookup`, `curl` (GraphQL).
+Повторяющиеся шаги — шаблоны `e2e/templates/`:
 
-Тесты работают с уже развёрнутым окружением и вызывают бизнес-API настоящим gRPC-клиентом:
-`grpcurl` с descriptor sets всех контрактов (образ `e2e/probe`, fixture `grpc-caller` в
-`nomnom-bff` с projected token). Вызов описан один раз — шаблон шага
-`e2e/templates/grpc-call.yaml` (bindings `method`, `authorize`, `code`, `message`, `request`);
-наборы методов задаются `scenarios`. Отчёт JUnit — `.artifacts/chainsaw-report.xml`.
-
-| Тест | Проверка |
+| Шаблон | Шаг |
 | --- | --- |
-| `gateway-registry` | все `GRPCRoute` `Accepted` и `ResolvedRefs` |
-| `gateway-routes-orders` | `OrdersService` без identity доходит до orders: `UNAUTHENTICATED` от backend'а |
-| `gateway-routes-to-backends` | 10 команд Order Fulfillment доходят до restaurants, delivery и payments: ответ backend'а, не Envoy |
-| `gateway-rejects-unregistered` | незарегистрированный сервис и команда кухни без вызывающего: `UNIMPLEMENTED` от Envoy |
+| `grpc-call` | gRPC-вызов (по умолчанию из `grpc-caller` через gateway): `code`, `message`, reason `ErrorInfo` |
+| `tcp-connect` | TCP из pod: `open`, `closed` или `dropped` (timeout, а не DNS и не refused) |
+| `dns-lookup` | имя резолвится из `net-probe` неймспейса |
+| `netpol-applied` | все NetworkPolicy применены (`kubectl apply -k manifests/netpol`) и действуют |
+| `gateway-retries` | вызов и число его повторов gateway по `upstream_rq_retry` Envoy |
+
+Фаза A меняет весь кластер, поэтому `netpol-without-policies` и `gateway-retries-and-deadlines`
+(общие счётчики Envoy, Cilium deny к SpiceDB) не `concurrent`: Chainsaw выполняет их по одному
+до остальных тестов. Фаза A восстанавливает политики в `cleanup`, тесты фазы B применяют их сами;
+после прогона политики остаются.
+
+| Тест | Проверка (прежний id `verify.sh`) |
+| --- | --- |
+| `gateway-registry` | все `GRPCRoute` `Accepted` и `ResolvedRefs` (1) |
+| `gateway-routes-orders` | `OrdersService` без identity доходит до orders: `UNAUTHENTICATED` от backend'а (1) |
+| `gateway-routes-to-backends` | 10 команд Order Fulfillment доходят до restaurants, delivery и payments: ответ backend'а, не Envoy (1) |
+| `gateway-rejects-unregistered` | незарегистрированный сервис и команда кухни без вызывающего: `UNIMPLEMENTED` от Envoy (3) |
+| `netpol-without-policies` | без NetworkPolicy `orders → restaurants` и `outsider → restaurants` напрямую доходят до backend'а (`NOT_FOUND`), gateway доступен (A1–A3) |
+| `netpol-blocks-direct-calls` | с NetworkPolicy при выполненных условиях (restaurants Available, имя резолвится, gateway доступен и Orders RPC через него проходит) прямые `orders ↔ restaurants` получают silent drop; `nomnom-outsider` не достаёт ни backend, ни gateway; Hubble фиксирует `DROPPED` (2.1–2.9) |
+| `gateway-call-metadata` | authorization metadata доходит до backend'а (`PERMISSION_DENIED` от SpiceDB, reason `OPERATION_NOT_ALLOWED`); случайный `traceparent` вызывающего продолжен server span `orders` в логе `trace-capture` (4.1–4.2) |
+| `gateway-retries-and-deadlines` | при недоступном SpiceDB (`fixtures/deny-orders-spicedb.yaml`) `ListCustomerOrders` — `UNAVAILABLE`, повторён ровно 2 раза, `RequestOrderCancellation` — ни разу; deadline 1 s вызывающего соблюдается backend'ом: ответ `DEADLINE_EXCEEDED` или remote reset, server span `orders` заканчивается по deadline, а не по таймауту SpiceDB (5a.1–5a.4, 5.1) |
+| `infra-connectivity` | под политиками `orders` → свой PostgreSQL, Kafka, Temporal; Kafka из restaurants, delivery, payments; restaurants → своя MongoDB; чужая БД и Temporal для не-`orders` закрыты; `orders` → Alloy OTLP открыт, если Alloy развёрнут (`GRAFANA_CLOUD=1`) (6.2–6.7, 6.9, 6.10) |
+| `infra-workloads` | DNS из `orders` под политиками; `orders` и `orders-consumer` Available — они падают на старте без PostgreSQL, Kafka и Temporal (6.1, 6.8) |
+| `workloads-healthy-under-policies` | после применения политик deployments неймспейсов приложений, `envoy-gateway-system` и `kube-system` Available, ни один контейнер не перезапускался и нет проваленных kubelet-проб (6a.1–6a.3) |
+| `app-probes` | startup, liveness и readiness `orders`, `restaurants`, `delivery`, `payments` на `/health/*` порта `metrics` (6a.4) |
+| `bff-end-to-end` | BFF Available, probes `/health/live` и `/health/ready`; из `nomnom-bff` закрыты прямой `orders` и PostgreSQL; `bffInfo`; `order(id)` без `Authorization` — `Unauthenticated` (AC-576); с access token тестового provider для отсутствующего заказа — `{"data":{"order":null}}` (AC-575), log `orders` — `user assertion accepted: delegate=bff`; тот же user assertion (ключ BFF, aud `nomnom.orders`) от `grpc-caller` — `UNAUTHENTICATED`, log — `service is not an allowed delegate` (7.1–7.10) |
 
 Один тест: `cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$CHAINSAW_VERSION test --kube-context kind-nomnom-test --config .chainsaw.yaml --test-dir . --include-test-regex 'chainsaw/gateway-registry'`.
-
-### verify.sh
-
-| # | Проверка | Статус |
-| --- | --- | --- |
-| A | без NetworkPolicy `orders → restaurants` и `outsider → restaurants` напрямую отвечают 200, gateway доступен | выполняется |
-| 2 | с NetworkPolicy прямые `orders ↔ restaurants` получают silent drop (curl timeout, не DNS и не refused) при выполненных условиях: backend Available, имя резолвится, gateway доступен и Orders RPC через него проходит; Hubble фиксирует `DROPPED`; `nomnom-outsider` не достаёт ни backend, ни gateway | выполняется |
-| 4 | authorization metadata доходит до backend (`PERMISSION_DENIED` от SpiceDB); случайный `traceparent` вызывающего продолжен server span `orders` (тот же trace id, parent — span вызывающего) в логах `trace-capture` | выполняется |
-| 5 | deadline вызывающего соблюдается backend'ом (`context deadline exceeded` от orders, а не timeout Envoy); retries только у идемпотентных методов | deadline выполняется; при недоступном SpiceDB (Cilium deny `fixtures/deny-orders-spicedb.yaml`) `ListCustomerOrders` повторяется ровно 2 раза, `RequestOrderCancellation` — ни разу (статистика Envoy `upstream_rq_retry`); route timeout 300 s задан `BackendTrafficPolicy` |
-| 6 | инфраструктурные подключения под политиками | DNS, `orders` → свой PostgreSQL, Kafka, Temporal, Kafka из других контекстов, запрет чужой БД и Temporal для не-`orders` выполняются; Alloy — только с `GRAFANA_CLOUD=1`; MongoDB `restaurants` **заблокирована**: приложение её ещё не использует |
-| 6a | после применения политик pod Available, без рестартов и проваленных kubelet-проб (Envoy Proxy, CoreDNS, Cilium) | выполняется; пробы приложений выключены до health contract (ADR 12) |
-| 7 | BFF насквозь (ADR 32), через port-forward под политиками: BFF Available, probes `/health/live` и `/health/ready`; из `nomnom-bff` закрыты прямой `orders` и PostgreSQL; `bffInfo`; `order(id)` без `Authorization` — ошибка `Unauthenticated` (AC-576); с access token тестового provider для отсутствующего заказа — `{"data":{"order":null}}` без ошибок (AC-575), log `orders` — `user assertion accepted: delegate=bff`; тот же user assertion (ключ BFF, aud `nomnom.orders`) от `grpc-caller` — `UNAUTHENTICATED`, log — `service is not an allowed delegate` | выполняется |
 
 ### Технические подключения
 
 | Назначение | Источник → получатель | Порт |
 | --- | --- | --- |
-| Kubelet probes | узел → pod | порт пробы; разрешено Cilium для host-трафика, проверяется тестом 6a |
-| Проверка 7 → BFF | `kubectl port-forward` → pod BFF | 3010; поток идёт через kubelet внутрь pod и ingress-политикой не ограничивается; egress BFF — только базовые политики неймспейса (DNS, internal gateway, telemetry) |
+| Kubelet probes | узел → pod | порт пробы; разрешено Cilium для host-трафика, проверяется тестом `workloads-healthy-under-policies` |
+| Проверка `bff-end-to-end` → BFF | `net-probe` в `nomnom-outsider` → pod BFF | 3010; ingress открывает на время теста `fixtures/allow-bff-from-outsider.yaml`; egress BFF — только базовые политики неймспейса (DNS, internal gateway, telemetry) |
+| Проверки retries → статистика Envoy | API server (proxy) → Envoy Proxy | 19001 (`/stats/prometheus`); host-трафик, политиками gateway не ограничивается |
 | DNS | pod → CoreDNS | UDP/TCP 53 |
 | Telemetry | приложения → Alloy | 4317 OTLP gRPC, 4318 OTLP HTTP, 4040 Pyroscope |
 | Метрики приложений | Alloy → pod | порт с именем `metrics` |

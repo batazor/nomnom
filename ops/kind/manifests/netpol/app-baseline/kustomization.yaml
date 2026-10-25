@@ -1,0 +1,6 @@
+# Базовые политики прикладного неймспейса без namespace: его задают overlays
+# namespaces/<неймспейс> (по одному на неймспейс с label nomnom.dev/tier=app).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - policies.yaml
