@@ -1,9 +1,12 @@
 import {
   execute,
+  type FragmentDefinitionNode,
   type GraphQLObjectType,
   Kind,
   type OperationDefinitionNode,
   parse,
+  print,
+  subscribe,
   validate,
 } from "graphql";
 import { describe, expect, it } from "vitest";
@@ -37,6 +40,7 @@ const documents = {
 const variablesByOperation: Record<string, Record<string, unknown>> = {
   BffInfo: {},
   ViewOrder: { id: "order-preparing" },
+  OrderChanged: { id: "order-preparing" },
   RequestOrderCancellation: {
     input: { orderId: "order-received", requestId: "contract-cancel" },
   },
@@ -72,18 +76,33 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   },
 };
 
-const operations = Object.entries(documents).flatMap(([file, source]) =>
-  parse(source)
-    .definitions.filter(
+// Each operation goes with the fragments of its file, as codegen sends it.
+const operations = Object.entries(documents).flatMap(([file, source]) => {
+  const { definitions } = parse(source);
+  const fragments = definitions.filter(
+    (definition): definition is FragmentDefinitionNode =>
+      definition.kind === Kind.FRAGMENT_DEFINITION,
+  );
+  return definitions
+    .filter(
       (definition): definition is OperationDefinitionNode =>
         definition.kind === Kind.OPERATION_DEFINITION,
     )
     .map((definition) => ({
       file,
       name: definition.name?.value ?? "",
-      document: { kind: Kind.DOCUMENT, definitions: [definition] } as const,
-    })),
-);
+      kind: definition.operation,
+      document: {
+        kind: Kind.DOCUMENT,
+        definitions: [
+          definition,
+          ...fragments.filter((fragment) =>
+            print(definition).includes(`...${fragment.name.value}`),
+          ),
+        ],
+      } as const,
+    }));
+});
 
 function schemaType(name: string): GraphQLObjectType {
   return publicSchema.getType(name) as GraphQLObjectType;
@@ -94,6 +113,7 @@ describe("mock contract", () => {
     const rootFields = [
       ...Object.keys(publicSchema.getQueryType()?.getFields() ?? {}),
       ...Object.keys(publicSchema.getMutationType()?.getFields() ?? {}),
+      ...Object.keys(publicSchema.getSubscriptionType()?.getFields() ?? {}),
     ];
     const store = createMockStore();
     expect(Object.keys(store.rootValue).sort()).toEqual(rootFields.sort());
@@ -101,17 +121,25 @@ describe("mock contract", () => {
 
   it.each(operations)(
     "$name from $file conforms to the schema",
-    async ({ name, document }) => {
+    async ({ name, kind, document }) => {
       expect(validate(publicSchema, document)).toEqual([]);
       const variables = variablesByOperation[name];
       expect(variables, `variables for ${name}`).toBeDefined();
 
-      const result = await execute({
+      const args = {
         schema: publicSchema,
         document,
         rootValue: createMockStore().rootValue,
         variableValues: variables,
-      });
+      };
+      if (kind === "subscription") {
+        // A stream yields only after a change; the store test follows one.
+        const stream = await subscribe(args);
+        expect(Symbol.asyncIterator in stream).toBe(true);
+        if (Symbol.asyncIterator in stream) await stream.return?.();
+        return;
+      }
+      const result = await execute(args);
       expect(result.errors).toBeUndefined();
     },
   );

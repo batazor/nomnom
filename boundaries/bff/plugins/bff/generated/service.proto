@@ -7,6 +7,11 @@ import "google/protobuf/wrappers.proto";
 
 // Service definition for BffService
 service BffService {
+  /*
+   * Lookup Order entity by id: Order of the current customer; the entity key lets the Router resolve
+   * subscription events of the events subgraph (ADR 36)
+   */
+  rpc LookupOrderById(LookupOrderByIdRequest) returns (LookupOrderByIdResponse) {}
   // Accept a delivery offer addressed to the current courier
   rpc MutationAcceptDeliveryOffer(MutationAcceptDeliveryOfferRequest) returns (MutationAcceptDeliveryOfferResponse) {}
   // Apply a command to the current delivery of the courier
@@ -45,6 +50,40 @@ service BffService {
   rpc QueryRestaurant(QueryRestaurantRequest) returns (QueryRestaurantResponse) {}
   // Restaurants available to the customer
   rpc QueryRestaurants(QueryRestaurantsRequest) returns (QueryRestaurantsResponse) {}
+}
+
+// Key message for Order entity lookup
+message LookupOrderByIdRequestKey {
+  // Key field for Order entity lookup.
+  string id = 1;
+}
+
+// Request message for Order entity lookup.
+message LookupOrderByIdRequest {
+  /*
+   * List of keys to look up Order entities.
+   * Order matters - each key maps to one entity in LookupOrderByIdResponse.
+   */
+  repeated LookupOrderByIdRequestKey keys = 1;
+}
+
+// Response message for Order entity lookup.
+message LookupOrderByIdResponse {
+  /*
+   * List of Order entities in the same order as the keys in LookupOrderByIdRequest.
+   * Always return the same number of entities as keys. Use null for entities that cannot be found.
+   * 
+   * Example:
+   *   LookupUserByIdRequest:
+   *     keys:
+   *       - id: 1
+   *       - id: 2
+   *   LookupUserByIdResponse:
+   *     result:
+   *       - id: 1 # User with id 1 found
+   *       - null  # User with id 2 not found
+   */
+  repeated Order result = 1;
 }
 
 // Request message for bffInfo operation: Metadata for the client BFF.
@@ -212,6 +251,33 @@ message MutationApplyCourierDeliveryActionResponse {
   CourierPayload apply_courier_delivery_action = 1;
 }
 
+/*
+ * Order of the current customer; the entity key lets the Router resolve
+ * subscription events of the events subgraph (ADR 36)
+ */
+message Order {
+  // Order identifier
+  string id = 1;
+  // Customer-facing lifecycle status
+  OrderStatus status = 2;
+  // Why the order ended, set only for CANCELLED and FAILED
+  OrderEndReason end_reason = 3;
+  // Restaurant that fulfills the order
+  Restaurant restaurant = 4;
+  // Ordered items
+  repeated OrderItem items = 5;
+  // Total amount of the order
+  Money total = 6;
+  // Delivery address as entered by the customer
+  string delivery_address = 7;
+  // Moment the order was placed in RFC 3339
+  string placed_at = 8;
+  // Milestones in chronological order
+  repeated OrderMilestone milestones = 9;
+  // Cancellation availability, null when cancellation is not possible now
+  OrderCancellationAvailability cancellation = 10;
+}
+
 message BffInfo {
   // Service name
   string name = 1;
@@ -238,30 +304,6 @@ message Restaurant {
   bool accepting_orders = 4;
   // Current menu, null if the restaurant has not published one
   Menu menu = 5;
-}
-
-// Order of the current customer
-message Order {
-  // Order identifier
-  string id = 1;
-  // Customer-facing lifecycle status
-  OrderStatus status = 2;
-  // Why the order ended, set only for CANCELLED and FAILED
-  OrderEndReason end_reason = 3;
-  // Restaurant that fulfills the order
-  Restaurant restaurant = 4;
-  // Ordered items
-  repeated OrderItem items = 5;
-  // Total amount of the order
-  Money total = 6;
-  // Delivery address as entered by the customer
-  string delivery_address = 7;
-  // Moment the order was placed in RFC 3339
-  string placed_at = 8;
-  // Milestones in chronological order
-  repeated OrderMilestone milestones = 9;
-  // Cancellation availability, null when cancellation is not possible now
-  OrderCancellationAvailability cancellation = 10;
 }
 
 message OrderConnection {
@@ -576,6 +618,8 @@ message DeliveryOffer {
   string dropoff_address = 4;
   // Moment in RFC 3339 after which the offer cannot be accepted
   string expires_at = 5;
+  // Customer order the delivery is for
+  string order_id = 6;
 }
 
 // Stage of a delivery assigned to the courier

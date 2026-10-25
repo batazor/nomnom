@@ -4,3 +4,7 @@ subgraphs:
   - plugin:
       version: 0.0.1
       path: plugins/bff
+  # Cosmo Streams (ADR 36): subscriptions from Kafka, entities resolved by the plugin.
+  - name: events
+    schema:
+      file: events/schema.graphql

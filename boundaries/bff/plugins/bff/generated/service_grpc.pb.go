@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	BffService_LookupOrderById_FullMethodName                    = "/service.BffService/LookupOrderById"
 	BffService_MutationAcceptDeliveryOffer_FullMethodName        = "/service.BffService/MutationAcceptDeliveryOffer"
 	BffService_MutationApplyCourierDeliveryAction_FullMethodName = "/service.BffService/MutationApplyCourierDeliveryAction"
 	BffService_MutationApplyKitchenAction_FullMethodName         = "/service.BffService/MutationApplyKitchenAction"
@@ -43,6 +44,9 @@ const (
 //
 // Service definition for BffService
 type BffServiceClient interface {
+	// Lookup Order entity by id: Order of the current customer; the entity key lets the Router resolve
+	// subscription events of the events subgraph (ADR 36)
+	LookupOrderById(ctx context.Context, in *LookupOrderByIdRequest, opts ...grpc.CallOption) (*LookupOrderByIdResponse, error)
 	// Accept a delivery offer addressed to the current courier
 	MutationAcceptDeliveryOffer(ctx context.Context, in *MutationAcceptDeliveryOfferRequest, opts ...grpc.CallOption) (*MutationAcceptDeliveryOfferResponse, error)
 	// Apply a command to the current delivery of the courier
@@ -85,6 +89,16 @@ type bffServiceClient struct {
 
 func NewBffServiceClient(cc grpc.ClientConnInterface) BffServiceClient {
 	return &bffServiceClient{cc}
+}
+
+func (c *bffServiceClient) LookupOrderById(ctx context.Context, in *LookupOrderByIdRequest, opts ...grpc.CallOption) (*LookupOrderByIdResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LookupOrderByIdResponse)
+	err := c.cc.Invoke(ctx, BffService_LookupOrderById_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *bffServiceClient) MutationAcceptDeliveryOffer(ctx context.Context, in *MutationAcceptDeliveryOfferRequest, opts ...grpc.CallOption) (*MutationAcceptDeliveryOfferResponse, error) {
@@ -253,6 +267,9 @@ func (c *bffServiceClient) QueryRestaurants(ctx context.Context, in *QueryRestau
 //
 // Service definition for BffService
 type BffServiceServer interface {
+	// Lookup Order entity by id: Order of the current customer; the entity key lets the Router resolve
+	// subscription events of the events subgraph (ADR 36)
+	LookupOrderById(context.Context, *LookupOrderByIdRequest) (*LookupOrderByIdResponse, error)
 	// Accept a delivery offer addressed to the current courier
 	MutationAcceptDeliveryOffer(context.Context, *MutationAcceptDeliveryOfferRequest) (*MutationAcceptDeliveryOfferResponse, error)
 	// Apply a command to the current delivery of the courier
@@ -297,6 +314,9 @@ type BffServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedBffServiceServer struct{}
 
+func (UnimplementedBffServiceServer) LookupOrderById(context.Context, *LookupOrderByIdRequest) (*LookupOrderByIdResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LookupOrderById not implemented")
+}
 func (UnimplementedBffServiceServer) MutationAcceptDeliveryOffer(context.Context, *MutationAcceptDeliveryOfferRequest) (*MutationAcceptDeliveryOfferResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationAcceptDeliveryOffer not implemented")
 }
@@ -364,6 +384,24 @@ func RegisterBffServiceServer(s grpc.ServiceRegistrar, srv BffServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&BffService_ServiceDesc, srv)
+}
+
+func _BffService_LookupOrderById_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LookupOrderByIdRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).LookupOrderById(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_LookupOrderById_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).LookupOrderById(ctx, req.(*LookupOrderByIdRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _BffService_MutationAcceptDeliveryOffer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -661,6 +699,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "service.BffService",
 	HandlerType: (*BffServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "LookupOrderById",
+			Handler:    _BffService_LookupOrderById_Handler,
+		},
 		{
 			MethodName: "MutationAcceptDeliveryOffer",
 			Handler:    _BffService_MutationAcceptDeliveryOffer_Handler,

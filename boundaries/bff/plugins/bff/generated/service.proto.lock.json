@@ -490,7 +490,8 @@
         "deliveryId": 2,
         "pickupAddress": 3,
         "dropoffAddress": 4,
-        "expiresAt": 5
+        "expiresAt": 5,
+        "orderId": 6
       }
     },
     "CourierDelivery": {
@@ -500,6 +501,21 @@
         "stage": 3,
         "pickupAddress": 4,
         "dropoffAddress": 5
+      }
+    },
+    "LookupOrderByIdRequestKey": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "LookupOrderByIdRequest": {
+      "fields": {
+        "keys": 1
+      }
+    },
+    "LookupOrderByIdResponse": {
+      "fields": {
+        "result": 1
       }
     }
   },

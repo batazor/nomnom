@@ -1,40 +1,52 @@
-query ViewOrder($id: ID!) {
-  order(id: $id) {
+# Fields of the order screen: the query loads them, orderChanged pushes them
+# after every change (ADR 36).
+fragment ViewedOrder on Order {
+  id
+  status
+  endReason
+  restaurant {
     id
-    status
-    endReason
-    restaurant {
+    name
+  }
+  items {
+    menuItem {
       id
       name
     }
-    items {
-      menuItem {
-        id
-        name
-      }
-      quantity
-      unitPrice {
-        amount
-        currency
-      }
-      lineTotal {
-        amount
-        currency
-      }
-    }
-    total {
+    quantity
+    unitPrice {
       amount
       currency
     }
-    deliveryAddress
-    placedAt
-    milestones {
-      kind
-      occurredAt
+    lineTotal {
+      amount
+      currency
     }
-    cancellation {
-      availableUntil
-    }
+  }
+  total {
+    amount
+    currency
+  }
+  deliveryAddress
+  placedAt
+  milestones {
+    kind
+    occurredAt
+  }
+  cancellation {
+    availableUntil
+  }
+}
+
+query ViewOrder($id: ID!) {
+  order(id: $id) {
+    ...ViewedOrder
+  }
+}
+
+subscription OrderChanged($id: ID!) {
+  orderChanged(id: $id) {
+    ...ViewedOrder
   }
 }
 

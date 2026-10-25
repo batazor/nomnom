@@ -1,9 +1,9 @@
-import { execute, parse } from "graphql";
-import { describe, expect, it } from "vitest";
+import { execute, parse, subscribe } from "graphql";
+import { describe, expect, it, vi } from "vitest";
 
 import { kitchenEight, nightBakery, restaurantFixtures } from "./fixtures";
 import { publicSchema } from "./schema";
-import { createMockStore, type MockStore } from "./store";
+import { createMockStore, liveStepMs, type MockStore } from "./store";
 
 type OrderData = {
   order: { id: string; status: string; endReason: string | null } | null;
@@ -118,25 +118,61 @@ describe("mock store", () => {
     });
   });
 
-  it("advances order-live one status per request up to DELIVERED", async () => {
+  it("pushes order-live one status per step up to DELIVERED, not per request", async () => {
+    vi.useFakeTimers();
     const store = createMockStore();
+    const stream = await subscribe({
+      schema: publicSchema,
+      document: parse(
+        "subscription ($id: ID!) { orderChanged(id: $id) { status } }",
+      ),
+      rootValue: store.rootValue,
+      variableValues: { id: "order-live" },
+    });
+    if (!(Symbol.asyncIterator in stream)) throw new Error("no stream");
+
+    await run<OrderData>(store, orderStatus, { id: "order-live" });
     const statuses: string[] = [];
-    for (let i = 0; i < 8; i += 1) {
-      statuses.push(
-        (await run<OrderData>(store, orderStatus, { id: "order-live" })).order
-          ?.status ?? "",
-      );
+    for (let i = 0; i < 5; i += 1) {
+      const next = stream.next();
+      await vi.advanceTimersByTimeAsync(liveStepMs);
+      const { value } = await next;
+      const data = value?.data as { orderChanged: { status: string } };
+      statuses.push(data.orderChanged.status);
     }
+    await stream.return?.();
+    vi.useRealTimers();
+
     expect(statuses).toEqual([
-      "RECEIVED",
       "CONFIRMED",
       "PREPARING",
       "READY_FOR_PICKUP",
       "PICKED_UP",
       "DELIVERED",
-      "DELIVERED",
-      "DELIVERED",
     ]);
+  });
+
+  it("notifies orderChanged subscribers after a cancellation", async () => {
+    const store = createMockStore();
+    const stream = await subscribe({
+      schema: publicSchema,
+      document: parse(
+        "subscription ($id: ID!) { orderChanged(id: $id) { status } }",
+      ),
+      rootValue: store.rootValue,
+      variableValues: { id: "order-received" },
+    });
+    if (!(Symbol.asyncIterator in stream)) throw new Error("no stream");
+    const next = stream.next();
+
+    await run<CancelData>(store, cancelOrder, {
+      input: { orderId: "order-received", requestId: "cancel-push" },
+    });
+
+    expect((await next).value?.data).toEqual({
+      orderChanged: { status: "CANCELLED" },
+    });
+    await stream.return?.();
   });
 
   it("reports unavailable items and closed restaurants as problems", async () => {

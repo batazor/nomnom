@@ -6,6 +6,7 @@ import {
   deliveryAddressFixture,
   liveOrderAt,
   liveOrderId,
+  liveOrderStepCount,
   type MockOrder,
   type MockRestaurant,
   managedRestaurantIds,
@@ -14,8 +15,14 @@ import {
   restaurantFixtures,
 } from "./fixtures";
 import { createFulfillment } from "./fulfillment";
+import { createChangeFeed } from "./order-changes";
 
 type Clock = () => Date;
+
+// order-live moves one status per step while someone follows it.
+export const liveStepMs = 4_000;
+
+const finalStatuses = new Set(["DELIVERED", "CANCELLED", "FAILED"]);
 
 type Connection<T> = {
   edges: { cursor: string; node: T }[];
@@ -91,7 +98,8 @@ function initialState(now: Date) {
 }
 
 // In-memory backend behind the MSW handlers. Each instance keeps its own
-// orders, order-live progress and idempotency keys.
+// orders, order-live progress and idempotency keys. Every mutation notifies
+// orderChanged subscribers, as Order Change Notifications of orders do.
 export function createMockStore({
   now = () => new Date(),
 }: {
@@ -100,6 +108,40 @@ export function createMockStore({
   let clock = now;
   let state = initialState(clock());
   let fulfillment = newFulfillment();
+  const changes = createChangeFeed();
+  let liveTimer: ReturnType<typeof setInterval> | undefined;
+  let liveFollowers = 0;
+
+  // order-live progresses like a real kitchen and courier, without requests.
+  function followLive(): () => void {
+    liveFollowers += 1;
+    liveTimer ??= setInterval(() => {
+      if (state.liveCancelled || state.liveStep >= liveOrderStepCount - 1) {
+        stopLive();
+        return;
+      }
+      state.liveStep += 1;
+      changes.changed();
+    }, liveStepMs);
+    return () => {
+      liveFollowers -= 1;
+      if (liveFollowers === 0) stopLive();
+    };
+  }
+
+  function stopLive() {
+    clearInterval(liveTimer);
+    liveTimer = undefined;
+  }
+
+  // Runs a mutation and notifies subscribers of the orders it may change.
+  function mutation<A, R>(resolve: (args: A) => R): (args: A) => R {
+    return (args) => {
+      const result = resolve(args);
+      changes.changed();
+      return result;
+    };
+  }
 
   function newFulfillment() {
     return createFulfillment({
@@ -247,11 +289,20 @@ export function createMockStore({
         args,
       ),
     restaurant: ({ id }: { id: string }) => currentRestaurant(id) ?? null,
-    order: ({ id }: { id: string }) => {
-      const order = findOrder(id) ?? null;
-      if (id === liveOrderId && !state.liveCancelled) state.liveStep += 1;
-      return order;
-    },
+    order: ({ id }: { id: string }) => findOrder(id) ?? null,
+    // Like Cosmo Streams: the order after each change, an error for a missing one.
+    orderChanged: ({ id }: { id: string }) =>
+      changes.subscribe(
+        () => {
+          const order = findOrder(id);
+          if (!order) throw bffError("NotFound", "order not found");
+          return { orderChanged: order };
+        },
+        {
+          isLast: ({ orderChanged }) => finalStatuses.has(orderChanged.status),
+          onClose: id === liveOrderId ? followLive() : undefined,
+        },
+      ),
     // Like ListOwnedRestaurants: open and closed restaurants of the mock user.
     myRestaurants: (args: PageArgs) =>
       paginate(
@@ -267,22 +318,24 @@ export function createMockStore({
         ),
         args,
       ),
-    placeOrder: ({ input }: { input: PlaceOrderInput }) => {
+    placeOrder: mutation(({ input }: { input: PlaceOrderInput }) => {
       const replay = state.placed.get(input.idempotencyKey);
       if (replay) return replay;
       const payload = placeOrder(input);
       state.placed.set(input.idempotencyKey, payload);
       return payload;
-    },
-    requestOrderCancellation: ({ input }: { input: CancellationInput }) => {
-      const replay = state.cancellations.get(input.requestId);
-      if (replay) return replay;
-      const order = findOrder(input.orderId);
-      if (!order) throw new Error("Order not found");
-      const payload = decideCancellation(order);
-      state.cancellations.set(input.requestId, payload);
-      return payload;
-    },
+    }),
+    requestOrderCancellation: mutation(
+      ({ input }: { input: CancellationInput }) => {
+        const replay = state.cancellations.get(input.requestId);
+        if (replay) return replay;
+        const order = findOrder(input.orderId);
+        if (!order) throw new Error("Order not found");
+        const payload = decideCancellation(order);
+        state.cancellations.set(input.requestId, payload);
+        return payload;
+      },
+    ),
     openRestaurant: ({ restaurantId }: { restaurantId: string }) =>
       setOpening(restaurantId, true),
     closeRestaurant: ({ restaurantId }: { restaurantId: string }) =>
@@ -290,26 +343,33 @@ export function createMockStore({
     // The mock user operates the kitchen of every restaurant and is a courier.
     kitchen: ({ restaurantId }: { restaurantId: string }) =>
       fulfillment.kitchen(restaurantId),
-    applyKitchenAction: ({
-      input,
-    }: {
-      input: Parameters<typeof fulfillment.applyKitchenAction>[0];
-    }) => fulfillment.applyKitchenAction(input),
+    applyKitchenAction: mutation(
+      ({
+        input,
+      }: {
+        input: Parameters<typeof fulfillment.applyKitchenAction>[0];
+      }) => fulfillment.applyKitchenAction(input),
+    ),
     courier: () => fulfillment.courier(),
-    setCourierAvailability: ({
-      availability,
-    }: {
-      availability: Parameters<typeof fulfillment.setAvailability>[0];
-    }) => fulfillment.setAvailability(availability),
-    acceptDeliveryOffer: ({ offerId }: { offerId: string }) =>
+    setCourierAvailability: mutation(
+      ({
+        availability,
+      }: {
+        availability: Parameters<typeof fulfillment.setAvailability>[0];
+      }) => fulfillment.setAvailability(availability),
+    ),
+    acceptDeliveryOffer: mutation(({ offerId }: { offerId: string }) =>
       fulfillment.acceptOffer(offerId),
-    applyCourierDeliveryAction: ({
-      deliveryId,
-      action,
-    }: {
-      deliveryId: string;
-      action: Parameters<typeof fulfillment.applyDeliveryAction>[1];
-    }) => fulfillment.applyDeliveryAction(deliveryId, action),
+    ),
+    applyCourierDeliveryAction: mutation(
+      ({
+        deliveryId,
+        action,
+      }: {
+        deliveryId: string;
+        action: Parameters<typeof fulfillment.applyDeliveryAction>[1];
+      }) => fulfillment.applyDeliveryAction(deliveryId, action),
+    ),
   };
 
   return {
@@ -318,6 +378,7 @@ export function createMockStore({
       clock = next;
     },
     reset() {
+      stopLive();
       clock = now;
       state = initialState(clock());
       fulfillment = newFulfillment();

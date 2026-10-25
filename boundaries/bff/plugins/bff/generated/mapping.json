@@ -115,6 +115,16 @@
       "response": "MutationApplyCourierDeliveryActionResponse"
     }
   ],
+  "entityMappings": [
+    {
+      "typeName": "Order",
+      "kind": "entity",
+      "key": "id",
+      "rpc": "LookupOrderById",
+      "request": "LookupOrderByIdRequest",
+      "response": "LookupOrderByIdResponse"
+    }
+  ],
   "typeFieldMappings": [
     {
       "type": "Query",
@@ -632,6 +642,10 @@
         {
           "original": "deliveryId",
           "mapped": "delivery_id"
+        },
+        {
+          "original": "orderId",
+          "mapped": "order_id"
         },
         {
           "original": "pickupAddress",

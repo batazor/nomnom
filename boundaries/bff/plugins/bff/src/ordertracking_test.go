@@ -119,6 +119,28 @@ func TestQueryOrderNotFoundIsNull(t *testing.T) {
 	assert.Nil(t, response.GetOrder())
 }
 
+// ADR 36: an orderChanged event is resolved as the customer, a foreign or
+// missing order is NOT_FOUND, never order data.
+func TestLookupOrderByIdResolvesAsTheCustomer(t *testing.T) {
+	getOrder := &fakeGetOrder{view: applications.OrderView{ID: "order-1", Status: applications.StatusPreparing,
+		Total: applications.Money{Amount: "0.30", Currency: "EUR"}}}
+	svc, ctx := newService(t, getOrder, &fakeCancellation{})
+	request := &service.LookupOrderByIdRequest{Keys: []*service.LookupOrderByIdRequestKey{{Id: "order-1"}}}
+
+	response, err := svc.LookupOrderById(ctx, request)
+	require.NoError(t, err)
+	require.Len(t, response.GetResult(), 1)
+	assert.Equal(t, "order-1", response.GetResult()[0].GetId())
+	assert.Equal(t, "customer-1", getOrder.user.ID)
+
+	getOrder.err = applications.ErrOrderNotFound
+	_, err = svc.LookupOrderById(ctx, request)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+
+	_, err = svc.LookupOrderById(context.Background(), request)
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
 func TestRequestOrderCancellationMapsOutcomeAndProblem(t *testing.T) {
 	cancel := &fakeCancellation{result: applications.CancellationResult{Problem: applications.ProblemWindowExpired}}
 	svc, ctx := newService(t, &fakeGetOrder{}, cancel)

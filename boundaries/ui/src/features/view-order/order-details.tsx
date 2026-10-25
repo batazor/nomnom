@@ -11,7 +11,7 @@ import {
   statusPresentation,
 } from "./order-presentation";
 import { StatusIcon } from "./status-icon";
-import { useOrderPolling, type ViewedOrder } from "./use-order-polling";
+import { useOrderUpdates, type ViewedOrder } from "./use-order-updates";
 import "./view-order.css";
 
 type Money = ViewedOrder["total"];
@@ -28,7 +28,7 @@ function useMoney() {
 // Status, progress, cancellation, items and history of one order.
 export function OrderDetails({ orderId }: { orderId: string }) {
   const { t } = useI18n();
-  const { order, failed, refresh } = useOrderPolling(orderId);
+  const { order, failed, refresh } = useOrderUpdates(orderId);
 
   if (order === undefined && failed) {
     return (

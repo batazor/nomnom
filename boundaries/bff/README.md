@@ -137,7 +137,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 
 `plugins/bff/courier/applications` — сценарии Get Courier, Set Availability, Accept Offer и Apply Delivery Action; `courier/infrastructure` вызывает RPC курьера `delivery` от имени пользователя (audience `nomnom.delivery`, GRPCRoute `delivery-v1-courier` и `delivery-v1-courier-reads`). Курьер — сам пользователь: `delivery` регистрирует курьера под user id (`RegisterCourier`), поэтому `courier_id` — subject access token; `courier#act` и принадлежность доставки или offer курьеру проверяет `delivery`.
 
-- `courier`: `GetCourierCurrentDelivery` — статус курьера (`courier_status`) и текущая доставка с адресами; `offers` — `ListAvailableDeliveryOffers`, только пока курьер `AVAILABLE`, иначе `[]`; `expiresAt` — из `expires_at_epoch_seconds`.
+- `courier`: `GetCourierCurrentDelivery` — статус курьера (`courier_status`) и текущая доставка с адресами; `offers` — `ListAvailableDeliveryOffers`, только пока курьер `AVAILABLE`, иначе `[]`; `orderId` — заказ доставки offer (`order_id`); `expiresAt` — из `expires_at_epoch_seconds`.
 - Mutations отвечают `CourierPayload`: курьер перечитывается после команды, в том числе после бизнес-отказа.
 - **Местоположение.** Dispatch предлагает доставку только курьеру с известной позицией (`UpdateCourierLocation`, e2e `order-lifecycle` вызывает его перед `SetCourierAvailability`). В схеме нет операции для позиции, и BFF её не выдумывает: `setCourierAvailability(AVAILABLE)` не меняет позицию, offers приходят курьеру, чья позиция уже известна `delivery`. Позицию курьерского приложения должна передавать отдельная mutation (например `reportCourierLocation(latitude, longitude)`) — её нужно добавить в контракт; до тех пор в kind позицию задаёт seed или fixture.
 
@@ -153,6 +153,15 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 | `ConfirmPickup`/`ConfirmDelivery`: `NOT_FOUND` | error `NOT_FOUND` |
 | `SetCourierAvailability`: `FAILED_PRECONDITION` | error `FAILED_PRECONDITION`: в `CourierProblemCode` нет кода для отказа по статусу курьера |
 | остальные сбои, в том числе `ABORTED` гонки | error `UNAVAILABLE` без внутренних деталей |
+
+## Subscriptions
+
+Решение — [ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md). Подписки обслуживает сам Cosmo Router (Cosmo Streams): у gRPC plugin нет streaming.
+
+- `orderChanged(id)` объявлен в event-driven subgraph [`events/schema.graphql`](events/schema.graphql) (`@edfs__kafkaSubscribe`, фильтр по `id`). Router читает `orders.v1.order-changes` (`events.providers.kafka`, `BFF__KAFKA_BROKERS`, Helm `kafka.brokers` обязателен).
+- Событие — только ключ `{"__typename":"Order","id":…}`. Данные Router получает через `LookupOrderById` plugin (`Order @key(fields: "id")`) с `Authorization` подписчика: тот же сценарий, что `order(id)`. Чужой или отсутствующий заказ — error-событие `NOT_FOUND`.
+- Клиенты подписываются по SSE (`POST /graphql`, `Accept: text/event-stream`). Первое событие приходит только после изменения, поэтому текущее состояние берётся query.
+- Клиентская схема — композиция subgraphs: `npm run compose` пишет `config.json` и [`client-schema.graphql`](client-schema.graphql) для codegen UI.
 
 ## Identity покупателя
 
@@ -206,7 +215,7 @@ BFF проверяет клиентский GraphQL-запрос и access token
 - BFF может выполнять coarse-grained authorization для endpoint и раннего отказа, но authoritative check прав на доменное действие, принадлежности resource и tenant-изоляции остаётся у bounded context;
 - доменные данные получаются только через gRPC API владельцев;
 - BFF не читает базы данных bounded contexts;
-- BFF не публикует и не потребляет Kafka-сообщения;
+- BFF не публикует Kafka-сообщения и не потребляет Integration Events; Router читает только топик уведомлений `orders.v1.order-changes` для subscriptions ([ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md));
 - BFF не запускает и не управляет Temporal workflow напрямую;
 - агрегация не создаёт общую транзакцию или атомарный снимок нескольких сервисов.
 

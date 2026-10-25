@@ -1,0 +1,19 @@
+# Event-driven subgraph of the BFF (Cosmo Streams, ADR 36). It has no server:
+# the Router consumes the Kafka topics itself and resolves the entities of
+# each event through the plugin subgraph (LookupOrderById) with the
+# subscriber's Authorization. Events carry only the entity key.
+
+type Subscription {
+  """
+  Current state of an order of the current customer after each of its changes.
+  Nothing is sent until the order changes: query order(id) first. A foreign or
+  missing order yields an error event instead of data.
+  """
+  orderChanged(id: ID!): Order!
+    @edfs__kafkaSubscribe(topics: ["orders.v1.order-changes"], providerId: "default")
+    @openfed__subscriptionFilter(condition: { IN: { fieldPath: "id", values: ["{{ args.id }}"] } })
+}
+
+type Order @key(fields: "id", resolvable: false) {
+  id: ID! @external
+}

@@ -61,8 +61,10 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
-          {{- if or .Values.extraEnv .Values.identity.providers .Values.internalGateway.address }}
           env:
+            # ADR 36: Cosmo Streams; образ без брокера Router не запускает.
+            - name: BFF__KAFKA_BROKERS
+              value: {{ required "kafka.brokers is required (ADR 36)" .Values.kafka.brokers | quote }}
             {{- with .Values.internalGateway.address }}
             - name: BFF__INTERNAL_GATEWAY_ADDR
               value: {{ . | quote }}
@@ -87,7 +89,6 @@ spec:
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- end }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             {{- toYaml (omit .Values.livenessProbe "enabled") | nindent 12 }}

@@ -9,7 +9,7 @@ import { defineConfig } from "vitest/config";
 // Public BFF schema, the same file codegen reads; MSW mocks execute against it.
 const publicSchemaPath = resolve(
   import.meta.dirname,
-  process.env.GRAPHQL_SCHEMA ?? "../bff/plugins/bff/src/schema.graphql",
+  process.env.GRAPHQL_SCHEMA ?? "../bff/client-schema.graphql",
 );
 
 // Origins the built UI talks to: the public BFF, the optional Faro collector

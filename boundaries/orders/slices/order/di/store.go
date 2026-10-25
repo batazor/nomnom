@@ -13,16 +13,19 @@ import (
 // слайса (PlacementStore, ReadModels, InboxStore, Activities fulfillment):
 // Unit of Work и Outbox (messaging/outbound) — под декоратором бизнес-метрик,
 // остальные порты — PostgreSQL напрямую. Роли объявлены рядом с потребителями,
-// Wire связывает их с одним ProcessStore.
+// Wire связывает их с одним ProcessStore. Каждая запись Order (Add, Save)
+// кладёт в тот же Outbox Order Change Notification для подписок BFF (ADR 36).
 type ProcessStore struct {
 	*postgres.Store
 	observed observability.ObservedStore
+	changes  outbound.ChangeNotifier
 }
 
 // NewProcessStore собирает store процесса поверх PostgreSQL.
 func NewProcessStore(store *postgres.Store, metrics *observability.DomainMetrics) *ProcessStore {
 	return &ProcessStore{
-		Store: store,
+		Store:   store,
+		changes: outbound.NewChangeNotifier(store),
 		observed: observability.ObservedStore{
 			UnitOfWork: store,
 			Outbox:     outbound.NewOutbox(store),
@@ -33,6 +36,20 @@ func NewProcessStore(store *postgres.Store, metrics *observability.DomainMetrics
 
 func (s *ProcessStore) Do(ctx context.Context, fn func(ctx context.Context) error) error {
 	return s.observed.Do(ctx, fn)
+}
+
+func (s *ProcessStore) Add(ctx context.Context, created *order.Order) error {
+	if err := s.Store.Add(ctx, created); err != nil {
+		return err
+	}
+	return s.changes.Notify(ctx, created.ID())
+}
+
+func (s *ProcessStore) Save(ctx context.Context, changed *order.Order) error {
+	if err := s.Store.Save(ctx, changed); err != nil {
+		return err
+	}
+	return s.changes.Notify(ctx, changed.ID())
 }
 
 func (s *ProcessStore) Append(ctx context.Context, aggregateID order.ID, aggregateVersion uint64, events []order.DomainEvent) error {

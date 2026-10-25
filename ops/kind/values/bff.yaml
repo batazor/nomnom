@@ -16,6 +16,11 @@ serviceAccount:
 internalGateway:
   address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
 
+# ADR 36: Router читает orders.v1.order-changes для подписок orderChanged
+# (egress — manifests/netpol/app-infrastructure.yaml).
+kafka:
+  brokers: kafka.nomnom-infra.svc.cluster.local:9092
+
 # ADR 32, ADR 35. ТОЛЬКО для kind: два identity provider из chart ops/kind/bootstrap —
 # Dex (вход в браузере, issuer — адрес port-forward на localhost) и тестовый test-idp
 # (tests/identity/fixtures, ключ подписи лежит в репозитории; tokens выпускает

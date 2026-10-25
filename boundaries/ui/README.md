@@ -19,7 +19,7 @@ npm run dev
 
 ## Вход через Dex
 
-С `VITE_OIDC_ISSUER` (в kind — `http://localhost:5556/dex`, port-forward `svc/dex` в `nomnom-data`) в каждой колонке доски есть кнопка «Войти: <роль>» ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)). `src/shared/auth/oidc.ts` выполняет authorization code + PKCE (public client `nomnom-ui`, scope `audience:server:client_id:nomnom-bff`, без `nonce`, `prompt=login`, чтобы в одном браузере войти несколькими пользователями); callback — route `/auth/callback`. Access token хранится только в памяти страницы и заменяет токен demo-пользователя этой роли (`AsRole`); перезагрузка страницы выходит из всех ролей. Redirect URI Dex разрешает для `localhost:4173` и `localhost:4180` (конфигурация `customer-ui-kind-login` в `.claude/launch.json`). Тестовые пользователи — `ops/kind/bootstrap/values.yaml` (`dex.users`).
+С `VITE_OIDC_ISSUER` (в kind — `http://localhost:5556/dex`, port-forward `svc/dex` в `nomnom-data`) в каждой колонке доски есть кнопка «Войти: <роль>» ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)). `src/shared/auth/oidc.ts` выполняет authorization code + PKCE (public client `nomnom-ui`, scope `audience:server:client_id:nomnom-bff`, без `nonce`, `prompt=login`, чтобы в одном браузере войти несколькими пользователями); callback — route `/auth/callback`. Access token хранится только в памяти страницы и заменяет токен demo-пользователя этой роли (`AsRole`); он обновляется за минуту до истечения по refresh token (`offline_access`, ротация Dex), refresh token роли лежит в `sessionStorage`: перезагрузка восстанавливает вход, закрытие вкладки и «Выйти» его завершают. С `VITE_OIDC_DEMO_EMAIL_DOMAIN` и `VITE_OIDC_DEMO_PASSWORD` рядом с кнопкой показан демо-вход `<роль>@<домен> / <пароль>`. Redirect URI Dex разрешает для `localhost:4173` и `localhost:4180` (конфигурация `customer-ui-kind-login` в `.claude/launch.json`). Тестовые пользователи — `ops/kind/bootstrap/values.yaml` (`dex.users`).
 
 ## Доска заказа
 
@@ -33,7 +33,7 @@ npm run dev
 
 Customer-схема BFF зафиксирована раньше resolvers (OpenSpec change [`add-customer-graphql-contract`](../../openspec/changes/add-customer-graphql-contract/)), поэтому UI развивается на MSW-моках той же схемы. Моки — только development и tests: в production bundle они не включаются, а данные fixtures демонстрационные.
 
-- Публичная схема подключается alias `@public-schema` из `vite.config.ts` — тот же файл, что читает codegen (`GRAPHQL_SCHEMA` или `../bff/plugins/bff/src/schema.graphql`). Handler (`src/shared/graphql/mocks/handlers.ts`) валидирует и исполняет каждую operation через `graphql-js` против этой схемы, поэтому мок не может ответить формой, которую не вернёт BFF.
+- Публичная схема подключается alias `@public-schema` из `vite.config.ts` — тот же файл, что читает codegen (`GRAPHQL_SCHEMA` или `../bff/client-schema.graphql`). Handler (`src/shared/graphql/mocks/handlers.ts`) валидирует и исполняет каждую operation через `graphql-js` против этой схемы, поэтому мок не может ответить формой, которую не вернёт BFF. Subscriptions он отдаёт SSE-потоком, как Router (ADR 36): мутации store будят подписчиков `orderChanged`, `order-live` сам продвигается на шаг каждые 4 с, пока за ним следят. В отличие от Router, мок завершает поток на финальном статусе: abort потокового ответа ломает fetch Node под MSW.
 - In-memory backend — `createMockStore` (`mocks/store.ts`): у каждого экземпляра свои заказы, прогресс `order-live` и idempotency keys; clock подменяется в тестах.
 - Тест соответствия (`mocks/contract.test.ts`) исполняет каждый document из `src/features/**/*.graphql` и `mocks/operations/*.graphql` против схемы с ответами моков; `schemaMismatches` (`mocks/conformance.ts`) находит поля вне схемы, неизвестные enum values, неверные scalars и отсутствующие non-null поля.
 
@@ -43,7 +43,7 @@ Customer-схема BFF зафиксирована раньше resolvers (OpenS
 | --- | --- |
 | `order-received`, `order-preparing`, `order-picked-up`, `order-delivered` | заказ в соответствующем статусе; у `order-received` открыто окно отмены |
 | `order-cancelled`, `order-restaurant-rejected`, `order-delivery-failed` | неуспешное завершение с `endReason` |
-| `order-live` | каждый запрос продвигает заказ на следующий шаг; окно отмены открыто 5 минут |
+| `order-live` | пока на него есть подписка `orderChanged`, каждые 4 с переходит на следующий шаг; окно отмены открыто 5 минут |
 | любой другой | `null` (отсутствующий или чужой заказ) |
 
 Каталог: `restaurants` отдаёт только рестораны, принимающие заказы (как `ListRestaurants` по умолчанию), — семь открытых, то есть две страницы при размере страницы 6; `restaurant(id)` отдаёт и закрытую «Ночную пекарню» (`restaurant-night-bakery`). В меню «Кухни №8» (`restaurant-kitchen-8`) позиция «Гёдза с уткой» недоступна, у «Кофейни на углу» (`restaurant-corner-coffee`) меню не опубликовано.
@@ -69,7 +69,7 @@ Feature `view-order` (`src/features/view-order/`) — экран заказа н
 
 - Operations `ViewOrder` и `RequestOrderCancellation` лежат в `order.graphql`; mapping `OrderStatus`, `OrderEndReason` и milestones на сообщения, icon и шаг прогресса — в `order-presentation.ts`.
 - Экран показывает статус, прогресс с отметкой «Курьер назначен», состав и итог (`Intl` форматирует десятичную строку `Money.amount` без float), адрес и историю. При `CANCELLED`/`FAILED` прогресс заменяется сообщением по `endReason` без внутренних кодов и обещаний о возврате денег.
-- `use-order-polling.ts`: запрос каждые 10 с, пока документ видим и статус не финальный; при ошибке интервал удваивается до 60 с, последние данные остаются на экране с кнопкой «Обновить».
+- `use-order-updates.ts`: query `ViewOrder` и subscription `OrderChanged` (fragment `ViewedOrder`) по SSE до финального статуса, без polling (ADR 36); при ошибке последние данные остаются на экране с кнопкой «Обновить». Клиент (`shared/graphql/client.ts`) перезапрашивает активные query при каждом подключении потока.
 - `cancel-order.tsx`: действие отмены видно, пока есть `cancellation.availableUntil`; подтверждение в `fieldset` переводит фокус на «Не отменять»; `requestId` создаётся на попытку и переиспользуется при ручном повторе, автоматического retry нет.
 - С реальным BFF экран работает через resolvers слайса `ordertracking` ([README BFF](../bff/README.md#слайс-ordertracking)); позиция, которой уже нет в меню ресторана, приходит с пустым названием и показывается как «Позиция меню».
 - Ответ `null` даёт «Заказ не найден», transport error и `Unimplemented` от BFF — generic recovery UI без технических деталей.
@@ -136,7 +136,7 @@ npm run codegen
 GRAPHQL_SCHEMA=https://example.test/graphql npm run codegen
 ```
 
-Локальный default schema source — `../bff/plugins/bff/src/schema.graphql`. Generated files не редактируются вручную.
+Локальный default schema source — `../bff/client-schema.graphql`: композиция subgraphs BFF, включая subscriptions (`npm run compose` в `boundaries/bff`). Generated files не редактируются вручную.
 
 ## Astra ownership
 

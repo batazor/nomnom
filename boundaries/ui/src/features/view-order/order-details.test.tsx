@@ -17,7 +17,7 @@ import { AppProviders } from "../../app/providers";
 import { OrderDetails } from "./order-details";
 import { mockStore } from "../../shared/graphql/mocks/handlers";
 import { mockServer } from "../../shared/graphql/mocks/server";
-import { nextPollDelay } from "./use-order-polling";
+import { liveStepMs } from "../../shared/graphql/mocks/store";
 
 const config = {
   publicGraphqlUrl: "https://public.example.test/graphql",
@@ -58,14 +58,6 @@ function countOrderRequests() {
     }),
   );
   return counter;
-}
-
-function setVisibility(state: DocumentVisibilityState) {
-  Object.defineProperty(document, "visibilityState", {
-    configurable: true,
-    value: state,
-  });
-  document.dispatchEvent(new Event("visibilitychange"));
 }
 
 describe("view order", () => {
@@ -261,17 +253,11 @@ describe("view order", () => {
   });
 });
 
-describe("order polling", () => {
-  it("backs off up to a minute", () => {
-    expect([0, 1, 2, 3, 4].map(nextPollDelay)).toEqual([
-      10_000, 20_000, 40_000, 60_000, 60_000,
-    ]);
-  });
-
-  it("follows order-live every 10 seconds and stops when delivered", async () => {
+describe("order updates", () => {
+  it("follows order-live by subscription, without polling, until delivered", async () => {
     vi.useFakeTimers({
       shouldAdvanceTime: true,
-      toFake: ["setTimeout", "clearTimeout"],
+      toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
     });
     const requests = countOrderRequests();
     renderOrder("order-live");
@@ -286,7 +272,7 @@ describe("order polling", () => {
       "В пути",
       "Доставлен",
     ]) {
-      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      await act(() => vi.advanceTimersByTimeAsync(liveStepMs));
       expect(
         await screen.findByRole("heading", { level: 3, name: label }),
       ).toBeInTheDocument();
@@ -295,25 +281,8 @@ describe("order polling", () => {
 
     await act(() => vi.advanceTimersByTimeAsync(120_000));
     expect(requests.value).toBe(delivered);
-    expect(delivered).toBe(6);
-  });
-
-  it("pauses while the document is hidden and refreshes on return", async () => {
-    vi.useFakeTimers({
-      shouldAdvanceTime: true,
-      toFake: ["setTimeout", "clearTimeout"],
-    });
-    const requests = countOrderRequests();
-    renderOrder("order-preparing");
-    await screen.findByRole("heading", { level: 3, name: "Готовится" });
-    expect(requests.value).toBe(1);
-
-    act(() => setVisibility("hidden"));
-    await act(() => vi.advanceTimersByTimeAsync(60_000));
-    expect(requests.value).toBe(1);
-
-    act(() => setVisibility("visible"));
-    await vi.waitFor(() => expect(requests.value).toBe(2));
+    // The first load and one refetch when the stream connects (ADR 36).
+    expect(delivered).toBe(2);
   });
 });
 

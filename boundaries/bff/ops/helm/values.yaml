@@ -116,6 +116,11 @@ readinessProbe:
 internalGateway:
   address: ""
 
+# ADR 36: bootstrap-адрес Kafka (BFF__KAFKA_BROKERS) для Cosmo Streams — Router читает
+# orders.v1.order-changes и отдаёт подписки orderChanged. Обязателен: без него chart не рендерится.
+kafka:
+  brokers: ""
+
 # ADR 32: identity покупателя. Router и plugin проверяют access token по JWKS identity
 # provider, которого называет iss (providers: issuer и jwksUrl); plugin подписывает user
 # assertions ключом из Secret assertionKeySecret (P-256 в PEM). tokenAudiences — контексты,

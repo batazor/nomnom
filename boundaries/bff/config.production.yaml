@@ -78,3 +78,13 @@ headers:
     request:
       - op: propagate
         named: Authorization
+
+# ADR 36: Cosmo Streams consume Order Change Notifications from Kafka. The
+# Helm chart requires BFF__KAFKA_BROKERS; an unreachable broker stops the
+# Router (skip_unavailable_providers: false) instead of disabling subscriptions.
+events:
+  providers:
+    kafka:
+      - id: default
+        brokers:
+          - "${BFF__KAFKA_BROKERS}"

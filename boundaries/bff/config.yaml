@@ -34,3 +34,12 @@ headers:
     request:
       - op: propagate
         named: Authorization
+
+# ADR 36: Cosmo Streams consume Order Change Notifications from Kafka; an
+# unreachable broker stops the Router (skip_unavailable_providers: false).
+events:
+  providers:
+    kafka:
+      - id: default
+        brokers:
+          - localhost:9092

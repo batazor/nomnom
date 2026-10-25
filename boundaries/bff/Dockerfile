@@ -64,6 +64,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm ci --no-audit --no-fund
 
 COPY graph.yaml ./
+COPY events/schema.graphql events/
 COPY plugins/bff/src/schema.graphql plugins/bff/src/
 COPY plugins/bff/generated/service.proto plugins/bff/generated/mapping.json plugins/bff/generated/
 RUN mkdir -p /out && npx wgc router compose --input graph.yaml --out /out/config.json

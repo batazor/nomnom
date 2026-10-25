@@ -37,6 +37,37 @@ func (s *BffService) QueryOrder(ctx context.Context, request *service.QueryOrder
 	return &service.QueryOrderResponse{Order: order}, nil
 }
 
+// LookupOrderById resolves the Order entities of orderChanged events (ADR 36)
+// with the subscriber's access token: orders hides foreign orders, so a
+// subscriber of a foreign id gets NOT_FOUND instead of order data. A repeated
+// Protobuf field cannot hold null, so a missing order fails the whole lookup;
+// an event carries one key.
+func (s *BffService) LookupOrderById(ctx context.Context, request *service.LookupOrderByIdRequest) (*service.LookupOrderByIdResponse, error) {
+	ctx, err := s.requireCustomer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireSlice(orderTrackingSlice, s.tracking != nil); err != nil {
+		return nil, err
+	}
+	orders := make([]*service.Order, 0, len(request.GetKeys()))
+	for _, key := range request.GetKeys() {
+		view, err := s.tracking.getOrder.Handle(ctx, key.GetId())
+		if errors.Is(err, applications.ErrOrderNotFound) {
+			return nil, status.Error(codes.NotFound, "order not found")
+		}
+		if err != nil {
+			return nil, internalError("orderChanged", err)
+		}
+		order, err := orderMessage(view)
+		if err != nil {
+			return nil, internalError("orderChanged", err)
+		}
+		orders = append(orders, order)
+	}
+	return &service.LookupOrderByIdResponse{Result: orders}, nil
+}
+
 func (s *BffService) MutationRequestOrderCancellation(ctx context.Context, request *service.MutationRequestOrderCancellationRequest) (*service.MutationRequestOrderCancellationResponse, error) {
 	input := request.GetInput()
 	if input.GetOrderId() == "" || input.GetRequestId() == "" {

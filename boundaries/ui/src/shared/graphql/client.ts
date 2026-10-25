@@ -1,4 +1,14 @@
-import { cacheExchange, createClient, fetchExchange, mapExchange } from "urql";
+import { createClient as createSseClient } from "graphql-sse";
+import {
+  type Client,
+  cacheExchange,
+  createClient,
+  fetchExchange,
+  makeOperation,
+  mapExchange,
+  type Operation,
+  subscriptionExchange,
+} from "urql";
 
 export type GraphqlErrorReport = Readonly<{
   operationName: string;
@@ -20,11 +30,52 @@ export function createGraphqlClient({
   getAccessToken,
   reportError,
 }: ClientOptions) {
-  return createClient({
+  function headers(): Record<string, string> {
+    const result: Record<string, string> = {};
+    const traceparent = getTraceparent?.();
+    if (traceparent) result.traceparent = traceparent;
+    const token = getAccessToken?.();
+    if (token) result.authorization = `Bearer ${token}`;
+    return result;
+  }
+
+  // Cosmo Streams send only changes after subscribe (ADR 36): a change
+  // between a query and its subscription, or during a reconnect, is otherwise
+  // lost. Every (re)connected stream refetches the active queries.
+  const activeQueries = new Map<number, Operation>();
+  let client: Client | undefined;
+  function refetchActiveQueries() {
+    for (const operation of activeQueries.values()) {
+      client?.reexecuteOperation(
+        makeOperation(operation.kind, operation, {
+          ...operation.context,
+          requestPolicy: "network-only",
+        }),
+      );
+    }
+  }
+
+  // One SSE request per subscription (distinct connections mode): the
+  // Router verifies Authorization like any other request, no WebSocket state.
+  const sse = createSseClient({
+    url,
+    headers,
+    retryAttempts: Number.POSITIVE_INFINITY,
+    on: { connected: refetchActiveQueries },
+  });
+
+  client = createClient({
     url,
     exchanges: [
       cacheExchange,
       mapExchange({
+        onOperation(operation) {
+          if (operation.kind === "query") {
+            activeQueries.set(operation.key, operation);
+          } else if (operation.kind === "teardown") {
+            activeQueries.delete(operation.key);
+          }
+        },
         onError(error, operation) {
           reportError?.({
             operationName:
@@ -35,14 +86,22 @@ export function createGraphqlClient({
         },
       }),
       fetchExchange,
+      subscriptionExchange({
+        forwardSubscription(request) {
+          return {
+            subscribe: (sink) => ({
+              unsubscribe: sse.subscribe(
+                { ...request, query: request.query ?? "" },
+                sink,
+              ),
+            }),
+          };
+        },
+      }),
     ],
     fetchOptions() {
-      const headers: Record<string, string> = {};
-      const traceparent = getTraceparent?.();
-      if (traceparent) headers.traceparent = traceparent;
-      const token = getAccessToken?.();
-      if (token) headers.authorization = `Bearer ${token}`;
-      return { headers };
+      return { headers: headers() };
     },
   });
+  return client;
 }
