@@ -20,7 +20,6 @@ import { useBoardOrders } from "./board-orders";
 import { CourierColumn } from "./courier-column";
 import { KitchenColumn } from "./kitchen-column";
 import { OrderStrip, OrderTimeline } from "./order-flow";
-import { BoardRefreshProvider, useBoardRefresh } from "./use-polling";
 import "./flow-board.css";
 
 type Column = "customer" | "kitchen" | "courier";
@@ -50,17 +49,14 @@ const columnTitle: Record<Column, MessageKey> = {
 // side panel. The three columns stay side by side on any screen.
 export function FlowBoard() {
   return (
-    <BoardRefreshProvider>
-      <BoardDragProvider>
-        <Board />
-      </BoardDragProvider>
-    </BoardRefreshProvider>
+    <BoardDragProvider>
+      <Board />
+    </BoardDragProvider>
   );
 }
 
 function Board() {
   const { t } = useI18n();
-  const refreshBoard = useBoardRefresh();
   const session = useRoleSession();
   const signInAvailable = useSignInAvailable();
   const neededKey: MessageKey = signInAvailable
@@ -77,6 +73,17 @@ function Board() {
   >(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const selectedRestaurantId = useOrderRestaurant(selectedOrderId);
+  // The kitchen follows the latest restaurant the board looked at: the one
+  // the customer picked or the one of the opened order.
+  const [kitchenRestaurantId, setKitchenRestaurantId] = useState<string | null>(
+    null,
+  );
+  const [seenOrderRestaurantId, setSeenOrderRestaurantId] =
+    useState(selectedRestaurantId);
+  if (selectedRestaurantId !== seenOrderRestaurantId) {
+    setSeenOrderRestaurantId(selectedRestaurantId);
+    if (selectedRestaurantId) setKitchenRestaurantId(selectedRestaurantId);
+  }
 
   const { remove } = orders;
   const forget = useCallback(
@@ -90,7 +97,6 @@ function Board() {
   function placed(orderId: string) {
     orders.add(orderId);
     setSelectedOrderId(orderId);
-    refreshBoard();
   }
 
   return (
@@ -129,7 +135,10 @@ function Board() {
       <div className="board-columns">
         <BoardColumn column="customer">
           <RestaurantPicker
-            onSelect={setCustomerRestaurantId}
+            onSelect={(restaurantId) => {
+              setCustomerRestaurantId(restaurantId);
+              setKitchenRestaurantId(restaurantId);
+            }}
             selectedId={customerRestaurantId}
           />
           {customerRestaurantId ? (
@@ -154,7 +163,7 @@ function Board() {
                 session.kind === "ready" ? session.session.restaurants : []
               }
               onSelectOrder={setSelectedOrderId}
-              preferredRestaurantId={selectedRestaurantId}
+              preferredRestaurantId={kitchenRestaurantId}
               selectedOrderId={selectedOrderId}
             />
           ) : (

@@ -1,9 +1,10 @@
 import { AnimatePresence, m } from "motion/react";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "urql";
+import { useMutation, useQuery, useSubscription } from "urql";
 
 import {
   ApplyKitchenActionDocument,
+  BoardKitchenChangedDocument,
   BoardKitchenDocument,
   type BoardKitchenQuery,
   BoardOwnedRestaurantsDocument,
@@ -16,7 +17,7 @@ import { AsRole, type DemoRestaurant } from "../../shared/session/roles";
 import { Button } from "../../shared/ui";
 import { RestaurantOpening } from "../manage-restaurant";
 import { useDragSource } from "./board-dnd";
-import { useBoardRefresh, usePolling } from "./use-polling";
+import { useLatest } from "./use-latest";
 
 type KitchenOrder = NonNullable<BoardKitchenQuery["kitchen"]>["orders"][number];
 
@@ -61,6 +62,12 @@ export function KitchenColumn({
 }) {
   const { t } = useI18n();
   const [chosenId, setChosenId] = useState<string | null>(null);
+  // A new preferred restaurant replaces the one chosen by hand.
+  const [seenPreferredId, setSeenPreferredId] = useState(preferredRestaurantId);
+  if (preferredRestaurantId !== seenPreferredId) {
+    setSeenPreferredId(preferredRestaurantId);
+    setChosenId(null);
+  }
 
   return (
     <AsRole as="owner">
@@ -132,10 +139,11 @@ function OwnedRestaurants({
   demoRestaurants: readonly DemoRestaurant[];
   children: (restaurants: readonly KitchenRestaurant[]) => React.ReactNode;
 }) {
-  const [{ data }, reexecute] = useQuery({
+  // Opening changes come with the kitchen board of the chosen restaurant;
+  // the opening mutations refresh this list through the urql document cache.
+  const [{ data }] = useQuery({
     query: BoardOwnedRestaurantsDocument,
   });
-  usePolling(() => reexecute({ requestPolicy: "network-only" }));
   const restaurants = useMemo(() => {
     const owned: KitchenRestaurant[] =
       data?.myRestaurants.edges.map((edge) => edge.node) ?? [];
@@ -158,11 +166,16 @@ function KitchenOrders({
   onSelectOrder: (orderId: string) => void;
 }) {
   const { t } = useI18n();
-  const [{ data, error }, reexecute] = useQuery({
+  const [{ data, error }] = useQuery({
     query: BoardKitchenDocument,
     variables: { restaurantId },
   });
-  usePolling(() => reexecute({ requestPolicy: "network-only" }));
+  const [{ data: pushed }] = useSubscription({
+    query: BoardKitchenChangedDocument,
+    variables: { restaurantId },
+    pause: data?.kitchen === null,
+  });
+  const kitchen = useLatest(data?.kitchen, pushed?.kitchenChanged);
 
   if (!data && error) {
     return (
@@ -172,18 +185,18 @@ function KitchenOrders({
     );
   }
   if (!data) return <p className="board-empty">{t("board.loading")}</p>;
-  if (!data.kitchen) {
+  if (!kitchen) {
     return <p className="board-empty">{t("board.kitchen.notPermitted")}</p>;
   }
-  if (data.kitchen.orders.length === 0) {
+  if (kitchen.orders.length === 0) {
     return <p className="board-empty">{t("board.kitchen.empty")}</p>;
   }
   return (
     <ul aria-label={t("board.kitchen.orders")} className="board-cards">
-      {/* Orders arrive from polling: new ones slide in, finished ones fade
-          out, and the rest move to their new place. */}
+      {/* Orders arrive with kitchenChanged: new ones slide in, finished
+          ones fade out, and the rest move to their new place. */}
       <AnimatePresence initial={false}>
-        {data.kitchen.orders.map((order) => (
+        {kitchen.orders.map((order) => (
           <m.li
             key={order.id}
             animate={{ opacity: 1, y: 0 }}
@@ -193,7 +206,6 @@ function KitchenOrders({
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
             <KitchenOrderCard
-              onChanged={() => reexecute({ requestPolicy: "network-only" })}
               onSelect={() => onSelectOrder(order.orderId)}
               order={order}
               restaurantId={restaurantId}
@@ -211,16 +223,13 @@ function KitchenOrderCard({
   restaurantId,
   selected,
   onSelect,
-  onChanged,
 }: {
   order: KitchenOrder;
   restaurantId: string;
   selected: boolean;
   onSelect: () => void;
-  onChanged: () => void;
 }) {
   const { t, formatters } = useI18n();
-  const refreshBoard = useBoardRefresh();
   const [{ fetching }, apply] = useMutation(ApplyKitchenActionDocument);
   const [problem, setProblem] = useState<MessageKey | null>(null);
   const next = nextAction[order.stage];
@@ -233,8 +242,6 @@ function KitchenOrderCard({
     const payload = result.data?.applyKitchenAction;
     if (result.error || !payload) setProblem("board.actionFailed");
     else if (payload.problem) setProblem("board.kitchen.conflict");
-    onChanged();
-    refreshBoard();
   }
 
   // An accepted order has a delivery, so the courier can take it.
