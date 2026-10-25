@@ -1,0 +1,31 @@
+# Dashboards as code (ADR 29): генератор и артефакты не расходятся, PromQL и lint проходят.
+name: grafana-dashboards
+
+on:
+  pull_request:
+    paths:
+      - ops/grafana/**
+      - boundaries/*/ops/grafana/**
+      - docs/observability/metric-inventory.md
+      - .github/workflows/grafana-dashboards.yaml
+  push:
+    branches: [main]
+    paths:
+      - ops/grafana/**
+      - boundaries/*/ops/grafana/**
+      - docs/observability/metric-inventory.md
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ops/grafana/go.mod
+          cache-dependency-path: ops/grafana/go.sum
+      - run: make grafana-tools
+      - run: make grafana-check

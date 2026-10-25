@@ -1,0 +1,280 @@
+// Package inventory — единственный источник правды о метриках, на которых строятся
+// overview-dashboards. docs/observability/metric-inventory.md генерируется из него.
+//
+// Панель становится живой только когда все её метрики имеют статус Present для
+// service.name, который она запрашивает; иначе генератор рисует TODO-панель со
+// ссылкой на инвентарь. Статус меняется здесь, когда инструментация доставлена в
+// Mimir существующим pipeline, а не когда она только запланирована.
+package inventory
+
+import (
+	"slices"
+	"strings"
+)
+
+type Status string
+
+const (
+	// Present — метрика экспортируется сервисом и доставляется в Mimir.
+	Present Status = "есть"
+	// Expected — метрика принята в архитектуре, но не экспортируется или не доставляется.
+	Expected Status = "ожидается"
+)
+
+type Type string
+
+const (
+	Counter   Type = "counter"
+	Histogram Type = "histogram"
+	Gauge     Type = "gauge"
+)
+
+// Service names (OTel service.name) deployable roles. Значения совпадают с
+// OTEL_SERVICE_NAME в Helm values; job в Mimir — "nomnom/<service.name>".
+const (
+	Orders         = "orders"
+	OrdersWorker   = "orders-worker"
+	OrdersConsumer = "orders-consumer"
+	Restaurants    = "restaurants"
+	Delivery       = "delivery"
+	Payments       = "payments"
+	BFF            = "bff"
+)
+
+var AllServices = []string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments, BFF}
+
+// Bounded contexts с ролями на технологиях, а не на имени.
+var (
+	goServices      = []string{Orders, OrdersWorker, OrdersConsumer}
+	grpcServers     = []string{Orders, Restaurants, Delivery, Payments}
+	contextServices = []string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}
+	otelConsumers   = []string{Restaurants, Delivery, Payments}
+)
+
+type Section struct {
+	ID    string
+	Title string
+	Intro string
+}
+
+type Metric struct {
+	// Name — имя в Mimir после OTLP-трансляции (UnderscoreEscapingWithSuffixes):
+	// unit suffix и _total добавлены. Для histogram — базовое имя без _bucket.
+	Name    string
+	Section string
+	Type    Type
+	// Source — OTel instrument/semconv или компонент, который создаёт метрику.
+	Source string
+	Labels []string
+	// Status по service.name; сервис вне карты метрику не экспортирует.
+	Status map[string]Status
+	Note   string
+}
+
+const RepoURL = "https://github.com/batazor/nomnom/blob/main/"
+
+const DocPath = "docs/observability/metric-inventory.md"
+
+// Exemplars включаются в запросах только когда это подтверждено end-to-end:
+// SDK histograms с exemplars, Alloy и Mimir (-ingester.max-global-exemplars-per-user).
+const ExemplarsEnabled = false
+
+func expected(services ...string) map[string]Status {
+	m := make(map[string]Status, len(services))
+	for _, s := range services {
+		m[s] = Expected
+	}
+	return m
+}
+
+var Sections = []Section{
+	{"resource", "Resource и идентичность", "OTel resource в Mimir: `job=\"nomnom/<service.name>\"`, `instance=<service.instance.id>`, остальные resource attributes — в `target_info`. Promotion resource attributes не используется (docs/observability.md), поэтому environment и version фильтруются join с `target_info`."},
+	{"rpc", "gRPC (server и client через internal gateway)", "`otelgrpc` / grpc-node / tonic / grpcio OTel instrumentation. Semconv RPC ещё в статусе development: актуальное имя `rpc.server.call.duration` (s) заменит `rpc.server.duration` (ms) при закреплении версии SDK; генератор меняется в одном месте."},
+	{"graphql", "GraphQL / HTTP (BFF, Cosmo Router)", "Встроенная telemetry Cosmo Router. Router экспортирует метрики по умолчанию, но OTLP exporter к Alloy в `config.yaml` не настроен и Alloy не развёрнут — метрики не доставляются."},
+	{"runtime", "Runtime", "Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). Node.js: `@opentelemetry/instrumentation-runtime-node`. Python: `opentelemetry-instrumentation-system-metrics`. Rust: semconv process metrics; метрики tokio runtime не имеют semconv и не инвентаризированы."},
+	{"db", "Database client (PostgreSQL, MongoDB)", "Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL/MongoDB — отдельные community dashboards, не overview."},
+	{"watermill", "Kafka: встроенные метрики Watermill", "`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`). Экспорт через OTel Prometheus bridge в общий OTLP pipeline. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся."},
+	{"messaging-otel", "Kafka: semconv messaging (не-Go контексты)", "Kafka-клиенты TypeScript, Rust и Python не выбраны; при выборе используется OTel messaging semconv."},
+	{"messaging", "Kafka: собственный OTel middleware и consumer lag", "Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Labels только `handler_name`, `event_type`, `stream`, `error_class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill."},
+	{"outbox", "Outbox", "SQL-метрики Forwarder-роли (опрос таблицы Outbox), не publish-декоратор."},
+	{"uow", "Unit of Work", "Декоратор Unit of Work (ADR 20). Deadlock/serialization — классы retry, а не SQL-панели поверх DB instrumentation."},
+	{"fsm", "Domain Lifecycle (FSM)", "Декоратор применения FSM-перехода (ADR 21). Labels допустимы только с закрытым набором значений из FSM-таблицы."},
+	{"temporal", "Temporal", "Temporal Go SDK `MetricsHandler` (contrib/opentelemetry) в `orders-worker` и клиенте `orders`. Суффикс единицы timers зависит от handler и проверяется при подключении."},
+	{"kitchen", "Kitchen", "Gauges kitchen queue — projection/polling Kitchen Board, не выводятся из counters. Consumer lag ≠ Kitchen Queue Size."},
+	{"authz", "Authorization (SpiceDB)", "Декоратор порта авторизации (ADR 18). `denied` — бизнес-результат, `error`/`timeout` — технический сбой. Без subject/resource ID."},
+	{"provider", "Payment provider", "Клиентский адаптер платёжного провайдера; провайдер не выбран."},
+	{"domain", "Domain metrics", "Бизнес-счётчики увеличиваются в точке идемпотентно подтверждённого перехода (docs/observability.md). Финансовые значения и ID не labels. Gauge «currently in state» требует projection/polling и из counters не выводится."},
+}
+
+var Metrics = []Metric{
+	// resource
+	{Name: "target_info", Section: "resource", Type: Gauge, Source: "OTel resource → Mimir OTLP", Labels: []string{"job", "instance", "deployment_environment_name", "service_version"}, Status: expected(AllServices...), Note: "Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations."},
+
+	// rpc
+	{Name: "rpc_server_duration_milliseconds", Section: "rpc", Type: Histogram, Source: "`rpc.server.duration`", Labels: []string{"rpc_system", "rpc_service", "rpc_method", "rpc_grpc_status_code"}, Status: expected(grpcServers...)},
+	{Name: "rpc_client_duration_milliseconds", Section: "rpc", Type: Histogram, Source: "`rpc.client.duration`", Labels: []string{"rpc_system", "rpc_service", "rpc_method", "rpc_grpc_status_code"}, Status: expected(OrdersWorker, BFF), Note: "Вызовы через internal gateway (ADR 15); SpiceDB — в row Authorization."},
+
+	// graphql
+	{Name: "router_http_requests_total", Section: "graphql", Type: Counter, Source: "Cosmo `router.http.requests`", Labels: []string{"wg_operation_type", "wg_operation_name", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "`wg_operation_name` ограничен persisted operations клиента."},
+	{Name: "router_http_requests_error_total", Section: "graphql", Type: Counter, Source: "Cosmo `router.http.requests.error`", Labels: []string{"wg_operation_type", "wg_operation_name", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "GraphQL errors в ответе 200."},
+	{Name: "router_http_request_duration_milliseconds", Section: "graphql", Type: Histogram, Source: "Cosmo `router.http.request.duration_milliseconds`", Labels: []string{"wg_operation_type", "wg_operation_name", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway)."},
+
+	// runtime
+	{Name: "process_cpu_time_seconds_total", Section: "runtime", Type: Counter, Source: "`process.cpu.time`", Labels: []string{"cpu_mode"}, Status: expected(append(slices.Clone(goServices), Restaurants, Delivery, Payments)...), Note: "Go: `go.opentelemetry.io/contrib/instrumentation/host`."},
+	{Name: "process_memory_usage_bytes", Section: "runtime", Type: Gauge, Source: "`process.memory.usage`", Status: expected(Restaurants, Delivery, Payments), Note: "Для Go не экспортируется; память Go-ролей — `go_memory_used_bytes`."},
+	{Name: "process_thread_count", Section: "runtime", Type: Gauge, Source: "`process.thread.count`", Status: expected(Delivery, Payments), Note: "Python: worker model gRPC thread pool."},
+	{Name: "go_memory_used_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.used`", Labels: []string{"go_memory_type"}, Status: expected(goServices...)},
+	{Name: "go_memory_allocated_bytes_total", Section: "runtime", Type: Counter, Source: "`go.memory.allocated`", Status: expected(goServices...)},
+	{Name: "go_memory_gc_goal_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.gc.goal`", Status: expected(goServices...)},
+	{Name: "go_goroutine_count", Section: "runtime", Type: Gauge, Source: "`go.goroutine.count`", Status: expected(goServices...)},
+	{Name: "go_processor_limit", Section: "runtime", Type: Gauge, Source: "`go.processor.limit`", Status: expected(goServices...)},
+	{Name: "v8js_memory_heap_used_bytes", Section: "runtime", Type: Gauge, Source: "`v8js.memory.heap.used`", Labels: []string{"v8js_heap_space_name"}, Status: expected(Restaurants)},
+	{Name: "v8js_memory_heap_limit_bytes", Section: "runtime", Type: Gauge, Source: "`v8js.memory.heap.limit`", Labels: []string{"v8js_heap_space_name"}, Status: expected(Restaurants)},
+	{Name: "nodejs_eventloop_delay_p99_seconds", Section: "runtime", Type: Gauge, Source: "`nodejs.eventloop.delay.p99`", Status: expected(Restaurants)},
+	{Name: "v8js_gc_duration_seconds", Section: "runtime", Type: Histogram, Source: "`v8js.gc.duration`", Labels: []string{"v8js_gc_type"}, Status: expected(Restaurants)},
+	{Name: "cpython_gc_collections_total", Section: "runtime", Type: Counter, Source: "`cpython.gc.collections`", Labels: []string{"cpython_gc_generation"}, Status: expected(Payments)},
+
+	// db
+	{Name: "db_client_operation_duration_seconds", Section: "db", Type: Histogram, Source: "`db.client.operation.duration`", Labels: []string{"db_system_name", "db_operation_name", "db_collection_name", "error_type"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants)},
+	{Name: "db_client_connection_count", Section: "db", Type: Gauge, Source: "`db.client.connection.count`", Labels: []string{"db_client_connection_pool_name", "db_client_connection_state"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants)},
+	{Name: "db_client_connection_max", Section: "db", Type: Gauge, Source: "`db.client.connection.max`", Labels: []string{"db_client_connection_pool_name"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants)},
+	{Name: "db_client_connection_wait_time_seconds", Section: "db", Type: Histogram, Source: "`db.client.connection.wait_time`", Labels: []string{"db_client_connection_pool_name"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants)},
+
+	// watermill (built-in)
+	{Name: "watermill_consumer_subscriber_messages_received_total", Section: "watermill", Type: Counter, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"acked", "handler_name", "subscriber_name"}, Status: expected(OrdersConsumer), Note: "Решение принято; builder в `orders-consumer` ещё не подключён (`pkg/messaging/consumer.go`)."},
+	{Name: "watermill_consumer_handler_execution_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"handler_name", "success"}, Status: expected(OrdersConsumer), Note: "Как выше."},
+	{Name: "watermill_consumer_publish_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"success", "handler_name", "publisher_name"}, Status: expected(OrdersConsumer), Note: "Publisher consumer-роли — PoisonQueue в `<stream>.dlq`."},
+	{Name: "watermill_outbox_forwarder_publish_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `outbox_forwarder`", Labels: []string{"success", "handler_name", "publisher_name"}, Status: expected(goServices...), Note: "Forwarder-роль `orders` ещё не выделена; метрика привязана к service.name процесса, где он запущен."},
+
+	// messaging-otel
+	{Name: "messaging_client_consumed_messages_total", Section: "messaging-otel", Type: Counter, Source: "`messaging.client.consumed.messages`", Labels: []string{"messaging_system", "messaging_destination_name", "messaging_consumer_group_name", "error_type"}, Status: expected(otelConsumers...)},
+	{Name: "messaging_client_sent_messages_total", Section: "messaging-otel", Type: Counter, Source: "`messaging.client.sent.messages`", Labels: []string{"messaging_system", "messaging_destination_name", "error_type"}, Status: expected(otelConsumers...)},
+	{Name: "messaging_client_operation_duration_seconds", Section: "messaging-otel", Type: Histogram, Source: "`messaging.client.operation.duration`", Labels: []string{"messaging_system", "messaging_operation_name", "messaging_destination_name", "error_type"}, Status: expected(otelConsumers...)},
+
+	// messaging (custom middleware + lag)
+	{Name: "nomnom_messaging_process_duration_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Длительность обработки по `event_type`; `error_class` пуст при успехе."},
+	{Name: "nomnom_messaging_retry_attempts_total", Section: "messaging", Type: Counter, Source: "OTel middleware", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Только transient: business errors не ретраятся."},
+	{Name: "nomnom_messaging_poison_messages_total", Section: "messaging", Type: Counter, Source: "OTel middleware вокруг PoisonQueue", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Сообщения, отправленные в `<stream>.dlq`."},
+	{Name: "nomnom_messaging_message_age_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware", Labels: []string{"handler_name", "event_type", "stream"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "`now − occurred_at` в момент обработки."},
+	{Name: "nomnom_inbox_duplicates_total", Section: "messaging", Type: Counter, Source: "OTel middleware / Inbox adapter", Labels: []string{"handler_name", "event_type", "stream"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Конфликт уникальности `(consumer, event_id)` = duplicate."},
+	{Name: "kafka_consumergroup_lag", Section: "messaging", Type: Gauge, Source: "Alloy `prometheus.exporter.kafka`", Labels: []string{"consumergroup", "topic", "partition"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join."},
+
+	// outbox
+	{Name: "nomnom_outbox_pending_messages", Section: "outbox", Type: Gauge, Source: "SQL-метрика Forwarder", Labels: []string{"stream"}, Status: expected(contextServices...)},
+	{Name: "nomnom_outbox_oldest_pending_age_seconds", Section: "outbox", Type: Gauge, Source: "SQL-метрика Forwarder", Labels: []string{"stream"}, Status: expected(contextServices...)},
+	{Name: "nomnom_outbox_publish_retries_total", Section: "outbox", Type: Counter, Source: "Forwarder", Labels: []string{"stream", "error_class"}, Status: expected(contextServices...)},
+
+	// uow
+	{Name: "nomnom_uow_transactions_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"outcome"}, Status: expected(contextServices...), Note: "`outcome`: committed | rolled_back | commit_failed."},
+	{Name: "nomnom_uow_duration_seconds", Section: "uow", Type: Histogram, Source: "Unit of Work decorator", Labels: []string{"outcome"}, Status: expected(contextServices...)},
+	{Name: "nomnom_uow_retries_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"reason"}, Status: expected(contextServices...), Note: "`reason`: serialization | deadlock | write_conflict | other."},
+
+	// fsm
+	{Name: "nomnom_fsm_transitions_total", Section: "fsm", Type: Counter, Source: "FSM transition decorator", Labels: []string{"aggregate_type", "from_state", "to_state", "trigger", "result", "terminal"}, Status: expected(contextServices...), Note: "`result`: applied | rejected (invalid transition); `terminal`: true | false."},
+
+	// temporal
+	{Name: "temporal_request_total", Section: "temporal", Type: Counter, Source: "Temporal SDK client", Labels: []string{"operation", "namespace"}, Status: expected(Orders, OrdersWorker), Note: "`operation=\"StartWorkflowExecution\"` — запуск workflow."},
+	{Name: "temporal_workflow_completed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: expected(OrdersWorker)},
+	{Name: "temporal_workflow_failed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: expected(OrdersWorker)},
+	{Name: "temporal_workflow_endtoend_latency_seconds", Section: "temporal", Type: Histogram, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: expected(OrdersWorker)},
+	{Name: "temporal_activity_execution_latency_seconds", Section: "temporal", Type: Histogram, Source: "Temporal SDK worker", Labels: []string{"activity_type", "namespace", "task_queue"}, Status: expected(OrdersWorker)},
+	{Name: "temporal_activity_execution_failed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"activity_type", "namespace", "task_queue"}, Status: expected(OrdersWorker), Note: "Каждая неуспешная попытка; retries = попытки сверх первой."},
+	{Name: "temporal_worker_task_slots_used", Section: "temporal", Type: Gauge, Source: "Temporal SDK worker", Labels: []string{"worker_type", "task_queue"}, Status: expected(OrdersWorker)},
+	{Name: "temporal_worker_task_slots_available", Section: "temporal", Type: Gauge, Source: "Temporal SDK worker", Labels: []string{"worker_type", "task_queue"}, Status: expected(OrdersWorker)},
+	{Name: "nomnom_orders_fulfillment_oldest_running_age_seconds", Section: "temporal", Type: Gauge, Source: "Polling Temporal Visibility", Status: expected(OrdersWorker), Note: "Возраст старейшего выполняющегося Order Fulfillment Workflow; SDK его не даёт."},
+	{Name: "nomnom_orders_compensations_total", Section: "temporal", Type: Counter, Source: "Compensation Activity decorator", Labels: []string{"step", "outcome"}, Status: expected(OrdersWorker), Note: "`outcome`: attempted | failed."},
+
+	// kitchen
+	{Name: "nomnom_kitchen_queue_size", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
+	{Name: "nomnom_kitchen_queue_oldest_age_seconds", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
+	{Name: "nomnom_kitchen_preparations_active", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
+	{Name: "nomnom_kitchen_ready_for_pickup", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
+	{Name: "nomnom_kitchen_preparation_duration_seconds", Section: "kitchen", Type: Histogram, Source: "Kitchen use case decorator", Status: expected(Restaurants)},
+	{Name: "nomnom_kitchen_delays_total", Section: "kitchen", Type: Counter, Source: "Kitchen use case decorator", Labels: []string{"reason"}, Status: expected(Restaurants)},
+
+	// authz
+	{Name: "nomnom_authz_checks_total", Section: "authz", Type: Counter, Source: "Authorization port decorator", Labels: []string{"permission", "resource_type", "result"}, Status: expected(contextServices...), Note: "`result`: allowed | denied | error | timeout."},
+	{Name: "nomnom_authz_check_duration_seconds", Section: "authz", Type: Histogram, Source: "Authorization port decorator", Labels: []string{"permission", "resource_type", "result"}, Status: expected(contextServices...)},
+
+	// provider
+	{Name: "nomnom_payments_provider_request_duration_seconds", Section: "provider", Type: Histogram, Source: "Provider gateway adapter", Labels: []string{"operation", "outcome"}, Status: expected(Payments), Note: "`operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат."},
+
+	// domain: orders
+	{Name: "nomnom_orders_placed_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Orders)},
+	{Name: "nomnom_orders_completed_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(OrdersWorker, OrdersConsumer)},
+	{Name: "nomnom_orders_cancelled_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(Orders, OrdersWorker)},
+	{Name: "nomnom_orders_failed_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(OrdersWorker)},
+	{Name: "nomnom_orders_cancellation_requests_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Orders)},
+	{Name: "nomnom_orders_fulfillment_duration_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(OrdersWorker)},
+	{Name: "nomnom_orders_in_state", Section: "domain", Type: Gauge, Source: "projection/polling", Labels: []string{"state"}, Status: expected(Orders), Note: "Требует отдельной projection; PromQL по counters не эмулируется."},
+	// domain: restaurants
+	{Name: "nomnom_restaurants_orders_received_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Restaurants)},
+	{Name: "nomnom_restaurants_orders_accepted_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Restaurants)},
+	{Name: "nomnom_restaurants_orders_rejected_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(Restaurants)},
+	// domain: delivery
+	{Name: "nomnom_delivery_created_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Delivery)},
+	{Name: "nomnom_delivery_assignments_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Delivery)},
+	{Name: "nomnom_delivery_reassignments_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(Delivery)},
+	{Name: "nomnom_delivery_offers_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Delivery), Note: "`outcome`: accepted | rejected | expired."},
+	{Name: "nomnom_delivery_pickups_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Delivery)},
+	{Name: "nomnom_delivery_completed_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Delivery)},
+	{Name: "nomnom_delivery_failed_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(Delivery)},
+	{Name: "nomnom_delivery_assignment_latency_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(Delivery)},
+	{Name: "nomnom_delivery_duration_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(Delivery)},
+	// domain: payments
+	{Name: "nomnom_payments_authorizations_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: authorized | declined | failed; attempts = сумма."},
+	{Name: "nomnom_payments_captures_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: captured | failed."},
+	{Name: "nomnom_payments_refunds_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: refunded | failed."},
+}
+
+// ForbiddenLabels — индивидуальные идентификаторы, которые не становятся labels.
+var ForbiddenLabels = []string{"order_id", "user_id", "payment_id", "event_id", "workflow_id", "run_id", "aggregate_id", "trace_id", "request_id", "message_id", "courier_id", "restaurant_id", "delivery_id", "customer_id", "amount"}
+
+// ResourceLabels допустимы в matchers любой метрики.
+var ResourceLabels = []string{"job", "instance", "le"}
+
+func Lookup(name string) (Metric, bool) {
+	base := BaseName(name)
+	for _, m := range Metrics {
+		if m.Name == base {
+			return m, true
+		}
+	}
+	return Metric{}, false
+}
+
+// BaseName убирает суффиксы histogram-серий.
+func BaseName(series string) string {
+	for _, suffix := range []string{"_bucket", "_count", "_sum"} {
+		if base, ok := strings.CutSuffix(series, suffix); ok {
+			if m, found := lookupExact(base); found && m.Type == Histogram {
+				return base
+			}
+		}
+	}
+	return series
+}
+
+func lookupExact(name string) (Metric, bool) {
+	i := slices.IndexFunc(Metrics, func(m Metric) bool { return m.Name == name })
+	if i < 0 {
+		return Metric{}, false
+	}
+	return Metrics[i], true
+}
+
+// Ready сообщает, есть ли метрика хотя бы у одного из сервисов.
+func Ready(name string, services []string) bool {
+	m, ok := Lookup(name)
+	if !ok {
+		return false
+	}
+	for _, s := range services {
+		if m.Status[s] == Present {
+			return true
+		}
+	}
+	return false
+}
+
+func Anchor(section string) string { return RepoURL + DocPath + "#" + section }

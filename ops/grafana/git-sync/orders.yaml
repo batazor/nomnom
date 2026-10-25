@@ -1,0 +1,22 @@
+# Git Sync (Grafana 13): repository nomnom = source of truth для overview-dashboard orders.
+# Read-only (workflows: []): единственный writer — генератор ops/grafana; правки в UI запрещены.
+# Доступ к GitHub (token или GitHub App connection) передаётся при создании через secure-поля,
+# в репозиторий не коммитится. Применение: gcx resources push -p ops/grafana/git-sync/orders.yaml
+apiVersion: provisioning.grafana.app/v1beta1
+kind: Repository
+metadata:
+  name: nomnom-orders
+spec:
+  title: nomnom / Orders
+  description: Overview-dashboard bounded context orders (boundaries/orders/ops/grafana/dashboards).
+  type: github
+  github:
+    url: https://github.com/batazor/nomnom
+    branch: main
+    path: boundaries/orders/ops/grafana/dashboards
+    generateDashboardPreviews: false
+  sync:
+    enabled: true
+    target: folder
+    intervalSeconds: 300
+  workflows: []

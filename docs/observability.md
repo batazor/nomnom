@@ -1,6 +1,6 @@
 # Observability
 
-Этот документ задаёт целевую архитектуру observability для BiteRoute: состав стека, движение телеметрии, общий контекст и правила инструментирования. Он не добавляет зависимости, конфигурацию Grafana Alloy, Docker Compose, Kubernetes-манифесты или единицы развёртывания. Решение зафиксировано в [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md).
+Этот документ задаёт целевую архитектуру observability для BiteRoute: состав стека, движение телеметрии, общий контекст и правила инструментирования. Он не добавляет зависимости, конфигурацию Grafana Alloy, Docker Compose, Kubernetes-манифесты или единицы развёртывания; dashboards as code описаны в разделе [Dashboards](#dashboards). Решение зафиксировано в [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md).
 
 ## Ответственность компонентов
 
@@ -114,6 +114,38 @@ Trace context связывает запуск workflow, Activities и внешн
 
 Техническая попытка и бизнес-результат — разные события. Retry Activity, повторный RPC или повторная доставка Kafka-сообщения увеличивают счётчик попыток, но не счётчик созданных заказов. Бизнес-счётчик меняется в точке идемпотентно подтверждённого перехода состояния; имя результата и его допустимые низкокардинальные значения задаются явно.
 
+### Watermill (`orders`)
+
+Встроенные метрики Watermill (`components/metrics`, `PrometheusMetricsBuilder`) — базовый слой Kafka-метрик Go-процессов: `subscriber_messages_received_total{acked,handler_name,subscriber_name}`, `handler_execution_time_seconds{handler_name,success}`, `publish_time_seconds{success,handler_name,publisher_name}`. Namespace — `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`), поэтому имена различаются между процессами и не коллидируют: например, `watermill_consumer_handler_execution_time_seconds`.
+
+Экспорт идёт через OTel Prometheus bridge в общий OTLP pipeline с общими resource attributes. Отдельный `/metrics` scrape допустим только если bridge неприменим, и тогда — на техническом порту ([cloud-native runtime](cloud-native-runtime.md)); два пути для одних метрик не используются.
+
+Встроенных метрик недостаточно. Собственный OTel middleware в composition root добавляет retry attempts по классу ошибки, poison/DLQ count, Inbox duplicates, processing duration по `event_type` и message age (`now − occurred_at`). Labels — только `handler_name`, `event_type`, `stream`, `error_class`; `event_id` и `aggregate_id` не используются. Consumer lag берётся из Kafka-клиента или Alloy Kafka exporter, а не из Watermill. Outbox pending и oldest pending age — SQL-метрики Forwarder-роли, а не publish-декоратора.
+
+Poison messages направляются Watermill `PoisonQueue` middleware в DLQ-топик `<stream>.dlq` (Requeuing After Error). Целевой порядок middleware: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler; business errors не ретраятся. Текущий `orders/pkg/messaging/consumer.go` ставит `PoisonQueue` снаружи `Retry` (исчерпанный transient тоже уходит в poison, как описано в [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md)), а `PrometheusMetricsBuilder` и OTel middleware ещё не подключены; расхождение устраняется при реализации middleware. Grafana dashboard [9777](https://grafana.com/grafana/dashboards/9777) — референс панелей row `Kafka` в overview `orders`, а не отдельный dashboard.
+
+## Dashboards
+
+Каждый deployable service владеет одним overview-dashboard `<Service> / Overview` рядом со своими ops-файлами; решение — [ADR 29](adr/0029-grafana-dashboards-as-code.md).
+
+| Service | Dashboard uid | service.name | Файл |
+| --- | --- | --- | --- |
+| `orders` | `nomnom-orders-overview` | `orders`, `orders-worker`, `orders-consumer` | [overview.json](../boundaries/orders/ops/grafana/dashboards/overview.json) |
+| `restaurants` | `nomnom-restaurants-overview` | `restaurants` | [overview.json](../boundaries/restaurants/ops/grafana/dashboards/overview.json) |
+| `delivery` | `nomnom-delivery-overview` | `delivery` | [overview.json](../boundaries/delivery/ops/grafana/dashboards/overview.json) |
+| `payments` | `nomnom-payments-overview` | `payments` | [overview.json](../boundaries/payments/ops/grafana/dashboards/overview.json) |
+| BFF | `nomnom-bff-overview` | `bff` | [overview.json](../boundaries/bff/ops/grafana/dashboards/overview.json) |
+
+| | |
+| --- | --- |
+| Toolchain | Grafana Foundation SDK (Go) в [`ops/grafana`](../ops/grafana/README.md); `overview.ServiceOverview` задаёт общую структуру rows; JSON — артефакт, `make grafana-check` в CI падает при расхождении. |
+| Схема | `dashboard.grafana.app/v2`, Grafana 13.2.4; миграция v1 → v2 для self-managed необратима. |
+| Доставка | Git Sync: read-only `Repository` на сервис в [`ops/grafana/git-sync`](../ops/grafana/git-sync). |
+| Проверка | `gcx dev lint run` закоммиченных и live-вариантов, тесты генератора. |
+| Метрики | Только из [инвентаря](observability/metric-inventory.md) со статусом «есть»; остальные панели — TODO со ссылкой на инвентарь. |
+
+Overview отвечает на вопросы incident: работает ли сервис, выросли ли ошибки (transport, application и business rejection раздельно; PaymentDeclined — не ошибка) и latency, какая зависимость деградировала, есть ли backlog, что с Inbox/Outbox и бизнес-потоком, где trace/log/profile. Серверные метрики PostgreSQL, MongoDB и Kafka остаются в community dashboards, на которые ведут ссылки. Alert rules создаются следующим шагом тем же генератором.
+
 ## Логи
 
 Приложение пишет по одной структурированной JSON-записи в stdout. Минимальная схема:
@@ -180,7 +212,7 @@ Observability дополняет, но не меняет принятую Vertic
 - Sampling и retention задаются отдельно для каждого окружения и сигнала. Конкретные rates, tail policies, объёмы и сроки хранения этим документом не определяются.
 - Обычный head sampling принимает решение до результата операции, поэтому не гарантирует сохранение всех ошибочных traces. Если такая гарантия понадобится, потребуется отдельное решение о tail sampling, его ресурсах и отказоустойчивости.
 - Доступ к telemetry и её срок жизни учитывают чувствительность данных. Redaction в приложении предпочтительнее попытки удалить секрет после приёма.
-- SLO, dashboards, alerts, recording rules и capacity planning определяются отдельными изменениями после появления рабочих сигналов и ожидаемой нагрузки.
+- SLO, alerts, recording rules и capacity planning определяются отдельными изменениями после появления рабочих сигналов и ожидаемой нагрузки; overview-dashboards определены [ADR 29](adr/0029-grafana-dashboards-as-code.md).
 
 ## Отложенные решения
 
@@ -190,7 +222,7 @@ Observability дополняет, но не меняет принятую Vertic
 - OTLP endpoint details, temporality и точное преобразование resource attributes;
 - sampling, retention, multi-tenancy, storage sizing и disaster recovery;
 - Loki labels/structured metadata limits и Mimir histogram strategy;
-- exact dashboards, alerts, SLO и доступ к данным;
+- alerts, SLO и доступ к данным;
 - BFF runtime и соответствующая profiling-интеграция.
 
 ## Официальные источники

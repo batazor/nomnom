@@ -46,6 +46,21 @@ RUNTIME_SERVICES ?=
 runtime-contract: ## собрать backend-приложения и проверить health, SIGTERM/SIGINT, drain и exit code
 	@python3 ops/runtime-contract/contract_test.py $(RUNTIME_SERVICES)
 
+## Grafana dashboards as code (ADR 29): генератор ops/grafana, артефакты boundaries/<service>/ops/grafana
+GCX_VERSION ?= v1.7.1
+GCX ?= gcx
+.PHONY: grafana-generate grafana-check grafana-serve grafana-tools
+grafana-generate: ## сгенерировать overview dashboards, их README и docs/observability/metric-inventory.md
+	@cd ops/grafana && go run ./cmd/dashboards -root ../..
+grafana-check: ## CI: тесты генератора, регенерация без диффа, gcx lint закоммиченного и live-варианта
+	@cd ops/grafana && go test ./... && go run ./cmd/dashboards -root ../.. -check
+	@preview=$$(mktemp -d) && (cd ops/grafana && go run ./cmd/dashboards -preview $$preview) && \
+		$(GCX) dev lint run boundaries/*/ops/grafana/dashboards/overview.json $$preview/*.json
+grafana-serve: ## gcx dev serve: локальный preview dashboards (нужен gcx context с Grafana для запросов)
+	@$(GCX) dev serve boundaries/*/ops/grafana/dashboards
+grafana-tools: ## установить gcx $(GCX_VERSION) в GOBIN
+	go install github.com/grafana/gcx/cmd/gcx@$(GCX_VERSION)
+
 .PHONY: help
 help: ## показать цели
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(firstword $(MAKEFILE_LIST)) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
