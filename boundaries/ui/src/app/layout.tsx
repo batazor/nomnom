@@ -12,7 +12,9 @@ export function AppLayout() {
           <span aria-hidden="true" className="brand-mark">
             NN
           </span>
-          <span>{t("app.brand")}</span>
+          <span aria-hidden="true" className="brand-name">
+            nom<span className="brand-name-accent">nom</span>
+          </span>
         </Link>
         <span className="location-label">{t("app.location")}</span>
       </header>

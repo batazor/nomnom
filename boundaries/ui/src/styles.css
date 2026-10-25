@@ -96,6 +96,10 @@ a {
   content: "";
 }
 
+.brand-name-accent {
+  color: var(--color-primary);
+}
+
 .location-label {
   display: none;
   color: var(--color-muted);
