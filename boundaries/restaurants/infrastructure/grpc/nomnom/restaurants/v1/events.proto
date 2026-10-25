@@ -41,3 +41,11 @@ message PreparationFailed {
 message RestaurantOrderReady {
   string order_id = 1;
 }
+
+// Kitchen Order отменён по запросу orders (Cancel Restaurant Order);
+// preparation_started — отмена произошла после начала Preparation.
+message RestaurantOrderCancelled {
+  string order_id = 1;
+  string reason = 2;
+  bool preparation_started = 3;
+}

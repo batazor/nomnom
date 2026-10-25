@@ -10,6 +10,7 @@
     "lint": "biome lint .",
     "proto:check": "cd ../.. && buf format --diff --exit-code && buf lint && buf build",
     "start": "node cmd/restaurants/main.ts",
+    "relay": "node cmd/restaurants-relay/main.ts",
     "test": "node --test test/*.test.ts",
     "migrate": "node cmd/restaurants-migrate/main.ts"
   },

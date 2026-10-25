@@ -19,9 +19,11 @@ import { MongoOutbox } from "../../pkg/infrastructure/mongodb/outbox.ts";
 import { MongoUnitOfWork } from "../../pkg/infrastructure/mongodb/unit-of-work.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../../pkg/lifecycle/periodic.ts";
+import { currentTraceMetadata } from "../../pkg/telemetry/trace-context.ts";
 import type { KitchenAccessControl } from "../../slices/kitchenorder/applications/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../../slices/kitchenorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import { ReceiveOrderRequestHandler } from "../../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
+import { restaurantOrderEventMapper } from "../../slices/kitchenorder/infrastructure/integration/restaurant-order-events.ts";
 import {
   createRestaurantOrderCollection,
   MongoRestaurantOrderRepository,
@@ -66,9 +68,12 @@ const mongo = await connectMongoDb(config.mongodb);
 
 const clock = { now: () => new Date() };
 const unitOfWork = new MongoUnitOfWork(mongo.client);
-// Protobuf mappers and restaurants-relay come with the event contracts
-// (ADR 31); until then no Domain Event is written to the Outbox.
-const outbox = new MongoOutbox(mongo.db, unitOfWork);
+// Only Kitchen Order facts with a contract in events.proto are written to the
+// Outbox (explicit allowlist); restaurants-relay publishes them (ADR 31).
+const outbox = new MongoOutbox(mongo.db, unitOfWork, {
+  mapper: restaurantOrderEventMapper,
+  metadata: currentTraceMetadata,
+});
 const restaurantCollection = createRestaurantCollection(mongo.db, unitOfWork);
 const orderCollection = createRestaurantOrderCollection(mongo.db, unitOfWork);
 const restaurants = new MongoRestaurantRepository(restaurantCollection);

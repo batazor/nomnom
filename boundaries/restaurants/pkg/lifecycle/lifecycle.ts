@@ -244,3 +244,35 @@ function stoppedUnexpectedly(outcome: Outcome): Error {
     cause: outcome.error ?? new Error("no error reported"),
   });
 }
+
+/**
+ * Worker without its own listener for processes whose work runs in periodic
+ * loops (relay): `run` waits for shutdown, `onShutdown` runs after the loops
+ * stopped.
+ */
+export class IdleWorker implements Worker {
+  readonly #onShutdown: () => Promise<void>;
+  readonly #stopped: Promise<void>;
+  #resolve: () => void = () => {};
+
+  constructor(onShutdown: () => Promise<void> = async () => {}) {
+    this.#onShutdown = onShutdown;
+    this.#stopped = new Promise((resolve) => {
+      this.#resolve = resolve;
+    });
+  }
+
+  async start(): Promise<void> {}
+
+  run(): Promise<void> {
+    return this.#stopped;
+  }
+
+  async shutdown(_deadline: AbortSignal): Promise<void> {
+    try {
+      await this.#onShutdown();
+    } finally {
+      this.#resolve();
+    }
+  }
+}

@@ -134,3 +134,32 @@ export declare type RestaurantOrderReady = Message<"nomnom.restaurants.v1.Restau
  */
 export declare const RestaurantOrderReadySchema: GenMessage<RestaurantOrderReady>;
 
+/**
+ * Kitchen Order отменён по запросу orders (Cancel Restaurant Order);
+ * preparation_started — отмена произошла после начала Preparation.
+ *
+ * @generated from message nomnom.restaurants.v1.RestaurantOrderCancelled
+ */
+export declare type RestaurantOrderCancelled = Message<"nomnom.restaurants.v1.RestaurantOrderCancelled"> & {
+  /**
+   * @generated from field: string order_id = 1;
+   */
+  orderId: string;
+
+  /**
+   * @generated from field: string reason = 2;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: bool preparation_started = 3;
+   */
+  preparationStarted: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RestaurantOrderCancelled.
+ * Use `create(RestaurantOrderCancelledSchema)` to create a new message.
+ */
+export declare const RestaurantOrderCancelledSchema: GenMessage<RestaurantOrderCancelled>;
+

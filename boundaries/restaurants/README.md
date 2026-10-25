@@ -248,7 +248,7 @@ MongoDB предлагается как основное логическое х
 
 Решение имеет статус Proposed в [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); коллекции, границы документов, validators, индексы, эволюция схемы и атомарность конкретизированы в локальном [ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md).
 
-Реализация: официальный драйвер `mongodb` без ODM. Общие части — `pkg/infrastructure/mongodb` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекции `outbox`, `outbox_counters`, `outbox_leases` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет), `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts`), адаптеры слайсов — `slices/<slice>/infrastructure/mongodb`, реестр коллекций и миграций — `infrastructure/mongodb/collections.ts`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `outbox`, `outbox_counters`, `outbox_leases`, `schema_migrations`. Транзакции требуют replica set.
+Реализация: официальный драйвер `mongodb` без ODM. Общие части — `pkg/infrastructure/mongodb` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекции `outbox`, `outbox_counters`, `outbox_leases` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет; `cmd/restaurants` подключает mapper Kitchen Order), `outbox-relay-store.ts` — lease и выборка relay, `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts`), адаптеры слайсов — `slices/<slice>/infrastructure/mongodb`, реестр коллекций и миграций — `infrastructure/mongodb/collections.ts`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `outbox`, `outbox_counters`, `outbox_leases`, `schema_migrations`. Транзакции требуют replica set.
 
 | Переменная | Значение | По умолчанию |
 | --- | --- | --- |
@@ -262,7 +262,28 @@ MongoDB предлагается как основное логическое х
 
 Consumers интеграционных событий `restaurants` используют Transactional Inbox по общесистемному [ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md). Проверка `event_id`, изменение документов контекста, запись Inbox и, если обработчик публикует новое событие, запись Outbox выполняются в одной MongoDB-транзакции. Уникальность `{ consumer, event_id }` обеспечивается unique index; конфликт индекса откатывает транзакцию и считается duplicate. Kafka offset подтверждается только после commit.
 
-Inbox-адаптер находится в `infrastructure/`, а транзакция обработки сообщения получает message scope Awilix. По умолчанию изменения опираются на single-document atomicity; Unit of Work с MongoDB transaction используется только для multi-document изменений или state + Inbox/Outbox — см. [документацию Unit of Work](../../docs/unit-of-work.md#restaurants--mongodb) и [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md). Выбор Kafka-клиента, коллекция Inbox, индексы и топология MongoDB с поддержкой транзакций относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+### Публикация: Outbox и restaurants-relay
+
+Публикация Integration Events реализована по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) и [ADR 13](../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md):
+
+- **Mapper** `slices/kitchenorder/infrastructure/integration/restaurant-order-events.ts` — явный allowlist Domain Event → Protobuf `nomnom/restaurants/v1/events.proto`, topic `restaurants.v1.restaurant-order-events`: `RestaurantOrderAccepted`, `RestaurantOrderRejected` (`reason` пустой, если не указан), `PreparationStarted`, `PreparationDelayed`, `RestaurantOrderFailed` → `PreparationFailed`, `RestaurantOrderReady`, `RestaurantOrderCancelled` (`reason`, `preparation_started`). Остальные события `RestaurantOrder` (`Received`, `Queued`, `Assembled`) и события `Restaurant`/`Menu` контракта не имеют и в Outbox не пишутся. Mapper подключён к `MongoOutbox` в `cmd/restaurants`; `traceparent` берётся из активного span, если он есть.
+- **`event_id`** — UUIDv5 (namespace `8f1d3c2a-5b7e-4a90-9c61-2e4f7b8d0a13`) от `"{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}"`, `event_type` — полное имя Protobuf-сообщения.
+- **`cmd/restaurants-relay`** (`npm run relay`, в образе — `node dist/cmd/restaurants-relay/main.js`) — polling relay с runtime contract `pkg/lifecycle` (только технический порт). Единственный активный экземпляр — lease-документ `restaurants-relay` в `outbox_leases` (владелец `hostname/pid`, срок `OUTBOX__LEASE_TTL`, продлевается каждый цикл, освобождается при shutdown). Цикл читает до `OUTBOX__BATCH_SIZE` записей `{ publishedAt: null }` по `seq`, публикует их idempotent producer'ом (`acks=all`, key — `aggregate_id`) и выставляет `publishedAt` только после ack. Первая ошибка останавливает пачку (head-of-line): у записи растут `attempts` и `lastError`, следующий цикл начинает с неё. Опубликованные записи старше `OUTBOX__RETENTION` удаляются (не чаще раза в минуту).
+- **Kafka headers** совпадают с `orders` (`pkg/messaging/envelope.go`): `event_id`, `event_type`, `occurred_at` (RFC 3339 Nano, UTC), `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent` (если есть), а также `_watermill_message_uuid` = `event_id`.
+- **Метрики** (OpenTelemetry, OTLP gRPC только при заданном `OTEL_EXPORTER_OTLP_ENDPOINT`): `nomnom_outbox_pending_messages`, `nomnom_outbox_oldest_pending_age_seconds` (labels `stream`, `boundary`; только у держателя lease), `nomnom_outbox_publish_retries_total` (`stream`, `event_type`, `boundary`, `error_class` ∈ `timeout|broker|unknown`), `nomnom_outbox_publish_duration_seconds` и `nomnom_outbox_publish_lag_seconds` (`occurred_at` → ack; `stream`, `event_type`, `boundary`).
+
+| Переменная | Назначение | По умолчанию |
+| --- | --- | --- |
+| `KAFKA__BROKERS` | `host:port` через запятую; обязателен для `restaurants-relay`, основной процесс к Kafka не подключается | — |
+| `KAFKA__CLIENT_ID` | client id producer'а | `restaurants-relay` |
+| `OUTBOX__POLL_INTERVAL` | пауза между циклами | `1s` |
+| `OUTBOX__BATCH_SIZE` | записей за цикл | `100` |
+| `OUTBOX__LEASE_TTL` | срок lease; должен быть больше интервала опроса | `15s` |
+| `OUTBOX__RETENTION` | срок хранения опубликованных записей (`ms`, `s`, `m`, `h`, `d`) | `7d` |
+
+### Потребление: Inbox
+
+Inbox-адаптер находится в `infrastructure/`, а транзакция обработки сообщения получает message scope Awilix. По умолчанию изменения опираются на single-document atomicity; Unit of Work с MongoDB transaction используется только для multi-document изменений или state + Inbox/Outbox — см. [документацию Unit of Work](../../docs/unit-of-work.md#restaurants--mongodb) и [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md). Kafka-клиент — `@confluentinc/kafka-javascript` (ADR 31); consumer, коллекция Inbox и её индексы относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 ## Dependency Injection
 
@@ -283,7 +304,7 @@ Inbox-адаптер находится в `infrastructure/`, а транзак�
 - **Domain:** aggregate `Restaurant`; aggregate `Menu` с entity `MenuItem` и VO `Money` на `decimal.js` (меню — отдельный aggregate slice `menu`, одно на ресторан); aggregate `RestaurantOrder` с чистой FSM в виде transition table, VO `Quantity`, domain service `evaluateOrderAcceptance` поверх `RestaurantAcceptingOrders` и `MenuItemAvailable`, Domain Events с `pullEvents()`; контракты repositories в `domains/`.
 - **Application:** по одному handler на use case в `slices/<slice>/applications/<usecase>/`: Register/Update/Open/Close Restaurant, Assign/Revoke Staff, Get/List Restaurants; Create Menu, Add/Update Menu Item, Set Menu Item Availability, Get Menu; Receive Order Request, Accept Order (с Queue в одной UoW), Reject Order, Queue Restaurant Order, Start Preparation, Mark Assembled, Mark Ready for Pickup, Report Preparation Delay/Failure, Cancel Restaurant Order, Get Restaurant Order, Get Kitchen Queue, List Active Preparations, List Ready Orders.
 - **Порты:** `UnitOfWork`, `Outbox`, `Clock`, `IdGenerator`, `Subject` и application errors в `pkg/application`; узкие authorization ports в `applications/access-control.ts` каждого слайса и `OwnerRelationshipWriter`; query/read-model ports рядом с queries; ports открытых решений — `AcceptanceConditionsProvider`, `ReadyTimeEstimator`, `KitchenQueueOrdering`. Политика повтора Start Preparation/Mark Ready и политика отмены во время Preparation — обязательные параметры handlers без значения по умолчанию.
-- **Адаптеры:** MongoDB (`pkg/infrastructure/mongodb`, `slices/*/infrastructure/mongodb`, см. [Хранилище: MongoDB](#хранилище-mongodb)) — UoW как транзакция, Outbox-коллекция, optimistic concurrency по `version`, уникальность `orderId` и меню на ресторан индексами; in-memory адаптеры (`pkg/infrastructure/memory`, `slices/*/infrastructure/memory`) — только для unit-тестов; SpiceDB adapter authorization ports подключается при заданном `SPICEDB__ENDPOINT` (см. [Authorization: SpiceDB](#authorization-spicedb)); writer relationships `restaurant#owner`/`staff` и фоновый reconciler (см. [Relationships и reconciliation](#relationships-и-reconciliation)); Kafka/Outbox relay и Integration Event mappers не реализованы. `GetRestaurant`, `ReceiveOrderRequest`, `CancelRestaurantOrder`, `RegisterRestaurant`, `AssignStaff` и `RevokeStaff` подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `ServiceTokenSubjectResolver` при заданной конфигурации identity, иначе с `RejectingSubjectResolver`), остальные handlers к transport пока не подключены.
+- **Адаптеры:** MongoDB (`pkg/infrastructure/mongodb`, `slices/*/infrastructure/mongodb`, см. [Хранилище: MongoDB](#хранилище-mongodb)) — UoW как транзакция, Outbox-коллекция, optimistic concurrency по `version`, уникальность `orderId` и меню на ресторан индексами; in-memory адаптеры (`pkg/infrastructure/memory`, `slices/*/infrastructure/memory`) — только для unit-тестов; SpiceDB adapter authorization ports подключается при заданном `SPICEDB__ENDPOINT` (см. [Authorization: SpiceDB](#authorization-spicedb)); writer relationships `restaurant#owner`/`staff` и фоновый reconciler (см. [Relationships и reconciliation](#relationships-и-reconciliation)); mapper Integration Events Kitchen Order и polling relay `cmd/restaurants-relay` в Kafka (см. [Публикация](#публикация-outbox-и-restaurants-relay)); Kafka consumers и Inbox не реализованы. Сейчас через transport в Outbox пишет только `CancelRestaurantOrder` — остальные Kitchen Order commands к gRPC ещё не подключены. `GetRestaurant`, `ReceiveOrderRequest`, `CancelRestaurantOrder`, `RegisterRestaurant`, `AssignStaff` и `RevokeStaff` подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `ServiceTokenSubjectResolver` при заданной конфигурации identity, иначе с `RejectingSubjectResolver`), остальные handlers к transport пока не подключены.
 - **Не реализованы:** Start / Complete Preparation Item (item-level model не входит в MVP) и Reject After Acceptance (не разрешён до продуктового решения); courier projection в List Ready Orders; BDD `.feature`.
 
 ## Запуск
@@ -298,6 +319,8 @@ docker exec restaurants-mongo mongosh --quiet --eval 'rs.initiate()'
 export MONGODB__URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true'
 npm run migrate
 npm start
+# Публикация Outbox (отдельный процесс, нужен Kafka):
+KAFKA__BROKERS=localhost:9092 npm run relay
 ```
 
 ## Проверка
@@ -307,10 +330,12 @@ npm test
 npm run check
 ```
 
-Интеграционные тесты MongoDB (`test/mongodb-integration.test.ts`) пропускаются без `MONGODB_URI`; каждый запуск создаёт и удаляет временную базу:
+Интеграционные тесты MongoDB (`test/mongodb-integration.test.ts`) пропускаются без `MONGODB_URI`, тест Outbox → relay → Kafka (`test/outbox-relay-integration.test.ts`) — без `MONGODB_URI` и `KAFKA_BROKERS`; каждый запуск создаёт и удаляет временную базу:
 
 ```bash
-MONGODB_URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true' npm test
+docker run -d --name restaurants-kafka -p 9092:9092 apache/kafka:4.1.0
+MONGODB_URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true' \
+  KAFKA_BROKERS=localhost:9092 npm test
 ```
 
 Автоформатирование:
@@ -339,8 +364,8 @@ docker run --rm -p 8082:8082 -p 9082:9082 \
 `/health/ready` на техническом порту `MANAGEMENT__PORT` (по умолчанию `9082`), а по
 `SIGTERM`/`SIGINT` — not ready, `SHUTDOWN__READINESS_DELAY` (по умолчанию `5s`), остановку
 приёма запросов и drain в пределах `SHUTDOWN__DRAIN_TIMEOUT` (по умолчанию `20s`).
-Файл `.env` предназначен для локальной разработки и в образ не копируется. Текущий
-HTTP-каркас не требует MongoDB или Kafka.
+Файл `.env` предназначен для локальной разработки и в образ не копируется. Основной процесс
+требует MongoDB и SpiceDB, `restaurants-relay` — MongoDB и Kafka.
 
 ## Развёртывание
 

@@ -30,16 +30,37 @@ export const DEFAULT_RECONCILER_GRACE = "10m";
 export const RECONCILER_PAGE_SIZE_ENV = "RECONCILER__PAGE_SIZE";
 export const DEFAULT_RECONCILER_PAGE_SIZE = 500;
 
+export const KAFKA_BROKERS_ENV = "KAFKA__BROKERS";
+export const KAFKA_CLIENT_ID_ENV = "KAFKA__CLIENT_ID";
+export const DEFAULT_KAFKA_CLIENT_ID = "restaurants-relay";
+export const OUTBOX_RETENTION_ENV = "OUTBOX__RETENTION";
+export const DEFAULT_OUTBOX_RETENTION = "7d";
+export const OUTBOX_POLL_INTERVAL_ENV = "OUTBOX__POLL_INTERVAL";
+export const DEFAULT_OUTBOX_POLL_INTERVAL = "1s";
+export const OUTBOX_BATCH_SIZE_ENV = "OUTBOX__BATCH_SIZE";
+export const DEFAULT_OUTBOX_BATCH_SIZE = 100;
+export const OUTBOX_LEASE_TTL_ENV = "OUTBOX__LEASE_TTL";
+export const DEFAULT_OUTBOX_LEASE_TTL = "15s";
+
 const portSchema = z.coerce.number().int().min(1).max(65535);
 
-const DURATION_UNITS_MS = { ms: 1, s: 1000, m: 60_000 } as const;
+const DURATION_UNITS_MS = {
+  ms: 1,
+  s: 1000,
+  m: 60_000,
+  h: 3_600_000,
+  d: 86_400_000,
+} as const;
 
-/** Длительность вида `500ms`, `5s`, `1m` в миллисекундах. */
+/** Длительность вида `500ms`, `5s`, `1m`, `2h`, `7d` в миллисекундах. */
 const durationSchema = z
   .string()
-  .regex(/^\d+(ms|s|m)$/, "expected a duration like 500ms, 5s or 1m")
+  .regex(
+    /^\d+(ms|s|m|h|d)$/,
+    "expected a duration like 500ms, 5s, 1m, 2h or 7d",
+  )
   .transform((value) => {
-    const [, amount, unit] = /^(\d+)(ms|s|m)$/.exec(value) ?? [];
+    const [, amount, unit] = /^(\d+)(ms|s|m|h|d)$/.exec(value) ?? [];
     return (
       Number(amount) * DURATION_UNITS_MS[unit as keyof typeof DURATION_UNITS_MS]
     );
@@ -122,6 +143,25 @@ export interface ReconcilerConfig {
   readonly pageSize: number;
 }
 
+/**
+ * Kafka брокеры relay (ADR 31). `enabled: false` при пустом `KAFKA__BROKERS`;
+ * restaurants-relay в этом случае не стартует, основной процесс к Kafka не
+ * подключается.
+ */
+export type KafkaConfig =
+  | Readonly<{ enabled: false }>
+  | Readonly<{ enabled: true; brokers: readonly string[]; clientId: string }>;
+
+/** Polling relay Outbox (ADR 31). */
+export interface OutboxRelayConfig {
+  /** Опубликованные записи старше этого срока удаляются. */
+  readonly retentionMs: number;
+  readonly pollIntervalMs: number;
+  readonly batchSize: number;
+  /** Срок lease единственного активного relay; продлевается каждый цикл. */
+  readonly leaseTtlMs: number;
+}
+
 export interface AppConfig {
   readonly server: ServerConfig;
   readonly management: ManagementConfig;
@@ -130,6 +170,8 @@ export interface AppConfig {
   readonly spicedb: SpiceDbConfig;
   readonly mongodb: MongoDbConfig;
   readonly reconciler: ReconcilerConfig;
+  readonly kafka: KafkaConfig;
+  readonly outbox: OutboxRelayConfig;
 }
 
 export function loadLocalEnv(path = ".env"): void {
@@ -166,6 +208,8 @@ export function loadConfig(
     spicedb: loadSpiceDbConfig(environment),
     mongodb: loadMongoDbConfig(environment),
     reconciler: loadReconcilerConfig(environment),
+    kafka: loadKafkaConfig(environment),
+    outbox: loadOutboxRelayConfig(environment),
   });
 }
 
@@ -253,6 +297,61 @@ export function loadReconcilerConfig(
         DEFAULT_RECONCILER_PAGE_SIZE,
     );
   return Object.freeze({ intervalMs, graceMs, pageSize });
+}
+
+const BROKER = /^[A-Za-z0-9._-]+:\d{1,5}$/;
+
+export function loadKafkaConfig(
+  environment: Record<string, string | undefined>,
+): KafkaConfig {
+  const raw = environment[KAFKA_BROKERS_ENV]?.trim() ?? "";
+  if (raw === "") return Object.freeze({ enabled: false });
+  const brokers = raw.split(",").map((broker) => broker.trim());
+  for (const broker of brokers) {
+    if (!BROKER.test(broker)) {
+      throw new Error(
+        `${KAFKA_BROKERS_ENV}: malformed broker "${broker}", expected host:port`,
+      );
+    }
+  }
+  const clientId =
+    environment[KAFKA_CLIENT_ID_ENV]?.trim() || DEFAULT_KAFKA_CLIENT_ID;
+  return Object.freeze({
+    enabled: true,
+    brokers: Object.freeze(brokers),
+    clientId,
+  });
+}
+
+export function loadOutboxRelayConfig(
+  environment: Record<string, string | undefined>,
+): OutboxRelayConfig {
+  const positive = (name: string) =>
+    durationSchema.refine((value) => value > 0, `${name} must be positive`);
+  const retentionMs = positive(OUTBOX_RETENTION_ENV).parse(
+    environment[OUTBOX_RETENTION_ENV]?.trim() || DEFAULT_OUTBOX_RETENTION,
+  );
+  const pollIntervalMs = positive(OUTBOX_POLL_INTERVAL_ENV).parse(
+    environment[OUTBOX_POLL_INTERVAL_ENV]?.trim() ||
+      DEFAULT_OUTBOX_POLL_INTERVAL,
+  );
+  const leaseTtlMs = positive(OUTBOX_LEASE_TTL_ENV).parse(
+    environment[OUTBOX_LEASE_TTL_ENV]?.trim() || DEFAULT_OUTBOX_LEASE_TTL,
+  );
+  if (leaseTtlMs <= pollIntervalMs) {
+    throw new Error(
+      `${OUTBOX_LEASE_TTL_ENV} must be longer than ${OUTBOX_POLL_INTERVAL_ENV}`,
+    );
+  }
+  const batchSize = z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(10_000)
+    .parse(
+      environment[OUTBOX_BATCH_SIZE_ENV]?.trim() || DEFAULT_OUTBOX_BATCH_SIZE,
+    );
+  return Object.freeze({ retentionMs, pollIntervalMs, batchSize, leaseTtlMs });
 }
 
 /** Сегмент namespace / ServiceAccount: DNS-1123 subdomain. */

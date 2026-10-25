@@ -58,4 +58,8 @@ COPY --from=build --chown=node:node /app/dist ./dist
 EXPOSE 8082 9082
 USER node
 ENTRYPOINT ["/usr/bin/tini", "--"]
+# The same image runs restaurants-relay (ADR 31): the relay Deployment
+# overrides the command with `node dist/cmd/restaurants-relay/main.js`
+# (management port 9082 only), restaurants-migrate with
+# `node dist/cmd/restaurants-migrate/main.js`.
 CMD ["node", "dist/cmd/restaurants/main.js"]
