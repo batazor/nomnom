@@ -13,6 +13,7 @@
   },
   "include": [
     "cmd/**/*.ts",
+    "di/**/*.ts",
     "infrastructure/grpc/service.ts",
     "infrastructure/grpc/subject.ts",
     "infrastructure/grpc/worker.ts",

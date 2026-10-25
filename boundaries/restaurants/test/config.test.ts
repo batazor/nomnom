@@ -122,3 +122,39 @@ test("Outbox relay config rejects a lease shorter than the poll interval", () =>
   );
   assert.throws(() => loadConfig({ OUTBOX__BATCH_SIZE: "0" }));
 });
+
+test("kitchen tunables default to the MVP decisions", () => {
+  assert.deepEqual(loadConfig({}).kitchen, {
+    preparationTimeMs: 20 * 60_000,
+    repeatPolicy: "succeed-without-event",
+    cancellationDuringPreparation: "reject",
+  });
+});
+
+test("kitchen tunables are read from the environment", () => {
+  assert.deepEqual(
+    loadConfig({
+      KITCHEN__PREPARATION_TIME: "45m",
+      KITCHEN__REPEAT_POLICY: "reject",
+      KITCHEN__CANCELLATION_DURING_PREPARATION: "allow",
+    }).kitchen,
+    {
+      preparationTimeMs: 45 * 60_000,
+      repeatPolicy: "reject",
+      cancellationDuringPreparation: "allow",
+    },
+  );
+});
+
+test("kitchen tunables reject malformed values", () => {
+  assert.throws(() => loadConfig({ KITCHEN__PREPARATION_TIME: "0m" }));
+  assert.throws(() => loadConfig({ KITCHEN__PREPARATION_TIME: "20" }));
+  assert.throws(
+    () => loadConfig({ KITCHEN__REPEAT_POLICY: "ignore" }),
+    /KITCHEN__REPEAT_POLICY/,
+  );
+  assert.throws(
+    () => loadConfig({ KITCHEN__CANCELLATION_DURING_PREPARATION: "maybe" }),
+    /KITCHEN__CANCELLATION_DURING_PREPARATION/,
+  );
+});

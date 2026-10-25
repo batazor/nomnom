@@ -32,6 +32,7 @@
     "@opentelemetry/exporter-metrics-otlp-grpc": "0.300.0",
     "@opentelemetry/resources": "3.0.0",
     "@opentelemetry/sdk-metrics": "3.0.0",
+    "awilix": "13.0.5",
     "decimal.js": "^10.6.0",
     "jose": "6.2.13",
     "mongodb": "7.7.0",

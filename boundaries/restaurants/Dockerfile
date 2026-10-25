@@ -11,6 +11,7 @@ FROM deps AS build
 
 COPY tsconfig.json ./
 COPY cmd ./cmd
+COPY di ./di
 COPY infrastructure ./infrastructure
 COPY pkg ./pkg
 COPY slices ./slices
@@ -26,6 +27,7 @@ RUN apt-get update && \
     chown node:node /app
 
 COPY --chown=node:node cmd ./cmd
+COPY --chown=node:node di ./di
 COPY --chown=node:node infrastructure ./infrastructure
 COPY --chown=node:node pkg ./pkg
 COPY --chown=node:node slices ./slices

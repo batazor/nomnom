@@ -295,6 +295,8 @@ profiles:
           manual:
             - src: "cmd/**/*.ts"
               dest: .
+            - src: "di/**/*.ts"
+              dest: .
             - src: "infrastructure/**/*.ts"
               dest: .
             - src: "infrastructure/**/*.js"

@@ -32,6 +32,13 @@ export const RECONCILER_GRACE_ENV = "RECONCILER__GRACE";
 export const DEFAULT_RECONCILER_GRACE = "10m";
 export const RECONCILER_PAGE_SIZE_ENV = "RECONCILER__PAGE_SIZE";
 export const DEFAULT_RECONCILER_PAGE_SIZE = 500;
+export const KITCHEN_PREPARATION_TIME_ENV = "KITCHEN__PREPARATION_TIME";
+export const DEFAULT_KITCHEN_PREPARATION_TIME = "20m";
+export const KITCHEN_REPEAT_POLICY_ENV = "KITCHEN__REPEAT_POLICY";
+export const DEFAULT_KITCHEN_REPEAT_POLICY = "succeed-without-event";
+export const KITCHEN_CANCELLATION_DURING_PREPARATION_ENV =
+  "KITCHEN__CANCELLATION_DURING_PREPARATION";
+export const DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION = "reject";
 
 export const KAFKA_BROKERS_ENV = "KAFKA__BROKERS";
 export const KAFKA_CLIENT_ID_ENV = "KAFKA__CLIENT_ID";
@@ -163,6 +170,25 @@ export interface ReconcilerConfig {
 }
 
 /**
+ * Open product decisions of Kitchen Order commands. Handlers take them as
+ * required parameters without defaults; the defaults live here.
+ */
+export interface KitchenConfig {
+  /**
+   * Initial `expected_ready_at` after Acceptance; staff move it later with
+   * Report Preparation Delay.
+   */
+  readonly preparationTimeMs: number;
+  /**
+   * A repeated Start Preparation or Mark Ready for Pickup: `succeed-without-event`
+   * answers with the current order and publishes nothing, `reject` fails.
+   */
+  readonly repeatPolicy: "succeed-without-event" | "reject";
+  /** Cancel Restaurant Order during Preparation: `reject` keeps it going. */
+  readonly cancellationDuringPreparation: "allow" | "reject";
+}
+
+/**
  * Kafka брокеры relay (ADR 31). `enabled: false` при пустом `KAFKA__BROKERS`;
  * restaurants-relay в этом случае не стартует, основной процесс к Kafka не
  * подключается.
@@ -189,6 +215,7 @@ export interface AppConfig {
   readonly spicedb: SpiceDbConfig;
   readonly mongodb: MongoDbConfig;
   readonly reconciler: ReconcilerConfig;
+  readonly kitchen: KitchenConfig;
   readonly kafka: KafkaConfig;
   readonly outbox: OutboxRelayConfig;
 }
@@ -227,6 +254,7 @@ export function loadConfig(
     spicedb: loadSpiceDbConfig(environment),
     mongodb: loadMongoDbConfig(environment),
     reconciler: loadReconcilerConfig(environment),
+    kitchen: loadKitchenConfig(environment),
     kafka: loadKafkaConfig(environment),
     outbox: loadOutboxRelayConfig(environment),
   });
@@ -316,6 +344,38 @@ export function loadReconcilerConfig(
         DEFAULT_RECONCILER_PAGE_SIZE,
     );
   return Object.freeze({ intervalMs, graceMs, pageSize });
+}
+
+export function loadKitchenConfig(
+  environment: Record<string, string | undefined>,
+): KitchenConfig {
+  const preparationTimeMs = durationSchema
+    .refine((value) => value > 0, "preparation time must be positive")
+    .parse(
+      environment[KITCHEN_PREPARATION_TIME_ENV]?.trim() ||
+        DEFAULT_KITCHEN_PREPARATION_TIME,
+    );
+  const repeatPolicy = z
+    .enum(["succeed-without-event", "reject"], {
+      error: `${KITCHEN_REPEAT_POLICY_ENV}: expected succeed-without-event or reject`,
+    })
+    .parse(
+      environment[KITCHEN_REPEAT_POLICY_ENV]?.trim() ||
+        DEFAULT_KITCHEN_REPEAT_POLICY,
+    );
+  const cancellationDuringPreparation = z
+    .enum(["allow", "reject"], {
+      error: `${KITCHEN_CANCELLATION_DURING_PREPARATION_ENV}: expected allow or reject`,
+    })
+    .parse(
+      environment[KITCHEN_CANCELLATION_DURING_PREPARATION_ENV]?.trim() ||
+        DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION,
+    );
+  return Object.freeze({
+    preparationTimeMs,
+    repeatPolicy,
+    cancellationDuringPreparation,
+  });
 }
 
 const BROKER = /^[A-Za-z0-9._-]+:\d{1,5}$/;

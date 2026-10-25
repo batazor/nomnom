@@ -2,17 +2,16 @@
 // to Kafka (ADR 13, ADR 31): a polling relay with a single active instance by
 // lease in `outbox_leases`; other replicas wait as failover. It follows the
 // same runtime contract as cmd/restaurants (pkg/lifecycle): management port
-// with /health/*, SIGTERM, readiness delay and drain.
-import { hostname } from "node:os";
+// with /health/*, SIGTERM, readiness delay and drain. The object graph is
+// composed by Awilix in di/relay.ts (ADR 5); this composition root owns the
+// connections and the shutdown order.
+import type { AwilixContainer } from "awilix";
 
+import { createRelayContainer, type RelayCradle } from "../../di/relay.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import { KafkaPublisher } from "../../pkg/infrastructure/kafka/publisher.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
-import { MongoOutboxRelayStore } from "../../pkg/infrastructure/mongodb/outbox-relay-store.ts";
-import { OtelRelayMetrics } from "../../pkg/infrastructure/outbox/metrics.ts";
-import { OutboxRelay } from "../../pkg/infrastructure/outbox/relay.ts";
-import { IdleWorker, Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
-import { PeriodicLoop, WorkerWithLoops } from "../../pkg/lifecycle/periodic.ts";
+import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 
 const log = (message: string) => console.log(`restaurants-relay ${message}`);
@@ -33,46 +32,25 @@ if (!config.kafka.enabled) {
 const telemetry = startTelemetry("restaurants-relay");
 const mongo = await connectMongoDb(config.mongodb);
 let publisher: KafkaPublisher | undefined;
+let container: AwilixContainer<RelayCradle> | undefined;
 try {
   publisher = await KafkaPublisher.connect(config.kafka);
-  const relay = new OutboxRelay({
-    store: new MongoOutboxRelayStore(mongo.db),
+  container = createRelayContainer({
+    outbox: config.outbox,
+    db: mongo.db,
     publisher,
-    owner: `${hostname()}/${process.pid}`,
-    batchSize: config.outbox.batchSize,
-    leaseTtlMs: config.outbox.leaseTtlMs,
-    retentionMs: config.outbox.retentionMs,
-    metrics: new OtelRelayMetrics("restaurants"),
     log,
   });
   await new Lifecycle({
     managementPort: config.management.port,
     readinessDelayMs: config.shutdown.readinessDelayMs,
     drainTimeoutMs: config.shutdown.drainTimeoutMs,
-  }).run(
-    new WorkerWithLoops(
-      new IdleWorker(async () => {
-        await relay.release();
-      }),
-      [
-        new PeriodicLoop(
-          async (signal) => {
-            await relay.cycle(signal);
-          },
-          {
-            initialDelayMs: 0,
-            intervalMs: config.outbox.pollIntervalMs,
-            log: (message) => console.error(`restaurants-relay ${message}`),
-          },
-        ),
-      ],
-    ),
-    { log },
-  );
+  }).run(container.cradle.worker, { log });
 } catch (error) {
   console.error("restaurants-relay stopped with error", error);
   process.exitCode = 1;
 } finally {
+  await container?.dispose();
   await publisher?.close();
   await mongo.close();
   await telemetry.shutdown();

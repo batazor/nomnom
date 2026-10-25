@@ -108,7 +108,15 @@ RPC, подключённые в `cmd/restaurants` (native gRPC/HTTP2 на би�
 
 Командные RPC ([FR-428](../../openspec/changes/add-fulfillment-command-rpcs/), [FR-446](../../openspec/changes/add-restaurant-admin-rpcs/)) получают `Subject` через `SubjectResolver` (`infrastructure/grpc/subject.ts`). Без конфигурации identity используется `RejectingSubjectResolver`, который отвечает `UNAUTHENTICATED`; с конфигурацией — `ServiceTokenSubjectResolver` (см. [Service identity](#service-identity) и [User identity](#user-identity)). Отказ отмены по стадии — бизнес-ответ, а не gRPC-ошибка.
 
-Команды кухни ([FR-480…FR-482](../../openspec/changes/add-kitchen-command-rpcs/)) адресуют заказ парой `restaurant_id` + `restaurant_order_id` и требуют `restaurant#operate_kitchen`; заказ другого ресторана — `NOT_FOUND`, запрещённый переход и повтор (кроме `StartPreparation`/`MarkRestaurantOrderReady`, отвечающих текущим заказом без факта) — `FAILED_PRECONDITION`. Пока модель расписания и capacity не согласована, Accept Order собран с `UnconstrainedAcceptanceConditions` (решают `Restaurant.isOpen` и `MenuItem.isAvailable`) и `FixedPreparationTimeEstimator` (20 минут).
+Команды кухни ([FR-480…FR-482](../../openspec/changes/add-kitchen-command-rpcs/)) адресуют заказ парой `restaurant_id` + `restaurant_order_id` и требуют `restaurant#operate_kitchen`; заказ другого ресторана — `NOT_FOUND`, запрещённый переход и повтор (кроме `StartPreparation`/`MarkRestaurantOrderReady`, которые по умолчанию отвечают текущим заказом без факта) — `FAILED_PRECONDITION`. Пока модель расписания и capacity не согласована, Accept Order собран с `UnconstrainedAcceptanceConditions` (решают `Restaurant.isOpen` и `MenuItem.isAvailable`) и `FixedPreparationTimeEstimator`.
+
+Открытые продуктовые решения команд кухни handlers получают обязательными параметрами без значения по умолчанию; значения задаёт конфигурация основного процесса (`pkg/config`, секция `kitchen`):
+
+| Переменная | Назначение | По умолчанию |
+| --- | --- | --- |
+| `KITCHEN__PREPARATION_TIME` | Начальный `expected_ready_at` после Acceptance (`FixedPreparationTimeEstimator`); позже сдвигается Report Preparation Delay | `20m` |
+| `KITCHEN__REPEAT_POLICY` | Повтор `StartPreparation`/`MarkRestaurantOrderReady`: `succeed-without-event` — текущий заказ без факта, `reject` — `FAILED_PRECONDITION` | `succeed-without-event` |
+| `KITCHEN__CANCELLATION_DURING_PREPARATION` | `CancelRestaurantOrder` во время Preparation: `reject` — отказ по стадии, Preparation продолжается; `allow` — отмена | `reject` |
 
 ### Service identity
 
@@ -319,6 +327,14 @@ Inbox-адаптер находится в `infrastructure/`, а транзак�
 
 Время жизни определяется назначением зависимости: общие клиенты получают application scope, а ресурсы конкретной обработки — request или message scope. В тестах handlers и прикладные компоненты создаются с явно переданными подменами.
 
+Структура:
+
+- `slices/<slice>/di/registrations.ts` — регистрации слайса: MongoDB adapters его ports, MVP adapters и handlers. Модуль объявляет `<Slice>Dependencies` (что берёт у процесса) и `<Slice>Cradle` (что предоставляет); тип `Registrations<Cradle>` из `pkg/di/container.ts` проверяет при компиляции, что зарегистрирован каждый ключ с нужным типом, а сигнатура `register<Slice>` — что процесс даёт все зависимости.
+- `di/restaurants.ts`, `di/relay.ts`, `di/migrate.ts` — контейнеры процессов: общие клиенты (MongoDB Unit of Work, Outbox, SpiceDB client, access control, relationship writer), модули слайсов, gRPC server и фоновые циклы. Фабрики регистраций — единственное место, где разбирается cradle; handlers получают обычный объект зависимостей.
+- `cmd/*/main.ts` — точки входа: читают конфигурацию, проверяют обязательную инфраструктуру, асинхронно открывают ресурсы (MongoDB, Kafka producer, subject resolver, telemetry), передают их контейнеру как values, запускают `Lifecycle` с `cradle.worker` и освобождают ресурсы в фиксированном порядке: `container.dispose()` (disposer закрывает SpiceDB client), затем Kafka producer, MongoDB и telemetry.
+
+Контейнер создаётся в PROXY injection mode со `strict: true`: регистрация с большим временем жизни не может зависеть от более короткоживущей. Сейчас все регистрации — application scope (singleton): handlers без состояния поверх общих клиентов, а ресурс одной операции — MongoDB session транзакции — принадлежит `MongoUnitOfWork.run` и живёт ровно один use case. Request/message scope (`container.createScope()`) появится вместе с первым ресурсом, принадлежащим одной обработке, — транзакцией Inbox-сообщения. `test/composition.test.ts` проверяет, что каждый контейнер разрешает все регистрации.
+
 Решение зафиксировано в общесистемном [ADR 5](../../docs/adr/0005-dependency-injection-strategy.md).
 
 ## Observability
@@ -331,7 +347,7 @@ Inbox-адаптер находится в `infrastructure/`, а транзак�
 
 - **Domain:** aggregate `Restaurant`; aggregate `Menu` с entity `MenuItem` и VO `Money` на `decimal.js` (меню — отдельный aggregate slice `menu`, одно на ресторан); aggregate `RestaurantOrder` с чистой FSM в виде transition table, VO `Quantity`, domain service `evaluateOrderAcceptance` поверх `RestaurantAcceptingOrders` и `MenuItemAvailable`, Domain Events с `pullEvents()`; контракты repositories в `domains/`.
 - **Application:** по одному handler на use case в `slices/<slice>/applications/<usecase>/`: Register/Update/Open/Close Restaurant, Assign/Revoke Staff, Get/List Restaurants; Create Menu, Add/Update Menu Item, Set Menu Item Availability, Get Menu; Receive Order Request, Accept Order (с Queue в одной UoW), Reject Order, Queue Restaurant Order, Start Preparation, Mark Assembled, Mark Ready for Pickup, Report Preparation Delay/Failure, Cancel Restaurant Order, Get Restaurant Order, Get Kitchen Queue, List Active Preparations, List Ready Orders.
-- **Порты:** `UnitOfWork`, `Outbox`, `Clock`, `IdGenerator`, `Subject` и application errors в `pkg/application`; узкие authorization ports в `applications/access-control.ts` каждого слайса и `OwnerRelationshipWriter`; query/read-model ports рядом с queries; ports открытых решений — `AcceptanceConditionsProvider`, `ReadyTimeEstimator`, `KitchenQueueOrdering`. Политика повтора Start Preparation/Mark Ready и политика отмены во время Preparation — обязательные параметры handlers без значения по умолчанию.
+- **Порты:** `UnitOfWork`, `Outbox`, `Clock`, `IdGenerator`, `Subject` и application errors в `pkg/application`; узкие authorization ports в `applications/access-control.ts` каждого слайса и `OwnerRelationshipWriter`; query/read-model ports рядом с queries; ports открытых решений — `AcceptanceConditionsProvider`, `ReadyTimeEstimator`, `KitchenQueueOrdering`. Политика повтора Start Preparation/Mark Ready и политика отмены во время Preparation — обязательные параметры handlers без значения по умолчанию; значения задаёт конфигурация (`KITCHEN__*`, см. [gRPC-адаптер](#grpc-адаптер)).
 - **Адаптеры:** MongoDB (`pkg/infrastructure/mongodb`, `slices/*/infrastructure/mongodb`, см. [Хранилище: MongoDB](#хранилище-mongodb)) — UoW как транзакция, Outbox-коллекция, optimistic concurrency по `version`, уникальность `orderId` и меню на ресторан индексами; in-memory адаптеры (`pkg/infrastructure/memory`, `slices/*/infrastructure/memory`) — только для unit-тестов; SpiceDB adapter authorization ports подключается при заданном `SPICEDB__ENDPOINT` (см. [Authorization: SpiceDB](#authorization-spicedb)); writer relationships `restaurant#owner`/`staff` и фоновый reconciler (см. [Relationships и reconciliation](#relationships-и-reconciliation)); mapper Integration Events Kitchen Order и polling relay `cmd/restaurants-relay` в Kafka (см. [Публикация](#публикация-outbox-и-restaurants-relay)); Kafka consumers и Inbox не реализованы. Через transport в Outbox пишут `CancelRestaurantOrder` и команды кухни. `GetRestaurant`, `ReceiveOrderRequest`, `CancelRestaurantOrder`, команды кухни (`AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure`, change [`add-kitchen-command-rpcs`](../../openspec/changes/add-kitchen-command-rpcs/)), `RegisterRestaurant`, `AssignStaff` и `RevokeStaff` подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `ServiceTokenSubjectResolver` при заданной конфигурации identity, иначе с `RejectingSubjectResolver`), к transport пока не подключены handlers меню, Update/Open/Close Restaurant, List Restaurants и queries kitchen board.
 - **Не реализованы:** Start / Complete Preparation Item (item-level model не входит в MVP) и Reject After Acceptance (не разрешён до продуктового решения); courier projection в List Ready Orders; BDD `.feature`.
 
@@ -358,7 +374,7 @@ npm test
 npm run check
 ```
 
-Интеграционные тесты MongoDB (`test/mongodb-integration.test.ts`, команды кухни через gRPC и Outbox — `test/grpc-kitchen-integration.test.ts`) пропускаются без `MONGODB_URI`, тест Outbox → relay → Kafka (`test/outbox-relay-integration.test.ts`) — без `MONGODB_URI` и `KAFKA_BROKERS`; каждый запуск создаёт и удаляет временную базу:
+Интеграционные тесты MongoDB (`test/mongodb-integration.test.ts`, команды кухни через gRPC и Outbox — `test/grpc-kitchen-integration.test.ts`, контейнеры migrate и основного процесса — `test/composition.test.ts`) пропускаются без `MONGODB_URI`, тест Outbox → relay → Kafka (`test/outbox-relay-integration.test.ts`) — без `MONGODB_URI` и `KAFKA_BROKERS`; каждый запуск создаёт и удаляет временную базу:
 
 ```bash
 docker run -d --name restaurants-kafka -p 9092:9092 apache/kafka:4.1.0
