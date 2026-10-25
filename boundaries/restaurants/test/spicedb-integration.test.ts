@@ -29,7 +29,11 @@ function accessControl(
   };
   const client = createSpiceDbClient(resolved);
   clients.push(client);
-  return new SpiceDbAccessControl({ client, timeoutMs: resolved.timeoutMs });
+  return new SpiceDbAccessControl({
+    client,
+    revisions: { authorizationRevision: async () => undefined },
+    timeoutMs: resolved.timeoutMs,
+  });
 }
 
 describe("SpiceDB access control", { skip }, () => {

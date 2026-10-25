@@ -39,6 +39,7 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
           undefined,
         );
         await world.authorization.touchOwner(input);
+        return "zed-owner";
       },
     },
     restaurants: world.restaurants,
@@ -64,7 +65,10 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
   assert.deepEqual(world.authorization.owners, [
     { restaurantId: "restaurant-1", ownerId: owner.id },
   ]);
-  assert.equal((await world.restaurants.get("restaurant-1"))?.isOpen, false);
+  const stored = await world.restaurants.get("restaurant-1");
+  assert.equal(stored?.isOpen, false);
+  // FR-447: the owner TOUCH revision is saved with the new restaurant.
+  assert.equal(stored?.authorizationRevision, "zed-owner");
   assert.deepEqual(world.outbox.records, []);
 });
 

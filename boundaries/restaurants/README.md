@@ -136,7 +136,7 @@ Authorization ports слайсов (`applications/access-control.ts`) реали
 | `canCoordinateFulfillment(id)` | `platform:nomnom#coordinate_fulfillment` (platform capability, `id` не участвует) |
 | `canViewRestaurantOrders(id)` | `restaurant:<id>#view_orders` |
 
-Subject `user` → `user:<id>`, `service` → `service:<id>`. Consistency `minimize_latency`. Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional — отказ (`PERMISSION_DENIED`). Ошибка, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationUnavailableError` (fail closed, gRPC `UNAVAILABLE`, AC-466). Grants `service` identities (`platform:nomnom#fulfillment@service:orders-worker`) принадлежат развёртыванию (`authorization/bootstrap.yaml`), а не коду; связи `restaurant#owner`/`staff` пишут use cases ресторана (см. [Relationships и reconciliation](#relationships-и-reconciliation)).
+Subject `user` → `user:<id>`, `service` → `service:<id>`. Consistency — см. [Authorization revisions](#authorization-revisions-zedtokens). Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional — отказ (`PERMISSION_DENIED`). Ошибка, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationUnavailableError` (fail closed, gRPC `UNAVAILABLE`, AC-466). Grants `service` identities (`platform:nomnom#fulfillment@service:orders-worker`) принадлежат развёртыванию (`authorization/bootstrap.yaml`), а не коду; связи `restaurant#owner`/`staff` пишут use cases ресторана (см. [Relationships и reconciliation](#relationships-и-reconciliation)).
 
 | Переменная | Значение | По умолчанию |
 | --- | --- | --- |
@@ -152,6 +152,10 @@ Unit-тесты маппинга и fail closed — `test/spicedb-access-control
 ```bash
 SPICEDB_ENDPOINT=localhost:50051 node --test test/spicedb-integration.test.ts
 ```
+
+### Authorization revisions (ZedTokens)
+
+Change [`add-authorization-revisions`](../../openspec/changes/add-authorization-revisions/) (FR-447, FR-448). `touchOwner`, `touchStaff` и `deleteStaff` возвращают ZedToken записи (`writtenAt.token`); Register Restaurant, Assign Staff и Revoke Staff сохраняют его в техническом поле snapshot `authorizationRevision` тем же save (повтор без записи revision не меняет; старые snapshots загружаются без него). Reconciler при `TOUCH` missing связи тоже сохраняет revision в ресторан; удаление orphan revision не меняет. `SpiceDbAccessControl` читает revision через порт `RevisionReader` (в `cmd/restaurants` — тот же `InMemoryRestaurantRepository`): проверки `restaurant:<id>` идут с `at_least_as_fresh` по сохранённому токену, без revision — `minimize_latency`; проверки `platform:nomnom` всегда `minimize_latency`. Ошибка чтения revision — `AuthorizationUnavailableError` (fail closed). Integration-тесты проверяют адаптер без принудительной full consistency: персонал получает `operate_kitchen` сразу после Assign Staff и теряет сразу после Revoke Staff (AC-482), владелец получает `manage` сразу после регистрации.
 
 ### Relationships и reconciliation
 
@@ -320,3 +324,5 @@ HTTP-каркас не требует MongoDB или Kafka.
 
 Базовый Helm chart и команды его проверки и установки описаны в [ops/README.md](ops/README.md).
 Операционные файлы приложения находятся в каталоге `ops/`.
+
+Вызывающий может передать ZedToken своей записи в metadata `authorization-revision`: проверки `platform:nomnom` и ресторанов без сохранённой revision в этом запросе идут `at_least_as_fresh` по нему (например, оператор сразу после выдачи `platform#operator`). Права token не расширяет.

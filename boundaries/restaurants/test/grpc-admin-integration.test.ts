@@ -11,11 +11,12 @@ import {
   RegisterRestaurantRequestSchema,
   RevokeStaffRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import {
-  checkPermissionRequest,
+  AUTHORIZATION_REVISION_HEADER,
+  createRestaurantsService,
+} from "../infrastructure/grpc/service.ts";
+import {
   createSpiceDbClient,
-  type PermissionsClient,
   SpiceDbAccessControl,
   type SpiceDbClient,
 } from "../infrastructure/spicedb/access-control.ts";
@@ -42,11 +43,6 @@ import { PICKUP_ADDRESS, startOfDay } from "./support/restaurants.ts";
 const endpoint = process.env.SPICEDB_ENDPOINT?.trim() ?? "";
 const skip = endpoint === "" ? "SPICEDB_ENDPOINT is not set" : false;
 
-const fullyConsistent = () =>
-  v1.Consistency.create({
-    requirement: { oneofKind: "fullyConsistent", fullyConsistent: true },
-  });
-
 const operatorGrant = (
   operation: v1.RelationshipUpdate_Operation,
   userId: string,
@@ -72,7 +68,10 @@ const operatorGrant = (
     ],
   });
 
-const context = undefined as never;
+// Request context; `authorization-revision` carries the ZedToken of the
+// operator grant written by `before`.
+const requestHeader = new Headers();
+const context = { requestHeader } as never;
 
 const rejectsWith = (code: Code) => (error: unknown) =>
   error instanceof ConnectError && error.code === code;
@@ -93,8 +92,12 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
       insecure: true,
       timeoutMs: 5000,
     });
-    await client.writeRelationships(
+    const granted = await client.writeRelationships(
       operatorGrant(v1.RelationshipUpdate_Operation.TOUCH, operator.id),
+    );
+    requestHeader.set(
+      AUTHORIZATION_REVISION_HEADER,
+      granted.writtenAt?.token ?? "",
     );
   });
 
@@ -128,43 +131,29 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
     }
   });
 
-  /** Fully consistent check, so a write is visible to the next assertion. */
-  const can = async (
-    permission: string,
-    restaurantId: string,
-    userId: string,
-  ): Promise<boolean> => {
-    const request = checkPermissionRequest(
-      "restaurant",
-      restaurantId,
-      permission,
-      { type: "user", id: userId },
-    );
-    request.consistency = fullyConsistent();
-    const response = await client.checkPermission(request);
-    return (
-      response.permissionship ===
-      v1.CheckPermissionResponse_Permissionship.HAS_PERMISSION
-    );
-  };
-
   /** Service with a switchable caller; restaurant ids start with `<run><scope>-`. */
   const world = (scope: string) => {
-    // Production checks use minimizeLatency; the test forces full
-    // consistency so a fresh write is visible to the next check.
-    const permissions: PermissionsClient = {
-      checkPermission: (request) => {
-        request.consistency = fullyConsistent();
-        return client.checkPermission(request);
-      },
-    };
-    const accessControl = new SpiceDbAccessControl({
-      client: permissions,
-      timeoutMs: 5000,
-    });
+    // The adapter with its own consistency, as in production: checks of a
+    // restaurant are at_least_as_fresh with its stored revision (FR-447).
     const writer = new SpiceDbRelationshipWriter({ client, timeoutMs: 5000 });
     const store = createRestaurantStore();
     const restaurants = new InMemoryRestaurantRepository(store);
+    const accessControl = new SpiceDbAccessControl({
+      client,
+      revisions: restaurants,
+      timeoutMs: 5000,
+    });
+    /** Check through the adapter right after the previous command. */
+    const can = (
+      permission: "manage" | "operate_kitchen",
+      restaurantId: string,
+      userId: string,
+    ): Promise<boolean> => {
+      const subject: Subject = { type: "user", id: userId };
+      return permission === "manage"
+        ? accessControl.canManageRestaurant(subject, restaurantId)
+        : accessControl.canOperateKitchen(subject, restaurantId);
+    };
     const staff = { accessControl, staffRelationships: writer, restaurants };
     let caller: Subject = operator;
     const unused = {
@@ -191,8 +180,10 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
       caller = subject;
       return service;
     };
-    const register = async () => {
-      const response = await as(operator).registerRestaurant(
+    // The caller passes the ZedToken of the operator grant, so the platform
+    // check of RegisterRestaurant sees it at once without retries.
+    const register = () =>
+      as(operator).registerRestaurant(
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
@@ -200,13 +191,11 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
         }),
         context,
       );
-      return response;
-    };
-    return { as, register, restaurants };
+    return { as, register, restaurants, can };
   };
 
   test("AC-479 operator registers a restaurant and the owner gets manage", async () => {
-    const { register } = world("register");
+    const { register, can } = world("register");
 
     const response = await register();
 
@@ -218,8 +207,8 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
     assert.equal(await can("manage", restaurantId, stranger.id), false);
   });
 
-  test("AC-480 owner assigns and revokes staff; repeats are changed=false", async () => {
-    const { as, register } = world("staff");
+  test("AC-480 AC-482 owner assigns and revokes staff, visible immediately; repeats are changed=false", async () => {
+    const { as, register, can } = world("staff");
     const restaurantId = (await register()).restaurant?.restaurantId ?? "";
     const request = { restaurantId, userId: cook };
 
@@ -251,7 +240,7 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
   });
 
   test("AC-481 a user without manage gets PERMISSION_DENIED and staff is unchanged", async () => {
-    const { as, register, restaurants } = world("denied");
+    const { as, register, restaurants, can } = world("denied");
     const restaurantId = (await register()).restaurant?.restaurantId ?? "";
 
     await assert.rejects(

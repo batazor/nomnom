@@ -42,7 +42,7 @@ const setup = (
 };
 
 test("AC-478 restores missing owner and staff relationships immediately", async () => {
-  const { client, reconciler, logs } = setup(
+  const { client, reconciler, logs, store } = setup(
     [{ id: "r-1", ownerId: "alice", staff: ["bob"] }],
     [],
   );
@@ -58,6 +58,10 @@ test("AC-478 restores missing owner and staff relationships immediately", async 
   });
   assert.ok(client.has("restaurant:r-1#owner@user:alice"));
   assert.ok(client.has("restaurant:r-1#staff@user:bob"));
+  // FR-447: the revision of the last repairing TOUCH is stored.
+  const stored = store.get("r-1");
+  assert.equal(stored?.document.authorizationRevision, "zed-2");
+  assert.equal(stored?.version, 3);
   assert.match(
     logs.at(-1) ?? "",
     /checked=0 orphans_pending=0 orphans_deleted=0 missing_repaired=2 unrepairable=0/,
@@ -202,4 +206,20 @@ test("an aborted signal stops the pass", async () => {
 
   await assert.rejects(reconciler.reconcile(AbortSignal.abort()));
   assert.deepEqual(client.writes, []);
+});
+
+test("a consistent restaurant keeps its revision; an orphan delete stores none", async () => {
+  const { store, reconciler, clock } = setup(
+    [{ id: "r-1", ownerId: "alice", authorizationRevision: "zed-old" }],
+    ["restaurant:r-1#owner@user:alice", "restaurant:r-gone#owner@user:eve"],
+  );
+
+  await reconciler.reconcile();
+  clock.advance(GRACE);
+  const stats = await reconciler.reconcile();
+
+  assert.equal(stats.orphansDeleted, 1);
+  assert.equal(store.get("r-1")?.document.authorizationRevision, "zed-old");
+  assert.equal(store.get("r-1")?.version, 1);
+  assert.equal(store.get("r-gone"), undefined);
 });

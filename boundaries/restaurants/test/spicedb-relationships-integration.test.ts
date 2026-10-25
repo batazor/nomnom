@@ -7,6 +7,7 @@ import { v1 } from "@authzed/authzed-node";
 import {
   checkPermissionRequest,
   createSpiceDbClient,
+  SpiceDbAccessControl,
   type SpiceDbClient,
 } from "../infrastructure/spicedb/access-control.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
@@ -72,7 +73,10 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
     }
   });
 
-  /** Fully consistent check, so a write is visible to the next assertion. */
+  /**
+   * Fully consistent check for relationships written outside the use cases
+   * (lost owner, orphans): they have no stored revision.
+   */
   const can = async (
     permission: string,
     restaurantId: string,
@@ -102,12 +106,20 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
       client: spicedb(),
       timeoutMs: 5000,
     });
+    // The production adapter with its own consistency: at_least_as_fresh
+    // with the revision stored by the use cases (FR-447), no forced full
+    // consistency.
+    const adapter = new SpiceDbAccessControl({
+      client: spicedb(),
+      revisions: restaurants,
+      timeoutMs: 5000,
+    });
     // Registration is a platform grant outside this test; manage is checked
     // in SpiceDB.
     const accessControl: RestaurantAccessControl = {
       canRegisterRestaurant: async () => true,
       canManageRestaurant: (subject: Subject, restaurantId: string) =>
-        can("manage", restaurantId, subject.id),
+        adapter.canManageRestaurant(subject, restaurantId),
     };
     const register = new RegisterRestaurantHandler({
       accessControl,
@@ -120,6 +132,7 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
     return {
       store,
       restaurants,
+      adapter,
       register,
       assign: new AssignStaffHandler(staff),
       revoke: new RevokeStaffHandler(staff),
@@ -130,8 +143,10 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
   const owner: Subject = { type: "user", id: `${run}owner` };
   const cook = `${run}cook`;
 
-  test("FR-443 registration gives the owner restaurant#manage", async () => {
-    const { register } = world("owner");
+  const cookSubject: Subject = { type: "user", id: cook };
+
+  test("FR-443 FR-447 registration gives the owner restaurant#manage immediately", async () => {
+    const { register, restaurants, adapter } = world("owner");
 
     const { restaurantId } = await register.execute({
       subject: operator,
@@ -140,19 +155,31 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
       address: PICKUP_ADDRESS,
     });
 
-    assert.equal(await can("manage", restaurantId, owner.id), true);
-    assert.equal(await can("manage", restaurantId, cook), false);
+    assert.ok(
+      (await restaurants.get(restaurantId))?.authorizationRevision !==
+        undefined,
+    );
+    assert.equal(await adapter.canManageRestaurant(owner, restaurantId), true);
+    assert.equal(
+      await adapter.canManageRestaurant(cookSubject, restaurantId),
+      false,
+    );
   });
 
-  test("AC-476 staff gets operate_kitchen and loses it after revoke", async () => {
-    const { register, assign, revoke } = world("staff");
+  test("AC-476 AC-482 staff gets operate_kitchen right after assign and loses it right after revoke", async () => {
+    const { register, assign, revoke, restaurants, adapter } = world("staff");
     const { restaurantId } = await register.execute({
       subject: operator,
       name: "Pho",
       ownerId: owner.id,
       address: PICKUP_ADDRESS,
     });
-    assert.equal(await can("operate_kitchen", restaurantId, cook), false);
+    assert.equal(
+      await adapter.canOperateKitchen(cookSubject, restaurantId),
+      false,
+    );
+    const registered = (await restaurants.get(restaurantId))
+      ?.authorizationRevision;
 
     const assigned = await assign.execute({
       subject: owner,
@@ -160,8 +187,17 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
       userId: cook,
     });
     assert.equal(assigned.changed, true);
-    assert.equal(await can("operate_kitchen", restaurantId, cook), true);
-    assert.equal(await can("manage", restaurantId, cook), false);
+    const afterAssign = (await restaurants.get(restaurantId))
+      ?.authorizationRevision;
+    assert.ok(afterAssign !== undefined && afterAssign !== registered);
+    assert.equal(
+      await adapter.canOperateKitchen(cookSubject, restaurantId),
+      true,
+    );
+    assert.equal(
+      await adapter.canManageRestaurant(cookSubject, restaurantId),
+      false,
+    );
 
     const revoked = await revoke.execute({
       subject: owner,
@@ -169,11 +205,18 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
       userId: cook,
     });
     assert.equal(revoked.changed, true);
-    assert.equal(await can("operate_kitchen", restaurantId, cook), false);
+    assert.notEqual(
+      (await restaurants.get(restaurantId))?.authorizationRevision,
+      afterAssign,
+    );
+    assert.equal(
+      await adapter.canOperateKitchen(cookSubject, restaurantId),
+      false,
+    );
   });
 
   test("AC-478 reconciler restores a lost owner and deletes an orphan after grace", async () => {
-    const { store, register } = world("reconcile");
+    const { store, register, restaurants, adapter } = world("reconcile");
     const { restaurantId } = await register.execute({
       subject: operator,
       name: "Pho",
@@ -225,9 +268,17 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
       log: () => {},
     });
 
+    const registered = (await restaurants.get(restaurantId))
+      ?.authorizationRevision;
     const first = await reconciler.reconcile();
     assert.equal(first.missingRepaired, 1);
     assert.equal(first.orphansPending, 1);
+    // The repairing TOUCH revision is stored, so the adapter sees it at once.
+    assert.notEqual(
+      (await restaurants.get(restaurantId))?.authorizationRevision,
+      registered,
+    );
+    assert.equal(await adapter.canManageRestaurant(owner, restaurantId), true);
     assert.equal(await can("manage", restaurantId, owner.id), true);
     assert.equal(await can("manage", orphanId, intruder), true);
 

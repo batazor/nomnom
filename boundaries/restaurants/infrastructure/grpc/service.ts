@@ -1,5 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
+import type { Subject } from "../../pkg/application/subject.ts";
 import type { CancelRestaurantOrderHandler } from "../../slices/kitchenorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import type { ReceiveOrderRequestHandler } from "../../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
 import type { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
@@ -52,7 +53,10 @@ export const createRestaurantsService = (
 
     async receiveOrderRequest(request, context) {
       try {
-        const subject = await subjects.resolve(context);
+        const subject = withRequestRevision(
+          await subjects.resolve(context),
+          context,
+        );
         requireField("restaurant_id", request.restaurantId);
         requireField("order_id", request.orderId);
         const result = await dependencies.receiveOrderRequest.execute({
@@ -75,7 +79,10 @@ export const createRestaurantsService = (
 
     async cancelRestaurantOrder(request, context) {
       try {
-        const subject = await subjects.resolve(context);
+        const subject = withRequestRevision(
+          await subjects.resolve(context),
+          context,
+        );
         requireField("restaurant_id", request.restaurantId);
         requireField("order_id", request.orderId);
         const result = await dependencies.cancelRestaurantOrder.execute({
@@ -102,7 +109,10 @@ export const createRestaurantsService = (
 
     async registerRestaurant(request, context) {
       try {
-        const subject = await subjects.resolve(context);
+        const subject = withRequestRevision(
+          await subjects.resolve(context),
+          context,
+        );
         requireField("name", request.name);
         requireField("owner_id", request.ownerId);
         requireField("address", request.address);
@@ -123,7 +133,10 @@ export const createRestaurantsService = (
 
     async assignStaff(request, context) {
       try {
-        const subject = await subjects.resolve(context);
+        const subject = withRequestRevision(
+          await subjects.resolve(context),
+          context,
+        );
         requireField("restaurant_id", request.restaurantId);
         requireField("user_id", request.userId);
         const result = await dependencies.assignStaff.execute({
@@ -139,7 +152,10 @@ export const createRestaurantsService = (
 
     async revokeStaff(request, context) {
       try {
-        const subject = await subjects.resolve(context);
+        const subject = withRequestRevision(
+          await subjects.resolve(context),
+          context,
+        );
         requireField("restaurant_id", request.restaurantId);
         requireField("user_id", request.userId);
         const result = await dependencies.revokeStaff.execute({
@@ -198,4 +214,25 @@ function transportError(error: unknown): ConnectError {
     if (status !== undefined) return new ConnectError(error.message, status);
   }
   return new ConnectError("internal error", Code.Internal);
+}
+
+/** gRPC metadata carrying the caller's authorization revision (docs/security.md). */
+export const AUTHORIZATION_REVISION_HEADER = "authorization-revision";
+const MAX_REVISION_LENGTH = 1024;
+
+/**
+ * Attaches the caller's ZedToken from metadata to the verified subject. An
+ * absent or oversized value is ignored: the revision only affects freshness.
+ */
+export function withRequestRevision(
+  subject: Subject,
+  context: { requestHeader?: Headers } | undefined,
+): Subject {
+  const revision = context?.requestHeader
+    ?.get(AUTHORIZATION_REVISION_HEADER)
+    ?.trim();
+  if (!revision || revision.length > MAX_REVISION_LENGTH) {
+    return subject;
+  }
+  return { ...subject, authorizationRevision: revision };
 }

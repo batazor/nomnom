@@ -1,6 +1,8 @@
+import { ConcurrencyConflictError } from "../../../../pkg/application/errors.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
 import { InMemoryDocumentStore } from "../../../../pkg/infrastructure/memory/document-store.ts";
 import type {
+  AuthorizationRevision,
   OwnerRelationshipWriter,
   RestaurantAccessControl,
   StaffRelationshipWriter,
@@ -43,6 +45,16 @@ export class InMemoryRestaurantRepository implements RestaurantRepository {
       restaurant.toSnapshot(),
     );
   }
+
+  /**
+   * Revision reader of the SpiceDB adapter: the stored ZedToken of the
+   * restaurant, `undefined` for a missing restaurant or one without revision.
+   */
+  async authorizationRevision(
+    restaurantId: string,
+  ): Promise<AuthorizationRevision | undefined> {
+    return this.#store.get(restaurantId)?.document.authorizationRevision;
+  }
 }
 
 /**
@@ -78,6 +90,30 @@ export class InMemoryRestaurantMemberships implements RestaurantMemberships {
       .sort((left, right) => (left.id < right.id ? -1 : 1))
       .slice(0, limit)
       .map(toMembers);
+  }
+
+  /**
+   * Stores the revision of a repairing TOUCH on the restaurant. A concurrent
+   * save is retried on the fresh version; a deleted restaurant is skipped.
+   */
+  async recordAuthorizationRevision(
+    restaurantId: string,
+    revision: AuthorizationRevision,
+  ): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      const stored = this.#store.get(restaurantId);
+      if (stored === undefined) return;
+      const restaurant = Restaurant.restore(stored.document, stored.version);
+      restaurant.recordAuthorizationRevision(revision);
+      try {
+        this.#store.save(restaurantId, stored.version, restaurant.toSnapshot());
+        return;
+      } catch (error) {
+        if (!(error instanceof ConcurrencyConflictError) || attempt >= 2) {
+          throw error;
+        }
+      }
+    }
   }
 }
 
@@ -148,6 +184,18 @@ export class InMemoryRestaurantAuthorization
   readonly #staff = new Set<string>();
   /** Every staff write in order, `touch:<restaurantId>:<userId>` or `delete:…`. */
   readonly staffWrites: string[] = [];
+  /** Revisions returned by writes: `rev-1`, `rev-2`, … in write order. */
+  #revisions = 0;
+
+  /** Revision the last write returned, `undefined` before any write. */
+  get lastRevision(): AuthorizationRevision | undefined {
+    return this.#revisions === 0 ? undefined : `rev-${this.#revisions}`;
+  }
+
+  #nextRevision(): AuthorizationRevision {
+    this.#revisions += 1;
+    return `rev-${this.#revisions}`;
+  }
 
   allowRegistration(subject: Subject): this {
     this.#registrars.add(subjectKey(subject));
@@ -170,17 +218,19 @@ export class InMemoryRestaurantAuthorization
   async touchStaff(input: {
     restaurantId: string;
     userId: string;
-  }): Promise<void> {
+  }): Promise<AuthorizationRevision> {
     this.staffWrites.push(`touch:${input.restaurantId}:${input.userId}`);
     this.#staff.add(`${input.restaurantId}:${input.userId}`);
+    return this.#nextRevision();
   }
 
   async deleteStaff(input: {
     restaurantId: string;
     userId: string;
-  }): Promise<void> {
+  }): Promise<AuthorizationRevision> {
     this.staffWrites.push(`delete:${input.restaurantId}:${input.userId}`);
     this.#staff.delete(`${input.restaurantId}:${input.userId}`);
+    return this.#nextRevision();
   }
 
   async canRegisterRestaurant(subject: Subject): Promise<boolean> {
@@ -197,7 +247,7 @@ export class InMemoryRestaurantAuthorization
   async touchOwner(input: {
     restaurantId: string;
     ownerId: string;
-  }): Promise<void> {
+  }): Promise<AuthorizationRevision> {
     const exists = this.#owners.some(
       (owner) =>
         owner.restaurantId === input.restaurantId &&
@@ -207,5 +257,6 @@ export class InMemoryRestaurantAuthorization
       this.#owners.push({ ...input });
     }
     this.grantManager({ type: "user", id: input.ownerId }, input.restaurantId);
+    return this.#nextRevision();
   }
 }

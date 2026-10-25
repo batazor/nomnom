@@ -72,8 +72,11 @@ let relationshipWriter: OwnerRelationshipWriter & StaffRelationshipWriter;
 let reconciler: RelationshipReconciler;
 if (config.spicedb.enabled) {
   spicedb = createSpiceDbClient(config.spicedb);
+  // Checks of `restaurant:<id>` read the stored ZedToken from the same
+  // repository the use cases save it to (at_least_as_fresh, FR-447).
   const accessControl = new SpiceDbAccessControl({
     client: spicedb,
+    revisions: restaurants,
     timeoutMs: config.spicedb.timeoutMs,
   });
   kitchenAccessControl = accessControl;

@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import { v1 } from "@authzed/authzed-node";
+import {
+  AUTHORIZATION_REVISION_HEADER,
+  withRequestRevision,
+} from "../infrastructure/grpc/service.ts";
 
 import {
   type PermissionsClient,
+  type RevisionReader,
   SpiceDbAccessControl,
 } from "../infrastructure/spicedb/access-control.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
@@ -41,6 +45,27 @@ class FakeClient implements PermissionsClient {
     return this.#answer();
   }
 }
+
+/** Revision reader without stored revisions. */
+const noRevisions: RevisionReader = {
+  authorizationRevision: async () => undefined,
+};
+
+/** Revision reader with one stored revision per restaurant id. */
+const revisionsOf = (
+  revisions: Record<string, string>,
+): RevisionReader & {
+  reads: string[];
+} => {
+  const reads: string[] = [];
+  return {
+    reads,
+    authorizationRevision: async (restaurantId) => {
+      reads.push(restaurantId);
+      return revisions[restaurantId];
+    },
+  };
+};
 
 const describe = (request: v1.CheckPermissionRequest): string =>
   `${request.resource?.objectType}:${request.resource?.objectId}#${request.permission}@${request.subject?.object?.objectType}:${request.subject?.object?.objectId}`;
@@ -85,7 +110,11 @@ const mapping: ReadonlyArray<{
 for (const { name, call, expected } of mapping) {
   test(`${name} checks ${expected} with minimize_latency`, async () => {
     const client = FakeClient.answering(HAS_PERMISSION);
-    const access = new SpiceDbAccessControl({ client, timeoutMs: 1000 });
+    const access = new SpiceDbAccessControl({
+      client,
+      revisions: noRevisions,
+      timeoutMs: 1000,
+    });
 
     assert.equal(await call(access), true);
     assert.equal(client.requests.length, 1);
@@ -108,6 +137,7 @@ for (const permissionship of [
   test(`permissionship ${v1.CheckPermissionResponse_Permissionship[permissionship]} denies`, async () => {
     const access = new SpiceDbAccessControl({
       client: FakeClient.answering(permissionship),
+      revisions: noRevisions,
       timeoutMs: 1000,
     });
 
@@ -115,9 +145,79 @@ for (const permissionship of [
   });
 }
 
+const PLATFORM_CHECKS = new Set([
+  "canRegisterRestaurant",
+  "canCoordinateFulfillment",
+]);
+
+for (const { name, call, expected } of mapping) {
+  const platform = PLATFORM_CHECKS.has(name);
+  test(`FR-447 FR-448 ${name} with a stored revision uses ${platform ? "minimize_latency" : "at_least_as_fresh"}`, async () => {
+    const client = FakeClient.answering(HAS_PERMISSION);
+    const revisions = revisionsOf({ "r-1": "zed-42" });
+    const access = new SpiceDbAccessControl({
+      client,
+      revisions,
+      timeoutMs: 1000,
+    });
+
+    assert.equal(await call(access), true);
+    const [request] = client.requests;
+    assert.ok(request !== undefined);
+    assert.equal(describe(request), expected);
+    if (platform) {
+      assert.deepEqual(revisions.reads, []);
+      assert.deepEqual(request.consistency?.requirement, {
+        oneofKind: "minimizeLatency",
+        minimizeLatency: true,
+      });
+    } else {
+      assert.deepEqual(revisions.reads, ["r-1"]);
+      assert.deepEqual(request.consistency?.requirement, {
+        oneofKind: "atLeastAsFresh",
+        atLeastAsFresh: v1.ZedToken.create({ token: "zed-42" }),
+      });
+    }
+  });
+}
+
+test("AC-484 a restaurant without a stored revision is checked with minimize_latency", async () => {
+  const client = FakeClient.answering(HAS_PERMISSION);
+  const access = new SpiceDbAccessControl({
+    client,
+    revisions: revisionsOf({ "r-other": "zed-1" }),
+    timeoutMs: 1000,
+  });
+
+  await access.canOperateKitchen(user, "r-1");
+
+  assert.deepEqual(client.requests[0]?.consistency?.requirement, {
+    oneofKind: "minimizeLatency",
+    minimizeLatency: true,
+  });
+});
+
+test("FR-448 a failed revision read fails closed without a check", async () => {
+  const client = FakeClient.answering(HAS_PERMISSION);
+  const cause = new Error("storage down");
+  const access = new SpiceDbAccessControl({
+    client,
+    revisions: { authorizationRevision: () => Promise.reject(cause) },
+    timeoutMs: 1000,
+  });
+
+  await assert.rejects(access.canManageRestaurant(user, "r-1"), (error) => {
+    assert.ok(error instanceof AuthorizationUnavailableError);
+    assert.equal(error.cause, cause);
+    return true;
+  });
+  assert.equal(client.requests.length, 0);
+});
+
 test("client error fails closed with AuthorizationUnavailableError", async () => {
   const cause = new Error("14 UNAVAILABLE: connection refused");
   const access = new SpiceDbAccessControl({
+    revisions: noRevisions,
     client: new FakeClient(() => Promise.reject(cause)),
     timeoutMs: 1000,
   });
@@ -135,6 +235,7 @@ test("client error fails closed with AuthorizationUnavailableError", async () =>
 
 test("a check exceeding the timeout fails closed", async () => {
   const access = new SpiceDbAccessControl({
+    revisions: noRevisions,
     client: new FakeClient(() => new Promise(() => {})),
     timeoutMs: 20,
   });
@@ -192,4 +293,80 @@ test("rejects invalid SpiceDB insecure flag and timeout", () => {
   assert.throws(() => loadConfig({ ...base, SPICEDB__INSECURE: "yes" }));
   assert.throws(() => loadConfig({ ...base, SPICEDB__TIMEOUT: "0s" }));
   assert.throws(() => loadConfig({ ...base, SPICEDB__TIMEOUT: "2" }));
+});
+
+const atLeastAsFresh = (token: string) => ({
+  oneofKind: "atLeastAsFresh",
+  atLeastAsFresh: v1.ZedToken.create({ token }),
+});
+
+test("the caller's revision makes platform checks at least as fresh", async () => {
+  const client = FakeClient.answering(HAS_PERMISSION);
+  const access = new SpiceDbAccessControl({
+    client,
+    revisions: noRevisions,
+    timeoutMs: 1000,
+  });
+
+  await access.canRegisterRestaurant({
+    ...user,
+    authorizationRevision: "zed-caller",
+  });
+
+  assert.deepEqual(
+    client.requests[0]?.consistency?.requirement,
+    atLeastAsFresh("zed-caller"),
+  );
+});
+
+test("a stored restaurant revision wins over the caller's revision", async () => {
+  const client = FakeClient.answering(HAS_PERMISSION);
+  const access = new SpiceDbAccessControl({
+    client,
+    revisions: revisionsOf({ "r-1": "zed-stored" }),
+    timeoutMs: 1000,
+  });
+
+  await access.canManageRestaurant(
+    { ...user, authorizationRevision: "zed-caller" },
+    "r-1",
+  );
+  await access.canManageRestaurant(
+    { ...user, authorizationRevision: "zed-caller" },
+    "r-2",
+  );
+
+  assert.deepEqual(
+    client.requests[0]?.consistency?.requirement,
+    atLeastAsFresh("zed-stored"),
+  );
+  assert.deepEqual(
+    client.requests[1]?.consistency?.requirement,
+    atLeastAsFresh("zed-caller"),
+  );
+});
+
+test("withRequestRevision reads authorization-revision metadata and ignores oversized values", () => {
+  const header = (value?: string) => ({
+    requestHeader: new Headers(
+      value === undefined ? {} : { [AUTHORIZATION_REVISION_HEADER]: value },
+    ),
+  });
+
+  assert.equal(
+    withRequestRevision(user, header(" zed-1 ")).authorizationRevision,
+    "zed-1",
+  );
+  assert.equal(
+    withRequestRevision(user, header()).authorizationRevision,
+    undefined,
+  );
+  assert.equal(
+    withRequestRevision(user, header("x".repeat(1025))).authorizationRevision,
+    undefined,
+  );
+  assert.equal(
+    withRequestRevision(user, undefined).authorizationRevision,
+    undefined,
+  );
 });

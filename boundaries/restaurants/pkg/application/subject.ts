@@ -5,4 +5,10 @@
 export type Subject = Readonly<{
   type: "user" | "service";
   id: string;
+  /**
+   * Freshest authorization revision (SpiceDB ZedToken) the caller knows, for
+   * example of its own relationship write in the same synchronous scenario.
+   * It only makes checks at least as fresh; it never grants a permission.
+   */
+  authorizationRevision?: string;
 }>;

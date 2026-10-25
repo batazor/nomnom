@@ -192,7 +192,7 @@ commit local transaction
 next check: at_least_as_fresh(revision)
 ```
 
-Authorization revision сохраняется рядом с resource как техническое поле local storage в той же транзакции. Если следующий check выполняет другой bounded context в том же синхронном сценарии, ZedToken передаётся в gRPC metadata; internal gateway сохраняет metadata без изменения. Точное имя поля, сериализация token и metadata key выбираются при SDK-интеграции.
+Authorization revision сохраняется рядом с resource как техническое поле local storage в той же транзакции. Если следующий check выполняет другой bounded context в том же синхронном сценарии, ZedToken передаётся в gRPC metadata; internal gateway сохраняет metadata без изменения. Metadata key — `authorization-revision` (значение — ZedToken как есть). Сервер применяет его к проверкам `platform:nomnom` и ресурсов без собственной сохранённой revision; сохранённая revision ресурса приоритетнее. Token влияет только на свежесть ответа и никогда не расширяет права; пустое значение или значение длиннее 1024 символов игнорируется. Реализовано в `restaurants`.
 
 `fully_consistent` не является способом скрыть отсутствие lifecycle design: он дороже и используется только с явным обоснованием.
 

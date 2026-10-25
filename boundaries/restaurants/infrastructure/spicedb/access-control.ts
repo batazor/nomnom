@@ -64,8 +64,18 @@ export function createSpiceDbClient(
   };
 }
 
+/**
+ * Reads the authorization revision (ZedToken) stored with a restaurant;
+ * `undefined` when none is stored or the restaurant does not exist.
+ */
+export interface RevisionReader {
+  authorizationRevision(restaurantId: string): Promise<string | undefined>;
+}
+
 export interface SpiceDbAccessControlOptions {
   readonly client: PermissionsClient;
+  /** Stored revisions of `restaurant:<id>` (FR-447). */
+  readonly revisions: RevisionReader;
   /** Upper bound of one decision; exceeding it fails closed. */
   readonly timeoutMs: number;
 }
@@ -76,15 +86,24 @@ export interface SpiceDbAccessControlOptions {
  * design. Only `PERMISSIONSHIP_HAS_PERMISSION` allows; no permission and
  * conditional permission deny; any error or timeout throws
  * {@link AuthorizationUnavailableError} (fail closed, gRPC `UNAVAILABLE`).
+ *
+ * Consistency (design of `add-authorization-revisions`): a `restaurant:<id>`
+ * check uses `at_least_as_fresh` with the restaurant's stored revision, so it
+ * sees the restaurant's own relationship writes. `platform:nomnom` and a
+ * restaurant without a stored revision use the caller's revision from the
+ * `authorization-revision` metadata, otherwise `minimize_latency`. A failed revision read fails
+ * closed like a failed check.
  */
 export class SpiceDbAccessControl
   implements RestaurantAccessControl, MenuAccessControl, KitchenAccessControl
 {
   readonly #client: PermissionsClient;
+  readonly #revisions: RevisionReader;
   readonly #timeoutMs: number;
 
   constructor(options: SpiceDbAccessControlOptions) {
     this.#client = options.client;
+    this.#revisions = options.revisions;
     this.#timeoutMs = options.timeoutMs;
   }
 
@@ -137,11 +156,23 @@ export class SpiceDbAccessControl
     permission: string,
     subject: Subject,
   ): Promise<boolean> {
+    // A resource reads at least as fresh as its own stored revision; the
+    // platform and a resource without one use the caller's revision, if any.
+    let revision = subject.authorizationRevision;
+    if (resourceType === "restaurant") {
+      try {
+        revision =
+          (await this.#revisions.authorizationRevision(resourceId)) ?? revision;
+      } catch (error) {
+        throw new AuthorizationUnavailableError(error);
+      }
+    }
     const request = checkPermissionRequest(
       resourceType,
       resourceId,
       permission,
       subject,
+      revision,
     );
     let response: v1.CheckPermissionResponse;
     try {
@@ -186,17 +217,32 @@ export async function withDeadline<T>(
   }
 }
 
+/**
+ * Consistency of a check: `at_least_as_fresh` with a stored revision,
+ * otherwise `minimize_latency`.
+ */
+export function checkConsistency(revision: string | undefined): v1.Consistency {
+  return v1.Consistency.create({
+    requirement:
+      revision === undefined || revision === ""
+        ? { oneofKind: "minimizeLatency", minimizeLatency: true }
+        : {
+            oneofKind: "atLeastAsFresh",
+            atLeastAsFresh: v1.ZedToken.create({ token: revision }),
+          },
+  });
+}
+
 /** Builds `<type>:<id>#<permission>@<subject.type>:<subject.id>` check. */
 export function checkPermissionRequest(
   resourceType: string,
   resourceId: string,
   permission: string,
   subject: Subject,
+  revision?: string,
 ): v1.CheckPermissionRequest {
   return v1.CheckPermissionRequest.create({
-    consistency: v1.Consistency.create({
-      requirement: { oneofKind: "minimizeLatency", minimizeLatency: true },
-    }),
+    consistency: checkConsistency(revision),
     resource: v1.ObjectReference.create({
       objectType: resourceType,
       objectId: resourceId,

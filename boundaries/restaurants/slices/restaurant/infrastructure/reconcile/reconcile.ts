@@ -39,6 +39,15 @@ export interface RestaurantMemberships {
     after: string | undefined,
     limit: number,
   ): Promise<readonly RestaurantMembers[]>;
+  /**
+   * Stores the revision (ZedToken) of a repairing TOUCH on the restaurant, so
+   * its next check sees the restored relationship (FR-447). A restaurant
+   * that no longer exists is skipped.
+   */
+  recordAuthorizationRevision(
+    restaurantId: string,
+    revision: string,
+  ): Promise<void>;
 }
 
 /** Drift counters of one pass, summed over both relations. */
@@ -222,7 +231,18 @@ export class RelationshipReconciler {
             continue;
           }
           signal?.throwIfAborted();
-          await this.#write("touch", relation, members.restaurantId, userId);
+          const revision = await this.#write(
+            "touch",
+            relation,
+            members.restaurantId,
+            userId,
+          );
+          if (revision !== "") {
+            await this.#restaurants.recordAuthorizationRevision(
+              members.restaurantId,
+              revision,
+            );
+          }
           stats.missingRepaired += 1;
         }
       }
@@ -268,9 +288,9 @@ export class RelationshipReconciler {
     relation: RestaurantRelation,
     restaurantId: string,
     userId: string,
-  ): Promise<void> {
+  ): Promise<string> {
     try {
-      await withDeadline(
+      const response = await withDeadline(
         this.#client.writeRelationships(
           restaurantRelationshipWrite(
             operation,
@@ -282,6 +302,7 @@ export class RelationshipReconciler {
         this.#timeoutMs,
         "write",
       );
+      return response.writtenAt?.token ?? "";
     } catch (error) {
       throw new Error(
         `${operation} restaurant:${restaurantId}#${relation}@user:${userId}`,

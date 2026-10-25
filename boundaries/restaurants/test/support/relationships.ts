@@ -33,6 +33,8 @@ export class FakeRelationshipsClient implements RelationshipsClient {
   readonly reads: v1.ReadRelationshipsRequest[] = [];
   failWrites: Error | undefined;
   failReads: Error | undefined;
+  /** ZedTokens returned by writes: `zed-1`, `zed-2`, … in write order. */
+  #revisions = 0;
 
   constructor(...tuples: string[]) {
     for (const tuple of tuples) this.tuples.add(tuple);
@@ -56,7 +58,10 @@ export class FakeRelationshipsClient implements RelationshipsClient {
         this.tuples.add(tuple);
       }
     }
-    return v1.WriteRelationshipsResponse.create({});
+    this.#revisions += 1;
+    return v1.WriteRelationshipsResponse.create({
+      writtenAt: v1.ZedToken.create({ token: `zed-${this.#revisions}` }),
+    });
   }
 
   async readRelationships(

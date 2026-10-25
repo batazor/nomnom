@@ -153,3 +153,22 @@ test("restore of a restaurant stored without an address yields an empty address"
   assert.equal(restaurant.address, "");
   assert.equal(restaurant.toSnapshot().address, "");
 });
+
+test("FR-447 authorization revision is technical snapshot state; old snapshots load without it", () => {
+  const legacy = Restaurant.restore(
+    { id: "r-1", name: "Pho", ownerId: "u-owner", isOpen: false },
+    3,
+  );
+  assert.equal(legacy.authorizationRevision, undefined);
+  assert.equal("authorizationRevision" in legacy.toSnapshot(), false);
+
+  legacy.recordAuthorizationRevision("zed-1");
+
+  assert.equal(legacy.toSnapshot().authorizationRevision, "zed-1");
+  assert.deepEqual(legacy.pullEvents(), []);
+  assert.equal(
+    Restaurant.restore(legacy.toSnapshot(), 4).authorizationRevision,
+    "zed-1",
+  );
+  assert.throws(() => legacy.recordAuthorizationRevision(""));
+});

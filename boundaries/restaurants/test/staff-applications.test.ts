@@ -37,6 +37,7 @@ test("AC-476 assign staff writes TOUCH restaurant#staff before saving", async ()
           (await world.restaurants.get(restaurantId))?.staff,
           [],
         );
+        return "zed-touch";
       },
       deleteStaff: async () => assert.fail("unexpected delete"),
     },
@@ -55,7 +56,10 @@ test("AC-476 assign staff writes TOUCH restaurant#staff before saving", async ()
     changed: true,
   });
   assert.deepEqual(calls, [`touch:${restaurantId}:${cook}`]);
-  assert.deepEqual((await world.restaurants.get(restaurantId))?.staff, [cook]);
+  const stored = await world.restaurants.get(restaurantId);
+  assert.deepEqual(stored?.staff, [cook]);
+  // FR-447: the ZedToken of the TOUCH is saved with the staff change.
+  assert.equal(stored?.authorizationRevision, "zed-touch");
 });
 
 test("assign staff again is a no-op without a SpiceDB write", async () => {
@@ -76,6 +80,11 @@ test("assign staff again is a no-op without a SpiceDB write", async () => {
 
   assert.equal(repeat.changed, false);
   assert.equal(repeat.version, version);
+  // A repeat without a write keeps the stored revision.
+  assert.equal(
+    (await world.restaurants.get(restaurantId))?.authorizationRevision,
+    world.authorization.lastRevision,
+  );
   assert.deepEqual(world.authorization.staffWrites, [
     `touch:${restaurantId}:${cook}`,
   ]);
@@ -100,6 +109,7 @@ test("AC-476 revoke staff writes DELETE restaurant#staff before saving", async (
         assert.deepEqual((await world.restaurants.get(restaurantId))?.staff, [
           cook,
         ]);
+        return "zed-delete";
       },
     },
   });
@@ -113,7 +123,10 @@ test("AC-476 revoke staff writes DELETE restaurant#staff before saving", async (
   assert.equal(result.changed, true);
   assert.deepEqual(result.staff, []);
   assert.deepEqual(calls, [`delete:${restaurantId}:${cook}`]);
-  assert.deepEqual((await world.restaurants.get(restaurantId))?.staff, []);
+  const stored = await world.restaurants.get(restaurantId);
+  assert.deepEqual(stored?.staff, []);
+  // FR-447: the revision of a DELETE is stored too, so a revoke is seen.
+  assert.equal(stored?.authorizationRevision, "zed-delete");
 });
 
 test("revoking a user who is not staff is a no-op without a SpiceDB write", async () => {
