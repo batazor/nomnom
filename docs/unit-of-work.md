@@ -28,7 +28,7 @@ UoW не является distributed transaction. Kafka, Temporal, SpiceDB, gRP
 | Query / read model (CQRS) | Нет |
 | Temporal workflow | Нет: workflow не владеет транзакцией |
 
-По умолчанию одна транзакция изменяет один aggregate плюс технические записи Inbox, Outbox и idempotency. Изменение нескольких aggregates в одной транзакции — осознанное исключение, а не способ обойти моделирование.
+По умолчанию одна транзакция изменяет один aggregate плюс технические записи Inbox, Outbox и idempotency. Изменение нескольких aggregates в одной транзакции — осознанное исключение, а не способ обойти моделирование. Каждое такое исключение записывается с причиной; действующие исключения — [offer, `Delivery` и `Courier` в `delivery`](#исключение-offer-delivery-и-courier-в-одной-транзакции).
 
 ## Размещение
 
@@ -460,10 +460,20 @@ Application-слой всех четырёх boundaries уже реализов�
 | `reassign_courier` | Да | Завершение текущего назначения + `Delivery` + освобождение курьера + [Outbox] |
 | `confirm_pickup` | Да | `Delivery` + Outbox |
 | `confirm_delivery`, `report_delivery_failure` | Да | `Delivery` + освобождение `Courier` + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md)) |
+| `cancel_delivery` | Да | `Delivery` (`waiting\|assigned → cancelled`) + освобождение `Courier`, если он был назначен + Outbox |
 | `create_delivery`, `offer_delivery` | Если публикуют событие или хранят idempotency key отдельно | Запись + [idempotency] + [Outbox] |
 | `register_courier`, `set_courier_availability`, `reject_delivery_offer`, `find_courier` | Нет по умолчанию | Одиночное изменение |
 | `update_courier_location` | Нет | Высокочастотная одиночная запись; транзакция не нужна |
 | `get_courier_current_delivery`, `list_available_delivery_offers` | Нет | Queries |
+
+#### Исключение: offer, `Delivery` и `Courier` в одной транзакции
+
+Accept Delivery Offer, Reassign Courier и сценарии завершения и отмены (Confirm Delivery, Report Delivery Failure, Cancel Delivery) изменяют несколько aggregates одной локальной транзакцией: offer (только при принятии), `Delivery` и `Courier` вместе с Outbox.
+
+- **Причина:** инвариант «у курьера не больше одной активной доставки» и атомарность Assignment (FR-310) нельзя обеспечить eventual consistency: между занятием курьера и назначением доставки в отдельных транзакциях курьер получил бы второе назначение или остался бы занятым без доставки.
+- **Границы слайсов:** use cases слайса `delivery` не вызывают методы агрегата `Courier` и `CourierRepository`. Занятость меняется только через прикладной порт `CourierAssignment` слайса `courier` (`ensure_available`, `occupy`, `release`); его реализация загружает и сохраняет `Courier` через `CourierRepository`, то есть в активной UoW вызывающего use case (FR-485). Правила доступности остаются в агрегате `Courier`.
+- **Конкуренция:** запись `Courier` защищена optimistic concurrency по `version`; конкурентное назначение того же курьера получает конфликт и откатывает всю транзакцию.
+- **Проверка:** сбой commit не оставляет курьера занятым, offer принятым и `Delivery` назначенной (AC-328, AC-550).
 
 ## Открытые вопросы реализации
 
