@@ -376,12 +376,17 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::{MemoryStore, RecordingRelationships};
     use crate::pkg::application::Subject;
+    use crate::pkg::persistence::RepositoryError;
     use crate::slices::courier::applications::{
         register_courier, set_courier_availability, update_courier_location,
+    };
+    use crate::slices::delivery::applications::dispatch_deliveries::{
+        DeliveryPosition, WaitingDeliveries,
     };
     use crate::slices::delivery::applications::{
         create_delivery, dispatch_deliveries, find_courier,
     };
+    use crate::slices::delivery::domains::delivery::{Delivery, DeliveryId};
 
     use super::super::infrastructure::local_authorization;
     use super::super::service::ServiceModule;
@@ -390,12 +395,39 @@ mod tests {
         Subject::User("operator-1".to_owned())
     }
 
+    /// Waiting Deliveries query that answers with the deliveries the test
+    /// lists, read from the store; the SQL query is covered by the
+    /// PostgreSQL tests.
+    #[derive(Default)]
+    struct ListedWaiting {
+        store: Arc<MemoryStore>,
+        ids: Mutex<Vec<DeliveryId>>,
+    }
+
+    impl WaitingDeliveries for ListedWaiting {
+        fn list_waiting_without_pending_offer(
+            &self,
+            _after: Option<&DeliveryPosition>,
+            limit: usize,
+        ) -> Result<Vec<Delivery>, RepositoryError> {
+            let ids = self.ids.lock().expect("ids").clone();
+            ids.iter()
+                .take(limit)
+                .filter_map(|id| DeliveryRepository::get(&*self.store, id).transpose())
+                .collect()
+        }
+    }
+
     /// Граф use cases с адаптерами процесса над in-memory хранилищем вместо
     /// PostgreSQL; новый граф над тем же хранилищем — перезапуск процесса.
     fn process(store: &Arc<MemoryStore>) -> ServiceModule {
+        process_with(store, Arc::new(ListedWaiting::default()))
+    }
+
+    fn process_with(store: &Arc<MemoryStore>, waiting: Arc<ListedWaiting>) -> ServiceModule {
         let (ids, locator) = assignment_adapters(Arc::clone(store) as _);
         service(infrastructure(
-            ProcessStores::over(store),
+            ProcessStores::with_waiting(store, waiting),
             ids,
             locator,
             Box::new(local_authorization()),
@@ -486,7 +518,11 @@ mod tests {
     #[test]
     fn dispatch_offers_a_created_delivery_to_a_courier_on_line() {
         let store = Arc::new(MemoryStore::new());
-        let process = process(&store);
+        let waiting = Arc::new(ListedWaiting {
+            store: Arc::clone(&store),
+            ..ListedWaiting::default()
+        });
+        let process = process_with(&store, Arc::clone(&waiting));
         let couriers = process.couriers();
         couriers
             .register_courier(
@@ -507,6 +543,11 @@ mod tests {
             )
             .expect("position recorded");
         let created = create(&process, "order-1");
+        waiting
+            .ids
+            .lock()
+            .expect("ids")
+            .push(created.delivery_id.clone());
 
         let output = process
             .deliveries()

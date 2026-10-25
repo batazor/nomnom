@@ -9,10 +9,15 @@ use shaku::{HasComponent, module};
 use crate::infrastructure::memory::{
     MemoryStore, RecordingRelationships, SequentialIdGenerator, StaticCourierLocator,
 };
+use crate::pkg::persistence::RepositoryError;
 use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;
+use crate::slices::delivery::applications::dispatch_deliveries::{
+    DeliveryPosition, WaitingDeliveries,
+};
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
+use crate::slices::delivery::domains::delivery::Delivery;
 use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
 
 use super::infrastructure::{
@@ -72,6 +77,28 @@ pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModul
     }
 }
 
+/// Выборка Dispatch Deliveries тестовых графов над in-memory хранилищем:
+/// она есть только в PostgreSQL, поэтому Dispatch здесь — ошибка
+/// зависимости. Тесты Dispatch передают свою подделку порта.
+struct PostgresOnlyWaitingDeliveries;
+
+impl WaitingDeliveries for PostgresOnlyWaitingDeliveries {
+    fn list_waiting_without_pending_offer(
+        &self,
+        _after: Option<&DeliveryPosition>,
+        _limit: usize,
+    ) -> Result<Vec<Delivery>, RepositoryError> {
+        Err(RepositoryError::Unavailable(
+            "waiting deliveries are queried only in PostgreSQL".to_owned(),
+        ))
+    }
+}
+
+/// Роли in-memory хранилища тестового графа.
+fn memory_stores(store: &Arc<MemoryStore>) -> ProcessStores {
+    ProcessStores::with_waiting(store, Arc::new(PostgresOnlyWaitingDeliveries))
+}
+
 /// Собирает тестовый граф с локальной авторизацией.
 #[must_use]
 pub fn build() -> ServiceModule {
@@ -83,7 +110,7 @@ pub fn build() -> ServiceModule {
 #[must_use]
 pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) -> ServiceModule {
     service(infrastructure(
-        ProcessStores::over(&Arc::new(MemoryStore::new())),
+        memory_stores(&Arc::new(MemoryStore::new())),
         Box::new(SequentialIdGenerator::new("delivery")),
         Box::new(StaticCourierLocator::new(Vec::new())),
         authorization,
@@ -111,7 +138,7 @@ pub fn build_over(
 #[cfg(test)]
 pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule {
     service(infrastructure(
-        ProcessStores::over(&Arc::new(MemoryStore::new())),
+        memory_stores(&Arc::new(MemoryStore::new())),
         Box::new(SequentialIdGenerator::new("delivery")),
         Box::new(locator),
         Box::new(local_authorization()),
@@ -129,7 +156,7 @@ pub(crate) fn build_over_memory(
     relationships: Box<dyn super::ProcessRelationships>,
 ) -> ServiceModule {
     service(infrastructure(
-        ProcessStores::over(store),
+        memory_stores(store),
         Box::new(SequentialIdGenerator::new("delivery")),
         Box::new(crate::infrastructure::locator::StoredCourierLocator::new(
             Arc::clone(store) as _,

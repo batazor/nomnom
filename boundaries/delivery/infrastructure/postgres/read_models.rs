@@ -6,15 +6,23 @@ use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::applications::update_courier_location::CourierPosition;
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus, Location};
+use crate::slices::delivery::applications::dispatch_deliveries::{
+    DeliveryPosition, WaitingDeliveries,
+};
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
-use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId, State};
+use crate::slices::delivery::domains::delivery::{
+    Delivery, DeliveryId, DeliveryOfferId, OfferState, OrderId, State,
+};
 
-use super::rows::{address, column, courier_status, delivery_state, parse_delivery_state};
+use super::rows::{
+    DELIVERY_COLUMNS, address, column, courier_status, delivery_from_row, delivery_state,
+    offer_state, parse_delivery_state,
+};
 use super::{PostgresStore, corrupt, domain_version, limit, storage_error};
 
 impl CourierCurrentDeliveryReadModel for PostgresStore {
@@ -39,6 +47,37 @@ impl CourierCurrentDeliveryReadModel for PostgresStore {
             })
         })
         .transpose()
+    }
+}
+
+impl WaitingDeliveries for PostgresStore {
+    fn list_waiting_without_pending_offer(
+        &self,
+        after: Option<&DeliveryPosition>,
+        limit: usize,
+    ) -> Result<Vec<Delivery>, RepositoryError> {
+        // Without a cursor every row is after (i64::MIN, ''): ids are "C"
+        // collated, so the empty string sorts first.
+        let (created_at, id) = after.map_or((i64::MIN, ""), DeliveryPosition::key);
+        let statement = format!(
+            "SELECT {DELIVERY_COLUMNS} FROM deliveries
+             WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)
+               AND NOT EXISTS (SELECT 1 FROM delivery_offers o
+                               WHERE o.delivery_id = deliveries.id AND o.state = $4)
+             ORDER BY COALESCE(created_at, 0), id LIMIT $5"
+        );
+        sql!(self, "SELECT", |connection| sqlx::query(
+            sqlx::AssertSqlSafe(statement)
+        )
+        .bind(delivery_state(State::Waiting))
+        .bind(created_at)
+        .bind(id)
+        .bind(offer_state(OfferState::Pending))
+        .bind(super::limit(limit))
+        .fetch_all(connection))?
+        .iter()
+        .map(delivery_from_row)
+        .collect()
     }
 }
 

@@ -26,12 +26,14 @@ use delivery::slices::courier::domains::courier::{
 };
 use delivery::slices::delivery::applications::accept_delivery_offer::{Handler, Input};
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
-use delivery::slices::delivery::applications::dispatch_deliveries;
+use delivery::slices::delivery::applications::dispatch_deliveries::{
+    self, DeliveryPosition, WaitingDeliveries,
+};
 use delivery::slices::delivery::applications::error::DeliveryApplicationError;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryPosition, DeliveryRepository, OfferState, OrderId, State,
+    DeliveryRepository, OfferState, OrderId, State,
 };
 use delivery::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 
@@ -206,23 +208,7 @@ struct SameBatch {
     barrier: Arc<Barrier>,
 }
 
-impl DeliveryRepository for SameBatch {
-    fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
-        DeliveryRepository::get(&*self.store, id)
-    }
-
-    fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
-        self.store.find_by_order(order_id)
-    }
-
-    fn add(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
-        DeliveryRepository::add(&*self.store, delivery)
-    }
-
-    fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
-        DeliveryRepository::save(&*self.store, delivery)
-    }
-
+impl WaitingDeliveries for SameBatch {
     fn list_waiting_without_pending_offer(
         &self,
         after: Option<&DeliveryPosition>,
@@ -268,7 +254,7 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
     let barrier = Arc::new(Barrier::new(dispatchers));
     let handles: Vec<_> = (0..dispatchers)
         .map(|dispatcher| {
-            let deliveries = SameBatch {
+            let waiting = SameBatch {
                 store: Arc::clone(&store),
                 barrier: Arc::clone(&barrier),
             };
@@ -284,7 +270,8 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
                 }]);
                 dispatch_deliveries::Handler {
                     unit_of_work: &*store,
-                    deliveries: &deliveries,
+                    waiting: &waiting,
+                    deliveries: &*store,
                     couriers: &*store,
                     offers: &*store,
                     outbox: &*store,

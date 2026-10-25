@@ -8,7 +8,7 @@ use crate::slices::courier::domains::courier::{Courier, CourierId, CourierReposi
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryPosition, DeliveryRepository, OfferState, OrderId, State,
+    DeliveryRepository, OfferState, OrderId,
 };
 
 use super::{DeliveryRecord, MemoryStore};
@@ -107,37 +107,6 @@ impl DeliveryRepository for MemoryStore {
         *stored = DeliveryRecord::from_domain(delivery);
         stored.version += 1;
         Ok(())
-    }
-
-    fn list_waiting_without_pending_offer(
-        &self,
-        after: Option<&DeliveryPosition>,
-        limit: usize,
-    ) -> Result<Vec<Delivery>, RepositoryError> {
-        let state = self.available()?;
-        let mut waiting: Vec<Delivery> = state
-            .deliveries
-            .values()
-            .filter(|record| record.state == State::Waiting)
-            .filter(|record| {
-                !state.offers.iter().any(|offer| {
-                    offer.delivery_id() == &record.id && offer.state() == OfferState::Pending
-                })
-            })
-            .map(DeliveryRecord::to_domain)
-            .collect::<Result<_, _>>()?;
-        waiting.sort_by(|left, right| {
-            DeliveryPosition::of(left)
-                .key()
-                .cmp(&DeliveryPosition::of(right).key())
-        });
-        Ok(waiting
-            .into_iter()
-            .filter(|delivery| {
-                after.is_none_or(|after| DeliveryPosition::of(delivery).key() > after.key())
-            })
-            .take(limit)
-            .collect())
     }
 }
 

@@ -22,15 +22,17 @@ use crate::slices::courier::di::{CourierDependencies, CourierPorts};
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
+use crate::slices::delivery::applications::dispatch_deliveries::WaitingDeliveries;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::di::{
     DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
+    WaitingDeliveriesQuery,
 };
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryFailureCode, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    DeliveryOfferRepository, DeliveryPosition, DeliveryRepository, OrderId,
+    DeliveryOfferRepository, DeliveryRepository, OrderId,
 };
 use crate::slices::delivery::infrastructure::failure_log::FailureLog;
 use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
@@ -58,12 +60,29 @@ pub struct ProcessStores {
     pub couriers: Arc<dyn CourierStore>,
     pub transactional: Arc<dyn TransactionalStore>,
     pub read_models: Arc<dyn DeliveryReadModels>,
+    /// Выборка Dispatch Deliveries: только PostgreSQL.
+    pub waiting: Arc<dyn WaitingDeliveriesQuery>,
 }
 
 impl ProcessStores {
-    /// Все роли слайсов над одним хранилищем.
+    /// Все роли слайсов над одним хранилищем (PostgreSQL).
     #[must_use]
     pub fn over<S>(store: &Arc<S>) -> Self
+    where
+        S: CourierStore
+            + TransactionalStore
+            + DeliveryReadModels
+            + WaitingDeliveriesQuery
+            + 'static,
+    {
+        Self::with_waiting(store, Arc::clone(store) as _)
+    }
+
+    /// Роли слайсов над одним хранилищем и отдельная выборка Dispatch
+    /// Deliveries: тестовые графы над in-memory хранилищем, у которого этой
+    /// выборки нет.
+    #[must_use]
+    pub fn with_waiting<S>(store: &Arc<S>, waiting: Arc<dyn WaitingDeliveriesQuery>) -> Self
     where
         S: CourierStore + TransactionalStore + DeliveryReadModels + 'static,
     {
@@ -71,6 +90,7 @@ impl ProcessStores {
             couriers: Arc::clone(store) as _,
             transactional: Arc::clone(store) as _,
             read_models: Arc::clone(store) as _,
+            waiting,
         }
     }
 }
@@ -215,6 +235,7 @@ impl CourierPorts for LocalCourierPorts {
 pub struct LocalDeliveryPorts {
     store: ObservedStore,
     read_models: Arc<dyn DeliveryReadModels>,
+    waiting: Arc<dyn WaitingDeliveriesQuery>,
     #[shaku(inject)]
     authorization: Arc<dyn SharedAuthorization>,
     #[shaku(inject)]
@@ -277,14 +298,6 @@ impl DeliveryRepository for ObservedStore {
 
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
         DeliveryRepository::save(&*self.inner, delivery)
-    }
-
-    fn list_waiting_without_pending_offer(
-        &self,
-        after: Option<&DeliveryPosition>,
-        limit: usize,
-    ) -> Result<Vec<Delivery>, RepositoryError> {
-        self.inner.list_waiting_without_pending_offer(after, limit)
     }
 }
 
@@ -350,6 +363,10 @@ impl DeliveryPorts for LocalDeliveryPorts {
 
     fn read_models(&self) -> &dyn DeliveryReadModels {
         &*self.read_models
+    }
+
+    fn waiting_deliveries(&self) -> &dyn WaitingDeliveries {
+        &*self.waiting
     }
 
     fn locator(&self) -> &dyn CourierLocator {
@@ -420,6 +437,7 @@ pub(super) fn infrastructure(
             .with_component_parameters::<LocalDeliveryPorts>(LocalDeliveryPortsParameters {
                 store: ObservedStore::new(stores.transactional, observed_outbox()),
                 read_models: stores.read_models,
+                waiting: stores.waiting,
                 locator,
                 ids,
             })

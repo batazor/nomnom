@@ -12,6 +12,7 @@ use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
+use crate::slices::delivery::applications::dispatch_deliveries::WaitingDeliveries;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     self, CourierCurrentDeliveryReadModel,
@@ -65,6 +66,11 @@ impl<T> DeliveryReadModels for T where
 {
 }
 
+/// Выборка Dispatch Deliveries; реализует только PostgreSQL.
+pub trait WaitingDeliveriesQuery: WaitingDeliveries + Send + Sync {}
+
+impl<T: WaitingDeliveries + Send + Sync> WaitingDeliveriesQuery for T {}
+
 /// Внешние порты слайса. Порты не требуют `Send + Sync`, поэтому shaku
 /// хранит их за этим интерфейсом, а не как отдельные `dyn` компоненты.
 pub trait DeliveryPorts: Interface {
@@ -73,6 +79,7 @@ pub trait DeliveryPorts: Interface {
     fn courier_authorization(&self) -> &dyn CourierAuthorization;
     fn store(&self) -> &dyn TransactionalStore;
     fn read_models(&self) -> &dyn DeliveryReadModels;
+    fn waiting_deliveries(&self) -> &dyn WaitingDeliveries;
     fn locator(&self) -> &dyn CourierLocator;
     fn clock(&self) -> &dyn Clock;
     fn ids(&self) -> &dyn IdGenerator;
@@ -428,6 +435,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError> {
         dispatch_deliveries::Handler {
             unit_of_work: &self.unit_of_work(),
+            waiting: self.ports.waiting_deliveries(),
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             offers: self.ports.store(),

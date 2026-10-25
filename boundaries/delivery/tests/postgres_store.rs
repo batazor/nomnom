@@ -24,13 +24,16 @@ use delivery::slices::courier::applications::update_courier_location::{
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierRepository, CourierStatus, Location,
 };
+use delivery::slices::delivery::applications::dispatch_deliveries::{
+    DeliveryPosition, WaitingDeliveries,
+};
 use delivery::slices::delivery::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use delivery::slices::delivery::applications::list_available_delivery_offers::PendingDeliveryOffersReadModel;
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use delivery::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
-    DeliveryOfferId, DeliveryOfferRepository, DeliveryPosition, DeliveryRepository, DomainEvent,
-    FailureReporter, OfferState, OrderId, State,
+    DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DomainEvent, FailureReporter,
+    OfferState, OrderId, State,
 };
 
 const DSN_ENV: &str = "DATABASE_URL";

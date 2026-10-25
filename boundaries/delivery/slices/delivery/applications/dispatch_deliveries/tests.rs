@@ -1,18 +1,68 @@
+use std::sync::{Mutex, PoisonError};
+
 use super::*;
 use crate::infrastructure::memory::MemoryStore;
-use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
 use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::applications::test_support::{
     NOW, OFFER_TTL, World, candidate, new_delivery,
 };
-use crate::slices::delivery::domains::delivery::{
-    DeliveryOfferId, DomainEvent, OfferState, OrderId, State,
-};
+use crate::slices::delivery::domains::delivery::{DeliveryOfferId, DomainEvent, OfferState, State};
 
-fn handler(world: &World) -> Handler<'_, MemoryStore> {
+/// Scripted Waiting Deliveries query: answers with the deliveries the test
+/// gives, in the given order, after the cursor and at most `limit`, and
+/// records every call. Filtering and ordering in SQL are covered by the
+/// PostgreSQL tests.
+#[derive(Default)]
+struct ScriptedWaiting {
+    deliveries: Mutex<Vec<Delivery>>,
+    calls: Mutex<Vec<(Option<DeliveryPosition>, usize)>>,
+}
+
+impl ScriptedWaiting {
+    fn answer(&self, deliveries: Vec<Delivery>) {
+        *self
+            .deliveries
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = deliveries;
+    }
+
+    fn calls(&self) -> Vec<(Option<DeliveryPosition>, usize)> {
+        self.calls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl WaitingDeliveries for ScriptedWaiting {
+    fn list_waiting_without_pending_offer(
+        &self,
+        after: Option<&DeliveryPosition>,
+        limit: usize,
+    ) -> Result<Vec<Delivery>, RepositoryError> {
+        self.calls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((after.cloned(), limit));
+        Ok(self
+            .deliveries
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter(|delivery| {
+                after.is_none_or(|after| DeliveryPosition::of(delivery).key() > after.key())
+            })
+            .take(limit)
+            .cloned()
+            .collect())
+    }
+}
+
+fn handler<'a>(world: &'a World, waiting: &'a ScriptedWaiting) -> Handler<'a, MemoryStore> {
     Handler {
         unit_of_work: &world.store,
+        waiting,
         deliveries: &world.store,
         couriers: &world.store,
         offers: &world.store,
@@ -29,13 +79,14 @@ const BATCH: Input = Input {
     after: None,
 };
 
-/// Waiting delivery created at `created_at`.
-fn created(world: &World, id: &str, created_at: i64) {
+/// Waiting delivery created at `created_at`, as the query returns it.
+fn created(world: &World, id: &str, created_at: i64) -> Delivery {
     DeliveryRepository::add(
         &world.store,
         &new_delivery(id).with_created_at(Some(created_at)),
     )
     .expect("seed delivery");
+    world.delivery(id)
 }
 
 fn on_line(world: &World, couriers: &[&str]) {
@@ -75,14 +126,18 @@ fn ids(values: &[&str]) -> Vec<DeliveryId> {
 #[test]
 fn created_delivery_is_offered_on_the_next_pass() {
     let world = World::new();
+    let waiting = ScriptedWaiting::default();
     on_line(&world, &["courier-1"]);
-    created(&world, "delivery-1", NOW);
+    waiting.answer(vec![created(&world, "delivery-1", NOW)]);
 
-    let output = handler(&world).execute(BATCH).expect("dispatched");
+    let output = handler(&world, &waiting)
+        .execute(BATCH)
+        .expect("dispatched");
 
     assert_eq!(offered_couriers(&output), vec![("delivery-1", "courier-1")]);
     assert!(output.without_candidate.is_empty() && output.skipped.is_empty());
     assert_eq!(output.next, None);
+    assert_eq!(waiting.calls(), vec![(None, 100)]);
     assert_eq!(world.offer_state("generated-1"), OfferState::Pending);
     assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
     assert_eq!(
@@ -95,26 +150,30 @@ fn created_delivery_is_offered_on_the_next_pass() {
         )]
     );
     assert_eq!(world.store.commits(), 1);
-
-    // A pending offer takes the delivery out of the next pass.
-    assert_eq!(handler(&world).execute(BATCH), Ok(Output::default()));
 }
 
 /// AC-735
 #[test]
 fn rejected_delivery_is_offered_to_another_courier() {
     let world = World::new();
+    let waiting = ScriptedWaiting::default();
     on_line(&world, &["courier-1", "courier-2"]);
-    created(&world, "delivery-1", NOW);
-    handler(&world).execute(BATCH).expect("first offer");
+    waiting.answer(vec![created(&world, "delivery-1", NOW)]);
+    handler(&world, &waiting)
+        .execute(BATCH)
+        .expect("first offer");
     let mut first = world.store_offer("generated-1");
     assert_eq!(first.courier_id(), &CourierId::new("courier-1"));
     first
         .reject(&CourierId::new("courier-1"), NOW)
         .expect("rejected");
     DeliveryOfferRepository::save(&world.store, &first).expect("save");
+    // Without a pending offer the delivery is waiting again.
+    waiting.answer(vec![world.delivery("delivery-1")]);
 
-    let output = handler(&world).execute(BATCH).expect("dispatched again");
+    let output = handler(&world, &waiting)
+        .execute(BATCH)
+        .expect("dispatched again");
 
     assert_eq!(offered_couriers(&output), vec![("delivery-1", "courier-2")]);
 }
@@ -123,15 +182,19 @@ fn rejected_delivery_is_offered_to_another_courier() {
 #[test]
 fn expired_delivery_is_offered_to_another_courier() {
     let world = World::new();
+    let waiting = ScriptedWaiting::default();
     on_line(&world, &["courier-1", "courier-2"]);
-    created(&world, "delivery-1", NOW);
+    let delivery = created(&world, "delivery-1", NOW);
     world.offer("offer-1", "delivery-1", "courier-1");
     world.clock.set(NOW + OFFER_TTL + 1);
     let mut expired = world.store_offer("offer-1");
     expired.expire(NOW + OFFER_TTL + 1).expect("expired");
     DeliveryOfferRepository::save(&world.store, &expired).expect("save");
+    waiting.answer(vec![delivery]);
 
-    let output = handler(&world).execute(BATCH).expect("dispatched");
+    let output = handler(&world, &waiting)
+        .execute(BATCH)
+        .expect("dispatched");
 
     assert_eq!(offered_couriers(&output), vec![("delivery-1", "courier-2")]);
     // Everyone was offered it once: the delivery waits for Replan.
@@ -140,7 +203,10 @@ fn expired_delivery_is_offered_to_another_courier() {
         .reject(&CourierId::new("courier-2"), NOW + OFFER_TTL + 1)
         .expect("rejected");
     DeliveryOfferRepository::save(&world.store, &second).expect("save");
-    let output = handler(&world).execute(BATCH).expect("no one left");
+    waiting.answer(vec![world.delivery("delivery-1")]);
+    let output = handler(&world, &waiting)
+        .execute(BATCH)
+        .expect("no one left");
     assert_eq!(output.without_candidate, ids(&["delivery-1"]));
 }
 
@@ -148,13 +214,14 @@ fn expired_delivery_is_offered_to_another_courier() {
 #[test]
 fn delivery_waits_until_a_courier_goes_on_line() {
     let world = World::new();
-    created(&world, "delivery-1", NOW);
+    let waiting = ScriptedWaiting::default();
+    waiting.answer(vec![created(&world, "delivery-1", NOW)]);
     world.courier("courier-1", CourierStatus::Unavailable);
     world
         .locator
         .set_candidates(vec![candidate("courier-1", 500)]);
 
-    let output = handler(&world).execute(BATCH).expect("no error");
+    let output = handler(&world, &waiting).execute(BATCH).expect("no error");
 
     assert!(output.offered.is_empty());
     assert_eq!(output.without_candidate, ids(&["delivery-1"]));
@@ -171,110 +238,58 @@ fn delivery_waits_until_a_courier_goes_on_line() {
         candidate("courier-1", 500),
         candidate("courier-2", 500),
     ]);
-    let output = handler(&world).execute(BATCH).expect("courier on line");
+    let output = handler(&world, &waiting)
+        .execute(BATCH)
+        .expect("courier on line");
     assert_eq!(offered_couriers(&output), vec![("delivery-1", "courier-2")]);
 }
 
 #[test]
-fn batches_are_oldest_first_and_page_by_position() {
+fn a_full_batch_continues_after_its_last_delivery() {
     let world = World::new();
-    created(&world, "delivery-b", NOW + 2);
-    created(&world, "delivery-c", NOW + 1);
-    created(&world, "delivery-a", NOW + 2);
-    // Stored before creation time was recorded: counts as the oldest.
-    DeliveryRepository::add(&world.store, &new_delivery("delivery-old")).expect("seed");
-    world.assigned_delivery("delivery-assigned", "busy");
+    let waiting = ScriptedWaiting::default();
+    waiting.answer(vec![
+        created(&world, "delivery-a", NOW),
+        created(&world, "delivery-b", NOW + 1),
+        created(&world, "delivery-c", NOW + 2),
+    ]);
+    let batch = |batch_size, after| Input { batch_size, after };
 
-    let first = handler(&world)
-        .execute(Input {
-            batch_size: 2,
-            after: None,
-        })
+    let first = handler(&world, &waiting)
+        .execute(batch(2, None))
         .expect("first batch");
-    assert_eq!(
-        first.without_candidate,
-        ids(&["delivery-old", "delivery-c"])
-    );
+    assert_eq!(first.without_candidate, ids(&["delivery-a", "delivery-b"]));
     let next = first.next.expect("full batch");
-    assert_eq!(next.delivery_id, DeliveryId::new("delivery-c"));
+    assert_eq!(next, DeliveryPosition::of(&world.delivery("delivery-b")));
 
-    let second = handler(&world)
-        .execute(Input {
-            batch_size: 2,
-            after: Some(next),
-        })
+    let second = handler(&world, &waiting)
+        .execute(batch(2, Some(next.clone())))
         .expect("second batch");
-    assert_eq!(second.without_candidate, ids(&["delivery-a", "delivery-b"]));
-    let third = handler(&world)
-        .execute(Input {
-            batch_size: 2,
-            after: second.next,
-        })
-        .expect("third batch");
-    assert_eq!(third, Output::default());
+    assert_eq!(second.without_candidate, ids(&["delivery-c"]));
+    assert_eq!(second.next, None, "a short batch ends the pass");
+    assert_eq!(waiting.calls(), vec![(None, 2), (Some(next), 2)]);
+
     assert_eq!(
-        handler(&world).execute(Input {
-            batch_size: 0,
-            after: None,
-        }),
+        handler(&world, &waiting).execute(batch(0, None)),
         Ok(Output::default())
     );
-}
-
-/// Deliveries repository whose batch is read before a concurrent writer
-/// changes the first delivery, so the dispatch claim hits a version
-/// conflict.
-struct ConcurrentChange<'a> {
-    store: &'a MemoryStore,
-}
-
-impl DeliveryRepository for ConcurrentChange<'_> {
-    fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
-        DeliveryRepository::get(self.store, id)
-    }
-
-    fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
-        self.store.find_by_order(order_id)
-    }
-
-    fn add(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
-        DeliveryRepository::add(self.store, delivery)
-    }
-
-    fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
-        DeliveryRepository::save(self.store, delivery)
-    }
-
-    fn list_waiting_without_pending_offer(
-        &self,
-        after: Option<&DeliveryPosition>,
-        limit: usize,
-    ) -> Result<Vec<Delivery>, RepositoryError> {
-        let batch = self
-            .store
-            .list_waiting_without_pending_offer(after, limit)?;
-        // Another dispatcher claimed the first delivery after this read.
-        DeliveryRepository::save(self.store, &batch[0])?;
-        Ok(batch)
-    }
+    assert_eq!(waiting.calls().len(), 2, "an empty batch reads nothing");
 }
 
 #[test]
 fn concurrently_changed_delivery_is_skipped() {
     let world = World::new();
+    let waiting = ScriptedWaiting::default();
     on_line(&world, &["courier-1"]);
-    created(&world, "delivery-1", NOW);
-    created(&world, "delivery-2", NOW + 1);
-    let deliveries = ConcurrentChange {
-        store: &world.store,
-    };
+    let stale = created(&world, "delivery-1", NOW);
+    let second = created(&world, "delivery-2", NOW + 1);
+    // Another dispatcher claimed the first delivery after the batch was read.
+    DeliveryRepository::save(&world.store, &stale).expect("concurrent change");
+    waiting.answer(vec![stale, second]);
 
-    let output = Handler {
-        deliveries: &deliveries,
-        ..handler(&world)
-    }
-    .execute(BATCH)
-    .expect("conflict is not an error");
+    let output = handler(&world, &waiting)
+        .execute(BATCH)
+        .expect("conflict is not an error");
 
     assert_eq!(output.skipped, ids(&["delivery-1"]));
     assert_eq!(offered_couriers(&output), vec![("delivery-2", "courier-1")]);
@@ -289,11 +304,12 @@ fn concurrently_changed_delivery_is_skipped() {
 #[test]
 fn locator_outage_is_an_error() {
     let world = World::new();
-    created(&world, "delivery-1", NOW);
+    let waiting = ScriptedWaiting::default();
+    waiting.answer(vec![created(&world, "delivery-1", NOW)]);
     world.locator.set_unavailable(true);
 
     assert!(matches!(
-        handler(&world).execute(BATCH),
+        handler(&world, &waiting).execute(BATCH),
         Err(DeliveryApplicationError::DependencyUnavailable(_))
     ));
     assert_eq!(world.delivery_state("delivery-1"), State::Waiting);

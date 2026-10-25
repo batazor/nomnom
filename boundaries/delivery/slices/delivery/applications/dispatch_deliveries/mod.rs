@@ -18,9 +18,10 @@
 //! subject and no permission check.
 
 use crate::pkg::application::{Clock, IdGenerator, UnitOfWork};
+use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::delivery::domains::delivery::{
-    Delivery, DeliveryId, DeliveryOfferRepository, DeliveryPosition, DeliveryRepository,
+    Delivery, DeliveryId, DeliveryOfferRepository, DeliveryRepository,
 };
 
 use super::courier_locator::CourierLocator;
@@ -29,6 +30,44 @@ use super::find_courier::{Outcome, select_candidate};
 use super::offer_delivery::{self, OfferPorts, make_offer};
 use super::outbox::DeliveryOutbox;
 use super::policy::AssignmentPolicy;
+
+/// Place of a delivery in creation order: creation time, then id. A Delivery
+/// stored before its creation time was recorded counts as created at `0`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeliveryPosition {
+    pub created_at_epoch_seconds: i64,
+    pub delivery_id: DeliveryId,
+}
+
+impl DeliveryPosition {
+    #[must_use]
+    pub fn of(delivery: &Delivery) -> Self {
+        Self {
+            created_at_epoch_seconds: delivery.created_at_epoch_seconds().unwrap_or(0),
+            delivery_id: delivery.id().clone(),
+        }
+    }
+
+    /// Sort key of the order: ids compare by bytes, as the PostgreSQL
+    /// `"C"` collation does.
+    #[must_use]
+    pub fn key(&self) -> (i64, &str) {
+        (self.created_at_epoch_seconds, self.delivery_id.as_str())
+    }
+}
+
+/// Query of the deliveries to dispatch. Implemented only by the PostgreSQL
+/// store, which filters and pages in SQL.
+pub trait WaitingDeliveries {
+    /// Waiting deliveries without a pending offer in creation order
+    /// ([`DeliveryPosition`]), strictly after `after` when given, at most
+    /// `limit`.
+    fn list_waiting_without_pending_offer(
+        &self,
+        after: Option<&DeliveryPosition>,
+        limit: usize,
+    ) -> Result<Vec<Delivery>, RepositoryError>;
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
@@ -61,6 +100,7 @@ enum Dispatch {
 
 pub struct Handler<'a, U: UnitOfWork> {
     pub unit_of_work: &'a U,
+    pub waiting: &'a dyn WaitingDeliveries,
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
@@ -78,7 +118,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
             return Ok(output);
         }
         let batch = self
-            .deliveries
+            .waiting
             .list_waiting_without_pending_offer(input.after.as_ref(), input.batch_size)?;
         if batch.len() >= input.batch_size {
             output.next = batch.last().map(DeliveryPosition::of);

@@ -120,7 +120,8 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
-    use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryPosition};
+    use crate::slices::delivery::applications::dispatch_deliveries::DeliveryPosition;
+    use crate::slices::delivery::domains::delivery::DeliveryId;
 
     const SCHEDULE: DispatchSchedule = DispatchSchedule {
         interval: Duration::from_millis(5),
