@@ -60,7 +60,13 @@ User assertions принимаются, только если заданы issue
 
 ### 4. Векторы
 
-`tests/identity/generate.sh` дополняется: ключ `bff-signing-key.pem` (P-256), `bff-jwks.json`, `user-vectors.json` с полями `issuer`, `audience`, `delegates`, `accepted`, `rejected`, `tokens`, `expected_subject`. Отдельные сценарии делегата используют service tokens существующих векторов: вызов от `bff` (добавляется в `service_accounts` векторов) принимается, от `orders-worker` с тем же assertion — отклоняется. Каждый контекст прогоняет оба набора в unit-тестах.
+`tests/identity/generate.sh` дополняется второй секцией, не меняя `vectors.json` service identity:
+
+- `bff-signing-key.pem` (P-256) и `bff-jwks.json`;
+- `user-vectors.json`: `issuer`, `audience` (`nomnom.payments`, как у service-векторов), `now`, `delegates`, `service_issuer`, `service_accounts` (с `nomnom/bff=bff`), `delegate_token` и `non_delegate_token` (service tokens `bff` и `orders-worker`, подписанные ключом кластера из `jwks.json`), `expected_subject`, `accepted`, `rejected`, `tokens`;
+- `idp-signing-key.pem`, `idp-jwks.json`, `idp-vectors.json` — access tokens тестового identity provider для BFF, включая ID token, который нельзя принять.
+
+Assertion живёт не дольше 60 s, поэтому статический вектор не может быть валиден в реальном времени: реализации проверяют `user-vectors.json` с часами, зафиксированными на `now`. Service tokens делегата действуют до 2100 года и проверяются по реальным часам, как раньше.
 
 ### 5. BFF
 

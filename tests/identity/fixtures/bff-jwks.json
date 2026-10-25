@@ -1,0 +1,13 @@
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "alg": "ES256",
+      "use": "sig",
+      "kid": "nomnom-bff-test-key",
+      "x": "3SLsCKRR18V_idq9m__ErofGvltbxt9HSZ1Va6ckjB8",
+      "y": "KrOklmRQGWo9ZlypBSu33aBYFSAi9qXXcVGZ9-kD8WE"
+    }
+  ]
+}

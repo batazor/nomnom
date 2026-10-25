@@ -2,7 +2,7 @@
 
 ## 1. Общие векторы
 
-- [ ] 1.1 Дополнить `tests/identity/generate.sh`: ключ BFF P-256, `bff-jwks.json`, `user-vectors.json` (accepted, rejected: expired, wrong_audience, wrong_issuer, ttl_too_long, empty_sub, missing_jti, bad_signature, unknown_kid, alg_none, hs256), service account `bff` в векторах ADR 27; тестовый ключ и JWKS identity provider для BFF; перегенерировать fixtures и проверить, что существующие service-векторы не изменились (`FR-472`).
+- [x] 1.1 Дополнить `tests/identity/generate.sh`: ключ BFF P-256, `bff-jwks.json`, `user-vectors.json` (accepted, rejected: expired, wrong_audience, wrong_issuer, ttl_too_long, empty_sub, missing_jti, bad_signature, unknown_kid, alg_none, hs256), service tokens делегата `bff` и не-делегата в `user-vectors.json`, фиксированные часы `now`; тестовый ключ и JWKS identity provider для BFF; перегенерировать fixtures и проверить, что существующие service-векторы не изменились (`FR-472`).
 
 ## 2. Verifier в контекстах
 

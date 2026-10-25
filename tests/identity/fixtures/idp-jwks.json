@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "alg": "RS256",
+      "use": "sig",
+      "kid": "nomnom-idp-test-key",
+      "n": "sUJCAV3CYUy6G-LC_ZSYnJoK9rVHDyz1Gdu2lxGW539qUs_jPL92A1EqbAy9PLfQ5xi0oFKUKcRI_dgkwRINt8alVmnUI2i5PuEdlec2XDnVdqfbWPJ7vlByDSc9fWAYIr_uBW7EC8lMJlkPT4wZkQfNsPVHDyY47p_bQKO7JPrKa2hWndzA1aeMeCoPcWHmUaIjXj-9Jh7yu4-Yl-3gX08KOljpHXp5q_Ojzu2KM5iJAMRARW7z3RXBU5w5mbSMBg2quN75Uwu-zzyCPQPanNjvOqgB6kA21Ya-THyRD7fUpL410I2zUHJwV_xqjgDAAiIzVQOs5tXN2vdonQxCGQ",
+      "e": "AQAB"
+    }
+  ]
+}
