@@ -1,0 +1,101 @@
+:root {
+  color-scheme: light dark;
+
+  --color-background: #f3f3f1;
+  --color-frame: #f3f3f1;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f6f6f3;
+  --color-foreground: #171714;
+  --color-muted: #5f625d;
+  --color-primary: #9f3f22;
+  --color-on-primary: #ffffff;
+  --color-primary-soft: #f3d8cf;
+  --color-success: #236b46;
+  --color-warning: #8a4a08;
+  --color-danger: #b4232d;
+  --color-border: #e6e2da;
+  --color-border-strong: #ccc6bb;
+
+  --font-family-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-control: 0.625rem;
+  --radius-card: 1rem;
+  --radius-sheet: 1rem;
+  --shadow-floating: 0 0.5rem 1.5rem rgb(23 23 20 / 10%);
+
+  --motion-fast: 140ms;
+  --motion-standard: 220ms;
+  --motion-easing: cubic-bezier(0.2, 0, 0, 1);
+  --focus-ring-width: 0.125rem;
+  --focus-ring-offset: 0.1875rem;
+}
+
+:root[data-theme="dark"] {
+  --color-background: #11110f;
+  --color-frame: #11110f;
+  --color-surface: #191917;
+  --color-surface-muted: #20201d;
+  --color-foreground: #faf9f6;
+  --color-muted: #b7b6b0;
+  --color-primary: #ee8d6c;
+  --color-on-primary: #171714;
+  --color-primary-soft: #4b2b21;
+  --color-success: #6fca98;
+  --color-warning: #efb25f;
+  --color-danger: #f57a82;
+  --color-border: #2c2c28;
+  --color-border-strong: #4a4943;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-background: #11110f;
+    --color-frame: #11110f;
+    --color-surface: #191917;
+    --color-surface-muted: #20201d;
+    --color-foreground: #faf9f6;
+    --color-muted: #b7b6b0;
+    --color-primary: #ee8d6c;
+    --color-on-primary: #171714;
+    --color-primary-soft: #4b2b21;
+    --color-success: #6fca98;
+    --color-warning: #efb25f;
+    --color-danger: #f57a82;
+    --color-border: #2c2c28;
+    --color-border-strong: #4a4943;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-standard: 0ms;
+  }
+}
+
+@theme inline {
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-foreground: var(--color-foreground);
+  --color-muted: var(--color-muted);
+  --color-primary: var(--color-primary);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
+  --color-border: var(--color-border);
+  --font-sans: var(--font-family-sans);
+}

@@ -1,0 +1,6 @@
+query BffInfo {
+  bffInfo {
+    name
+    version
+  }
+}
