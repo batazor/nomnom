@@ -328,6 +328,31 @@ async fn courier_accepts_picks_up_and_completes_the_delivery() {
             already_accepted: false,
         }
     );
+    let current = api
+        .client
+        .get_courier_current_delivery(as_user(
+            "courier-1",
+            GetCourierCurrentDeliveryRequest {
+                courier_id: "courier-1".to_owned(),
+            },
+        ))
+        .await
+        .expect("current delivery")
+        .into_inner();
+    assert_eq!(
+        current,
+        GetCourierCurrentDeliveryResponse {
+            delivery: Some(Delivery {
+                delivery_id: delivery_id.clone(),
+                order_id: "order-1".to_owned(),
+                courier_id: "courier-1".to_owned(),
+                state: DeliveryState::Assigned as i32,
+                pickup_address: "Restaurant street 1".to_owned(),
+                dropoff_address: "Customer street 2".to_owned(),
+            }),
+            courier_status: CourierStatus::Busy as i32,
+        }
+    );
     let pickup = api
         .client
         .confirm_pickup(as_user(

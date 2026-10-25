@@ -5,6 +5,9 @@ package nomnom.delivery.v1;
 import "nomnom/delivery/v1/delivery.proto";
 
 service DeliveryService {
+  // Courier view of its work: current status and the assigned or picked up
+  // Delivery with its addresses. Requires courier#act; an unregistered courier
+  // is NOT_FOUND.
   rpc GetCourierCurrentDelivery(GetCourierCurrentDeliveryRequest) returns (GetCourierCurrentDeliveryResponse);
 
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
@@ -33,7 +36,9 @@ message GetCourierCurrentDeliveryRequest {
 }
 
 message GetCourierCurrentDeliveryResponse {
+  // Unset when the courier has no assigned or picked up Delivery.
   Delivery delivery = 1;
+  CourierStatus courier_status = 2;
 }
 
 message CreateDeliveryRequest {

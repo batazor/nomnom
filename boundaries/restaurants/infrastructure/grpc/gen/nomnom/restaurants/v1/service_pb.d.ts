@@ -790,6 +790,70 @@ export declare type ListIncomingOrdersResponse = Message<"nomnom.restaurants.v1.
 export declare const ListIncomingOrdersResponseSchema: GenMessage<ListIncomingOrdersResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.ListActiveRestaurantOrdersRequest
+ */
+export declare type ListActiveRestaurantOrdersRequest = Message<"nomnom.restaurants.v1.ListActiveRestaurantOrdersRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListActiveRestaurantOrdersRequest.
+ * Use `create(ListActiveRestaurantOrdersRequestSchema)` to create a new message.
+ */
+export declare const ListActiveRestaurantOrdersRequestSchema: GenMessage<ListActiveRestaurantOrdersRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ActiveRestaurantOrder
+ */
+export declare type ActiveRestaurantOrder = Message<"nomnom.restaurants.v1.ActiveRestaurantOrder"> & {
+  /**
+   * State, expected_ready_at (unset until Acceptance) and version of the order.
+   *
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.RestaurantOrderItem items = 2;
+   */
+  items: RestaurantOrderItem[];
+
+  /**
+   * Unset only on orders received before the time was recorded.
+   *
+   * @generated from field: google.protobuf.Timestamp received_at = 3;
+   */
+  receivedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ActiveRestaurantOrder.
+ * Use `create(ActiveRestaurantOrderSchema)` to create a new message.
+ */
+export declare const ActiveRestaurantOrderSchema: GenMessage<ActiveRestaurantOrder>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListActiveRestaurantOrdersResponse
+ */
+export declare type ListActiveRestaurantOrdersResponse = Message<"nomnom.restaurants.v1.ListActiveRestaurantOrdersResponse"> & {
+  /**
+   * By ascending received_at, then by id; empty when the kitchen has no work.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.ActiveRestaurantOrder orders = 1;
+   */
+  orders: ActiveRestaurantOrder[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListActiveRestaurantOrdersResponse.
+ * Use `create(ListActiveRestaurantOrdersResponseSchema)` to create a new message.
+ */
+export declare const ListActiveRestaurantOrdersResponseSchema: GenMessage<ListActiveRestaurantOrdersResponse>;
+
+/**
  * @generated from message nomnom.restaurants.v1.RegisterRestaurantRequest
  */
 export declare type RegisterRestaurantRequest = Message<"nomnom.restaurants.v1.RegisterRestaurantRequest"> & {
@@ -1489,6 +1553,19 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof ListIncomingOrdersRequestSchema;
     output: typeof ListIncomingOrdersResponseSchema;
+  },
+  /**
+   * Active orders of a restaurant's kitchen board: Restaurant Orders in
+   * RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY with their items, by
+   * ascending received_at, then by id. Requires restaurant#operate_kitchen.
+   * The recommended order of the QUEUED ones is GetKitchenQueue.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ListActiveRestaurantOrders
+   */
+  listActiveRestaurantOrders: {
+    methodKind: "unary";
+    input: typeof ListActiveRestaurantOrdersRequestSchema;
+    output: typeof ListActiveRestaurantOrdersResponseSchema;
   },
   /**
    * Restaurant administration. RegisterRestaurant requires platform#register_restaurant

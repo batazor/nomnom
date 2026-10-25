@@ -10,6 +10,11 @@ pub struct Delivery {
     pub courier_id: ::prost::alloc::string::String,
     #[prost(enumeration="DeliveryState", tag="4")]
     pub state: i32,
+    /// Set by GetCourierCurrentDelivery for the courier's own active Delivery.
+    #[prost(string, tag="5")]
+    pub pickup_address: ::prost::alloc::string::String,
+    #[prost(string, tag="6")]
+    pub dropoff_address: ::prost::alloc::string::String,
 }
 /// Pending, not yet expired Delivery Offer addressed to a courier.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -208,8 +213,11 @@ pub struct GetCourierCurrentDeliveryRequest {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetCourierCurrentDeliveryResponse {
+    /// Unset when the courier has no assigned or picked up Delivery.
     #[prost(message, optional, tag="1")]
     pub delivery: ::core::option::Option<Delivery>,
+    #[prost(enumeration="CourierStatus", tag="2")]
+    pub courier_status: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CreateDeliveryRequest {

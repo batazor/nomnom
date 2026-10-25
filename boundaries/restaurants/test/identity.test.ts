@@ -329,6 +329,9 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
     reportPreparationFailure: world.reportFailure,
     getKitchenQueue: world.getKitchenQueue,
     listIncomingOrders: { execute: async () => assert.fail("unexpected call") },
+    listActiveRestaurantOrders: {
+      execute: async () => assert.fail("unexpected call"),
+    },
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,

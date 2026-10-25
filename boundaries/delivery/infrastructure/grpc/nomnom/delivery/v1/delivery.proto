@@ -17,6 +17,9 @@ message Delivery {
   string order_id = 2;
   string courier_id = 3;
   DeliveryState state = 4;
+  // Set by GetCourierCurrentDelivery for the courier's own active Delivery.
+  string pickup_address = 5;
+  string dropoff_address = 6;
 }
 
 enum CourierStatus {

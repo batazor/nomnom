@@ -250,6 +250,7 @@ const processRegistrations = (
       reportPreparationFailure: cradle.reportPreparationFailure,
       getKitchenQueue: cradle.getKitchenQueue,
       listIncomingOrders: cradle.listIncomingOrders,
+      listActiveRestaurantOrders: cradle.listActiveRestaurantOrders,
       registerRestaurant: cradle.registerRestaurant,
       assignStaff: cradle.assignStaff,
       revokeStaff: cradle.revokeStaff,

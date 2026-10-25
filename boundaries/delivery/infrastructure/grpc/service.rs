@@ -86,9 +86,12 @@ impl DeliveryService for DeliveryGrpcService {
             order_id: view.order_id.as_str().to_owned(),
             courier_id: output.courier_id.as_str().to_owned(),
             state: delivery_state(view.state) as i32,
+            pickup_address: view.pickup_address.as_str().to_owned(),
+            dropoff_address: view.dropoff_address.as_str().to_owned(),
         });
         Ok(Response::new(GetCourierCurrentDeliveryResponse {
             delivery,
+            courier_status: courier_status(output.courier_status) as i32,
         }))
     }
 

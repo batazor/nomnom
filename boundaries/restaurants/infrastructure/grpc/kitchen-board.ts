@@ -4,10 +4,12 @@ import type { KitchenBoardQuery } from "../../slices/restaurantorder/application
 import { requireField, transportError } from "./errors.ts";
 import {
   GetKitchenQueueResponseSchema,
+  ListActiveRestaurantOrdersResponseSchema,
   ListIncomingOrdersResponseSchema,
   type RestaurantsService,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import {
+  toActiveRestaurantOrderMessage,
   toIncomingOrderMessage,
   toKitchenQueueEntryMessage,
 } from "./messages.ts";
@@ -17,11 +19,11 @@ import type { SubjectResolver } from "./subject.ts";
 
 type KitchenBoardRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
-  "getKitchenQueue" | "listIncomingOrders"
+  "getKitchenQueue" | "listIncomingOrders" | "listActiveRestaurantOrders"
 >;
 
 /**
- * Kitchen board queries of restaurant staff (FR-583, FR-586): read-only, they
+ * Kitchen board queries of restaurant staff (FR-583, FR-586, active orders): read-only, they
  * require `restaurant#operate_kitchen` through the query's own access port.
  */
 export const createKitchenBoardRpcs = (
@@ -64,6 +66,21 @@ export const createKitchenBoardRpcs = (
         return create(ListIncomingOrdersResponseSchema, {
           orders: incoming.orders.map((order) =>
             toIncomingOrderMessage(incoming.restaurantId, order),
+          ),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async listActiveRestaurantOrders(request, context) {
+      try {
+        const active = await dependencies.listActiveRestaurantOrders.execute(
+          await boardQuery(request, context),
+        );
+        return create(ListActiveRestaurantOrdersResponseSchema, {
+          orders: active.orders.map((order) =>
+            toActiveRestaurantOrderMessage(active.restaurantId, order),
           ),
         });
       } catch (error) {

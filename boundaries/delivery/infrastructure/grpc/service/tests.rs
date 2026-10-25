@@ -290,6 +290,7 @@ async fn cancel_assigned_delivery_releases_courier_and_repeat_succeeds() {
         .expect("current delivery")
         .into_inner();
     assert_eq!(current.delivery, None);
+    assert_eq!(current.courier_status, CourierStatus::Available as i32);
     let couriers = running.module.couriers();
     let availability = couriers
         .set_courier_availability(

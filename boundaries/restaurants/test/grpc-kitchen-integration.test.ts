@@ -28,6 +28,7 @@ import {
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { AcceptOrderHandler } from "../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
+import { ListActiveRestaurantOrdersHandler } from "../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import { ListIncomingOrdersHandler } from "../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import { MarkAssembledHandler } from "../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
@@ -190,6 +191,10 @@ describe("kitchen command RPCs over MongoDB", () => {
         accessControl,
         reader: board,
       }),
+      listActiveRestaurantOrders: new ListActiveRestaurantOrdersHandler({
+        accessControl,
+        reader: board,
+      }),
     });
   });
 
@@ -288,6 +293,54 @@ describe("kitchen command RPCs over MongoDB", () => {
         (entry) =>
           entry.restaurantOrder?.restaurantOrderId === first.restaurantOrderId,
       ),
+    );
+  });
+
+  test("ListActiveRestaurantOrders lists the kitchen work from receipt to READY by received_at", async () => {
+    const queued = await received("order-active-queued");
+    await delay(5);
+    const ready = await received("order-active-ready");
+    await delay(5);
+    const waiting = await received("order-active-received");
+    await delay(5);
+    const rejected = await received("order-active-rejected");
+    await service.acceptRestaurantOrder(queued, context);
+    await service.acceptRestaurantOrder(ready, context);
+    await service.startPreparation(ready, context);
+    await service.markRestaurantOrderAssembled(ready, context);
+    await service.markRestaurantOrderReady(ready, context);
+    await service.rejectRestaurantOrder(rejected, context);
+    const ids = new Set(
+      [queued, ready, waiting, rejected].map(
+        (order) => order.restaurantOrderId,
+      ),
+    );
+
+    const active = (
+      await service.listActiveRestaurantOrders({ restaurantId }, context)
+    ).orders.filter((order) =>
+      ids.has(order.restaurantOrder?.restaurantOrderId ?? ""),
+    );
+
+    assert.deepEqual(
+      active.map((order) => [
+        order.restaurantOrder?.restaurantOrderId,
+        order.restaurantOrder?.state,
+      ]),
+      [
+        [queued.restaurantOrderId, RestaurantOrderState.QUEUED],
+        [ready.restaurantOrderId, RestaurantOrderState.READY],
+        [waiting.restaurantOrderId, RestaurantOrderState.RECEIVED],
+      ],
+    );
+    const [first] = active;
+    assert.equal(first?.restaurantOrder?.orderId, "order-active-queued");
+    assert.equal(first?.restaurantOrder?.restaurantId, restaurantId);
+    assert.ok(first?.restaurantOrder?.expectedReadyAt !== undefined);
+    assert.ok(first?.receivedAt !== undefined);
+    assert.deepEqual(
+      first?.items.map((item) => [item.menuItemId, item.quantity]),
+      [["pho", 1]],
     );
   });
 

@@ -15,6 +15,10 @@ import type {
   ActivePreparationsReader,
 } from "../../applications/list-active-preparations/list-active-preparations.ts";
 import type {
+  ActiveRestaurantOrder,
+  ActiveRestaurantOrdersReader,
+} from "../../applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+import type {
   IncomingOrder,
   IncomingOrdersReader,
 } from "../../applications/list-incoming-orders/list-incoming-orders.ts";
@@ -166,7 +170,8 @@ export class MongoKitchenBoard
     IncomingOrdersReader,
     KitchenQueueReader,
     ActivePreparationsReader,
-    ReadyOrdersReader
+    ReadyOrdersReader,
+    ActiveRestaurantOrdersReader
 {
   readonly #collection: VersionedCollection<RestaurantOrderDocument>;
 
@@ -197,6 +202,35 @@ export class MongoKitchenBoard
       orderId: document.orderId,
       items: boardItems(document),
       receivedAt: document.timeline.receivedAt,
+      version: document.version,
+    }));
+  }
+
+  async listActiveOrders(
+    restaurantId: string,
+  ): Promise<readonly ActiveRestaurantOrder[]> {
+    const documents = await this.#collection.find(
+      {
+        restaurantId,
+        state: {
+          $in: [
+            RestaurantOrderState.Received,
+            RestaurantOrderState.Queued,
+            RestaurantOrderState.Preparing,
+            RestaurantOrderState.Assembled,
+            RestaurantOrderState.Ready,
+          ],
+        },
+      },
+      { sort: { "timeline.receivedAt": 1, _id: 1 } },
+    );
+    return documents.map((document) => ({
+      restaurantOrderId: document._id,
+      orderId: document.orderId,
+      state: document.state,
+      items: boardItems(document),
+      receivedAt: document.timeline.receivedAt,
+      expectedReadyAt: document.timeline.expectedReadyAt,
       version: document.version,
     }));
   }

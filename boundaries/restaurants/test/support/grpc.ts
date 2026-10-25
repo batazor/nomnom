@@ -21,6 +21,7 @@ import type { Subject } from "../../pkg/application/subject.ts";
 import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
+import type { ListActiveRestaurantOrdersHandler } from "../../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import { createKitchenWorld, ordersService } from "./kitchen.ts";
 
@@ -80,6 +81,11 @@ export const createWorld = async (
     subjects?: SubjectResolver | null;
     /** Query over a fake reader instead of the MongoDB one. */
     listIncomingOrders?: Pick<ListIncomingOrdersHandler, "execute">;
+    /** Query over a fake reader instead of the MongoDB one. */
+    listActiveRestaurantOrders?: Pick<
+      ListActiveRestaurantOrdersHandler,
+      "execute"
+    >;
   } = {},
 ) => {
   const world = await createKitchenWorld();
@@ -101,6 +107,8 @@ export const createWorld = async (
     reportPreparationFailure: world.reportFailure,
     getKitchenQueue: world.getKitchenQueue,
     listIncomingOrders: options.listIncomingOrders ?? notComposed,
+    listActiveRestaurantOrders:
+      options.listActiveRestaurantOrders ?? notComposed,
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,

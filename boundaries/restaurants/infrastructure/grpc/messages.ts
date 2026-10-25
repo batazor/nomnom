@@ -7,6 +7,7 @@ import type {
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type { RestaurantView } from "../../slices/restaurant/applications/restaurant-view.ts";
 import type { KitchenQueueEntry } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
+import type { ActiveRestaurantOrder } from "../../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import type { IncomingOrder } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-view.ts";
 import {
@@ -14,6 +15,7 @@ import {
   RestaurantSchema,
 } from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
+  ActiveRestaurantOrderSchema,
   IncomingOrderSchema,
   KitchenQueueEntrySchema,
   RestaurantOrderSchema,
@@ -94,6 +96,27 @@ export const toIncomingOrderMessage = (
       orderId: order.orderId,
       restaurantId,
       state: RestaurantOrderState.RECEIVED,
+      version: BigInt(order.version),
+    },
+    items: order.items.map((item) => ({
+      menuItemId: item.menuItemId,
+      quantity: item.quantity,
+      options: [...item.options],
+    })),
+    receivedAt: optionalTimestamp(order.receivedAt),
+  });
+
+export const toActiveRestaurantOrderMessage = (
+  restaurantId: string,
+  order: ActiveRestaurantOrder,
+) =>
+  create(ActiveRestaurantOrderSchema, {
+    restaurantOrder: {
+      restaurantOrderId: order.restaurantOrderId,
+      orderId: order.orderId,
+      restaurantId,
+      state: STATE_MESSAGES[order.state],
+      expectedReadyAt: optionalTimestamp(order.expectedReadyAt),
       version: BigInt(order.version),
     },
     items: order.items.map((item) => ({

@@ -161,6 +161,7 @@ test("one trace spans the gRPC call, the use case, the Outbox relay and the Kafk
       startPreparation: unused,
       getKitchenQueue: unused,
       listIncomingOrders: unused,
+      listActiveRestaurantOrders: unused,
       markRestaurantOrderAssembled: unused,
       markRestaurantOrderReady: unused,
       reportPreparationDelay: unused,

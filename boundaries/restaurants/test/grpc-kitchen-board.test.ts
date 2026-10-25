@@ -7,9 +7,14 @@ import { Code } from "@connectrpc/connect";
 import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
 import {
+  type ActiveRestaurantOrder,
+  ListActiveRestaurantOrdersHandler,
+} from "../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+import {
   type IncomingOrder,
   ListIncomingOrdersHandler,
 } from "../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
+import { RestaurantOrderState as DomainRestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   context,
   createWorld,
@@ -219,6 +224,95 @@ test("ListIncomingOrders without restaurant_id is INVALID_ARGUMENT", async () =>
 
   await assert.rejects(
     async () => service.listIncomingOrders({ restaurantId: "" }, context),
+    rejectsWith(Code.InvalidArgument),
+  );
+  assert.deepEqual(reads, []);
+});
+
+// ListActiveRestaurantOrders is read only from MongoDB, like ListIncomingOrders.
+const ACTIVE_RESTAURANT = "restaurant-active";
+const ACTIVE: readonly ActiveRestaurantOrder[] = [
+  {
+    restaurantOrderId: "restaurant-order-3",
+    orderId: "order-3",
+    state: DomainRestaurantOrderState.Assembled,
+    items: [{ menuItemId: "pho", quantity: 1, options: [] }],
+    receivedAt: RECEIVED_AT,
+    expectedReadyAt: new Date(RECEIVED_AT.getTime() + minutes(20)),
+    version: 4,
+  },
+];
+
+const createActiveService = async (subjects: SubjectResolver | null) => {
+  const reads: string[] = [];
+  const { service } = await createWorld({
+    subjects,
+    listActiveRestaurantOrders: new ListActiveRestaurantOrdersHandler({
+      accessControl: {
+        canOperateKitchen: async (subject, restaurantId) =>
+          subject.id === cook.id && restaurantId === ACTIVE_RESTAURANT,
+      },
+      reader: {
+        listActiveOrders: async (restaurantId) => {
+          reads.push(restaurantId);
+          return restaurantId === ACTIVE_RESTAURANT ? ACTIVE : [];
+        },
+      },
+    }),
+  });
+  return { service, reads };
+};
+
+test("ListActiveRestaurantOrders answers the orders with state, items, version, received_at and expected_ready_at", async () => {
+  const { service, reads } = await createActiveService(resolverOf(cook));
+
+  const response = await service.listActiveRestaurantOrders(
+    { restaurantId: ACTIVE_RESTAURANT },
+    context,
+  );
+
+  assert.deepEqual(reads, [ACTIVE_RESTAURANT]);
+  const [order] = response.orders;
+  assert.equal(response.orders.length, 1);
+  assert.equal(order?.restaurantOrder?.restaurantOrderId, "restaurant-order-3");
+  assert.equal(order?.restaurantOrder?.orderId, "order-3");
+  assert.equal(order?.restaurantOrder?.restaurantId, ACTIVE_RESTAURANT);
+  assert.equal(order?.restaurantOrder?.state, RestaurantOrderState.ASSEMBLED);
+  assert.equal(order?.restaurantOrder?.version, 4n);
+  assert.deepEqual(
+    order?.items.map((item) => [item.menuItemId, item.quantity]),
+    [["pho", 1]],
+  );
+  assert.ok(order?.receivedAt !== undefined);
+  assert.equal(
+    timestampDate(order.receivedAt).getTime(),
+    RECEIVED_AT.getTime(),
+  );
+  assert.ok(order.restaurantOrder?.expectedReadyAt !== undefined);
+});
+
+test("ListActiveRestaurantOrders without restaurant#operate_kitchen is PERMISSION_DENIED", async () => {
+  const { service, reads } = await createActiveService(
+    resolverOf({ type: "user", id: "stranger" }),
+  );
+
+  await assert.rejects(
+    async () =>
+      service.listActiveRestaurantOrders(
+        { restaurantId: ACTIVE_RESTAURANT },
+        context,
+      ),
+    rejectsWith(Code.PermissionDenied),
+  );
+  assert.deepEqual(reads, []);
+});
+
+test("ListActiveRestaurantOrders without restaurant_id is INVALID_ARGUMENT", async () => {
+  const { service, reads } = await createActiveService(resolverOf(cook));
+
+  await assert.rejects(
+    async () =>
+      service.listActiveRestaurantOrders({ restaurantId: "" }, context),
     rejectsWith(Code.InvalidArgument),
   );
   assert.deepEqual(reads, []);

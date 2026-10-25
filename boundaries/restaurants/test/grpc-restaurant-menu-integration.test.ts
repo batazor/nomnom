@@ -161,6 +161,7 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
       reportPreparationFailure: unused,
       getKitchenQueue: unused,
       listIncomingOrders: unused,
+      listActiveRestaurantOrders: unused,
       registerRestaurant: unused,
       assignStaff: unused,
       revokeStaff: unused,

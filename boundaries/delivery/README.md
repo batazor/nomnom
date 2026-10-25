@@ -82,7 +82,7 @@ RPC сервиса `DeliveryService`:
 
 | RPC | Use case | Ответ |
 | --- | --- | --- |
-| `GetCourierCurrentDelivery` | Get Courier Current Delivery | `Delivery` или пусто |
+| `GetCourierCurrentDelivery` | Get Courier Current Delivery | `courier_status` и `Delivery` (`ASSIGNED`/`PICKED_UP` с `pickup_address` и `dropoff_address`) или пусто; незарегистрированный курьер — `NOT_FOUND` |
 | `CreateDelivery` | Create Delivery (`order_id`, `pickup_address`, `dropoff_address`) | `delivery_id`, `created = false` для идентичного повтора; другие адреса — `ALREADY_EXISTS` |
 | `ReplanDelivery` | Replan Delivery (`order_id`) | `delivery_id`, `offered_courier_id` (пусто без кандидата); после Pickup — `FAILED_PRECONDITION` |
 | `CancelDelivery` | Cancel Delivery (`order_id`, `reason`) | `cancelled = true` (включая повтор) или `cancelled = false` + `rejection_reason` (`already_picked_up`, `already_closed`) — бизнес-результат, не gRPC-ошибка |

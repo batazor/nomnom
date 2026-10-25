@@ -1,5 +1,5 @@
-//! Get Courier Current Delivery: a courier reads its active Delivery —
-//! assigned or picked up — or the explicit absence of one. The query reads the
+//! Get Courier Current Delivery: a courier reads its status and its active
+//! Delivery — assigned or picked up — or the explicit absence of one. The query reads the
 //! `Delivery` model, so it belongs to the `delivery` slice; the courier's right
 //! is checked by the `courier` slice authorization port as before.
 
@@ -9,7 +9,7 @@ use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };
-use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
 use crate::slices::delivery::domains::delivery::{Address, DeliveryId, OrderId, State};
 
 use super::courier_id;
@@ -41,6 +41,7 @@ pub struct Input {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Output {
     pub courier_id: CourierId,
+    pub courier_status: CourierStatus,
     /// `None` when the courier has no assigned or picked up Delivery.
     pub current_delivery: Option<CurrentDeliveryView>,
 }
@@ -64,10 +65,11 @@ impl Handler<'_> {
             &CourierResource::Courier(courier_id.clone()),
         )?;
 
-        self.couriers.ensure_registered(&courier_id)?;
+        let courier_status = self.couriers.status(&courier_id)?;
         let current_delivery = self.current_deliveries.active_delivery_for(&courier_id)?;
         Ok(Output {
             courier_id,
+            courier_status,
             current_delivery,
         })
     }
@@ -78,7 +80,7 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::infrastructure::postgres::test_support::TestStore;
-    use crate::slices::courier::domains::courier::{Courier, CourierRepository, CourierStatus};
+    use crate::slices::courier::domains::courier::{Courier, CourierRepository};
     use crate::slices::delivery::domains::delivery::{Delivery, DeliveryRepository};
 
     fn subject() -> Subject {
@@ -129,6 +131,7 @@ mod tests {
 
         let output = handler.execute(&subject(), input()).expect("query");
 
+        assert_eq!(output.courier_status, CourierStatus::Busy);
         assert_eq!(
             output.current_delivery,
             Some(CurrentDeliveryView {
@@ -162,6 +165,7 @@ mod tests {
             handler.execute(&subject(), input()),
             Ok(Output {
                 courier_id: courier,
+                courier_status: CourierStatus::Busy,
                 current_delivery: None,
             })
         );

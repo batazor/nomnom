@@ -13,7 +13,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{
-    Courier, CourierError, CourierId, CourierRepository,
+    Courier, CourierError, CourierId, CourierRepository, CourierStatus,
 };
 
 /// Error of the courier busyness port; causes are the ones the aggregate and
@@ -53,8 +53,8 @@ impl From<CourierError> for CourierAssignmentError {
 
 /// Public contract of the `courier` slice for Courier Assignments.
 pub trait CourierAssignment {
-    /// Checks that the courier is registered without reading its state.
-    fn ensure_registered(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError>;
+    /// Reads the status of a registered courier without changing it.
+    fn status(&self, courier_id: &CourierId) -> Result<CourierStatus, CourierAssignmentError>;
 
     /// Checks that the courier may receive a new Delivery Offer or Assignment
     /// without changing its state.
@@ -70,8 +70,8 @@ pub trait CourierAssignment {
 /// Every courier repository provides the port: the change is saved through
 /// the same repository, inside whatever Unit of Work is active.
 impl<R: CourierRepository + ?Sized> CourierAssignment for R {
-    fn ensure_registered(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
-        load(self, courier_id).map(drop)
+    fn status(&self, courier_id: &CourierId) -> Result<CourierStatus, CourierAssignmentError> {
+        Ok(load(self, courier_id)?.status())
     }
 
     fn ensure_available(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {

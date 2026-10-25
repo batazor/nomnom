@@ -309,9 +309,9 @@ impl<'a> RecordingAssignment<'a> {
 }
 
 impl CourierAssignment for RecordingAssignment<'_> {
-    fn ensure_registered(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
-        self.record("ensure_registered", courier_id);
-        self.store.ensure_registered(courier_id)
+    fn status(&self, courier_id: &CourierId) -> Result<CourierStatus, CourierAssignmentError> {
+        self.record("status", courier_id);
+        self.store.status(courier_id)
     }
 
     fn ensure_available(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {

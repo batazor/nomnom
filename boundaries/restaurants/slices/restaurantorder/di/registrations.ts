@@ -28,6 +28,7 @@ import type {
 import { CancelRestaurantOrderHandler } from "../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import { GetKitchenQueueHandler } from "../applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { KitchenCommandDependencies } from "../applications/kitchen-command.ts";
+import { ListActiveRestaurantOrdersHandler } from "../applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import { ListIncomingOrdersHandler } from "../applications/list-incoming-orders/list-incoming-orders.ts";
 import { MarkAssembledHandler } from "../applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
@@ -108,6 +109,7 @@ export interface RestaurantOrderCradle {
   readonly kitchenBoard: MongoKitchenBoard;
   readonly getKitchenQueue: GetKitchenQueueHandler;
   readonly listIncomingOrders: ListIncomingOrdersHandler;
+  readonly listActiveRestaurantOrders: ListActiveRestaurantOrdersHandler;
 }
 
 type Cradle = RestaurantOrderDependencies & RestaurantOrderCradle;
@@ -241,6 +243,13 @@ export const registerRestaurantOrder = (
     listIncomingOrders: asFunction(
       ({ kitchenBoard, kitchenAccessControl }: Cradle) =>
         new ListIncomingOrdersHandler({
+          accessControl: kitchenAccessControl,
+          reader: kitchenBoard,
+        }),
+    ).singleton(),
+    listActiveRestaurantOrders: asFunction(
+      ({ kitchenBoard, kitchenAccessControl }: Cradle) =>
+        new ListActiveRestaurantOrdersHandler({
           accessControl: kitchenAccessControl,
           reader: kitchenBoard,
         }),

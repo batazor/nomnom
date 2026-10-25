@@ -19,7 +19,7 @@ use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
 use crate::slices::courier::di::{CourierDependencies, CourierPorts};
-use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::courier::domains::courier::{CourierId, CourierRepository, CourierStatus};
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
 use crate::slices::delivery::applications::dispatch_deliveries::WaitingDeliveries;
@@ -326,8 +326,8 @@ impl ExpiredDeliveryOffers for ObservedStore {
 }
 
 impl CourierAssignment for ObservedStore {
-    fn ensure_registered(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
-        self.inner.ensure_registered(courier_id)
+    fn status(&self, courier_id: &CourierId) -> Result<CourierStatus, CourierAssignmentError> {
+        self.inner.status(courier_id)
     }
 
     fn ensure_available(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
