@@ -12,9 +12,14 @@ const publicSchemaPath = resolve(
   process.env.GRAPHQL_SCHEMA ?? "../bff/plugins/bff/src/schema.graphql",
 );
 
-// Origins the built UI talks to: the public BFF and the optional Faro collector.
+// Origins the built UI talks to: the public BFF, the optional Faro collector
+// and the optional dev token issuer.
 function connectOrigins(env: Record<string, string>): string[] {
-  return [env.VITE_PUBLIC_GRAPHQL_URL, env.VITE_FARO_URL]
+  return [
+    env.VITE_PUBLIC_GRAPHQL_URL,
+    env.VITE_FARO_URL,
+    env.VITE_DEV_TOKENS_URL,
+  ]
     .filter(Boolean)
     .map((url) => new URL(url).origin);
 }
