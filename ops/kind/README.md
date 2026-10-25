@@ -26,7 +26,8 @@ make kind-down
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
 | `KIND_CLUSTER_NAME` | `nomnom-test` | имя кластера; контекст всегда `kind-${KIND_CLUSTER_NAME}` |
-| `BFF_HOST_PORT` | `18080` | host-порт для NodePort `30080` публичного API BFF |
+| `BFF_HOST_PORT` | `18080` | host-порт для NodePort `30080` будущего публичного API BFF (сейчас BFF не публикуется) |
+| `BFF_FORWARD_PORT` | `18090` | локальный порт `kubectl port-forward` к BFF в проверке 7 |
 | `KIND_KEEP` | `0` | `1` — не удалять кластер после `make kind-e2e` |
 | `PRELOAD_PLATFORM_IMAGES` | `1` | загружать образы платформы из Docker-кеша хоста вместо pull на узле |
 
@@ -80,6 +81,24 @@ make kind-down
 - Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в
   `nomnom-observability` и OTLP метрик `orders`/`orders-consumer` в Grafana Cloud free tier;
   настройка и лимиты — [`ops/grafana-cloud`](../grafana-cloud/README.md).
+- BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)) — artifact
+  `nomnom/bff` ([`boundaries/bff/Dockerfile`](../../boundaries/bff/Dockerfile): Cosmo Router с
+  закреплённым SHA-256) и последний release `bff` в `nomnom-bff` с [`values/bff.yaml`](values/bff.yaml):
+  ServiceAccount `bff`, контексты только через internal gateway, projected tokens `nomnom.orders` и
+  `nomnom.restaurants`. Наружу BFF не опубликован; проверка обращается к нему через port-forward.
+  `scripts/bff-identity.sh` в `before`-hook рядом с `identity-jwks.sh`:
+  - создаёт ключ подписи user assertions один раз на кластер — Secret `bff-assertion-key`
+    (`nomnom-bff`, kid `nomnom-bff-kind`); ключ хранится только в Secret;
+  - при каждом запуске переиздаёт из него ConfigMap `bff-jwks` в namespaces четырёх контекстов
+    (их values: `identity.userJwksConfigMap: bff-jwks`, `userIssuer: nomnom-bff`, `userDelegates: bff`;
+    `nomnom-bff/bff` — в allowlist `orders` и `restaurants`);
+  - публикует ConfigMap `idp-jwks` тестового identity provider из `tests/identity/fixtures`.
+    **Только для kind**: реального provider нет, проверка подписывает access tokens ключом
+    `tests/identity/fixtures/idp-signing-key.pem` (`scripts/mint-jwt.py`).
+
+  На кластере, где ServiceAccount `bff` создала прежняя фикстура, скрипт передаёт его release `bff`.
+  Фикстура `grpc-caller` теперь работает под своим ServiceAccount `nomnom-bff/grpc-caller`: он
+  допущен allowlist `orders`, но не делегат.
 - `scripts/verify.sh` выполняет проверки, `scripts/diagnostics.sh` собирает pod logs, events,
   состояние Gateway API, `cilium-dbg status` и DROPPED flows Hubble; `scripts/e2e.sh`
   связывает шаги и собирает диагностику при ошибке.
@@ -99,7 +118,7 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 | Неймспейс | Содержимое |
 | --- | --- |
 | `nomnom-orders`, `nomnom-restaurants`, `nomnom-delivery`, `nomnom-payments` | приложения из Helm charts; в `orders` и `restaurants` — pod проверок `net-probe` (curl) |
-| `nomnom-bff` | зарезервирован: образ BFF ещё не определён (ADR 10) |
+| `nomnom-bff` | BFF (release `bff`, ServiceAccount `bff`), Secret `bff-assertion-key`, ConfigMap `idp-jwks`; pod проверок `grpc-caller` (curl, ServiceAccount `grpc-caller`) |
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура для ingress-проверок |
@@ -166,13 +185,14 @@ curl --cacert "$(ops/kind/scripts/local-ca.sh)" --resolve webhooks.nomnom.localh
 | 5 | deadline вызывающего соблюдается backend'ом (`context deadline exceeded` от orders, а не timeout Envoy); retries только у идемпотентных методов | deadline выполняется; при недоступном SpiceDB (Cilium deny `fixtures/deny-orders-spicedb.yaml`) `ListCustomerOrders` повторяется ровно 2 раза, `RequestOrderCancellation` — ни разу (статистика Envoy `upstream_rq_retry`); route timeout 300 s задан `BackendTrafficPolicy` |
 | 6 | инфраструктурные подключения под политиками | DNS, `orders` → свой PostgreSQL, Kafka, Temporal, Kafka из других контекстов, запрет чужой БД и Temporal для не-`orders` выполняются; Alloy — только с `GRAFANA_CLOUD=1`; MongoDB `restaurants` **заблокирована**: приложение её ещё не использует |
 | 6a | после применения политик pod Available, без рестартов и проваленных kubelet-проб (Envoy Proxy, CoreDNS, Cilium) | выполняется; пробы приложений выключены до health contract (ADR 12) |
-| E2E | через публичный API BFF | **заблокирована**: образ BFF не определён (ADR 10); port mapping подготовлен |
+| 7 | BFF насквозь (ADR 32), через port-forward под политиками: BFF Available, probes `/health/live` и `/health/ready`; из `nomnom-bff` закрыты прямой `orders` и PostgreSQL; `bffInfo`; `order(id)` без `Authorization` — ошибка `Unauthenticated` (AC-576); с access token тестового provider для отсутствующего заказа — `{"data":{"order":null}}` без ошибок (AC-575), log `orders` — `user assertion accepted: delegate=bff`; тот же user assertion (ключ BFF, aud `nomnom.orders`) от `grpc-caller` — `UNAUTHENTICATED`, log — `service is not an allowed delegate` | выполняется |
 
 ### Технические подключения
 
 | Назначение | Источник → получатель | Порт |
 | --- | --- | --- |
 | Kubelet probes | узел → pod | порт пробы; разрешено Cilium для host-трафика, проверяется тестом 6a |
+| Проверка 7 → BFF | `kubectl port-forward` → pod BFF | 3010; поток идёт через kubelet внутрь pod и ingress-политикой не ограничивается; egress BFF — только базовые политики неймспейса (DNS, internal gateway, telemetry) |
 | DNS | pod → CoreDNS | UDP/TCP 53 |
 | Telemetry | приложения → Alloy | 4317 OTLP gRPC, 4318 OTLP HTTP, 4040 Pyroscope |
 | Метрики приложений | Alloy → pod | порт с именем `metrics` |

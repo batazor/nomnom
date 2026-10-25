@@ -60,17 +60,15 @@ Runtime-образ полностью задаётся через values и не
 | `image.tag` | `""` | Tag сборки. Пустое значение означает `latest` — задавайте явно. |
 | `image.pullPolicy` | `IfNotPresent` | Для kind позволяет использовать локально загруженный образ. |
 
-Пока образ BFF не определён, локальной сборки для kind нет. После появления образа он
-загружается в kind командой `kind load docker-image <image>:<tag>` и задаётся через
-`--set image.repository=<image> --set image.tag=<tag>`. Если тестовое окружение не должно
-обращаться к registry вовсе, задайте `--set image.pullPolicy=Never`. kind-specific значения в
-базовый chart не входят; при необходимости они оформляются отдельным файлом вида
-`ops/helm/values-kind.yaml`.
+Образ собирает [`Dockerfile`](../Dockerfile) (см. README BFF, «Статус контейнеризации»). В kind
+его собирает и загружает Skaffold, а values окружения лежат в
+[`ops/kind/values/bff.yaml`](../../../ops/kind/values/bff.yaml) (`pullPolicy: Never`); в базовый chart
+kind-specific значения не входят.
 
 ## Конфигурация
 
-Приложение слушает порт `3010` (переменная `LISTEN_ADDR`); `service.targetPort` должен
-совпадать с портом процесса. Несекретная конфигурация передаётся через `env` и попадает в
+Router в образе слушает `0.0.0.0:3010` ([`config.production.yaml`](../config.production.yaml));
+`service.targetPort` должен совпадать с портом процесса. Несекретная конфигурация передаётся через `env` и попадает в
 `ConfigMap`:
 
 ```yaml
@@ -104,63 +102,28 @@ Secret-ресурсы chart не создаёт.
 ## Security
 
 По умолчанию контейнер запускается с `runAsNonRoot: true`, `allowPrivilegeEscalation: false`,
-сбросом всех capabilities и seccomp profile `RuntimeDefault`. `runAsUser` не задан: UID runtime-образа BFF неизвестен, пока образ не определён. После его появления UID переносится в `podSecurityContext`.
+сбросом всех capabilities и seccomp profile `RuntimeDefault`; `podSecurityContext.runAsUser` и
+`runAsGroup` — 65532 (`nonroot` образа distroless).
 
 `readOnlyRootFilesystem` выключен и доступен через values до проверки поведения Cosmo Router и plugin.
 
 ## Probes
 
-Liveness и readiness probes поддерживаются chart, но отключены: приложение пока не реализует
-health contract, а `/hello` таким контрактом не является. Contract определён в
-[документации cloud-native runtime](../../../docs/cloud-native-runtime.md) и
-[ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md): health обслуживается на
-отдельном техническом порту `metrics`, а не на бизнес-порту. Probes включаются сразу после
-реализации contract в приложении; объявление технического порта, `startupProbe` и
-`terminationGracePeriodSeconds` добавляются в chart тем же изменением:
-
-```yaml
-startupProbe:
-  enabled: true
-  httpGet:
-    path: /health/startup
-    port: metrics
-livenessProbe:
-  enabled: true
-  httpGet:
-    path: /health/live
-    port: metrics
-readinessProbe:
-  enabled: true
-  httpGet:
-    path: /health/ready
-    port: metrics
-```
-
-Приложение без HTTP-стека использует `grpc: { port: <номер технического порта>, service: <startup|liveness|readiness> }`
-вместо `httpGet`; `grpc` probe Kubernetes принимает только числовой порт.
-
-BFF использует Cosmo Router, который сам обслуживает health endpoints. Если вынести их на
-технический порт средствами Cosmo Router нельзя, расхождение фиксируется как явное исключение
-в документации BFF.
+Liveness и readiness включены и используют штатные endpoints Cosmo Router: `/health/live` и
+`/health/ready` (execution config и plugin загружены). Router обслуживает их только на порту
+GraphQL, поэтому probes идут на порт `http`, а не на технический порт `metrics` из
+[ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md) — это явное исключение для BFF.
+`/health/startup` у Router нет; старт Router занимает доли секунды, поэтому `startupProbe` не задан.
 
 ## Ресурсы
 
 `resources.requests` и `resources.limits` не заданы: профиль потребления ещё не измерен.
 Значения задаются environment values после нагрузочной проверки.
 
-## Статус образа BFF
+## Образ BFF
 
-Образ всего BFF (Cosmo Router, plugin, execution config) ещё не определён: по
-[ADR 10](../../../docs/adr/0010-использовать-multi-stage-container-builds.md) его Dockerfile отложен до
-pinning версии и checksum Cosmo Router. Существующий `plugins/bff/Dockerfile` собирает только
-plugin и не является образом BFF. Поэтому `image.repository` по умолчанию пуст, а
-`helm upgrade --install` даст Deployment, который не запустится до задания образа.
-
-При появлении образа нужно учесть:
-
-- `config.yaml` задаёт `listen_addr: localhost:3010`; в контейнере router должен слушать
-  `0.0.0.0:3010` (production `config.yaml` или переменная `LISTEN_ADDR`);
-- `dev_mode` в production выключается;
-- UID runtime-пользователя образа переносится в `podSecurityContext.runAsUser`, иначе проверка
-  `runAsNonRoot` не сможет подтвердить непривилегированного пользователя по имени;
-- токены control plane и composition передаются внешним `Secret`, а не values.
+Образ всего BFF (Cosmo Router с закреплёнными версией и SHA-256, plugin, execution config)
+собирает [`Dockerfile`](../Dockerfile) по
+[ADR 10](../../../docs/adr/0010-использовать-multi-stage-container-builds.md). Токены control plane и
+composition в образ не попадают: композиция локальная; если они появятся, они передаются внешним
+`Secret`, а не values.

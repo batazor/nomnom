@@ -7,6 +7,9 @@ env:
   KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
   TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
   TEMPORAL__NAMESPACE: default
+  # Config orders требует адрес gateway при fulfillment neighbours "grpc" (по умолчанию) и
+  # для migrate init container тоже: без него consumer не стартует.
+  INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
 
 # ADR 8: Inbox, Order и Outbox consumer'а — в PostgreSQL orders (Secret создаёт
 # scripts/postgres.sh). Миграции выполняет init container release orders и этого release.

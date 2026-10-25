@@ -22,6 +22,11 @@ identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
   serviceAccounts: nomnom-orders/orders-worker=orders-worker
+  # ADR 32: user assertions BFF (ConfigMap bff-jwks создаёт scripts/bff-identity.sh);
+  # передавать user subject может только service bff.
+  userJwksConfigMap: bff-jwks
+  userIssuer: nomnom-bff
+  userDelegates: bff
 
 # ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт scripts/authz.sh.
 spicedb:

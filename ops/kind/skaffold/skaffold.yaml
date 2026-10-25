@@ -97,14 +97,17 @@ build:
       context: ../../../boundaries/payments
       docker:
         target: runtime
+    # BFF (ADR 10): Cosmo Router с закреплённым SHA-256, router plugin и execution config.
+    - image: nomnom/bff
+      context: ../../../boundaries/bff
+      docker:
+        target: runtime
 manifests:
+  # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) применяет только before-hook:
+  # rawYaml добавляет pod template label skaffold.dev/run-id, и каждый deploy перезапускал бы
+  # их с пустыми данными уже после миграций приложений.
   rawYaml:
     - ../manifests/base/namespaces.yaml
-    - ../manifests/authz/spicedb.yaml
-    - ../manifests/data/postgres-orders.yaml
-    - ../manifests/data/postgres-payments.yaml
-    - ../manifests/data/postgres-delivery.yaml
-    - ../manifests/data/mongodb-restaurants.yaml
     - ../manifests/gateway/gateway.yaml
     - ../manifests/certs/issuers.yaml
     - ../manifests/gateway/public-gateway.yaml
@@ -139,16 +142,16 @@ deploy:
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
                   -l gateway.envoyproxy.io/owning-gateway-name=public
                 test "$(k -n envoy-gateway-system get service internal-gateway -o jsonpath='{.spec.type}')" = ClusterIP
-  # Bounded contexts ставятся собственными charts (ADR 12) с values тестового окружения.
-  # BFF chart не устанавливается: образ BFF ещё не определён (ADR 10).
+  # Bounded contexts и BFF ставятся собственными charts (ADR 12) с values тестового окружения.
   helm:
     # Releases независимы и ставятся параллельно; порядок задаёт dependsOn.
     concurrency: 0
     hooks:
       before:
         # Skaffold применяет rawYaml после helm, поэтому всё, что charts читают при старте,
-        # создаётся здесь: namespaces, JWKS (ADR 27), bootstrap и preshared key SpiceDB
-        # (ADR 18), Secrets и PostgreSQL orders, payments и delivery, MongoDB restaurants (ADR 8, ADR 31). Повторный rawYaml идемпотентен.
+        # создаётся здесь: namespaces, JWKS (ADR 27), ключ и JWKS BFF, JWKS тестового identity
+        # provider (ADR 32), bootstrap и preshared key SpiceDB
+        # (ADR 18), Secrets и PostgreSQL orders, payments и delivery, MongoDB restaurants (ADR 8, ADR 31).
         - host:
             command:
               - sh
@@ -158,6 +161,7 @@ deploy:
                 k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
                 k apply -f ../manifests/base/namespaces.yaml
                 ../scripts/identity-jwks.sh "$SKAFFOLD_KUBE_CONTEXT"
+                ../scripts/bff-identity.sh "$SKAFFOLD_KUBE_CONTEXT"
                 ../scripts/authz.sh "$SKAFFOLD_KUBE_CONTEXT"
                 ../scripts/postgres.sh "$SKAFFOLD_KUBE_CONTEXT"
                 ../scripts/mongodb.sh "$SKAFFOLD_KUBE_CONTEXT" secrets
@@ -275,6 +279,17 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
           image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
+      # BFF (ADR 32): контексты только через internal gateway; access tokens тестового identity
+      # provider, ключ assertions — scripts/bff-identity.sh. Последний release: индексы в
+      # patches профилей не меняются.
+      - name: bff
+        chartPath: ../../../boundaries/bff/ops/helm
+        namespace: nomnom-bff
+        createNamespace: true
+        valuesFiles: [../values/bff.yaml]
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_bff}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_bff}}"
 profiles:
   # make kind-deploy GRAFANA_CLOUD=1: метрики orders и orders-consumer → Alloy → Grafana Cloud.
   # Индексы releases: 0 — orders, 4 — orders-consumer; при изменении порядка поправить patches.

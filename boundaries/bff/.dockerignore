@@ -1,0 +1,27 @@
+.git
+.gitignore
+.env
+.env.*
+.envrc
+.netrc
+.npmrc
+*.key
+*.pem
+*.log
+Dockerfile*
+.dockerignore
+node_modules/
+release/
+# Local plugin builds; the image builds the plugin itself.
+plugins/bff/bin/
+plugins/bff/Dockerfile
+# Not part of the image: editing them must not change inputDigest and rebuild BFF.
+ops/
+docs/
+*.md
+Makefile
+plugins/bff/Makefile
+config.yaml
+config.json
+.adr-dir
+**/*_test.go

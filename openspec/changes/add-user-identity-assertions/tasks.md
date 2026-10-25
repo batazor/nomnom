@@ -20,9 +20,9 @@
 
 ## 4. Развёртывание
 
-- [ ] 4.1 Отложено до развёртывания BFF в kind (у BFF нет образа, ADR 10; в skaffold нет его release). `ops/kind/scripts/bff-identity.sh`: ключ BFF один раз на кластер, Secret `bff-assertion-key`, ConfigMap `bff-jwks`; вызов из skaffold рядом с `identity-jwks.sh`; values kind контекстов (`userJwksConfigMap`, `userIssuer`, `userDelegates: bff`) и BFF.
+- [x] 4.1 Выполнено change `deploy-bff-in-kind`. `ops/kind/scripts/bff-identity.sh`: ключ BFF один раз на кластер, Secret `bff-assertion-key`, ConfigMap `bff-jwks`; вызов из skaffold рядом с `identity-jwks.sh`; values kind контекстов (`userJwksConfigMap`, `userIssuer`, `userDelegates: bff`) и BFF.
 - [x] 4.2 Helm charts контекстов: `identity.userJwksConfigMap`, `identity.userIssuer`, `identity.userDelegates` → `IDENTITY__USER_*`; Helm BFF: Secret ключа, projected tokens для audience контекстов, конфигурация provider; `helm lint` и `helm template` всех charts.
-- [ ] 4.3 Отложено вместе с 4.1. Проверить в kind: вызов `orders` от BFF с assertion даёт `Subject{user}` (по log), тот же assertion от другого workload — `UNAUTHENTICATED`.
+- [x] 4.3 Выполнено change `deploy-bff-in-kind` (`make kind-test`, проверки 7.7–7.10). Проверить в kind: вызов `orders` от BFF с assertion даёт `Subject{user}` (по log), тот же assertion от другого workload — `UNAUTHENTICATED`.
 
 ## 5. Документация и проверка
 
@@ -31,7 +31,6 @@
 
 ## Workflow follow-up
 
-- Развернуть BFF в kind (образ Router + plugin) и выполнить 4.1 и 4.3.
 - Resolver `order(id)` в BFF поверх interceptor.
 - Выбор identity provider и login flow браузера.
 - После review реализации архивировать change через OpenSpec archive workflow.

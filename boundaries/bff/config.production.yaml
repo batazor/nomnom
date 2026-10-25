@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/wundergraph/cosmo/main/router/pkg/config/config.schema.json
+#
+# Runtime configuration of the BFF container image (Dockerfile copies it to /app/config.yaml).
+# Local development keeps config.yaml with dev_mode and the playground.
+
+version: "1"
+
+# All interfaces of the Pod; the Service and kubelet probes reach the Router here.
+listen_addr: 0.0.0.0:3010
+
+dev_mode: false
+
+# Health endpoints of the Router on the same listener (kubelet probes):
+# /health/live — the process serves HTTP, /health/ready — the execution config and plugins
+# are loaded.
+liveness_check_path: /health/live
+readiness_check_path: /health/ready
+
+playground:
+  enabled: false
+
+introspection:
+  enabled: false
+
+json_log: true
+log_level: info
+
+execution_config:
+  file:
+    path: config.json
+
+plugins:
+  enabled: true
+  path: plugins
+
+# No Cosmo control plane: no usage metrics and no telemetry exporters by default.
+# Exporters are configured when the observability of BFF is decided.
+graphql_metrics:
+  enabled: false
+
+telemetry:
+  tracing:
+    enabled: false
+  metrics:
+    otlp:
+      enabled: false
+    prometheus:
+      enabled: false
+
+# ADR 32: the plugin verifies the customer's access token itself, so the
+# Router forwards Authorization to it as gRPC metadata authorization. No other
+# client header reaches the plugin.
+headers:
+  all:
+    request:
+      - op: propagate
+        named: Authorization

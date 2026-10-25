@@ -24,7 +24,14 @@ env:
 identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  serviceAccounts: nomnom-bff/bff=bff
+  # grpc-caller — фикстура проверок (manifests/fixtures/net-probe.yaml): допущенный
+  # workload, но не делегат; с ним проверяется отказ assertion от чужого workload.
+  serviceAccounts: nomnom-bff/bff=bff,nomnom-bff/grpc-caller=grpc-caller
+  # ADR 32: user assertions BFF (ConfigMap bff-jwks создаёт scripts/bff-identity.sh);
+  # передавать user subject может только service bff.
+  userJwksConfigMap: bff-jwks
+  userIssuer: nomnom-bff
+  userDelegates: bff
 
 # ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт scripts/authz.sh.
 spicedb:
