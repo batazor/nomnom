@@ -12,14 +12,12 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
-	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/neighbours"
@@ -29,9 +27,25 @@ import (
 	"nomnom/orders/slices/order/infrastructure/system"
 )
 
-// ProviderSet собирает компоненты слайса order. Provider'ы handlers
-// добавляются сюда вместе с реализацией соответствующих use cases.
-var ProviderSet = wire.NewSet(NewPostgresStore, NewStore, NewAuthorizer, NewCancellationPolicy, NewCatalog, NewClock, NewOrderIDs, NewModule)
+// Provider sets слайса order. Composition root процесса (корневой di) выбирает
+// нужные: инфраструктура — PostgresSet и TelemetrySet, use cases процесса —
+// APISet, ConsumerSet или WorkerSet. Новый порт добавляется полем в структуру
+// зависимостей набора и provider'ом; позиционных конструкторов нет.
+var (
+	// PostgresSet — общий PostgreSQL store процесса (ADR 8) и его роль портов Store.
+	PostgresSet = wire.NewSet(NewPostgresStore, wire.Bind(new(Store), new(*postgres.Store)))
+	// TelemetrySet — инструменты телеметрии use cases, общие для handlers процесса.
+	TelemetrySet = wire.NewSet(observability.UseCases)
+	// APISet — command и query use cases cmd/orders и их порты, кроме Workflow:
+	// Temporal client выбирает composition root.
+	APISet = wire.NewSet(NewAuthorizer, NewCancellationPolicy, NewCatalog, NewClock, NewOrderIDs,
+		wire.Struct(new(Dependencies), "*"), NewModule)
+	// ConsumerSet — handlers orders-consumer без Notifier workflow: его Temporal
+	// client открывает KafkaConsumer.Start.
+	ConsumerSet = wire.NewSet(NewCourierRelationships, wire.Struct(new(Consumer), "*"))
+	// WorkerSet — Activities fulfillment orders-worker и адаптеры соседних контекстов.
+	WorkerSet = wire.NewSet(NewNeighbours, NewActivities)
+)
 
 // Store — persistence-порты слайса: Unit of Work, repository, Inbox, Outbox,
 // idempotency keys, read models и authorization revision. В процессах — общий
@@ -87,14 +101,6 @@ func NewClock() application.Clock { return system.Clock{} }
 // NewOrderIDs — генератор UUIDv7 идентификаторов Order.
 func NewOrderIDs() placeorder.IDGenerator { return system.OrderIDs{} }
 
-// Module — собранный слайс order, который получает composition root процесса.
-type Module struct {
-	PlaceOrder               application.Handler[placeorder.Input, placeorder.Result]
-	RequestOrderCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
-	GetOrder                 application.Handler[getorder.Query, getorder.OrderView]
-	ListCustomerOrders       application.Handler[listcustomerorders.Query, listcustomerorders.Page]
-}
-
 // NewPostgresStore — общий store API, worker'а, consumer'а и forwarder'а;
 // без POSTGRES__DSN процесс не стартует. Pool подключается лениво.
 func NewPostgresStore(cfg config.PostgresConfig) (*postgres.Store, func(), error) {
@@ -104,9 +110,6 @@ func NewPostgresStore(cfg config.PostgresConfig) (*postgres.Store, func(), error
 	}
 	return store, store.Close, nil
 }
-
-// NewStore отдаёт PostgreSQL store как порты слайса.
-func NewStore(store *postgres.Store) Store { return store }
 
 // NewAuthorizer connects the authorization ports to SpiceDB (ADR 18). The
 // endpoint is required: a process that checks permissions does not start
@@ -141,43 +144,4 @@ func NewCourierRelationships(cfg config.SpiceDBConfig) (CourierRelationships, fu
 		return nil, nil, err
 	}
 	return spicedb.NewAuthorizer(client, nil, cfg.Timeout), func() { _ = client.Close() }, nil
-}
-
-// NewModule собирает handlers под декоратором телеметрии use cases. Get Order
-// и Request Order Cancellation получают один экземпляр cancellation policy.
-func NewModule(
-	store Store,
-	authorizer Authorizer,
-	policy CancellationPolicy,
-	catalog placeorder.Catalog,
-	workflow Workflow,
-	clock application.Clock,
-	ids placeorder.IDGenerator,
-) *Module {
-	uc := observability.UseCases()
-	placeOrder := placeorder.NewHandler(placeorder.Dependencies{
-		UnitOfWork:      store,
-		Orders:          store,
-		Outbox:          store,
-		IdempotencyKeys: store,
-		Catalog:         catalog,
-		Relationships:   authorizer,
-		Revisions:       store,
-		IDs:             ids,
-		Clock:           clock,
-		Workflow:        workflow,
-	})
-	requestCancellation := requestordercancellation.NewHandler(requestordercancellation.Dependencies{
-		Authorizer: authorizer,
-		Orders:     store,
-		Policy:     policy,
-		Clock:      clock,
-		Workflow:   workflow,
-	})
-	return &Module{
-		PlaceOrder:               telemetry.Instrument(uc, observability.PlaceOrder, placeOrder.Handle),
-		RequestOrderCancellation: telemetry.Instrument(uc, observability.RequestOrderCancellation, requestCancellation.Handle),
-		GetOrder:                 telemetry.Instrument(uc, observability.GetOrder, getorder.NewHandler(authorizer, store, policy).Handle),
-		ListCustomerOrders:       telemetry.Instrument(uc, observability.ListCustomerOrders, listcustomerorders.NewHandler(authorizer, store).Handle),
-	}
 }

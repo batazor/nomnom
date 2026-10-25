@@ -1,5 +1,7 @@
-// Package di — composition root процесса orders: собирает слайсы и
-// инфраструктуру в App и владеет их запуском и остановкой.
+// Package di — composition roots процессов orders: Wire injectors (wire.go)
+// собирают слайсы и инфраструктуру в App, TemporalWorker, KafkaConsumer,
+// OutboxForwarder, RelationshipReconciler и Migrator, а те владеют запуском и
+// остановкой своих ресурсов.
 package di
 
 import (

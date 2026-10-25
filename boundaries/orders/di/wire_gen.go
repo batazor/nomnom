@@ -7,9 +7,11 @@
 package di
 
 import (
+	"github.com/google/wire"
 	"nomnom/orders/infrastructure/grpc"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/slices/order/di"
+	"nomnom/orders/slices/order/infrastructure/observability"
 )
 
 // Injectors from wire.go:
@@ -21,9 +23,8 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	diStore := di.NewStore(store)
 	spiceDBConfig := cfg.SpiceDB
-	authorizer, cleanup2, err := di.NewAuthorizer(spiceDBConfig, diStore)
+	authorizer, cleanup2, err := di.NewAuthorizer(spiceDBConfig, store)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -47,7 +48,18 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	workflow := NewFulfillmentWorkflow(client, fulfillmentConfig)
 	clock := di.NewClock()
 	idGenerator := di.NewOrderIDs()
-	module := di.NewModule(diStore, authorizer, v, catalog, workflow, clock, idGenerator)
+	useCases := observability.UseCases()
+	dependencies := di.Dependencies{
+		Store:      store,
+		Authorizer: authorizer,
+		Policy:     v,
+		Catalog:    catalog,
+		Workflow:   workflow,
+		Clock:      clock,
+		IDs:        idGenerator,
+		Telemetry:  useCases,
+	}
+	module := di.NewModule(dependencies)
 	identityConfig := cfg.Identity
 	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
 	if err != nil {
@@ -71,12 +83,16 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	diStore := di.NewStore(store)
-	activities, cleanup2, err := NewActivities(diStore, cfg)
+	fulfillmentConfig := cfg.Fulfillment
+	internalGatewayConfig := cfg.InternalGateway
+	identityConfig := cfg.Identity
+	neighbours, cleanup2, err := di.NewNeighbours(fulfillmentConfig, internalGatewayConfig, identityConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
+	useCases := observability.UseCases()
+	activities := di.NewActivities(store, neighbours, useCases)
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
 		cleanup2()
@@ -90,14 +106,19 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	diStore := di.NewStore(store)
 	spiceDBConfig := cfg.SpiceDB
-	v, cleanup2, err := di.NewCourierRelationships(spiceDBConfig)
+	courierRelationships, cleanup2, err := di.NewCourierRelationships(spiceDBConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	kafkaConsumer := NewKafkaConsumer(cfg, diStore, v)
+	useCases := observability.UseCases()
+	consumer := di.Consumer{
+		Store:         store,
+		Relationships: courierRelationships,
+		Telemetry:     useCases,
+	}
+	kafkaConsumer := NewKafkaConsumer(cfg, consumer)
 	return kafkaConsumer, func() {
 		cleanup2()
 		cleanup()
@@ -134,3 +155,31 @@ func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), e
 		cleanup()
 	}, nil
 }
+
+func InitializeMigrator(cfg config.Config) *Migrator {
+	postgresConfig := cfg.Postgres
+	migrator := NewMigrator(postgresConfig)
+	return migrator
+}
+
+// wire.go:
+
+// Provider sets процессов orders объявлены здесь, под тегом wireinject: их
+// использует только генератор. Инфраструктура слайса (PostgreSQL, SpiceDB
+// ports, телеметрия use cases) и его use cases — в slices/order/di; здесь —
+// клиенты и транспорт процесса. Запуск и остановка ресурсов, которым нужен
+// контекст Start или pipeline метрик процесса (Temporal client consumer'а и
+// worker'а, Kafka, Watermill Router, telemetry.Start), остаются в lifecycle.Worker
+// процесса, а не в Wire.
+var (
+	// configSet раскрывает секции конфигурации для provider'ов, которым нужна
+	// только своя секция.
+	configSet = wire.NewSet(wire.FieldsOf(new(config.Config),
+		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Temporal", "Fulfillment", "InternalGateway"))
+	// temporalAPISet — lazy Temporal client API и порт Order Fulfillment Workflow.
+	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
+	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
+	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
+	// spiceDBSet — клиент SpiceDB процесса orders-reconciler.
+	spiceDBSet = wire.NewSet(NewSpiceDBClient)
+)

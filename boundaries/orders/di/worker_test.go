@@ -15,10 +15,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"nomnom/orders/pkg/config"
+	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/infrastructure/memory"
-	"nomnom/orders/slices/order/infrastructure/neighbours"
-	"nomnom/orders/slices/order/infrastructure/neighbours/grpcclient"
-	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
+	"nomnom/orders/slices/order/infrastructure/observability"
 )
 
 type fakeRunner struct {
@@ -62,9 +61,9 @@ func testConfig() config.Config {
 func newTestWorker(t *testing.T, cfg config.Config, fake *fakeRunner) (*TemporalWorker, *mocks.Client) {
 	t.Helper()
 	temporalClient := mocks.NewClient(t)
-	activities, _, err := NewActivities(memory.NewStore(), cfg)
+	neighbours, _, err := orderdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
 	require.NoError(t, err)
-	w := NewTemporalWorker(cfg, activities)
+	w := NewTemporalWorker(cfg, orderdi.NewActivities(memory.NewStore(), neighbours, observability.UseCases()))
 	w.dial = func(ctx context.Context, options client.Options) (client.Client, error) {
 		_, hasDeadline := ctx.Deadline()
 		assert.True(t, hasDeadline, "connection is bounded by connect timeout")
@@ -170,29 +169,6 @@ func TestTemporalWorkerShutdownRespectsDeadline(t *testing.T) {
 	require.ErrorIs(t, w.Shutdown(ctx), context.DeadlineExceeded)
 	require.NoError(t, <-runErr, "Run returns after Shutdown even when the drain deadline passes")
 	time.Sleep(250 * time.Millisecond)
-}
-
-func TestNewActivitiesSelectsNeighbours(t *testing.T) {
-	activitiesFor := func(cfg config.Config) *fulfillorder.Activities {
-		t.Helper()
-		activities, cleanup, err := NewActivities(memory.NewStore(), cfg)
-		require.NoError(t, err)
-		t.Cleanup(cleanup)
-		return activities
-	}
-	unavailable := activitiesFor(config.Config{Fulfillment: config.FulfillmentConfig{Neighbours: config.NeighboursUnavailable}})
-	simulated := activitiesFor(config.Config{Fulfillment: config.FulfillmentConfig{Neighbours: config.NeighboursSimulated}})
-	viaGateway := activitiesFor(config.Config{
-		Fulfillment:     config.FulfillmentConfig{Neighbours: config.NeighboursGRPC},
-		InternalGateway: config.InternalGatewayConfig{Address: "internal-gateway:8080"},
-	})
-
-	assert.Equal(t, neighbours.Unavailable{}, unavailable.Payments)
-	assert.Equal(t, neighbours.Simulated{}, simulated.Delivery)
-	assert.IsType(t, &grpcclient.Payments{}, viaGateway.Payments)
-	assert.IsType(t, &grpcclient.Delivery{}, viaGateway.Delivery)
-	assert.NotNil(t, simulated.Complete)
-	assert.NotNil(t, simulated.Finalize)
 }
 
 func TestNewFulfillmentPolicyCopiesConfig(t *testing.T) {

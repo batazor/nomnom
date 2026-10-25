@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"nomnom/orders/di"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/slices/order/infrastructure/postgres"
 )
 
 func main() {
@@ -27,7 +27,7 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	if err := postgres.Migrate(ctx, cfg.Postgres); err != nil {
+	if err := di.InitializeMigrator(cfg).Run(ctx); err != nil {
 		return err
 	}
 	log.Print("orders migrations applied")

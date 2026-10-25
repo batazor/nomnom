@@ -13,12 +13,6 @@ import (
 
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/slices/order/applications/completeorder"
-	"nomnom/orders/slices/order/applications/failorcancelorder"
-	orderdi "nomnom/orders/slices/order/di"
-	"nomnom/orders/slices/order/infrastructure/neighbours"
-	"nomnom/orders/slices/order/infrastructure/neighbours/grpcclient"
-	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
 
@@ -151,35 +145,6 @@ func (w *TemporalWorker) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return fmt.Errorf("stop temporal worker: %w", ctx.Err())
 	}
-}
-
-// NewActivities собирает Activities fulfillment поверх store слайса и адаптеров
-// соседних контекстов, выбранных конфигурацией; cleanup закрывает соединение
-// с internal gateway.
-func NewActivities(store orderdi.Store, cfg config.Config) (*fulfillorder.Activities, func(), error) {
-	uc := observability.UseCases()
-	activities := &fulfillorder.Activities{
-		Orders:   store,
-		Complete: telemetry.Instrument(uc, observability.CompleteOrder, completeorder.NewHandler(store, store, store).Handle),
-		Finalize: telemetry.Instrument(uc, observability.FailOrCancelOrder, failorcancelorder.NewHandler(store, store, store).Handle),
-	}
-	switch cfg.Fulfillment.Neighbours {
-	case config.NeighboursGRPC:
-		conn, err := grpcclient.Dial(cfg.InternalGateway.Address, cfg.Identity.TokenDir)
-		if err != nil {
-			return nil, nil, err
-		}
-		activities.Payments = grpcclient.NewPayments(conn)
-		activities.Restaurants = grpcclient.NewRestaurants(conn)
-		activities.Delivery = grpcclient.NewDelivery(conn)
-		return activities, func() { _ = conn.Close() }, nil
-	case config.NeighboursSimulated:
-		log.Printf("WARNING: fulfillment neighbours are simulated: payments, restaurants and delivery calls are approved without effect")
-		activities.Payments, activities.Restaurants, activities.Delivery = neighbours.Simulated{}, neighbours.Simulated{}, neighbours.Simulated{}
-	default:
-		activities.Payments, activities.Restaurants, activities.Delivery = neighbours.Unavailable{}, neighbours.Unavailable{}, neighbours.Unavailable{}
-	}
-	return activities, func() {}, nil
 }
 
 // NewFulfillmentPolicy переводит конфигурацию во вход workflow.

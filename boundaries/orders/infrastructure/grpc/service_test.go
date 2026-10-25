@@ -25,6 +25,7 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/memory"
 	"nomnom/orders/slices/order/infrastructure/neighbours"
+	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
 
@@ -64,8 +65,16 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
-	module := orderdi.NewModule(store, authorizer, memory.FixedWindow{Duration: cancellationWindow},
-		ports.catalog, ports.workflow, ports.clock, &memory.IDs{})
+	module := orderdi.NewModule(orderdi.Dependencies{
+		Store:      store,
+		Authorizer: authorizer,
+		Policy:     memory.FixedWindow{Duration: cancellationWindow},
+		Catalog:    ports.catalog,
+		Workflow:   ports.workflow,
+		Clock:      ports.clock,
+		IDs:        &memory.IDs{},
+		Telemetry:  observability.UseCases(),
+	})
 	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module, subjects))
 	go func() {
 		_ = server.Serve(listener)
