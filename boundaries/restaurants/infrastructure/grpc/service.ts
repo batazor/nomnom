@@ -7,25 +7,25 @@ import {
   type ServiceImpl,
 } from "@connectrpc/connect";
 import type { Subject } from "../../pkg/application/subject.ts";
-import type { AcceptOrderHandler } from "../../slices/kitchenorder/applications/accept-order/accept-order.ts";
-import type { CancelRestaurantOrderHandler } from "../../slices/kitchenorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
-import type { MarkAssembledHandler } from "../../slices/kitchenorder/applications/mark-assembled/mark-assembled.ts";
-import type { MarkReadyForPickupHandler } from "../../slices/kitchenorder/applications/mark-order-ready/mark-order-ready.ts";
-import type { ReceiveOrderRequestHandler } from "../../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
-import type { RejectOrderHandler } from "../../slices/kitchenorder/applications/reject-order/reject-order.ts";
-import type { ReportPreparationDelayHandler } from "../../slices/kitchenorder/applications/report-preparation-delay/report-preparation-delay.ts";
-import type { ReportPreparationFailureHandler } from "../../slices/kitchenorder/applications/report-preparation-failure/report-preparation-failure.ts";
-import type {
-  KitchenCommand,
-  RestaurantOrderView,
-} from "../../slices/kitchenorder/applications/restaurant-order-support.ts";
-import type { StartPreparationHandler } from "../../slices/kitchenorder/applications/start-preparing-order/start-preparing-order.ts";
 import type { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import type { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import type { RestaurantView } from "../../slices/restaurant/applications/restaurant-view.ts";
 import type { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import type { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
+import type { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import type { MarkAssembledHandler } from "../../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
+import type { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
+import type { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
+import type { RejectOrderHandler } from "../../slices/restaurantorder/applications/reject-order/reject-order.ts";
+import type { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
+import type { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
+import type {
+  KitchenCommand,
+  RestaurantOrderView,
+} from "../../slices/restaurantorder/applications/restaurant-order-support.ts";
+import type { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
 import { RestaurantSchema } from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
   AcceptRestaurantOrderResponseSchema,

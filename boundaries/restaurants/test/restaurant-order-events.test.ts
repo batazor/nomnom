@@ -12,12 +12,12 @@ import {
   RestaurantOrderRejectedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 import { outboxEventId, uuidV5 } from "../pkg/infrastructure/mongodb/outbox.ts";
-import { RestaurantOrderState } from "../slices/kitchenorder/domains/restaurantorder/restaurantorder.ts";
+import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   PUBLISHED_RESTAURANT_ORDER_EVENT_TYPES,
   RESTAURANT_ORDER_EVENTS_TOPIC,
   restaurantOrderEventMapper,
-} from "../slices/kitchenorder/infrastructure/integration/restaurant-order-events.ts";
+} from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 
 const aggregate = { type: "RestaurantOrder", id: "ro-1", version: 3 };
 const base = {

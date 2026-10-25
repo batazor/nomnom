@@ -200,7 +200,6 @@ Context glossary остаются локальными индексами. Пр�
 | Файл / контракт | Текущее имя | Канонический термин / правило |
 | --- | --- | --- |
 | `docs/testing.md`, orchestration SDD, slice READMEs, gRPC reasons `KITCHEN_ORDER_*` в Restaurants README | `Kitchen Order` / `KitchenOrder` как имя aggregate | `Restaurant Order` / `RestaurantOrder`; `Kitchen Order` допустим только как роль |
-| Restaurants slices | `slices/kitchenorder`, `start-preparing-order`, `mark-order-ready` | Язык `RestaurantOrder`: Start Preparation, Mark Ready for Pickup |
 | Orders glossary/README, testing/SDD | `Order Confirmation`, `Confirm Order` для решения ресторана | `Acceptance` принадлежит restaurants; event `RestaurantOrderAccepted`; orders Command должен явно отражать факт |
 | Orders glossary | `Order Cancellation`, `Order Completion` рядом с короткими формами | Внутри `orders`: `Cancellation`, `Completion`; qualification только при неоднозначности |
 | Delivery glossary/README/use cases/SDD | `Courier Assignment` | `Assignment`; event — конкретный past-tense fact; в коде `delivery` — `CourierAssignedToDelivery` и `CourierUnassignedFromDelivery` |

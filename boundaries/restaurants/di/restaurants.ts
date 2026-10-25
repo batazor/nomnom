@@ -43,11 +43,6 @@ import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
-import type { KitchenAccessControl } from "../slices/kitchenorder/applications/access-control.ts";
-import {
-  type KitchenOrderCradle,
-  registerKitchenOrder,
-} from "../slices/kitchenorder/di/registrations.ts";
 import {
   type MenuCradle,
   registerMenu,
@@ -61,6 +56,11 @@ import {
   type RestaurantCradle,
   registerRestaurant,
 } from "../slices/restaurant/di/registrations.ts";
+import type { KitchenAccessControl } from "../slices/restaurantorder/applications/access-control.ts";
+import {
+  type RestaurantOrderCradle,
+  registerRestaurantOrder,
+} from "../slices/restaurantorder/di/registrations.ts";
 
 /** First reconciliation pass shortly after start. */
 const RECONCILER_FIRST_PASS_MS = 10_000;
@@ -108,7 +108,7 @@ export interface ProcessCradle {
 export type RestaurantsCradle = InfrastructureCradle &
   RestaurantCradle &
   MenuCradle &
-  KitchenOrderCradle &
+  RestaurantOrderCradle &
   ProcessCradle;
 
 export const createRestaurantsContainer = (
@@ -118,7 +118,7 @@ export const createRestaurantsContainer = (
   container.register(infrastructureRegistrations(resources));
   registerRestaurant(container);
   registerMenu(container);
-  registerKitchenOrder(container);
+  registerRestaurantOrder(container);
   container.register(processRegistrations(resources));
   return container;
 };

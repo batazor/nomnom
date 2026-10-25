@@ -5,7 +5,7 @@ import {
   type AcceptanceConditions,
   AcceptanceReasonCode,
   evaluateOrderAcceptance,
-} from "../slices/kitchenorder/domains/restaurantorder/acceptance.ts";
+} from "../slices/restaurantorder/domains/restaurantorder/acceptance.ts";
 import {
   AlreadyInStateError,
   GuardFailedError,
@@ -13,7 +13,7 @@ import {
   InvalidRestaurantOrderReason,
   InvalidTransitionError,
   RestaurantOrder,
-} from "../slices/kitchenorder/domains/restaurantorder/restaurantorder.ts";
+} from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 
 const at = (minute: number): Date =>
   new Date(Date.UTC(2026, 9, 25, 12, minute));

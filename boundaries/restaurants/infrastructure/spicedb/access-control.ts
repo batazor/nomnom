@@ -3,9 +3,9 @@ import { deadlineInterceptor, v1 } from "@authzed/authzed-node";
 import { AuthorizationUnavailableError } from "../../pkg/application/errors.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
 import type { SpiceDbEnabledConfig } from "../../pkg/config/config.ts";
-import type { KitchenAccessControl } from "../../slices/kitchenorder/applications/access-control.ts";
 import type { MenuAccessControl } from "../../slices/menu/applications/access-control.ts";
 import type { RestaurantAccessControl } from "../../slices/restaurant/applications/access-control.ts";
+import type { KitchenAccessControl } from "../../slices/restaurantorder/applications/access-control.ts";
 
 /** Singleton object of `definition platform` (authorization/schema.zed). */
 export const PLATFORM_ID = "nomnom";

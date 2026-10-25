@@ -13,7 +13,7 @@ import {
   InvalidRestaurantOrderError,
   InvalidTransitionError,
   RestaurantOrder,
-} from "../slices/kitchenorder/domains/restaurantorder/restaurantorder.ts";
+} from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   cook,
   createKitchenWorld,
