@@ -28,8 +28,8 @@ const (
 )
 
 // FulfillmentConfig holds the Policy of the Order Fulfillment Workflow. The
-// defaults equal fulfillorder.DefaultPolicy and are placeholders, not product
-// decisions.
+// defaults equal the DefaultPolicy of the fulfillment Temporal adapter and are
+// placeholders, not product decisions.
 type FulfillmentConfig struct {
 	AcceptanceTimeout       time.Duration `mapstructure:"acceptance_timeout"`
 	AssignmentTimeout       time.Duration `mapstructure:"assignment_timeout"`

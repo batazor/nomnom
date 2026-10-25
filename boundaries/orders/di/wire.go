@@ -7,13 +7,15 @@ import (
 
 	grpcadapter "nomnom/orders/infrastructure/grpc"
 	"nomnom/orders/pkg/config"
+	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	orderdi "nomnom/orders/slices/order/di"
 )
 
 // Provider sets процессов orders объявлены здесь, под тегом wireinject: их
 // использует только генератор. Инфраструктура слайса (PostgreSQL, SpiceDB
-// ports, телеметрия use cases) и его use cases — в slices/order/di; здесь —
-// клиенты и транспорт процесса. Запуск и остановка ресурсов, которым нужен
+// ports, телеметрия use cases) и его use cases — в slices/order/di, Activities
+// Order Fulfillment — в slices/fulfillment/di; здесь — клиенты и транспорт
+// процесса. Запуск и остановка ресурсов, которым нужен
 // контекст Start или pipeline метрик процесса (Temporal client consumer'а и
 // worker'а, Kafka, Watermill Router, telemetry.Start), остаются в lifecycle.Worker
 // процесса, а не в Wire.
@@ -40,7 +42,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 }
 
 func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
-	wire.Build(configSet, orderdi.PostgresSet, orderdi.TelemetrySet, orderdi.WorkerSet, NewTemporalWorker)
+	wire.Build(configSet, orderdi.PostgresSet, orderdi.TelemetrySet, fulfillmentdi.WorkerSet, NewTemporalWorker)
 	return nil, nil, nil
 }
 

@@ -15,7 +15,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"nomnom/orders/pkg/config"
-	orderdi "nomnom/orders/slices/order/di"
+	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	"nomnom/orders/slices/order/infrastructure/memory"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
@@ -61,9 +61,9 @@ func testConfig() config.Config {
 func newTestWorker(t *testing.T, cfg config.Config, fake *fakeRunner) (*TemporalWorker, *mocks.Client) {
 	t.Helper()
 	temporalClient := mocks.NewClient(t)
-	neighbours, _, err := orderdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
+	neighbours, _, err := fulfillmentdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
 	require.NoError(t, err)
-	w := NewTemporalWorker(cfg, orderdi.NewActivities(memory.NewStore(), neighbours, observability.UseCases()))
+	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(memory.NewStore(), neighbours, observability.UseCases()))
 	w.dial = func(ctx context.Context, options client.Options) (client.Client, error) {
 		_, hasDeadline := ctx.Deadline()
 		assert.True(t, hasDeadline, "connection is bounded by connect timeout")

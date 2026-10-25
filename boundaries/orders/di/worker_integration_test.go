@@ -15,19 +15,19 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"nomnom/orders/pkg/config"
+	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
+	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/recordorderready"
 	"nomnom/orders/slices/order/applications/recordpickup"
-	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/memory"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres"
-	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
 
 // AC-446: the worker runs the Order Fulfillment Workflow end to end against a
@@ -77,10 +77,10 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	neighbours, cleanup, err := orderdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
+	neighbours, cleanup, err := fulfillmentdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
 	require.NoError(t, err)
 	defer cleanup()
-	worker := NewTemporalWorker(cfg, orderdi.NewActivities(store, neighbours, observability.UseCases()))
+	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(store, neighbours, observability.UseCases()))
 	require.NoError(t, worker.Start(ctx))
 	runErr := make(chan error, 1)
 	go func() { runErr <- worker.Run() }()
@@ -92,8 +92,8 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	temporalClient, err := client.DialContext(ctx, client.Options{HostPort: address, Namespace: "default"})
 	require.NoError(t, err)
 	defer temporalClient.Close()
-	port := fulfillorder.NewClient(temporalClient, NewFulfillmentPolicy(cfg.Fulfillment))
-	workflowID := fulfillorder.WorkflowID(string(orderID))
+	port := fulfillmenttemporal.NewClient(temporalClient, NewFulfillmentPolicy(cfg.Fulfillment))
+	workflowID := fulfillmenttemporal.WorkflowID(string(orderID))
 
 	waitActivity := func(name string) {
 		require.Eventually(t, func() bool { return activityCompleted(ctx, t, temporalClient, workflowID, name) },
@@ -111,12 +111,12 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	now := time.Now().UTC()
 
 	require.NoError(t, port.Start(ctx, fulfillment.StartRequest{OrderID: orderID}))
-	waitActivity(fulfillorder.ActivityRequestRestaurantOrder)
+	waitActivity(fulfillmenttemporal.ActivityRequestRestaurantOrder)
 	send("accepted", func(ctx context.Context, id string) error {
 		_, err := confirm.Handle(ctx, confirmorder.Input{EventID: id, OrderID: orderID, OccurredAt: now})
 		return err
 	})
-	waitActivity(fulfillorder.ActivityCreateDelivery)
+	waitActivity(fulfillmenttemporal.ActivityCreateDelivery)
 	send("assigned", func(ctx context.Context, id string) error {
 		_, err := assign.Handle(ctx, recordcourierassignment.Input{EventID: id, OrderID: orderID, OccurredAt: now})
 		return err
@@ -129,15 +129,15 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 		_, err := pickup.Handle(ctx, recordpickup.Input{EventID: id, OrderID: orderID, OccurredAt: now})
 		return err
 	})
-	waitActivity(fulfillorder.ActivityCapturePayment)
+	waitActivity(fulfillmenttemporal.ActivityCapturePayment)
 	send("delivered", func(ctx context.Context, id string) error {
 		_, err := complete.Handle(ctx, recorddeliverycompletion.Input{EventID: id, OrderID: orderID, OccurredAt: now})
 		return err
 	})
 
-	var result fulfillorder.Result
+	var result fulfillmenttemporal.Result
 	require.NoError(t, temporalClient.GetWorkflow(ctx, workflowID, "").Get(ctx, &result))
-	assert.Equal(t, fulfillorder.Result{Outcome: fulfillorder.OutcomeCompleted}, result)
+	assert.Equal(t, fulfillmenttemporal.Result{Outcome: fulfillmenttemporal.OutcomeCompleted}, result)
 
 	completed, err := placing.Get(ctx, orderID)
 	require.NoError(t, err)
@@ -145,9 +145,9 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 
 	description, err := temporalClient.DescribeWorkflow(ctx, workflowID, "")
 	require.NoError(t, err)
-	stage, ok := description.TypedSearchAttributes.GetKeyword(fulfillorder.StageSearchAttribute)
+	stage, ok := description.TypedSearchAttributes.GetKeyword(fulfillmenttemporal.StageSearchAttribute)
 	assert.True(t, ok)
-	assert.Equal(t, string(fulfillorder.StageCompleted), stage)
+	assert.Equal(t, string(fulfillmenttemporal.StageCompleted), stage)
 }
 
 // activityCompleted reports whether an Activity of the given type completed in

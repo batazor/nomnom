@@ -6,8 +6,8 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"nomnom/orders/pkg/config"
+	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	orderdi "nomnom/orders/slices/order/di"
-	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
 
 // NewTemporalClient — lazy Temporal client API: соединение открывается при
@@ -24,5 +24,5 @@ func NewTemporalClient(cfg config.TemporalConfig) (client.Client, func(), error)
 
 // NewFulfillmentWorkflow — порт Order Fulfillment Workflow command use cases.
 func NewFulfillmentWorkflow(c client.Client, cfg config.FulfillmentConfig) orderdi.Workflow {
-	return fulfillorder.NewClient(c, NewFulfillmentPolicy(cfg))
+	return fulfillmenttemporal.NewClient(c, NewFulfillmentPolicy(cfg))
 }

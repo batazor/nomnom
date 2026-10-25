@@ -13,7 +13,8 @@ import (
 
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
+	"nomnom/orders/slices/fulfillment/domains/fulfillment"
+	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 )
 
 // WorkerServiceName — service.name Temporal worker по умолчанию; OTEL_SERVICE_NAME переопределяет.
@@ -25,7 +26,7 @@ type TemporalWorker struct {
 	cfg        config.TemporalConfig
 	stage      bool
 	drain      time.Duration
-	activities *fulfillorder.Activities
+	activities *fulfillmenttemporal.Activities
 
 	dial      func(ctx context.Context, options client.Options) (client.Client, error)
 	newWorker func(c client.Client, options worker.Options) runner
@@ -42,12 +43,12 @@ type TemporalWorker struct {
 
 // runner — часть worker.Worker, которой управляет lifecycle.
 type runner interface {
-	fulfillorder.Registry
+	fulfillmenttemporal.Registry
 	Start() error
 	Stop()
 }
 
-func NewTemporalWorker(cfg config.Config, activities *fulfillorder.Activities) *TemporalWorker {
+func NewTemporalWorker(cfg config.Config, activities *fulfillmenttemporal.Activities) *TemporalWorker {
 	return &TemporalWorker{
 		cfg:        cfg.Temporal,
 		stage:      cfg.Fulfillment.PublishStage,
@@ -56,10 +57,10 @@ func NewTemporalWorker(cfg config.Config, activities *fulfillorder.Activities) *
 		dial:       client.DialContext,
 		newMetrics: telemetry.Start,
 		newWorker: func(c client.Client, options worker.Options) runner {
-			return worker.New(c, fulfillorder.TaskQueue, options)
+			return worker.New(c, fulfillmenttemporal.TaskQueue, options)
 		},
 		ensure: func(ctx context.Context, c client.Client) error {
-			return fulfillorder.EnsureStageSearchAttribute(ctx, c.OperatorService(), cfg.Temporal.Namespace, cfg.Temporal.RegisterSearchAttributes)
+			return fulfillmenttemporal.EnsureStageSearchAttribute(ctx, c.OperatorService(), cfg.Temporal.Namespace, cfg.Temporal.RegisterSearchAttributes)
 		},
 		fatal:   make(chan error, 1),
 		stopped: make(chan struct{}),
@@ -102,13 +103,13 @@ func (w *TemporalWorker) Start(ctx context.Context) error {
 			}
 		},
 	})
-	fulfillorder.Register(w.worker, w.activities)
+	fulfillmenttemporal.Register(w.worker, w.activities)
 	if err := w.worker.Start(); err != nil {
 		c.Close()
 		return fmt.Errorf("start temporal worker: %w", err)
 	}
 	w.client = c
-	log.Printf("orders-worker polling task queue %s in namespace %s", fulfillorder.TaskQueue, w.cfg.Namespace)
+	log.Printf("orders-worker polling task queue %s in namespace %s", fulfillmenttemporal.TaskQueue, w.cfg.Namespace)
 	return nil
 }
 
@@ -148,16 +149,18 @@ func (w *TemporalWorker) Shutdown(ctx context.Context) error {
 }
 
 // NewFulfillmentPolicy переводит конфигурацию во вход workflow.
-func NewFulfillmentPolicy(cfg config.FulfillmentConfig) fulfillorder.Policy {
-	return fulfillorder.Policy{
-		AcceptanceTimeout:       cfg.AcceptanceTimeout,
-		AssignmentTimeout:       cfg.AssignmentTimeout,
-		MaxReplans:              cfg.MaxReplans,
-		OperatorDecisionTimeout: cfg.OperatorDecisionTimeout,
-		PreparationTimeout:      cfg.PreparationTimeout,
-		MaxPreparationExtension: cfg.MaxPreparationExtension,
-		PickupTimeout:           cfg.PickupTimeout,
-		DeliveryTimeout:         cfg.DeliveryTimeout,
-		PublishStage:            cfg.PublishStage,
+func NewFulfillmentPolicy(cfg config.FulfillmentConfig) fulfillmenttemporal.Policy {
+	return fulfillmenttemporal.Policy{
+		Policy: fulfillment.Policy{
+			AcceptanceTimeout:       cfg.AcceptanceTimeout,
+			AssignmentTimeout:       cfg.AssignmentTimeout,
+			MaxReplans:              cfg.MaxReplans,
+			OperatorDecisionTimeout: cfg.OperatorDecisionTimeout,
+			PreparationTimeout:      cfg.PreparationTimeout,
+			MaxPreparationExtension: cfg.MaxPreparationExtension,
+			PickupTimeout:           cfg.PickupTimeout,
+			DeliveryTimeout:         cfg.DeliveryTimeout,
+		},
+		PublishStage: cfg.PublishStage,
 	}
 }

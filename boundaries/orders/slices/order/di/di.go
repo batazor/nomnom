@@ -29,8 +29,10 @@ import (
 
 // Provider sets слайса order. Composition root процесса (корневой di) выбирает
 // нужные: инфраструктура — PostgresSet и TelemetrySet, use cases процесса —
-// APISet, ConsumerSet или WorkerSet. Новый порт добавляется полем в структуру
-// зависимостей набора и provider'ом; позиционных конструкторов нет.
+// APISet или ConsumerSet; Activities orders-worker собирает слайс fulfillment
+// (slices/fulfillment/di) поверх PostgresSet и TelemetrySet. Новый порт
+// добавляется полем в структуру зависимостей набора и provider'ом; позиционных
+// конструкторов нет.
 var (
 	// PostgresSet — общий PostgreSQL store процесса (ADR 8) и его роль портов Store.
 	PostgresSet = wire.NewSet(NewPostgresStore, wire.Bind(new(Store), new(*postgres.Store)))
@@ -43,8 +45,6 @@ var (
 	// ConsumerSet — handlers orders-consumer без Notifier workflow: его Temporal
 	// client открывает KafkaConsumer.Start.
 	ConsumerSet = wire.NewSet(NewCourierRelationships, wire.Struct(new(Consumer), "*"))
-	// WorkerSet — Activities fulfillment orders-worker и адаптеры соседних контекстов.
-	WorkerSet = wire.NewSet(NewNeighbours, NewActivities)
 )
 
 // Store — persistence-порты слайса: Unit of Work, repository, Inbox, Outbox,
