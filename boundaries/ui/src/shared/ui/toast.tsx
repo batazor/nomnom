@@ -10,9 +10,14 @@ import {
   useState,
 } from "react";
 
-type Toast = Readonly<{ id: number; message: string }>;
+export type ToastContent = Readonly<{
+  title: string;
+  description?: string;
+}>;
 
-type ShowToast = (message: string) => void;
+type Toast = ToastContent & Readonly<{ id: number }>;
+
+type ShowToast = (toast: ToastContent) => void;
 
 const ToastContext = createContext<ShowToast | null>(null);
 
@@ -23,8 +28,8 @@ const visible = 3;
 // A horizontal throw this far dismisses a toast.
 const throwDistance = 80;
 
-// Short confirmations that stack in a corner: the newest in front, older
-// ones recede behind it, smaller and fainter. Hover or focus fans the stack
+// Short confirmations that stack at the bottom of the screen: the newest in
+// front, older ones peek out above it, narrower and fainter. Hover or focus fans the stack
 // out and holds the timers. Screen readers hear each message once.
 export function ToastProvider({
   closeLabel,
@@ -39,10 +44,10 @@ export function ToastProvider({
   const [expanded, setExpanded] = useState(false);
   const nextId = useRef(0);
 
-  const show = useCallback<ShowToast>((message) => {
+  const show = useCallback<ShowToast>((content) => {
     nextId.current += 1;
     const id = nextId.current;
-    setToasts((current) => [{ id, message }, ...current]);
+    setToasts((current) => [{ ...content, id }, ...current]);
   }, []);
   const dismiss = useCallback((id: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -107,11 +112,11 @@ function ToastItem({
 
   const hidden = !expanded && depth >= visible;
   const placement = expanded
-    ? { y: `${-depth * 110}%`, scale: 1, opacity: 1 }
+    ? { y: `calc(${-depth * 100}% - ${depth * 0.5}rem)`, scale: 1, opacity: 1 }
     : {
-        y: `${-depth * 18}%`,
+        y: `${-depth * 0.625}rem`,
         scale: 1 - depth * 0.05,
-        opacity: hidden ? 0 : 1 - depth * 0.2,
+        opacity: hidden ? 0 : 1 - depth * 0.25,
       };
 
   return (
@@ -121,15 +126,37 @@ function ToastItem({
       drag="x"
       dragSnapToOrigin
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
-      initial={{ opacity: 0, y: "100%", scale: 0.9 }}
+      initial={{ opacity: 0, y: "100%", scale: 0.95 }}
       onDragEnd={(_, info) => {
         if (Math.abs(info.offset.x) > throwDistance) onDismiss();
       }}
+      data-behind={(!expanded && depth > 0) || undefined}
       style={{ zIndex: 100 - depth }}
       transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
       {...(hidden ? { "aria-hidden": true } : {})}
     >
-      <p className="nomnom-toast-message">{toast.message}</p>
+      <span aria-hidden="true" className="nomnom-toast-icon">
+        <svg
+          aria-hidden="true"
+          fill="none"
+          focusable="false"
+          viewBox="0 0 16 16"
+        >
+          <path
+            d="m3.5 8.5 3 3 6-7"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.75"
+          />
+        </svg>
+      </span>
+      <div className="nomnom-toast-text">
+        <p className="nomnom-toast-title">{toast.title}</p>
+        {toast.description ? (
+          <p className="nomnom-toast-description">{toast.description}</p>
+        ) : null}
+      </div>
       <button
         aria-label={closeLabel}
         className="nomnom-toast-close"
@@ -137,7 +164,19 @@ function ToastItem({
         tabIndex={hidden ? -1 : undefined}
         type="button"
       >
-        <span aria-hidden="true">×</span>
+        <svg
+          aria-hidden="true"
+          fill="none"
+          focusable="false"
+          viewBox="0 0 16 16"
+        >
+          <path
+            d="m4 4 8 8M12 4l-8 8"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.5"
+          />
+        </svg>
       </button>
     </m.li>
   );

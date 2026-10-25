@@ -395,9 +395,10 @@ a,
 .nomnom-toasts {
   position: fixed;
   z-index: 60;
-  right: var(--space-4);
-  bottom: var(--space-4);
+  bottom: var(--space-5);
+  left: 50%;
   width: min(calc(100vw - 2 * var(--space-4)), 22rem);
+  transform: translateX(-50%);
 }
 
 .nomnom-toast-list {
@@ -411,35 +412,87 @@ a,
   display: flex;
   grid-area: 1 / 1;
   align-items: center;
-  gap: var(--space-3);
   align-self: end;
+  gap: var(--space-3);
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
-  box-shadow: var(--shadow-floating);
+  box-shadow:
+    0 1px 2px rgb(23 23 20 / 6%),
+    var(--shadow-floating);
   color: var(--color-foreground);
-  transform-origin: bottom center;
+  transform-origin: top center;
   cursor: grab;
   touch-action: pan-y;
 }
 
-.nomnom-toast-message {
-  flex: 1;
-  margin: 0;
-  font-size: var(--font-size-sm);
+/* Toasts behind the front one show only their edge, as a stack of cards. */
+.nomnom-toast > * {
+  transition: opacity var(--motion-fast) var(--motion-easing);
 }
 
-.nomnom-toast-close {
+.nomnom-toast[data-behind] > * {
+  opacity: 0;
+}
+
+.nomnom-toast-icon {
+  display: grid;
   width: 1.75rem;
   height: 1.75rem;
   flex: none;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.nomnom-toast-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.nomnom-toast-text {
+  display: grid;
+  flex: 1;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.nomnom-toast-title,
+.nomnom-toast-description {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nomnom-toast-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.nomnom-toast-description {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+.nomnom-toast-close {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  place-items: center;
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-muted);
-  font-size: 1.25rem;
   cursor: pointer;
+}
+
+.nomnom-toast-close svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .nomnom-toast-close:hover {

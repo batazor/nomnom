@@ -108,12 +108,12 @@ function RestaurantView({
 
   function add(item: MenuEntry) {
     cart.add(item.id);
-    toast(
-      t("menu.added", {
-        item: item.name,
+    toast({
+      title: item.name,
+      description: t("menu.added", {
         count: (quantities.get(item.id) ?? 0) + 1,
       }),
-    );
+    });
   }
 
   return (
@@ -149,7 +149,10 @@ function RestaurantView({
                 onItemProblems={setItemProblems}
                 onPlaced={(orderId) => {
                   cart.clear();
-                  toast(t("order.sentToKitchen"));
+                  toast({
+                    title: t("order.sentToKitchen"),
+                    description: restaurant.name,
+                  });
                   onPlaced(orderId);
                 }}
                 restaurantId={restaurant.id}
