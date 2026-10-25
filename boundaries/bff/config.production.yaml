@@ -47,6 +47,18 @@ telemetry:
     prometheus:
       enabled: false
 
+# Browser customer UI on another origin: Faro tracing adds W3C trace context to
+# BFF requests (boundaries/ui/src/shared/telemetry), so preflight must allow it;
+# the Router default allows only Origin, Content-Length and Content-Type.
+cors:
+  allow_headers:
+    - Origin
+    - Content-Length
+    - Content-Type
+    - Authorization
+    - traceparent
+    - tracestate
+
 # ADR 32: the plugin verifies the customer's access token itself, so the
 # Router forwards Authorization to it as gRPC metadata authorization. No other
 # client header reaches the plugin.

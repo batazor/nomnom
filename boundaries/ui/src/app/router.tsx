@@ -1,3 +1,4 @@
+import { withFaroRouterInstrumentation } from "@grafana/faro-react";
 import {
   createBrowserRouter,
   createMemoryRouter,
@@ -26,11 +27,17 @@ export const routes = [
   },
 ];
 
-export const browserRouter = createBrowserRouter(routes);
+// Created on first render, after initTelemetry: Faro instruments the live router.
+let browserRouter: ReturnType<typeof createBrowserRouter> | undefined;
+
+function getBrowserRouter() {
+  browserRouter ??= withFaroRouterInstrumentation(createBrowserRouter(routes));
+  return browserRouter;
+}
 
 export function AppRouter({ initialEntries }: { initialEntries?: string[] }) {
   const router = initialEntries
     ? createMemoryRouter(routes, { initialEntries })
-    : browserRouter;
+    : getBrowserRouter();
   return <RouterProvider router={router} />;
 }

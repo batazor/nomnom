@@ -14,7 +14,25 @@ describe("parseRuntimeConfig", () => {
       publicGraphqlUrl: "https://api.example.test/graphql",
       locale: "en",
       enableMocks: true,
+      telemetryUrl: undefined,
+      environment: "development",
     });
+  });
+
+  it("enables browser telemetry only with a collector URL", () => {
+    const config = parseRuntimeConfig({
+      VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
+      VITE_FARO_URL: "https://telemetry.example.test/collect",
+      VITE_DEPLOYMENT_ENVIRONMENT: "kind",
+    });
+    expect(config.telemetryUrl).toBe("https://telemetry.example.test/collect");
+    expect(config.environment).toBe("kind");
+    expect(() =>
+      parseRuntimeConfig({
+        VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
+        VITE_FARO_URL: "ftp://telemetry.example.test",
+      }),
+    ).toThrow("VITE_FARO_URL must use http or https");
   });
 
   it("fails fast when the public endpoint is missing", () => {

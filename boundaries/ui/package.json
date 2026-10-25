@@ -20,6 +20,8 @@
   "dependencies": {
     "@astra-rn/react": "1.0.1",
     "@astra-rn/styles": "1.0.1",
+    "@grafana/faro-react": "2.13.0",
+    "@grafana/faro-web-tracing": "2.13.0",
     "graphql": "17.0.2",
     "react": "19.3.1",
     "react-aria-components": "1.22.1",
