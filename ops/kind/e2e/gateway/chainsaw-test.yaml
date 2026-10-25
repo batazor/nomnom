@@ -89,13 +89,12 @@ metadata:
   name: gateway-rejects-unregistered
 spec:
   description: >
-    Незарегистрированный сервис и метод без вызывающего (команда кухни) получают
-    UNIMPLEMENTED от Envoy и не доходят до backend'а.
+    Незарегистрированный сервис получает UNIMPLEMENTED от Envoy и не доходит до backend'а.
+    Метод опубликованного сервиса здесь не берётся: набор опубликованных методов меняется
+    вместе с реестром, а отказ проверяется на сервисе, которого в реестре нет никогда.
   scenarios:
     - bindings:
         - {name: method, value: nomnom.unknown.v1.UnknownService/Call}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder}
   steps:
     - use:
         template: ../templates/grpc-call.yaml

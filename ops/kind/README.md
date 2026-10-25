@@ -248,7 +248,7 @@ curl --cacert "$(make -s kind-local-ca)" --resolve webhooks.nomnom.localhost:180
 | `gateway-registry` | все `GRPCRoute` `Accepted` и `ResolvedRefs` (1) |
 | `gateway-routes-orders` | `OrdersService` без identity доходит до orders: `UNAUTHENTICATED` от backend'а (1) |
 | `gateway-routes-to-backends` | 10 команд Order Fulfillment доходят до restaurants, delivery и payments: ответ backend'а, не Envoy (1) |
-| `gateway-rejects-unregistered` | незарегистрированный сервис и команда кухни без вызывающего: `UNIMPLEMENTED` от Envoy (3) |
+| `gateway-rejects-unregistered` | незарегистрированный сервис: `UNIMPLEMENTED` от Envoy (3) |
 | `netpol-without-policies` | без NetworkPolicy `orders → restaurants` и `outsider → restaurants` напрямую доходят до backend'а (`NOT_FOUND`), gateway доступен (A1–A3) |
 | `netpol-blocks-direct-calls` | с NetworkPolicy при выполненных условиях (restaurants Available, имя резолвится, gateway доступен и Orders RPC через него проходит) прямые `orders ↔ restaurants` получают silent drop; `nomnom-outsider` не достаёт ни backend, ни gateway; Hubble фиксирует `DROPPED` (2.1–2.9) |
 | `gateway-call-metadata` | authorization metadata доходит до backend'а (`PERMISSION_DENIED` от SpiceDB, reason `OPERATION_NOT_ALLOWED`); случайный `traceparent` вызывающего продолжен server span `orders` в логе `trace-capture` (4.1–4.2) |
