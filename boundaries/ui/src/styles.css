@@ -366,3 +366,28 @@ a,
   overflow-y: auto;
   padding: var(--space-5);
 }
+
+.nomnom-number-digits {
+  display: inline-flex;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+
+.nomnom-number-slot {
+  display: inline-grid;
+}
+
+.nomnom-number-slot > * {
+  grid-area: 1 / 1;
+}
+
+.nomnom-pointer-halo {
+  position: fixed;
+  z-index: 100;
+  top: 0;
+  left: 0;
+  border: 1.5px solid var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  pointer-events: none;
+}

@@ -3,7 +3,7 @@ import { type ReactNode, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { Button } from "../../shared/ui";
+import { AnimatedNumber, Button } from "../../shared/ui";
 import { type CartLine, maxQuantity } from "./cart";
 import type { MenuEntry } from "./menu";
 import { estimateSubtotal, type Money, useMoney } from "./money";
@@ -26,7 +26,7 @@ export function CartPanel({
   // Checkout below the cart lines, when ordering is possible.
   children?: ReactNode;
 }) {
-  const { t } = useI18n();
+  const { t, formatters } = useI18n();
   const money = useMoney();
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -75,7 +75,12 @@ export function CartPanel({
                     <div className="cart-line-head">
                       <span className="cart-line-name">{item.name}</span>
                       <span className="cart-line-total">
-                        {lineTotal ? money(lineTotal) : null}
+                        {lineTotal ? (
+                          <AnimatedNumber
+                            text={money(lineTotal)}
+                            value={Number(lineTotal.amount)}
+                          />
+                        ) : null}
                       </span>
                     </div>
                     {note ? (
@@ -108,7 +113,10 @@ export function CartPanel({
                           aria-live="polite"
                           className="cart-quantity"
                         >
-                          {line.quantity}
+                          <AnimatedNumber
+                            text={formatters.number.format(line.quantity)}
+                            value={line.quantity}
+                          />
                         </output>
                         <Button
                           aria-label={t("cart.increase", { item: item.name })}
@@ -144,7 +152,10 @@ export function CartPanel({
                 <div>
                   <dt>{t("cart.subtotal")}</dt>
                   <dd aria-live="polite" data-testid="cart-subtotal">
-                    {money(subtotal)}
+                    <AnimatedNumber
+                      text={money(subtotal)}
+                      value={Number(subtotal.amount)}
+                    />
                   </dd>
                 </div>
               </dl>

@@ -8,3 +8,6 @@ export type { SwitchProps } from "./switch";
 export { Switch } from "./switch";
 export type { TextFieldProps } from "./text-field";
 export { TextField } from "./text-field";
+export type { AnimatedNumberProps } from "./animated-number";
+export { AnimatedNumber } from "./animated-number";
+export { PointerHalo } from "./pointer-halo";

@@ -11,6 +11,24 @@ if (typeof HTMLCanvasElement !== "undefined") {
   });
 }
 
+// jsdom has no media queries: tests run as a touch screen without a
+// reduced-motion preference.
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (media: string) => ({
+      matches: false,
+      media,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
 // Animations jump to their end: content that fades in after a card grows is
 // there at once, and tests see the settled screen.
 MotionGlobalConfig.skipAnimations = true;
