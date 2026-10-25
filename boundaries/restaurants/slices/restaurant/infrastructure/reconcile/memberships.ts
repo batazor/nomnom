@@ -32,6 +32,8 @@ export type ReconcileStats = {
   checked: number;
   orphansPending: number;
   orphansDeleted: number;
+  /** Missing relationships seen on fewer than two passes grace apart. */
+  missingPending: number;
   missingRepaired: number;
   /** Business ids SpiceDB cannot store; their writer could not write them either. */
   unrepairable: number;

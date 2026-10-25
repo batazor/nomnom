@@ -217,7 +217,7 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
     );
   });
 
-  test("AC-478 reconciler restores a lost owner and deletes an orphan after grace", async () => {
+  test("AC-478 reconciler restores a lost owner and deletes an orphan after two passes grace apart", async () => {
     const { store, register, restaurants, adapter } = world("reconcile");
     const { restaurantId } = await register.execute({
       subject: operator,
@@ -273,8 +273,22 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
     const registered = (await restaurants.get(restaurantId))
       ?.authorizationRevision;
     const first = await reconciler.reconcile();
-    assert.equal(first.missingRepaired, 1);
+    assert.equal(first.missingPending, 1);
+    assert.equal(first.missingRepaired, 0);
     assert.equal(first.orphansPending, 1);
+    assert.equal(await can("manage", restaurantId, owner.id), false);
+    assert.equal(await can("manage", orphanId, intruder), true);
+
+    clock.advance(GRACE - 1);
+    const early = await reconciler.reconcile();
+    assert.equal(early.orphansDeleted, 0);
+    assert.equal(early.missingRepaired, 0);
+    assert.equal(await can("manage", orphanId, intruder), true);
+
+    clock.advance(1);
+    const late = await reconciler.reconcile();
+    assert.equal(late.orphansDeleted, 1);
+    assert.equal(late.missingRepaired, 1);
     // The repairing TOUCH revision is stored, so the adapter sees it at once.
     assert.notEqual(
       (await restaurants.get(restaurantId))?.authorizationRevision,
@@ -282,18 +296,9 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
     );
     assert.equal(await adapter.canManageRestaurant(owner, restaurantId), true);
     assert.equal(await can("manage", restaurantId, owner.id), true);
-    assert.equal(await can("manage", orphanId, intruder), true);
-
-    clock.advance(GRACE - 1);
-    const early = await reconciler.reconcile();
-    assert.equal(early.orphansDeleted, 0);
-    assert.equal(await can("manage", orphanId, intruder), true);
-
-    clock.advance(1);
-    const late = await reconciler.reconcile();
-    assert.equal(late.orphansDeleted, 1);
-    assert.equal(late.missingRepaired, 0);
     assert.equal(await can("manage", orphanId, intruder), false);
-    assert.equal(await can("manage", restaurantId, owner.id), true);
+
+    const settled = await reconciler.reconcile();
+    assert.equal(settled.missingPending + settled.missingRepaired, 0);
   });
 });
