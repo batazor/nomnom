@@ -17,10 +17,13 @@ import {
   MongoOutbox,
   MongoOutboxOutsideUnitOfWorkError,
   OUTBOX_COLLECTION,
+  OUTBOX_LEASES_COLLECTION,
   type OutboxEventMapper,
+  type OutboxLeaseDocument,
   outboxEventId,
   uuidV5,
 } from "../pkg/infrastructure/mongodb/outbox.ts";
+import { MongoOutboxRelayStore } from "../pkg/infrastructure/mongodb/outbox-relay-store.ts";
 import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
@@ -345,6 +348,33 @@ describe("MongoDB storage", { skip }, () => {
       ]),
       MongoOutboxOutsideUnitOfWorkError,
     );
+  });
+
+  test("relay lease expiry uses the server clock, not the relay clock", async () => {
+    const store = new MongoOutboxRelayStore(mongo.db, {
+      leaseId: `lease-${randomUUID()}`,
+    });
+    const leases = mongo.db.collection<OutboxLeaseDocument>(
+      OUTBOX_LEASES_COLLECTION,
+    );
+    const farFuture = new Date(Date.UTC(2100, 0, 1));
+    const farPast = new Date(Date.UTC(2000, 0, 1));
+
+    // A relay clock far in the past still gets a lease valid from server time.
+    assert.equal(await store.acquireLease("relay-a", farPast, 60_000), true);
+    const lease = await leases.findOne({ owner: "relay-a" });
+    assert.ok(lease);
+    assert.ok(
+      Math.abs(lease.expiresAt.getTime() - (Date.now() + 60_000)) < 10_000,
+      "expiry is server now + TTL",
+    );
+    // A relay whose clock runs ahead cannot take the live lease.
+    assert.equal(await store.acquireLease("relay-b", farFuture, 60_000), false);
+    // The owner renews; after server-side expiry another relay takes over.
+    assert.equal(await store.acquireLease("relay-a", farPast, 1), true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(await store.acquireLease("relay-b", farPast, 60_000), true);
+    assert.equal(await store.acquireLease("relay-a", farFuture, 60_000), false);
   });
 
   test("orderId is unique and the board queries by state", async () => {
