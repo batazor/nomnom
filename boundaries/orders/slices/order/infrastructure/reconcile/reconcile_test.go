@@ -182,3 +182,55 @@ func TestReconcileReleasedCourier(t *testing.T) {
 	assert.False(t, e.hasRelation(courierRelation, cancelled, "courier-1"))
 	assert.False(t, e.hasRelation(deliveryRelation, cancelled, "delivery-1"), "a cancelled delivery is deleted")
 }
+
+// AC-667: a reassignment A→B wrote TOUCH B + DELETE A in SpiceDB and has not
+// committed when the pass reads PostgreSQL. The page still names courier A as
+// missing; the locked re-read waits for the commit, sees B and restores
+// nothing, so A never regains access.
+func TestReconcileDoesNotResurrectReplacedCourier(t *testing.T) {
+	e := newEnv(t)
+	reassigned := id("reassigned")
+	require.NoError(t, e.store.Add(e.ctx, ordertest.New(t, order.ID(reassigned))))
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(reassigned), recordcourierassignment.Assignment{
+		DeliveryID: "delivery-1", CourierID: "courier-a", AssignedAt: e.now, DeliveryVersion: 2,
+	}, ""))
+	e.touchRelation(customerRelation, reassigned, "customer-1")
+	e.touchRelation(Relations[1], reassigned, "restaurant-1")
+	e.touchRelation(deliveryRelation, reassigned, "delivery-1")
+	// The consumer of the reassignment: row lock, SpiceDB write, commit later.
+	locked, commit, committed := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		committed <- e.store.Do(e.ctx, func(ctx context.Context) error {
+			if _, _, err := e.store.CourierAssignment(ctx, order.ID(reassigned)); err != nil {
+				return err
+			}
+			e.touchRelation(courierRelation, reassigned, "courier-b")
+			close(locked)
+			<-commit
+			return e.store.RememberCourierAssignment(ctx, order.ID(reassigned), recordcourierassignment.Assignment{
+				DeliveryID: "delivery-1", CourierID: "courier-b", AssignedAt: e.now, DeliveryVersion: 3,
+			}, "")
+		})
+	}()
+	<-locked
+
+	passed := make(chan Stats, 1)
+	go func() {
+		stats, err := e.reconciler.Reconcile(e.ctx)
+		assert.NoError(t, err)
+		passed <- stats
+	}()
+	// The pass is blocked on the row lock of the in-flight reassignment.
+	require.Eventually(t, func() bool {
+		var waiting int
+		err := e.store.Pool().QueryRow(e.ctx, `SELECT count(*) FROM pg_locks WHERE NOT granted`).Scan(&waiting)
+		return err == nil && waiting > 0
+	}, 10*time.Second, 20*time.Millisecond)
+	close(commit)
+	require.NoError(t, <-committed)
+	stats := <-passed
+
+	assert.GreaterOrEqual(t, stats.MissingSuperseded, 1)
+	assert.False(t, e.hasRelation(courierRelation, reassigned, "courier-a"), "the replaced courier is not restored")
+	assert.True(t, e.hasRelation(courierRelation, reassigned, "courier-b"))
+}

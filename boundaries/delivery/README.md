@@ -178,12 +178,12 @@ SPICEDB_ENDPOINT=localhost:50051 cargo test --test spicedb_authorization
 
 Допущение: курьер — пользователь с тем же id (`courier_id` = `user_id`, см. `GLOSSARY.md`). Ошибка записи отменяет use case (fail closed, `UNAVAILABLE`). Повторы, не меняющие состояние (повторная регистрация, повторное принятие offer, повторная отмена, отмена доставки без курьера), ничего не пишут. Если запись прошла, а commit нет, лишнюю связь удалит reconciliation; `DELETE` до commit при неуспешном commit временно отнимает доступ, его восстановит reconciliation.
 
-Reconciliation (`infrastructure/reconcile.rs`, порт алгоритма `orders`): для `courier#self` (зарегистрированные курьеры) и `delivery#courier` (доставки с `courier_id`) граф читается страницами `ReadRelationships` с `fully_consistent`, хранилище — постранично по id и только committed state. Orphan/stale связь удаляется, только если была orphan на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` сразу; id вне грамматики SpiceDB `^[a-zA-Z0-9/_|\-=+]+$` пропускаются и считаются `unrepairable`. Каждый проход пишет в stdout `checked`, `orphans_pending`, `orphans_deleted`, `missing_repaired`, `unrepairable`. Reconciler читает PostgreSQL через порт `ReconciliationStore` и работает фоновой задачей основного процесса (`ReconcilingWorker`): первый проход через `min(10s, interval)` после старта, остановка по сигналу shutdown (проход прерывается на границе страницы).
+Reconciliation (`infrastructure/reconcile.rs`, порт алгоритма `orders`): для `courier#self` (зарегистрированные курьеры) и `delivery#courier` (доставки с `courier_id`) граф читается страницами `ReadRelationships` с `fully_consistent`, хранилище — постранично по id и только committed state. Orphan/stale связь удаляется, только если была orphan на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` так же только после двух проходов с интервалом не меньше grace, на которых она отсутствовала при том же subject в хранилище: Reassign Courier и Cancel Delivery делают `DELETE` до `UPDATE` строки и без row lock, и проход, прочитавший граф после `DELETE`, а хранилище до commit, иначе вернул бы снятому курьеру доступ (FR-563); id вне грамматики SpiceDB `^[a-zA-Z0-9/_|\-=+]+$` пропускаются и считаются `unrepairable`. Каждый проход пишет в stdout `checked`, `orphans_pending`, `orphans_deleted`, `missing_pending`, `missing_repaired`, `unrepairable`. Reconciler читает PostgreSQL через порт `ReconciliationStore` и работает фоновой задачей основного процесса (`ReconcilingWorker`): первый проход через `min(10s, interval)` после старта, остановка по сигналу shutdown (проход прерывается на границе страницы).
 
 | Переменная | Ключ TOML | Значение |
 | --- | --- | --- |
 | `RECONCILER__INTERVAL` | `reconciler.interval` | Интервал между проходами, по умолчанию `5m`; положительный |
-| `RECONCILER__GRACE` | `reconciler.grace` | Минимальный интервал между двумя orphan-проходами до удаления, по умолчанию `10m` |
+| `RECONCILER__GRACE` | `reconciler.grace` | Минимальный интервал между двумя проходами до удаления orphan или восстановления missing, по умолчанию `10m` |
 | `RECONCILER__PAGE_SIZE` | `reconciler.page_size` | Размер страницы, по умолчанию `500`; `1..1000` |
 
 ### Authorization revisions (ZedToken)
@@ -318,7 +318,7 @@ Mapper — явный allowlist: новый Domain Event не публикует
 
 `delivery-relay` (`cmd/delivery-relay`, тот же образ, runtime contract `pkg/lifecycle`) — polling relay ADR 31:
 
-- **single active instance** — session-level `pg_try_advisory_lock` на выделенном соединении; реплики без lock не читают Outbox, потеря соединения снимает lock;
+- **single active instance** — session-level `pg_try_advisory_lock` на выделенном соединении; реплики без lock не читают Outbox, потеря соединения снимает lock. Сессия lock проверяется (`ping`) перед публикацией каждой записи (FR-537): потеряв её, relay останавливает пачку до следующей записи, пропускает retention и становится standby до повторного захвата;
 - **выборка** — пачка `published_at IS NULL` по `seq`; полные пачки без сбоев читаются подряд, затем пауза `OUTBOX__POLL_INTERVAL`;
 - **публикация** — `rdkafka` idempotent producer, `acks=all`, key — `aggregate_id`; `published_at` выставляется после подтверждения брокера, повтор после сбоя штатен (consumers дедуплицируют по `event_id`);
 - **head-of-line** — первая неудачная запись останавливает пачку, у неё растут `attempts` и `last_error`; следующий цикл начинает с неё;
@@ -340,7 +340,7 @@ Relay также требует `DATABASE__URL`. Метрики (ADR 13, [инв
 
 Бизнес-метрики процесса `delivery` (раздел domain [инвентаря](../../docs/observability/metric-inventory.md), имена — `ops/semconv/model/domain.yaml`): `slices/delivery/infrastructure/observability` — декоратор портов Unit of Work и Outbox (`ObservedOutbox`, подключён в `di::infrastructure`). Domain Events, переданные в Outbox внутри Unit of Work, записываются только после commit внешней Unit of Work: rollback и идемпотентный повтор без новых событий ничего не меняют. `DeliveryCreated` → `nomnom.delivery.created`; `CourierAssignedToDelivery` → `assignments` и `assignment.latency` (от `created_at`); `CourierUnassignedFromDelivery` → `reassignments` (`reason=other`: доменной причины снятия нет); `DeliveryOfferAccepted`/`DeliveryOfferRejected` → `offers` (`outcome` accepted/rejected; expiry — функция времени, `expired` не пишется); `DeliveryPickedUp` → `pickups`; `DeliveryCompleted` → `completed` и `duration` (от `created_at`); `DeliveryFailed` → `failed` (`reason` из закрытого набора, иначе `other`; набор пока пуст — причина свободным текстом). `DeliveryCreated` и события offer не имеют контракта и не публикуются. `service.name` — `delivery`.
 
-Integration-тест `tests/outbox_relay.rs` (запись основного процесса → relay → настоящий Kafka, проверка key, headers и payload; advisory lock; retention) выполняется при заданных `DATABASE_URL` и `KAFKA_BROKERS`:
+Integration-тест `tests/outbox_relay.rs` (запись основного процесса → relay → настоящий Kafka, проверка key, headers и payload; advisory lock; retention) выполняется при заданных `DATABASE_URL` и `KAFKA_BROKERS`; `tests/outbox_relay_lock.rs` (обрыв сессии lock замечается до следующей записи, standby захватывает lock) — при `DATABASE_URL`:
 
 ```bash
 docker run -d --rm --name delivery-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18
@@ -354,7 +354,7 @@ docker run -d --rm --name delivery-kafka -p 59092:9092 \
   -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
   -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 apache/kafka:4.1.0
 DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres KAFKA_BROKERS=localhost:59092 \
-  cargo test --test outbox_relay
+  cargo test --test outbox_relay --test outbox_relay_lock
 docker stop delivery-pg delivery-kafka
 ``` Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 

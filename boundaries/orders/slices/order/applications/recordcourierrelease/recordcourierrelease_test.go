@@ -17,7 +17,13 @@ import (
 	"nomnom/orders/slices/order/infrastructure/memory"
 )
 
-var assignedAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
+var (
+	assignedAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
+	releasedAt = assignedAt.Add(time.Minute)
+)
+
+// assignedVersion is the Delivery version of the assignment of newWorld.
+const assignedVersion = 2
 
 type world struct {
 	store      *memory.Store
@@ -27,19 +33,32 @@ type world struct {
 	release    recordcourierrelease.Handler
 }
 
-// newWorld has order-1 with courier-1 assigned on delivery-1 at assignedAt.
+// newWorld has order-1 with courier-1 assigned on delivery-1 at assignedAt
+// (Delivery version assignedVersion).
 func newWorld(t *testing.T) world {
+	t.Helper()
+	w := newUnassignedWorld(t)
+	w.assignCourier(t, "assigned-1", "courier-1", assignedVersion, assignedAt)
+	require.True(t, w.courierCanView(t, "courier-1"))
+	return w
+}
+
+// newUnassignedWorld has order-1 without a stored Courier Assignment.
+func newUnassignedWorld(t *testing.T) world {
 	t.Helper()
 	w := world{store: memory.NewStore(), authorizer: memory.NewAuthorizer(), workflow: memory.NewWorkflow()}
 	require.NoError(t, w.store.Add(context.Background(), ordertest.New(t, "order-1")))
 	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.authorizer)
 	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.authorizer)
+	return w
+}
+
+func (w world) assignCourier(t *testing.T, eventID, courierID string, version uint64, at time.Time) {
+	t.Helper()
 	_, err := w.assign.Handle(context.Background(), recordcourierassignment.Input{
-		EventID: "assigned-1", OrderID: "order-1", OccurredAt: assignedAt, DeliveryID: "delivery-1", CourierID: "courier-1",
+		EventID: eventID, OrderID: "order-1", OccurredAt: at, DeliveryVersion: version, DeliveryID: "delivery-1", CourierID: courierID,
 	})
 	require.NoError(t, err)
-	require.True(t, w.courierCanView(t, "courier-1"))
-	return w
 }
 
 func (w world) courierCanView(t *testing.T, courierID string) bool {
@@ -59,26 +78,31 @@ func (w world) stored(t *testing.T) recordcourierassignment.Assignment {
 	return stored
 }
 
-func unassigned(eventID, deliveryID, courierID string, at time.Time) recordcourierrelease.Input {
-	return recordcourierrelease.Input{EventID: eventID, OrderID: "order-1", OccurredAt: at, DeliveryID: deliveryID, CourierID: courierID}
+// unassigned is an unassignment at releasedAt of Delivery version version.
+func unassigned(eventID, deliveryID, courierID string, version uint64) recordcourierrelease.Input {
+	return recordcourierrelease.Input{
+		EventID: eventID, OrderID: "order-1", OccurredAt: releasedAt, DeliveryVersion: version, DeliveryID: deliveryID, CourierID: courierID,
+	}
 }
 
-func cancelled(eventID, deliveryID string, at time.Time) recordcourierrelease.Input {
-	return recordcourierrelease.Input{EventID: eventID, OrderID: "order-1", OccurredAt: at, DeliveryID: deliveryID, DeliveryCancelled: true}
+// cancelled is a cancellation at releasedAt of Delivery version version.
+func cancelled(eventID, deliveryID string, version uint64) recordcourierrelease.Input {
+	return recordcourierrelease.Input{
+		EventID: eventID, OrderID: "order-1", OccurredAt: releasedAt, DeliveryVersion: version, DeliveryID: deliveryID, DeliveryCancelled: true,
+	}
 }
 
 // AC-534: the unassignment revokes the courier, keeps the delivery, stores the
 // revision and leaves the workflow alone.
 func TestUnassignmentRevokesCourier(t *testing.T) {
 	w := newWorld(t)
-	releasedAt := assignedAt.Add(time.Minute)
 
-	result, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", releasedAt))
+	result, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 3))
 
 	require.NoError(t, err)
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
 	assert.False(t, w.courierCanView(t, "courier-1"))
-	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", AssignedAt: releasedAt}, w.stored(t))
+	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", AssignedAt: releasedAt, DeliveryVersion: 3}, w.stored(t))
 	revision, _, err := w.store.Revision(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.Equal(t, application.AuthorizationRevision("memory:order-1:courier:2"), revision)
@@ -88,26 +112,28 @@ func TestUnassignmentRevokesCourier(t *testing.T) {
 // AC-535: the cancellation clears the courier and the delivery.
 func TestCancellationReleasesCourierAndDelivery(t *testing.T) {
 	w := newWorld(t)
-	cancelledAt := assignedAt.Add(time.Minute)
 
-	result, err := w.release.Handle(context.Background(), cancelled("event-1", "delivery-1", cancelledAt))
+	result, err := w.release.Handle(context.Background(), cancelled("event-1", "delivery-1", 3))
 
 	require.NoError(t, err)
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
 	assert.False(t, w.courierCanView(t, "courier-1"))
-	assert.Equal(t, recordcourierassignment.Assignment{AssignedAt: cancelledAt}, w.stored(t))
+	assert.Equal(t, recordcourierassignment.Assignment{AssignedAt: releasedAt, DeliveryVersion: 3}, w.stored(t))
 }
 
-// AC-536: an event that does not name the stored assignment changes nothing.
+// AC-536: an event of another Delivery or of an older Delivery version than
+// the stored assignment changes nothing.
 func TestEventOfAnotherAssignmentIsIgnored(t *testing.T) {
+	older := unassigned("event-1", "delivery-1", "courier-1", assignedVersion-1)
+	// occurred_at is later than the assignment; the version still orders it before.
+	older.OccurredAt = assignedAt.Add(time.Hour)
 	tests := []struct {
 		name string
 		in   recordcourierrelease.Input
 	}{
-		{name: "another courier", in: unassigned("event-1", "delivery-1", "courier-2", assignedAt.Add(time.Minute))},
-		{name: "another delivery", in: unassigned("event-1", "delivery-2", "courier-1", assignedAt.Add(time.Minute))},
-		{name: "older than the assignment", in: unassigned("event-1", "delivery-1", "courier-1", assignedAt.Add(-time.Minute))},
-		{name: "cancellation of another delivery", in: cancelled("event-1", "delivery-2", assignedAt.Add(time.Minute))},
+		{name: "another delivery", in: unassigned("event-1", "delivery-2", "courier-1", 3)},
+		{name: "older version than the assignment", in: older},
+		{name: "cancellation of another delivery", in: cancelled("event-1", "delivery-2", 3)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -119,36 +145,91 @@ func TestEventOfAnotherAssignmentIsIgnored(t *testing.T) {
 			assert.Equal(t, recordcourierrelease.OutcomeIgnoredStale, result.Outcome)
 			assert.True(t, w.courierCanView(t, "courier-1"))
 			assert.Equal(t, 1, w.authorizer.CourierWrites())
-			assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt}, w.stored(t))
+			assert.Equal(t, recordcourierassignment.Assignment{
+				DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt, DeliveryVersion: assignedVersion,
+			}, w.stored(t))
 			assert.Equal(t, 2, w.store.InboxSize(), "the event is recorded in the Inbox")
 		})
 	}
 }
 
-// AC-536: an assignment older than the release, delivered after it, does not
-// grant access again; a newer one does.
+// AC-536: an assignment of an older Delivery version than the release,
+// delivered after it, does not grant access again; a newer one does.
 func TestOlderAssignmentAfterReleaseIsSkipped(t *testing.T) {
 	w := newWorld(t)
-	_, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", assignedAt.Add(2*time.Minute)))
+	_, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 4))
 	require.NoError(t, err)
 
-	_, err = w.assign.Handle(context.Background(), recordcourierassignment.Input{
-		EventID: "assigned-2", OrderID: "order-1", OccurredAt: assignedAt.Add(time.Minute), DeliveryID: "delivery-1", CourierID: "courier-2",
-	})
-	require.NoError(t, err)
+	// occurred_at is later than the release; the version orders it before.
+	w.assignCourier(t, "assigned-2", "courier-2", 3, releasedAt.Add(time.Hour))
 	assert.False(t, w.courierCanView(t, "courier-2"))
 
-	_, err = w.assign.Handle(context.Background(), recordcourierassignment.Input{
-		EventID: "assigned-3", OrderID: "order-1", OccurredAt: assignedAt.Add(3 * time.Minute), DeliveryID: "delivery-1", CourierID: "courier-3",
-	})
-	require.NoError(t, err)
+	w.assignCourier(t, "assigned-3", "courier-3", 5, releasedAt)
 	assert.True(t, w.courierCanView(t, "courier-3"))
 	assert.False(t, w.courierCanView(t, "courier-1"))
 }
 
+// AC-669: a release of a newer Delivery version than the stored assignment is
+// applied even if occurred_at is older: occurred_at is the start of the
+// delivery transaction and does not order commits.
+func TestVersionOrdersReleaseNotOccurredAt(t *testing.T) {
+	w := newWorld(t)
+	in := unassigned("event-1", "delivery-1", "courier-1", assignedVersion+1)
+	in.OccurredAt = assignedAt.Add(-time.Minute)
+
+	result, err := w.release.Handle(context.Background(), in)
+
+	require.NoError(t, err)
+	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
+	assert.False(t, w.courierCanView(t, "courier-1"))
+}
+
+// AC-670: a newer unassignment that names another courier (its assignment
+// has not been handled yet) leaves the Delivery without a courier: the stored
+// courier is released and the late assignment of the named one is skipped.
+func TestNewerUnassignmentOfAnotherCourierReleasesStoredOne(t *testing.T) {
+	w := newWorld(t)
+
+	result, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-2", 4))
+
+	require.NoError(t, err)
+	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
+	assert.False(t, w.courierCanView(t, "courier-1"))
+	w.assignCourier(t, "assigned-2", "courier-2", 3, releasedAt)
+	assert.False(t, w.courierCanView(t, "courier-2"), "the assignment the unassignment ended is skipped")
+	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", AssignedAt: releasedAt, DeliveryVersion: 4}, w.stored(t))
+}
+
+// AC-670: a release handled before any assignment is remembered with its
+// Delivery version, so the older assignment handled afterwards is skipped.
+func TestReleaseBeforeAssignmentIsRemembered(t *testing.T) {
+	for name, in := range map[string]recordcourierrelease.Input{
+		"unassignment": unassigned("event-1", "delivery-1", "courier-1", 3),
+		"cancellation": cancelled("event-1", "delivery-1", 3),
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newUnassignedWorld(t)
+
+			result, err := w.release.Handle(context.Background(), in)
+
+			require.NoError(t, err)
+			assert.Equal(t, recordcourierrelease.OutcomeRememberedAhead, result.Outcome)
+			assert.Equal(t, 0, w.authorizer.CourierWrites(), "nothing to delete")
+			remembered := w.stored(t)
+			assert.Equal(t, uint64(3), remembered.DeliveryVersion)
+			assert.Empty(t, remembered.CourierID)
+
+			w.assignCourier(t, "assigned-1", "courier-1", assignedVersion, assignedAt)
+			assert.False(t, w.courierCanView(t, "courier-1"), "the older assignment is skipped")
+			assert.Equal(t, 0, w.authorizer.CourierWrites())
+			assert.Equal(t, remembered, w.stored(t))
+		})
+	}
+}
+
 func TestRedeliveryIsDuplicate(t *testing.T) {
 	w := newWorld(t)
-	in := unassigned("event-1", "delivery-1", "courier-1", assignedAt.Add(time.Minute))
+	in := unassigned("event-1", "delivery-1", "courier-1", 3)
 
 	_, err := w.release.Handle(context.Background(), in)
 	require.NoError(t, err)
@@ -163,7 +244,7 @@ func TestRedeliveryIsDuplicate(t *testing.T) {
 func TestRelationshipFailureRollsBack(t *testing.T) {
 	w := newWorld(t)
 	w.authorizer.FailWrites(errors.New("spicedb unavailable"))
-	in := unassigned("event-1", "delivery-1", "courier-1", assignedAt.Add(time.Minute))
+	in := unassigned("event-1", "delivery-1", "courier-1", 3)
 
 	_, err := w.release.Handle(context.Background(), in)
 

@@ -50,8 +50,8 @@ func (r *RelationshipReconciler) Run() error {
 		case err != nil:
 			log.Printf("reconcile order relationships failed: %v", err)
 		default:
-			log.Printf("reconcile order relationships: checked=%d orphans_pending=%d orphans_deleted=%d missing_repaired=%d unrepairable=%d",
-				stats.Checked, stats.OrphansPending, stats.OrphansDeleted, stats.MissingRepaired, stats.Unrepairable)
+			log.Printf("reconcile order relationships: checked=%d orphans_pending=%d orphans_deleted=%d missing_repaired=%d missing_superseded=%d unrepairable=%d",
+				stats.Checked, stats.OrphansPending, stats.OrphansDeleted, stats.MissingRepaired, stats.MissingSuperseded, stats.Unrepairable)
 		}
 		select {
 		case <-r.ctx.Done():

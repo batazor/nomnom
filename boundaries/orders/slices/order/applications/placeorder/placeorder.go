@@ -80,8 +80,16 @@ type IDGenerator interface {
 	NewOrderID(ctx context.Context) (order.ID, error)
 }
 
+// ErrIdempotencyKeyTaken is returned by IdempotencyKeys.RememberOrder when the
+// key already identifies another Order: a concurrent request with the same key
+// committed first.
+var ErrIdempotencyKeyTaken = errors.New("idempotency key already identifies another order")
+
 type IdempotencyKeys interface {
 	FindOrder(ctx context.Context, customerID order.CustomerID, key string) (order.ID, bool, error)
+	// RememberOrder binds key to orderID in the active transaction; it waits
+	// for a concurrent transaction that binds the same key and returns
+	// ErrIdempotencyKeyTaken if that one committed another Order.
 	RememberOrder(ctx context.Context, customerID order.CustomerID, key string, orderID order.ID) error
 }
 
@@ -174,10 +182,28 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		}
 		return h.deps.Outbox.Append(ctx, orderID, placed.Version()+1, events)
 	})
+	if errors.Is(err, ErrIdempotencyKeyTaken) {
+		// The concurrent request committed while this one waited on the key:
+		// replay its Order. The relationship written above is left to
+		// reconciliation.
+		result, err = h.replayConcurrent(ctx, customerID, in.IdempotencyKey)
+	}
 	if err != nil {
 		return Result{}, err
 	}
 	return h.start(ctx, result), nil
+}
+
+// replayConcurrent reads the Order a concurrent request committed under key.
+func (h Handler) replayConcurrent(ctx context.Context, customerID order.CustomerID, key string) (Result, error) {
+	existing, found, err := h.deps.IdempotencyKeys.FindOrder(ctx, customerID, key)
+	if err != nil {
+		return Result{}, fmt.Errorf("find idempotency key: %w", err)
+	}
+	if !found {
+		return Result{}, fmt.Errorf("%w: idempotency key %q is being placed concurrently", application.ErrConcurrencyConflict, key)
+	}
+	return Result{OrderID: existing, Replayed: true}, nil
 }
 
 // start runs after commit; the committed Order and OrderPlaced in the Outbox

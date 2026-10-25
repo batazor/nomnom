@@ -2,7 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
+
+	"nomnom/orders/pkg/application"
+	"nomnom/orders/slices/order/domains/order"
 )
 
 // Relation is an Order relation in SpiceDB whose subject is a column of the
@@ -84,4 +90,43 @@ func (s *Store) RelationPage(ctx context.Context, relation Relation, afterID str
 		page = append(page, row)
 	}
 	return page, rows.Err()
+}
+
+// RestoreRelation re-reads the subject of relation under a FOR SHARE row lock
+// and, only if the committed Order still names subject, runs restore and
+// stores its revision in the same transaction. Record Courier Assignment and
+// Record Courier Release hold FOR UPDATE on the row from before their SpiceDB
+// write until commit, so the re-read waits for a writer in flight and a later
+// writer waits for the restore: a relationship such a writer just deleted is
+// never restored for the subject it is replacing. false — the Order is gone or
+// names another subject; nothing is written.
+func (s *Store) RestoreRelation(
+	ctx context.Context, relation Relation, orderID, subject string,
+	restore func(context.Context) (application.AuthorizationRevision, error),
+) (bool, error) {
+	column, err := relation.column()
+	if err != nil {
+		return false, err
+	}
+	restored := false
+	err = s.Do(ctx, func(ctx context.Context) error {
+		var current *string
+		err := s.q(ctx).QueryRow(ctx, `SELECT `+column+` FROM orders WHERE id = $1 FOR SHARE`, orderID).Scan(&current)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (current == nil || *current != subject)) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("re-read order %s %s: %w", orderID, relation, err)
+		}
+		revision, err := restore(ctx)
+		if err != nil {
+			return err
+		}
+		if err := s.RememberRevision(ctx, order.ID(orderID), revision); err != nil {
+			return err
+		}
+		restored = true
+		return nil
+	})
+	return restored, err
 }

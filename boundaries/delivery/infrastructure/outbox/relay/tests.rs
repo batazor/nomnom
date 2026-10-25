@@ -25,6 +25,9 @@ type FakeRow = (OutboxEntry, bool, u32, Option<String>);
 #[derive(Default)]
 struct FakeStore {
     rows: Mutex<Vec<FakeRow>>,
+    /// The lock session survives this many checks; `None` — always.
+    lock_lost_after: Option<usize>,
+    lock_checks: Mutex<usize>,
 }
 
 impl FakeStore {
@@ -35,6 +38,7 @@ impl FakeStore {
                     .map(|seq| (entry(*seq), false, 0, None))
                     .collect(),
             ),
+            ..Self::default()
         }
     }
 
@@ -54,6 +58,12 @@ impl FakeStore {
 }
 
 impl OutboxStore for FakeStore {
+    async fn holds_lock(&self) -> bool {
+        let mut checks = self.lock_checks.lock().expect("lock checks");
+        *checks += 1;
+        self.lock_lost_after.is_none_or(|alive| *checks <= alive)
+    }
+
     async fn fetch(&self, limit: u32) -> Result<Vec<OutboxEntry>, String> {
         let rows = self.rows.lock().expect("rows");
         Ok(rows
@@ -133,7 +143,8 @@ async fn publishes_batch_in_seq_order() {
         BatchOutcome {
             fetched: 3,
             published: 3,
-            failed: None
+            failed: None,
+            lock_lost: false,
         }
     );
     assert_eq!(publisher.attempts(), vec![1, 2, 3]);
@@ -152,7 +163,8 @@ async fn first_failure_stops_the_batch() {
         BatchOutcome {
             fetched: 4,
             published: 1,
-            failed: Some(2)
+            failed: Some(2),
+            lock_lost: false,
         }
     );
     // Rows after the failed one are not attempted in this cycle.
@@ -193,4 +205,45 @@ async fn batch_size_limits_one_batch() {
         .expect("batch");
     assert_eq!(outcome.fetched, 2);
     assert_eq!(store.published(), vec![1, 2]);
+}
+
+/// FR-537: the lock session is checked before every record; once it is lost
+/// the batch stops before the next record, which a standby may publish.
+#[tokio::test]
+async fn lost_lock_stops_the_batch_before_the_next_record() {
+    let store = FakeStore {
+        lock_lost_after: Some(2),
+        ..FakeStore::with(&[1, 2, 3, 4])
+    };
+    let publisher = FakePublisher::default();
+    let outcome = relay_batch(&store, &publisher, 10, &metrics())
+        .await
+        .expect("batch");
+    assert_eq!(
+        outcome,
+        BatchOutcome {
+            fetched: 4,
+            published: 2,
+            failed: None,
+            lock_lost: true,
+        }
+    );
+    assert_eq!(publisher.attempts(), vec![1, 2]);
+    assert_eq!(store.published(), vec![1, 2]);
+    assert_eq!(*store.lock_checks.lock().expect("lock checks"), 3);
+}
+
+#[tokio::test]
+async fn relay_without_the_lock_publishes_nothing() {
+    let store = FakeStore {
+        lock_lost_after: Some(0),
+        ..FakeStore::with(&[1, 2])
+    };
+    let publisher = FakePublisher::default();
+    let outcome = relay_batch(&store, &publisher, 10, &metrics())
+        .await
+        .expect("batch");
+    assert!(outcome.lock_lost);
+    assert!(publisher.attempts().is_empty());
+    assert!(store.published().is_empty());
 }

@@ -277,26 +277,24 @@ func assertNothingPlaced(t *testing.T, e env) {
 	assert.Empty(t, e.workflow.Starts())
 }
 
-// racingKeys hides a key committed by a concurrent request from the first lookup.
+// racingKeys hides a key committed by a concurrent request from the first
+// hidden lookups (one by default).
 type racingKeys struct {
 	*memory.Store
+	hidden  int
 	lookups int
 }
 
 func (k *racingKeys) FindOrder(ctx context.Context, customerID order.CustomerID, key string) (order.ID, bool, error) {
 	k.lookups++
-	if k.lookups == 1 {
+	if k.lookups <= max(k.hidden, 1) {
 		return "", false, nil
 	}
 	return k.Store.FindOrder(ctx, customerID, key)
 }
 
-func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
-	e := newEnv(t)
-	require.NoError(t, e.store.Add(context.Background(), ordertest.New(t, "order-0")))
-	require.NoError(t, e.store.RememberOrder(context.Background(), "customer-1", "key-1", "order-0"))
-	keys := &racingKeys{Store: e.store}
-	handler := placeorder.NewHandler(placeorder.Dependencies{
+func (e env) handlerWithKeys(keys placeorder.IdempotencyKeys) placeorder.Handler {
+	return placeorder.NewHandler(placeorder.Dependencies{
 		UnitOfWork:      e.store,
 		Orders:          e.store,
 		Outbox:          e.store,
@@ -308,6 +306,49 @@ func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
 		Clock:           memory.NewClock(now),
 		Workflow:        e.workflow,
 	})
+}
+
+// AC-671: the concurrent request with the same key commits while this one
+// waits on the key in RememberOrder (both lookups missed it): the request
+// replays the committed Order instead of failing.
+func TestPlaceOrderReplaysOrderCommittedDuringKeyConflict(t *testing.T) {
+	e := newEnv(t)
+	require.NoError(t, e.store.Add(context.Background(), ordertest.New(t, "order-0")))
+	require.NoError(t, e.store.RememberOrder(context.Background(), "customer-1", "key-1", "order-0"))
+
+	result, err := e.handlerWithKeys(&racingKeys{Store: e.store, hidden: 2}).Handle(context.Background(), validInput())
+
+	require.NoError(t, err)
+	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true, FulfillmentStarted: true}, result)
+	assertNothingPlaced(t, env{store: e.store, workflow: memory.NewWorkflow()})
+}
+
+// takenKeys reports the key as taken without a committed Order behind it.
+type takenKeys struct{ *memory.Store }
+
+func (takenKeys) FindOrder(context.Context, order.CustomerID, string) (order.ID, bool, error) {
+	return "", false, nil
+}
+
+func (takenKeys) RememberOrder(context.Context, order.CustomerID, string, order.ID) error {
+	return placeorder.ErrIdempotencyKeyTaken
+}
+
+// AC-671: if the conflicting Order cannot be read, the request fails with a
+// retryable concurrency conflict, not an internal error.
+func TestPlaceOrderKeyConflictWithoutOrderIsConcurrencyConflict(t *testing.T) {
+	e := newEnv(t)
+
+	_, err := e.handlerWithKeys(takenKeys{Store: e.store}).Handle(context.Background(), validInput())
+
+	require.ErrorIs(t, err, application.ErrConcurrencyConflict)
+}
+
+func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
+	e := newEnv(t)
+	require.NoError(t, e.store.Add(context.Background(), ordertest.New(t, "order-0")))
+	require.NoError(t, e.store.RememberOrder(context.Background(), "customer-1", "key-1", "order-0"))
+	handler := e.handlerWithKeys(&racingKeys{Store: e.store})
 
 	result, err := handler.Handle(context.Background(), validInput())
 

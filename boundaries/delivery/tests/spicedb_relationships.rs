@@ -376,8 +376,8 @@ impl RelationshipGraph for ScopedGraph {
     }
 }
 
-/// FR-445: reconciliation restores a lost relationship at once and deletes an
-/// orphan only after the grace period on a second pass.
+/// FR-445, FR-563, AC-668: reconciliation restores a lost relationship and deletes an
+/// orphan only after the grace period on a later pass.
 #[test]
 fn reconciler_restores_lost_and_deletes_orphan_after_grace() {
     let Some(client) = live() else { return };
@@ -423,10 +423,9 @@ fn reconciler_restores_lost_and_deletes_orphan_after_grace() {
 
     let first = deliveries.reconcile(&|| false).expect("first pass");
     couriers.reconcile(&|| false).expect("first courier pass");
-    assert!(first.missing_repaired >= 1, "{first:?}");
+    assert!(first.missing_pending >= 1, "{first:?}");
+    assert_eq!(first.missing_repaired, 0, "{first:?}");
     assert!(first.orphans_pending >= 1, "{first:?}");
-    // The restoring TOUCH stored its revision: the check sees it at once.
-    acts_as_courier(&world, &client, true);
 
     // Second pass before the grace: the orphan stays.
     *clock.lock().expect("clock") += grace - Duration::from_secs(1);
@@ -438,11 +437,13 @@ fn reconciler_restores_lost_and_deletes_orphan_after_grace() {
     *clock.lock().expect("clock") += Duration::from_secs(1);
     let third = deliveries.reconcile(&|| false).expect("third pass");
     let courier_pass = couriers.reconcile(&|| false).expect("courier pass");
+    assert!(third.missing_repaired >= 1, "{third:?}");
     assert!(third.orphans_deleted >= 1, "{third:?}");
     assert!(courier_pass.orphans_deleted >= 1, "{courier_pass:?}");
     eventually(false, || {
         act_as_courier(&unrevisioned, &orphan_delivery, &world.courier)
     });
     eventually(false, || courier_act(&unrevisioned, &ghost));
+    // The restoring TOUCH stored its revision: the check sees it at once.
     acts_as_courier(&world, &client, true);
 }
