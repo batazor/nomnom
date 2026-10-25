@@ -346,6 +346,17 @@ Duplicate не считается бизнес-ошибкой и не уходи
 | Business operation завершилась ошибкой | Транзакция откатывается, запись Inbox не фиксирует событие как обработанное | Сообщение может быть обработано повторно согласно retry policy |
 | Permanent failure | Сообщение не может быть успешно обработано | Inbox не заменяет стратегию poison messages; retry limits, dead-letter handling и ручное восстановление определяются отдельно |
 
+Для Go-consumers на Watermill действие по классу ошибки фиксирует [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md); остальные языки следуют той же таблице:
+
+| Класс | Источник | Действие |
+| --- | --- | --- |
+| Transient (DB, network) | infrastructure / application | nack → retry с backoff и лимитом |
+| Deserialization, unknown `event_type`, permanent | infrastructure | poison topic (DLQ) + ack |
+| Business error | domain / application | ack; результат — outbox-событие или лог, не retry |
+| Duplicate (Inbox) | application | ack, no-op |
+
+Business error не уходит в бесконечный transport retry. Процедура восстановления из DLQ определяется отдельно.
+
 ## Конкурентная обработка
 
 Два экземпляра consumer могут одновременно получить или начать обрабатывать один `event_id`, например при rebalance consumer group или повторной публикации Outbox publisher.
@@ -382,6 +393,21 @@ Inbox решает дедупликацию, но не решает наруше
 Если порядок критичен, Kafka partition key — существующий `aggregate_id` или другой доменный идентификатор. Тогда события одного агрегата попадают в одну partition и читаются в порядке записи в неё.
 
 Порядок может нарушаться и при одном partition key: например, из-за повторной публикации publisher или retry. При необходимости consumer проверяет `aggregate_version` и отклоняет либо откладывает устаревшие или преждевременные события. Отложенное событие не фиксируется в Inbox как обработанное. Устаревшее событие, осознанно отклонённое как неприменимое, является ожидаемым бизнес-исходом и фиксируется.
+
+### Consumer на Watermill CQRS
+
+Application CQRS ≠ Watermill CommandBus; Watermill CQRS = typed event dispatch для Kafka integration ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md), [CQRS и Watermill](cqrs.md)):
+
+```text
+Kafka → Watermill Subscriber → EventProcessor → Watermill handler (infrastructure)
+→ deserialize envelope/DTO → map to Command → Application Handler
+→ Inbox (insert-first) → UoW → Domain/FSM → Outbox → commit → return nil → ack
+```
+
+- Custom marshaler: имя события — `event_type` envelope, payload — Protobuf, `event_id` и trace context — в metadata.
+- Топик — stream aggregate контекста-источника (например, `restaurants.v1.restaurant-order-events`), ключ — `aggregate_id`; события внутри стрима маршрутизируются по `event_type`.
+- Handlers одного стрима — одна handler group с общим subscriber'ом, чтобы сохранить порядок событий aggregate. Топик-на-тип-события не используется.
+- `EventBus.Publish()` не используется: публикация только через Outbox и Forwarder.
 
 ## Размещение в коде
 
@@ -461,6 +487,8 @@ Consumer и Temporal Activity авторизуются как собственн
 | Publication lag | Гистограмма задержки от `occurred_at` до подтверждения публикации Kafka. |
 
 Для Outbox publisher labels — `event_type` и boundary. Head-of-line blocking и рост возраста самой старой неопубликованной записи сопровождаются alert'ами. Publisher логирует `event_id`, `event_type` и результат публикации.
+
+Watermill-consumers добавляют consumer lag и poison count; trace context восстанавливается из headers OpenTelemetry middleware ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#observability)).
 
 Допустимые metric labels — низкокардинальные: `consumer`, `event_type`, boundary, результат обработки и класс ошибки. `event_id` и `aggregate_id` не используются как metric labels. Счётчики бизнес-результатов меняются только при фактическом применении события, а не при duplicate, по [общим правилам метрик](observability.md#метрики).
 

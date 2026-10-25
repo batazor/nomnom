@@ -170,6 +170,17 @@ Slice acceptance использует test authorization port и проверя�
 
 BDD не заменяет unit tests, Testcontainers или kind. Тесты не используют реальные payment providers, wall-clock ожидания и shared mutable state. Обычное время управляется clock abstraction, orchestration time — Temporal time skipping.
 
+## Watermill consumers
+
+Уровни для Go-consumers на Watermill CQRS ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md)):
+
+| Уровень | Что проверяется | Инструмент |
+| --- | --- | --- |
+| Unit | Application handlers без Watermill | `go test` |
+| Wiring | Marshaler, маршрутизация по `event_type`, handler groups, mapping ошибок в nack/poison/ack | Watermill `gochannel` Pub/Sub in-memory |
+| Integration | `Kafka → Watermill → EventProcessor → Inbox → handler`, ordering по ключу, retry и poison | Testcontainers |
+| E2E | Полный путь между boundaries | kind |
+
 ## Runners
 
 | Runtime | Boundary | Направление при реализации |
