@@ -15,7 +15,7 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpcerr"
 )
 
-// Orders implements applications.Orders.
+// Orders implements applications.OrderPlacer.
 type Orders struct {
 	client ordersv1.OrdersServiceClient
 }
@@ -24,7 +24,7 @@ func NewOrders(conn grpc.ClientConnInterface) *Orders {
 	return &Orders{client: ordersv1.NewOrdersServiceClient(conn)}
 }
 
-var _ applications.Orders = (*Orders)(nil)
+var _ applications.OrderPlacer = (*Orders)(nil)
 
 func (o *Orders) PlaceOrder(ctx context.Context, input applications.Input) (string, error) {
 	request := &ordersv1.PlaceOrderRequest{

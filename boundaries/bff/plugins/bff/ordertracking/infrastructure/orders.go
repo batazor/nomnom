@@ -15,7 +15,8 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
-// Orders implements applications.Orders on orders.v1.OrdersService.
+// Orders implements applications.OrderReader and
+// applications.CancellationRequester on orders.v1.OrdersService.
 type Orders struct {
 	client ordersv1.OrdersServiceClient
 }
@@ -23,6 +24,11 @@ type Orders struct {
 func NewOrders(conn grpc.ClientConnInterface) *Orders {
 	return &Orders{client: ordersv1.NewOrdersServiceClient(conn)}
 }
+
+var (
+	_ applications.OrderReader           = (*Orders)(nil)
+	_ applications.CancellationRequester = (*Orders)(nil)
+)
 
 var orderStates = map[ordersv1.OrderState]string{
 	ordersv1.OrderState_ORDER_STATE_PLACED:    "placed",

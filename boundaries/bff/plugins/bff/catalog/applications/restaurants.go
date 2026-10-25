@@ -4,10 +4,7 @@
 // reach it (BFF ADR 2).
 package applications
 
-import (
-	"context"
-	"errors"
-)
+import "errors"
 
 var (
 	// ErrRestaurantNotFound is a restaurant unknown to restaurants.
@@ -42,26 +39,4 @@ type MenuItem struct {
 	Name        string
 	Price       Money
 	Available   bool
-}
-
-// PageRequest asks for Size restaurants after the Cursor of a previous page.
-type PageRequest struct {
-	Size   int
-	Cursor string
-}
-
-// Page is one page of restaurants; NextCursor is empty on the last page.
-type Page struct {
-	Restaurants []Restaurant
-	NextCursor  string
-}
-
-// Restaurants reads the public APIs of restaurants.
-type Restaurants interface {
-	// List returns open restaurants ordered by a stable key.
-	List(ctx context.Context, request PageRequest) (Page, error)
-	// Restaurant returns ErrRestaurantNotFound for an unknown restaurant.
-	Restaurant(ctx context.Context, restaurantID string) (Restaurant, error)
-	// Menu returns ErrMenuNotFound for a restaurant without a menu.
-	Menu(ctx context.Context, restaurantID string) ([]MenuItem, error)
 }

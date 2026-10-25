@@ -6,15 +6,28 @@ import (
 	"time"
 )
 
+// OrderReader reads one Order on behalf of the customer in the request
+// context; a missing or foreign Order is ErrOrderNotFound.
+type OrderReader interface {
+	GetOrder(ctx context.Context, orderID string) (OrderSnapshot, error)
+}
+
+// Catalog reads public data of restaurants: no customer is involved.
+type Catalog interface {
+	Restaurant(ctx context.Context, restaurantID string) (Restaurant, error)
+	// MenuItemNames returns the current names of menu items by id.
+	MenuItemNames(ctx context.Context, restaurantID string) (map[string]string, error)
+}
+
 // GetOrder builds the customer view of one Order: orders on behalf of the
 // customer, restaurants for the restaurant and the names of menu items.
 type GetOrder struct {
-	orders  Orders
+	orders  OrderReader
 	catalog Catalog
 	now     func() time.Time
 }
 
-func NewGetOrder(orders Orders, catalog Catalog) GetOrder {
+func NewGetOrder(orders OrderReader, catalog Catalog) GetOrder {
 	return GetOrder{orders: orders, catalog: catalog, now: time.Now}
 }
 
