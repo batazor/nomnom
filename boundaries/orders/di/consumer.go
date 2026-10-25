@@ -14,9 +14,9 @@ import (
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/pkg/telemetry"
+	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	orderdi "nomnom/orders/slices/order/di"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
-	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
 
 // KafkaConsumer — lifecycle.Worker процесса orders-consumer (ADR 28): в Start
@@ -89,7 +89,7 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 		return errors.Join(err, c.closeResources())
 	}
 
-	workflow := fulfillorder.NewClient(temporal, NewFulfillmentPolicy(c.cfg.Fulfillment))
+	workflow := fulfillmenttemporal.NewClient(temporal, NewFulfillmentPolicy(c.cfg.Fulfillment))
 	streams := ordermessaging.Streams(c.handlers.Handlers(workflow))
 	c.router, err = messaging.NewConsumerRouter(messaging.ConsumerConfig{
 		ConsumerGroup: c.cfg.Kafka.ConsumerGroup,

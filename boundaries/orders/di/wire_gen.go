@@ -10,6 +10,7 @@ import (
 	"github.com/google/wire"
 	"nomnom/orders/infrastructure/grpc"
 	"nomnom/orders/pkg/config"
+	di2 "nomnom/orders/slices/fulfillment/di"
 	"nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
@@ -86,13 +87,13 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	fulfillmentConfig := cfg.Fulfillment
 	internalGatewayConfig := cfg.InternalGateway
 	identityConfig := cfg.Identity
-	neighbours, cleanup2, err := di.NewNeighbours(fulfillmentConfig, internalGatewayConfig, identityConfig)
+	neighbours, cleanup2, err := di2.NewNeighbours(fulfillmentConfig, internalGatewayConfig, identityConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
 	useCases := observability.UseCases()
-	activities := di.NewActivities(store, neighbours, useCases)
+	activities := di2.NewActivities(store, neighbours, useCases)
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
 		cleanup2()
@@ -166,8 +167,9 @@ func InitializeMigrator(cfg config.Config) *Migrator {
 
 // Provider sets процессов orders объявлены здесь, под тегом wireinject: их
 // использует только генератор. Инфраструктура слайса (PostgreSQL, SpiceDB
-// ports, телеметрия use cases) и его use cases — в slices/order/di; здесь —
-// клиенты и транспорт процесса. Запуск и остановка ресурсов, которым нужен
+// ports, телеметрия use cases) и его use cases — в slices/order/di, Activities
+// Order Fulfillment — в slices/fulfillment/di; здесь — клиенты и транспорт
+// процесса. Запуск и остановка ресурсов, которым нужен
 // контекст Start или pipeline метрик процесса (Temporal client consumer'а и
 // worker'а, Kafka, Watermill Router, telemetry.Start), остаются в lifecycle.Worker
 // процесса, а не в Wire.

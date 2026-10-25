@@ -1,5 +1,5 @@
 // Command orders-worker исполняет Order Fulfillment Workflow: опрашивает task
-// queue orders в Temporal и выполняет workflow и Activities fulfillorder.
+// queue orders в Temporal и выполняет workflow и Activities слайса fulfillment.
 package main
 
 import (

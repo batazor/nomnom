@@ -12,7 +12,7 @@ Package не является use case. Он объявляет единстве
 
 `KindPreparationDelayed` (с `ExpectedReadyAt`) и `KindPreparationFailed` — входы orchestration, а не Fulfillment Facts `Order`: их consumer передаёт workflow без изменения агрегата.
 
-Выбор Signal, Update или `SignalWithStart`, Workflow ID `order:<order_id>` и имена сигналов — ответственность Temporal-адаптера [`fulfillorder`](../../infrastructure/temporal/fulfillorder/README.md).
+Порт остаётся в слайсе `order` как контракт его use cases; реализует его слайс [`fulfillment`](../../../fulfillment/README.md), и `order` его не импортирует. Выбор Signal, Update или `SignalWithStart`, Workflow ID `order:<order_id>` и имена сигналов — ответственность Temporal-адаптера [`slices/fulfillment/infrastructure/temporal`](../../../fulfillment/infrastructure/temporal/README.md); правила процесса (маршрут, сроки, допустимость отмены, компенсации) — доменной модели `slices/fulfillment/domains/fulfillment`.
 
 ## Reflector
 
