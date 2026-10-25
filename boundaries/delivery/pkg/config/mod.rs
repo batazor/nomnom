@@ -75,6 +75,115 @@ pub const DATABASE_URL_ENV: &str = "DATABASE__URL";
 pub const DATABASE_MAX_CONNS_ENV: &str = "DATABASE__MAX_CONNS";
 pub const DEFAULT_DATABASE_MAX_CONNS: &str = "10";
 
+/// Kafka (ADR 31): ключ, переменная, значение по умолчанию. Brokers обязательны
+/// только для `delivery-relay`; основной процесс к Kafka не подключается.
+const KAFKA_SETTINGS: [(&str, &str, &str); 2] = [
+    ("kafka.brokers", KAFKA_BROKERS_ENV, ""),
+    (
+        "kafka.client_id",
+        KAFKA_CLIENT_ID_ENV,
+        DEFAULT_KAFKA_CLIENT_ID,
+    ),
+];
+pub const KAFKA_BROKERS_ENV: &str = "KAFKA__BROKERS";
+pub const KAFKA_CLIENT_ID_ENV: &str = "KAFKA__CLIENT_ID";
+pub const DEFAULT_KAFKA_CLIENT_ID: &str = "delivery-relay";
+
+/// Outbox relay (ADR 13, ADR 31): ключ, переменная, значение по умолчанию.
+const OUTBOX_SETTINGS: [(&str, &str, &str); 5] = [
+    ("outbox.poll_interval", OUTBOX_POLL_INTERVAL_ENV, "1s"),
+    ("outbox.batch_size", OUTBOX_BATCH_SIZE_ENV, "100"),
+    ("outbox.publish_timeout", OUTBOX_PUBLISH_TIMEOUT_ENV, "10s"),
+    ("outbox.retention", OUTBOX_RETENTION_ENV, "7d"),
+    ("outbox.cleanup_interval", OUTBOX_CLEANUP_INTERVAL_ENV, "1h"),
+];
+pub const OUTBOX_POLL_INTERVAL_ENV: &str = "OUTBOX__POLL_INTERVAL";
+pub const OUTBOX_BATCH_SIZE_ENV: &str = "OUTBOX__BATCH_SIZE";
+pub const OUTBOX_PUBLISH_TIMEOUT_ENV: &str = "OUTBOX__PUBLISH_TIMEOUT";
+pub const OUTBOX_RETENTION_ENV: &str = "OUTBOX__RETENTION";
+pub const OUTBOX_CLEANUP_INTERVAL_ENV: &str = "OUTBOX__CLEANUP_INTERVAL";
+
+/// Kafka-клиент `delivery-relay`.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct KafkaConfig {
+    /// `host:port` через запятую (`bootstrap.servers`).
+    pub brokers: String,
+    /// `client.id` producer'а.
+    pub client_id: String,
+}
+
+impl KafkaConfig {
+    /// Brokers обязательны для relay: пустое значение — ошибка конфигурации.
+    pub fn require(&self) -> Result<(), ConfigError> {
+        if self.brokers.trim().is_empty() {
+            return Err(ConfigError::Message(format!(
+                "{KAFKA_BROKERS_ENV} is required"
+            )));
+        }
+        if self.client_id.trim().is_empty() {
+            return Err(ConfigError::Message(format!(
+                "{KAFKA_CLIENT_ID_ENV} must not be empty"
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Polling relay Outbox (ADR 31).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct OutboxConfig {
+    /// Пауза между циклами опроса.
+    #[serde(with = "humantime_serde")]
+    pub poll_interval: Duration,
+    /// Максимум записей одной пачки.
+    pub batch_size: u32,
+    /// Deadline подтверждения брокера одной записи (`message.timeout.ms`).
+    #[serde(with = "humantime_serde")]
+    pub publish_timeout: Duration,
+    /// Опубликованные записи старше retention удаляются.
+    #[serde(with = "humantime_serde")]
+    pub retention: Duration,
+    /// Интервал очистки по retention.
+    #[serde(with = "humantime_serde")]
+    pub cleanup_interval: Duration,
+}
+
+impl Default for OutboxConfig {
+    fn default() -> Self {
+        Self {
+            poll_interval: Duration::from_secs(1),
+            batch_size: 100,
+            publish_timeout: Duration::from_secs(10),
+            retention: Duration::from_secs(7 * 24 * 60 * 60),
+            cleanup_interval: Duration::from_secs(60 * 60),
+        }
+    }
+}
+
+impl OutboxConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        let positive = [
+            ("poll_interval", self.poll_interval),
+            ("publish_timeout", self.publish_timeout),
+            ("retention", self.retention),
+            ("cleanup_interval", self.cleanup_interval),
+        ];
+        if let Some((name, _)) = positive.iter().find(|(_, value)| value.is_zero()) {
+            return Err(ConfigError::Message(format!(
+                "outbox {name} must be positive"
+            )));
+        }
+        if self.batch_size == 0 {
+            return Err(ConfigError::Message(
+                "outbox batch_size must be positive".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Хранилище `delivery`. URL обязателен для процесса и миграций: пустое
 /// значение завершает startup (см. `di::postgres`). URL приходит из Secret.
 #[derive(Clone, Deserialize, PartialEq, Eq)]
@@ -285,6 +394,8 @@ pub struct AppConfig {
     pub spicedb: SpiceDbConfig,
     pub reconciler: ReconcilerConfig,
     pub database: DatabaseConfig,
+    pub kafka: KafkaConfig,
+    pub outbox: OutboxConfig,
 }
 
 pub fn load() -> Result<AppConfig, ConfigError> {
@@ -306,6 +417,8 @@ fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigError> {
     builder = configure_spicedb(builder, |name| std::env::var(name).ok())?;
     builder = configure_reconciler(builder, |name| std::env::var(name).ok())?;
     builder = configure_database(builder, |name| std::env::var(name).ok())?;
+    builder = configure_settings(builder, &KAFKA_SETTINGS, |name| std::env::var(name).ok())?;
+    builder = configure_settings(builder, &OUTBOX_SETTINGS, |name| std::env::var(name).ok())?;
 
     let config: AppConfig = builder.build()?.try_deserialize()?;
     config.server.validate()?;
@@ -314,6 +427,7 @@ fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigError> {
     config.spicedb.validate()?;
     config.reconciler.validate()?;
     config.database.validate()?;
+    config.outbox.validate()?;
 
     Ok(config)
 }
@@ -394,6 +508,20 @@ fn configure_database(
         builder = builder.set_default(key, default)?;
         if let Some(value) = env(name) {
             builder = builder.set_override(key, value)?;
+        }
+    }
+    Ok(builder)
+}
+
+fn configure_settings(
+    mut builder: ConfigBuilder<DefaultState>,
+    settings: &[(&str, &str, &str)],
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    for (key, name, default) in settings {
+        builder = builder.set_default(*key, *default)?;
+        if let Some(value) = env(name) {
+            builder = builder.set_override(*key, value)?;
         }
     }
     Ok(builder)
@@ -768,5 +896,49 @@ mod tests {
         fs::remove_file(path).expect("remove config");
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn outbox_and_kafka_defaults() {
+        let config = load_toml("outbox-defaults", "").expect("load config");
+        assert_eq!(config.outbox, OutboxConfig::default());
+        assert_eq!(
+            config.outbox.retention,
+            Duration::from_secs(7 * 24 * 60 * 60)
+        );
+        assert_eq!(config.kafka.client_id, DEFAULT_KAFKA_CLIENT_ID);
+        // Основной процесс стартует без Kafka; relay требует brokers.
+        assert!(config.kafka.require().is_err());
+    }
+
+    #[test]
+    fn loads_outbox_and_kafka_from_toml_and_validates() {
+        let config = load_toml(
+            "outbox-toml",
+            "[kafka]\nbrokers = \"kafka:9092\"\n[outbox]\nretention = \"1d\"\nbatch_size = 10\n",
+        )
+        .expect("load config");
+        assert_eq!(config.kafka.brokers, "kafka:9092");
+        assert!(config.kafka.require().is_ok());
+        assert_eq!(config.outbox.retention, Duration::from_secs(24 * 60 * 60));
+        assert_eq!(config.outbox.batch_size, 10);
+
+        let error =
+            load_toml("outbox-zero-batch", "[outbox]\nbatch_size = 0\n").expect_err("zero batch");
+        assert!(error.to_string().contains("batch_size"));
+    }
+
+    #[test]
+    fn outbox_env_overrides_file_values() {
+        let builder = configure_settings(ConfigLoader::builder(), &OUTBOX_SETTINGS, |name| {
+            (name == OUTBOX_RETENTION_ENV).then(|| "2d".to_owned())
+        })
+        .expect("configure");
+        let config: OutboxConfig = builder
+            .build()
+            .expect("build")
+            .get("outbox")
+            .expect("outbox");
+        assert_eq!(config.retention, Duration::from_secs(2 * 24 * 60 * 60));
     }
 }

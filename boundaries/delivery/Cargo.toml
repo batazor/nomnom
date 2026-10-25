@@ -11,6 +11,10 @@ name = "delivery"
 path = "cmd/delivery/main.rs"
 
 [[bin]]
+name = "delivery-relay"
+path = "cmd/delivery-relay/main.rs"
+
+[[bin]]
 name = "delivery-migrate"
 path = "cmd/delivery-migrate/main.rs"
 
@@ -18,8 +22,12 @@ path = "cmd/delivery-migrate/main.rs"
 config = { version = "0.15.27", default-features = false, features = ["toml"] }
 humantime-serde = "1.1.1"
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
+opentelemetry = { version = "0.33.1", default-features = false, features = ["metrics"] }
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["metrics", "grpc-tonic"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics"] }
 prost = "0.14.4"
 prost-types = "0.14.4"
+rdkafka = { version = "0.39.0", features = ["tokio"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 shaku = "0.6.3"

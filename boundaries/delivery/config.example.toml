@@ -50,3 +50,22 @@ page_size = 500
 url = ""
 # Максимум соединений пула процесса.
 max_conns = 10
+
+[kafka]
+# Kafka (ADR 31). Нужен только `delivery-relay`: пустой brokers завершает его
+# startup; основной процесс к Kafka не подключается. Переменные: KAFKA__BROKERS,
+# KAFKA__CLIENT_ID.
+brokers = ""
+client_id = "delivery-relay"
+
+[outbox]
+# Polling relay Outbox (ADR 13, ADR 31). Переменные: OUTBOX__POLL_INTERVAL,
+# OUTBOX__BATCH_SIZE, OUTBOX__PUBLISH_TIMEOUT, OUTBOX__RETENTION,
+# OUTBOX__CLEANUP_INTERVAL.
+poll_interval = "1s"
+batch_size = 100
+# Deadline подтверждения брокера одной записи (message.timeout.ms).
+publish_timeout = "10s"
+# Опубликованные записи старше retention удаляются; неопубликованные остаются.
+retention = "7d"
+cleanup_interval = "1h"

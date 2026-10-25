@@ -52,6 +52,47 @@ impl DeliveryState {
         }
     }
 }
+// Integration Events стрима delivery.v1.delivery-events (ADR 25, ADR 28).
+// Envelope (event_id, event_type, occurred_at, aggregate_*) передаётся в Kafka
+// headers; event_type — полное имя сообщения ниже, partition key — aggregate_id
+// Delivery.
+
+/// Курьер назначен на Delivery (Courier Assignment).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CourierAssignedToDelivery {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+/// Курьер забрал заказ (Pickup).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeliveryPickedUp {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+}
+/// Delivery завершена (Delivery Completion).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeliveryCompleted {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+}
+/// Delivery не удалась по бизнес-причине.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeliveryFailed {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub reason: ::prost::alloc::string::String,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetCourierCurrentDeliveryRequest {
     #[prost(string, tag="1")]

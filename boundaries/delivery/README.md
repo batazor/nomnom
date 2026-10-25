@@ -20,7 +20,7 @@ Rust.
 
 ## Use Cases
 
-Статус реализации: все перечисленные Commands и Queries реализованы как application handlers (`Input` / `Output` / `Handler::execute`) по SDD change [`implement-delivery-application-layer`](../../openspec/changes/implement-delivery-application-layer/) ; хранилище — PostgreSQL (см. «Хранилище (PostgreSQL)»), Kafka-адаптеры ещё не подключены. Требования — `FR-300`…`FR-318`, acceptance criteria — `AC-300`…`AC-343`. Командные use cases процесса исполнения заказа (Cancel Delivery, Replan Delivery) и их gRPC-методы добавлены по change [`add-fulfillment-command-rpcs`](../../openspec/changes/add-fulfillment-command-rpcs/) (`FR-429`, `AC-455`, `AC-456`).
+Статус реализации: все перечисленные Commands и Queries реализованы как application handlers (`Input` / `Output` / `Handler::execute`) по SDD change [`implement-delivery-application-layer`](../../openspec/changes/implement-delivery-application-layer/) ; хранилище — PostgreSQL (см. «Хранилище (PostgreSQL)»), Integration Events публикует `delivery-relay` (см. «Событийная интеграция»); Kafka consumers ещё не подключены. Требования — `FR-300`…`FR-318`, acceptance criteria — `AC-300`…`AC-343`. Командные use cases процесса исполнения заказа (Cancel Delivery, Replan Delivery) и их gRPC-методы добавлены по change [`add-fulfillment-command-rpcs`](../../openspec/changes/add-fulfillment-command-rpcs/) (`FR-429`, `AC-455`, `AC-456`).
 
 ### Commands
 
@@ -177,7 +177,7 @@ make test-spicedb   # SPICEDB_ENDPOINT=localhost:50051, оба integration-на�
 
 - **Optimistic concurrency.** `Courier`, `Delivery` и `DeliveryOffer` несут технический `version` (`with_version`/`version()`, как `authorization_revision`). `save` выполняет `UPDATE … SET version = version + 1 WHERE id = $1 AND version = $2`; 0 строк при существующем id — `RepositoryError::ConcurrentModification` → `ConcurrentModification` application error → gRPC `ABORTED` (клиент повторяет вызов целиком); отсутствующий id — `Conflict`. Запись revision reconciler'ом тоже увеличивает `version`. In-memory store проверяет версии так же.
 - **Unit of Work.** Порты не принимают handle транзакции: соединение текущей транзакции хранится в thread-local слоте store, поэтому записи агрегатов и Outbox внутри `run` фиксируются или откатываются вместе. Вложенные Unit of Work не поддерживаются.
-- **Outbox.** Таблица `delivery_outbox` по ADR 31; `event_id` — UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`, `aggregate_version` — версия, записанная той же транзакцией. Domain Event → Integration Event переводит `OutboxMapper` (`PostgresStore::with_outbox_mapper`); по умолчанию `NoIntegrationEvents` — ничего не пишется.
+- **Outbox.** Таблица `delivery_outbox` по ADR 31; `event_id` — UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`, `aggregate_version` — версия, записанная той же транзакцией. Domain Event → Integration Event переводит `OutboxMapper` (`PostgresStore::with_outbox_mapper`). Процесс `delivery` подключает `DeliveryIntegrationEvents` (`slices/delivery/infrastructure`) в `di::postgres`; `NoIntegrationEvents` (ничего не пишется) остаётся значением по умолчанию `PostgresStore::connect` для тестов.
 - **Sync порты над async sqlx.** Store владеет tokio runtime пула; вызовы идут через `block_in_place` на multi-thread runtime процесса и через scoped thread на current-thread runtime.
 
 | Переменная | Ключ | Назначение |
@@ -265,7 +265,59 @@ Shaku импортируют только модули `di`; `domains/` и `appl
 
 Consumers интеграционных событий `delivery` используют Transactional Inbox по общесистемному [ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md). Проверка `event_id`, изменение состояния доставки, запись Inbox и, если обработчик публикует новое событие, запись Outbox выполняются в одной локальной транзакции. Kafka offset подтверждается только после commit.
 
-Хранилище `delivery` — PostgreSQL ([ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md), [ADR 0001 контекста](docs/adr/0001-postgresql-хранилище-delivery.md)): Unit of Work, optimistic concurrency и таблица Outbox реализованы, Inbox — следующий шаг; см. [документацию Unit of Work](../../docs/unit-of-work.md#delivery) и [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md). Kafka-клиент, схема Inbox и адаптеры относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+Хранилище `delivery` — PostgreSQL ([ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md), [ADR 0001 контекста](docs/adr/0001-postgresql-хранилище-delivery.md)): Unit of Work, optimistic concurrency и таблица Outbox реализованы, Inbox — следующий шаг; см. [документацию Unit of Work](../../docs/unit-of-work.md#delivery) и [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md). Схема Inbox и Kafka consumers относятся к следующим шагам.
+
+### Публикация Integration Events
+
+Topic `delivery.v1.delivery-events`, контракт `infrastructure/grpc/nomnom/delivery/v1/events.proto` ([ADR 25](../../docs/adr/0025-integration-event-publication.md), [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md)).
+
+| Domain Event | Integration Event (`event_type`) |
+| --- | --- |
+| `CourierAssignedToDelivery` | `nomnom.delivery.v1.CourierAssignedToDelivery` |
+| `DeliveryPickedUp` | `nomnom.delivery.v1.DeliveryPickedUp` |
+| `DeliveryCompleted` | `nomnom.delivery.v1.DeliveryCompleted` |
+| `DeliveryFailed` | `nomnom.delivery.v1.DeliveryFailed` (с `reason`) |
+| `CourierUnassignedFromDelivery`, `DeliveryCancelled` | не публикуются: контракта нет, mapper — явный allowlist |
+
+`delivery-relay` (`cmd/delivery-relay`, тот же образ, runtime contract `pkg/lifecycle`) — polling relay ADR 31:
+
+- **single active instance** — session-level `pg_try_advisory_lock` на выделенном соединении; реплики без lock не читают Outbox, потеря соединения снимает lock;
+- **выборка** — пачка `published_at IS NULL` по `seq`; полные пачки без сбоев читаются подряд, затем пауза `OUTBOX__POLL_INTERVAL`;
+- **публикация** — `rdkafka` idempotent producer, `acks=all`, key — `aggregate_id`; `published_at` выставляется после подтверждения брокера, повтор после сбоя штатен (consumers дедуплицируют по `event_id`);
+- **head-of-line** — первая неудачная запись останавливает пачку, у неё растут `attempts` и `last_error`; следующий цикл начинает с неё;
+- **retention** — опубликованные записи старше `OUTBOX__RETENTION` удаляются раз в `OUTBOX__CLEANUP_INTERVAL`; неопубликованные не удаляются.
+
+Kafka headers совпадают с `orders/pkg/messaging/envelope.go`: `event_id`, `event_type`, `occurred_at` (RFC 3339 с наносекундами, UTC, как Go `time.RFC3339Nano`), `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent` (если записан в `metadata`), плюс `_watermill_message_uuid` = `event_id`.
+
+| Переменная | Ключ | Назначение |
+| --- | --- | --- |
+| `KAFKA__BROKERS` | `kafka.brokers` | `bootstrap.servers`; обязателен для `delivery-relay` (пусто — ошибка startup), основной процесс Kafka не использует |
+| `KAFKA__CLIENT_ID` | `kafka.client_id` | `client.id`, по умолчанию `delivery-relay` |
+| `OUTBOX__POLL_INTERVAL` | `outbox.poll_interval` | Пауза между циклами, по умолчанию `1s` |
+| `OUTBOX__BATCH_SIZE` | `outbox.batch_size` | Размер пачки, по умолчанию `100` |
+| `OUTBOX__PUBLISH_TIMEOUT` | `outbox.publish_timeout` | `message.timeout.ms` одной записи, по умолчанию `10s` |
+| `OUTBOX__RETENTION` | `outbox.retention` | Хранение опубликованных записей, по умолчанию `7d` |
+| `OUTBOX__CLEANUP_INTERVAL` | `outbox.cleanup_interval` | Интервал очистки, по умолчанию `1h` |
+
+Relay также требует `DATABASE__URL`. Метрики (ADR 13, [инвентарь](../../docs/observability/metric-inventory.md#outbox)): `nomnom_outbox_pending_messages` и `nomnom_outbox_oldest_pending_age_seconds` (label `stream`), `nomnom_outbox_publish_retries_total` (`stream`, `event_type`, `error_class`), histograms `nomnom_outbox_publish_duration_seconds` (`outcome`) и `nomnom_outbox_publish_lag_seconds` (`occurred_at` → ack). Экспорт OTLP gRPC (`pkg/telemetry`) включается только при заданном `OTEL_EXPORTER_OTLP_ENDPOINT` (или `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`); `service.name` — `delivery-relay`, `service.namespace` — `nomnom`.
+
+Integration-тест `tests/outbox_relay.rs` (запись основного процесса → relay → настоящий Kafka, проверка key, headers и payload; advisory lock; retention) выполняется при заданных `DATABASE_URL` и `KAFKA_BROKERS`:
+
+```bash
+docker run -d --rm --name delivery-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18
+docker run -d --rm --name delivery-kafka -p 59092:9092 \
+  -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller \
+  -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+  -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:59092 \
+  -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+  -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+  -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
+  -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 apache/kafka:4.1.0
+DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres KAFKA_BROKERS=localhost:59092 \
+  cargo test --test outbox_relay
+docker stop delivery-pg delivery-kafka
+``` Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 ## Observability
 
@@ -281,9 +333,10 @@ Consumers интеграционных событий `delivery` использ�
 - `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27);
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
 - `PostgresStore` (`infrastructure/postgres`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox ADR 31, миграции `delivery-migrate`;
+- публикация Integration Events: mapper `DeliveryIntegrationEvents` (4 события `events.proto`) и процесс `delivery-relay` (`infrastructure/outbox`: advisory lock, head-of-line, retention, `rdkafka`, OTLP-метрики ADR 13);
 - in-memory адаптеры всех портов в `infrastructure/memory` (транзакционный store с rollback и инъекцией сбоя commit, статическая authorization, управляемые clock и id generator, статический locator) — только для тестов и локальной сборки.
 
-Не реализованы: Protobuf-мапперы Outbox (по умолчанию `NoIntegrationEvents`), Outbox relay и Kafka, Inbox, user identity через BFF (ADR 27 оставляет её открытой), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
+Не реализованы: Kafka consumers и Inbox, распространение trace context в Outbox (`traceparent` не пишется: OpenTelemetry tracing в процессе не подключён), метрики основного процесса, user identity через BFF (ADR 27 оставляет её открытой), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
 
 Допущения по открытым продуктовым вопросам (момент начала поиска курьера, retryability причин неудачи, параметры позиции и политики назначения) зафиксированы в [design.md](../../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам) change.
 
