@@ -11,6 +11,20 @@ pub struct Delivery {
     #[prost(enumeration="DeliveryState", tag="4")]
     pub state: i32,
 }
+/// Pending, not yet expired Delivery Offer addressed to a courier.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeliveryOffer {
+    #[prost(string, tag="1")]
+    pub offer_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub pickup_address: ::prost::alloc::string::String,
+    #[prost(string, tag="4")]
+    pub dropoff_address: ::prost::alloc::string::String,
+    #[prost(int64, tag="5")]
+    pub expires_at_epoch_seconds: i64,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum DeliveryState {
@@ -48,6 +62,68 @@ impl DeliveryState {
             "DELIVERY_STATE_COMPLETED" => Some(Self::Completed),
             "DELIVERY_STATE_FAILED" => Some(Self::Failed),
             "DELIVERY_STATE_CANCELLED" => Some(Self::Cancelled),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CourierStatus {
+    Unspecified = 0,
+    Available = 1,
+    Busy = 2,
+    Unavailable = 3,
+}
+impl CourierStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "COURIER_STATUS_UNSPECIFIED",
+            Self::Available => "COURIER_STATUS_AVAILABLE",
+            Self::Busy => "COURIER_STATUS_BUSY",
+            Self::Unavailable => "COURIER_STATUS_UNAVAILABLE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "COURIER_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "COURIER_STATUS_AVAILABLE" => Some(Self::Available),
+            "COURIER_STATUS_BUSY" => Some(Self::Busy),
+            "COURIER_STATUS_UNAVAILABLE" => Some(Self::Unavailable),
+            _ => None,
+        }
+    }
+}
+/// Availability a courier asks for; busy is set by an assignment only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CourierAvailability {
+    Unspecified = 0,
+    Available = 1,
+    Unavailable = 2,
+}
+impl CourierAvailability {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "COURIER_AVAILABILITY_UNSPECIFIED",
+            Self::Available => "COURIER_AVAILABILITY_AVAILABLE",
+            Self::Unavailable => "COURIER_AVAILABILITY_UNAVAILABLE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "COURIER_AVAILABILITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "COURIER_AVAILABILITY_AVAILABLE" => Some(Self::Available),
+            "COURIER_AVAILABILITY_UNAVAILABLE" => Some(Self::Unavailable),
             _ => None,
         }
     }
@@ -182,6 +258,167 @@ pub struct CancelDeliveryResponse {
     /// Business reason when cancellation is rejected by state, for example already_picked_up.
     #[prost(string, tag="3")]
     pub rejection_reason: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RegisterCourierRequest {
+    /// User id of the courier: that user gets courier#act on courier:<courier_id>.
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RegisterCourierResponse {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    #[prost(enumeration="CourierStatus", tag="2")]
+    pub status: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpdateCourierLocationRequest {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    #[prost(double, tag="2")]
+    pub latitude: f64,
+    #[prost(double, tag="3")]
+    pub longitude: f64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpdateCourierLocationResponse {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    #[prost(double, tag="2")]
+    pub latitude: f64,
+    #[prost(double, tag="3")]
+    pub longitude: f64,
+    /// Time delivery recorded the position at.
+    #[prost(int64, tag="4")]
+    pub recorded_at_epoch_seconds: i64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SetCourierAvailabilityRequest {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    #[prost(enumeration="CourierAvailability", tag="2")]
+    pub availability: i32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SetCourierAvailabilityResponse {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    #[prost(enumeration="CourierStatus", tag="2")]
+    pub status: i32,
+    /// false when the requested availability was already in effect.
+    #[prost(bool, tag="3")]
+    pub changed: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListAvailableDeliveryOffersRequest {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListAvailableDeliveryOffersResponse {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag="2")]
+    pub offers: ::prost::alloc::vec::Vec<DeliveryOffer>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AcceptDeliveryOfferRequest {
+    #[prost(string, tag="1")]
+    pub offer_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AcceptDeliveryOfferResponse {
+    #[prost(string, tag="1")]
+    pub offer_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub courier_id: ::prost::alloc::string::String,
+    /// true when the same courier had already accepted this offer.
+    #[prost(bool, tag="4")]
+    pub already_accepted: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RejectDeliveryOfferRequest {
+    #[prost(string, tag="1")]
+    pub offer_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RejectDeliveryOfferResponse {
+    #[prost(string, tag="1")]
+    pub offer_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+    /// false when the same courier had already rejected this offer.
+    #[prost(bool, tag="3")]
+    pub changed: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConfirmPickupRequest {
+    #[prost(string, tag="1")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConfirmPickupResponse {
+    #[prost(string, tag="1")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(enumeration="DeliveryState", tag="2")]
+    pub state: i32,
+    /// false when the same courier had already confirmed the Pickup.
+    #[prost(bool, tag="3")]
+    pub changed: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConfirmDeliveryRequest {
+    #[prost(string, tag="1")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConfirmDeliveryResponse {
+    #[prost(string, tag="1")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(enumeration="DeliveryState", tag="2")]
+    pub state: i32,
+    /// false when the same courier had already confirmed the completion.
+    #[prost(bool, tag="3")]
+    pub changed: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ReportDeliveryFailureRequest {
+    #[prost(string, tag="1")]
+    pub delivery_id: ::prost::alloc::string::String,
+    /// The assigned courier reporting on its own assignment; empty when an
+    /// authorized dispatcher reports.
+    #[prost(string, tag="2")]
+    pub courier_id: ::prost::alloc::string::String,
+    /// Code of the Delivery Failure Reason catalog, for example customer_unreachable.
+    #[prost(string, tag="3")]
+    pub reason: ::prost::alloc::string::String,
+    /// Optional free text; empty means no detail.
+    #[prost(string, tag="4")]
+    pub detail: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ReportDeliveryFailureResponse {
+    #[prost(string, tag="1")]
+    pub delivery_id: ::prost::alloc::string::String,
+    /// Catalog code of the recorded reason.
+    #[prost(string, tag="2")]
+    pub reason: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub detail: ::prost::alloc::string::String,
+    /// Courier whose assignment the failure ended.
+    #[prost(string, tag="4")]
+    pub released_courier_id: ::prost::alloc::string::String,
 }
 include!("nomnom.delivery.v1.tonic.rs");
 // @@protoc_insertion_point(module)

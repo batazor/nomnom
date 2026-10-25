@@ -85,6 +85,26 @@ pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule
     ))
 }
 
+/// Граф над данным in-memory хранилищем с locator процесса (сохранённые
+/// позиции курьеров) и выбранными авторизацией и relationships — для
+/// транспортных тестов, которые проверяют состояние хранилища.
+#[cfg(test)]
+pub(crate) fn build_over(
+    store: &Arc<MemoryStore>,
+    authorization: Box<dyn ProcessAuthorization>,
+    relationships: Box<dyn super::ProcessRelationships>,
+) -> ServiceModule {
+    service(infrastructure(
+        ProcessStores::over(store),
+        Box::new(SequentialIdGenerator::new("delivery")),
+        Box::new(crate::infrastructure::locator::StoredCourierLocator::new(
+            Arc::clone(store) as _,
+        )),
+        authorization,
+        relationships,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::infrastructure::memory::StaticAuthorization;

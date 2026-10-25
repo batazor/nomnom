@@ -12,6 +12,7 @@ use crate::infrastructure::memory::StaticCourierLocator;
 use crate::slices::courier::applications::{register_courier, set_courier_availability};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::courier_locator::CourierCandidate;
+use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, confirm_pickup, list_available_delivery_offers,
 };

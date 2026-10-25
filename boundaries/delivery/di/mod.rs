@@ -33,4 +33,4 @@ pub use server::{postgres, spicedb, spicedb_authorization};
 pub use service::{ServiceModule, build, build_with_authorization};
 
 #[cfg(test)]
-pub(crate) use service::build_with_locator;
+pub(crate) use service::{build_over, build_with_locator};
