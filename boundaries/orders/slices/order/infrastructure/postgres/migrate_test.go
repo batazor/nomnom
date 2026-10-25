@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -73,4 +74,97 @@ func TestStartupMigrationAppliesOnceAndThenChangesNothing(t *testing.T) {
 
 	require.NoError(t, postgres.Migrate(ctx, cfg))
 	assert.Equal(t, applied, version(), "a migrated database is left as it is")
+}
+
+func migrationFiles(files map[string]string) fstest.MapFS {
+	fsys := fstest.MapFS{}
+	for name, sql := range files {
+		fsys["migrations/"+name] = &fstest.MapFile{Data: []byte(sql)}
+	}
+	return fsys
+}
+
+func schemaVersion(t *testing.T, conn *pgx.Conn) (int64, bool) {
+	t.Helper()
+	var (
+		version int64
+		dirty   bool
+	)
+	require.NoError(t, conn.QueryRow(context.Background(), `SELECT version, dirty FROM schema_migrations`).Scan(&version, &dirty))
+	return version, dirty
+}
+
+func tableExists(t *testing.T, conn *pgx.Conn, name string) bool {
+	t.Helper()
+	var exists bool
+	require.NoError(t, conn.QueryRow(context.Background(), `SELECT to_regclass($1) IS NOT NULL`, name).Scan(&exists))
+	return exists
+}
+
+// A failed migration file leaves no changes (one implicit transaction) and a
+// dirty version; the next start returns it to the previous version and
+// applies the file again instead of refusing to start.
+func TestStartupMigrationRetriesAnIncompleteMigration(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		first string
+	}{
+		{name: "first migration", first: "1_a.up.sql"},
+		{name: "later migration", first: "2_a.up.sql"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			cfg := config.PostgresConfig{DSN: emptyDatabase(t)}
+			files := map[string]string{"1_base.up.sql": `CREATE TABLE base (id int);`}
+			if tc.first == "1_a.up.sql" {
+				files = map[string]string{}
+			}
+			files[tc.first] = `CREATE TABLE a (id int); SELECT 1 / 0;`
+			require.Error(t, postgres.MigrateFiles(ctx, cfg, migrationFiles(files)))
+
+			conn, err := pgx.Connect(ctx, cfg.DSN)
+			require.NoError(t, err)
+			defer func() { _ = conn.Close(ctx) }()
+			_, dirty := schemaVersion(t, conn)
+			require.True(t, dirty)
+			assert.False(t, tableExists(t, conn, "a"), "the failed file left no changes")
+
+			files[tc.first] = `CREATE TABLE a (id int);`
+			require.NoError(t, postgres.MigrateFiles(ctx, cfg, migrationFiles(files)))
+			version, dirty := schemaVersion(t, conn)
+			assert.False(t, dirty)
+			assert.Equal(t, int64(len(files)), version)
+			assert.True(t, tableExists(t, conn, "a"))
+		})
+	}
+}
+
+// A migration waiting for a lock held by live traffic fails within
+// lock_timeout instead of stalling the table, and succeeds on the next start.
+func TestStartupMigrationGivesUpOnALockedTable(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.PostgresConfig{DSN: emptyDatabase(t)}
+	files := map[string]string{"1_a.up.sql": `CREATE TABLE a (id int);`}
+	require.NoError(t, postgres.MigrateFiles(ctx, cfg, migrationFiles(files)))
+
+	traffic, err := pgx.Connect(ctx, cfg.DSN)
+	require.NoError(t, err)
+	defer func() { _ = traffic.Close(ctx) }()
+	tx, err := traffic.Begin(ctx)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `SELECT * FROM a`)
+	require.NoError(t, err)
+
+	files["2_column.up.sql"] = `ALTER TABLE a ADD COLUMN name text;`
+	started := time.Now()
+	err = postgres.MigrateFiles(ctx, cfg, migrationFiles(files))
+	// golang-migrate wraps the driver error without Unwrap.
+	require.ErrorContains(t, err, "SQLSTATE 55P03", "lock_not_available")
+	assert.Less(t, time.Since(started), 30*time.Second)
+
+	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, postgres.MigrateFiles(ctx, cfg, migrationFiles(files)))
+	version, dirty := schemaVersion(t, traffic)
+	assert.Equal(t, int64(2), version)
+	assert.False(t, dirty)
 }

@@ -184,6 +184,34 @@ fn startup_migrates_an_empty_database_and_skips_a_migrated_one() {
     assert_eq!(migrate(&config).expect("no pending"), Vec::<i64>::new());
 }
 
+/// Replicas starting together serialize on the advisory lock: one applies
+/// every migration, the others find nothing to change.
+#[test]
+fn replicas_starting_together_apply_migrations_once() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let config = support::empty_database(&format!("replicas_{nanos}"));
+    let embedded: Vec<i64> = MIGRATOR.iter().map(|migration| migration.version).collect();
+    let barrier = Arc::new(Barrier::new(4));
+    let replicas: Vec<_> = (0..4)
+        .map(|_| {
+            let (config, barrier) = (config.clone(), Arc::clone(&barrier));
+            std::thread::spawn(move || {
+                barrier.wait();
+                migrate(&config).expect("startup migration")
+            })
+        })
+        .collect();
+    let mut applied: Vec<Vec<i64>> = replicas
+        .into_iter()
+        .map(|replica| replica.join().expect("replica"))
+        .collect();
+    applied.sort_by_key(Vec::len);
+    assert_eq!(applied, vec![vec![], vec![], vec![], embedded]);
+}
+
 /// Applied migrations with the time each was installed.
 fn installed(config: &DatabaseConfig) -> Vec<(i64, String)> {
     support::off_runtime(|| {
