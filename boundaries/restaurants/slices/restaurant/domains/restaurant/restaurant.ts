@@ -1,42 +1,16 @@
-export const RestaurantAcceptanceReason = {
-  OutsideOpeningHours: "outside_opening_hours",
-  ScheduleException: "schedule_exception",
-  CapacityExhausted: "capacity_exhausted",
-} as const;
+import { InvalidRestaurantError, InvalidRestaurantReason } from "./errors.ts";
+import type { RestaurantEvent } from "./events.ts";
 
-export type RestaurantAcceptanceReason =
-  (typeof RestaurantAcceptanceReason)[keyof typeof RestaurantAcceptanceReason];
-
-export type RestaurantAcceptanceContext = Readonly<{
-  now: Date;
-  opensAt: Date;
-  closesAt: Date;
-  currentOrders: number;
-  maximumOrders: number;
-  scheduleException: boolean;
-}>;
-
-export type RestaurantAcceptanceResult = Readonly<{
-  satisfied: boolean;
-  reasons: readonly RestaurantAcceptanceReason[];
-}>;
-
-export const RestaurantAcceptingOrders = (
-  context: RestaurantAcceptanceContext,
-): RestaurantAcceptanceResult => {
-  const reasons: RestaurantAcceptanceReason[] = [];
-  const now = context.now.getTime();
-  if (now < context.opensAt.getTime() || now >= context.closesAt.getTime()) {
-    reasons.push(RestaurantAcceptanceReason.OutsideOpeningHours);
-  }
-  if (context.scheduleException) {
-    reasons.push(RestaurantAcceptanceReason.ScheduleException);
-  }
-  if (context.currentOrders >= context.maximumOrders) {
-    reasons.push(RestaurantAcceptanceReason.CapacityExhausted);
-  }
-  return { satisfied: reasons.length === 0, reasons };
-};
+export * from "./acceptance.ts";
+export * from "./errors.ts";
+export type {
+  RestaurantAddressChanged,
+  RestaurantClosed,
+  RestaurantEvent,
+  RestaurantOpened,
+  RestaurantRegistered,
+  RestaurantRenamed,
+} from "./events.ts";
 
 export type RestaurantSnapshot = Readonly<{
   id: string;
@@ -65,55 +39,6 @@ export type StoredRestaurantSnapshot = Omit<
   "address" | "staff"
 > &
   Readonly<{ address?: string; staff?: readonly string[] }>;
-
-type RestaurantEventBase = Readonly<{
-  restaurantId: string;
-  occurredAt: Date;
-}>;
-
-export type RestaurantRegistered = RestaurantEventBase &
-  Readonly<{
-    type: "RestaurantRegistered";
-    name: string;
-    ownerId: string;
-    address: string;
-  }>;
-export type RestaurantRenamed = RestaurantEventBase &
-  Readonly<{ type: "RestaurantRenamed"; name: string }>;
-export type RestaurantAddressChanged = RestaurantEventBase &
-  Readonly<{ type: "RestaurantAddressChanged"; address: string }>;
-export type RestaurantOpened = RestaurantEventBase &
-  Readonly<{ type: "RestaurantOpened" }>;
-export type RestaurantClosed = RestaurantEventBase &
-  Readonly<{ type: "RestaurantClosed" }>;
-
-export type RestaurantEvent =
-  | RestaurantRegistered
-  | RestaurantRenamed
-  | RestaurantAddressChanged
-  | RestaurantOpened
-  | RestaurantClosed;
-
-export const InvalidRestaurantReason = {
-  EmptyName: "empty_name",
-  EmptyOwner: "empty_owner",
-  EmptyAddress: "empty_address",
-  EmptyStaff: "empty_staff",
-} as const;
-
-export type InvalidRestaurantReason =
-  (typeof InvalidRestaurantReason)[keyof typeof InvalidRestaurantReason];
-
-export class InvalidRestaurantError extends Error {
-  readonly code = "invalid_restaurant";
-  readonly reason: InvalidRestaurantReason;
-
-  constructor(reason: InvalidRestaurantReason) {
-    super(`invalid restaurant: ${reason}`);
-    this.name = "InvalidRestaurantError";
-    this.reason = reason;
-  }
-}
 
 const restaurantName = (name: string): string => {
   const normalized = name.trim();
