@@ -1,8 +1,25 @@
 import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
+import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import {
+  Code,
+  ConnectError,
+  type HandlerContext,
+  type ServiceImpl,
+} from "@connectrpc/connect";
 import type { Subject } from "../../pkg/application/subject.ts";
+import type { AcceptOrderHandler } from "../../slices/kitchenorder/applications/accept-order/accept-order.ts";
 import type { CancelRestaurantOrderHandler } from "../../slices/kitchenorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import type { MarkAssembledHandler } from "../../slices/kitchenorder/applications/mark-assembled/mark-assembled.ts";
+import type { MarkReadyForPickupHandler } from "../../slices/kitchenorder/applications/mark-order-ready/mark-order-ready.ts";
 import type { ReceiveOrderRequestHandler } from "../../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
+import type { RejectOrderHandler } from "../../slices/kitchenorder/applications/reject-order/reject-order.ts";
+import type { ReportPreparationDelayHandler } from "../../slices/kitchenorder/applications/report-preparation-delay/report-preparation-delay.ts";
+import type { ReportPreparationFailureHandler } from "../../slices/kitchenorder/applications/report-preparation-failure/report-preparation-failure.ts";
+import type {
+  KitchenCommand,
+  RestaurantOrderView,
+} from "../../slices/kitchenorder/applications/restaurant-order-support.ts";
+import type { StartPreparationHandler } from "../../slices/kitchenorder/applications/start-preparing-order/start-preparing-order.ts";
 import type { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
@@ -11,13 +28,22 @@ import type { RestaurantView } from "../../slices/restaurant/applications/restau
 import type { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import { RestaurantSchema } from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
+  AcceptRestaurantOrderResponseSchema,
   AssignStaffResponseSchema,
   CancelRestaurantOrderResponseSchema,
   GetRestaurantResponseSchema,
+  MarkRestaurantOrderAssembledResponseSchema,
+  MarkRestaurantOrderReadyResponseSchema,
   ReceiveOrderRequestResponseSchema,
   RegisterRestaurantResponseSchema,
+  RejectRestaurantOrderResponseSchema,
+  ReportPreparationDelayResponseSchema,
+  ReportPreparationFailureResponseSchema,
+  RestaurantOrderSchema,
+  RestaurantOrderState,
   type RestaurantsService,
   RevokeStaffResponseSchema,
+  StartPreparationResponseSchema,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import { RejectingSubjectResolver, type SubjectResolver } from "./subject.ts";
 
@@ -25,6 +51,13 @@ export type RestaurantsServiceDependencies = Readonly<{
   getRestaurant: Pick<GetRestaurantHandler, "execute">;
   receiveOrderRequest: Pick<ReceiveOrderRequestHandler, "execute">;
   cancelRestaurantOrder: Pick<CancelRestaurantOrderHandler, "execute">;
+  acceptRestaurantOrder: Pick<AcceptOrderHandler, "execute">;
+  rejectRestaurantOrder: Pick<RejectOrderHandler, "execute">;
+  startPreparation: Pick<StartPreparationHandler, "execute">;
+  markRestaurantOrderAssembled: Pick<MarkAssembledHandler, "execute">;
+  markRestaurantOrderReady: Pick<MarkReadyForPickupHandler, "execute">;
+  reportPreparationDelay: Pick<ReportPreparationDelayHandler, "execute">;
+  reportPreparationFailure: Pick<ReportPreparationFailureHandler, "execute">;
   registerRestaurant: Pick<RegisterRestaurantHandler, "execute">;
   assignStaff: Pick<AssignStaffHandler, "execute">;
   revokeStaff: Pick<RevokeStaffHandler, "execute">;
@@ -37,6 +70,23 @@ export const createRestaurantsService = (
   dependencies: RestaurantsServiceDependencies,
 ): ServiceImpl<typeof RestaurantsService> => {
   const subjects = dependencies.subjects ?? new RejectingSubjectResolver();
+  /** Resolves the caller and the addressed Restaurant Order of a kitchen command. */
+  const kitchenCommand = async (
+    request: { restaurantId: string; restaurantOrderId: string },
+    context: HandlerContext,
+  ): Promise<KitchenCommand> => {
+    const subject = withRequestRevision(
+      await subjects.resolve(context),
+      context,
+    );
+    requireField("restaurant_id", request.restaurantId);
+    requireField("restaurant_order_id", request.restaurantOrderId);
+    return {
+      subject,
+      restaurantId: request.restaurantId,
+      restaurantOrderId: request.restaurantOrderId,
+    };
+  };
   return {
     async getRestaurant(request) {
       try {
@@ -102,6 +152,109 @@ export const createRestaurantsService = (
               cancelled: false,
               rejectionReason: result.reason,
             });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async acceptRestaurantOrder(request, context) {
+      try {
+        const command = await kitchenCommand(request, context);
+        const view = await dependencies.acceptRestaurantOrder.execute(command);
+        return create(AcceptRestaurantOrderResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async rejectRestaurantOrder(request, context) {
+      try {
+        const command = await kitchenCommand(request, context);
+        const view = await dependencies.rejectRestaurantOrder.execute({
+          ...command,
+          reason: request.reason === "" ? undefined : request.reason,
+        });
+        return create(RejectRestaurantOrderResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async startPreparation(request, context) {
+      try {
+        const command = await kitchenCommand(request, context);
+        const view = await dependencies.startPreparation.execute(command);
+        return create(StartPreparationResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async markRestaurantOrderAssembled(request, context) {
+      try {
+        const command = await kitchenCommand(request, context);
+        const view =
+          await dependencies.markRestaurantOrderAssembled.execute(command);
+        return create(MarkRestaurantOrderAssembledResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async markRestaurantOrderReady(request, context) {
+      try {
+        const command = await kitchenCommand(request, context);
+        const view =
+          await dependencies.markRestaurantOrderReady.execute(command);
+        return create(MarkRestaurantOrderReadyResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async reportPreparationDelay(request, context) {
+      try {
+        const command = await kitchenCommand(request, context);
+        if (request.expectedReadyAt === undefined) {
+          throw new ConnectError(
+            "expected_ready_at is required",
+            Code.InvalidArgument,
+          );
+        }
+        const view = await dependencies.reportPreparationDelay.execute({
+          ...command,
+          expectedReadyAt: timestampDate(request.expectedReadyAt),
+          reason: request.reason === "" ? undefined : request.reason,
+        });
+        return create(ReportPreparationDelayResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async reportPreparationFailure(request, context) {
+      try {
+        const command = await kitchenCommand(request, context);
+        requireField("reason", request.reason);
+        const view = await dependencies.reportPreparationFailure.execute({
+          ...command,
+          reason: request.reason,
+        });
+        return create(ReportPreparationFailureResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
       } catch (error) {
         throw transportError(error);
       }
@@ -177,6 +330,33 @@ const toRestaurantMessage = (view: RestaurantView) =>
     name: view.name,
     isOpen: view.isOpen,
     address: view.address,
+  });
+
+const STATE_MESSAGES: Readonly<
+  Record<RestaurantOrderView["state"], RestaurantOrderState>
+> = {
+  RECEIVED: RestaurantOrderState.RECEIVED,
+  ACCEPTED: RestaurantOrderState.ACCEPTED,
+  QUEUED: RestaurantOrderState.QUEUED,
+  PREPARING: RestaurantOrderState.PREPARING,
+  ASSEMBLED: RestaurantOrderState.ASSEMBLED,
+  READY: RestaurantOrderState.READY,
+  REJECTED: RestaurantOrderState.REJECTED,
+  CANCELLED: RestaurantOrderState.CANCELLED,
+  FAILED: RestaurantOrderState.FAILED,
+};
+
+const toRestaurantOrderMessage = (view: RestaurantOrderView) =>
+  create(RestaurantOrderSchema, {
+    restaurantOrderId: view.restaurantOrderId,
+    orderId: view.orderId,
+    restaurantId: view.restaurantId,
+    state: STATE_MESSAGES[view.state],
+    expectedReadyAt:
+      view.timeline.expectedReadyAt === undefined
+        ? undefined
+        : timestampFromDate(view.timeline.expectedReadyAt),
+    version: BigInt(view.version),
   });
 
 const toStaffMessage = (result: StaffChangeResult) => ({

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package nomnom.restaurants.v1;
 
+import "google/protobuf/timestamp.proto";
 import "nomnom/restaurants/v1/restaurants.proto";
 
 service RestaurantsService {
@@ -10,6 +11,19 @@ service RestaurantsService {
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc ReceiveOrderRequest(ReceiveOrderRequestRequest) returns (ReceiveOrderRequestResponse);
   rpc CancelRestaurantOrder(CancelRestaurantOrderRequest) returns (CancelRestaurantOrderResponse);
+
+  // Kitchen commands of restaurant staff over one Restaurant Order addressed by
+  // restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
+  // an order of another restaurant is NOT_FOUND, a forbidden transition is
+  // FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
+  // succeeds without a new fact; other repeats are FAILED_PRECONDITION.
+  rpc AcceptRestaurantOrder(AcceptRestaurantOrderRequest) returns (AcceptRestaurantOrderResponse);
+  rpc RejectRestaurantOrder(RejectRestaurantOrderRequest) returns (RejectRestaurantOrderResponse);
+  rpc StartPreparation(StartPreparationRequest) returns (StartPreparationResponse);
+  rpc MarkRestaurantOrderAssembled(MarkRestaurantOrderAssembledRequest) returns (MarkRestaurantOrderAssembledResponse);
+  rpc MarkRestaurantOrderReady(MarkRestaurantOrderReadyRequest) returns (MarkRestaurantOrderReadyResponse);
+  rpc ReportPreparationDelay(ReportPreparationDelayRequest) returns (ReportPreparationDelayResponse);
+  rpc ReportPreparationFailure(ReportPreparationFailureRequest) returns (ReportPreparationFailureResponse);
 
   // Restaurant administration. RegisterRestaurant requires platform#register_restaurant
   // and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
@@ -56,6 +70,101 @@ message CancelRestaurantOrderResponse {
   bool cancelled = 2;
   // Business reason when cancellation is rejected by stage, for example already_ready.
   string rejection_reason = 3;
+}
+
+enum RestaurantOrderState {
+  RESTAURANT_ORDER_STATE_UNSPECIFIED = 0;
+  RESTAURANT_ORDER_STATE_RECEIVED = 1;
+  RESTAURANT_ORDER_STATE_ACCEPTED = 2;
+  RESTAURANT_ORDER_STATE_QUEUED = 3;
+  RESTAURANT_ORDER_STATE_PREPARING = 4;
+  RESTAURANT_ORDER_STATE_ASSEMBLED = 5;
+  RESTAURANT_ORDER_STATE_READY = 6;
+  RESTAURANT_ORDER_STATE_REJECTED = 7;
+  RESTAURANT_ORDER_STATE_CANCELLED = 8;
+  RESTAURANT_ORDER_STATE_FAILED = 9;
+}
+
+// Restaurant Order after a kitchen command.
+message RestaurantOrder {
+  string restaurant_order_id = 1;
+  string order_id = 2;
+  string restaurant_id = 3;
+  RestaurantOrderState state = 4;
+  // Unset until Acceptance.
+  google.protobuf.Timestamp expected_ready_at = 5;
+  int64 version = 6;
+}
+
+message AcceptRestaurantOrderRequest {
+  string restaurant_id = 1;
+  string restaurant_order_id = 2;
+}
+
+message AcceptRestaurantOrderResponse {
+  RestaurantOrder restaurant_order = 1;
+}
+
+message RejectRestaurantOrderRequest {
+  string restaurant_id = 1;
+  string restaurant_order_id = 2;
+  // Optional opaque reason.
+  string reason = 3;
+}
+
+message RejectRestaurantOrderResponse {
+  RestaurantOrder restaurant_order = 1;
+}
+
+message StartPreparationRequest {
+  string restaurant_id = 1;
+  string restaurant_order_id = 2;
+}
+
+message StartPreparationResponse {
+  RestaurantOrder restaurant_order = 1;
+}
+
+message MarkRestaurantOrderAssembledRequest {
+  string restaurant_id = 1;
+  string restaurant_order_id = 2;
+}
+
+message MarkRestaurantOrderAssembledResponse {
+  RestaurantOrder restaurant_order = 1;
+}
+
+message MarkRestaurantOrderReadyRequest {
+  string restaurant_id = 1;
+  string restaurant_order_id = 2;
+}
+
+message MarkRestaurantOrderReadyResponse {
+  RestaurantOrder restaurant_order = 1;
+}
+
+message ReportPreparationDelayRequest {
+  string restaurant_id = 1;
+  string restaurant_order_id = 2;
+  // Required; later than the current expected_ready_at and now.
+  google.protobuf.Timestamp expected_ready_at = 3;
+  // Optional opaque category for analytics.
+  string reason = 4;
+}
+
+message ReportPreparationDelayResponse {
+  RestaurantOrder restaurant_order = 1;
+}
+
+message ReportPreparationFailureRequest {
+  string restaurant_id = 1;
+  string restaurant_order_id = 2;
+  // Required opaque reason, for example ITEM_UNAVAILABLE.
+  string reason = 3;
+}
+
+message ReportPreparationFailureResponse {
+  RestaurantOrder restaurant_order = 1;
 }
 
 message RegisterRestaurantRequest {

@@ -2,9 +2,10 @@
 // @generated from file nomnom/restaurants/v1/service.proto (package nomnom.restaurants.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 import type { Restaurant } from "./restaurants_pb.js";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
  * Describes the file nomnom/restaurants/v1/service.proto.
@@ -170,6 +171,338 @@ export declare type CancelRestaurantOrderResponse = Message<"nomnom.restaurants.
 export declare const CancelRestaurantOrderResponseSchema: GenMessage<CancelRestaurantOrderResponse>;
 
 /**
+ * Restaurant Order after a kitchen command.
+ *
+ * @generated from message nomnom.restaurants.v1.RestaurantOrder
+ */
+export declare type RestaurantOrder = Message<"nomnom.restaurants.v1.RestaurantOrder"> & {
+  /**
+   * @generated from field: string restaurant_order_id = 1;
+   */
+  restaurantOrderId: string;
+
+  /**
+   * @generated from field: string order_id = 2;
+   */
+  orderId: string;
+
+  /**
+   * @generated from field: string restaurant_id = 3;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrderState state = 4;
+   */
+  state: RestaurantOrderState;
+
+  /**
+   * Unset until Acceptance.
+   *
+   * @generated from field: google.protobuf.Timestamp expected_ready_at = 5;
+   */
+  expectedReadyAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int64 version = 6;
+   */
+  version: bigint;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RestaurantOrder.
+ * Use `create(RestaurantOrderSchema)` to create a new message.
+ */
+export declare const RestaurantOrderSchema: GenMessage<RestaurantOrder>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.AcceptRestaurantOrderRequest
+ */
+export declare type AcceptRestaurantOrderRequest = Message<"nomnom.restaurants.v1.AcceptRestaurantOrderRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string restaurant_order_id = 2;
+   */
+  restaurantOrderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.AcceptRestaurantOrderRequest.
+ * Use `create(AcceptRestaurantOrderRequestSchema)` to create a new message.
+ */
+export declare const AcceptRestaurantOrderRequestSchema: GenMessage<AcceptRestaurantOrderRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.AcceptRestaurantOrderResponse
+ */
+export declare type AcceptRestaurantOrderResponse = Message<"nomnom.restaurants.v1.AcceptRestaurantOrderResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.AcceptRestaurantOrderResponse.
+ * Use `create(AcceptRestaurantOrderResponseSchema)` to create a new message.
+ */
+export declare const AcceptRestaurantOrderResponseSchema: GenMessage<AcceptRestaurantOrderResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.RejectRestaurantOrderRequest
+ */
+export declare type RejectRestaurantOrderRequest = Message<"nomnom.restaurants.v1.RejectRestaurantOrderRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string restaurant_order_id = 2;
+   */
+  restaurantOrderId: string;
+
+  /**
+   * Optional opaque reason.
+   *
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RejectRestaurantOrderRequest.
+ * Use `create(RejectRestaurantOrderRequestSchema)` to create a new message.
+ */
+export declare const RejectRestaurantOrderRequestSchema: GenMessage<RejectRestaurantOrderRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.RejectRestaurantOrderResponse
+ */
+export declare type RejectRestaurantOrderResponse = Message<"nomnom.restaurants.v1.RejectRestaurantOrderResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RejectRestaurantOrderResponse.
+ * Use `create(RejectRestaurantOrderResponseSchema)` to create a new message.
+ */
+export declare const RejectRestaurantOrderResponseSchema: GenMessage<RejectRestaurantOrderResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.StartPreparationRequest
+ */
+export declare type StartPreparationRequest = Message<"nomnom.restaurants.v1.StartPreparationRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string restaurant_order_id = 2;
+   */
+  restaurantOrderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.StartPreparationRequest.
+ * Use `create(StartPreparationRequestSchema)` to create a new message.
+ */
+export declare const StartPreparationRequestSchema: GenMessage<StartPreparationRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.StartPreparationResponse
+ */
+export declare type StartPreparationResponse = Message<"nomnom.restaurants.v1.StartPreparationResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.StartPreparationResponse.
+ * Use `create(StartPreparationResponseSchema)` to create a new message.
+ */
+export declare const StartPreparationResponseSchema: GenMessage<StartPreparationResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.MarkRestaurantOrderAssembledRequest
+ */
+export declare type MarkRestaurantOrderAssembledRequest = Message<"nomnom.restaurants.v1.MarkRestaurantOrderAssembledRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string restaurant_order_id = 2;
+   */
+  restaurantOrderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.MarkRestaurantOrderAssembledRequest.
+ * Use `create(MarkRestaurantOrderAssembledRequestSchema)` to create a new message.
+ */
+export declare const MarkRestaurantOrderAssembledRequestSchema: GenMessage<MarkRestaurantOrderAssembledRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.MarkRestaurantOrderAssembledResponse
+ */
+export declare type MarkRestaurantOrderAssembledResponse = Message<"nomnom.restaurants.v1.MarkRestaurantOrderAssembledResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.MarkRestaurantOrderAssembledResponse.
+ * Use `create(MarkRestaurantOrderAssembledResponseSchema)` to create a new message.
+ */
+export declare const MarkRestaurantOrderAssembledResponseSchema: GenMessage<MarkRestaurantOrderAssembledResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.MarkRestaurantOrderReadyRequest
+ */
+export declare type MarkRestaurantOrderReadyRequest = Message<"nomnom.restaurants.v1.MarkRestaurantOrderReadyRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string restaurant_order_id = 2;
+   */
+  restaurantOrderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.MarkRestaurantOrderReadyRequest.
+ * Use `create(MarkRestaurantOrderReadyRequestSchema)` to create a new message.
+ */
+export declare const MarkRestaurantOrderReadyRequestSchema: GenMessage<MarkRestaurantOrderReadyRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.MarkRestaurantOrderReadyResponse
+ */
+export declare type MarkRestaurantOrderReadyResponse = Message<"nomnom.restaurants.v1.MarkRestaurantOrderReadyResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.MarkRestaurantOrderReadyResponse.
+ * Use `create(MarkRestaurantOrderReadyResponseSchema)` to create a new message.
+ */
+export declare const MarkRestaurantOrderReadyResponseSchema: GenMessage<MarkRestaurantOrderReadyResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ReportPreparationDelayRequest
+ */
+export declare type ReportPreparationDelayRequest = Message<"nomnom.restaurants.v1.ReportPreparationDelayRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string restaurant_order_id = 2;
+   */
+  restaurantOrderId: string;
+
+  /**
+   * Required; later than the current expected_ready_at and now.
+   *
+   * @generated from field: google.protobuf.Timestamp expected_ready_at = 3;
+   */
+  expectedReadyAt?: Timestamp | undefined;
+
+  /**
+   * Optional opaque category for analytics.
+   *
+   * @generated from field: string reason = 4;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ReportPreparationDelayRequest.
+ * Use `create(ReportPreparationDelayRequestSchema)` to create a new message.
+ */
+export declare const ReportPreparationDelayRequestSchema: GenMessage<ReportPreparationDelayRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ReportPreparationDelayResponse
+ */
+export declare type ReportPreparationDelayResponse = Message<"nomnom.restaurants.v1.ReportPreparationDelayResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ReportPreparationDelayResponse.
+ * Use `create(ReportPreparationDelayResponseSchema)` to create a new message.
+ */
+export declare const ReportPreparationDelayResponseSchema: GenMessage<ReportPreparationDelayResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ReportPreparationFailureRequest
+ */
+export declare type ReportPreparationFailureRequest = Message<"nomnom.restaurants.v1.ReportPreparationFailureRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string restaurant_order_id = 2;
+   */
+  restaurantOrderId: string;
+
+  /**
+   * Required opaque reason, for example ITEM_UNAVAILABLE.
+   *
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ReportPreparationFailureRequest.
+ * Use `create(ReportPreparationFailureRequestSchema)` to create a new message.
+ */
+export declare const ReportPreparationFailureRequestSchema: GenMessage<ReportPreparationFailureRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ReportPreparationFailureResponse
+ */
+export declare type ReportPreparationFailureResponse = Message<"nomnom.restaurants.v1.ReportPreparationFailureResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ReportPreparationFailureResponse.
+ * Use `create(ReportPreparationFailureResponseSchema)` to create a new message.
+ */
+export declare const ReportPreparationFailureResponseSchema: GenMessage<ReportPreparationFailureResponse>;
+
+/**
  * @generated from message nomnom.restaurants.v1.RegisterRestaurantRequest
  */
 export declare type RegisterRestaurantRequest = Message<"nomnom.restaurants.v1.RegisterRestaurantRequest"> & {
@@ -317,6 +650,66 @@ export declare type RevokeStaffResponse = Message<"nomnom.restaurants.v1.RevokeS
 export declare const RevokeStaffResponseSchema: GenMessage<RevokeStaffResponse>;
 
 /**
+ * @generated from enum nomnom.restaurants.v1.RestaurantOrderState
+ */
+export enum RestaurantOrderState {
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_RECEIVED = 1;
+   */
+  RECEIVED = 1,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_ACCEPTED = 2;
+   */
+  ACCEPTED = 2,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_QUEUED = 3;
+   */
+  QUEUED = 3,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_PREPARING = 4;
+   */
+  PREPARING = 4,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_ASSEMBLED = 5;
+   */
+  ASSEMBLED = 5,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_READY = 6;
+   */
+  READY = 6,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_REJECTED = 7;
+   */
+  REJECTED = 7,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_CANCELLED = 8;
+   */
+  CANCELLED = 8,
+
+  /**
+   * @generated from enum value: RESTAURANT_ORDER_STATE_FAILED = 9;
+   */
+  FAILED = 9,
+}
+
+/**
+ * Describes the enum nomnom.restaurants.v1.RestaurantOrderState.
+ */
+export declare const RestaurantOrderStateSchema: GenEnum<RestaurantOrderState>;
+
+/**
  * @generated from service nomnom.restaurants.v1.RestaurantsService
  */
 export declare const RestaurantsService: GenService<{
@@ -345,6 +738,68 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof CancelRestaurantOrderRequestSchema;
     output: typeof CancelRestaurantOrderResponseSchema;
+  },
+  /**
+   * Kitchen commands of restaurant staff over one Restaurant Order addressed by
+   * restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
+   * an order of another restaurant is NOT_FOUND, a forbidden transition is
+   * FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
+   * succeeds without a new fact; other repeats are FAILED_PRECONDITION.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.AcceptRestaurantOrder
+   */
+  acceptRestaurantOrder: {
+    methodKind: "unary";
+    input: typeof AcceptRestaurantOrderRequestSchema;
+    output: typeof AcceptRestaurantOrderResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.RejectRestaurantOrder
+   */
+  rejectRestaurantOrder: {
+    methodKind: "unary";
+    input: typeof RejectRestaurantOrderRequestSchema;
+    output: typeof RejectRestaurantOrderResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.StartPreparation
+   */
+  startPreparation: {
+    methodKind: "unary";
+    input: typeof StartPreparationRequestSchema;
+    output: typeof StartPreparationResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderAssembled
+   */
+  markRestaurantOrderAssembled: {
+    methodKind: "unary";
+    input: typeof MarkRestaurantOrderAssembledRequestSchema;
+    output: typeof MarkRestaurantOrderAssembledResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderReady
+   */
+  markRestaurantOrderReady: {
+    methodKind: "unary";
+    input: typeof MarkRestaurantOrderReadyRequestSchema;
+    output: typeof MarkRestaurantOrderReadyResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ReportPreparationDelay
+   */
+  reportPreparationDelay: {
+    methodKind: "unary";
+    input: typeof ReportPreparationDelayRequestSchema;
+    output: typeof ReportPreparationDelayResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ReportPreparationFailure
+   */
+  reportPreparationFailure: {
+    methodKind: "unary";
+    input: typeof ReportPreparationFailureRequestSchema;
+    output: typeof ReportPreparationFailureResponseSchema;
   },
   /**
    * Restaurant administration. RegisterRestaurant requires platform#register_restaurant
