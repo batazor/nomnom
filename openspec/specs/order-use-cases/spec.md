@@ -81,13 +81,19 @@ Place Order SHALL записывать creation relationship Customer → `Order
 ### Requirement: Confirm Order отражает Order Acceptance
 **ID:** FR-105
 
-Confirm Order SHALL переводить `Order` из `placed` в `confirmed` по событию Order Acceptance ресторана и после commit передавать бизнес-факт Order Fulfillment Workflow вместе с исходным `event_id`.
+Confirm Order SHALL переводить `Order` из `placed` в `confirmed` по событию Order Acceptance ресторана, в той же транзакции записывать Fulfillment Fact `restaurant_accepted` с моментом события и после commit передавать бизнес-факт Order Fulfillment Workflow вместе с исходным `event_id`.
 
 #### Scenario: Ресторан принял заказ
 **ID:** AC-108
 
 - **WHEN** `Order` в состоянии `placed` получает событие Order Acceptance
 - **THEN** `Order` переходит в `confirmed`, а workflow получает факт принятия с исходным `event_id`
+
+#### Scenario: Момент подтверждения сохраняется
+**ID:** AC-563
+
+- **WHEN** событие Order Acceptance с `OccurredAt = 12:03` подтверждает `Order`
+- **THEN** `GetOrder` возвращает факт `restaurant_accepted` с моментом `12:03`
 
 ### Requirement: Отказ ресторана сохраняется без финализации Order
 **ID:** FR-106
@@ -388,3 +394,47 @@ Production cancellation policy SHALL открывать окно в момент
 
 - **WHEN** второй запрос с тем же idempotency key сохраняет key, пока первый не закоммичен, и первый затем коммитит свой Order
 - **THEN** второй запрос возвращает `order_id` первого с `replayed=true` и не создаёт второй `Order`
+
+### Requirement: Отказ Cancellation Request называет причину
+**ID:** FR-494
+
+Отказ Request Order Cancellation по окну отмены SHALL возвращаться gRPC `FAILED_PRECONDITION` с `ErrorInfo.reason` `CANCELLATION_WINDOW_NOT_OPEN` или `CANCELLATION_WINDOW_EXPIRED`; отказ по состоянию заказа или процессу SHALL сохранять `ORDER_STATE_CONFLICT`.
+
+#### Scenario: Окно отмены истекло
+**ID:** AC-562
+
+- **WHEN** покупатель запрашивает отмену после закрытия окна
+- **THEN** ответ — `FAILED_PRECONDITION` с `ErrorInfo.reason = CANCELLATION_WINDOW_EXPIRED`
+
+### Requirement: Place Order читает каталог из restaurants
+**ID:** FR-497
+
+Production-адаптер каталога Place Order SHALL строить snapshot из `restaurants.GetRestaurant` и `GetMenu` до транзакции: цены и доступность запрошенных позиций, минимальная и максимальная сумма — из конфигурации. Закрытый ресторан MUST отклонять оформление до транзакции, недоступность `restaurants` MUST давать `UNAVAILABLE`.
+
+#### Scenario: Закрытый ресторан
+**ID:** AC-566
+
+- **WHEN** покупатель оформляет заказ в ресторане с `is_open = false`
+- **THEN** `PlaceOrder` отвечает `FAILED_PRECONDITION` с `ErrorInfo.reason = RESTAURANT_NOT_ACCEPTING_ORDERS`, и `Order` не создаётся
+
+### Requirement: Отказ Place Order называет причины
+**ID:** FR-498
+
+Отказ политики `OrderItemsOrderable` SHALL возвращаться `FAILED_PRECONDITION` с `ErrorInfo.reason = ORDER_NOT_ORDERABLE` и metadata `codes` и `menu_item_ids`.
+
+#### Scenario: Позиция недоступна
+**ID:** AC-567
+
+- **WHEN** заказ содержит недоступную позицию `menu-gyoza`
+- **THEN** metadata ответа содержит `codes = ORDER_ITEM_UNAVAILABLE` и `menu_item_ids = menu-gyoza`
+
+### Requirement: OrderCompleted несёт момент завершения
+**ID:** FR-544
+
+Domain Event `OrderCompleted` SHALL содержать момент завершения из домена, а Integration Event `OrderCompleted` SHALL публиковать его как время события; время записи в Outbox MUST NOT подменять его.
+
+#### Scenario: Повтор публикации
+**ID:** AC-634
+
+- **WHEN** Outbox публикует `OrderCompleted` повторно после сбоя
+- **THEN** время события совпадает с моментом завершения, а не с моментом повторной записи
