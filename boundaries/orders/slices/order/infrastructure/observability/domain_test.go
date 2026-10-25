@@ -69,7 +69,8 @@ func cancelled(t *testing.T, outcome order.NegativeOutcome, code string) order.O
 
 // commit имитирует ObservedStore.Do: events попадают в Outbox внутри fn.
 func commit(ctx context.Context, m *observability.DomainMetrics, fnErr error, events ...order.DomainEvent) {
-	ctx, done := m.Track(ctx)
+	ctx, attempt, done := m.Track(ctx)
+	attempt()
 	m.Appended(ctx, events)
 	done(fnErr)
 }
@@ -97,8 +98,8 @@ func TestNestedUnitOfWorkRecordsOnceAfterOuterCommit(t *testing.T) {
 	reader := installMeter(t)
 	m := observability.NewDomainMetrics(testReasons)
 
-	outer, done := m.Track(context.Background())
-	inner, innerDone := m.Track(outer)
+	outer, _, done := m.Track(context.Background())
+	inner, _, innerDone := m.Track(outer)
 	m.Appended(inner, []order.DomainEvent{order.OrderPlaced{OrderID: "order-1"}})
 	innerDone(nil)
 	assert.Empty(t, sums(t, collect(t, reader)["nomnom.orders.placed"], ""), "вложенный Do не фиксирует")
@@ -168,7 +169,10 @@ func TestOrdersInStateObservesStoreCounts(t *testing.T) {
 
 func TestNilDomainMetricsIsNoOp(t *testing.T) {
 	var m *observability.DomainMetrics
-	ctx, done := m.Track(context.Background())
+	ctx, attempt, done := m.Track(context.Background())
+	attempt()
 	m.Appended(ctx, []order.DomainEvent{order.OrderPlaced{}})
+	m.Loaded(ctx, nil)
+	m.Saved(ctx, nil)
 	done(nil)
 }
