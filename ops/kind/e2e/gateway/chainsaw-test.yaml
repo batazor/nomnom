@@ -25,7 +25,8 @@ metadata:
   name: gateway-routes-to-backends
 spec:
   description: >
-    Команды Order Fulfillment доходят до backend'а: ответ формирует backend, а не Envoy.
+    Опубликованные методы restaurants, delivery и payments (команды Order Fulfillment, кухни,
+    курьера и администрирования) доходят до backend'а: ответ формирует backend, а не Envoy.
     Token grpc-caller выпущен для audience nomnom.orders, поэтому restaurants, delivery и
     payments отвечают UNAUTHENTICATED своим текстом.
   scenarios:
@@ -43,6 +44,69 @@ spec:
         - {name: message, value: verified caller identity is required}
     - bindings:
         - {name: method, value: nomnom.delivery.v1.DeliveryService/CancelDelivery}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RejectRestaurantOrder}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/StartPreparation}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderAssembled}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderReady}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ReportPreparationDelay}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ReportPreparationFailure}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/GetKitchenQueue}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ListIncomingOrders}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AssignStaff}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RevokeStaff}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/RegisterCourier}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/UpdateCourierLocation}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/SetCourierAvailability}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/ListAvailableDeliveryOffers}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/AcceptDeliveryOffer}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/RejectDeliveryOffer}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/ConfirmPickup}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/ConfirmDelivery}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/ReportDeliveryFailure}
         - {name: message, value: verified caller identity is required}
     - bindings:
         - {name: method, value: nomnom.payments.v1.PaymentsService/CreatePayment}
@@ -89,13 +153,13 @@ metadata:
   name: gateway-rejects-unregistered
 spec:
   description: >
-    Незарегистрированный сервис и метод без вызывающего (команда кухни) получают
+    Незарегистрированный сервис и метод без вызывающего (GetCourierCurrentDelivery) получают
     UNIMPLEMENTED от Envoy и не доходят до backend'а.
   scenarios:
     - bindings:
         - {name: method, value: nomnom.unknown.v1.UnknownService/Call}
     - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder}
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/GetCourierCurrentDelivery}
   steps:
     - use:
         template: ../templates/grpc-call.yaml

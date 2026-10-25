@@ -53,6 +53,15 @@ make kind-down
   тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
   `nomnom-infra`. Kafka и Temporal применяет `before`-hook helm-деплоера и ждёт их readiness:
   consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
+- `orders-worker` (Temporal worker Order Fulfillment Workflow) и `orders-forwarder`
+  ([ADR 13](../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md), Outbox `orders` → Kafka) — releases chart `orders` с `values-worker.yaml`
+  / `values-forwarder.yaml` и [`values/orders-worker.yaml`](values/orders-worker.yaml) /
+  [`values/orders-forwarder.yaml`](values/orders-forwarder.yaml): тот же образ, своя `command`, без
+  Service, `dependsOn: [orders]`. Worker опрашивает Temporal в `nomnom-infra` (Search Attribute стадии
+  создаёт сам: `TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true`, dev server держит namespace в памяти) и
+  вызывает restaurants, delivery и payments через internal gateway с projected tokens их audiences;
+  ServiceAccount `nomnom-orders/orders-worker` — в allowlist всех трёх. Egress к PostgreSQL, Kafka и
+  Temporal разрешён `manifests/netpol/app-infrastructure.yaml` для всех pod `nomnom-orders`.
 - `payments-relay`, `delivery-relay`, `restaurants-relay` ([ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md)) —
   releases charts контекстов с `values-relay.yaml` и `values/<context>-relay.yaml`: тот же образ,
   своя `command`, без Service и миграций (их выполняет основной release), один экземпляр.
@@ -99,6 +108,17 @@ make kind-down
   На кластере, где ServiceAccount `bff` создала прежняя фикстура, скрипт передаёт его release `bff`.
   Фикстура `grpc-caller` теперь работает под своим ServiceAccount `nomnom-bff/grpc-caller`: он
   допущен allowlist `orders`, но не делегат.
+- SpiceDB kind получает общий `authorization/bootstrap.yaml` и kind-only grants
+  [`authz/bootstrap-kind.yaml`](authz/bootstrap-kind.yaml) (`platform:nomnom#operator@user:kind-operator`
+  — оператор e2e пути заказа): `scripts/authz.sh` дописывает их relationships в блок relationships
+  общего bootstrap, и checksum перезапуска SpiceDB считается от объединённого файла. Общий файл не
+  меняется: grant конкретного человека в него не входит.
+- Fixture `e2e-driver` (`nomnom-bff`, ServiceAccount `e2e-driver`, образ `e2e/probe`, projected tokens
+  `nomnom.restaurants` и `nomnom.delivery`) играет оператора, владельца, кухню и курьера, у которых ещё
+  нет клиентов. Только kind-values `restaurants` и `delivery` добавляют `nomnom-bff/e2e-driver=e2e-driver`
+  в allowlist и `e2e-driver` в `userDelegates`; chart-default не меняется. Egress — базовые политики
+  неймспейса (DNS, internal gateway) и Service `bff` (`manifests/netpol/fixtures.yaml`, порт 3010);
+  BFF принимает GraphQL только от него.
 - `scripts/verify.sh` выполняет проверки, `scripts/diagnostics.sh` собирает pod logs, events,
   состояние Gateway API, `cilium-dbg status` и DROPPED flows Hubble; `scripts/e2e.sh`
   связывает шаги и собирает диагностику при ошибке.
@@ -118,14 +138,14 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 | Неймспейс | Содержимое |
 | --- | --- |
 | `nomnom-orders`, `nomnom-restaurants`, `nomnom-delivery`, `nomnom-payments` | приложения из Helm charts; в `orders` и `restaurants` — pod проверок `net-probe` (curl) |
-| `nomnom-bff` | BFF (release `bff`, ServiceAccount `bff`), Secret `bff-assertion-key`, ConfigMap `idp-jwks`; pod проверок `grpc-caller` (curl, ServiceAccount `grpc-caller`) |
+| `nomnom-bff` | BFF (release `bff`, ServiceAccount `bff`), Secret `bff-assertion-key`, ConfigMap `idp-jwks`; pod проверок `grpc-caller` (curl, ServiceAccount `grpc-caller`) и `e2e-driver` (grpcurl, curl, ServiceAccount `e2e-driver`) |
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура для ingress-проверок |
 | `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | `trace-capture` всегда; Alloy — только с `GRAFANA_CLOUD=1` |
-| `nomnom-infra` | single-node Kafka (KRaft, `apache/kafka`) и Temporal dev server для `orders-consumer` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir` |
+| `nomnom-infra` | single-node Kafka (KRaft, `apache/kafka`) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir` |
 
 ## Internal gateway
 
@@ -146,13 +166,19 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 | `restaurants-v1-reads` | `GetRestaurant`, `GetMenu`, `ListRestaurants` | `reads` |
 | `restaurants-v1-commands` | `ReceiveOrderRequest`, `CancelRestaurantOrder` | `commands` |
 | `restaurants-v1-management` | `OpenRestaurant`, `CloseRestaurant`, `CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability` | `commands` |
+| `restaurants-v1-kitchen` | `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure` | `commands` |
+| `restaurants-v1-kitchen-reads` | `GetKitchenQueue`, `ListIncomingOrders` | `reads` |
+| `restaurants-v1-administration` | `RegisterRestaurant`, `AssignStaff`, `RevokeStaff` | `commands` |
 | `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
+| `delivery-v1-courier` | `UpdateCourierLocation`, `SetCourierAvailability`, `AcceptDeliveryOffer`, `RejectDeliveryOffer`, `ConfirmPickup`, `ConfirmDelivery`, `ReportDeliveryFailure` | `commands` |
+| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers` | `reads` |
+| `delivery-v1-administration` | `RegisterCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
 
 `reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и
 `reset-before-request`; `commands` — только на `connect-failure`, `refused-stream` и
 `reset-before-request`. Вызов незарегистрированного сервиса или метода получает 404 (gRPC
-`UNIMPLEMENTED`), например команды кухни, у которых ещё нет вызывающих. Новый бизнес-RPC публикуется так:
+`UNIMPLEMENTED`), например `GetCourierCurrentDelivery`, у которого ещё нет вызывающих. Новый бизнес-RPC публикуется так:
 
 1. Метод (`method.type: Exact`, полное имя сервиса и метод) — в route своего класса и
    `targetRefs` политики `reads` или `commands`; новый route добавляется в `targetRefs` нужной
@@ -192,14 +218,20 @@ curl --cacert "$(ops/kind/scripts/local-ca.sh)" --resolve webhooks.nomnom.localh
 `grpcurl` с descriptor sets всех контрактов (образ `e2e/probe`, fixture `grpc-caller` в
 `nomnom-bff` с projected token). Вызов описан один раз — шаблон шага
 `e2e/templates/grpc-call.yaml` (bindings `method`, `authorize`, `code`, `message`, `request`);
-наборы методов задаются `scenarios`. Отчёт JUnit — `.artifacts/chainsaw-report.xml`.
+наборы методов задаются `scenarios`. Сценарии от имени пользователя вызывает fixture `e2e-driver`:
+шаблоны `e2e/templates/driver-call.yaml` (gRPC с user assertion, выпущенным на хосте
+`scripts/mint-jwt.py` kind-ключом BFF) и `e2e/templates/customer-graphql.yaml` (GraphQL покупателя
+в Service `bff` с access token тестового identity provider). Ожидание асинхронного перехода —
+повтор вызова до условия `until` в пределах `wait` секунд; ids прогона шаги передают через
+ConfigMap состояния теста. Отчёт JUnit — `.artifacts/chainsaw-report.xml`.
 
 | Тест | Проверка |
 | --- | --- |
 | `gateway-registry` | все `GRPCRoute` `Accepted` и `ResolvedRefs` |
 | `gateway-routes-orders` | `OrdersService` без identity доходит до orders: `UNAUTHENTICATED` от backend'а |
-| `gateway-routes-to-backends` | 10 команд Order Fulfillment доходят до restaurants, delivery и payments: ответ backend'а, не Envoy |
-| `gateway-rejects-unregistered` | незарегистрированный сервис и команда кухни без вызывающего: `UNIMPLEMENTED` от Envoy |
+| `gateway-routes-to-backends` | опубликованные методы restaurants, delivery и payments (Order Fulfillment, кухня, курьер, администрирование) доходят до backend'а: ответ backend'а, не Envoy |
+| `gateway-rejects-unregistered` | незарегистрированный сервис и метод без вызывающего (`GetCourierCurrentDelivery`): `UNIMPLEMENTED` от Envoy |
+| `order-lifecycle` | путь заказа (AC-740): оператор регистрирует ресторан и курьера, владелец — персонал, меню, открытие; курьер на линии; покупатель оформляет заказ через BFF; кухня находит его в `ListIncomingOrders`, принимает и готовит, курьер принимает предложение Dispatch, забирает и доставляет; в BFF `DELIVERED` с milestones `COURIER_ASSIGNED`, `PICKED_UP`, `DELIVERED`, оплата `captured`. Ids уникальны на прогон; в конце курьер уходит с линии |
 
 Один тест: `cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$CHAINSAW_VERSION test --kube-context kind-nomnom-test --config .chainsaw.yaml --test-dir . --include-test-regex 'chainsaw/gateway-registry'`.
 
@@ -220,6 +252,7 @@ curl --cacert "$(ops/kind/scripts/local-ca.sh)" --resolve webhooks.nomnom.localh
 | Назначение | Источник → получатель | Порт |
 | --- | --- | --- |
 | Kubelet probes | узел → pod | порт пробы; разрешено Cilium для host-трафика, проверяется тестом 6a |
+| `order-lifecycle` → BFF | `e2e-driver` → Service `bff` | 3010 HTTP; `manifests/netpol/fixtures.yaml` |
 | Проверка 7 → BFF | `kubectl port-forward` → pod BFF | 3010; поток идёт через kubelet внутрь pod и ingress-политикой не ограничивается; egress BFF — только базовые политики неймспейса (DNS, internal gateway, telemetry) |
 | DNS | pod → CoreDNS | UDP/TCP 53 |
 | Telemetry | приложения → Alloy | 4317 OTLP gRPC, 4318 OTLP HTTP, 4040 Pyroscope |

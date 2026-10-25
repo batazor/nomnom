@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+# Запрос покупателя к BFF настоящим путём (ADR 32): access token тестового identity provider
+# (tests/identity/fixtures, только для kind) выпускается на хосте scripts/mint-jwt.py, GraphQL
+# уходит изнутри кластера из fixture e2e-driver в Service bff (manifests/netpol/fixtures.yaml),
+# без port-forward.
+#
+# Состояние прогона — ConfigMap $state теста; jq-программы видят его как $s. Bindings:
+#   body  — jq: тело запроса {query, variables}; покупатель — $s.customer;
+#   until — jq над ответом: запрос повторяется, пока результат не true (по умолчанию —
+#           ответ без errors);
+#   wait  — сколько секунд повторять; 0 — одна попытка;
+#   save  — jq над ответом: объект новых ключей состояния (по умолчанию {}).
+# Access token живёт 120 s, поэтому выпускается на каждую попытку.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: customer-graphql
+spec:
+  bindings:
+    - name: until
+      value: .errors == null
+    - name: wait
+      value: 0
+    - name: save
+      value: '{}'
+    - name: bff
+      value: http://bff.nomnom-bff.svc.cluster.local:3010/graphql
+  try:
+    - script:
+        timeout: 5m
+        env:
+          - name: STATE
+            value: ($state)
+          - name: BODY
+            value: ($body)
+          - name: UNTIL
+            value: ($until)
+          - name: WAIT
+            value: (to_string($wait))
+          - name: SAVE
+            value: ($save)
+          - name: BFF
+            value: ($bff)
+        content: |
+          set -eu
+          root="$(git rev-parse --show-toplevel)"
+          fixtures="$root/tests/identity/fixtures"
+          state="$(kubectl -n nomnom-bff get configmap "$STATE" -o json | jq -c .data)"
+          body="$(jq -cn --argjson s "$state" "$BODY")"
+          customer="$(printf '%s' "$state" | jq -r .customer)"
+          deadline=$(($(date +%s) + WAIT))
+          while :; do
+            token="$(python3 -I "$root/ops/kind/scripts/mint-jwt.py" access-token "$fixtures/idp-signing-key.pem" \
+              "$fixtures/idp-jwks.json" "$fixtures/idp-vectors.json" "$customer")"
+            ok=true
+            response="$(kubectl -n nomnom-bff exec deploy/e2e-driver -- \
+              curl -sS --fail-with-body --max-time 10 "$BFF" -H 'content-type: application/json' \
+                -H "authorization: Bearer $token" -d "$body" 2>&1)" || ok=false
+            if $ok && printf '%s' "$response" | jq -e --argjson s "$state" "$UNTIL" >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "BFF as $customer: $response" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          printf '%s\n' "$response"
+          saved="$(printf '%s' "$response" | jq -c --argjson s "$state" "$SAVE | map_values(tostring)")"
+          if [ "$saved" != '{}' ]; then
+            printf '%s' "$saved" | jq -e 'all(.[]; . != "null" and . != "")' >/dev/null ||
+              { echo "BFF: nothing to save in $saved" >&2; exit 1; }
+            kubectl -n nomnom-bff patch configmap "$STATE" --type merge -p "{\"data\":$saved}" >/dev/null
+          fi

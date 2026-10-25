@@ -14,10 +14,10 @@
 
 ## 3. kind
 
-- [ ] 3.1 Skaffold-релизы и values `orders-worker`, `orders-forwarder`; AC-739.
-- [ ] 3.2 Gateway routes: команды кухни и `GetKitchenQueue`, API курьера, `RegisterRestaurant`, `AssignStaff`, `RegisterCourier`; тест реестра маршрутов.
-- [ ] 3.3 Fixture `e2e-driver`, kind-values allowlist и `userDelegates` `restaurants`/`delivery`; AC-741.
-- [ ] 3.4 `ops/kind/authz/bootstrap-kind.yaml` с `platform:nomnom#operator@user:kind-operator`, подключение в `scripts/authz.sh`.
+- [x] 3.1 Skaffold-релизы и values `orders-worker`, `orders-forwarder`; AC-739.
+- [x] 3.2 Gateway routes: команды кухни и `GetKitchenQueue`, API курьера, `RegisterRestaurant`, `AssignStaff`, `RegisterCourier`; тест реестра маршрутов.
+- [x] 3.3 Fixture `e2e-driver`, kind-values allowlist и `userDelegates` `restaurants`/`delivery`; AC-741.
+- [x] 3.4 `ops/kind/authz/bootstrap-kind.yaml` с `platform:nomnom#operator@user:kind-operator`, подключение в `scripts/authz.sh`.
 - [ ] 3.5 Chainsaw `e2e/order-lifecycle`: AC-740; прогон в `nomnom-test`.
 
 ## 4. Документация

@@ -288,6 +288,31 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
           image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
+      # Temporal worker orders: Order Fulfillment Workflow, тот же образ и chart,
+      # command /orders-worker. После orders: его init container применяет миграции.
+      - name: orders-worker
+        chartPath: ../../../boundaries/orders/ops/helm
+        namespace: nomnom-orders
+        createNamespace: true
+        dependsOn: [orders]
+        valuesFiles:
+          - ../../../boundaries/orders/ops/helm/values-worker.yaml
+          - ../values/orders-worker.yaml
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
+      # Outbox forwarder orders (ADR 13): тот же образ и chart, один активный экземпляр.
+      - name: orders-forwarder
+        chartPath: ../../../boundaries/orders/ops/helm
+        namespace: nomnom-orders
+        createNamespace: true
+        dependsOn: [orders]
+        valuesFiles:
+          - ../../../boundaries/orders/ops/helm/values-forwarder.yaml
+          - ../values/orders-forwarder.yaml
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
       # BFF (ADR 32): контексты только через internal gateway; access tokens тестового identity
       # provider, ключ assertions — scripts/bff-identity.sh. Последний release: индексы в
       # patches профилей не меняются.
@@ -301,7 +326,7 @@ deploy:
           image.tag: "{{.IMAGE_TAG_nomnom_bff}}"
 profiles:
   # make kind-deploy GRAFANA_CLOUD=1: метрики, traces и логи сервисов → Alloy → Grafana Cloud.
-  # Индексы releases 0–8 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
+  # Индексы releases 0–10 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
   # своя telemetry); при изменении порядка releases поправить patches.
   - name: grafana-cloud
     patches:
@@ -336,6 +361,12 @@ profiles:
         value: ../values/grafana-cloud.yaml
       - op: add
         path: /deploy/helm/releases/8/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/9/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/10/valuesFiles/-
         value: ../values/grafana-cloud.yaml
   # make kind-dev: restaurants и payments собираются из stage dev и получают file sync —
   # правка исходников копируется в контейнер, процесс перезапускает node --watch / watchfiles.
