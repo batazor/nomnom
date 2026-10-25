@@ -93,7 +93,7 @@ func TestCompleteRecordsOrderCompletedOnce(t *testing.T) {
 
 	_, err := order.Complete()
 	require.NoError(t, err)
-	assert.Equal(t, []DomainEvent{OrderCompleted{OrderID: "order-1"}}, order.PullEvents())
+	assert.Equal(t, []DomainEvent{OrderCompleted{OrderID: "order-1", PlacedAt: testNow}}, order.PullEvents())
 
 	_, err = order.Complete()
 	var already AlreadyInState

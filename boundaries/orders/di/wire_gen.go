@@ -23,8 +23,10 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	domainMetrics := observability.NewDomainMetrics()
+	diStore := di.NewObservedStore(store, domainMetrics)
 	spiceDBConfig := cfg.SpiceDB
-	authorizer, cleanup2, err := di.NewAuthorizer(spiceDBConfig, store)
+	authorizer, cleanup2, err := di.NewAuthorizer(spiceDBConfig, diStore)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -50,7 +52,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	idGenerator := di.NewOrderIDs()
 	useCases := observability.UseCases()
 	dependencies := di.Dependencies{
-		Store:      store,
+		Store:      diStore,
 		Authorizer: authorizer,
 		Policy:     v,
 		Catalog:    catalog,
@@ -58,6 +60,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		Clock:      clock,
 		IDs:        idGenerator,
 		Telemetry:  useCases,
+		Metrics:    domainMetrics,
 	}
 	module := di.NewModule(dependencies)
 	identityConfig := cfg.Identity
@@ -83,6 +86,8 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	domainMetrics := observability.NewDomainMetrics()
+	diStore := di.NewObservedStore(store, domainMetrics)
 	fulfillmentConfig := cfg.Fulfillment
 	internalGatewayConfig := cfg.InternalGateway
 	identityConfig := cfg.Identity
@@ -92,7 +97,7 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 		return nil, nil, err
 	}
 	useCases := observability.UseCases()
-	activities := di.NewActivities(store, neighbours, useCases)
+	activities := di.NewActivities(diStore, neighbours, useCases)
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
 		cleanup2()
@@ -106,6 +111,8 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	domainMetrics := observability.NewDomainMetrics()
+	diStore := di.NewObservedStore(store, domainMetrics)
 	spiceDBConfig := cfg.SpiceDB
 	courierRelationships, cleanup2, err := di.NewCourierRelationships(spiceDBConfig)
 	if err != nil {
@@ -114,7 +121,7 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	}
 	useCases := observability.UseCases()
 	consumer := di.Consumer{
-		Store:         store,
+		Store:         diStore,
 		Relationships: courierRelationships,
 		Telemetry:     useCases,
 	}

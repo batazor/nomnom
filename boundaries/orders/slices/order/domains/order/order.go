@@ -86,6 +86,8 @@ func (OrderCancelled) isOrderDomainEvent() {}
 
 type OrderCompleted struct {
 	OrderID ID
+	// PlacedAt is the start of fulfillment, carried for its duration.
+	PlacedAt time.Time
 }
 
 func (OrderCompleted) isOrderDomainEvent() {}
@@ -316,7 +318,7 @@ func (o *Order) Complete() (TransitionResult, error) {
 	if err != nil {
 		return TransitionResult{}, err
 	}
-	o.events = append(o.events, OrderCompleted{OrderID: o.id})
+	o.events = append(o.events, OrderCompleted{OrderID: o.id, PlacedAt: o.placedAt})
 	return result, nil
 }
 

@@ -33,7 +33,8 @@ import (
 // зависимостей набора и provider'ом; позиционных конструкторов нет.
 var (
 	// PostgresSet — общий PostgreSQL store процесса (ADR 8) и его роль портов Store.
-	PostgresSet = wire.NewSet(NewPostgresStore, wire.Bind(new(Store), new(*postgres.Store)))
+	// Store процесса — PostgreSQL под декоратором бизнес-метрик (ObservedStore).
+	PostgresSet = wire.NewSet(NewPostgresStore, observability.NewDomainMetrics, NewObservedStore)
 	// TelemetrySet — инструменты телеметрии use cases, общие для handlers процесса.
 	TelemetrySet = wire.NewSet(observability.UseCases)
 	// APISet — command и query use cases cmd/orders и их порты, кроме Workflow:
@@ -62,6 +63,34 @@ type Store interface {
 	recordcourierassignment.Assignments
 	OrderView(ctx context.Context, id order.ID) (getorder.OrderView, error)
 	ListCustomerOrders(ctx context.Context, request listcustomerorders.PageRequest) (listcustomerorders.Page, error)
+	CountByState(ctx context.Context) (map[order.State]int64, error)
+}
+
+// ObservedStore — Store, который после commit внешнего Unit of Work записывает
+// бизнес-метрики по Domain Events, попавшим в Outbox (observability.DomainMetrics).
+type ObservedStore struct {
+	Store
+	Metrics *observability.DomainMetrics
+}
+
+// NewObservedStore — Store процессов поверх PostgreSQL.
+func NewObservedStore(store *postgres.Store, metrics *observability.DomainMetrics) Store {
+	return ObservedStore{Store: store, Metrics: metrics}
+}
+
+func (s ObservedStore) Do(ctx context.Context, fn func(ctx context.Context) error) error {
+	ctx, done := s.Metrics.Track(ctx)
+	err := s.Store.Do(ctx, fn)
+	done(err)
+	return err
+}
+
+func (s ObservedStore) Append(ctx context.Context, aggregateID order.ID, aggregateVersion uint64, events []order.DomainEvent) error {
+	if err := s.Store.Append(ctx, aggregateID, aggregateVersion, events); err != nil {
+		return err
+	}
+	s.Metrics.Appended(ctx, events)
+	return nil
 }
 
 // Authorizer — permission checks use cases и creation-time relationships слайса.
