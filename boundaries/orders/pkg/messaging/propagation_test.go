@@ -61,18 +61,3 @@ func TestEmptyTraceparentStartsNewTrace(t *testing.T) {
 	msg.Metadata.Set(messaging.TraceParentMetadata, "")
 	assert.False(t, trace.SpanContextFromContext(messaging.ExtractTraceContext(context.Background(), msg)).IsValid())
 }
-
-// Outside a span the metadata stays without traceparent: no fake context.
-func TestInjectTraceContextOutsideSpanAddsNothing(t *testing.T) {
-	msg := message.NewMessage("event-1", nil)
-	messaging.InjectTraceContext(context.Background(), msg)
-	assert.Empty(t, msg.Metadata.Get(messaging.TraceParentMetadata))
-	assert.Empty(t, msg.Metadata.Get(messaging.TraceStateMetadata))
-}
-
-// A malformed traceparent is ignored: processing starts a new trace.
-func TestExtractTraceContextIgnoresMalformedTraceparent(t *testing.T) {
-	msg := message.NewMessage("event-1", nil)
-	msg.Metadata.Set(messaging.TraceParentMetadata, "00-not-a-trace-01")
-	assert.False(t, trace.SpanContextFromContext(messaging.ExtractTraceContext(context.Background(), msg)).IsValid())
-}

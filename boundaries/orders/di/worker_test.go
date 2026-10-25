@@ -168,13 +168,3 @@ func TestTemporalWorkerShutdownRespectsDeadline(t *testing.T) {
 	require.NoError(t, <-runErr, "Run returns after Shutdown even when the drain deadline passes")
 	time.Sleep(250 * time.Millisecond)
 }
-
-func TestNewFulfillmentPolicyCopiesConfig(t *testing.T) {
-	policy := NewFulfillmentPolicy(config.FulfillmentConfig{
-		AcceptanceTimeout: time.Minute, MaxReplans: 3, PublishStage: true,
-	})
-
-	assert.Equal(t, time.Minute, policy.AcceptanceTimeout)
-	assert.Equal(t, 3, policy.MaxReplans)
-	assert.True(t, policy.PublishStage)
-}

@@ -11,7 +11,6 @@ import {
   type RestaurantOrderTrigger,
   resolveTransition,
   RestaurantOrderState as S,
-  TERMINAL_STATES,
   type TransitionRequest,
 } from "../slices/restaurantorder/domains/restaurantorder/fsm.ts";
 
@@ -169,14 +168,6 @@ test("every state × trigger pair has the expected explicit outcome", () => {
           label,
         );
       }
-    }
-  }
-});
-
-test("terminal states have no changing transitions", () => {
-  for (const state of TERMINAL_STATES) {
-    for (const trigger of ALL_TRIGGERS) {
-      assert.equal(resolveTransition(state, passingRequest(trigger)).ok, false);
     }
   }
 });

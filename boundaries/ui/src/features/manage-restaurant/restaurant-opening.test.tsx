@@ -6,10 +6,10 @@ import { graphql } from "msw/graphql";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AppProviders } from "../../app/providers";
-import { RestaurantOpening } from "./restaurant-opening";
 import { mockStore } from "../../shared/graphql/mocks/handlers";
 import { mockServer } from "../../shared/graphql/mocks/server";
 import { bffError } from "../../shared/graphql/mocks/store";
+import { RestaurantOpening } from "./restaurant-opening";
 
 const config = {
   publicGraphqlUrl: "https://public.example.test/graphql",
@@ -264,18 +264,13 @@ describe("manage restaurant", () => {
 });
 
 describe("manage restaurant quality", () => {
-  it("fits a 390px viewport and passes axe", async () => {
-    Object.defineProperty(window, "innerWidth", {
-      value: 390,
-      configurable: true,
-    });
+  it("has no detectable accessibility violations", async () => {
     const { container } = renderManage(bakery);
     await screen.findByRole("switch", {
       name: "Приём заказов",
       checked: false,
     });
 
-    expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     const result = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
     });

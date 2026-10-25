@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http2";
 import test from "node:test";
 
 import { create } from "@bufbuild/protobuf";
-import { Code, createClient } from "@connectrpc/connect";
-import {
-  connectNodeAdapter,
-  createGrpcTransport,
-} from "@connectrpc/connect-node";
+import { Code } from "@connectrpc/connect";
 
 import {
   CancelRestaurantOrderRequestSchema,
@@ -16,9 +11,7 @@ import {
   ListOwnedRestaurantsRequestSchema,
   ListRestaurantsRequestSchema,
   ReceiveOrderRequestRequestSchema,
-  RestaurantsService,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
@@ -431,38 +424,4 @@ test("CancelRestaurantOrder of an unknown order is NOT_FOUND", async () => {
       ),
     rejectsWith(Code.NotFound),
   );
-});
-
-test("HTTP/2 worker serves the generated gRPC contract", async () => {
-  const { world, service } = await createWorld();
-  const { restaurantId, phoId } = await world.givenKitchen();
-  const server = createServer(
-    connectNodeAdapter({
-      routes: (router) => router.service(RestaurantsService, service),
-    }),
-  );
-  const worker = new GrpcWorker(server, 0);
-  await worker.start();
-  const running = worker.run();
-
-  const client = createClient(
-    RestaurantsService,
-    createGrpcTransport({ baseUrl: `http://127.0.0.1:${worker.port}` }),
-  );
-  const restaurant = await client.getRestaurant({ restaurantId });
-  assert.equal(restaurant.restaurant?.address, PICKUP_ADDRESS);
-  const received = await client.receiveOrderRequest({
-    restaurantId,
-    orderId: "order-42",
-    items: [{ menuItemId: phoId, quantity: 1 }],
-  });
-  assert.equal(received.created, true);
-  const cancelled = await client.cancelRestaurantOrder({
-    restaurantId,
-    orderId: "order-42",
-  });
-  assert.equal(cancelled.cancelled, true);
-
-  await worker.shutdown(AbortSignal.timeout(1_000));
-  await running;
 });

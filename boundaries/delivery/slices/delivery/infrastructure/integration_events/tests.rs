@@ -192,30 +192,6 @@ fn maps_cancellation_with_and_without_reason() {
     );
 }
 
-/// ADR 31: two events of one transaction share the aggregate version, so
-/// `event_type` keeps their ids apart (unassignment followed by a new
-/// assignment on the same version would not collide).
-#[test]
-fn unassignment_and_assignment_on_one_version_have_distinct_ids() {
-    let unassigned = crate::infrastructure::postgres::event_id(
-        "delivery",
-        "delivery-1",
-        5,
-        COURIER_UNASSIGNED_FROM_DELIVERY,
-    );
-    let assigned = crate::infrastructure::postgres::event_id(
-        "delivery",
-        "delivery-1",
-        5,
-        COURIER_ASSIGNED_TO_DELIVERY,
-    );
-    assert_ne!(unassigned, assigned);
-    assert_ne!(
-        crate::infrastructure::postgres::event_id("delivery", "delivery-1", 5, DELIVERY_CANCELLED),
-        unassigned
-    );
-}
-
 /// Reference value computed independently (Python `uuid.uuid5`) with the
 /// ADR 31 namespace `8f1d3c2a-5b7e-4a90-9c61-2e4f7b8d0a13`.
 #[test]

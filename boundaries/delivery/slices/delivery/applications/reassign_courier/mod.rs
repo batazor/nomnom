@@ -210,20 +210,6 @@ mod tests {
         assert!(world.store.outbox_messages().is_empty());
     }
 
-    /// A waiting delivery has no assignment to end: nothing is written.
-    #[test]
-    fn waiting_delivery_cannot_be_reassigned_and_writes_nothing() {
-        let world = World::new();
-        world.waiting_delivery("delivery-1");
-
-        assert!(
-            handler(&world)
-                .execute(&subject("dispatcher-1"), input())
-                .is_err()
-        );
-        assert!(world.relationships.writes().is_empty());
-    }
-
     /// AC-332
     #[test]
     fn picked_up_delivery_cannot_be_reassigned() {

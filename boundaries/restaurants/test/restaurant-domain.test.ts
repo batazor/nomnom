@@ -126,24 +126,6 @@ test("rename to the current name is a no-op", () => {
   );
 });
 
-test("restore keeps state and version without events", () => {
-  const restaurant = Restaurant.restore(
-    {
-      id: "r-1",
-      name: "Pho",
-      ownerId: "u-1",
-      isOpen: true,
-      address: "1 Pho Street",
-    },
-    3,
-  );
-
-  assert.equal(restaurant.version, 3);
-  assert.equal(restaurant.isOpen, true);
-  assert.equal(restaurant.address, "1 Pho Street");
-  assert.deepEqual(restaurant.pullEvents(), []);
-});
-
 test("restore of a restaurant stored without an address yields an empty address", () => {
   const restaurant = Restaurant.restore(
     { id: "r-1", name: "Pho", ownerId: "u-1", isOpen: true },

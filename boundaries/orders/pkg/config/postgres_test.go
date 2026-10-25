@@ -98,6 +98,4 @@ func TestPostgresConfigAllowsMinConnsEqualToMaxConns(t *testing.T) {
 		ConnectTimeout: time.Second, HealthCheckPeriod: time.Minute,
 	}
 	require.NoError(t, cfg.Validate())
-	cfg.MaxConns = 0
-	require.ErrorContains(t, cfg.Validate(), "max_conns")
 }

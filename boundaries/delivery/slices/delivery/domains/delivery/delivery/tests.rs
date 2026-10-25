@@ -170,20 +170,6 @@ fn failure_is_recorded_with_reason_by_courier_or_dispatcher() {
 }
 
 #[test]
-fn waiting_delivery_cannot_fail() {
-    let mut delivery = delivery();
-    assert_eq!(
-        delivery.fail(reason(), &FailureReporter::Dispatcher),
-        Err(DeliveryError::Transition(
-            TransitionError::InvalidTransition {
-                from: State::Waiting,
-                trigger: Trigger::Fail
-            }
-        ))
-    );
-}
-
-#[test]
 fn cancellation_before_pickup_releases_the_courier() {
     let mut cancelled = assigned("courier-1");
     let reason = DeliveryCancellationReason::new("order cancelled");

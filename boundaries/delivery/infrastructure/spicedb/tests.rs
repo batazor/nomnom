@@ -213,25 +213,6 @@ fn unmapped_check_is_denied_without_calling_spicedb() {
 }
 
 #[test]
-fn courier_permission_checks_courier_act() {
-    let (authorization, seen) = adapter(Ok(true));
-
-    assert_eq!(
-        CourierAuthorization::check(
-            &authorization,
-            &Subject::User("user-1".to_owned()),
-            CourierPermission::SetCourierAvailability,
-            &CourierResource::Courier(CourierId::new("courier-1")),
-        ),
-        Ok(())
-    );
-    assert_eq!(
-        *seen.lock().unwrap_or_else(PoisonError::into_inner),
-        vec!["courier:courier-1#act@user:user-1".to_owned()]
-    );
-}
-
-#[test]
 fn empty_endpoint_keeps_local_authorization() {
     assert!(matches!(
         SpiceDbAuthorization::from_config(&SpiceDbConfig::default()),

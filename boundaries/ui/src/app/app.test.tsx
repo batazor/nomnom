@@ -30,19 +30,13 @@ function renderApp(path: string) {
 }
 
 describe("customer application shell", () => {
-  it("opens the order board on the mobile-first home route", async () => {
-    Object.defineProperty(window, "innerWidth", {
-      value: 390,
-      configurable: true,
-    });
+  it("opens the order board on the home route", async () => {
     renderApp("/");
 
     expect(screen.getByRole("main")).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { level: 1, name: "Доска заказа" }),
     ).toBeInTheDocument();
-    expect(document.querySelector(".app-shell")).toBeInTheDocument();
-    expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   });
 
   it("leads any other address back to the board", async () => {

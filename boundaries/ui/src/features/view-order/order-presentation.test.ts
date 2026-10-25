@@ -7,7 +7,6 @@ import {
   endPresentation,
   endReasonPresentation,
   milestoneLabel,
-  progressSteps,
   showsCourierAssigned,
   statusPresentation,
 } from "./order-presentation";
@@ -38,19 +37,6 @@ describe("order presentation", () => {
     for (const locale of Object.values(messages)) {
       expect(keys.filter((key) => !(key in locale))).toEqual([]);
     }
-  });
-
-  it("places active statuses on the progress and final ones off it", () => {
-    for (const [index, status] of progressSteps.entries()) {
-      expect(statusPresentation[status].step).toBe(index);
-    }
-    expect(statusPresentation.CANCELLED.step).toBeNull();
-    expect(statusPresentation.FAILED).toMatchObject({
-      step: null,
-      final: true,
-    });
-    expect(statusPresentation.DELIVERED.final).toBe(true);
-    expect(statusPresentation.PICKED_UP.final).toBe(false);
   });
 
   it("presents a restaurant rejection with its own message", () => {

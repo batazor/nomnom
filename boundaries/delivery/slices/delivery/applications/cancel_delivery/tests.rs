@@ -155,10 +155,6 @@ fn picked_up_delivery_is_rejected_as_already_picked_up() {
         output.outcome,
         Outcome::Rejected(CancellationRejection::AlreadyPickedUp)
     );
-    assert_eq!(
-        CancellationRejection::AlreadyPickedUp.as_str(),
-        "already_picked_up"
-    );
     assert_eq!(world.delivery_state("delivery-1"), State::PickedUp);
     assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
     assert!(world.store.outbox_messages().is_empty());

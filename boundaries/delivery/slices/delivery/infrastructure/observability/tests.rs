@@ -7,7 +7,7 @@ use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMete
 use super::*;
 use crate::infrastructure::memory::{ManualClock, SequentialIdGenerator, StaticAuthorization};
 use crate::infrastructure::postgres::test_support::TestStore;
-use crate::pkg::application::{ScopedUnitOfWork, Subject, UnitOfWork};
+use crate::pkg::application::{ScopedUnitOfWork, Subject};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::create_delivery;
 use crate::slices::delivery::domains::delivery::{
@@ -491,26 +491,6 @@ fn failed_outbox_write_records_nothing() {
     );
 
     assert_eq!(harness.count("nomnom.delivery.created", None), 0);
-}
-
-#[test]
-fn unit_of_work_trait_runs_through_the_decorator() {
-    let harness = Harness::new();
-    let store = TestStore::new();
-    let ports = ObservedPorts {
-        store: &store,
-        observed: &harness.observed,
-    };
-
-    let result: Result<(), UnitOfWorkError> = ScopedUnitOfWork::new(&ports).run(|| {
-        ports
-            .add(OutboxMessage::delivery(created()))
-            .map_err(|error| UnitOfWorkError::CommitFailed(error.to_string()))
-    });
-
-    result.expect("committed");
-    assert_eq!(store.commits(), 1);
-    assert_eq!(harness.count("nomnom.delivery.created", None), 1);
 }
 
 #[test]

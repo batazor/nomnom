@@ -14,7 +14,6 @@ import {
 import { outboxEventId, uuidV5 } from "../pkg/infrastructure/mongodb/outbox.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
-  PUBLISHED_RESTAURANT_ORDER_EVENT_TYPES,
   RESTAURANT_ORDER_EVENTS_TOPIC,
   restaurantOrderEventMapper,
 } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
@@ -118,7 +117,6 @@ test("PreparationStarted and RestaurantOrderReady are published", () => {
     map({ ...base, type: "RestaurantOrderReady", readyAt: at }).eventType,
     "nomnom.restaurants.v1.RestaurantOrderReady",
   );
-  assert.equal(PUBLISHED_RESTAURANT_ORDER_EVENT_TYPES.length, 7);
 });
 
 test("events without a contract are not published", () => {

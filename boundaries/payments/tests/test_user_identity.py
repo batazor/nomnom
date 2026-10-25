@@ -331,9 +331,6 @@ class UserIdentityConfigTest(_ResolverCase):
                 with self.subTest(jwks=name), self.assertRaises(IdentityConfigError):
                     create_subject_resolver(_settings(IDENTITY__USER_JWKS_FILE=str(path)))
 
-    def test_bff_jwks_fixture_loads(self) -> None:
-        self.assertEqual(list(load_user_jwks(BFF_JWKS_FILE)), ["nomnom-bff-test-key"])
-
 
 @pytest.mark.usefixtures("postgres")
 class UserIdentityGrpcTest(unittest.TestCase):

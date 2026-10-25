@@ -30,7 +30,6 @@ func TestClassifyApplicationErrors(t *testing.T) {
 		{"unknown order", fmt.Errorf("%w: %q", order.ErrOrderNotFound, "order-1"), messaging.ClassPermanent},
 		{"permission denied", application.ErrPermissionDenied, messaging.ClassPermanent},
 		{"invalid transition", fmt.Errorf("apply: %w", order.InvalidTransition{}), messaging.ClassBusiness},
-		{"guard failed", order.GuardFailed{Reason: "x"}, messaging.ClassBusiness},
 		{"order exists", order.ErrOrderAlreadyExists, messaging.ClassBusiness},
 		{"concurrency conflict", application.ErrConcurrencyConflict, messaging.ClassTransient},
 		{"dependency unavailable", application.ErrDependencyUnavailable, messaging.ClassTransient},

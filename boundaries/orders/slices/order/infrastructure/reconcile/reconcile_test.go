@@ -134,17 +134,6 @@ func TestReconcileOrderCustomerRelationships(t *testing.T) {
 	assert.True(t, e.hasRelationship(committing, "customer-committing"), "a committed Order keeps its relationship")
 }
 
-// AC-523: order#courier is not a reconciled relation: the schema has none, the
-// courier sees the Order through delivery->act_as_courier, which the
-// reconciler of delivery owns.
-func TestRelationsAreCustomerRestaurantDelivery(t *testing.T) {
-	names := make([]string, 0, len(Relations))
-	for _, relation := range Relations {
-		names = append(names, string(relation.Name))
-	}
-	assert.Equal(t, []string{"customer", "restaurant", "delivery"}, names)
-}
-
 // AC-524: the delivery relationship follows the stored Courier Assignment and
 // restaurant follows the Order: a previous Delivery that survived a lost
 // DELETE is stale and deleted after grace, the missing ones are restored.

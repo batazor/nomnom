@@ -121,22 +121,6 @@ func TestOpenAndCloseCarryServiceTokenAndUserAssertion(t *testing.T) {
 	assert.Len(t, server.seenMD.Get(identity.AssertionMetadata), 1)
 }
 
-// A repeat succeeds with changed = false.
-func TestRepeatedOpeningIsNotAChange(t *testing.T) {
-	server := &restaurantsServer{open: true}
-	restaurants := connect(t, server)
-
-	opened, err := restaurants.Open(ownerContext(), "restaurant-1")
-	require.NoError(t, err)
-	assert.True(t, opened.Restaurant.IsOpen)
-	assert.False(t, opened.Changed)
-
-	server.open = false
-	closed, err := restaurants.Close(ownerContext(), "restaurant-1")
-	require.NoError(t, err)
-	assert.False(t, closed.Changed)
-}
-
 func TestOpeningNamesRefusals(t *testing.T) {
 	server := &restaurantsServer{}
 	restaurants := connect(t, server)

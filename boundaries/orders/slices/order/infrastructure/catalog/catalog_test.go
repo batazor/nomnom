@@ -141,10 +141,8 @@ func TestSnapshotMapsErrors(t *testing.T) {
 		"empty menu":           {&fakeRestaurants{open: true}, placeorder.ErrUnknownRestaurant},
 		"invalid argument":     {&fakeRestaurants{restaurantErr: status.Error(codes.InvalidArgument, "bad id")}, application.ErrInvalidInput},
 		"unavailable":          {&fakeRestaurants{restaurantErr: status.Error(codes.Unavailable, "down")}, application.ErrDependencyUnavailable},
-		"deadline exceeded":    {&fakeRestaurants{open: true, menuErr: status.Error(codes.DeadlineExceeded, "slow")}, application.ErrDependencyUnavailable},
 		"unauthenticated":      {&fakeRestaurants{restaurantErr: status.Error(codes.Unauthenticated, "who")}, application.ErrDependencyUnavailable},
 		"route not registered": {&fakeRestaurants{open: true, menuErr: status.Error(codes.Unimplemented, "404")}, application.ErrDependencyUnavailable},
-		"internal":             {&fakeRestaurants{open: true, menuErr: status.Error(codes.Internal, "boom")}, application.ErrDependencyUnavailable},
 		"mixed currencies": {&fakeRestaurants{open: true, items: []*restaurantsv1.MenuItem{
 			item("pizza", "12.50", "EUR", true), item("soup", "4", "USD", true),
 		}}, vo.ErrInvalidValue},

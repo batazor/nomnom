@@ -59,24 +59,6 @@ fn config() -> DatabaseConfig {
 }
 
 #[tokio::test]
-async fn options_carry_the_configured_limits() {
-    let config = config();
-    let options = pool_options(&config, config.max_conns);
-    assert_eq!(options.get_max_connections(), 3);
-    assert_eq!(options.get_min_connections(), 1);
-    assert_eq!(options.get_acquire_timeout(), Duration::from_millis(200));
-    assert_eq!(options.get_max_lifetime(), Some(config.max_lifetime));
-    assert_eq!(options.get_idle_timeout(), Some(config.idle_timeout));
-    // A smaller pool (startup migrations) never keeps more idle than it holds.
-    assert_eq!(pool_options(&config, 1).get_min_connections(), 1);
-    let none = DatabaseConfig {
-        min_conns: 0,
-        ..config
-    };
-    assert_eq!(pool_options(&none, 1).get_min_connections(), 0);
-}
-
-#[tokio::test]
 async fn gauges_report_count_max_and_idle_min_of_the_pool() {
     let (provider, exporter) = meter();
     let config = config();

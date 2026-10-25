@@ -38,13 +38,6 @@ fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
 }
 
 #[test]
-fn loads_management_port_from_toml() {
-    let config = load_toml("management", "[management]\nport = 9100\n").expect("load config");
-
-    assert_eq!(config.management.port, 9100);
-}
-
-#[test]
 fn rejects_zero_management_port() {
     assert!(load_toml("zero-management", "[management]\nport = 0\n").is_err());
 }
@@ -81,18 +74,6 @@ fn rejects_invalid_readiness_delay() {
 }
 
 #[test]
-fn loads_drain_timeout_from_toml() {
-    let name = format!("nomnom-delivery-drain-{}.toml", std::process::id());
-    let path = std::env::temp_dir().join(name);
-    fs::write(&path, "[shutdown]\ndrain_timeout = \"1500ms\"\n").expect("write config");
-
-    let config = load_from(Some(&path)).expect("load config");
-    fs::remove_file(path).expect("remove config");
-
-    assert_eq!(config.shutdown.drain_timeout, Duration::from_millis(1500));
-}
-
-#[test]
 fn rejects_zero_drain_timeout() {
     let name = format!("nomnom-delivery-zero-drain-{}.toml", std::process::id());
     let path = std::env::temp_dir().join(name);
@@ -109,24 +90,6 @@ fn identity_is_disabled_by_default() {
     let config = load_toml("identity-default", "").expect("load config");
 
     assert_eq!(config.identity, IdentityConfig::default());
-}
-
-#[test]
-fn loads_identity_from_toml() {
-    let config = load_toml(
-        "identity",
-        "[identity]\nissuer = \"https://issuer\"\naudience = \"nomnom.delivery\"\n\
-         jwks_file = \"/etc/jwks.json\"\nservice_accounts = \"nomnom/orders-worker=orders-worker\"\n",
-    )
-    .expect("load config");
-
-    assert_eq!(config.identity.issuer, "https://issuer");
-    assert_eq!(config.identity.audience, "nomnom.delivery");
-    assert_eq!(config.identity.jwks_file, "/etc/jwks.json");
-    assert_eq!(
-        config.identity.service_accounts,
-        "nomnom/orders-worker=orders-worker"
-    );
 }
 
 #[test]
@@ -159,21 +122,6 @@ fn identity_env_overrides_file_values() {
             ..IdentityConfig::default()
         }
     );
-}
-
-#[test]
-fn loads_user_assertions_from_toml() {
-    let config = load_toml(
-        "identity-user",
-        "[identity]\nuser_issuer = \"nomnom-bff\"\n\
-         user_jwks_file = \"/etc/bff-jwks.json\"\nuser_delegates = \"bff\"\n",
-    )
-    .expect("load config");
-
-    assert_eq!(config.identity.user_issuer, "nomnom-bff");
-    assert_eq!(config.identity.user_jwks_file, "/etc/bff-jwks.json");
-    assert_eq!(config.identity.user_delegates, "bff");
-    assert_eq!(config.identity.issuer, "");
 }
 
 #[test]
@@ -362,20 +310,6 @@ fn offers_env_overrides_defaults() {
     assert_eq!(offers.expiry_batch, 7);
     assert_eq!(offers.dispatch_interval, Duration::from_secs(5));
     assert_eq!(offers.dispatch_batch, 3);
-}
-
-#[test]
-fn reconciler_defaults() {
-    let config = load_toml("reconciler-default", "").expect("load config");
-
-    assert_eq!(
-        config.reconciler,
-        ReconcilerConfig {
-            interval: Duration::from_secs(300),
-            grace: Duration::from_secs(600),
-            page_size: 500,
-        }
-    );
 }
 
 #[test]

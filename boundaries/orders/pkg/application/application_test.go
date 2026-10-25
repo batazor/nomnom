@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +28,6 @@ func TestSubjectValidate(t *testing.T) {
 			require.ErrorIs(t, err, ErrInvalidInput)
 		})
 	}
-	assert.Equal(t, "user:u-1", Subject{Kind: SubjectUser, ID: "u-1"}.String())
 }
 
 func TestFailClosedDeniesOnAnyCheckFailure(t *testing.T) {

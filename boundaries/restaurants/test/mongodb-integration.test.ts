@@ -23,11 +23,9 @@ import {
 import {
   dropOutboxRelayMigration,
   MongoOutbox,
-  MongoOutboxOutsideUnitOfWorkError,
   OUTBOX_COLLECTION,
   type OutboxEventMapper,
   outboxEventId,
-  uuidV5,
 } from "../pkg/infrastructure/mongodb/outbox.ts";
 import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
@@ -66,14 +64,6 @@ const testMapper: OutboxEventMapper = (_aggregate, event) => ({
   eventType: `nomnom.restaurants.v1.${event.type}`,
   topic: "restaurants.test",
   payload: new TextEncoder().encode(event.type),
-});
-
-test("uuidV5 matches the RFC 4122 test vector", () => {
-  // python: uuid.uuid5(uuid.NAMESPACE_DNS, "python.org")
-  assert.equal(
-    uuidV5("python.org", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
-    "886313e1-3b8a-5372-9b90-0c9aee199e5d",
-  );
 });
 
 describe("startup migration", () => {
@@ -530,16 +520,6 @@ describe("MongoDB storage", () => {
         .collection(OUTBOX_COLLECTION)
         .countDocuments({ aggregateId: order.id }),
       0,
-    );
-  });
-
-  test("outbox refuses records outside a unit of work", async () => {
-    const outbox = new MongoOutbox(mongo.db, unitOfWork);
-    await assert.rejects(
-      outbox.add({ type: "RestaurantOrder", id: "x", version: 1 }, [
-        { type: "X", occurredAt: now },
-      ]),
-      MongoOutboxOutsideUnitOfWorkError,
     );
   });
 

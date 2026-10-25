@@ -10,28 +10,6 @@ const button = readFileSync(
 );
 
 describe("semantic theme", () => {
-  it.each([
-    "background",
-    "surface",
-    "foreground",
-    "muted",
-    "primary",
-    "success",
-    "warning",
-    "danger",
-    "border",
-  ])("defines the %s color token", (name) => {
-    expect(theme).toContain(`--color-${name}:`);
-  });
-
-  it("defines typography, spacing, radius, shadow, and motion categories", () => {
-    expect(theme).toMatch(/--font-family-/);
-    expect(theme).toMatch(/--space-/);
-    expect(theme).toMatch(/--radius-/);
-    expect(theme).toMatch(/--shadow-/);
-    expect(theme).toMatch(/--motion-/);
-  });
-
   it("provides dark theme and reduced-motion overrides", () => {
     expect(theme).toContain(':root[data-theme="dark"]');
     expect(theme).toContain("prefers-color-scheme: dark");

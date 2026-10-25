@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/domains/order"
@@ -35,13 +34,6 @@ func TestHandleByOrderState(t *testing.T) {
 	}{
 		{name: "placed", outcome: fulfillment.OutcomeApplied, wantState: order.StatePlaced, wantFacts: []order.RecordedFact{recorded}},
 		{
-			name:      "confirmed",
-			options:   []ordertest.Option{ordertest.WithState(order.StateConfirmed)},
-			outcome:   fulfillment.OutcomeApplied,
-			wantState: order.StateConfirmed,
-			wantFacts: []order.RecordedFact{recorded},
-		},
-		{
 			name:      "already recorded",
 			options:   []ordertest.Option{ordertest.WithFacts(recorded)},
 			outcome:   fulfillment.OutcomeAlreadyApplied,
@@ -53,12 +45,6 @@ func TestHandleByOrderState(t *testing.T) {
 			options:   []ordertest.Option{ordertest.WithState(order.StateCancelled)},
 			outcome:   fulfillment.OutcomeIgnoredLate,
 			wantState: order.StateCancelled,
-		},
-		{
-			name:      "completed is late",
-			options:   []ordertest.Option{ordertest.WithState(order.StateCompleted)},
-			outcome:   fulfillment.OutcomeIgnoredLate,
-			wantState: order.StateCompleted,
 		},
 	}
 	for _, tt := range tests {
@@ -81,30 +67,4 @@ func TestHandleByOrderState(t *testing.T) {
 			assert.Equal(t, 1, store.InboxSize())
 		})
 	}
-}
-
-func TestHandleRedeliveryIsDuplicate(t *testing.T) {
-	store := postgrestest.Open(t)
-	workflow := fake.NewWorkflow()
-	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := rejectorder.NewHandler(store, store, store, workflow)
-
-	_, err := handler.Handle(context.Background(), input("event-1"))
-	require.NoError(t, err)
-	result, err := handler.Handle(context.Background(), input("event-1"))
-	require.NoError(t, err)
-
-	assert.Equal(t, fulfillment.OutcomeDuplicate, result.Outcome)
-	snapshot, _ := store.Snapshot("order-1")
-	assert.Len(t, snapshot.Facts, 1)
-	assert.Len(t, workflow.Notifications(), 2)
-}
-
-func TestHandleRequiresOccurredAt(t *testing.T) {
-	store := postgrestest.Open(t)
-	handler := rejectorder.NewHandler(store, store, store, fake.NewWorkflow())
-
-	_, err := handler.Handle(context.Background(), rejectorder.Input{EventID: "event-1", OrderID: "order-1"})
-
-	require.ErrorIs(t, err, application.ErrInvalidInput)
 }

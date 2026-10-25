@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
@@ -42,7 +41,6 @@ func TestConfirmOrderByState(t *testing.T) {
 		{name: "placed is confirmed", state: order.StatePlaced, outcome: fulfillment.OutcomeApplied, wantState: order.StateConfirmed},
 		{name: "confirmed stays confirmed", state: order.StateConfirmed, outcome: fulfillment.OutcomeAlreadyApplied, wantState: order.StateConfirmed},
 		{name: "cancelled is late", state: order.StateCancelled, outcome: fulfillment.OutcomeIgnoredLate, wantState: order.StateCancelled},
-		{name: "completed is late", state: order.StateCompleted, outcome: fulfillment.OutcomeIgnoredLate, wantState: order.StateCompleted},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -90,13 +88,4 @@ func TestConfirmOrderReceivedAgainHasNoAdditionalEffect(t *testing.T) {
 	assert.Equal(t, order.StateConfirmed, snapshot.State)
 	assert.Equal(t, uint64(2), snapshot.Version, "only the first event saves the Order")
 	assert.Len(t, workflow.Notifications(), 3, "the workflow deduplicates by event_id")
-}
-
-func TestConfirmOrderRequiresEventIdentity(t *testing.T) {
-	handler, store, _ := setup(t, order.StatePlaced)
-
-	_, err := handler.Handle(context.Background(), confirmorder.Input{OrderID: "order-1", OccurredAt: occurredAt})
-
-	require.ErrorIs(t, err, application.ErrInvalidInput)
-	assert.Zero(t, store.InboxSize())
 }

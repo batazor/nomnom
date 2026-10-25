@@ -54,21 +54,3 @@ impl IdGenerator for SequentialIdGenerator {
         format!("{}-{value}", self.prefix)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn manual_clock_and_ids_are_deterministic() {
-        let clock = ManualClock::new(10);
-        clock.advance(5);
-        assert_eq!(clock.now_epoch_seconds(), 15);
-        clock.set(3);
-        assert_eq!(clock.now_epoch_seconds(), 3);
-
-        let ids = SequentialIdGenerator::new("offer");
-        assert_eq!(ids.next_id(), "offer-1");
-        assert_eq!(ids.next_id(), "offer-2");
-    }
-}

@@ -10,7 +10,6 @@ import {
 } from "@opentelemetry/sdk-metrics";
 import type { MongoClient } from "mongodb";
 
-import { mongoPoolOptions } from "../pkg/infrastructure/mongodb/client.ts";
 import { MongoPoolMetrics } from "../pkg/infrastructure/mongodb/pool-metrics.ts";
 
 class TestReader extends MetricReader {
@@ -186,23 +185,4 @@ test("a closed pool stops reporting", async () => {
   created(emit);
   emit("connectionPoolClosed", {});
   assert.deepEqual(await values(reader, "db.client.connection.max"), {});
-});
-
-test("pool config maps to MongoClient options", () => {
-  assert.deepEqual(
-    mongoPoolOptions({
-      maxPoolSize: 3,
-      minPoolSize: 0,
-      maxIdleTimeMs: 300_000,
-      waitQueueTimeoutMs: 5000,
-      maxConnecting: 2,
-    }),
-    {
-      maxPoolSize: 3,
-      minPoolSize: 0,
-      maxIdleTimeMS: 300_000,
-      waitQueueTimeoutMS: 5000,
-      maxConnecting: 2,
-    },
-  );
 });

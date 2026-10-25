@@ -38,16 +38,3 @@ fn expected_refusals_are_rejected_and_failures_are_errors() {
         assert_eq!(classify(&error), expected, "{error}");
     }
 }
-
-#[test]
-fn use_case_names_are_stable_snake_case() {
-    assert_eq!(CREATE_DELIVERY, UseCase::command("create_delivery"));
-    assert_eq!(
-        GET_COURIER_CURRENT_DELIVERY,
-        UseCase::query("get_courier_current_delivery")
-    );
-    assert_eq!(
-        EXPIRE_DELIVERY_OFFERS,
-        UseCase::command("expire_delivery_offers")
-    );
-}

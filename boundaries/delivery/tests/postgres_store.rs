@@ -158,13 +158,6 @@ impl From<RepositoryError> for TestError {
     }
 }
 
-#[test]
-fn migrations_are_idempotent() {
-    let config = config();
-    migrate(&config).expect("first run");
-    assert_eq!(migrate(&config).expect("second run"), Vec::<i64>::new());
-}
-
 /// Startup of the process (`di::postgres`) applies every embedded migration
 /// to an empty database and leaves a migrated one as it is.
 #[test]

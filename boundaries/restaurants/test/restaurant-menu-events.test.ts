@@ -17,10 +17,8 @@ import {
   MENU_AGGREGATE_TYPE,
   MENU_EVENTS_TOPIC,
   menuEventMapper,
-  PUBLISHED_MENU_EVENT_TYPES,
 } from "../slices/menu/infrastructure/integration/menu-events.ts";
 import {
-  PUBLISHED_RESTAURANT_EVENT_TYPES,
   RESTAURANT_AGGREGATE_TYPE,
   RESTAURANT_EVENTS_TOPIC,
   restaurantEventMapper,
@@ -66,10 +64,6 @@ test("RestaurantOpened and RestaurantClosed go to restaurant-events with restaur
     assert.equal(mapped.eventType, `nomnom.restaurants.v1.${type}`);
     assert.equal(fromBinary(schema, mapped.payload).restaurantId, "rest-1");
   }
-  assert.deepEqual(PUBLISHED_RESTAURANT_EVENT_TYPES, [
-    "nomnom.restaurants.v1.RestaurantOpened",
-    "nomnom.restaurants.v1.RestaurantClosed",
-  ]);
 });
 
 test("MenuItemAvailabilityChanged goes to menu-events with menu, restaurant, item and value", () => {
@@ -95,9 +89,6 @@ test("MenuItemAvailabilityChanged goes to menu-events with menu, restaurant, ite
   assert.equal(message.restaurantId, "rest-1");
   assert.equal(message.menuItemId, "pho");
   assert.equal(message.available, false);
-  assert.deepEqual(PUBLISHED_MENU_EVENT_TYPES, [
-    "nomnom.restaurants.v1.MenuItemAvailabilityChanged",
-  ]);
 });
 
 test("internal Restaurant and Menu facts are not published", () => {

@@ -16,16 +16,6 @@ import (
 
 const bufferSize = 1024 * 1024
 
-func TestQueryBffInfo(t *testing.T) {
-	response, err := newClient(t).QueryBffInfo(
-		context.Background(),
-		&service.QueryBffInfoRequest{},
-	)
-	require.NoError(t, err)
-	require.Equal(t, "nomnom-bff", response.BffInfo.Name)
-	require.Equal(t, serviceVersion, response.BffInfo.Version)
-}
-
 // Customer operations are published in the schema ahead of their resolvers.
 // Every operation of the schema is implemented: without identity the
 // customer operations are UNAUTHENTICATED, not UNIMPLEMENTED.

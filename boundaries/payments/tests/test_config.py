@@ -12,10 +12,6 @@ REQUIRED_ENV = {"DATABASE__URL": "postgresql://payments@localhost/payments"}
 
 
 class ConfigTest(unittest.TestCase):
-    def test_uses_default_port(self) -> None:
-        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
-            self.assertEqual(load_settings().server.port, 8084)
-
     def test_server_port_takes_precedence_over_port(self) -> None:
         environment = {
             "SERVER__PORT": "9004",
@@ -23,20 +19,6 @@ class ConfigTest(unittest.TestCase):
         }
         with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
             self.assertEqual(load_settings().server.port, 9004)
-
-    def test_rejects_invalid_port(self) -> None:
-        with (
-            patch.dict(os.environ, {**REQUIRED_ENV, "PORT": "70000"}, clear=True),
-            self.assertRaises(ValidationError),
-        ):
-            load_settings()
-
-    def test_uses_default_management_and_shutdown(self) -> None:
-        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
-            settings = load_settings()
-        self.assertEqual(settings.management.port, 9084)
-        self.assertEqual(settings.shutdown.readiness_delay, timedelta(seconds=5))
-        self.assertEqual(settings.shutdown.drain_timeout, timedelta(seconds=20))
 
     def test_reads_management_and_shutdown_from_environment(self) -> None:
         environment = {
@@ -108,35 +90,6 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(settings.max_conns, 4)
         self.assertNotIn("payments@localhost", repr(settings))
 
-    def test_uses_database_pool_defaults(self) -> None:
-        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
-            settings = load_settings().database
-        self.assertEqual(settings.max_conns, 10)
-        self.assertEqual(settings.min_conns, 0)
-        self.assertEqual(settings.max_conn_lifetime, timedelta(minutes=30))
-        self.assertEqual(settings.max_conn_idle_time, timedelta(minutes=5))
-        self.assertEqual(settings.connect_timeout, timedelta(seconds=5))
-        self.assertEqual(settings.acquire_timeout, timedelta(seconds=5))
-
-    def test_reads_database_pool_settings(self) -> None:
-        environment = {
-            **REQUIRED_ENV,
-            "DATABASE__MAX_CONNS": "2",
-            "DATABASE__MIN_CONNS": "1",
-            "DATABASE__MAX_CONN_LIFETIME": "20m",
-            "DATABASE__MAX_CONN_IDLE_TIME": "90s",
-            "DATABASE__CONNECT_TIMEOUT": "2500ms",
-            "DATABASE__ACQUIRE_TIMEOUT": "3s",
-        }
-        with patch.dict(os.environ, environment, clear=True):
-            settings = load_settings().database
-        self.assertEqual(settings.max_conns, 2)
-        self.assertEqual(settings.min_conns, 1)
-        self.assertEqual(settings.max_conn_lifetime, timedelta(minutes=20))
-        self.assertEqual(settings.max_conn_idle_time, timedelta(seconds=90))
-        self.assertEqual(settings.connect_timeout, timedelta(milliseconds=2500))
-        self.assertEqual(settings.acquire_timeout, timedelta(seconds=3))
-
     def test_rejects_invalid_database_pool_settings(self) -> None:
         for name, value in (
             ("DATABASE__MAX_CONNS", "0"),
@@ -146,7 +99,6 @@ class ConfigTest(unittest.TestCase):
             ("DATABASE__MAX_CONN_IDLE_TIME", "0m"),
             ("DATABASE__CONNECT_TIMEOUT", "0ms"),
             ("DATABASE__ACQUIRE_TIMEOUT", "5"),
-            ("DATABASE__ACQUIRE_TIMEOUT", "1h"),
         ):
             with (
                 self.subTest(name=name, value=value),

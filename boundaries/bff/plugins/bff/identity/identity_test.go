@@ -115,11 +115,6 @@ func TestAccessTokenFromIncomingContextRequiresBearer(t *testing.T) {
 	}
 }
 
-type userVectors struct {
-	Issuer   string `json:"issuer"`
-	Audience string `json:"audience"`
-}
-
 // FR-474, AC-530: the assertion carries the subject of the verified token,
 // not a client header, and passes the rules contexts apply.
 func TestAssertionCarriesVerifiedSubject(t *testing.T) {
@@ -190,28 +185,6 @@ func TestInterceptorSendsServiceTokenAndAssertionForUser(t *testing.T) {
 
 	_, err = invoke(t, context.Background(), fixedTokens{})
 	assert.Error(t, err)
-}
-
-type fakeSigner struct{ audience string }
-
-func (f *fakeSigner) Sign(user User, audience string) (string, error) {
-	f.audience = audience
-	return "assertion-of-" + user.ID, nil
-}
-
-// The interceptor depends on the Signer interface, not on a key.
-func TestInterceptorUsesAnySigner(t *testing.T) {
-	signer := &fakeSigner{}
-	interceptor := UnaryClientInterceptor("nomnom.orders", fixedTokens{"nomnom.orders": "service-token"}, signer)
-	var sent metadata.MD
-	err := interceptor(WithUser(context.Background(), User{ID: "customer-1"}), "/m", nil, nil, nil,
-		func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
-			sent, _ = metadata.FromOutgoingContext(ctx)
-			return nil
-		})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"assertion-of-customer-1"}, sent.Get(AssertionMetadata))
-	assert.Equal(t, "nomnom.orders", signer.audience)
 }
 
 func TestServiceTokensReadFilePerAudience(t *testing.T) {

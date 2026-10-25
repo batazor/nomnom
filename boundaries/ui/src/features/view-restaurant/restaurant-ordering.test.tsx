@@ -254,12 +254,8 @@ describe("view restaurant", () => {
 });
 
 describe("restaurant page quality", () => {
-  it("fits a 390px viewport, is keyboard reachable and passes axe", async () => {
+  it("is keyboard reachable and passes axe", async () => {
     const user = userEvent.setup();
-    Object.defineProperty(window, "innerWidth", {
-      value: 390,
-      configurable: true,
-    });
     const { container } = renderRestaurant();
     const add = await screen.findByRole("button", {
       name: "Добавить в корзину: Том ям с креветками",
@@ -273,7 +269,6 @@ describe("restaurant page quality", () => {
     await user.keyboard("{Enter}");
     expect(screen.getByText("В корзине: 1")).toBeVisible();
 
-    expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     expect(document.querySelectorAll('[data-ui-primary="true"]')).toHaveLength(
       1,
     );

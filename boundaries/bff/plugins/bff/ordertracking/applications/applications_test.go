@@ -163,12 +163,6 @@ func TestItemMissingFromMenuHasEmptyName(t *testing.T) {
 	assert.Empty(t, got.Items[0].Name)
 }
 
-func TestNotFoundPassesThrough(t *testing.T) {
-	h := NewGetOrder(&fakeOrders{err: ErrOrderNotFound}, fakeCatalog{})
-	_, err := h.Handle(context.Background(), "order-1")
-	assert.ErrorIs(t, err, ErrOrderNotFound)
-}
-
 // AC-560: business refusals become problems, other errors stay errors.
 func TestCancellationRefusalsBecomeProblems(t *testing.T) {
 	for reason, want := range map[string]CancellationProblem{

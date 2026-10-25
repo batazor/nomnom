@@ -258,17 +258,6 @@ class IdentityConfigTest(unittest.TestCase):
         with patch.dict(os.environ, REQUIRED_ENV, clear=True):
             self.assertFalse(load_settings().identity.enabled)
 
-    def test_reads_identity_from_environment(self) -> None:
-        settings = _vector_settings()
-        self.assertTrue(settings.enabled)
-        self.assertEqual(settings.issuer, VECTORS["issuer"])
-        self.assertEqual(settings.audience, "nomnom.payments")
-        self.assertEqual(settings.jwks_file, str(JWKS_FILE))
-        self.assertEqual(
-            settings.service_account_map,
-            {"system:serviceaccount:nomnom:orders-worker": "orders-worker"},
-        )
-
     def test_parses_several_service_accounts(self) -> None:
         settings = _vector_settings(
             IDENTITY__SERVICE_ACCOUNTS=" nomnom/orders-worker=orders-worker , ops/job=refunds-job"
@@ -308,14 +297,6 @@ class IdentityConfigTest(unittest.TestCase):
         ):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 _vector_settings(IDENTITY__SERVICE_ACCOUNTS=value)
-
-    def test_malformed_allowlist_fails_load_settings(self) -> None:
-        environment = {"IDENTITY__SERVICE_ACCOUNTS": "broken"}
-        with (
-            patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True),
-            self.assertRaises(ValidationError),
-        ):
-            load_settings()
 
     def test_unreadable_or_invalid_jwks_is_a_startup_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

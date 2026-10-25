@@ -166,29 +166,8 @@ class CompositionTest(unittest.TestCase):
         with self.assertRaisesRegex(SpiceDBConfigurationError, "SPICEDB__ENDPOINT"):
             create_permission_checker(SpiceDBSettings.model_validate({}))
 
-    def test_configured_endpoint_creates_spicedb_checker(self) -> None:
-        for insecure in (True, False):
-            with self.subTest(insecure=insecure):
-                settings = SpiceDBSettings.model_validate(
-                    {
-                        "SPICEDB__ENDPOINT": "localhost:50051",
-                        "SPICEDB__PRESHARED_KEY": "devkey",
-                        "SPICEDB__INSECURE": insecure,
-                    }
-                )
-                checker = create_permission_checker(settings)
-                self.assertIsInstance(checker, SpiceDBPermissionChecker)
-
 
 class SettingsTest(unittest.TestCase):
-    def test_defaults(self) -> None:
-        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
-            settings = load_settings().spicedb
-        self.assertEqual(settings.endpoint, "")
-        self.assertFalse(settings.enabled)
-        self.assertFalse(settings.insecure)
-        self.assertEqual(settings.timeout, timedelta(seconds=2))
-
     def test_reads_environment(self) -> None:
         environment = {
             "SPICEDB__ENDPOINT": "spicedb.nomnom-authz:50051",

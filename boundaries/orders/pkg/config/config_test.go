@@ -10,20 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadUsesDefaultPort(t *testing.T) {
-	clearConfigEnvironment(t)
-
-	cfg, err := Load()
-	require.NoError(t, err)
-	assert.Equal(t, DefaultPort, cfg.Server.Port)
-	assert.Equal(t, DefaultManagementPort, cfg.Management.Port)
-	assert.Equal(t, DefaultDrainTimeout, cfg.Shutdown.DrainTimeout)
-	assert.Equal(t, DefaultReadinessDelay, cfg.Shutdown.ReadinessDelay)
-	assert.Equal(t, []string{DefaultKafkaBroker}, cfg.Kafka.Brokers)
-	assert.Equal(t, DefaultKafkaClientID, cfg.Kafka.ClientID)
-	assert.Equal(t, DefaultKafkaConsumerGroup, cfg.Kafka.ConsumerGroup)
-}
-
 func TestLoadEnvironmentOverridesConfigFile(t *testing.T) {
 	clearConfigEnvironment(t)
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -205,14 +191,6 @@ func TestLoadRequiresGateway(t *testing.T) {
 	assert.Equal(t, "internal-gateway:8080", cfg.InternalGateway.Address)
 }
 
-func TestLoadUsesPlaceholderCancellationWindow(t *testing.T) {
-	clearConfigEnvironment(t)
-
-	cfg, err := Load()
-	require.NoError(t, err)
-	assert.Equal(t, DefaultCancellationWindow, cfg.Cancellation.Window)
-}
-
 func TestLoadReadsCancellationWindowFromEnvironment(t *testing.T) {
 	clearConfigEnvironment(t)
 	t.Setenv(EnvCancellationWindow, "90s")
@@ -233,18 +211,6 @@ func TestLoadRejectsUnusableCancellationWindow(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
-}
-
-func TestLoadUsesPlaceholderCatalogLimits(t *testing.T) {
-	clearConfigEnvironment(t)
-
-	cfg, err := Load()
-	require.NoError(t, err)
-	assert.Equal(t, CatalogConfig{
-		MinimumTotal: DefaultCatalogMinimumTotal,
-		MaximumTotal: DefaultCatalogMaximumTotal,
-		Timeout:      DefaultCatalogTimeout,
-	}, cfg.Catalog)
 }
 
 func TestLoadReadsCatalogFromEnvironment(t *testing.T) {

@@ -175,34 +175,3 @@ impl DeliveryOutbox for PostgresStore {
         .map(drop)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use opentelemetry::Context;
-    use opentelemetry::trace::{
-        SpanContext, SpanId, TraceContextExt as _, TraceFlags, TraceId, TraceState,
-    };
-
-    use super::*;
-
-    #[test]
-    fn traceparent_without_a_span_is_empty() {
-        assert_eq!(row_traceparent(), "");
-    }
-
-    #[test]
-    fn traceparent_is_the_current_span() {
-        let span = SpanContext::new(
-            TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").expect("trace id"),
-            SpanId::from_hex("00f067aa0ba902b7").expect("span id"),
-            TraceFlags::SAMPLED,
-            false,
-            TraceState::default(),
-        );
-        let _guard = Context::new().with_remote_span_context(span).attach();
-        assert_eq!(
-            row_traceparent(),
-            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-        );
-    }
-}

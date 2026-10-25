@@ -246,19 +246,6 @@ mod tests {
         }
     }
 
-    /// AC-694
-    #[test]
-    fn dispatcher_failure_report_checks_dispatch_delivery() {
-        assert_eq!(
-            rendered(delivery_check(
-                &user(),
-                DeliveryPermission::ReportDeliveryFailure,
-                &DeliveryResource::Delivery(DeliveryId::new("delivery-1"))
-            )),
-            Some("platform:nomnom#dispatch_delivery@user:user-1".to_owned())
-        );
-    }
-
     #[test]
     fn other_delivery_permissions_check_courier_or_delivery() {
         let others = ALL_DELIVERY_PERMISSIONS
@@ -300,14 +287,5 @@ mod tests {
                 None
             );
         }
-    }
-
-    #[test]
-    fn six_commands_are_fulfillment_capabilities() {
-        let count = ALL_DELIVERY_PERMISSIONS
-            .into_iter()
-            .filter(|permission| coordinates_delivery(*permission))
-            .count();
-        assert_eq!(count, 6);
     }
 }

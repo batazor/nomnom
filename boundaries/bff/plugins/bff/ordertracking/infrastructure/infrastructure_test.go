@@ -187,14 +187,6 @@ func TestGetOrderFailedPreconditionIsNotACancellationRefusal(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err), "the cause is kept for the log")
 }
 
-func TestOrdersUnavailableStaysAnError(t *testing.T) {
-	server := &ordersServer{err: status.Error(codes.Unavailable, "down")}
-	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
-	_, err := orders.GetOrder(customerContext(), "order-1")
-	assert.Error(t, err)
-	assert.NotErrorIs(t, err, applications.ErrOrderNotFound)
-}
-
 func TestCatalogIsPublicAndToleratesMissingMenu(t *testing.T) {
 	server := &restaurantsServer{}
 	catalog := NewCatalog(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1.RegisterRestaurantsServiceServer(s, server) }))

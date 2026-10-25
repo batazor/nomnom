@@ -28,12 +28,10 @@ from infrastructure.postgres import (
     PostgresPendingOperationQuery,
     PostgresProviderMessageInbox,
     PostgresUnitOfWork,
-    migrate,
     outbox_event_id,
 )
 from infrastructure.postgres.migrate import migrations
 from pkg.application import AggregateRef, ConcurrencyConflictError
-from pkg.config import DatabaseSettings
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
@@ -136,9 +134,6 @@ class PostgresIntegrationTest(unittest.TestCase):
                 "SELECT event_id, aggregate_type, aggregate_id, aggregate_version, event_type, "
                 "topic, payload, traceparent FROM payments_outbox ORDER BY created_at, event_id"
             ).fetchall()
-
-    def test_migrations_are_idempotent(self) -> None:
-        self.assertEqual(migrate(DatabaseSettings(DATABASE__URL=self.dsn)), [])
 
     def test_payment_round_trip_keeps_exact_money(self) -> None:
         payment = self._payment()

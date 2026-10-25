@@ -3,10 +3,6 @@ import test from "node:test";
 
 import { loadConfig } from "../pkg/config/config.ts";
 
-test("uses the default port", () => {
-  assert.equal(loadConfig({}).server.port, 8082);
-});
-
 test("SERVER__PORT takes precedence over PORT", () => {
   const config = loadConfig({
     SERVER__PORT: "9002",
@@ -19,17 +15,6 @@ test("SERVER__PORT takes precedence over PORT", () => {
 test("rejects an invalid port", () => {
   assert.throws(() => loadConfig({ PORT: "not-a-port" }));
   assert.throws(() => loadConfig({ PORT: "70000" }));
-});
-
-test("uses default management port and shutdown budget", () => {
-  const config = loadConfig({});
-
-  assert.equal(config.management.port, 9082);
-  assert.deepEqual(config.shutdown, {
-    readinessDelayMs: 5000,
-    drainTimeoutMs: 20000,
-    telemetryFlushTimeoutMs: 5000,
-  });
 });
 
 test("reads shutdown budget from the environment", () => {

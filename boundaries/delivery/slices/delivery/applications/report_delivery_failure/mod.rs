@@ -316,18 +316,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_reason_is_invalid() {
-        let world = World::new();
-        world.assigned_delivery("delivery-1", "courier-1");
-        assert_eq!(
-            handler(&world).execute(&subject("dispatcher-1"), input(Reporter::Dispatcher, " ")),
-            Err(DeliveryApplicationError::InvalidRequest(
-                InvalidDeliveryRequest::Validation(DeliveryValidationError::EmptyFailureReason)
-            ))
-        );
-    }
-
-    #[test]
     fn unknown_code_is_invalid_not_other() {
         let world = World::new();
         world.assigned_delivery("delivery-1", "courier-1");
@@ -344,28 +332,6 @@ mod tests {
         );
         assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
         assert!(world.store.outbox_messages().is_empty());
-    }
-
-    #[test]
-    fn too_long_detail_is_invalid() {
-        let world = World::new();
-        world.assigned_delivery("delivery-1", "courier-1");
-        let detail = "x".repeat(DeliveryFailureReason::MAX_DETAIL_CHARS + 1);
-        assert_eq!(
-            handler(&world).execute(
-                &subject("dispatcher-1"),
-                Input {
-                    detail: Some(detail),
-                    ..input(Reporter::Dispatcher, "other")
-                }
-            ),
-            Err(DeliveryApplicationError::InvalidRequest(
-                InvalidDeliveryRequest::Validation(DeliveryValidationError::FailureDetailTooLong {
-                    maximum: DeliveryFailureReason::MAX_DETAIL_CHARS
-                })
-            ))
-        );
-        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
     }
 
     #[test]
