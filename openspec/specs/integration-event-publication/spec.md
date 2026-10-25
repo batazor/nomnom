@@ -25,7 +25,7 @@
 ### Requirement: Публикуемые события выбираются явным allowlist
 **ID:** FR-521
 
-Mapper Domain Event → Integration Event SHALL находиться в `infrastructure` контекста и сопоставлять только события, у которых есть Protobuf-контракт. Domain Event вне allowlist MUST NOT попадать в Outbox. Основной процесс MUST подключать mapper контекста, тестовая сборка хранилища — mapper без контрактов. В `restaurants` allowlist SHALL вести слайс, владеющий aggregate, а mapper процесса MUST выбирать его по `aggregate_type`; событие aggregate неизвестного типа MUST NOT публиковаться.
+Mapper Domain Event → Integration Event SHALL находиться в `infrastructure` и сопоставлять только события с Protobuf-контрактом. Domain Event вне allowlist MUST NOT попадать в Outbox. Основной процесс MUST подключать mapper контекста, тестовая сборка хранилища — mapper без контрактов. В `restaurants` allowlist ведёт слайс aggregate, mapper процесса MUST выбирать его по `aggregate_type`, неизвестный тип MUST NOT публиковаться.
 
 #### Scenario: Внутренний факт payments не публикуется
 **ID:** AC-602
@@ -160,7 +160,7 @@ Outbox каждого контекста SHALL читать отдельный �
 ### Requirement: Механизм исключительности relay
 **ID:** FR-537
 
-`payments-relay` и `delivery-relay` SHALL удерживать session-level `pg_try_advisory_lock` на выделенном соединении и MUST проверять живость его сессии перед каждой записью. `restaurants-relay` SHALL владеть lease в `outbox_leases` со сроком `OUTBOX__LEASE_TTL` по времени сервера MongoDB и MUST продлевать его внутри пачки не реже трети TTL; `message.timeout.ms` MUST быть меньше TTL. Потеряв lock или lease, relay MUST остановить пачку до следующей записи; истёкший lease MAY захватить другой экземпляр.
+`payments-relay` и `delivery-relay` SHALL удерживать session-level `pg_try_advisory_lock` на выделенном соединении и MUST проверять живость его сессии перед каждой записью. `restaurants-relay` SHALL владеть lease в `outbox_leases` со сроком `OUTBOX__LEASE_TTL` по времени сервера MongoDB и MUST продлевать его внутри пачки не реже трети TTL; `message.timeout.ms` MUST быть меньше TTL. Без lock или lease relay MUST остановить пачку; истёкший lease MAY захватить другой экземпляр.
 
 #### Scenario: Failover после потери владельца
 **ID:** AC-615
