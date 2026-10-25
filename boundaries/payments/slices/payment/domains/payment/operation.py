@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from .events import PaymentDomainEvent, PaymentOperationDeclined
 from .fsm import PaymentTrigger
@@ -11,13 +11,13 @@ from .payment import Payment
 from .vo.money import Money
 
 
-class OperationState(str, Enum):
+class OperationState(StrEnum):
     PENDING = "pending"
     SUCCEEDED = "succeeded"
     DECLINED = "declined"
 
 
-class OperationTrigger(str, Enum):
+class OperationTrigger(StrEnum):
     SUCCEED = "succeed"
     DECLINE = "decline"
 

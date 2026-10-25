@@ -1,10 +1,10 @@
 """Verified caller identity passed into protected use cases."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class SubjectKind(str, Enum):
+class SubjectKind(StrEnum):
     USER = "user"
     SERVICE = "service"
 

@@ -1,6 +1,6 @@
 """Identifiers and operation kinds shared by the payment model modules."""
 
-from enum import Enum
+from enum import StrEnum
 
 
 class PaymentId(str):
@@ -15,7 +15,7 @@ class OperationId(str):
     pass
 
 
-class OperationKind(str, Enum):
+class OperationKind(StrEnum):
     AUTHORIZE = "authorize"
     CAPTURE = "capture"
     CANCEL_AUTHORIZATION = "cancel_authorization"

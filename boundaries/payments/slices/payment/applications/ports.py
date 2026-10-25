@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Protocol
 
 from pkg.application import AggregateRef, ApplicationError, Subject
@@ -16,7 +16,7 @@ from slices.payment.domains.payment import (
 )
 
 
-class PaymentPermission(str, Enum):
+class PaymentPermission(StrEnum):
     CREATE = "create"
     AUTHORIZE = "authorize"
     CAPTURE = "capture"
@@ -46,7 +46,7 @@ class ProviderUnavailable(ApplicationError):
     """The payment provider could not be reached or returned a technical error."""
 
 
-class ProviderOperationStatus(str, Enum):
+class ProviderOperationStatus(StrEnum):
     SUCCEEDED = "succeeded"
     DECLINED = "declined"
     ACCEPTED = "accepted"

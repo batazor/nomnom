@@ -1,7 +1,7 @@
 """Result of a financial Payment Operation as returned to transports."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from slices.payment.domains.payment import (
     OperationId,
@@ -15,7 +15,7 @@ from slices.payment.domains.payment import (
 PAYMENT_AGGREGATE = "Payment"
 
 
-class OperationStatus(str, Enum):
+class OperationStatus(StrEnum):
     SUCCEEDED = "succeeded"
     DECLINED = "declined"
     PENDING = "pending"

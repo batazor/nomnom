@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pkg.application import AggregateRef, Clock
 from slices.payment.domains.payment import (
@@ -107,7 +107,7 @@ def to_domain_outcome(outcome: ProviderOperationOutcome) -> OperationOutcome:
     raise InvalidPaymentRequest("provider result must be final: succeeded or declined")
 
 
-class ProviderResultStatus(str, Enum):
+class ProviderResultStatus(StrEnum):
     APPLIED = "applied"
     ALREADY_APPLIED = "already_applied"
     DUPLICATE_MESSAGE = "duplicate_message"

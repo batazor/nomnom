@@ -2,11 +2,11 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import NamedTuple
 
 
-class PaymentState(str, Enum):
+class PaymentState(StrEnum):
     PENDING = "pending"
     AUTHORIZED = "authorized"
     CAPTURED = "captured"
@@ -14,7 +14,7 @@ class PaymentState(str, Enum):
     FAILED = "failed"
 
 
-class PaymentTrigger(str, Enum):
+class PaymentTrigger(StrEnum):
     AUTHORIZE = "authorize"
     CANCEL_AUTHORIZATION = "cancel_authorization"
     CAPTURE = "capture"

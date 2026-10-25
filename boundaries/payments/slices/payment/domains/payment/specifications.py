@@ -2,12 +2,12 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 
 from .vo.money import CurrencyMismatch, Money
 
 
-class PaymentPolicyReason(str, Enum):
+class PaymentPolicyReason(StrEnum):
     REFUND_WINDOW_EXPIRED = "refund_window_expired"
     REFUND_AMOUNT_EXCEEDS_AVAILABLE = "refund_amount_exceeds_available"
     AUTHORIZATION_EXPIRED = "authorization_expired"
