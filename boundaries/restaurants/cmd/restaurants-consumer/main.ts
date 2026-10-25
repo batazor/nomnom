@@ -13,6 +13,7 @@ import {
   type ConsumerCradle,
   createConsumerContainer,
 } from "../../di/consumer.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/collections.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import {
   type ConsumerClient,
@@ -32,8 +33,8 @@ const logger = createLogger({ resource: telemetryResource(SERVICE_NAME) });
 logUncaughtErrors(logger);
 const config = loadConfig(process.env, { process: "consumer" });
 // MongoDB and Kafka are required: without them the process does not start.
-// Collections and indexes, the Inbox included, are created by
-// restaurants-migrate before the workload starts.
+// Collections and indexes, the Inbox included, are migrated by the process
+// itself before it consumes (local ADR 2).
 if (!config.mongodb.enabled) {
   throw new Error(
     "MONGODB__URI is required: restaurants-consumer writes the Inbox and Restaurant Orders to MongoDB",
@@ -51,6 +52,12 @@ let deadLetters: KafkaPublisher | undefined;
 let kafkaConsumer: ConsumerClient | undefined;
 let container: AwilixContainer<ConsumerCradle> | undefined;
 try {
+  // Nothing to change on an already current database; a failed migration
+  // stops the process before it consumes.
+  await migrateRestaurantsDatabase(
+    mongo.db,
+    logger.child({ operation: "migrate" }).info,
+  );
   deadLetters = await KafkaPublisher.connect(config.kafka, {
     allowAutoTopicCreation: true,
   });

@@ -31,7 +31,7 @@ def postgres_dsn() -> Iterator[str]:
         POSTGRES_IMAGE, username="payments", password="payments", dbname="payments", driver=None
     ) as container:
         dsn = container.get_connection_url()
-        migrate(dsn)
+        migrate(DatabaseSettings(DATABASE__URL=dsn))
         yield dsn
 
 

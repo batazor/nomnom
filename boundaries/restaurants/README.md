@@ -295,14 +295,14 @@ MongoDB предлагается как основное логическое х
 
 Решение имеет статус Proposed в [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); коллекции, границы документов, validators, индексы, эволюция схемы и атомарность конкретизированы в локальном [ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md).
 
-Реализация: официальный драйвер `mongodb` без ODM. Общие части — `pkg/infrastructure/mongodb` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекция `outbox` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) в контракте CDC [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет; `cmd/restaurants` подключает mapper процесса, который по `aggregate_type` выбирает mappers слайсов `restaurant`, `menu` и `restaurantorder`), `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts`), адаптеры слайсов — `slices/<slice>/infrastructure/mongodb`, реестр коллекций и миграций — `infrastructure/mongodb/collections.ts`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `outbox`, `inbox`, `schema_migrations`. Транзакции требуют replica set.
+Реализация: официальный драйвер `mongodb` без ODM. Общие части — `pkg/infrastructure/mongodb` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекция `outbox` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) в контракте CDC [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет; `cmd/restaurants` подключает mapper процесса, который по `aggregate_type` выбирает mappers слайсов `restaurant`, `menu` и `restaurantorder`), `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts`), адаптеры слайсов — `slices/<slice>/infrastructure/mongodb`, реестр коллекций и миграций — `infrastructure/mongodb/collections.ts`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `outbox`, `inbox`, `schema_migrations`, `schema_migrations_lock`. Транзакции требуют replica set.
 
 | Переменная | Значение | По умолчанию |
 | --- | --- | --- |
-| `MONGODB__URI` | connection string replica set; обязателен — без него `restaurants` и `restaurants-migrate` не стартуют | — |
+| `MONGODB__URI` | connection string replica set; обязателен — без него `restaurants` и `restaurants-consumer` не стартуют | — |
 | `MONGODB__DATABASE` | имя базы | `restaurants` |
 | `MONGODB__TIMEOUT` | server selection timeout; недоступная MongoDB останавливает старт | `5s` |
-| `MONGODB__MAX_POOL_SIZE` | соединений в пуле одного сервера replica set (1..100), `maxPoolSize` | `restaurants` 20, `restaurants-consumer` 5, `restaurants-migrate` 2 |
+| `MONGODB__MAX_POOL_SIZE` | соединений в пуле одного сервера replica set (1..100), `maxPoolSize` | `restaurants` 20, `restaurants-consumer` 5 |
 | `MONGODB__MIN_POOL_SIZE` | прогретые соединения (0..`MAX_POOL_SIZE`), `minPoolSize` | `0` |
 | `MONGODB__MAX_IDLE_TIME` | idle-соединение закрывается после этого срока, `maxIdleTimeMS` | `5m` |
 | `MONGODB__WAIT_QUEUE_TIMEOUT` | ожидание свободного соединения до ошибки checkout, `waitQueueTimeoutMS` | `5s` |
@@ -310,7 +310,7 @@ MongoDB предлагается как основное логическое х
 
 Connection pool — один `MongoClient` на процесс (`pkg/infrastructure/mongodb/client.ts`); драйвер держит пул на каждый сервер replica set, лимиты действуют на пул одного сервера и перекрывают одноимённые параметры URI. Default `MAX_POOL_SIZE` выбирает процесс (`loadConfig(env, { process })`); значение вне диапазона или нулевой таймаут (у драйвера 0 означает «без ограничения») останавливает старт. Метрики пула — CMAP events драйвера (`pool-metrics.ts`) по semconv `db.client.connection.*` (`count` по `state` idle | used, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`) с `db.client.connection.pool.name` = `<host:port>/<database>`, плюс `nomnom.db.client.connection.pool.clears` ([инвентарь](../../docs/observability/metric-inventory.md#db)); панели и alert rules пула — row Dependencies overview ([ops/grafana](ops/grafana/README.md)).
 
-Коллекции, validators и индексы создаёт `npm run migrate` (`cmd/restaurants-migrate`, идемпотентно); основной процесс схему не меняет.
+Миграции встроены в приложение: `restaurants` и `restaurants-consumer` при старте, до обслуживания, вызывают `migrateRestaurantsDatabase` своим `MongoClient` — создают недостающие коллекции, validators и индексы и применяют новые миграции документов, либо пишут `nothing to migrate` и продолжают. Ошибка миграции останавливает процесс. Одновременный старт процессов сериализует lease в `schema_migrations_lock` ([локальный ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md#эволюция-схемы)); отдельного шага migrate нет.
 
 ## Событийная интеграция
 
@@ -366,8 +366,8 @@ Change [`add-restaurants-order-placed-consumer`](../../openspec/changes/add-rest
 Структура:
 
 - `slices/<slice>/di/registrations.ts` — регистрации слайса: MongoDB adapters его ports, MVP adapters и handlers. Модуль объявляет `<Slice>Dependencies` (что берёт у процесса) и `<Slice>Cradle` (что предоставляет); тип `Registrations<Cradle>` из `pkg/di/container.ts` проверяет при компиляции, что зарегистрирован каждый ключ с нужным типом, а сигнатура `register<Slice>` — что процесс даёт все зависимости.
-- `di/restaurants.ts`, `di/consumer.ts`, `di/migrate.ts` — контейнеры процессов: общие клиенты (MongoDB Unit of Work, Outbox, SpiceDB client, access control, relationship writer), модули слайсов, gRPC server и фоновые циклы. Фабрики регистраций — единственное место, где разбирается cradle; handlers получают обычный объект зависимостей.
-- `cmd/*/main.ts` — точки входа: читают конфигурацию, проверяют обязательную инфраструктуру, асинхронно открывают ресурсы (MongoDB, Kafka producer, subject resolver, telemetry), передают их контейнеру как values, запускают `Lifecycle` с `cradle.worker` и освобождают ресурсы в фиксированном порядке: `container.dispose()` (disposer закрывает SpiceDB client), затем Kafka producer, MongoDB и telemetry.
+- `di/restaurants.ts`, `di/consumer.ts` — контейнеры процессов: общие клиенты (MongoDB Unit of Work, Outbox, SpiceDB client, access control, relationship writer), модули слайсов, gRPC server и фоновые циклы. Фабрики регистраций — единственное место, где разбирается cradle; handlers получают обычный объект зависимостей.
+- `cmd/*/main.ts` — точки входа: читают конфигурацию, проверяют обязательную инфраструктуру, асинхронно открывают ресурсы (MongoDB, Kafka producer, subject resolver, telemetry), передают их контейнеру как values, мигрируют MongoDB, запускают `Lifecycle` с `cradle.worker` и освобождают ресурсы в фиксированном порядке: `container.dispose()` (disposer закрывает SpiceDB client), затем Kafka producer, MongoDB и telemetry.
 
 Контейнер создаётся в PROXY injection mode со `strict: true`: регистрация с большим временем жизни не может зависеть от более короткоживущей. Сейчас все регистрации — application scope (singleton): handlers без состояния поверх общих клиентов, а ресурс одной операции — MongoDB session транзакции — принадлежит `MongoUnitOfWork.run` и живёт ровно один use case. В `restaurants-consumer` ресурс одного сообщения — MongoDB session транзакции Inbox — так же принадлежит `MongoUnitOfWork.run` (async context), поэтому отдельный message scope (`container.createScope()`) не нужен. `test/composition.test.ts` проверяет, что каждый контейнер разрешает все регистрации.
 
@@ -375,7 +375,7 @@ Change [`add-restaurants-order-placed-consumer`](../../openspec/changes/add-rest
 
 ## Observability
 
-Контракт — [docs/observability.md](../../docs/observability.md), lifecycle — [cloud-native runtime](../../docs/cloud-native-runtime.md#observability-lifecycle). Bootstrap — `pkg/telemetry`; инструментирование транспорта, MongoDB, Kafka и внешних клиентов — в `infrastructure/` и `pkg/infrastructure/`; logger и use case decorator собираются в composition root (`cmd/*`, `di/`). Одинаково для `restaurants`, `restaurants-consumer` и `restaurants-relay`; `restaurants-migrate` пишет только JSON-логи.
+Контракт — [docs/observability.md](../../docs/observability.md), lifecycle — [cloud-native runtime](../../docs/cloud-native-runtime.md#observability-lifecycle). Bootstrap — `pkg/telemetry`; инструментирование транспорта, MongoDB, Kafka и внешних клиентов — в `infrastructure/` и `pkg/infrastructure/`; logger и use case decorator собираются в composition root (`cmd/*`, `di/`). Одинаково для `restaurants`, `restaurants-consumer` и `restaurants-relay`.
 
 **Resource** (`pkg/telemetry/resource.ts`) один для traces, metrics и logs: `service.name` (по умолчанию имя процесса; `OTEL_SERVICE_NAME` > `OTEL_RESOURCE_ATTRIBUTES` > default), `service.namespace=nomnom` всегда, `service.version`, `service.instance.id`, `deployment.environment.name` из `OTEL_RESOURCE_ATTRIBUTES`, плюс `telemetry.sdk.*` и `process.runtime.*`.
 
@@ -419,8 +419,7 @@ Change [`add-restaurants-order-placed-consumer`](../../openspec/changes/add-rest
 docker run -d --name restaurants-mongo -p 27017:27017 mongo:8 --replSet rs0
 docker exec restaurants-mongo mongosh --quiet --eval 'rs.initiate()'
 export MONGODB__URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true'
-npm run migrate
-npm start
+npm start  # мигрирует базу при старте
 # OrderPlaced → Restaurant Order (отдельный процесс, нужен Kafka):
 KAFKA__BROKERS=localhost:9092 npm run consumer
 ```

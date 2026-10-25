@@ -77,7 +77,7 @@ export type MongoDbPoolConfig = Readonly<{
 
 /**
  * `enabled: false` при пустом `MONGODB__URI`; процессы `restaurants` и
- * `restaurants-migrate` в этом случае не стартуют.
+ * `restaurants-consumer` в этом случае не стартуют.
  */
 export type MongoDbConfig = Readonly<{ enabled: false }> | MongoDbEnabledConfig;
 
@@ -186,8 +186,8 @@ export function loadMongoDbPoolConfig(
     maxPoolSize,
     DEFAULT_MONGODB_MIN_POOL_SIZE,
   );
-  // Default не превышает маленький пул (migrate); явное значение больше
-  // maxPoolSize бессмысленно и отклоняется.
+  // Default не превышает маленький пул (MONGODB__MAX_POOL_SIZE=1); явное
+  // значение больше maxPoolSize бессмысленно и отклоняется.
   const maxConnecting = integer(
     MONGODB_MAX_CONNECTING_ENV,
     1,

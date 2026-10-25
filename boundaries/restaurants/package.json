@@ -12,8 +12,7 @@
     "start": "node cmd/restaurants/main.ts",
     "consumer": "node cmd/restaurants-consumer/main.ts",
     "typecheck": "tsc --project tsconfig.test.json",
-    "test": "node --test --test-global-setup=test/support/global-containers.ts test/*.test.ts",
-    "migrate": "node cmd/restaurants-migrate/main.ts"
+    "test": "node --test --test-global-setup=test/support/global-containers.ts test/*.test.ts"
   },
   "engines": {
     "node": ">=22.6"

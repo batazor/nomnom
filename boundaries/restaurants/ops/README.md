@@ -46,16 +46,14 @@ Authorization через SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-au
 `restaurants`) и `mongodb.timeout` (по умолчанию `5s`). Нужен replica set: Unit of Work использует
 multi-document транзакции. Пока `mongodb.uriSecret.name` пуст, `MONGODB__*` не задаются и
 приложение не стартует: `MONGODB__URI` обязателен. Если Secret задан, рендерятся `MONGODB__URI` из
-`secretKeyRef` (Secret chart не создаёт), `MONGODB__DATABASE`, `MONGODB__TIMEOUT` и — при
-`mongodb.migrate.enabled` (по умолчанию) — init container `migrate` с командой
-`mongodb.migrate.command` (по умолчанию `node dist/cmd/restaurants-migrate/main.js`; для dev-образа
-— `["node", "cmd/restaurants-migrate/main.ts"]`). Он идемпотентно создаёт коллекции, JSON Schema
-validators, индексы и применяет миграции документов до старта процесса, как `orders-migrate`.
+`secretKeyRef` (Secret chart не создаёт), `MONGODB__DATABASE` и `MONGODB__TIMEOUT`. Init container
+миграций нет: каждый процесс при старте сам создаёт недостающие коллекции, JSON Schema validators,
+индексы и применяет новые миграции документов (на актуальной базе — ничего), под lease в MongoDB;
+ошибка останавливает pod. Время миграции входит в бюджет `startupProbe`.
 Лимиты connection pool задаёт `mongodb.pool` (`maxPoolSize` 20, `minPoolSize` 0, `maxIdleTime`
 `5m`, `waitQueueTimeout` `5s`, `maxConnecting` 2) → `MONGODB__MAX_POOL_SIZE`, `MONGODB__MIN_POOL_SIZE`,
 `MONGODB__MAX_IDLE_TIME`, `MONGODB__WAIT_QUEUE_TIMEOUT`, `MONGODB__MAX_CONNECTING`;
-`values-consumer.yaml` задаёт `maxPoolSize` 5, init container `migrate` берёт
-`mongodb.migrate.maxPoolSize` (2) и остальные лимиты из `mongodb.pool`.
+`values-consumer.yaml` задаёт `maxPoolSize` 5; миграция при старте идёт через тот же пул.
 С неверным `mongodb.database`, `mongodb.timeout` или лимитом пула вне диапазона приложения chart не
 рендерится.
 
@@ -96,8 +94,8 @@ helm uninstall restaurants
 ### Процессы того же образа
 
 Фоновые процессы ставятся отдельными releases того же chart с собственным values-файлом: своя
-`command`, `component`, без `Service` и без init container `migrate` (коллекции создаёт release
-`restaurants`, поэтому он ставится первым). Brokers (`env.KAFKA__BROKERS`) и `mongodb.uriSecret`
+`command`, `component` и без `Service`; коллекции и индексы процесс мигрирует сам при старте,
+поэтому порядок установки releases не важен. Brokers (`env.KAFKA__BROKERS`) и `mongodb.uriSecret`
 задаёт окружение; без них процесс не стартует.
 
 | Release | Values | Процесс |
@@ -168,7 +166,6 @@ OpenTelemetry задаётся секцией `telemetry`, а не `env`: chart 
 `telemetry.resourceAttributes`) и, если `telemetry.endpoint` задан,
 `OTEL_EXPORTER_OTLP_ENDPOINT` (traces и metrics по OTLP/gRPC). Явные переменные chart
 перекрывают одноимённые из `env`; `service.*` в `resourceAttributes` chart отклоняет.
-Init container `migrate` получает тот же resource для JSON-логов.
 
 ```yaml
 telemetry:

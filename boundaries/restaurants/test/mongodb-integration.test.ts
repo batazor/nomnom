@@ -4,7 +4,10 @@ import { after, before, describe, test } from "node:test";
 
 import { MongoServerError } from "mongodb";
 
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
+import {
+  COLLECTIONS,
+  migrateRestaurantsDatabase,
+} from "../infrastructure/mongodb/collections.ts";
 import {
   AlreadyExistsError,
   ConcurrencyConflictError,
@@ -13,6 +16,10 @@ import {
   connectMongoDb,
   type MongoDbConnection,
 } from "../pkg/infrastructure/mongodb/client.ts";
+import {
+  MIGRATION_LOCK_COLLECTION,
+  MIGRATIONS_COLLECTION,
+} from "../pkg/infrastructure/mongodb/migrate.ts";
 import {
   dropOutboxRelayMigration,
   MongoOutbox,
@@ -67,6 +74,106 @@ test("uuidV5 matches the RFC 4122 test vector", () => {
     uuidV5("python.org", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
     "886313e1-3b8a-5372-9b90-0c9aee199e5d",
   );
+});
+
+describe("startup migration", () => {
+  let mongo: MongoDbConnection;
+
+  before(async () => {
+    mongo = await connectMongoDb({
+      enabled: true,
+      uri,
+      database: "restaurants_test",
+      timeoutMs: 5000,
+    });
+  });
+
+  after(async () => {
+    await mongo?.close();
+  });
+
+  const freshDatabase = (t: { after(fn: () => Promise<void>): void }) => {
+    const db = mongo.client.db(`restaurants_test_${randomUUID().slice(0, 8)}`);
+    t.after(async () => {
+      await db.dropDatabase();
+    });
+    return db;
+  };
+
+  test("applies everything on an empty database and nothing on a migrated one", async (t) => {
+    const db = freshDatabase(t);
+    const messages: string[] = [];
+
+    const first = await migrateRestaurantsDatabase(db, (message) =>
+      messages.push(message),
+    );
+    for (const spec of COLLECTIONS) {
+      assert.ok(first.includes(`created collection ${spec.name}`), spec.name);
+    }
+    assert.ok(first.includes("created index menus.menus_restaurant_unique"));
+    assert.ok(first.includes("applied migration 0001-outbox-cdc-drop-relay"));
+    assert.ok(
+      await db
+        .collection(MIGRATIONS_COLLECTION)
+        .findOne({ _id: "0001-outbox-cdc-drop-relay" as never }),
+    );
+
+    messages.length = 0;
+    assert.deepEqual(
+      await migrateRestaurantsDatabase(db, (message) => messages.push(message)),
+      [],
+    );
+    assert.deepEqual(messages, [
+      "database schema is up to date, nothing to migrate",
+    ]);
+    // The lease is released after every run.
+    assert.equal(
+      await db.collection(MIGRATION_LOCK_COLLECTION).countDocuments(),
+      0,
+    );
+  });
+
+  test("restores a changed validator and a dropped index", async (t) => {
+    const db = freshDatabase(t);
+    await migrateRestaurantsDatabase(db);
+    await db.command({ collMod: "menus", validator: {} });
+    await db.collection("menus").dropIndex("menus_restaurant_unique");
+
+    assert.deepEqual(await migrateRestaurantsDatabase(db), [
+      "updated validator of menus",
+      "created index menus.menus_restaurant_unique",
+    ]);
+    assert.deepEqual(await migrateRestaurantsDatabase(db), []);
+  });
+
+  test("processes starting together migrate once under the lease", async (t) => {
+    const db = freshDatabase(t);
+    const runs = await Promise.all(
+      Array.from({ length: 4 }, () => migrateRestaurantsDatabase(db)),
+    );
+    // One holder applies the changes; the others wait for the lease and find
+    // nothing to change.
+    assert.equal(runs.filter((changes) => changes.length > 0).length, 1);
+    assert.equal(
+      runs.flat().filter((change) => change.startsWith("applied migration"))
+        .length,
+      1,
+    );
+  });
+
+  test("an expired lease of a crashed process does not block startup", async (t) => {
+    const db = freshDatabase(t);
+    await db.collection(MIGRATION_LOCK_COLLECTION).insertOne({
+      _id: "migrate" as never,
+      owner: "crashed",
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    assert.ok((await migrateRestaurantsDatabase(db)).length > 0);
+    assert.equal(
+      await db.collection(MIGRATION_LOCK_COLLECTION).countDocuments(),
+      0,
+    );
+  });
 });
 
 describe("MongoDB storage", () => {

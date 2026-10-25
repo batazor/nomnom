@@ -62,6 +62,5 @@ USER node
 ENTRYPOINT ["/usr/bin/tini", "--"]
 # The same image runs restaurants-consumer (ADR 28): its Deployment overrides
 # the command with `node dist/cmd/restaurants-consumer/main.js` (management
-# port 9082 only),
-# restaurants-migrate with `node dist/cmd/restaurants-migrate/main.js`.
+# port 9082 only). Both processes migrate MongoDB themselves at startup.
 CMD ["node", "dist/cmd/restaurants/main.js"]

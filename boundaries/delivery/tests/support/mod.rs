@@ -63,6 +63,29 @@ pub fn own_database() -> DatabaseConfig {
     pooled(&off_runtime(start_postgres))
 }
 
+/// New database without schema on the shared PostgreSQL container, for a
+/// test of the startup migrations.
+pub fn empty_database(name: &str) -> DatabaseConfig {
+    let server = DATABASE.get_or_init(|| off_runtime(start_postgres));
+    let statement = format!("CREATE DATABASE {name}");
+    off_runtime(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime")
+            .block_on(async {
+                let pool = sqlx::PgPool::connect(server).await.expect("connect");
+                sqlx::raw_sql(sqlx::AssertSqlSafe(statement))
+                    .execute(&pool)
+                    .await
+                    .expect("create database");
+                pool.close().await;
+            });
+    });
+    let (base, _) = server.rsplit_once('/').expect("database in url");
+    pooled(&format!("{base}/{name}"))
+}
+
 fn pooled(url: &str) -> DatabaseConfig {
     DatabaseConfig {
         url: url.to_owned(),

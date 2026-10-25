@@ -19,7 +19,8 @@ logger = logging.getLogger("entrypoints.payments")
 def run() -> None:
     """Build the container and run the process lifecycle until a graceful shutdown.
 
-    Invalid configuration or an unreachable database raises before any port opens;
+    Invalid configuration, an unreachable database or a failed migration raises before
+    any port opens;
     telemetry is initialized first and shut down last.
     """
     # Невалидная конфигурация завершает процесс до открытия портов.
@@ -28,8 +29,8 @@ def run() -> None:
     # Telemetry инициализируется первой и сбрасывается последней (runtime contract, шаг 8).
     container.init_resources(TelemetryResource)
     try:
-        # Недоступная база завершает процесс до открытия портов; схему применяет
-        # entrypoints.payments_migrate (init container).
+        # Недоступная база или неудачная миграция завершают процесс до открытия портов:
+        # ресурс базы применяет недостающие миграции под advisory lock.
         container.init_resources(ProcessResource)
         container.lifecycle().run(container.workers())
     finally:

@@ -57,7 +57,7 @@ tokio::task_local! {
 
 /// Pool options of `config`: size, idle minimum, lifetime, idle timeout and
 /// acquire timeout. `max_conns` is the size of this pool; the caller may
-/// lower it (`delivery-migrate`).
+/// lower it (startup migrations).
 #[must_use]
 pub fn pool_options(config: &DatabaseConfig, max_conns: u32) -> PgPoolOptions {
     PgPoolOptions::new()

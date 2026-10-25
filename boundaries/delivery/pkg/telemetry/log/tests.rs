@@ -82,13 +82,13 @@ fn record_inside_a_span_carries_its_trace_and_span_id() {
 fn missing_resource_attributes_are_omitted() {
     let records = capture(
         &Resource::builder_empty()
-            .with_attribute(KeyValue::new("service.name", "delivery-migrate"))
+            .with_attribute(KeyValue::new("service.name", "delivery"))
             .build(),
         || tracing::error!("boom"),
     );
 
     let record = records[0].as_object().expect("object");
-    assert_eq!(record["service.name"], "delivery-migrate");
+    assert_eq!(record["service.name"], "delivery");
     assert_eq!(record["severity"], "ERROR");
     assert!(!record.contains_key("service.version"));
     assert!(!record.contains_key("trace_id"));

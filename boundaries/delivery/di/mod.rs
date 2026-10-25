@@ -4,8 +4,8 @@
 //! - [`infrastructure`] — порты слайсов и их реализации ([`InfrastructureModule`]);
 //! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы;
 //! - [`server`] — `cmd/delivery`: gRPC, reconciliation, истечение Delivery
-//!   Offers и Dispatch Deliveries ([`server::ServerModule`]);
-//! - [`migrate`] — `cmd/delivery-migrate` ([`migrate::MigrateModule`]).
+//!   Offers и Dispatch Deliveries ([`server::ServerModule`]); схему PostgreSQL
+//!   процесс мигрирует сам при старте ([`server::postgres`]).
 //!
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
 //! PostgreSQL (`infrastructure::postgres`, ADR 0001 контекста), идентификаторы —
@@ -17,7 +17,6 @@
 mod dispatch_worker;
 mod http_worker;
 pub mod infrastructure;
-pub mod migrate;
 mod offer_expiry_worker;
 mod reconciling_worker;
 pub mod server;

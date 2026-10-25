@@ -1,14 +1,19 @@
 """Forward-only SQL migrations of the payments database.
 
 Files ``migrations/<version>_<name>.sql`` are applied in version order, each in its
-own transaction together with its ``schema_migrations`` row. A session advisory lock
-serializes concurrent runs (several replicas starting their init containers).
+own transaction together with its ``schema_migrations`` row. The ``payments`` process
+applies them at startup; a session advisory lock serializes concurrent runs (several
+replicas starting together), so the rest find nothing to change.
 """
 
 import re
 from importlib import resources
 
 import psycopg
+
+from pkg.config import DatabaseSettings
+
+from .database import connect_timeout_seconds
 
 _FILE = re.compile(r"^(\d+)_[\w-]+\.sql$")
 # Arbitrary constant shared by every payments migrator.
@@ -25,10 +30,14 @@ def migrations() -> list[tuple[int, str, str]]:
     return sorted(found)
 
 
-def migrate(dsn: str) -> list[str]:
-    """Apply pending migrations and return the names of the applied files."""
+def migrate(settings: DatabaseSettings) -> list[str]:
+    """Apply pending migrations on one connection and return the names of the applied files."""
     applied: list[str] = []
-    with psycopg.connect(dsn, autocommit=True) as conn:
+    with psycopg.connect(
+        settings.url,
+        autocommit=True,
+        connect_timeout=connect_timeout_seconds(settings.connect_timeout),
+    ) as conn:
         conn.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
         try:
             conn.execute(

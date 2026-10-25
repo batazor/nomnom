@@ -89,7 +89,7 @@ resources:
 env: {}
 
 # ADR 9, docs/observability.md: OpenTelemetry процесса. service.namespace=nomnom задаёт код,
-# service.name по умолчанию — имя процесса (payments, payments-migrate).
+# service.name по умолчанию — имя процесса (payments).
 # Chart всегда передаёт OTEL_RESOURCE_ATTRIBUTES: service.instance.id — имя pod (downward
 # API), service.version — image.tag (или "unknown"), плюс resourceAttributes, например
 # deployment.environment.name.
@@ -99,7 +99,7 @@ telemetry:
   # задаёт (её можно передать через env); без endpoint traces и metrics не экспортируются,
   # JSON-логи в stdout пишутся всегда.
   endpoint: ""
-  # OTEL_SERVICE_NAME; пусто — имя процесса из кода. Init container migrate его не получает.
+  # OTEL_SERVICE_NAME; пусто — имя процесса из кода.
   serviceName: ""
   # Дополнительные resource attributes: ключ → значение.
   resourceAttributes: {}
@@ -240,9 +240,6 @@ database:
   # connect_timeout libpq (целые секунды) и ожидание свободного соединения пула.
   connectTimeout: "5s"
   acquireTimeout: "5s"
-  # Init container `python -m entrypoints.payments_migrate.main` перед процессом;
-  # advisory lock сериализует параллельные запуски реплик; одно соединение (пул 1).
-  migrate: true
 
 # ADR 37: Outbox payments доставляет Debezium (Kafka Connect) из WAL. Hook Job release
 # регистрирует коннектор cdc.connector.name в cdc.connectUrl.

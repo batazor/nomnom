@@ -26,6 +26,7 @@ Use cases уже работают через порты `RestaurantRepository`, 
 | `outbox` | одно Integration Event или Change Notification ([ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md), контракт CDC — [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)) | `payload` — байты контракта (BinData), `traceparent` (`""` без trace context) | `aggregateType`, `aggregateId`, `aggregateVersion` (Long) |
 | `inbox` | факт обработки Integration Event consumer'ом ([ADR 11](../../../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md)), `_id` — `{consumer}:{eventId}` | — | `eventId`, `aggregateId`, `topic` |
 | `schema_migrations` | применённая миграция документов | — | — |
+| `schema_migrations_lock` | lease процесса, который сейчас мигрирует базу | — | `owner`, `expiresAt` |
 
 Restaurant вместе с меню и заказами не объединяется в один документ: заказы растут неограниченно и меняются с другой частотой. Read models kitchen board и каталога пока читаются запросами к документам aggregate по индексам; отдельные проекции — следующий шаг.
 
@@ -50,7 +51,9 @@ Restaurant вместе с меню и заказами не объединяе�
 
 ### Эволюция схемы
 
-Коллекции, validators и индексы создаёт идемпотентная команда `restaurants-migrate` (`cmd/restaurants-migrate`): недостающие коллекции создаются, validators существующих заменяются `collMod`, недостающие индексы создаются, затем по порядку применяются миграции документов из `infrastructure/mongodb/collections.ts` с записью id в `schema_migrations`. В Kubernetes она выполняется init container'ом `migrate` перед процессом, как `orders-migrate`. Основной процесс схему не меняет.
+Миграции встроены в приложение: каждый процесс (`restaurants`, `restaurants-consumer`) при старте, до обслуживания, своим `MongoClient` вызывает `migrateRestaurantsDatabase` (`infrastructure/mongodb/collections.ts` поверх `pkg/infrastructure/mongodb/migrate.ts`): недостающие коллекции создаются, отличающиеся validators заменяются `collMod`, недостающие индексы создаются, затем по порядку применяются миграции документов из `infrastructure/mongodb/collections.ts` с записью id в `schema_migrations`. На актуальной базе изменений нет — процесс пишет `nothing to migrate` и продолжает; ошибка миграции останавливает старт. Отдельной команды и init container нет.
+
+API и consumer стартуют одновременно, а миграции документов не обязаны выдерживать параллельный запуск (два `dropIndex` одного индекса — ошибка у второго). Поэтому прогон держит lease — документ в `schema_migrations_lock`, захватываемый upsert'ом по `_id` с истечением по времени сервера и продлеваемый, пока идёт миграция. Остальные процессы ждут и затем находят, что менять нечего; lease упавшего процесса истекает через 30 с, что укладывается в бюджет `startupProbe`.
 
 Изменение формата документа: новый `schemaVersion`, читатель принимает предыдущую версию (как `StoredRestaurantSnapshot` принимает документы без `address` и `staff`), validator расширяется до перехода, миграция документов добавляется в конец списка и никогда не редактируется после применения.
 
@@ -62,7 +65,7 @@ Restaurant вместе с меню и заказами не объединяе�
 
 ### Подключение
 
-Официальный драйвер `mongodb` 7.x (проверено с MongoDB 8.3). `MONGODB__URI` обязателен: при пустом значении `restaurants` и `restaurants-migrate` не стартуют; недоступная MongoDB останавливает старт после `MONGODB__TIMEOUT`. Connection string с учётными данными приходит только из Secret.
+Официальный драйвер `mongodb` 7.x (проверено с MongoDB 8.3). `MONGODB__URI` обязателен: при пустом значении `restaurants` и `restaurants-consumer` не стартуют; недоступная MongoDB останавливает старт после `MONGODB__TIMEOUT`. Connection string с учётными данными приходит только из Secret.
 
 ## Consequences
 

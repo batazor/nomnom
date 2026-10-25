@@ -9,7 +9,7 @@ POSTGRES_PORT ?= 5433
 POSTGRES_CONTAINER ?= orders-postgres-dev
 POSTGRES_DEV_DSN ?= postgres://orders:orders@localhost:$(POSTGRES_PORT)/orders?sslmode=disable
 
-.PHONY: check run run-worker migrate postgres-dev postgres-dev-stop test-postgres run-consumer generate proto-check proto-generate test temporal-dev temporal-dev-stop lint format format-check
+.PHONY: check run run-worker postgres-dev postgres-dev-stop test-postgres run-consumer generate proto-check proto-generate test temporal-dev temporal-dev-stop lint format format-check
 
 check: proto-check test lint format-check
 
@@ -51,9 +51,6 @@ postgres-dev:
 
 postgres-dev-stop:
 	-$(DOCKER) rm -f $(POSTGRES_CONTAINER)
-
-migrate:
-	POSTGRES__DSN=$${POSTGRES__DSN:-$(POSTGRES_DEV_DSN)} $(GO) run ./cmd/orders-migrate
 
 # Контракт PostgreSQL-адаптеров; PostgreSQL поднимается testcontainers в TestMain.
 test-postgres:

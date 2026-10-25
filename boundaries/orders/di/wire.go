@@ -36,7 +36,7 @@ var (
 )
 
 // Injectors процессов orders: каждый cmd/* вызывает свой и передаёт результат
-// в pkg/lifecycle (orders-migrate — запускает Run). wire_gen.go генерирует
+// в pkg/lifecycle; store применяет миграции при сборке. wire_gen.go генерирует
 // `make generate`.
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
@@ -59,7 +59,3 @@ func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), e
 	return nil, nil, nil
 }
 
-func InitializeMigrator(cfg config.Config) *Migrator {
-	wire.Build(configSet, NewMigrator)
-	return nil
-}

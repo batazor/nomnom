@@ -37,21 +37,6 @@ spec:
       securityContext:
         {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 8 }}
       {{- end }}
-      {{- if and .Values.database.migrate .Values.database.urlSecret.name }}
-      # Миграции PostgreSQL до старта процесса; advisory lock sqlx сериализует реплики.
-      initContainers:
-        - name: migrate
-          image: {{ include "delivery.image" . | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["/usr/local/bin/delivery-migrate"]
-          {{- with .Values.securityContext }}
-          securityContext:
-            {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
-          {{- end }}
-          env:
-            {{- include "delivery.databaseEnv" (dict "root" . "maxConns" .Values.database.pool.migrateMaxConns) | nindent 12 }}
-            {{- include "delivery.otelEnv" . | nindent 12 }}
-      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "delivery.image" . | quote }}

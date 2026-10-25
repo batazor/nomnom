@@ -37,32 +37,6 @@ spec:
       securityContext:
         {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 8 }}
       {{- end }}
-      {{- if and .Values.postgres.migrate .Values.postgres.dsnSecret.name }}
-      # Миграции PostgreSQL до старта процесса; goose сериализует реплики advisory lock'ом.
-      initContainers:
-        - name: migrate
-          image: {{ include "orders.image" . | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/orders-migrate"]
-          {{- with .Values.securityContext }}
-          securityContext:
-            {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
-          {{- end }}
-          # Migrate валидирует ту же конфигурацию процесса, что и workload.
-          {{- if or .Values.env .Values.envFrom }}
-          envFrom:
-            {{- if .Values.env }}
-            - configMapRef:
-                name: {{ include "common.names.fullname" . }}
-            {{- end }}
-            {{- with .Values.envFrom }}
-            {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
-            {{- end }}
-          {{- end }}
-          env:
-            {{- include "orders.postgresEnv" (dict "context" . "migrate" true) | nindent 12 }}
-            {{- include "orders.otelEnv" (dict "context" . "serviceName" "orders-migrate") | nindent 12 }}
-      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "orders.image" . | quote }}
@@ -125,7 +99,7 @@ spec:
               value: /var/run/secrets/nomnom/identity
             {{- end }}
             {{- end }}
-            {{- include "orders.postgresEnv" (dict "context" . "migrate" false) | nindent 12 }}
+            {{- include "orders.postgresEnv" (dict "context" .) | nindent 12 }}
             {{- include "orders.otelEnv" (dict "context" . "serviceName" "") | nindent 12 }}
             {{- with .Values.spicedb }}
             {{- if .endpoint }}

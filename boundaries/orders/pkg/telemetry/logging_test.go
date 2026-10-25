@@ -159,9 +159,9 @@ func TestLogResourceFollowsOTelEnv(t *testing.T) {
 
 	t.Setenv("OTEL_SERVICE_NAME", "")
 	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "")
-	resource, err = telemetry.LogResourceFor(context.Background(), "orders-migrate")
+	resource, err = telemetry.LogResourceFor(context.Background(), "orders-reconciler")
 	require.NoError(t, err)
-	assert.Equal(t, "orders-migrate", resource.Name)
+	assert.Equal(t, "orders-reconciler", resource.Name)
 	assert.NotEmpty(t, resource.Version, "build version by default")
 	assert.Empty(t, resource.Environment, "unknown environment is absent, not faked")
 }

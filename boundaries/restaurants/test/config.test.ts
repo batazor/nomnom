@@ -85,14 +85,13 @@ test("MongoDB config defaults the database and timeout", () => {
 
 test("MongoDB pool defaults depend on the process", () => {
   const environment = { MONGODB__URI: "mongodb://m" };
-  const maxPoolSize = (process?: "api" | "consumer" | "migrate") => {
+  const maxPoolSize = (process?: "api" | "consumer") => {
     const { mongodb } = loadConfig(environment, { process });
     assert.ok(mongodb.enabled);
     return [mongodb.pool.maxPoolSize, mongodb.pool.maxConnecting];
   };
   assert.deepEqual(maxPoolSize(), [20, 2]);
   assert.deepEqual(maxPoolSize("consumer"), [5, 2]);
-  assert.deepEqual(maxPoolSize("migrate"), [2, 2]);
 });
 
 test("MongoDB pool reads MONGODB__* overrides", () => {

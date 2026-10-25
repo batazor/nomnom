@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-[ADR 8](../../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md) не выбирал хранилище `delivery`; [ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) выбрал PostgreSQL, `sqlx`, `sqlx::migrate!`, процесс `delivery-migrate` и схему Outbox. До этого решения состояние `delivery` жило в памяти процесса (`infrastructure/memory`), поэтому терялось при рестарте, а конкурентные назначения курьеров и Outbox не были защищены.
+[ADR 8](../../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md) не выбирал хранилище `delivery`; [ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) выбрал PostgreSQL, `sqlx`, `sqlx::migrate!` и схему Outbox. До этого решения состояние `delivery` жило в памяти процесса (`infrastructure/memory`), поэтому терялось при рестарте, а конкурентные назначения курьеров и Outbox не были защищены.
 
 Порты репозиториев, Outbox и `UnitOfWork` синхронные и не принимают handle транзакции, а use cases вызываются из async handlers tonic. Ревизии SpiceDB (`authorization_revision`, FR-447) хранятся вместе с `Courier` и `Delivery`.
 
@@ -19,7 +19,8 @@ Accepted
 - Unit of Work: соединение текущей транзакции хранится в thread-local слоте, привязанном к store; все записи репозиториев и Outbox внутри `run` идут в одну транзакцию (`BEGIN`/`COMMIT`/`ROLLBACK`). Ошибка ввода-вывода при `COMMIT` — `CommitOutcomeUnknown`.
 - Optimistic concurrency: агрегаты несут технический `version` (как `authorization_revision`). `save` — `UPDATE … SET version = version + 1 WHERE id = $1 AND version = $2`; 0 строк при существующем id — `RepositoryError::ConcurrentModification` → `ConcurrentModification` application error → gRPC `ABORTED`. Запись revision reconciler'ом тоже увеличивает `version`.
 - Outbox — таблица `delivery_outbox` с записью контракта [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md) (`event_id` UUIDv5, `payload` Protobuf, `traceparent`, `created_at`), пишется в транзакции агрегата с `aggregate_version` только что записанной строки. Публикует её коннектор Debezium из WAL (publication `delivery_outbox`); каждая запись Outbox удаляет строки старше часа. Domain Event → Integration Event переводит внедряемый `OutboxMapper`; по умолчанию `NoIntegrationEvents` (ничего не публикуется).
-- Конфигурация — `DATABASE__URL` (ADR 31) и `DATABASE__MAX_CONNS`; пустой URL или недоступная база завершают startup процесса и `delivery-migrate`. Миграции — `sqlx::migrate!` в процессе `delivery-migrate` (init container), advisory lock сериализует реплики.
+- Конфигурация — `DATABASE__URL` (ADR 31) и `DATABASE__MAX_CONNS`; пустой URL или недоступная база завершают startup процесса.
+- Миграции ([ADR 38](../../../../docs/adr/0038-schema-migrations-at-process-startup.md)) — `sqlx::migrate!`, встроены в бинарь и применяются самим процессом `delivery` при старте до открытия портов (`di::postgres`): актуальная схема — no-op, иначе ожидающие версии применяются. Advisory lock sqlx сериализует старт реплик; ошибка миграции завершает процесс. Отдельного процесса и init container миграций нет: схема и код, который её ожидает, всегда из одного образа.
 
 ## Consequences
 

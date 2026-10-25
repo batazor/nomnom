@@ -4,6 +4,7 @@
 // asynchronously acquired resources and the shutdown order.
 import { createRestaurantsContainer } from "../../di/restaurants.ts";
 import { createSubjectResolver } from "../../infrastructure/grpc/subject.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/collections.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
@@ -19,8 +20,8 @@ loadLocalEnv();
 const logger = createLogger({ resource: telemetryResource(SERVICE_NAME) });
 logUncaughtErrors(logger);
 const config = loadConfig();
-// MongoDB (ADR 8, local ADR 1) is required; collections, validators and
-// indexes are created by restaurants-migrate before the process starts.
+// MongoDB (ADR 8, local ADR 1) is required; the process migrates its
+// collections, validators and indexes itself before serving (local ADR 2).
 if (!config.mongodb.enabled) {
   throw new Error(
     "MONGODB__URI is required: restaurants stores its data in MongoDB",
@@ -57,6 +58,12 @@ const container = createRestaurantsContainer({
 });
 
 try {
+  // Nothing to change on an already current database; a failed migration
+  // stops the process before it serves.
+  await migrateRestaurantsDatabase(
+    mongo.db,
+    logger.child({ operation: "migrate" }).info,
+  );
   await new Lifecycle({
     managementPort: config.management.port,
     readinessDelayMs: config.shutdown.readinessDelayMs,

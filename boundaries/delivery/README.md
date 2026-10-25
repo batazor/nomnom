@@ -239,7 +239,7 @@ make test-spicedb   # оба integration-набора, контейнеры по
 
 ## Хранилище (PostgreSQL)
 
-[ADR 0001 контекста](docs/adr/0001-postgresql-хранилище-delivery.md), [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md). `PostgresStore` (`infrastructure/postgres`, `sqlx`) закрывает репозитории `Courier`, `Delivery`, `DeliveryOffer`, Outbox, `CourierLocationStore`, оба read model, `UnitOfWork` и `ReconciliationStore`. Схема — `infrastructure/postgres/migrations` (`sqlx::migrate!`), применяется процессом `delivery-migrate` (init container; advisory lock сериализует реплики).
+[ADR 0001 контекста](docs/adr/0001-postgresql-хранилище-delivery.md), [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md). `PostgresStore` (`infrastructure/postgres`, `sqlx`) закрывает репозитории `Courier`, `Delivery`, `DeliveryOffer`, Outbox, `CourierLocationStore`, оба read model, `UnitOfWork` и `ReconciliationStore`. Схема — `infrastructure/postgres/migrations` (`sqlx::migrate!`), встроена в бинарь и применяется самим процессом при старте до открытия портов (`di::postgres`): актуальная схема — no-op, иначе ожидающие версии применяются; advisory lock сериализует старт реплик, ошибка миграции завершает процесс. Отдельного шага миграций нет ([ADR 38](../../docs/adr/0038-schema-migrations-at-process-startup.md)).
 
 - **Optimistic concurrency.** `Courier`, `Delivery` и `DeliveryOffer` несут технический `version` (`with_version`/`version()`, как `authorization_revision`). `save` выполняет `UPDATE … SET version = version + 1 WHERE id = $1 AND version = $2`; 0 строк при существующем id — `RepositoryError::ConcurrentModification` → `ConcurrentModification` application error → gRPC `ABORTED` (клиент повторяет вызов целиком); отсутствующий id — `Conflict`. Запись revision reconciler'ом тоже увеличивает `version`. In-memory store проверяет версии так же.
 - **Unit of Work.** Порты не принимают handle транзакции: соединение текущей транзакции хранится в thread-local слоте store, поэтому записи агрегатов и Outbox внутри `run` фиксируются или откатываются вместе. Вложенные Unit of Work не поддерживаются.
@@ -248,8 +248,8 @@ make test-spicedb   # оба integration-набора, контейнеры по
 
 | Переменная | Ключ | Назначение |
 | --- | --- | --- |
-| `DATABASE__URL` | `database.url` | URL `postgres://user:password@host:5432/db`; только из Secret. Пусто или база недоступна — ошибка startup процесса и `delivery-migrate` |
-| `DATABASE__MAX_CONNS` | `database.max_conns` | Размер пула процесса, по умолчанию `10`; `1..100`. `delivery-migrate` всегда открывает одно соединение (`MIGRATE_MAX_CONNS`) |
+| `DATABASE__URL` | `database.url` | URL `postgres://user:password@host:5432/db`; только из Secret. Пусто, база недоступна или миграция не применилась — ошибка startup |
+| `DATABASE__MAX_CONNS` | `database.max_conns` | Размер пула процесса, по умолчанию `10`; `1..100`. Миграции при старте открывают отдельное одно соединение (`MIGRATE_MAX_CONNS`) |
 | `DATABASE__MIN_CONNS` | `database.min_conns` | Idle-минимум, по умолчанию `0`; `0..1` и не больше `max_conns` |
 | `DATABASE__MAX_LIFETIME` | `database.max_lifetime` | Соединение старше закрывается при возврате в пул, по умолчанию `30m`; положительный |
 | `DATABASE__IDLE_TIMEOUT` | `database.idle_timeout` | Простаивающее дольше соединение закрывается (выше `min_conns`), по умолчанию `5m`; положительный и не больше `max_lifetime` |
@@ -259,14 +259,14 @@ make test-spicedb   # оба integration-набора, контейнеры по
 
 ### Пулер PostgreSQL
 
-Перед базой стоит пулер соединений, и он обязан работать в **session mode**: `delivery-migrate` (`sqlx::migrate!`) берёт session-level advisory lock на единственном соединении, sqlx кэширует prepared statements на соединении. Transaction mode ломает это: lock и prepared statements окажутся на чужом server-соединении. Unit of Work и запись Outbox живут внутри транзакции и от режима не зависят; `LISTEN/NOTIFY` и временные таблицы не используются. Коннектор Debezium читает WAL через слот логической репликации напрямую из PostgreSQL, не через пулер.
+Перед базой стоит пулер соединений, и он обязан работать в **session mode**: миграции при старте (`sqlx::migrate!`) берут session-level advisory lock на единственном соединении, sqlx кэширует prepared statements на соединении. Transaction mode ломает это: lock и prepared statements окажутся на чужом server-соединении. Unit of Work и запись Outbox живут внутри транзакции и от режима не зависят; `LISTEN/NOTIFY` и временные таблицы не используются. Коннектор Debezium читает WAL через слот логической репликации напрямую из PostgreSQL, не через пулер.
 
 Каждый процесс держит собственный пул sqlx (`DATABASE__*`), в session mode каждое его соединение занимает server-соединение пулера. Сумма Σ(replicas × maxConns) всех release должна помещаться в `pool_size` пулера для базы `delivery`:
 
 | Процесс | values | maxConns | minConns |
 | --- | --- | --- | --- |
 | `delivery` (gRPC, reconciler, истечение offers) | `values.yaml` | 10 | 0 |
-| init container `delivery-migrate` | `values.yaml` (`migrateMaxConns`) | 1 (одно соединение под advisory lock) | 0 |
+| миграции при старте `delivery` | — (`MIGRATE_MAX_CONNS`) | 1 (одно соединение под advisory lock, закрывается до открытия пула) | 0 |
 
 При одной реплике (`replicaCount: 1`) это 10 server-соединений плюс одно на время миграций в каждом стартующем pod `delivery`. Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`; `db.client.connection.pool.name=delivery`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
 
@@ -331,8 +331,7 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 - `di` — корневой composition root, по модулю на процесс:
   - `di::infrastructure` — `InfrastructureModule`: реализации портов обоих слайсов (роли одного хранилища `ProcessStores`: `CourierStore`, `TransactionalStore`, `DeliveryReadModels`; генератор id, locator курьеров, одна авторизация, один writer relationships, `SystemClock`, `AssignmentPolicy`); реализации приходят параметрами компонентов, memory-адаптеры — только в тестовом графе;
   - `di::service` — модули слайсов над `InfrastructureModule` и итоговый `ServiceModule` (use cases); `di::build_over` и тестовые графы — над PostgreSQL (в unit-тестах `TestStore`) с тестовыми адаптерами `infrastructure::memory`. Транспорт получает use cases через `ServiceModule::couriers()` / `deliveries()` и shaku не импортирует;
-  - `di::server` — `ServerModule` процесса `delivery`: `compose` выбирает `SpiceDbAuthorization` с revisions из хранилища (роль `RevisionReader`), `SpiceDbRelationships`, `PostgresStore` с mapper Integration Events, `UuidIdGenerator` (UUIDv7, FR-541), `StoredCourierLocator` (последние позиции доступных курьеров, FR-542) и resolver service identity; каждая роль хранилища разрешается отдельно над одним `Arc<PostgresStore>`; компоненты `TonicTransport` (use cases, identity, бизнес-порт), `SpiceDbReconciliation` (граф SpiceDB и то же хранилище в роли `ReconciliationStore`), `UseCaseOfferExpiry` и `UseCaseDeliveryDispatch` (фоновые задачи над тем же графом use cases), provider `DeliveryWorkerProvider` — gRPC worker с reconciliation, истечением offers и Dispatch Deliveries;
-  - `di::migrate` — `MigrateModule` процесса `delivery-migrate` с компонентом `PostgresMigration`.
+  - `di::server` — `ServerModule` процесса `delivery`: `compose` выбирает `SpiceDbAuthorization` с revisions из хранилища (роль `RevisionReader`), `SpiceDbRelationships`, `PostgresStore` с mapper Integration Events (перед подключением `di::postgres` применяет встроенные миграции), `UuidIdGenerator` (UUIDv7, FR-541), `StoredCourierLocator` (последние позиции доступных курьеров, FR-542) и resolver service identity; каждая роль хранилища разрешается отдельно над одним `Arc<PostgresStore>`; компоненты `TonicTransport` (use cases, identity, бизнес-порт), `SpiceDbReconciliation` (граф SpiceDB и то же хранилище в роли `ReconciliationStore`), `UseCaseOfferExpiry` и `UseCaseDeliveryDispatch` (фоновые задачи над тем же графом use cases), provider `DeliveryWorkerProvider` — gRPC worker с reconciliation, истечением offers и Dispatch Deliveries;
 - `cmd/*` — загружают конфигурацию (невалидная завершает процесс до открытия портов), вызывают `compose` своего модуля, открывают технический порт `pkg::lifecycle::Lifecycle`, затем получают worker из модуля и передают его lifecycle.
 
 Ресурсы: клиент SpiceDB, пул PostgreSQL, resolver identity и MeterProvider создаёт `compose` один раз на процесс, ими владеет модуль; транзакция живёт один use case (Unit of Work хранилища); worker создаётся provider'ом один раз после открытия технического порта, поэтому бизнес-порт открывается последним. Shaku-компоненты собираются синхронно и без ошибок, поэтому подключение к инфраструктуре (fail fast) выполняет `compose`, а не компонент. `Lifecycle` (технический порт, сигналы, drain) остаётся в `cmd`: это runtime contract процесса, а не зависимость use cases.
@@ -388,7 +387,7 @@ Kafka headers те же, что слал relay, и совпадают с `orders
 
 ### Observability
 
-Контракт — [docs/observability.md](../../docs/observability.md); pipeline — `pkg/telemetry`, по образцу `orders/pkg/telemetry`. Все процессы (`delivery`, `delivery-migrate`) используют один resource: `service.namespace=nomnom`, `service.name` (имя процесса или `OTEL_SERVICE_NAME`), `service.version`, `service.instance.id`, `deployment.environment.name` из `OTEL_RESOURCE_ATTRIBUTES` (Helm: `telemetry.*`, pod name и image tag).
+Контракт — [docs/observability.md](../../docs/observability.md); pipeline — `pkg/telemetry`, по образцу `orders/pkg/telemetry`. Процесс `delivery` использует resource: `service.namespace=nomnom`, `service.name` (имя процесса или `OTEL_SERVICE_NAME`), `service.version`, `service.instance.id`, `deployment.environment.name` из `OTEL_RESOURCE_ATTRIBUTES` (Helm: `telemetry.*`, pod name и image tag).
 
 | Сигнал | Что есть |
 | --- | --- |
@@ -420,7 +419,7 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test outbox_tracing
 - порты: `UnitOfWork`, `Clock`, `IdGenerator`, `Subject`/`AuthorizationError` (`pkg/application`), `RepositoryError` (`pkg/persistence`), `CourierAuthorization` и `DeliveryAuthorization`, порт занятости курьера `CourierAssignment`, `DeliveryOutbox`, `CourierLocator`, `CourierLocationStore`, read models `CourierCurrentDeliveryReadModel` и `PendingDeliveryOffersReadModel`, параметры `AssignmentPolicy`;
 - `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27) и user identity по assertion BFF (ADR 32);
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
-- `PostgresStore` (`infrastructure/postgres`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox по контракту ADR 37 (retention при записи), миграции `delivery-migrate`;
+- `PostgresStore` (`infrastructure/postgres`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox по контракту ADR 37 (retention при записи), встроенные миграции при старте процесса;
 - публикация Integration Events: mapper `DeliveryIntegrationEvents` (4 события `events.proto`), публикует коннектор Debezium `delivery-outbox` (CDC, ADR 37, Helm `cdc.*`);
 - `UuidIdGenerator` (`infrastructure/ids.rs`): UUIDv7-идентификаторы `Delivery` и offer, уникальные между перезапусками и репликами (FR-541);
 - `StoredCourierLocator` (`infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Pickup не геокодируется, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;

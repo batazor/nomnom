@@ -243,15 +243,6 @@ mongodb:
     waitQueueTimeout: "5s"
     # Одновременно устанавливаемые соединения: сглаживает шторм подключений после рестарта.
     maxConnecting: 2
-  # init container migrate: коллекции, JSON Schema validators, индексы и миграции
-  # документов перед стартом процесса; шаги идемпотентны, параллельные реплики безопасны.
-  migrate:
-    enabled: true
-    # Команда production-образа; для dev-образа (исходники .ts) —
-    # ["node", "cmd/restaurants-migrate/main.ts"].
-    command: ["node", "dist/cmd/restaurants-migrate/main.js"]
-    # maxPoolSize init container: DDL и миграции документов выполняются последовательно.
-    maxPoolSize: 2
 
 # ADR 37: Outbox restaurants доставляет Debezium (Kafka Connect) из change streams MongoDB.
 # Включается в одном release контекста (API): hook Job регистрирует коннектор

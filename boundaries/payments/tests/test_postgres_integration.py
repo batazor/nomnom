@@ -33,6 +33,7 @@ from infrastructure.postgres import (
 )
 from infrastructure.postgres.migrate import migrations
 from pkg.application import AggregateRef, ConcurrencyConflictError
+from pkg.config import DatabaseSettings
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
@@ -137,7 +138,7 @@ class PostgresIntegrationTest(unittest.TestCase):
             ).fetchall()
 
     def test_migrations_are_idempotent(self) -> None:
-        self.assertEqual(migrate(self.dsn), [])
+        self.assertEqual(migrate(DatabaseSettings(DATABASE__URL=self.dsn)), [])
 
     def test_payment_round_trip_keeps_exact_money(self) -> None:
         payment = self._payment()

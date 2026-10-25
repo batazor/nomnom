@@ -542,7 +542,7 @@ class RuntimeAndResourceTest(unittest.TestCase):
         self.assertEqual(signals.tracer_provider.resource.attributes, resource)
 
     def test_service_name_override(self) -> None:
-        resource = telemetry.build_resource("payments-migrate", {"OTEL_SERVICE_NAME": "canary"})
+        resource = telemetry.build_resource("payments", {"OTEL_SERVICE_NAME": "canary"})
         self.assertEqual(resource.attributes["service.name"], "canary")
         self.assertEqual(resource.attributes["service.namespace"], "nomnom")
 

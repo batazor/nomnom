@@ -63,11 +63,11 @@ helm uninstall orders
 ## PostgreSQL и Outbox
 
 DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`/`key` (env `POSTGRES__DSN`); без него
-процесс не стартует. При `postgres.migrate: true` каждый workload получает init container
-`/orders-migrate` (goose под advisory lock). Пул процесса задают `postgres.maxConns`,
+процесс не стартует. Миграции встроены в образ: каждый процесс при старте применяет
+недостающие (goose под advisory lock) и только потом запускает остальное. Пул процесса задают `postgres.maxConns`,
 `minConns`, `maxConnLifetime`, `maxConnLifetimeJitter`, `maxConnIdleTime`, `connectTimeout`,
 `healthCheckPeriod` (env `POSTGRES__*`); values каждой роли задают свой `maxConns` (API 10,
-worker и consumer 5, reconciler 2), init container migrate — пул 2. Пулер перед
+worker и consumer 5, reconciler 2), миграции при старте — отдельный пул 2. Пулер перед
 базой — только session mode, Σ(replicas × maxConns) ≤ `pool_size`
 ([README](../README.md#пулер-postgresql)).
 
@@ -128,10 +128,8 @@ env:
 
 OpenTelemetry задаётся секцией `telemetry` (не через `env`: явные переменные chart
 перекрывают `envFrom`). Chart сам выставляет `OTEL_SERVICE_NAME` (`telemetry.serviceName`
-роли: `orders`, `orders-worker`, `orders-consumer`, `orders-reconciler`;
-init container — `orders-migrate`) и `OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя
-pod, `service.version` — image tag, плюс `telemetry.resourceAttributes`) во всех releases и
-в init container migrate:
+роли: `orders`, `orders-worker`, `orders-consumer`, `orders-reconciler`) и `OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя
+pod, `service.version` — image tag, плюс `telemetry.resourceAttributes`) во всех releases:
 
 ```yaml
 telemetry:

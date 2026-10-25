@@ -58,7 +58,7 @@ spec:
             - name: CONNECTOR_URL
               value: {{ printf "%s/connectors/%s" (trimSuffix "/" $url) $name | quote }}
           # Kafka Connect может ещё подниматься: PUT повторяет и ошибки соединения, и 5xx.
-          # Источник (publication PostgreSQL) создаёт миграция init container release, она
+          # Источник (коллекция outbox) создаёт миграция при старте процесса release, она
           # может закончиться позже hook: задачу, упавшую до неё, Job перезапускает и ждёт
           # RUNNING; иначе release падает, а не оставляет Outbox без доставки.
           command:

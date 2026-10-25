@@ -111,7 +111,7 @@ SpiceDB (ADR 18): с endpoint приложению нужен preshared key из
 
 {{/*
 MongoDB (ADR 8): переменные подключения из Secret и лимиты connection pool процесса.
-Без uriSecret.name ничего не задаётся, и процессы restaurants и restaurants-migrate не
+Без uriSecret.name ничего не задаётся, и процессы restaurants и restaurants-consumer не
 стартуют (MONGODB__URI обязателен).
 Usage: {{ include "restaurants.mongodbEnv" (dict "context" $ "pool" .Values.mongodb.pool) }}
 */}}
@@ -158,19 +158,14 @@ MongoDB: имя базы, timeout и лимиты пула в формате п�
 {{- fail (printf "mongodb.timeout must be a positive duration like 500ms, 5s or 1m, got %q" (toString .timeout)) -}}
 {{- end -}}
 {{- $max := int .pool.maxPoolSize -}}
-{{- range $name, $value := dict "pool.maxPoolSize" .pool.maxPoolSize "migrate.maxPoolSize" .migrate.maxPoolSize -}}
-{{- if not (and (regexMatch "^[0-9]+$" (toString $value)) (ge (int $value) 1) (le (int $value) 100)) -}}
-{{- fail (printf "mongodb.%s must be an integer between 1 and 100, got %q" $name (toString $value)) -}}
-{{- end -}}
+{{- if not (and (regexMatch "^[0-9]+$" (toString .pool.maxPoolSize)) (ge (int .pool.maxPoolSize) 1) (le (int .pool.maxPoolSize) 100)) -}}
+{{- fail (printf "mongodb.pool.maxPoolSize must be an integer between 1 and 100, got %q" (toString .pool.maxPoolSize)) -}}
 {{- end -}}
 {{- if not (and (regexMatch "^[0-9]+$" (toString .pool.minPoolSize)) (le (int .pool.minPoolSize) $max)) -}}
 {{- fail (printf "mongodb.pool.minPoolSize must be an integer between 0 and pool.maxPoolSize (%d), got %q" $max (toString .pool.minPoolSize)) -}}
 {{- end -}}
 {{- if not (and (regexMatch "^[0-9]+$" (toString .pool.maxConnecting)) (ge (int .pool.maxConnecting) 1) (le (int .pool.maxConnecting) $max)) -}}
 {{- fail (printf "mongodb.pool.maxConnecting must be an integer between 1 and pool.maxPoolSize (%d), got %q" $max (toString .pool.maxConnecting)) -}}
-{{- end -}}
-{{- if and .migrate.enabled (gt (int .pool.maxConnecting) (int .migrate.maxPoolSize)) -}}
-{{- fail (printf "mongodb.pool.maxConnecting (%v) must not exceed mongodb.migrate.maxPoolSize (%v)" .pool.maxConnecting .migrate.maxPoolSize) -}}
 {{- end -}}
 {{- range $name, $value := dict "maxIdleTime" .pool.maxIdleTime "waitQueueTimeout" .pool.waitQueueTimeout -}}
 {{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString $value)) -}}

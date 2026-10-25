@@ -189,11 +189,10 @@ Helm values `spicedb.*` описаны в [ops/README.md](ops/README.md#authoriz
 
 | Процесс | Контейнер | Ресурсы (`providers.Resource`) |
 | --- | --- | --- |
-| `payments` (gRPC API и provider webhooks в одном `WorkerGroup`) | `di/payments.py` — `PaymentsContainer` | telemetry providers, psycopg pool, SpiceDB client |
-| `payments-migrate` | `di/migrate.py` — `MigrateContainer` | — (одно соединение под advisory lock внутри `migrate`) |
+| `payments` (gRPC API и provider webhooks в одном `WorkerGroup`) | `di/payments.py` — `PaymentsContainer` | telemetry providers, psycopg pool (перед ним — миграции), SpiceDB client |
 
 - **Configuration.** `providers.Configuration(strict=True)` заполняется провалидированными pydantic settings через `di.resources.sections`: секции остаются типизированными объектами `pkg.config` (`config.identity`, `config.database`, …); секция `provider` хранится как `config.payment_provider`, потому что `Configuration.provider` — собственный атрибут провайдера.
-- **Ресурсы и порядок.** `TelemetryResource` и `ProcessResource` (`di/resources.py`) — подтипы `providers.Resource`. Entrypoint вызывает `init_resources(TelemetryResource)`, затем `init_resources(ProcessResource)`, а в `finally` — `shutdown_resources(ProcessResource)` и последним `shutdown_resources(TelemetryResource)`: telemetry сбрасывается последней (runtime contract, шаг 8). Pool проверяется до открытия портов. Authzed client не хранит ссылку на канал, поэтому его release пуст.
+- **Ресурсы и порядок.** `TelemetryResource` и `ProcessResource` (`di/resources.py`) — подтипы `providers.Resource`. Entrypoint вызывает `init_resources(TelemetryResource)`, затем `init_resources(ProcessResource)`, а в `finally` — `shutdown_resources(ProcessResource)` и последним `shutdown_resources(TelemetryResource)`: telemetry сбрасывается последней (runtime contract, шаг 8). Ресурс базы сначала применяет миграции, затем открывает и проверяет pool — всё до открытия портов. Authzed client не хранит ссылку на канал, поэтому его release пуст.
 - **Use cases.** `PaymentsHandlers`, `PaymentOperationExecutor` и `ApplyProviderCallbackHandler` — `Singleton`/`Factory` провайдеры на процесс; зависимости передаются через конструкторы. Выбор реализаций — `create_subject_resolver` (identity), `create_permission_checker` (SpiceDB; ошибка старта без `SPICEDB__ENDPOINT`), `create_provider` (`PROVIDER__KIND`), `PaymentEventsMapper` — описан только в `PaymentsContainer`.
 - **Границы.** `@inject` и wiring не используются; `slices/`, `pkg/` и `infrastructure/` не импортируют `di` и `dependency_injector`. Тесты собирают handlers напрямую с fakes (`tests/payment_fakes.py`) или через контейнер с `override()` (`tests/test_di_containers.py`: разрешение графа, подмена fakes, порядок ресурсов в entrypoints).
 
@@ -227,7 +226,7 @@ Pipeline процесса — `pkg/telemetry` (контракт [docs/observabil
 
 | Сигнал | Что пишется | Где |
 | --- | --- | --- |
-| Resource | `service.namespace=nomnom`, `service.name` процесса (`payments`, `payments-migrate`; `OTEL_SERVICE_NAME` переопределяет), `OTEL_RESOURCE_ATTRIBUTES` (`service.version`, `service.instance.id`, `deployment.environment.name`). Один resource для traces и metrics, те же поля в логах. | `pkg/telemetry/resource.py` |
+| Resource | `service.namespace=nomnom`, `service.name` процесса (`payments`; `OTEL_SERVICE_NAME` переопределяет), `OTEL_RESOURCE_ATTRIBUTES` (`service.version`, `service.instance.id`, `deployment.environment.name`). Один resource для traces и metrics, те же поля в логах. | `pkg/telemetry/resource.py` |
 | Propagation | W3C `traceparent`/`tracestate`; baggage — только ключи `BAGGAGE_ALLOWLIST` (сейчас пусто). Некорректный `traceparent` отбрасывается, начинается новый trace. | `pkg/telemetry/propagation.py` |
 | Traces | `TracerProvider` + OTLP gRPC, `BatchSpanProcessor` (очередь 2048, batch 512, export timeout 3s) — только при `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`. Sampler `ParentBased(SkipOrphanClientSpans)`: client span без родителя (проверка пула) не пишется. | `pkg/telemetry/__init__.py` |
 | gRPC | Server и client interceptors (`pkg/telemetry/rpc.py`): span `Service/Method`, `rpc.system.name`, `rpc.method`, `rpc.response.status_code` (имя кода); `rpc.server.call.duration` / `rpc.client.call.duration` (s). Client interceptor стоит на канале SpiceDB (`server.address`/`server.port`). `opentelemetry-instrumentation-grpc` не используется: у него нет RPC-метрик и старые attributes. | `infrastructure/grpc/worker.py`, `infrastructure/authorization/spicedb.py` |
@@ -263,7 +262,7 @@ Histograms в секундах получают явные границы `SECON
 
 Реализовано хранилище PostgreSQL в `infrastructure/postgres` (psycopg 3, пул `psycopg_pool`):
 
-- Схема — `infrastructure/postgres/migrations/*.sql` (forward-only), применяется `python -m entrypoints.payments_migrate.main` под advisory lock; версии — в `schema_migrations`. Таблицы `payments`, `payment_operations`, `payments_outbox`, `inbox`.
+- Схема — `infrastructure/postgres/migrations/*.sql` (forward-only), вшита в образ и применяется самим процессом `payments` при старте, до открытия портов: на одном соединении под `pg_advisory_lock`, затем открывается пул. Нечего применять — лог `none pending` и обычный старт; ошибка миграции завершает процесс с кодом 1. Отдельного шага миграций нет. Версии — в `schema_migrations`. Таблицы `payments`, `payment_operations`, `payments_outbox`, `inbox`.
 - `PostgresUnitOfWork` — одна локальная транзакция; repositories, Outbox и Inbox внутри `run` используют её соединение (context variable), вложенный `run` присоединяется. Вне Unit of Work каждый вызов берёт своё соединение из пула.
 - Outbox `payments_outbox` — контракт записи [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md): `event_id` (PK, UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`), `event_type` (полное имя Protobuf-сообщения), `aggregate_type`, `aggregate_id`, `aggregate_version`, `occurred_at`, `topic`, `payload` (Protobuf, `BYTEA`), `traceparent` (`NOT NULL DEFAULT ''`) и `created_at` для retention (индекс). Миграция `00002_cdc_outbox.sql` переименовала прежнюю `outbox`, перенесла `traceparent` из `metadata`, удалила `seq`, `published_at`, `attempts`, `last_error` и создала publication. Какие Domain Events публикуются, решает внедряемый `OutboxEventMapper` (`infrastructure/postgres/outbox.py`); событие без контракта (mapper вернул `None`) в Outbox не пишется. `NoPublishedContracts` — mapper без опубликованных контрактов для тестовых сборок; контейнер `di/payments.py` передаёт `PaymentEventsMapper` — см. [Публикация Integration Events](#публикация-integration-events).
 - Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePaymentError`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKeyError`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPendingError`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflictError`.
@@ -273,16 +272,16 @@ Histograms в секундах получают явные границы `SECON
 
 ### Пулер PostgreSQL
 
-Перед базой стоит пулер соединений, и он обязан работать в **session mode**: payments опирается на состояние server-сессии. `payments-migrate` берёт `pg_advisory_lock` на единственном соединении; psycopg автоматически готовит prepared statements после `prepare_threshold` выполнений. Transaction mode ломает это: lock и prepared statements окажутся на чужом server-соединении. Unit of Work, savepoints и запросы Outbox живут внутри транзакции и от режима не зависят; `LISTEN/NOTIFY` и временные таблицы не используются.
+Перед базой стоит пулер соединений, и он обязан работать в **session mode**: payments опирается на состояние server-сессии. Миграции при старте берут `pg_advisory_lock` на единственном соединении; psycopg автоматически готовит prepared statements после `prepare_threshold` выполнений. Transaction mode ломает это: lock и prepared statements окажутся на чужом server-соединении. Unit of Work, savepoints и запросы Outbox живут внутри транзакции и от режима не зависят; `LISTEN/NOTIFY` и временные таблицы не используются.
 
 Каждый процесс держит собственный пул (`DATABASE__*`), в session mode каждое его соединение занимает server-соединение пулера. Сумма replicas × maxConns должна помещаться в `pool_size` пулера для базы payments:
 
 | Процесс | values | maxConns | minConns |
 | --- | --- | --- | --- |
 | payments (gRPC + webhooks) | `values.yaml` | 10 | 1 |
-| init container migrate | — | 1 (одно соединение под advisory lock) | 0 |
+| миграции при старте `payments` | — | 1 (до открытия пула) | 0 |
 
-При одной реплике это 10 server-соединений плюс одно на время миграций. Debezium держит своё соединение репликации к базе (не через пулер). Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`; `db.client.connection.pool.name=payments`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
+При одной реплике это 10 server-соединений; соединение миграций закрывается до открытия пула. Debezium держит своё соединение репликации к базе (не через пулер). Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`; `db.client.connection.pool.name=payments`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
 
 Не реализованы: provider client, проверка подписи webhooks, Kafka consumers (Inbox для integration events) и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; контейнер `di/payments.py` требует identity, `SPICEDB__ENDPOINT`, `PROVIDER__KIND=fake` и `PROVIDER__WEBHOOK_SECRET` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
 
@@ -321,8 +320,7 @@ docker run --rm -p 8084:8084 -p 9084:9084 \
 
 Контейнер запускается непривилегированным пользователем `app`; `tini` пересылает сигналы
 приложению. Конфигурация передаётся
-переменными окружения; `.env` в образ не копируется. Основной процесс требует `DATABASE__URL`; тот же образ запускает
-`python -m entrypoints.payments_migrate.main`.
+переменными окружения; `.env` в образ не копируется. Основной процесс требует `DATABASE__URL` и при старте сам применяет миграции.
 
 ## Развёртывание
 

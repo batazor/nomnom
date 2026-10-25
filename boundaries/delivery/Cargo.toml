@@ -10,10 +10,6 @@ path = "lib.rs"
 name = "delivery"
 path = "cmd/delivery/main.rs"
 
-[[bin]]
-name = "delivery-migrate"
-path = "cmd/delivery-migrate/main.rs"
-
 [dependencies]
 config = { version = "0.15.27", default-features = false, features = ["toml"] }
 http = "1.5.0"

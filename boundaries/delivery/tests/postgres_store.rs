@@ -8,9 +8,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use delivery::di;
 use delivery::infrastructure::locator::CourierPositions;
 use delivery::infrastructure::postgres::{
-    OutboxMapper, OutboxRecord, PostgresStore, event_id, migrate,
+    MIGRATOR, OutboxMapper, OutboxRecord, PostgresStore, event_id, migrate,
 };
 use delivery::infrastructure::reconcile::ReconciliationStore;
 use delivery::pkg::application::{UnitOfWork, UnitOfWorkError};
@@ -164,6 +165,54 @@ fn migrations_are_idempotent() {
     let config = config();
     migrate(&config).expect("first run");
     assert_eq!(migrate(&config).expect("second run"), Vec::<i64>::new());
+}
+
+/// Startup of the process (`di::postgres`) applies every embedded migration
+/// to an empty database and leaves a migrated one as it is.
+#[test]
+fn startup_migrates_an_empty_database_and_skips_a_migrated_one() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let config = support::empty_database(&format!("startup_{nanos}"));
+    let embedded: Vec<i64> = MIGRATOR.iter().map(|migration| migration.version).collect();
+
+    di::postgres(&config).expect("startup on an empty database");
+    let first = installed(&config);
+    assert_eq!(
+        first
+            .iter()
+            .map(|(version, _)| *version)
+            .collect::<Vec<_>>(),
+        embedded
+    );
+
+    di::postgres(&config).expect("startup on a migrated database");
+    assert_eq!(installed(&config), first);
+    assert_eq!(migrate(&config).expect("no pending"), Vec::<i64>::new());
+}
+
+/// Applied migrations with the time each was installed.
+fn installed(config: &DatabaseConfig) -> Vec<(i64, String)> {
+    support::off_runtime(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime")
+            .block_on(async {
+                let pool = sqlx::PgPool::connect(&config.url).await.expect("connect");
+                let rows = sqlx::query_as(
+                    "SELECT version, installed_on::text FROM _sqlx_migrations \
+                     WHERE success ORDER BY version",
+                )
+                .fetch_all(&pool)
+                .await
+                .expect("applied migrations");
+                pool.close().await;
+                rows
+            })
+    })
 }
 
 #[test]

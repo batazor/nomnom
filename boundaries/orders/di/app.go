@@ -1,6 +1,6 @@
 // Package di — composition roots процессов orders: Wire injectors (wire.go)
 // собирают слайсы и инфраструктуру в App, TemporalWorker, KafkaConsumer,
-// RelationshipReconciler и Migrator, а те владеют запуском и остановкой своих
+// RelationshipReconciler, а те владеют запуском и остановкой своих
 // ресурсов. Outbox публикует Debezium (ADR 37), процесса публикации нет.
 package di
 

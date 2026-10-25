@@ -198,7 +198,8 @@ spicedb:
     key: preshared-key
 
 # PostgreSQL (ADR 8). DSN берётся из внешнего Secret; без него процесс не стартует.
-# migrate: init container /orders-migrate перед каждым workload'ом.
+# Миграции встроены в образ: каждый процесс при старте применяет недостающие под advisory
+# lock до запуска остального (пул 2 соединения, вне maxConns).
 postgres:
   dsnSecret:
     name: ""
@@ -216,8 +217,6 @@ postgres:
   maxConnIdleTime: 5m
   connectTimeout: 5s
   healthCheckPeriod: 1m
-  # Init container использует пул 2 (advisory lock goose + миграция), minConns 0.
-  migrate: true
 
 # ADR 37: Outbox orders доставляет Debezium (Kafka Connect) из WAL. Включается в одном release
 # контекста (API): hook Job регистрирует коннектор cdc.connector.name в cdc.connectUrl.

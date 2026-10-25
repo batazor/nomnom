@@ -6,30 +6,33 @@ import os
 import threading
 import time
 import unittest
+import uuid
 from collections.abc import Iterator
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import override
 from unittest.mock import patch
 
+import psycopg
 import pytest
-from dependency_injector import errors, providers
+from dependency_injector import providers
 from payment_fakes import (
     NOW,
     PaymentsTestKit,
     close_container,
     payments_container,
 )
+from psycopg import sql
 
-from di.migrate import MigrateContainer
 from di.payments import PaymentsContainer, SpiceDBConfigurationError
-from di.resources import ProcessResource, TelemetryResource
+from di.resources import ProcessResource, TelemetryResource, postgres_database
 from entrypoints.payments import main as payments_main
 from infrastructure.authorization import SpiceDBPermissionChecker
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
 from infrastructure.postgres import PostgresDatabase, PostgresPaymentOutbox
+from infrastructure.postgres.migrate import migrations
 from infrastructure.provider import (
     SIGNATURE_HEADER,
     WEBHOOK_PATH,
@@ -167,20 +170,44 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertEqual(kit.operation(operation_id).state, OperationState.SUCCEEDED)
 
 
-class MigrateContainerTest(unittest.TestCase):
-    def test_config_is_strict(self) -> None:
-        with self.assertRaises(errors.Error):
-            MigrateContainer().migrations()
-
-
 @pytest.mark.usefixtures("postgres")
-class MigrateContainerDatabaseTest(unittest.TestCase):
+class StartupMigrationTest(unittest.TestCase):
+    """The database resource applies pending migrations before the process serves."""
+
     dsn: str
 
-    def test_applies_migrations(self) -> None:
-        container = MigrateContainer()
-        container.config.from_dict({"database": DatabaseSettings(DATABASE__URL=self.dsn)})
-        self.assertEqual(container.migrations(), [])
+    def start(self, dsn: str) -> list[str]:
+        resource = ProcessResource(postgres_database, DatabaseSettings(DATABASE__URL=dsn))
+        with self.assertLogs("di.resources", logging.INFO) as logs:
+            resource.init()
+        resource.shutdown()
+        return logs.output
+
+    def test_migrated_database_is_left_unchanged(self) -> None:
+        with psycopg.connect(self.dsn) as conn:
+            before = conn.execute("SELECT version, applied_at FROM schema_migrations").fetchall()
+        logs = self.start(self.dsn)
+        self.assertIn("payments migrations applied: none pending", logs[-1])
+        with psycopg.connect(self.dsn) as conn:
+            after = conn.execute("SELECT version, applied_at FROM schema_migrations").fetchall()
+        self.assertEqual(after, before)
+
+    def test_empty_database_gets_every_migration(self) -> None:
+        name = f"startup_{uuid.uuid4().hex}"
+        with psycopg.connect(self.dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        self.addCleanup(self._drop, name)
+        dsn = self.dsn.rsplit("/", 1)[0] + f"/{name}"
+        logs = self.start(dsn)
+        files = [file for _, file, _ in migrations()]
+        self.assertIn(f"payments migrations applied: {', '.join(files)}", logs[-1])
+        with psycopg.connect(dsn) as conn:
+            versions = conn.execute("SELECT name FROM schema_migrations ORDER BY version")
+            self.assertEqual([row[0] for row in versions], files)
+
+    def _drop(self, name: str) -> None:
+        with psycopg.connect(self.dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
 class _Lifecycle:

@@ -19,6 +19,7 @@ inside it. An entrypoint therefore calls::
 Within a type, ``shutdown_resources`` releases dependents before their dependencies.
 """
 
+import logging
 from collections.abc import Iterator
 from dataclasses import fields
 from datetime import timedelta
@@ -26,7 +27,7 @@ from typing import Any
 
 from dependency_injector import providers
 
-from infrastructure.postgres import PostgresDatabase, create_database
+from infrastructure.postgres import PostgresDatabase, create_database, migrate
 from pkg import telemetry
 from pkg.config import (
     DatabaseSettings,
@@ -35,6 +36,8 @@ from pkg.config import (
     ShutdownSettings,
 )
 from pkg.lifecycle import Lifecycle, LifecycleConfig
+
+logger = logging.getLogger(__name__)
 
 
 class TelemetryResource[T](providers.Resource[T]):
@@ -73,10 +76,14 @@ def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetr
 
 
 def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
-    """The psycopg pool; an unreachable database stops the process before ports open.
+    """The psycopg pool over the migrated schema; any failure stops the process before ports open.
 
-    The schema is applied by ``payments-migrate`` (init container), not here.
+    Pending migrations are applied first, on one connection under the advisory lock of
+    ``migrate``: replicas starting together apply them once, the rest find nothing to
+    change. The pool opens only after that connection is closed.
     """
+    applied = migrate(settings)
+    logger.info("payments migrations applied: %s", ", ".join(applied) or "none pending")
     database = create_database(settings)
     try:
         database.check()

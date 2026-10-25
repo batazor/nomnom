@@ -1,7 +1,8 @@
-//! Schema migrations of `delivery` (`sqlx::migrate!`, ADR 31). The
-//! `delivery-migrate` process applies them and exits; in Kubernetes it runs as
-//! the init container of every pod. sqlx takes an advisory lock, so
-//! concurrent runs of several replicas are serialized.
+//! Schema migrations of `delivery` (`sqlx::migrate!`, ADR 31), embedded in
+//! the binary. The `delivery` process applies them at startup, before it opens
+//! its pool and ports (`di::postgres`): an up-to-date schema is a no-op, a
+//! failure stops the process. sqlx takes an advisory lock, so concurrent
+//! starts of several replicas are serialized.
 
 use sqlx::migrate::Migrator;
 
@@ -10,7 +11,7 @@ use crate::pkg::config::{DATABASE_URL_ENV, DatabaseConfig};
 /// Migrations embedded at compile time; append-only.
 pub static MIGRATOR: Migrator = sqlx::migrate!("infrastructure/postgres/migrations");
 
-/// Pool size of `delivery-migrate`, whatever `DATABASE__MAX_CONNS` says.
+/// Pool size of the startup migration, whatever `DATABASE__MAX_CONNS` says.
 pub const MIGRATE_MAX_CONNS: u32 = 1;
 
 /// Applies pending migrations; returns the versions applied by this run.

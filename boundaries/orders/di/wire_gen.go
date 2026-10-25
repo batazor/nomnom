@@ -165,12 +165,6 @@ func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), e
 	}, nil
 }
 
-func InitializeMigrator(cfg config.Config) *Migrator {
-	postgresConfig := cfg.Postgres
-	migrator := NewMigrator(postgresConfig)
-	return migrator
-}
-
 // wire.go:
 
 // Provider sets процессов orders объявлены здесь, под тегом wireinject: их

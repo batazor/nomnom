@@ -19,7 +19,7 @@ Accepted
 - Optimistic concurrency — `UPDATE … WHERE id = ? AND version = ?`.
 - Суммы — `NUMERIC` без потери масштаба.
 - `payments_outbox` и `inbox` (`PRIMARY KEY (consumer, event_id)`) живут в той же базе и пишутся в той же транзакции. Детерминированный `event_id` и отбор публикуемых событий mapper'ом — по [ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md); поля записи, publication `payments_outbox` и удаление записей старше часа в транзакции очередной записи — по [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md).
-- Схема — forward-only SQL-миграции в репозитории, применяемые отдельным entrypoint под advisory lock.
+- Схема — forward-only SQL-миграции в репозитории, вшитые в образ; процесс `payments` применяет их сам при старте под advisory lock, до открытия портов (отдельного шага миграций нет).
 - `DATABASE__URL` обязателен: пустое значение или недоступная база завершают процесс на старте.
 
 ## Consequences

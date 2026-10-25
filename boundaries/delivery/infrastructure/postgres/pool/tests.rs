@@ -67,7 +67,7 @@ async fn options_carry_the_configured_limits() {
     assert_eq!(options.get_acquire_timeout(), Duration::from_millis(200));
     assert_eq!(options.get_max_lifetime(), Some(config.max_lifetime));
     assert_eq!(options.get_idle_timeout(), Some(config.idle_timeout));
-    // A smaller pool (delivery-migrate) never keeps more idle than it holds.
+    // A smaller pool (startup migrations) never keeps more idle than it holds.
     assert_eq!(pool_options(&config, 1).get_min_connections(), 1);
     let none = DatabaseConfig {
         min_conns: 0,

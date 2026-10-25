@@ -389,10 +389,6 @@ profiles:
               dest: .
             - src: "slices/**/*.ts"
               dest: .
-      # Индекс releases: 1 — restaurants.
-      - op: add
-        path: /deploy/helm/releases/1/valuesFiles/-
-        value: ../values/restaurants-dev.yaml
       # Индекс releases: 5 — restaurants-consumer.
       - op: add
         path: /deploy/helm/releases/5/valuesFiles/-

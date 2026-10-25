@@ -69,15 +69,13 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 PostgreSQL env (ADR 8): DSN из внешнего Secret и лимиты пула процесса. Без dsnSecret.name
 переменные не задаются, и процесс orders не стартует (POSTGRES__DSN обязателен).
 За пулером в session mode каждое соединение пула держит server-соединение, поэтому
-maxConns задаётся values каждой роли. Init container migrate передаёт "migrate": goose
-держит advisory lock на одном соединении и применяет миграции на втором (пул 2).
-Usage: {{ include "orders.postgresEnv" (dict "context" $ "migrate" false) }}
+maxConns задаётся values каждой роли. Миграции процесс применяет сам при старте
+отдельным пулом из 2 соединений (advisory lock goose и миграция), вне maxConns.
+Usage: {{ include "orders.postgresEnv" (dict "context" $) }}
 */}}
 {{- define "orders.postgresEnv" -}}
 {{- with .context.Values.postgres }}
 {{- if .dsnSecret.name }}
-{{- $maxConns := ternary 2 .maxConns $.migrate -}}
-{{- $minConns := ternary 0 .minConns $.migrate -}}
 {{- if lt (int .maxConns) 1 -}}
 {{- fail (printf "postgres.maxConns must be positive, got %v" .maxConns) -}}
 {{- end -}}
@@ -93,9 +91,9 @@ Usage: {{ include "orders.postgresEnv" (dict "context" $ "migrate" false) }}
       name: {{ .dsnSecret.name }}
       key: {{ .dsnSecret.key }}
 - name: POSTGRES__MAX_CONNS
-  value: {{ $maxConns | quote }}
+  value: {{ .maxConns | quote }}
 - name: POSTGRES__MIN_CONNS
-  value: {{ $minConns | quote }}
+  value: {{ .minConns | quote }}
 - name: POSTGRES__MAX_CONN_LIFETIME
   value: {{ .maxConnLifetime | quote }}
 - name: POSTGRES__MAX_CONN_LIFETIME_JITTER
@@ -112,8 +110,7 @@ Usage: {{ include "orders.postgresEnv" (dict "context" $ "migrate" false) }}
 
 {{/*
 OpenTelemetry (ADR 9, docs/observability.md): одинаковая идентификация traces, metrics и
-JSON-логов процесса. service.name — telemetry.serviceName роли (init container migrate
-передаёт "orders-migrate"), service.instance.id — имя pod (downward API),
+JSON-логов процесса. service.name — telemetry.serviceName роли, service.instance.id — имя pod (downward API),
 service.version — неизменяемый image.tag. Остальные атрибуты окружения задаются
 telemetry.resourceAttributes: явная env имеет приоритет над envFrom, поэтому
 OTEL_RESOURCE_ATTRIBUTES и OTEL_SERVICE_NAME в env были бы перекрыты. OTLP endpoint и

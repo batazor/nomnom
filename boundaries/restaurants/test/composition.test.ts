@@ -5,11 +5,11 @@ import { after, before, describe, test } from "node:test";
 import { MongoClient } from "mongodb";
 
 import { createConsumerContainer } from "../di/consumer.ts";
-import { createMigrateContainer } from "../di/migrate.ts";
 import {
   createRestaurantsContainer,
   type RestaurantsResources,
 } from "../di/restaurants.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
 import { type AppConfig, loadConfig } from "../pkg/config/config.ts";
 import {
   connectMongoDb,
@@ -154,22 +154,6 @@ test("the kitchen tunables reach the composed handlers from configuration", asyn
   }
 });
 
-test("the migrate container resolves every registration", async () => {
-  const mongo = offlineMongo();
-  const migrate = createMigrateContainer({
-    db: mongo.db,
-    logger: silentLogger,
-  });
-  try {
-    for (const name of Object.keys(migrate.registrations)) {
-      assert.notEqual(migrate.resolve(name), undefined, name);
-    }
-  } finally {
-    await migrate.dispose();
-    await mongo.close();
-  }
-});
-
 test("the consumer container resolves every registration", async () => {
   const mongo = offlineMongo();
   const container = createConsumerContainer({
@@ -228,13 +212,8 @@ describe("composed processes against MongoDB", () => {
     await mongo.close();
   });
 
-  test("migrate prepares the database the restaurants graph reads", async () => {
-    const migrate = createMigrateContainer({
-      db: mongo.db,
-      logger: silentLogger,
-    });
-    await migrate.cradle.migration.run();
-    await migrate.dispose();
+  test("startup migration prepares the database the restaurants graph reads", async () => {
+    await migrateRestaurantsDatabase(mongo.db);
 
     const container = createRestaurantsContainer(
       resourcesOf(loadConfig(environment), mongo),

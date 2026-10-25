@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -96,8 +97,9 @@ func (s *Store) Close() {
 // Pool exposes the pool for test fixtures and read-only checks.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
-// Migrate applies the embedded migrations under a PostgreSQL advisory lock,
-// so concurrent init containers serialize.
+// Migrate brings the schema to the embedded migrations under a PostgreSQL
+// advisory lock: applied ones are skipped, missing ones applied, so processes
+// starting at once serialize. Every process calls it at startup.
 func Migrate(ctx context.Context, cfg config.PostgresConfig) error {
 	if cfg.DSN == "" {
 		return fmt.Errorf("%s is required", config.EnvPostgresDSN)
@@ -128,9 +130,11 @@ func Migrate(ctx context.Context, cfg config.PostgresConfig) error {
 	if err != nil {
 		return fmt.Errorf("migration provider: %w", err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
+	applied, err := provider.Up(ctx)
+	if err != nil {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
+	slog.InfoContext(ctx, "postgres migrations checked", slog.Int("applied", len(applied)))
 	return nil
 }
 

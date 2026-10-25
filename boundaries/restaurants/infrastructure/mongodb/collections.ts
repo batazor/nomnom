@@ -32,7 +32,11 @@ export const MIGRATIONS: readonly DocumentMigration[] = [
   dropOutboxRelayMigration,
 ];
 
+/**
+ * Startup migration of every restaurants process (local ADR 2): returns the
+ * applied changes, empty when the database already is current.
+ */
 export const migrateRestaurantsDatabase = (
   db: Db,
   log?: (message: string) => void,
-): Promise<void> => migrate(db, COLLECTIONS, MIGRATIONS, log);
+): Promise<readonly string[]> => migrate(db, COLLECTIONS, MIGRATIONS, log);

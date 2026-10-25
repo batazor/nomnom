@@ -15,7 +15,8 @@ use super::{
 /// Хранилище `delivery`. URL обязателен для процесса и миграций: пустое
 /// значение завершает startup (см. `di::postgres`). URL приходит из Secret.
 ///
-/// Пул процесса ограничен: размер задаёт Helm на процесс (API ~10, migrate 1).
+/// Пул процесса ограничен: размер задаёт Helm (`database.pool.maxConns`, ~10);
+/// миграции при старте берут отдельное соединение (`MIGRATE_MAX_CONNS`).
 /// Pooler перед PostgreSQL работает только в session mode: миграции держат
 /// session-level advisory lock.
 #[derive(Clone, Deserialize, PartialEq, Eq)]

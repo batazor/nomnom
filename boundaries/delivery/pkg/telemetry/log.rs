@@ -139,7 +139,6 @@ pub fn filter() -> Targets {
     Targets::new()
         .with_default(LevelFilter::WARN)
         .with_target(env!("CARGO_CRATE_NAME"), LevelFilter::INFO)
-        .with_target("delivery_migrate", LevelFilter::INFO)
         .with_target("sqlx", LevelFilter::ERROR)
 }
 

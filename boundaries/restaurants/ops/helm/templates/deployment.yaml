@@ -40,24 +40,6 @@ spec:
       securityContext:
         {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 8 }}
       {{- end }}
-      {{- if and .Values.mongodb.migrate.enabled .Values.mongodb.uriSecret.name }}
-      # Коллекции, validators и индексы MongoDB до старта процесса (restaurants-migrate).
-      initContainers:
-        - name: migrate
-          image: {{ include "restaurants.image" . | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command:
-            {{- toYaml .Values.mongodb.migrate.command | nindent 12 }}
-          {{- with .Values.securityContext }}
-          securityContext:
-            {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
-          {{- end }}
-          env:
-            {{- $migratePool := merge (dict "maxPoolSize" .Values.mongodb.migrate.maxPoolSize) (deepCopy .Values.mongodb.pool) }}
-            {{- include "restaurants.mongodbEnv" (dict "context" . "pool" $migratePool) | trim | nindent 12 }}
-            # JSON-логи миграции с тем же resource; OTLP-экспорта у init container нет.
-            {{- include "restaurants.otelResourceEnv" . | nindent 12 }}
-      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "restaurants.image" . | quote }}

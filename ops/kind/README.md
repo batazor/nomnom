@@ -86,8 +86,8 @@ make kind-down
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) и identity ставит chart
   [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, PostgreSQL `orders`,
   `payments`, `delivery` и MongoDB `restaurants` в `nomnom-data` (`emptyDir`). Secret DSN
-  кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`), а init
-  container `delivery-migrate` применяет миграции до старта процесса.
+  кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`). Миграции
+  каждый процесс применяет сам при старте ([ADR 38](../../docs/adr/0038-schema-migrations-at-process-startup.md)).
 
 - Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в
   `nomnom-observability` и OTLP метрик `orders`/`orders-consumer` в Grafana Cloud free tier;

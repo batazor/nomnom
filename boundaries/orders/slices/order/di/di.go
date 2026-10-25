@@ -107,8 +107,14 @@ func NewClock() application.Clock { return system.Clock{} }
 func NewOrderIDs() placeorder.IDGenerator { return system.OrderIDs{} }
 
 // NewPostgresStore — общий store API, worker'а и consumer'а;
-// без POSTGRES__DSN процесс не стартует. Pool подключается лениво.
+// без POSTGRES__DSN процесс не стартует. Сначала процесс приводит схему к
+// встроенным миграциям: применённые goose пропускает, недостающие применяет под
+// advisory lock, так что одновременный старт pods сериализуется. Ошибка
+// миграции останавливает процесс до запуска остального. Pool подключается лениво.
 func NewPostgresStore(cfg config.PostgresConfig) (*postgres.Store, func(), error) {
+	if err := postgres.Migrate(context.Background(), cfg); err != nil {
+		return nil, nil, err
+	}
 	store, err := postgres.Open(context.Background(), cfg)
 	if err != nil {
 		return nil, nil, err
