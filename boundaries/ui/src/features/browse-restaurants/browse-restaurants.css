@@ -1,0 +1,133 @@
+.catalog-page {
+  display: grid;
+  width: min(100%, 64rem);
+  gap: var(--space-6);
+  align-self: start;
+  margin: 0 auto;
+}
+
+.catalog-header h1,
+.catalog-message h1 {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.catalog-header p,
+.catalog-message p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-muted);
+}
+
+.catalog-message {
+  justify-items: start;
+  max-width: 36rem;
+}
+
+.catalog-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.catalog-card {
+  display: grid;
+  gap: var(--space-1);
+  min-height: 5.5rem;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  text-decoration: none;
+}
+
+.catalog-card:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.catalog-card h2 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.catalog-card p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+}
+
+.catalog-card .catalog-closed {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+.catalog-more {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+}
+
+.catalog-more-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.catalog-skeleton {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.catalog-skeleton span {
+  display: block;
+  height: 5.5rem;
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+}
+
+.catalog-skeleton .catalog-skeleton-title {
+  width: 55%;
+  height: 2rem;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-control);
+}
+
+@media (min-width: 40rem) {
+  .catalog-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .catalog-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .catalog-card {
+    transition:
+      background-color var(--motion-fast) var(--motion-easing),
+      border-color var(--motion-fast) var(--motion-easing);
+  }
+
+  .catalog-skeleton span {
+    animation: catalog-skeleton-pulse 1.4s var(--motion-easing) infinite
+      alternate;
+  }
+}
+
+@keyframes catalog-skeleton-pulse {
+  to {
+    opacity: 0.55;
+  }
+}

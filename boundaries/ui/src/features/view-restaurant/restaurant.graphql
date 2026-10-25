@@ -1,0 +1,20 @@
+query ViewRestaurant($id: ID!) {
+  restaurant(id: $id) {
+    id
+    name
+    address
+    acceptingOrders
+    menu {
+      items {
+        id
+        name
+        description
+        price {
+          amount
+          currency
+        }
+        available
+      }
+    }
+  }
+}
