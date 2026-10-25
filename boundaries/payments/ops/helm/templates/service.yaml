@@ -20,5 +20,10 @@ spec:
       {{- with .Values.service.appProtocol }}
       appProtocol: {{ . }}
       {{- end }}
+    # Webhooks провайдера: публикуется только через public gateway (HTTPRoute).
+    - name: webhooks
+      port: {{ .Values.providerWebhooks.port }}
+      targetPort: webhooks
+      protocol: TCP
   selector:
     {{- include "common.labels.matchLabels" . | nindent 4 }}

@@ -111,7 +111,8 @@ management:
   port: 9084
 
 # HTTP-приём webhooks платёжного провайдера (POST /webhooks/provider), передаётся через
-# PROVIDER__WEBHOOK_PORT. Внешняя публикация порта (ingress) пока не настроена.
+# PROVIDER__WEBHOOK_PORT. Порт входит в Service; снаружи доступен только путь
+# /webhooks/provider через public gateway (в kind — ops/kind/manifests/gateway/public-gateway.yaml).
 providerWebhooks:
   port: 8085
 
