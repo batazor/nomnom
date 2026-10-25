@@ -9,12 +9,15 @@ export type GraphqlErrorReport = Readonly<{
 type ClientOptions = Readonly<{
   url: string;
   getTraceparent?: () => string | undefined;
+  // Access token of the user BFF acts for; without it only public reads work.
+  getAccessToken?: () => string | undefined;
   reportError?: (report: GraphqlErrorReport) => void;
 }>;
 
 export function createGraphqlClient({
   url,
   getTraceparent,
+  getAccessToken,
   reportError,
 }: ClientOptions) {
   return createClient({
@@ -34,8 +37,12 @@ export function createGraphqlClient({
       fetchExchange,
     ],
     fetchOptions() {
+      const headers: Record<string, string> = {};
       const traceparent = getTraceparent?.();
-      return traceparent ? { headers: { traceparent } } : {};
+      if (traceparent) headers.traceparent = traceparent;
+      const token = getAccessToken?.();
+      if (token) headers.authorization = `Bearer ${token}`;
+      return { headers };
     },
   });
 }

@@ -4,3 +4,5 @@ export type { CardProps } from "./card";
 export { Card } from "./card";
 export type { TextFieldProps } from "./text-field";
 export { TextField } from "./text-field";
+export type { SidePanelProps } from "./side-panel";
+export { SidePanel } from "./side-panel";

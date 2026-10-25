@@ -13,6 +13,7 @@ import {
   orderTotal,
   restaurantFixtures,
 } from "./fixtures";
+import { createFulfillment } from "./fulfillment";
 
 type Clock = () => Date;
 
@@ -74,10 +75,11 @@ function paginate<T extends { id: string }>(
 const cancellationWindowMinutes = 5;
 
 function initialState(now: Date) {
+  const orders = new Map(
+    createOrderScenarios(now).map((order) => [order.id, order]),
+  );
   return {
-    orders: new Map(
-      createOrderScenarios(now).map((order) => [order.id, order]),
-    ),
+    orders,
     liveStep: 0,
     liveStartedAt: now,
     liveCancelled: null as MockOrder | null,
@@ -97,6 +99,15 @@ export function createMockStore({
 } = {}) {
   let clock = now;
   let state = initialState(clock());
+  let fulfillment = newFulfillment();
+
+  function newFulfillment() {
+    return createFulfillment({
+      clock: () => clock(),
+      orders: state.orders,
+      restaurant: (id) => currentRestaurant(id),
+    });
+  }
 
   function liveOrder(): MockOrder {
     return (
@@ -223,6 +234,7 @@ export function createMockStore({
       },
     };
     state.orders.set(order.id, order);
+    fulfillment.received(order);
     return { order, problems: [] };
   }
 
@@ -275,6 +287,29 @@ export function createMockStore({
       setOpening(restaurantId, true),
     closeRestaurant: ({ restaurantId }: { restaurantId: string }) =>
       setOpening(restaurantId, false),
+    // The mock user operates the kitchen of every restaurant and is a courier.
+    kitchen: ({ restaurantId }: { restaurantId: string }) =>
+      fulfillment.kitchen(restaurantId),
+    applyKitchenAction: ({
+      input,
+    }: {
+      input: Parameters<typeof fulfillment.applyKitchenAction>[0];
+    }) => fulfillment.applyKitchenAction(input),
+    courier: () => fulfillment.courier(),
+    setCourierAvailability: ({
+      availability,
+    }: {
+      availability: Parameters<typeof fulfillment.setAvailability>[0];
+    }) => fulfillment.setAvailability(availability),
+    acceptDeliveryOffer: ({ offerId }: { offerId: string }) =>
+      fulfillment.acceptOffer(offerId),
+    applyCourierDeliveryAction: ({
+      deliveryId,
+      action,
+    }: {
+      deliveryId: string;
+      action: Parameters<typeof fulfillment.applyDeliveryAction>[1];
+    }) => fulfillment.applyDeliveryAction(deliveryId, action),
   };
 
   return {
@@ -285,6 +320,7 @@ export function createMockStore({
     reset() {
       clock = now;
       state = initialState(clock());
+      fulfillment = newFulfillment();
     },
   };
 }

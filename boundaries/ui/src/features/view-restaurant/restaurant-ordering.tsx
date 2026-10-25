@@ -1,5 +1,4 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
 import { useQuery } from "urql";
 
 import {
@@ -12,18 +11,20 @@ import { type ItemProblems, PlaceOrder } from "../place-order";
 import { useCart } from "./cart";
 import { type CartEntry, CartPanel } from "./cart-panel";
 import { Menu, type MenuEntry } from "./menu";
-import { estimateSubtotal, useMoney } from "./money";
+import { estimateSubtotal } from "./money";
 import "./view-restaurant.css";
 
 type ViewedRestaurant = NonNullable<ViewRestaurantQuery["restaurant"]>;
 
-export function ViewRestaurantPage() {
-  const { restaurantId = "" } = useParams();
-  // A new restaurant gets its own screen state and cart.
-  return <RestaurantScreen key={restaurantId} restaurantId={restaurantId} />;
-}
-
-function RestaurantScreen({ restaurantId }: { restaurantId: string }) {
+// Menu, cart and checkout of one restaurant. The caller keys it by
+// restaurantId, so another restaurant gets its own state and cart.
+export function RestaurantOrdering({
+  restaurantId,
+  onPlaced,
+}: {
+  restaurantId: string;
+  onPlaced: (orderId: string) => void;
+}) {
   const { t } = useI18n();
   const [{ data, error, fetching }, reexecute] = useQuery({
     query: ViewRestaurantDocument,
@@ -47,18 +48,22 @@ function RestaurantScreen({ restaurantId }: { restaurantId: string }) {
   if (!data.restaurant) {
     return (
       <RestaurantMessage
-        action={<Link to="/">{t("restaurant.back")}</Link>}
         detail={t("restaurant.notFound.detail")}
         title={t("restaurant.notFound.title")}
       />
     );
   }
-  return <RestaurantView restaurant={data.restaurant} />;
+  return <RestaurantView onPlaced={onPlaced} restaurant={data.restaurant} />;
 }
 
-function RestaurantView({ restaurant }: { restaurant: ViewedRestaurant }) {
+function RestaurantView({
+  restaurant,
+  onPlaced,
+}: {
+  restaurant: ViewedRestaurant;
+  onPlaced: (orderId: string) => void;
+}) {
   const { t } = useI18n();
-  const money = useMoney();
   const cart = useCart(restaurant.id);
   const [itemProblems, setItemProblems] = useState<ItemProblems>(
     () => new Map(),
@@ -90,7 +95,6 @@ function RestaurantView({ restaurant }: { restaurant: ViewedRestaurant }) {
       quantity: line.quantity,
     })),
   );
-  const itemCount = entries.reduce((sum, { line }) => sum + line.quantity, 0);
 
   function add(item: MenuEntry) {
     cart.add(item.id);
@@ -105,10 +109,7 @@ function RestaurantView({ restaurant }: { restaurant: ViewedRestaurant }) {
   return (
     <article aria-labelledby="restaurant-title" className="restaurant-page">
       <header className="restaurant-header">
-        <Link className="restaurant-back" to="/">
-          <span aria-hidden="true">←</span> {t("restaurant.back")}
-        </Link>
-        <h1 id="restaurant-title">{restaurant.name}</h1>
+        <h3 id="restaurant-title">{restaurant.name}</h3>
         <p>{restaurant.address}</p>
         {restaurant.acceptingOrders ? null : (
           <p className="restaurant-closed" role="status">
@@ -136,7 +137,10 @@ function RestaurantView({ restaurant }: { restaurant: ViewedRestaurant }) {
               <PlaceOrder
                 lines={entries.map(({ line }) => line)}
                 onItemProblems={setItemProblems}
-                onPlaced={cart.clear}
+                onPlaced={(orderId) => {
+                  cart.clear();
+                  onPlaced(orderId);
+                }}
                 restaurantId={restaurant.id}
               />
             ) : null}
@@ -149,13 +153,6 @@ function RestaurantView({ restaurant }: { restaurant: ViewedRestaurant }) {
       <p aria-live="polite" className="sr-only">
         {announcement}
       </p>
-
-      {itemCount > 0 ? (
-        <a className="cart-jump" href="#cart">
-          <span>{t("cart.jump", { count: itemCount })}</span>
-          {subtotal ? <span>{money(subtotal)}</span> : null}
-        </a>
-      ) : null}
     </article>
   );
 }
@@ -174,7 +171,7 @@ function RestaurantMessage({
       aria-labelledby="restaurant-message-title"
       className="restaurant-page restaurant-message"
     >
-      <h1 id="restaurant-message-title">{title}</h1>
+      <h3 id="restaurant-message-title">{title}</h3>
       <p>{detail}</p>
       {action}
     </section>
@@ -189,9 +186,9 @@ function RestaurantSkeleton() {
       aria-labelledby="restaurant-loading"
       className="restaurant-page"
     >
-      <h1 className="sr-only" id="restaurant-loading">
+      <h3 className="sr-only" id="restaurant-loading">
         {t("restaurant.loading")}
-      </h1>
+      </h3>
       <div aria-hidden="true" className="restaurant-skeleton">
         <span className="restaurant-skeleton-title" />
         <span />

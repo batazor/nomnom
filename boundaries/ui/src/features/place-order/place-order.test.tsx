@@ -59,10 +59,11 @@ async function openCheckout() {
   const user = userEvent.setup();
   render(
     <AppProviders config={config}>
-      <AppRouter initialEntries={[`/restaurants/${kitchen}`]} />
+      <AppRouter initialEntries={["/"]} />
     </AppProviders>,
   );
-  await screen.findByRole("heading", { level: 1, name: "Кухня №8" });
+  await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
+  await screen.findByRole("heading", { level: 3, name: "Кухня №8" });
   return user;
 }
 
@@ -76,7 +77,7 @@ function cartLine(name: string) {
 }
 
 describe("place order", () => {
-  it("places the cart and opens the placed order", async () => {
+  it("places the cart and shows the placed order on the board", async () => {
     storeCart([
       { menuItemId: "menu-tom-yum", quantity: 2 },
       { menuItemId: "menu-bao", quantity: 1 },
@@ -91,9 +92,14 @@ describe("place order", () => {
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Заказ принят" }),
+      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("order-total")).toHaveTextContent(/1.?800/);
+    await user.click(
+      screen.getByRole("button", { name: "Подробнее о заказе" }),
+    );
+    expect(await screen.findByTestId("order-total")).toHaveTextContent(
+      /1.?800/,
+    );
     expect(requests).toEqual([
       {
         restaurantId: kitchen,
@@ -160,7 +166,7 @@ describe("place order", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Заказ принят" }),
+      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
     ).toBeInTheDocument();
   });
 
@@ -221,7 +227,7 @@ describe("place order", () => {
     await user.click(screen.getByRole("button", { name: "Отправить ещё раз" }));
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Заказ принят" }),
+      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
     ).toBeInTheDocument();
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(keys[0]);
@@ -254,7 +260,7 @@ describe("place order", () => {
     );
     await user.click(screen.getByRole("button", { name: "Отправить ещё раз" }));
 
-    await screen.findByRole("heading", { level: 1, name: "Заказ принят" });
+    await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
     expect(keys).toHaveLength(2);
     expect(keys[1]).not.toBe(keys[0]);
   });

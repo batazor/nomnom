@@ -2,28 +2,23 @@ import { withFaroRouterInstrumentation } from "@grafana/faro-react";
 import {
   createBrowserRouter,
   createMemoryRouter,
+  Navigate,
   RouterProvider,
 } from "react-router-dom";
-import { BrowseRestaurantsPage } from "../features/browse-restaurants/browse-restaurants-page";
-import { ManageRestaurantPage } from "../features/manage-restaurant/manage-restaurant-page";
-import { MyRestaurantsPage } from "../features/manage-restaurant/my-restaurants-page";
-import { ViewOrderPage } from "../features/view-order/view-order-page";
-import { ViewRestaurantPage } from "../features/view-restaurant/view-restaurant-page";
+import { FlowBoard } from "../features/flow-board";
+import { SignInCallback } from "../shared/auth/sign-in";
 import { AppLayout } from "./layout";
 
+// The whole flow lives on one screen; anything else leads back to it.
 export const routes = [
   {
     path: "/",
     element: <AppLayout />,
     children: [
-      { index: true, element: <BrowseRestaurantsPage /> },
-      { path: "restaurants/:restaurantId", element: <ViewRestaurantPage /> },
-      { path: "orders/:orderId", element: <ViewOrderPage /> },
-      { path: "manage/restaurants", element: <MyRestaurantsPage /> },
-      {
-        path: "manage/restaurants/:restaurantId",
-        element: <ManageRestaurantPage />,
-      },
+      { index: true, element: <FlowBoard /> },
+      // Redirect URI of the browser login (ADR 35).
+      { path: "auth/callback", element: <SignInCallback /> },
+      { path: "*", element: <Navigate replace to="/" /> },
     ],
   },
 ];

@@ -1,5 +1,4 @@
 import { type FormEvent, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useMutation } from "urql";
 
 import { PlaceOrderDocument } from "../../shared/graphql/generated/graphql";
@@ -35,10 +34,9 @@ export function PlaceOrder({
   restaurantId: string;
   lines: readonly OrderLine[];
   onItemProblems: (problems: ItemProblems) => void;
-  onPlaced: () => void;
+  onPlaced: (orderId: string) => void;
 }) {
   const { t } = useI18n();
-  const navigate = useNavigate();
   const [, placeOrder] = useMutation(PlaceOrderDocument);
   const [address, setAddress] = useState("");
   const [addressMissing, setAddressMissing] = useState(false);
@@ -84,8 +82,7 @@ export function PlaceOrder({
     attempt.current = null;
     if (payload.order) {
       onItemProblems(new Map());
-      onPlaced();
-      navigate(`/orders/${payload.order.id}`);
+      onPlaced(payload.order.id);
       return;
     }
     const { orderProblems, itemProblems } = splitProblems(payload.problems);
@@ -109,7 +106,7 @@ export function PlaceOrder({
       noValidate
       onSubmit={submit}
     >
-      <h3 id="checkout-title">{t("checkout.title")}</h3>
+      <h5 id="checkout-title">{t("checkout.title")}</h5>
 
       {state.kind === "problems" &&
       (state.orderProblems.length > 0 || itemProblemsInCart) ? (

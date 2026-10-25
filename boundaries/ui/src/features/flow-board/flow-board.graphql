@@ -1,0 +1,156 @@
+query BoardKitchen($restaurantId: ID!) {
+  kitchen(restaurantId: $restaurantId) {
+    restaurant {
+      id
+      name
+      acceptingOrders
+    }
+    orders {
+      id
+      orderId
+      stage
+      items {
+        name
+        quantity
+      }
+      receivedAt
+    }
+  }
+}
+
+query BoardOwnedRestaurants {
+  myRestaurants(first: 20) {
+    edges {
+      node {
+        id
+        name
+        acceptingOrders
+      }
+    }
+  }
+}
+
+mutation ApplyKitchenAction($input: KitchenActionInput!) {
+  applyKitchenAction(input: $input) {
+    order {
+      id
+      orderId
+      stage
+      items {
+        name
+        quantity
+      }
+      receivedAt
+    }
+    problem
+  }
+}
+
+query BoardCourier {
+  courier {
+    availability
+    offers {
+      id
+      deliveryId
+      pickupAddress
+      dropoffAddress
+      expiresAt
+    }
+    currentDelivery {
+      id
+      orderId
+      stage
+      pickupAddress
+      dropoffAddress
+    }
+  }
+}
+
+mutation SetCourierAvailability($availability: CourierAvailability!) {
+  setCourierAvailability(availability: $availability) {
+    courier {
+      availability
+      offers {
+        id
+        deliveryId
+        pickupAddress
+        dropoffAddress
+        expiresAt
+      }
+      currentDelivery {
+        id
+        orderId
+        stage
+        pickupAddress
+        dropoffAddress
+      }
+    }
+    problem
+  }
+}
+
+mutation AcceptDeliveryOffer($offerId: ID!) {
+  acceptDeliveryOffer(offerId: $offerId) {
+    courier {
+      availability
+      offers {
+        id
+        deliveryId
+        pickupAddress
+        dropoffAddress
+        expiresAt
+      }
+      currentDelivery {
+        id
+        orderId
+        stage
+        pickupAddress
+        dropoffAddress
+      }
+    }
+    problem
+  }
+}
+
+mutation ApplyCourierDeliveryAction(
+  $deliveryId: ID!
+  $action: CourierDeliveryAction!
+) {
+  applyCourierDeliveryAction(deliveryId: $deliveryId, action: $action) {
+    courier {
+      availability
+      offers {
+        id
+        deliveryId
+        pickupAddress
+        dropoffAddress
+        expiresAt
+      }
+      currentDelivery {
+        id
+        orderId
+        stage
+        pickupAddress
+        dropoffAddress
+      }
+    }
+    problem
+  }
+}
+
+query BoardOrderStatus($id: ID!) {
+  order(id: $id) {
+    id
+    status
+    endReason
+    restaurant {
+      id
+      name
+    }
+    total {
+      amount
+      currency
+    }
+    placedAt
+  }
+}

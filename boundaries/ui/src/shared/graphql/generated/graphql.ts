@@ -4,6 +4,76 @@ type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 /** Internal type. DO NOT USE DIRECTLY. */
 export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
+/** Availability of a courier for new deliveries */
+export type CourierAvailability =
+  /** Courier receives delivery offers */
+  | 'AVAILABLE'
+  /** Courier is on a delivery */
+  | 'BUSY'
+  /** Courier does not receive delivery offers */
+  | 'UNAVAILABLE';
+
+/** Command of the courier over the current delivery */
+export type CourierDeliveryAction =
+  /** Confirm the order is handed to the customer */
+  | 'CONFIRM_DELIVERY'
+  /** Confirm the order is picked up at the restaurant */
+  | 'CONFIRM_PICKUP';
+
+/** Stage of a delivery assigned to the courier */
+export type CourierDeliveryStage =
+  /** Courier is going to the restaurant */
+  | 'ASSIGNED'
+  /** Courier has the order and is going to the customer */
+  | 'PICKED_UP';
+
+/** Business reason why a courier command cannot be applied */
+export type CourierProblemCode =
+  /** The delivery is not in a stage that allows this command */
+  | 'DELIVERY_STAGE_CONFLICT'
+  /** The offer expired or was taken */
+  | 'OFFER_NOT_AVAILABLE';
+
+/** Command of the kitchen over one restaurant order */
+export type KitchenAction =
+  /** Accept a RECEIVED order into the kitchen queue */
+  | 'ACCEPT'
+  /** Mark a PREPARING order assembled */
+  | 'MARK_ASSEMBLED'
+  /** Mark an ASSEMBLED order ready for pickup */
+  | 'MARK_READY'
+  /** Reject a RECEIVED order */
+  | 'REJECT'
+  /** Start preparing a QUEUED order */
+  | 'START_PREPARATION';
+
+export type KitchenActionInput = {
+  /** Command to apply */
+  action: KitchenAction;
+  /** Restaurant order identifier (KitchenOrder.id) */
+  kitchenOrderId: string | number;
+  /** Restaurant of the order */
+  restaurantId: string | number;
+};
+
+/** Business reason why a kitchen command cannot be applied */
+export type KitchenActionProblemCode =
+  /** The order is not in a stage that allows this command */
+  | 'ORDER_STAGE_CONFLICT';
+
+/** Stage of a restaurant order in the kitchen */
+export type KitchenOrderStage =
+  /** Order is assembled and waits to be marked ready */
+  | 'ASSEMBLED'
+  /** Kitchen is preparing the order */
+  | 'PREPARING'
+  /** Order is accepted and waits in the kitchen queue */
+  | 'QUEUED'
+  /** Order is ready for pickup */
+  | 'READY'
+  /** Order arrived and waits for the kitchen to accept or reject it */
+  | 'RECEIVED';
+
 /** Accepted result of a cancellation request */
 export type OrderCancellationOutcome =
   /** Order was already cancelled */
@@ -115,6 +185,59 @@ export type BrowseRestaurantsQueryVariables = Exact<{
 
 export type BrowseRestaurantsQuery = { restaurants: { edges: Array<{ cursor: string, node: { id: string, name: string, address: string, acceptingOrders: boolean } }>, pageInfo: { hasNextPage: boolean, endCursor: string | null } } };
 
+export type BoardKitchenQueryVariables = Exact<{
+  restaurantId: string | number;
+}>;
+
+
+export type BoardKitchenQuery = { kitchen: { restaurant: { id: string, name: string, acceptingOrders: boolean }, orders: Array<{ id: string, orderId: string, stage: KitchenOrderStage, receivedAt: string, items: Array<{ name: string, quantity: number }> }> } | null };
+
+export type BoardOwnedRestaurantsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type BoardOwnedRestaurantsQuery = { myRestaurants: { edges: Array<{ node: { id: string, name: string, acceptingOrders: boolean } }> } };
+
+export type ApplyKitchenActionMutationVariables = Exact<{
+  input: KitchenActionInput;
+}>;
+
+
+export type ApplyKitchenActionMutation = { applyKitchenAction: { problem: KitchenActionProblemCode | null, order: { id: string, orderId: string, stage: KitchenOrderStage, receivedAt: string, items: Array<{ name: string, quantity: number }> } | null } };
+
+export type BoardCourierQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type BoardCourierQuery = { courier: { availability: CourierAvailability, offers: Array<{ id: string, deliveryId: string, pickupAddress: string, dropoffAddress: string, expiresAt: string }>, currentDelivery: { id: string, orderId: string, stage: CourierDeliveryStage, pickupAddress: string, dropoffAddress: string } | null } | null };
+
+export type SetCourierAvailabilityMutationVariables = Exact<{
+  availability: CourierAvailability;
+}>;
+
+
+export type SetCourierAvailabilityMutation = { setCourierAvailability: { problem: CourierProblemCode | null, courier: { availability: CourierAvailability, offers: Array<{ id: string, deliveryId: string, pickupAddress: string, dropoffAddress: string, expiresAt: string }>, currentDelivery: { id: string, orderId: string, stage: CourierDeliveryStage, pickupAddress: string, dropoffAddress: string } | null } } };
+
+export type AcceptDeliveryOfferMutationVariables = Exact<{
+  offerId: string | number;
+}>;
+
+
+export type AcceptDeliveryOfferMutation = { acceptDeliveryOffer: { problem: CourierProblemCode | null, courier: { availability: CourierAvailability, offers: Array<{ id: string, deliveryId: string, pickupAddress: string, dropoffAddress: string, expiresAt: string }>, currentDelivery: { id: string, orderId: string, stage: CourierDeliveryStage, pickupAddress: string, dropoffAddress: string } | null } } };
+
+export type ApplyCourierDeliveryActionMutationVariables = Exact<{
+  deliveryId: string | number;
+  action: CourierDeliveryAction;
+}>;
+
+
+export type ApplyCourierDeliveryActionMutation = { applyCourierDeliveryAction: { problem: CourierProblemCode | null, courier: { availability: CourierAvailability, offers: Array<{ id: string, deliveryId: string, pickupAddress: string, dropoffAddress: string, expiresAt: string }>, currentDelivery: { id: string, orderId: string, stage: CourierDeliveryStage, pickupAddress: string, dropoffAddress: string } | null } } };
+
+export type BoardOrderStatusQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type BoardOrderStatusQuery = { order: { id: string, status: OrderStatus, endReason: OrderEndReason | null, placedAt: string, restaurant: { id: string, name: string }, total: { amount: string, currency: string } } | null };
+
 export type ManageRestaurantQueryVariables = Exact<{
   id: string | number;
 }>;
@@ -178,6 +301,14 @@ export type ViewRestaurantQuery = { restaurant: { id: string, name: string, addr
 
 
 export const BrowseRestaurantsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"BrowseRestaurants"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"restaurants"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"address"}},{"kind":"Field","name":{"kind":"Name","value":"acceptingOrders"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]} as unknown as DocumentNode<BrowseRestaurantsQuery, BrowseRestaurantsQueryVariables>;
+export const BoardKitchenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"BoardKitchen"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"restaurantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"kitchen"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"restaurantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"restaurantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"restaurant"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"acceptingOrders"}}]}},{"kind":"Field","name":{"kind":"Name","value":"orders"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orderId"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}}]}},{"kind":"Field","name":{"kind":"Name","value":"receivedAt"}}]}}]}}]}}]} as unknown as DocumentNode<BoardKitchenQuery, BoardKitchenQueryVariables>;
+export const BoardOwnedRestaurantsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"BoardOwnedRestaurants"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myRestaurants"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"20"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"acceptingOrders"}}]}}]}}]}}]}}]} as unknown as DocumentNode<BoardOwnedRestaurantsQuery, BoardOwnedRestaurantsQueryVariables>;
+export const ApplyKitchenActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ApplyKitchenAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"KitchenActionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"applyKitchenAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"order"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orderId"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}}]}},{"kind":"Field","name":{"kind":"Name","value":"receivedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"problem"}}]}}]}}]} as unknown as DocumentNode<ApplyKitchenActionMutation, ApplyKitchenActionMutationVariables>;
+export const BoardCourierDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"BoardCourier"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"courier"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"availability"}},{"kind":"Field","name":{"kind":"Name","value":"offers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"deliveryId"}},{"kind":"Field","name":{"kind":"Name","value":"pickupAddress"}},{"kind":"Field","name":{"kind":"Name","value":"dropoffAddress"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"currentDelivery"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orderId"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"pickupAddress"}},{"kind":"Field","name":{"kind":"Name","value":"dropoffAddress"}}]}}]}}]}}]} as unknown as DocumentNode<BoardCourierQuery, BoardCourierQueryVariables>;
+export const SetCourierAvailabilityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetCourierAvailability"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"availability"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CourierAvailability"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setCourierAvailability"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"availability"},"value":{"kind":"Variable","name":{"kind":"Name","value":"availability"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"courier"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"availability"}},{"kind":"Field","name":{"kind":"Name","value":"offers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"deliveryId"}},{"kind":"Field","name":{"kind":"Name","value":"pickupAddress"}},{"kind":"Field","name":{"kind":"Name","value":"dropoffAddress"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"currentDelivery"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orderId"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"pickupAddress"}},{"kind":"Field","name":{"kind":"Name","value":"dropoffAddress"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"problem"}}]}}]}}]} as unknown as DocumentNode<SetCourierAvailabilityMutation, SetCourierAvailabilityMutationVariables>;
+export const AcceptDeliveryOfferDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AcceptDeliveryOffer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"acceptDeliveryOffer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"offerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offerId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"courier"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"availability"}},{"kind":"Field","name":{"kind":"Name","value":"offers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"deliveryId"}},{"kind":"Field","name":{"kind":"Name","value":"pickupAddress"}},{"kind":"Field","name":{"kind":"Name","value":"dropoffAddress"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"currentDelivery"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orderId"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"pickupAddress"}},{"kind":"Field","name":{"kind":"Name","value":"dropoffAddress"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"problem"}}]}}]}}]} as unknown as DocumentNode<AcceptDeliveryOfferMutation, AcceptDeliveryOfferMutationVariables>;
+export const ApplyCourierDeliveryActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ApplyCourierDeliveryAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"deliveryId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"action"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CourierDeliveryAction"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"applyCourierDeliveryAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"deliveryId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"deliveryId"}}},{"kind":"Argument","name":{"kind":"Name","value":"action"},"value":{"kind":"Variable","name":{"kind":"Name","value":"action"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"courier"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"availability"}},{"kind":"Field","name":{"kind":"Name","value":"offers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"deliveryId"}},{"kind":"Field","name":{"kind":"Name","value":"pickupAddress"}},{"kind":"Field","name":{"kind":"Name","value":"dropoffAddress"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"currentDelivery"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orderId"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"pickupAddress"}},{"kind":"Field","name":{"kind":"Name","value":"dropoffAddress"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"problem"}}]}}]}}]} as unknown as DocumentNode<ApplyCourierDeliveryActionMutation, ApplyCourierDeliveryActionMutationVariables>;
+export const BoardOrderStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"BoardOrderStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"order"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"endReason"}},{"kind":"Field","name":{"kind":"Name","value":"restaurant"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"total"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"amount"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}}]}},{"kind":"Field","name":{"kind":"Name","value":"placedAt"}}]}}]}}]} as unknown as DocumentNode<BoardOrderStatusQuery, BoardOrderStatusQueryVariables>;
 export const ManageRestaurantDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ManageRestaurant"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"restaurant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"address"}},{"kind":"Field","name":{"kind":"Name","value":"acceptingOrders"}}]}}]}}]} as unknown as DocumentNode<ManageRestaurantQuery, ManageRestaurantQueryVariables>;
 export const OpenRestaurantDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"OpenRestaurant"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"restaurantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"openRestaurant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"restaurantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"restaurantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"changed"}},{"kind":"Field","name":{"kind":"Name","value":"restaurant"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"address"}},{"kind":"Field","name":{"kind":"Name","value":"acceptingOrders"}}]}}]}}]}}]} as unknown as DocumentNode<OpenRestaurantMutation, OpenRestaurantMutationVariables>;
 export const CloseRestaurantDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CloseRestaurant"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"restaurantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"closeRestaurant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"restaurantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"restaurantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"changed"}},{"kind":"Field","name":{"kind":"Name","value":"restaurant"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"address"}},{"kind":"Field","name":{"kind":"Name","value":"acceptingOrders"}}]}}]}}]}}]} as unknown as DocumentNode<CloseRestaurantMutation, CloseRestaurantMutationVariables>;

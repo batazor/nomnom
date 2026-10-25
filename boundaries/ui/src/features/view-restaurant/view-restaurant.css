@@ -1,11 +1,8 @@
 .restaurant-page {
   display: grid;
-  width: min(100%, 64rem);
-  gap: var(--space-6);
+  gap: var(--space-4);
   align-self: start;
-  margin: 0 auto;
-  /* Room for the cart bar fixed at the bottom of a phone screen. */
-  padding-bottom: var(--space-16);
+  min-width: 0;
 }
 
 .restaurant-header {
@@ -25,8 +22,8 @@
   text-decoration: underline;
 }
 
-.restaurant-header h1,
-.restaurant-message h1 {
+.restaurant-header h3,
+.restaurant-message h3 {
   margin: 0;
   color: var(--color-foreground);
   font-size: clamp(1.5rem, 4vw, 2rem);
@@ -67,8 +64,8 @@
   min-width: 0;
 }
 
-.restaurant-menu h2,
-.restaurant-cart h2 {
+.restaurant-menu h4,
+.restaurant-cart h4 {
   margin: 0 0 var(--space-3);
   color: var(--color-foreground);
   font-size: 1.0625rem;
@@ -100,7 +97,7 @@
   min-width: 0;
 }
 
-.menu-item-copy h3 {
+.menu-item-copy h5 {
   margin: 0;
   color: var(--color-foreground);
   font-size: var(--font-size-md);
@@ -154,7 +151,7 @@
   scroll-margin-top: var(--space-4);
 }
 
-.restaurant-cart h2 {
+.restaurant-cart h4 {
   margin: 0;
 }
 
@@ -257,26 +254,6 @@
   font-size: var(--font-size-xs);
 }
 
-.cart-jump {
-  position: fixed;
-  right: var(--space-4);
-  bottom: var(--space-4);
-  left: var(--space-4);
-  z-index: 10;
-  display: flex;
-  min-height: 3rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-control);
-  background: var(--color-foreground);
-  box-shadow: var(--shadow-floating);
-  color: var(--color-background);
-  font-weight: 600;
-  text-decoration: none;
-}
-
 .restaurant-skeleton {
   display: grid;
   gap: var(--space-3);
@@ -295,31 +272,14 @@
   margin-bottom: var(--space-3);
 }
 
-/* Phone order: menu, then cart and checkout; side by side on wide screens. */
-@container style(--viewport: lg) {
-  .restaurant-page {
-    padding-bottom: 0;
-  }
+/* Menu, then cart and checkout; side by side once the column is wide enough. */
+.restaurant-page {
+  container-type: inline-size;
+}
 
+@container (min-width: 44rem) {
   .restaurant-layout {
-    grid-template-columns: minmax(0, 1.5fr) minmax(20rem, 1fr);
+    grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 1fr);
     align-items: start;
-  }
-
-  .cart-jump {
-    display: none;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .restaurant-skeleton span {
-    animation: restaurant-skeleton-pulse 1.4s var(--motion-easing) infinite
-      alternate;
-  }
-}
-
-@keyframes restaurant-skeleton-pulse {
-  to {
-    opacity: 0.55;
   }
 }

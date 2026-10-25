@@ -4,7 +4,7 @@
   min-width: 0;
 }
 
-.checkout h3 {
+.checkout h5 {
   margin: 0;
   color: var(--color-foreground);
   font-size: var(--font-size-md);

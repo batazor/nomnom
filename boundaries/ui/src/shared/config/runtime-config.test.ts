@@ -16,6 +16,8 @@ describe("parseRuntimeConfig", () => {
       enableMocks: true,
       telemetryUrl: undefined,
       environment: "development",
+      devTokensUrl: undefined,
+      oidc: undefined,
     });
   });
 

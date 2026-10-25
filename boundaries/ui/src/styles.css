@@ -123,11 +123,11 @@ a,
 
 .app-content {
   display: grid;
-  width: min(100%, 82rem);
+  width: min(100%, 112rem);
   min-height: calc(100vh - 4rem - var(--space-2));
   margin: 0 auto;
-  align-items: center;
-  padding: var(--space-8) var(--space-5) var(--space-12);
+  align-items: start;
+  padding: var(--space-5) var(--space-4) var(--space-10);
 }
 
 .nomnom-button {
@@ -176,7 +176,7 @@ a,
   }
 
   .app-content {
-    padding: var(--space-12) var(--space-10) var(--space-16);
+    padding: var(--space-6) var(--space-6) var(--space-12);
   }
 }
 
@@ -190,4 +190,9 @@ a,
   .nomnom-button[data-pressed] {
     transform: translateY(1px);
   }
+}
+
+.nomnom-side-panel {
+  width: min(100vw, 40rem);
+  max-width: 100vw;
 }

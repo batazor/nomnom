@@ -43,10 +43,25 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   BrowseRestaurants: { first: 2 },
   ViewRestaurant: { id: kitchenEight.id },
   MockCustomerOrders: { first: 3 },
-  ManageRestaurant: { id: nightBakery.id },
   OpenRestaurant: { restaurantId: nightBakery.id },
   CloseRestaurant: { restaurantId: kitchenEight.id },
-  MyRestaurants: { first: 10 },
+  BoardKitchen: { restaurantId: kitchenEight.id },
+  BoardOwnedRestaurants: {},
+  ApplyKitchenAction: {
+    input: {
+      restaurantId: kitchenEight.id,
+      kitchenOrderId: "kitchen-order-received",
+      action: "ACCEPT",
+    },
+  },
+  BoardCourier: {},
+  SetCourierAvailability: { availability: "AVAILABLE" },
+  AcceptDeliveryOffer: { offerId: "offer-order-preparing" },
+  ApplyCourierDeliveryAction: {
+    deliveryId: "delivery-order-preparing",
+    action: "CONFIRM_PICKUP",
+  },
+  BoardOrderStatus: { id: "order-preparing" },
   PlaceOrder: {
     input: {
       restaurantId: kitchenEight.id,

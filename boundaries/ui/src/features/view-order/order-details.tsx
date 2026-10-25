@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { useParams } from "react-router-dom";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import { Button } from "../../shared/ui";
@@ -26,8 +25,8 @@ function useMoney() {
       .format(money.amount as Intl.StringNumericLiteral);
 }
 
-export function ViewOrderPage() {
-  const { orderId = "" } = useParams();
+// Status, progress, cancellation, items and history of one order.
+export function OrderDetails({ orderId }: { orderId: string }) {
   const { t } = useI18n();
   const { order, failed, refresh } = useOrderPolling(orderId);
 
@@ -79,7 +78,7 @@ function OrderView({
             <StatusIcon name={status.icon} />
           </span>
           <div>
-            <h1 id="order-title">{t(status.label)}</h1>
+            <h3 id="order-title">{t(status.label)}</h3>
             <p>{t(status.detail)}</p>
             <p className="order-placed">
               {t("order.placedAt", { time: time(order.placedAt) })}
@@ -121,7 +120,7 @@ function OrderView({
           aria-labelledby="order-summary-title"
           className="order-card order-summary"
         >
-          <h2 id="order-summary-title">{t("order.summary")}</h2>
+          <h4 id="order-summary-title">{t("order.summary")}</h4>
           <p className="order-restaurant">{order.restaurant.name}</p>
           <ul className="order-items">
             {order.items.map((item) => (
@@ -152,7 +151,7 @@ function OrderView({
           aria-labelledby="order-history-title"
           className="order-card order-history-card"
         >
-          <h2 id="order-history-title">{t("order.milestones")}</h2>
+          <h4 id="order-history-title">{t("order.milestones")}</h4>
           <ol className="order-history">
             {order.milestones.map((milestone) => (
               <li key={`${milestone.kind}-${milestone.occurredAt}`}>
@@ -181,9 +180,9 @@ function OrderProgress({
 
   return (
     <section aria-labelledby="order-progress-title" className="order-card">
-      <h2 className="sr-only" id="order-progress-title">
+      <h4 className="sr-only" id="order-progress-title">
         {t("order.progress")}
-      </h2>
+      </h4>
       <ol className="order-progress">
         {progressSteps.map((step, index) => {
           const state =
@@ -226,7 +225,7 @@ function EndNotice({ order }: { order: ViewedOrder }) {
   const end = endPresentation(order.endReason);
   return (
     <section className="order-card order-end" data-status={order.status}>
-      <h2>{t(end.title)}</h2>
+      <h4>{t(end.title)}</h4>
       <p>{t(end.detail)}</p>
     </section>
   );
@@ -246,7 +245,7 @@ function OrderMessage({
       aria-labelledby="order-message-title"
       className="order-page order-message"
     >
-      <h1 id="order-message-title">{title}</h1>
+      <h3 id="order-message-title">{title}</h3>
       <p>{detail}</p>
       {action}
     </section>
@@ -261,9 +260,9 @@ function OrderSkeleton() {
       aria-labelledby="order-loading"
       className="order-page"
     >
-      <h1 className="sr-only" id="order-loading">
+      <h3 className="sr-only" id="order-loading">
         {t("order.loading")}
-      </h1>
+      </h3>
       <div aria-hidden="true" className="order-skeleton">
         <span className="order-skeleton-line order-skeleton-title" />
         <span className="order-skeleton-line" />

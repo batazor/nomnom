@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -31,7 +30,7 @@ function renderApp(path: string) {
 }
 
 describe("customer application shell", () => {
-  it("opens the restaurant catalog on the mobile-first home route", async () => {
+  it("opens the order board on the mobile-first home route", async () => {
     Object.defineProperty(window, "innerWidth", {
       value: 390,
       configurable: true,
@@ -40,26 +39,22 @@ describe("customer application shell", () => {
 
     expect(screen.getByRole("main")).toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Рестораны рядом" }),
+      await screen.findByRole("heading", { level: 1, name: "Доска заказа" }),
     ).toBeInTheDocument();
     expect(document.querySelector(".app-shell")).toBeInTheDocument();
     expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   });
 
-  it("leads back to the catalog from the brand", async () => {
-    const user = userEvent.setup();
+  it("leads any other address back to the board", async () => {
     renderApp("/orders/order-preparing");
-    await screen.findByRole("heading", { level: 1, name: "Готовится" });
-
-    await user.click(screen.getByRole("link", { name: "nomnom" }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Рестораны рядом" }),
+      await screen.findByRole("heading", { level: 1, name: "Доска заказа" }),
     ).toBeInTheDocument();
   });
 
   it("has no detectable accessibility violations", async () => {
     const { container } = renderApp("/");
-    await screen.findByRole("heading", { level: 1, name: "Рестораны рядом" });
+    await screen.findByRole("heading", { level: 1, name: "Доска заказа" });
     const result = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
     });

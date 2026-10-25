@@ -37,9 +37,10 @@
         "VITE_LOCALE": "ru",
         "VITE_ENABLE_MOCKS": "false",
         "VITE_FARO_URL": "http://localhost:12347/collect",
-        "VITE_DEPLOYMENT_ENVIRONMENT": "kind"
+        "VITE_DEPLOYMENT_ENVIRONMENT": "kind",
+        "VITE_DEV_TOKENS_URL": "http://localhost:3011/tokens"
       },
-      "port": 4173
+      "port": 4174
     },
     {
       "name": "customer-ui-preview-mocks",

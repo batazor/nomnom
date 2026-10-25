@@ -75,9 +75,9 @@ export function CancelOrder({
 
   return (
     <section aria-labelledby="order-cancel-title" className="order-cancel">
-      <h2 className="sr-only" id="order-cancel-title">
+      <h4 className="sr-only" id="order-cancel-title">
         {t("order.cancel.action")}
-      </h2>
+      </h4>
 
       {showsAction ? (
         <div className="order-cancel-row">

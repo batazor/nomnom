@@ -1,12 +1,3 @@
-query ManageRestaurant($id: ID!) {
-  restaurant(id: $id) {
-    id
-    name
-    address
-    acceptingOrders
-  }
-}
-
 mutation OpenRestaurant($restaurantId: ID!) {
   openRestaurant(restaurantId: $restaurantId) {
     changed
@@ -27,19 +18,6 @@ mutation CloseRestaurant($restaurantId: ID!) {
       name
       address
       acceptingOrders
-    }
-  }
-}
-
-query MyRestaurants($first: Int!) {
-  myRestaurants(first: $first) {
-    edges {
-      node {
-        id
-        name
-        address
-        acceptingOrders
-      }
     }
   }
 }

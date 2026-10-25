@@ -2,6 +2,8 @@ export const supportedLocales = ["ru", "en"] as const;
 
 export type SupportedLocale = (typeof supportedLocales)[number];
 
+import type { OidcConfig } from "../auth/oidc";
+
 export type RuntimeConfig = Readonly<{
   publicGraphqlUrl: string;
   locale: SupportedLocale;
@@ -9,6 +11,10 @@ export type RuntimeConfig = Readonly<{
   // Faro collector (Alloy faro.receiver); without it browser telemetry is off.
   telemetryUrl?: string;
   environment: string;
+  // Dev token issuer of kind: access tokens of the demo users of the flow board.
+  devTokensUrl?: string;
+  // Browser login (ADR 35); without an issuer the sign-in buttons are hidden.
+  oidc?: OidcConfig;
 }>;
 
 type RuntimeEnv = Readonly<{
@@ -17,6 +23,10 @@ type RuntimeEnv = Readonly<{
   VITE_ENABLE_MOCKS?: string;
   VITE_FARO_URL?: string;
   VITE_DEPLOYMENT_ENVIRONMENT?: string;
+  VITE_DEV_TOKENS_URL?: string;
+  VITE_OIDC_ISSUER?: string;
+  VITE_OIDC_CLIENT_ID?: string;
+  VITE_OIDC_AUDIENCE?: string;
 }>;
 
 function parseHttpUrl(name: string, value: string): string {
@@ -53,6 +63,26 @@ export function parseRuntimeConfig(env: RuntimeEnv): RuntimeConfig {
       ? parseHttpUrl("VITE_FARO_URL", env.VITE_FARO_URL)
       : undefined,
     environment: env.VITE_DEPLOYMENT_ENVIRONMENT ?? "development",
+    devTokensUrl: env.VITE_DEV_TOKENS_URL
+      ? parseHttpUrl("VITE_DEV_TOKENS_URL", env.VITE_DEV_TOKENS_URL)
+      : undefined,
+    oidc: parseOidc(env),
+  });
+}
+
+function parseOidc(env: RuntimeEnv): OidcConfig | undefined {
+  if (!env.VITE_OIDC_ISSUER) return undefined;
+  return Object.freeze({
+    issuer: parseHttpUrl("VITE_OIDC_ISSUER", env.VITE_OIDC_ISSUER).replace(
+      /\/$/,
+      "",
+    ),
+    clientId: env.VITE_OIDC_CLIENT_ID || "nomnom-ui",
+    audience: env.VITE_OIDC_AUDIENCE || "nomnom-bff",
+    redirectUri: new URL(
+      "/auth/callback",
+      globalThis.location?.origin,
+    ).toString(),
   });
 }
 

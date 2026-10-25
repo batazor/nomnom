@@ -27,7 +27,7 @@ export function Menu({
 
   return (
     <section aria-labelledby="menu-title" className="restaurant-menu">
-      <h2 id="menu-title">{t("menu.title")}</h2>
+      <h4 id="menu-title">{t("menu.title")}</h4>
       <ul className="menu-items">
         {items.map((item) => {
           const inCart = quantities.get(item.id) ?? 0;
@@ -35,7 +35,7 @@ export function Menu({
           return (
             <li data-available={item.available} key={item.id}>
               <div className="menu-item-copy">
-                <h3>{item.name}</h3>
+                <h5>{item.name}</h5>
                 {item.description ? <p>{item.description}</p> : null}
                 <p className="menu-item-price">{money(item.price)}</p>
               </div>
