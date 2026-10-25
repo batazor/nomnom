@@ -3,7 +3,11 @@
 import contextlib
 import json
 import logging
+import os
+import socket
+import threading
 from datetime import datetime
+from typing import LiteralString
 
 import psycopg
 
@@ -18,13 +22,57 @@ ADVISORY_LOCK_KEY = int.from_bytes(b"payments", "big", signed=True)
 
 _MAX_ERROR_LENGTH = 1000
 
+# Deadline of one query on the lock session (seconds). A half-open TCP connection
+# (peer gone without FIN/RST) must not block the ownership check for minutes.
+LOCK_QUERY_TIMEOUT = 5.0
+
+# libpq options of the lock session: the kernel detects a dead peer of an idle session
+# in about keepalives_idle + keepalives_interval * keepalives_count seconds, and
+# tcp_user_timeout (ms; Linux only) bounds unacknowledged writes.
+_LOCK_CONNECT_OPTIONS: dict[str, int] = {
+    "connect_timeout": 5,
+    "keepalives": 1,
+    "keepalives_idle": 10,
+    "keepalives_interval": 5,
+    "keepalives_count": 3,
+    "tcp_user_timeout": 15_000,
+}
+
+_HOLDS_LOCK_QUERY = (
+    "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' "
+    "AND pid = pg_backend_pid() AND granted "
+    "AND database = (SELECT oid FROM pg_database WHERE datname = current_database()) "
+    "AND classid::bigint = %s AND objid::bigint = %s AND objsubid = 1)"
+)
+
+
+def advisory_lock_key_parts(key: int) -> tuple[int, int]:
+    """Split a bigint advisory lock key into ``pg_locks`` ``(classid, objid)``.
+
+    ``pg_advisory_lock(bigint)`` stores the high 32 bits in ``classid`` and the low
+    32 bits in ``objid`` (both unsigned ``oid``) with ``objsubid = 1``.
+    """
+    unsigned = key & 0xFFFF_FFFF_FFFF_FFFF
+    return unsigned >> 32, unsigned & 0xFFFF_FFFF
+
+
+class LockQueryTimeoutError(Exception):
+    """A query on the lock session missed its client-side deadline."""
+
 
 class PostgresOutboxStore:
     """Outbox queries plus a dedicated session connection holding the advisory lock."""
 
-    def __init__(self, database: PostgresDatabase, dsn: str) -> None:
+    def __init__(
+        self,
+        database: PostgresDatabase,
+        dsn: str,
+        *,
+        lock_query_timeout: float = LOCK_QUERY_TIMEOUT,
+    ) -> None:
         self._db = database
         self._dsn = dsn
+        self._lock_query_timeout = lock_query_timeout
         self._lock_conn: psycopg.Connection | None = None
 
     def try_lock(self) -> bool:
@@ -34,9 +82,21 @@ class PostgresOutboxStore:
         """
         if self._lock_conn is not None and self.holds_lock():
             return True
-        conn = psycopg.connect(self._dsn, autocommit=True)
+        conn = psycopg.connect(self._dsn, autocommit=True, **_LOCK_CONNECT_OPTIONS)
         try:
-            row = conn.execute("SELECT pg_try_advisory_lock(%s)", (ADVISORY_LOCK_KEY,)).fetchone()
+            # Server-side bound as well; the client-side deadline covers a dead network.
+            _bounded_fetchone(
+                conn,
+                "SELECT set_config('statement_timeout', %s, false)",
+                (f"{max(1, int(self._lock_query_timeout * 1000))}ms",),
+                self._lock_query_timeout,
+            )
+            row = _bounded_fetchone(
+                conn,
+                "SELECT pg_try_advisory_lock(%s)",
+                (ADVISORY_LOCK_KEY,),
+                self._lock_query_timeout,
+            )
         except BaseException:
             conn.close()
             raise
@@ -48,19 +108,28 @@ class PostgresOutboxStore:
         return False
 
     def holds_lock(self) -> bool:
-        """Round-trip on the lock session: the lock lives exactly as long as that session.
+        """Check in ``pg_locks`` that the lock session still owns the advisory lock.
 
-        libpq never reconnects silently, so a successful query on the same connection
-        means the same session and the same lock. A failed query drops the connection.
+        The query is bounded by TCP keepalives, ``statement_timeout`` and a client-side
+        deadline. An error, a missed deadline or a missing lock means the lock is lost:
+        the session is dropped and another replica may take over.
         """
         conn = self._lock_conn
         if conn is None:
             return False
         try:
-            conn.execute("SELECT 1")
-        except psycopg.Error:
-            # Session lost: so is the lock; another replica may take over.
+            row = _bounded_fetchone(
+                conn,
+                _HOLDS_LOCK_QUERY,
+                advisory_lock_key_parts(ADVISORY_LOCK_KEY),
+                self._lock_query_timeout,
+            )
+        except psycopg.Error, LockQueryTimeoutError:
             logger.warning("outbox relay lock session lost", exc_info=True)
+            self._close_lock_conn()
+            return False
+        if row is None or not row[0]:
+            logger.warning("outbox relay lock no longer held by its session")
             self._close_lock_conn()
             return False
         return True
@@ -71,8 +140,13 @@ class PostgresOutboxStore:
         if conn is None:
             return
         try:
-            conn.execute("SELECT pg_advisory_unlock(%s)", (ADVISORY_LOCK_KEY,))
-        except psycopg.Error:
+            _bounded_fetchone(
+                conn,
+                "SELECT pg_advisory_unlock(%s)",
+                (ADVISORY_LOCK_KEY,),
+                self._lock_query_timeout,
+            )
+        except psycopg.Error, LockQueryTimeoutError:
             logger.warning("outbox relay unlock failed", exc_info=True)
         self._close_lock_conn()
 
@@ -150,6 +224,61 @@ class PostgresOutboxStore:
                 "WHERE published_at IS NULL GROUP BY topic"
             ).fetchall()
         return [TopicBacklog(topic, int(count), oldest) for topic, count, oldest in rows]
+
+
+def _bounded_fetchone(
+    conn: psycopg.Connection,
+    query: LiteralString,
+    params: tuple[int | str, ...],
+    timeout: float,
+) -> tuple[object, ...] | None:
+    """Run ``query`` and fetch one row, failing after ``timeout`` seconds.
+
+    On the deadline the socket is shut down, which wakes libpq at once; the connection
+    is unusable afterwards and the caller drops it.
+
+    Raises:
+        LockQueryTimeoutError: the deadline passed, even if the query then finished.
+        psycopg.Error: the query failed.
+    """
+    guard = threading.Lock()
+    finished = False
+    fired = False
+
+    def _expire() -> None:
+        nonlocal fired
+        with guard:
+            if finished:
+                return
+            fired = True
+        _shutdown_socket(conn)
+
+    timer = threading.Timer(timeout, _expire)
+    timer.daemon = True
+    timer.start()
+    try:
+        row = conn.execute(query, params).fetchone()
+    except psycopg.Error as error:
+        if fired:
+            raise LockQueryTimeoutError(f"lock session query exceeded {timeout}s") from error
+        raise
+    finally:
+        with guard:
+            finished = True
+        timer.cancel()
+    if fired:
+        raise LockQueryTimeoutError(f"lock session query exceeded {timeout}s")
+    return row
+
+
+def _shutdown_socket(conn: psycopg.Connection) -> None:
+    # Дубликат дескриптора: shutdown рвёт общий сокет, а свой дескриптор libpq закроет сам.
+    with contextlib.suppress(OSError, psycopg.Error):
+        dup = socket.socket(fileno=os.dup(conn.pgconn.socket))
+        try:
+            dup.shutdown(socket.SHUT_RDWR)
+        finally:
+            dup.close()
 
 
 def _metadata(value: object) -> dict[str, str]:

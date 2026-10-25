@@ -27,6 +27,10 @@ identity:
   # grpc-caller — фикстура проверок (manifests/fixtures/net-probe.yaml): допущенный
   # workload, но не делегат; с ним проверяется отказ assertion от чужого workload.
   serviceAccounts: nomnom-bff/bff=bff,nomnom-bff/grpc-caller=grpc-caller
+  # Каталог Place Order читает GetRestaurant и GetMenu restaurants через gateway с
+  # projected token audience nomnom.restaurants (IDENTITY__TOKEN_DIR).
+  tokenAudiences:
+    - nomnom.restaurants
   # ADR 32: user assertions BFF (ConfigMap bff-jwks создаёт scripts/bff-identity.sh);
   # передавать user subject может только service bff.
   userJwksConfigMap: bff-jwks

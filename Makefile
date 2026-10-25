@@ -29,8 +29,10 @@ kind-deploy: ## Skaffold: собрать образы, загрузить в kin
 	@$(SKAFFOLD) run $(SKAFFOLD_APP_FLAGS) --status-check=true
 kind-dev: ## Skaffold dev loop: пересборка и передеплой приложений при изменении исходников
 	@$(SKAFFOLD) dev $(SKAFFOLD_APP_FLAGS)
-kind-test: ## проверки gateway и NetworkPolicy (фаза A без политик, фаза B с ними)
+kind-test: ## проверки окружения: verify.sh (NetworkPolicy A/B и др.) и Chainsaw (ops/kind/e2e)
 	@$(KIND_SCRIPTS)/verify.sh
+	@cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$(CHAINSAW_VERSION) test \
+	  --kube-context kind-$(KIND_CLUSTER_NAME) --config .chainsaw.yaml --test-dir .
 kind-policies: ## применить NetworkPolicy
 	@$(KIND_SCRIPTS)/policies.sh apply
 kind-policies-delete: ## удалить NetworkPolicy

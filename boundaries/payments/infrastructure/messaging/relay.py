@@ -122,7 +122,7 @@ class OutboxRelay:
                 recorded first.
         """
         if not self._store.try_lock():
-            # Standby: the active replica reports the backlog.
+            # Standby: zeros only, the active replica reports the real backlog.
             self._metrics.set_backlog([])
             return CycleResult(active=False)
         published = 0
@@ -135,7 +135,7 @@ class OutboxRelay:
                     "outbox relay lock lost mid-batch, stopping after %d published records",
                     published,
                 )
-                # Standby from now on: the new active replica reports the backlog.
+                # Standby from now on: zeros only, the new active replica reports it.
                 self._metrics.set_backlog([])
                 return CycleResult(active=True, published=published, lock_lost=True)
             started = time.perf_counter()

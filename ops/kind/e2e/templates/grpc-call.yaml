@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+# Вызов gRPC-метода через internal gateway настоящим клиентом (grpcurl с descriptor sets
+# контрактов, образ e2e/probe) из fixture grpc-caller — изнутри nomnom-bff, под его
+# NetworkPolicy и с projected token ServiceAccount grpc-caller (ADR 27).
+#
+# Bindings (обязательные, кроме request): method — <полное имя сервиса>/<метод>;
+# authorize — передавать ли token; code и message — ожидаемый ответ (message пуст у
+# локального ответа Envoy); request — JSON сообщения, по умолчанию {}. Bindings
+# шаблона перекрывают bindings сценария, поэтому значений по умолчанию у ожидаемых полей нет.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: grpc-call
+spec:
+  bindings:
+    - name: request
+      value: '{}'
+    - name: gateway
+      value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+  try:
+    - script:
+        env:
+          - name: METHOD
+            value: ($method)
+          - name: REQUEST
+            value: ($request)
+          - name: AUTHORIZE
+            value: (to_string($authorize))
+          - name: GATEWAY
+            value: ($gateway)
+        # Ответ с ошибкой grpcurl печатает в stderr как JSON {code, message} (-format-error);
+        # 2>&1 внутри pod отделяет его от служебных строк kubectl exec.
+        content: |
+          kubectl -n nomnom-bff exec deploy/grpc-caller -- sh -c '
+            request=$1 gateway=$2 method=$3
+            set --
+            [ "$0" = true ] && set -- -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/nomnom.orders)"
+            grpcurl -plaintext -max-time 5 -format-error \
+              -protoset /protos/nomnom.binpb -protoset /protos/fixtures.binpb \
+              "$@" -d "$request" "$gateway" "$method" 2>&1 || true
+          ' "$AUTHORIZE" "$REQUEST" "$GATEWAY" "$METHOD"
+        check:
+          ($error): ~
+          (json_parse($stdout).code): ($code)
+          # Локальный ответ Envoy (UNIMPLEMENTED) приходит без message.
+          (json_parse($stdout).message || ''): ($message)

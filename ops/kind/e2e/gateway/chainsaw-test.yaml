@@ -1,0 +1,106 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+# Реестр маршрутов internal gateway (ADR 15, ops/kind/README.md): каждый опубликованный
+# метод доходит до своего backend'а, неопубликованные получают UNIMPLEMENTED от Envoy.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: gateway-registry
+spec:
+  description: Все GRPCRoute приняты gateway, ссылки на backend'ы разрешены.
+  steps:
+    - try:
+        - assert:
+            resource:
+              apiVersion: gateway.networking.k8s.io/v1
+              kind: GRPCRoute
+              metadata:
+                namespace: nomnom-gateway
+              status:
+                (parents[0].conditions[?type == 'Accepted'].status): ['True']
+                (parents[0].conditions[?type == 'ResolvedRefs'].status): ['True']
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: gateway-routes-to-backends
+spec:
+  description: >
+    Команды Order Fulfillment доходят до backend'а: ответ формирует backend, а не Envoy.
+    Token grpc-caller выпущен для audience nomnom.orders, поэтому restaurants, delivery и
+    payments отвечают UNAUTHENTICATED своим текстом.
+  scenarios:
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/CreateDelivery}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/ReplanDelivery}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.delivery.v1.DeliveryService/CancelDelivery}
+        - {name: message, value: verified caller identity is required}
+    - bindings:
+        - {name: method, value: nomnom.payments.v1.PaymentsService/CreatePayment}
+        - {name: message, value: invalid caller identity}
+    - bindings:
+        - {name: method, value: nomnom.payments.v1.PaymentsService/AuthorizePayment}
+        - {name: message, value: invalid caller identity}
+    - bindings:
+        - {name: method, value: nomnom.payments.v1.PaymentsService/CapturePayment}
+        - {name: message, value: invalid caller identity}
+    - bindings:
+        - {name: method, value: nomnom.payments.v1.PaymentsService/CancelAuthorization}
+        - {name: message, value: invalid caller identity}
+    - bindings:
+        - {name: method, value: nomnom.payments.v1.PaymentsService/RefundPayment}
+        - {name: message, value: invalid caller identity}
+  steps:
+    - use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: authorize, value: true}
+            - {name: code, value: 16}
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: gateway-routes-orders
+spec:
+  description: Вызов OrdersService без identity доходит до orders и отклоняется им.
+  steps:
+    - use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: method, value: nomnom.orders.v1.OrdersService/ListCustomerOrders}
+            - {name: authorize, value: false}
+            - {name: code, value: 16}
+            - {name: message, value: caller identity is not authenticated}
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: gateway-rejects-unregistered
+spec:
+  description: >
+    Незарегистрированный сервис и метод без вызывающего (команда кухни) получают
+    UNIMPLEMENTED от Envoy и не доходят до backend'а.
+  scenarios:
+    - bindings:
+        - {name: method, value: nomnom.unknown.v1.UnknownService/Call}
+    - bindings:
+        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder}
+  steps:
+    - use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: authorize, value: true}
+            - {name: code, value: 12}
+            - {name: message, value: ''}

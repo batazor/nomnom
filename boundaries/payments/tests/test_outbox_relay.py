@@ -1,16 +1,20 @@
 """Outbox relay logic of ADR 31: headers, head-of-line, retention, single active instance."""
 
+import socket
 import threading
 import time
 import unittest
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any, ClassVar
+from unittest import mock
 
+import psycopg
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
-from infrastructure.messaging import OutboxRecord, OutboxRelay, kafka_headers
+from infrastructure.messaging import OutboxRecord, OutboxRelay, PostgresOutboxStore, kafka_headers
+from infrastructure.messaging.postgres_store import ADVISORY_LOCK_KEY, advisory_lock_key_parts
 from infrastructure.messaging.relay import (
     FatalPublishError,
     PublishError,
@@ -24,6 +28,7 @@ from pkg.config import KafkaSettings, OutboxSettings
 
 NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
 TOPIC = "payments.v1.payment-events"
+_TOPIC_ATTR = {"messaging.destination.name": TOPIC}
 
 
 def _record(seq: int, occurred_at: datetime = NOW - timedelta(seconds=2)) -> OutboxRecord:
@@ -304,9 +309,10 @@ class RelayCycleTest(unittest.TestCase):
         self.assertEqual(set(store.published), {1, 2})
         self.assertEqual(store.failures, {})
         self.assertEqual((result.published, result.failed, result.lock_lost), (2, False, True))
-        # No retention cleanup and no backlog report without the lock.
+        # No retention cleanup and no backlog read without the lock: zeros only.
         self.assertEqual(store.cutoffs, [])
-        self.assertEqual(_points(self.reader).get("nomnom.outbox.pending.messages", []), [])
+        pending = _points(self.reader)["nomnom.outbox.pending.messages"]
+        self.assertEqual([(dict(p.attributes), p.value) for p in pending], [(_TOPIC_ATTR, 0)])
 
     def test_fatal_publish_error_is_recorded_and_raised(self) -> None:
         store = FakeStore([_record(1), _record(2), _record(3)])
@@ -327,6 +333,133 @@ class RelayCycleTest(unittest.TestCase):
         self.assertEqual(store.published, {})
         self.assertEqual(store.failures, {})
         self.assertEqual((result.published, result.failed), (0, False))
+
+
+class BacklogGaugesTest(unittest.TestCase):
+    def _observed(self, reader: InMemoryMetricReader) -> dict[str, dict[str, float]]:
+        return {
+            name: {p.attributes["messaging.destination.name"]: p.value for p in points}
+            for name, points in _points(reader).items()
+            if name.startswith(("nomnom.outbox.pending", "nomnom.outbox.oldest_pending"))
+        }
+
+    def test_nothing_reported_before_first_backlog(self) -> None:
+        _, reader = _metrics()
+        self.assertEqual(self._observed(reader), {})
+
+    def test_known_topic_reports_zero_without_backlog(self) -> None:
+        metrics, reader = _metrics()
+        metrics.set_backlog([])
+        observed = self._observed(reader)
+        self.assertEqual(observed["nomnom.outbox.pending.messages"], {TOPIC: 0})
+        self.assertEqual(observed["nomnom.outbox.oldest_pending.age"], {TOPIC: 0.0})
+
+    def test_drained_topic_reports_zero_instead_of_disappearing(self) -> None:
+        metrics, reader = _metrics()
+        other = "payments.v1.other"
+        metrics.set_backlog(
+            [
+                TopicBacklog(TOPIC, 3, NOW - timedelta(seconds=40)),
+                TopicBacklog(other, 1, NOW - timedelta(seconds=5)),
+            ]
+        )
+        observed = self._observed(reader)
+        self.assertEqual(observed["nomnom.outbox.pending.messages"], {TOPIC: 3, other: 1})
+        self.assertEqual(observed["nomnom.outbox.oldest_pending.age"], {TOPIC: 40.0, other: 5.0})
+        metrics.set_backlog([])
+        observed = self._observed(reader)
+        self.assertEqual(observed["nomnom.outbox.pending.messages"], {TOPIC: 0, other: 0})
+        self.assertEqual(observed["nomnom.outbox.oldest_pending.age"], {TOPIC: 0.0, other: 0.0})
+
+    def test_relay_cycle_after_drain_reports_zero(self) -> None:
+        metrics, reader = _metrics()
+        store = FakeStore([_record(1)])
+        relay = OutboxRelay(
+            store, FakePublisher(), batch_size=10, retention=timedelta(days=7), metrics_=metrics
+        )
+        relay.run_once()
+        observed = self._observed(reader)
+        self.assertEqual(observed["nomnom.outbox.pending.messages"], {TOPIC: 0})
+        self.assertEqual(observed["nomnom.outbox.oldest_pending.age"], {TOPIC: 0.0})
+
+
+class LockOwnershipCheckTest(unittest.TestCase):
+    def test_key_split_matches_pg_locks_classid_objid(self) -> None:
+        self.assertEqual(advisory_lock_key_parts(0x0000_0001_0000_0002), (1, 2))
+        self.assertEqual(advisory_lock_key_parts(-1), (0xFFFF_FFFF, 0xFFFF_FFFF))
+        self.assertEqual(advisory_lock_key_parts(-(2**63)), (0x8000_0000, 0))
+        classid, objid = advisory_lock_key_parts(ADVISORY_LOCK_KEY)
+        self.assertEqual((classid << 32) | objid, int.from_bytes(b"payments", "big"))
+
+    def _store_with(self, conn: mock.MagicMock, timeout: float = 5.0) -> PostgresOutboxStore:
+        store = PostgresOutboxStore(mock.MagicMock(), "postgresql://x", lock_query_timeout=timeout)
+        with mock.patch("infrastructure.messaging.postgres_store.psycopg.connect") as connect:
+            connect.return_value = conn
+            self.assertTrue(store.try_lock())
+        options = connect.call_args.kwargs
+        self.assertEqual(options["keepalives"], 1)
+        self.assertTrue(
+            {"keepalives_idle", "keepalives_interval", "keepalives_count"} <= set(options)
+        )
+        return store
+
+    def _conn(self, held: object) -> mock.MagicMock:
+        conn = mock.MagicMock()
+        conn.execute.return_value.fetchone.side_effect = [("5000ms",), (True,), held]
+        return conn
+
+    def test_lock_held_checks_pg_locks_with_key_parts(self) -> None:
+        conn = self._conn((True,))
+        store = self._store_with(conn)
+        self.assertTrue(store.holds_lock())
+        query, params = conn.execute.call_args.args
+        self.assertIn("pg_locks", query)
+        self.assertIn("pg_backend_pid()", query)
+        self.assertEqual(params, advisory_lock_key_parts(ADVISORY_LOCK_KEY))
+        conn.close.assert_not_called()
+
+    def test_lock_missing_from_session_is_lost(self) -> None:
+        conn = self._conn((False,))
+        store = self._store_with(conn)
+        self.assertFalse(store.holds_lock())
+        conn.close.assert_called_once()
+        self.assertFalse(store.holds_lock())
+
+    def test_query_error_is_lost(self) -> None:
+        conn = mock.MagicMock()
+        conn.execute.return_value.fetchone.side_effect = [
+            ("5000ms",),
+            (True,),
+            psycopg.OperationalError("terminated"),
+        ]
+        store = self._store_with(conn)
+        self.assertFalse(store.holds_lock())
+        conn.close.assert_called_once()
+
+    def test_query_past_deadline_is_lost(self) -> None:
+        # The libpq socket of a half-open connection: the reply never arrives.
+        client, server = socket.socketpair()
+        self.addCleanup(client.close)
+        self.addCleanup(server.close)
+        conn = mock.MagicMock()
+        conn.pgconn.socket = client.fileno()
+        replies = iter([("5000ms",), (True,)])
+
+        def fetchone() -> object:
+            reply = next(replies, None)
+            if reply is not None:
+                return reply
+            # Blocks like libpq until the deadline shuts the socket down.
+            if client.recv(1) == b"":
+                raise psycopg.OperationalError("server closed the connection unexpectedly")
+            return (True,)
+
+        conn.execute.return_value.fetchone.side_effect = fetchone
+        store = self._store_with(conn, timeout=0.1)
+        started = time.monotonic()
+        self.assertFalse(store.holds_lock())
+        self.assertLess(time.monotonic() - started, 2.0)
+        conn.close.assert_called_once()
 
 
 class RelayWorkerTest(unittest.TestCase):

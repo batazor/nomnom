@@ -7,7 +7,9 @@ auto-creation on). Tables are truncated before every test. The shutdown tests of
 ``KafkaPublisher`` need no broker: they point at an address nobody listens on.
 """
 
+import contextlib
 import os
+import socket
 import threading
 import time
 import unittest
@@ -17,6 +19,7 @@ from datetime import timedelta
 from typing import Any, override
 
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from infrastructure.messaging import (
     KafkaPublisher,
@@ -28,6 +31,7 @@ from infrastructure.messaging import (
 )
 from infrastructure.messaging.events import events_pb2
 from infrastructure.messaging.outbox import PublishInterruptedError
+from infrastructure.messaging.postgres_store import ADVISORY_LOCK_KEY
 from infrastructure.postgres import (
     PAYMENT_EVENTS_TOPIC,
     PostgresDatabase,
@@ -60,6 +64,45 @@ def _headers(message: Any) -> dict[str, str]:
     for name, value in message.headers() or []:
         result[name] = value.decode() if isinstance(value, bytes) else str(value or "")
     return result
+
+
+class _BlackholeProxy:
+    """TCP proxy to the Postgres of ``dsn`` that can silently drop all traffic."""
+
+    def __init__(self, dsn: str) -> None:
+        params = conninfo_to_dict(dsn)
+        self._upstream = (str(params.get("host") or "localhost"), int(params.get("port") or 5432))
+        self.blackhole = threading.Event()
+        self._closed = threading.Event()
+        self._sockets: list[socket.socket] = []
+        self._listener = socket.create_server(("127.0.0.1", 0))
+        self._sockets.append(self._listener)
+        self.dsn = make_conninfo(dsn, host="127.0.0.1", port=self._listener.getsockname()[1])
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    def _accept(self) -> None:
+        while not self._closed.is_set():
+            try:
+                client, _ = self._listener.accept()
+                upstream = socket.create_connection(self._upstream)
+            except OSError:
+                return
+            self._sockets += [client, upstream]
+            for src, dst in ((client, upstream), (upstream, client)):
+                threading.Thread(target=self._pump, args=(src, dst), daemon=True).start()
+
+    def _pump(self, src: socket.socket, dst: socket.socket) -> None:
+        with contextlib.suppress(OSError):
+            while data := src.recv(65536):
+                if not self.blackhole.is_set():
+                    dst.sendall(data)
+
+    def close(self) -> None:
+        self._closed.set()
+        for sock in self._sockets:
+            with contextlib.suppress(OSError):
+                sock.shutdown(socket.SHUT_RDWR)
+            sock.close()
 
 
 class _Clock:
@@ -136,11 +179,57 @@ class RelayLockIntegrationTest(_DatabaseCase):
             self.assertTrue(first.try_lock())
             self.assertTrue(first.holds_lock())
             self._terminate_lock_session()
+            started = time.monotonic()
             self.assertFalse(first.holds_lock())
+            self.assertLess(time.monotonic() - started, 2.0)
             self.assertTrue(second.try_lock())
             self.assertFalse(first.try_lock())
         finally:
             first.unlock()
+            second.unlock()
+
+    def test_lock_released_on_its_own_session_is_lost(self) -> None:
+        store = PostgresOutboxStore(self.database, DSN)
+        try:
+            self.assertTrue(store.try_lock())
+            self.assertTrue(store.holds_lock())
+            # The session stays alive, the lock does not: a liveness ping would pass.
+            with self.database.connection() as conn:
+                pid = conn.execute(
+                    "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted"
+                ).fetchone()
+            self.assertIsNotNone(pid)
+            lock_conn = store._lock_conn
+            assert lock_conn is not None
+            lock_conn.execute("SELECT pg_advisory_unlock(%s)", (ADVISORY_LOCK_KEY,))
+            self.assertFalse(store.holds_lock())
+            self.assertIsNone(store._lock_conn)
+        finally:
+            store.unlock()
+
+    def test_half_open_lock_session_is_lost_within_deadline(self) -> None:
+        proxy = _BlackholeProxy(DSN)
+        self.addCleanup(proxy.close)
+        store = PostgresOutboxStore(self.database, proxy.dsn, lock_query_timeout=0.5)
+        try:
+            self.assertTrue(store.try_lock())
+            self.assertTrue(store.holds_lock())
+            # The network drops every packet; no FIN or RST reaches the relay.
+            proxy.blackhole.set()
+            started = time.monotonic()
+            self.assertFalse(store.holds_lock())
+            self.assertLess(time.monotonic() - started, 3.0)
+        finally:
+            store.unlock()
+            # Closing the upstream side ends the server session and frees the lock.
+            proxy.close()
+        deadline = time.monotonic() + 10
+        second = PostgresOutboxStore(self.database, DSN)
+        try:
+            while not second.try_lock():
+                self.assertLess(time.monotonic(), deadline, "lock never released")
+                time.sleep(0.05)
+        finally:
             second.unlock()
 
     def test_relay_stops_batch_when_lock_session_dies(self) -> None:

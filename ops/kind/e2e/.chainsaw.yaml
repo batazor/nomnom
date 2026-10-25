@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/configuration-chainsaw-v1alpha1.json
+# Kind E2E на Kyverno Chainsaw: тесты работают с уже развёрнутым окружением (make kind-deploy)
+# и не создают своих ресурсов в неймспейсах приложений.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Configuration
+metadata:
+  name: kind-e2e
+spec:
+  timeouts:
+    assert: 60s
+    exec: 30s
+  # Неймспейс тестов — fixture вызывающего: Chainsaw его не создаёт и не удаляет.
+  namespace: nomnom-bff
+  reportFormat: JUNIT-TEST
+  reportPath: ../.artifacts
+  reportName: chainsaw-report

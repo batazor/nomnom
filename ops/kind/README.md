@@ -181,14 +181,33 @@ curl --cacert "$(ops/kind/scripts/local-ca.sh)" --resolve webhooks.nomnom.localh
 
 ## Проверки
 
-`make kind-test` выполняет:
+`make kind-test` запускает `scripts/verify.sh` и тесты Chainsaw из `e2e/`
+([ADR 33](../../docs/adr/0033-kind-e2e-on-kyverno-chainsaw-and-grpcurl.md)). Проверки
+переносятся из `verify.sh` в Chainsaw по секциям; новые пишутся сразу в Chainsaw.
+
+### Chainsaw (`e2e/`)
+
+Тесты работают с уже развёрнутым окружением и вызывают бизнес-API настоящим gRPC-клиентом:
+`grpcurl` с descriptor sets всех контрактов (образ `e2e/probe`, fixture `grpc-caller` в
+`nomnom-bff` с projected token). Вызов описан один раз — шаблон шага
+`e2e/templates/grpc-call.yaml` (bindings `method`, `authorize`, `code`, `message`, `request`);
+наборы методов задаются `scenarios`. Отчёт JUnit — `.artifacts/chainsaw-report.xml`.
+
+| Тест | Проверка |
+| --- | --- |
+| `gateway-registry` | все `GRPCRoute` `Accepted` и `ResolvedRefs` |
+| `gateway-routes-orders` | `OrdersService` без identity доходит до orders: `UNAUTHENTICATED` от backend'а |
+| `gateway-routes-to-backends` | 10 команд Order Fulfillment доходят до restaurants, delivery и payments: ответ backend'а, не Envoy |
+| `gateway-rejects-unregistered` | незарегистрированный сервис и команда кухни без вызывающего: `UNIMPLEMENTED` от Envoy |
+
+Один тест: `cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$CHAINSAW_VERSION test --kube-context kind-nomnom-test --config .chainsaw.yaml --test-dir . --include-test-regex 'chainsaw/gateway-registry'`.
+
+### verify.sh
 
 | # | Проверка | Статус |
 | --- | --- | --- |
 | A | без NetworkPolicy `orders → restaurants` и `outsider → restaurants` напрямую отвечают 200, gateway доступен | выполняется |
-| 1 | вызов Orders RPC через gateway достигает backend и требует identity (`UNAUTHENTICATED`) | выполняется |
 | 2 | с NetworkPolicy прямые `orders ↔ restaurants` получают silent drop (curl timeout, не DNS и не refused) при выполненных условиях: backend Available, имя резолвится, gateway доступен и Orders RPC через него проходит; Hubble фиксирует `DROPPED`; `nomnom-outsider` не достаёт ни backend, ни gateway | выполняется |
-| 3 | неизвестный gRPC-сервис через gateway → HTTP 404 (`UNIMPLEMENTED`) | выполняется |
 | 4 | authorization metadata доходит до backend (`PERMISSION_DENIED` от SpiceDB); случайный `traceparent` вызывающего продолжен server span `orders` (тот же trace id, parent — span вызывающего) в логах `trace-capture` | выполняется |
 | 5 | deadline вызывающего соблюдается backend'ом (`context deadline exceeded` от orders, а не timeout Envoy); retries только у идемпотентных методов | deadline выполняется; при недоступном SpiceDB (Cilium deny `fixtures/deny-orders-spicedb.yaml`) `ListCustomerOrders` повторяется ровно 2 раза, `RequestOrderCancellation` — ни разу (статистика Envoy `upstream_rq_retry`); route timeout 300 s задан `BackendTrafficPolicy` |
 | 6 | инфраструктурные подключения под политиками | DNS, `orders` → свой PostgreSQL, Kafka, Temporal, Kafka из других контекстов, запрет чужой БД и Temporal для не-`orders` выполняются; Alloy — только с `GRAFANA_CLOUD=1`; MongoDB `restaurants` **заблокирована**: приложение её ещё не использует |

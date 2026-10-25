@@ -116,10 +116,14 @@ Temporal Activities и телеметрия переводят вид своим
 Preparation Issue вызывает Kafka consumer, Complete Order и Fail or Cancel Order — только
 fulfillment workflow.
 
-`PlaceOrder` оформляет заказ для verified subject: поля customer в запросе нет. Пока resolver
-выдаёт только service subjects (ADR 27), вызов отвечает `PERMISSION_DENIED`. Catalog snapshot
+`PlaceOrder` оформляет заказ для verified subject: поля customer в запросе нет. Customer — user
+subject из user assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)):
+BFF передаёт свой service token и `x-nomnom-user-assertion`; service subject без assertion
+(в том числе сам BFF) получает `PERMISSION_DENIED`. Catalog snapshot
 до транзакции читает адаптер [`slices/order/infrastructure/catalog`](slices/order/infrastructure/catalog)
-(FR-497): `restaurants.GetRestaurant` (`is_open`) и `GetMenu` через internal gateway с общим
+(FR-497): `restaurants.GetRestaurant` (`is_open`) и `GetMenu` через internal gateway
+(`INTERNAL_GATEWAY_ADDR`; без адреса при `FULFILLMENT__NEIGHBOURS=grpc` по умолчанию процесс не
+стартует) с projected token `nomnom.restaurants` API orders (`IDENTITY__TOKEN_DIR`, если задан) и общим
 deadline `CATALOG__TIMEOUT`. В snapshot попадают только запрошенные позиции; отсутствующие в меню
 недоступны. Закрытый ресторан — `RESTAURANT_NOT_ACCEPTING_ORDERS`, `NOT_FOUND` ресторана или меню и
 пустое меню — `RESTAURANT_NOT_FOUND`, цены в разных валютах — `INVALID_ORDER`, любая другая ошибка
@@ -408,9 +412,6 @@ Delivery запросов к SpiceDB не делает и `authorization_revisio
 `order#delivery` сохраняется в `authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и
 redelivery повторяет событие.
 
-Не реализованы: выпуск user assertions в BFF (verifier в `orders` готов), поэтому Place Order пока
-недоступен клиентам.
-
 Снятие курьера без замены (`CourierUnassignedFromDelivery`) только очищает `courier_id` без запроса
 к SpiceDB, отмена Delivery (`DeliveryCancelled`) удаляет `order#delivery` и очищает
 `delivery_id`; событие применяется, если относится к сохранённой Delivery и его версия не ниже
@@ -481,7 +482,7 @@ make temporal-dev-stop
 `jti` → `Subject{user, sub}`. Повторный или пустой assertion и любое нарушение — `UNAUTHENTICATED`; принятие и
 отказ пишутся в log с делегатом и `jti`, без самих tokens.
 
-`FULFILLMENT__NEIGHBOURS=unavailable` (по умолчанию) — вызовы соседей завершаются retryable ошибкой, workflow ждёт на текущем шаге; `simulated` одобряет вызовы без эффекта и предназначен только для локальной проверки; `grpc` вызывает командные API `payments`, `restaurants`, `delivery` через `INTERNAL_GATEWAY_ADDR` клиентами [`neighbours/grpcclient`](slices/fulfillment/infrastructure/neighbours/grpcclient). Подключение к gateway, projected token целевого контекста из `IDENTITY__TOKEN_DIR` (ADR 27) и сгенерированные клиенты соседей лежат в общем пакете [`pkg/gateway`](pkg/gateway) (Go-код генерируется `make proto-generate` из workspace-модулей до публикации в BSR): им пользуются и Activities fulfillment, и каталог Place Order, поэтому слайс `order` не зависит от слайса `fulfillment`; `UNAUTHENTICATED` и `PERMISSION_DENIED` клиент считает retryable.
+`FULFILLMENT__NEIGHBOURS=unavailable` — явный fallback: вызовы соседей завершаются retryable ошибкой, workflow ждёт на текущем шаге, catalog Place Order отвечает `UNAVAILABLE`; `simulated` одобряет вызовы без эффекта и предназначен только для локальной проверки (catalog не симулируется); `grpc` (по умолчанию, требует `INTERNAL_GATEWAY_ADDR`) вызывает командные API `payments`, `restaurants`, `delivery` через `INTERNAL_GATEWAY_ADDR` клиентами [`neighbours/grpcclient`](slices/fulfillment/infrastructure/neighbours/grpcclient). Подключение к gateway, projected token целевого контекста из `IDENTITY__TOKEN_DIR` (ADR 27) и сгенерированные клиенты соседей лежат в общем пакете [`pkg/gateway`](pkg/gateway) (Go-код генерируется `make proto-generate` из workspace-модулей до публикации в BSR): им пользуются и Activities fulfillment, и каталог Place Order, поэтому слайс `order` не зависит от слайса `fulfillment`; `UNAUTHENTICATED` и `PERMISSION_DENIED` клиент считает retryable.
 
 ## Проверка
 
@@ -494,6 +495,10 @@ brew install golangci-lint
 ```bash
 make check
 ```
+
+Place Order end to end без кластера — [`infrastructure/grpc/placeorder_e2e_test.go`](infrastructure/grpc/placeorder_e2e_test.go):
+production resolver по общим векторам `tests/identity/fixtures` (service token BFF и user assertion) и
+адаптер catalog против fake `restaurants` по gRPC; входит в `make test`.
 
 Автоформатирование:
 
