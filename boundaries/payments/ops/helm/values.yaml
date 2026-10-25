@@ -63,7 +63,12 @@ securityContext:
   privileged: false
   readOnlyRootFilesystem: false
 
+# Команда контейнера; пусто — CMD образа. Relay-release задаёт свою (values-relay.yaml).
+command: []
+
 service:
+  # false — без Service и бизнес-порта контейнера (Outbox relay).
+  enabled: true
   type: ClusterIP
   # Порт Service и порт приложения. Приложение слушает 8084 по умолчанию
   # (переменная SERVER__PORT или PORT); targetPort должен совпадать с портом,

@@ -1,0 +1,17 @@
+# Outbox relay restaurants (ADR 13, ADR 31): отдельный release того же chart, один активный экземпляр.
+#   helm upgrade --install restaurants-relay ops/helm -f ops/helm/values-relay.yaml
+# Kafka и хранилище задаются values окружения (env KAFKA__*, OUTBOX__*).
+component: relay
+
+# Advisory lock / lease держит один активный экземпляр; replicas — только failover.
+replicaCount: 1
+
+command: ["/usr/bin/tini", "--", "node", "dist/cmd/restaurants-relay/main.js"]
+
+service:
+  enabled: false
+
+mongodb:
+  # Коллекции и индексы создаёт init container release restaurants.
+  migrate:
+    enabled: false

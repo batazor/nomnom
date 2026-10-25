@@ -1,0 +1,12 @@
+# Values тестового kind-окружения для release payments-relay chart boundaries/payments/ops/helm
+# поверх values-relay.yaml (ADR 31). image задаёт Skaffold (setValueTemplates).
+image:
+  pullPolicy: Never
+
+env:
+  KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
+  KAFKA__CLIENT_ID: payments-relay
+
+database:
+  urlSecret:
+    name: payments-postgres

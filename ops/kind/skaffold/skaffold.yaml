@@ -226,6 +226,42 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
           image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
+      # Outbox relay payments (ADR 31): тот же образ и chart, один активный экземпляр.
+      - name: payments-relay
+        chartPath: ../../../boundaries/payments/ops/helm
+        namespace: nomnom-payments
+        createNamespace: true
+        dependsOn: [payments]
+        valuesFiles:
+          - ../../../boundaries/payments/ops/helm/values-relay.yaml
+          - ../values/payments-relay.yaml
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_payments}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_payments}}"
+      # Outbox relay delivery (ADR 31): тот же образ и chart, один активный экземпляр.
+      - name: delivery-relay
+        chartPath: ../../../boundaries/delivery/ops/helm
+        namespace: nomnom-delivery
+        createNamespace: true
+        dependsOn: [delivery]
+        valuesFiles:
+          - ../../../boundaries/delivery/ops/helm/values-relay.yaml
+          - ../values/delivery-relay.yaml
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_delivery}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_delivery}}"
+      # Outbox relay restaurants (ADR 31): тот же образ и chart, один активный экземпляр.
+      - name: restaurants-relay
+        chartPath: ../../../boundaries/restaurants/ops/helm
+        namespace: nomnom-restaurants
+        createNamespace: true
+        dependsOn: [restaurants]
+        valuesFiles:
+          - ../../../boundaries/restaurants/ops/helm/values-relay.yaml
+          - ../values/restaurants-relay.yaml
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
 profiles:
   # make kind-deploy GRAFANA_CLOUD=1: метрики orders и orders-consumer → Alloy → Grafana Cloud.
   # Индексы releases: 0 — orders, 4 — orders-consumer; при изменении порядка поправить patches.
@@ -271,6 +307,10 @@ profiles:
       - op: add
         path: /deploy/helm/releases/1/valuesFiles/-
         value: ../values/restaurants-dev.yaml
+      # Индекс releases: 7 — restaurants-relay.
+      - op: add
+        path: /deploy/helm/releases/7/valuesFiles/-
+        value: ../values/restaurants-relay-dev.yaml
       - op: replace
         path: /build/artifacts/3/docker/target
         value: dev

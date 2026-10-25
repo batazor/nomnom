@@ -52,6 +52,10 @@ make kind-down
   тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
   `nomnom-infra`. Kafka и Temporal применяет `before`-hook helm-деплоера и ждёт их readiness:
   consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
+- `payments-relay`, `delivery-relay`, `restaurants-relay` ([ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md)) —
+  releases charts контекстов с `values-relay.yaml` и `values/<context>-relay.yaml`: тот же образ,
+  своя `command`, без Service и миграций (их выполняет основной release), один экземпляр.
+  Публикуют Outbox в Kafka `nomnom-infra`; topics создаются при первой публикации.
 - Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) применяет `before`-hook helm-деплоера
   до charts: SpiceDB в `nomnom-authz`, PostgreSQL `orders`, `payments`, `delivery` и MongoDB

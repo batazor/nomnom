@@ -1,0 +1,16 @@
+# Outbox relay payments (ADR 13, ADR 31): отдельный release того же chart, один активный экземпляр.
+#   helm upgrade --install payments-relay ops/helm -f ops/helm/values-relay.yaml
+# Kafka и хранилище задаются values окружения (env KAFKA__*, OUTBOX__*).
+component: relay
+
+# Advisory lock / lease держит один активный экземпляр; replicas — только failover.
+replicaCount: 1
+
+command: ["/usr/bin/tini", "--", "python", "-m", "entrypoints.payments_relay.main"]
+
+service:
+  enabled: false
+
+database:
+  # Схему применяет init container release payments.
+  migrate: false
