@@ -27,6 +27,7 @@ from infrastructure.grpc.identity import (
     USER_ASSERTION_METADATA,
     IdentityConfigError,
     ServiceTokenSubjectResolver,
+    ServiceTokenVerifier,
     UserAssertionVerifier,
     create_subject_resolver,
     load_jwks,
@@ -176,11 +177,13 @@ class UserAssertionClockTest(unittest.TestCase):
     def _accepts(self, now: float) -> bool:
         # The service token keeps the fixed clock: only the assertion moves in time.
         resolver = ServiceTokenSubjectResolver(
-            issuer=USER_VECTORS["service_issuer"],
-            audience=USER_VECTORS["audience"],
-            keys=load_jwks(JWKS_FILE),
-            service_accounts=_settings().service_account_map,
-            clock=lambda: NOW,
+            ServiceTokenVerifier(
+                issuer=USER_VECTORS["service_issuer"],
+                audience=USER_VECTORS["audience"],
+                keys=load_jwks(JWKS_FILE),
+                service_accounts=_settings().service_account_map,
+                clock=lambda: NOW,
+            ),
             user_assertions=UserAssertionVerifier(
                 issuer=USER_VECTORS["issuer"],
                 audience=USER_VECTORS["audience"],

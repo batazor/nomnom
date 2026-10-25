@@ -23,7 +23,7 @@ class OperationStatus(StrEnum):
     PENDING = "pending"
 
 
-_STATUS_OF: dict[OperationState, OperationStatus] = {
+STATUS_OF: dict[OperationState, OperationStatus] = {
     OperationState.SUCCEEDED: OperationStatus.SUCCEEDED,
     OperationState.DECLINED: OperationStatus.DECLINED,
     OperationState.PENDING: OperationStatus.PENDING,
@@ -51,7 +51,7 @@ class PaymentOperationResult:
             payment_id=operation.payment_id,
             operation_id=operation.id,
             kind=operation.kind,
-            status=_STATUS_OF[operation.state],
+            status=STATUS_OF[operation.state],
             payment_state=payment_state,
             decline_reason=operation.decline_reason,
             replayed=replayed,

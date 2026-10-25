@@ -20,6 +20,7 @@ from infrastructure.grpc.identity import (
     IdentityConfigError,
     RejectingSubjectResolver,
     ServiceTokenSubjectResolver,
+    ServiceTokenVerifier,
     create_subject_resolver,
     load_jwks,
 )
@@ -213,10 +214,12 @@ class EcdsaTokenTest(unittest.TestCase):
         jwks_file = Path(self.directory.name) / "jwks.json"
         jwks_file.write_text(json.dumps({"keys": [jwk]}), encoding="utf-8")
         self.resolver = ServiceTokenSubjectResolver(
-            issuer=VECTORS["issuer"],
-            audience=VECTORS["audience"],
-            keys=load_jwks(jwks_file),
-            service_accounts={"system:serviceaccount:nomnom:orders-worker": "orders-worker"},
+            ServiceTokenVerifier(
+                issuer=VECTORS["issuer"],
+                audience=VECTORS["audience"],
+                keys=load_jwks(jwks_file),
+                service_accounts={"system:serviceaccount:nomnom:orders-worker": "orders-worker"},
+            )
         )
 
     def test_es256_token_is_accepted(self) -> None:
