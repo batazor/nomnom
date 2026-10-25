@@ -110,6 +110,12 @@ fn offer_facts_are_not_published() {
     let (delivery_id, _, courier_id) = ids();
     let offer_id = DeliveryOfferId::new("offer-1");
     for event in [
+        DomainEvent::DeliveryOffered {
+            delivery_id: delivery_id.clone(),
+            offer_id: offer_id.clone(),
+            courier_id: courier_id.clone(),
+            expires_at_epoch_seconds: 1_060,
+        },
         DomainEvent::DeliveryOfferAccepted {
             delivery_id: delivery_id.clone(),
             offer_id: offer_id.clone(),

@@ -15,6 +15,40 @@ pub trait DeliveryRepository {
     /// Updates an existing delivery; a missing id yields
     /// [`RepositoryError::Conflict`].
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError>;
+
+    /// Waiting deliveries without a pending offer in creation order
+    /// ([`DeliveryPosition`]), strictly after `after` when given, at most
+    /// `limit`.
+    fn list_waiting_without_pending_offer(
+        &self,
+        after: Option<&DeliveryPosition>,
+        limit: usize,
+    ) -> Result<Vec<Delivery>, RepositoryError>;
+}
+
+/// Place of a delivery in creation order: creation time, then id. A Delivery
+/// stored before its creation time was recorded counts as created at `0`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeliveryPosition {
+    pub created_at_epoch_seconds: i64,
+    pub delivery_id: DeliveryId,
+}
+
+impl DeliveryPosition {
+    #[must_use]
+    pub fn of(delivery: &Delivery) -> Self {
+        Self {
+            created_at_epoch_seconds: delivery.created_at_epoch_seconds().unwrap_or(0),
+            delivery_id: delivery.id().clone(),
+        }
+    }
+
+    /// Sort key of the order: ids compare by bytes, as the PostgreSQL
+    /// `"C"` collation does.
+    #[must_use]
+    pub fn key(&self) -> (i64, &str) {
+        (self.created_at_epoch_seconds, self.delivery_id.as_str())
+    }
 }
 
 /// Persistence contract of the `DeliveryOffer` aggregate.

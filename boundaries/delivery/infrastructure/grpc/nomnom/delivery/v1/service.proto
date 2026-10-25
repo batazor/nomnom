@@ -11,6 +11,21 @@ service DeliveryService {
   rpc CreateDelivery(CreateDeliveryRequest) returns (CreateDeliveryResponse);
   rpc ReplanDelivery(ReplanDeliveryRequest) returns (ReplanDeliveryResponse);
   rpc CancelDelivery(CancelDeliveryRequest) returns (CancelDeliveryResponse);
+
+  // Courier administration by a platform operator (platform register_courier).
+  rpc RegisterCourier(RegisterCourierRequest) returns (RegisterCourierResponse);
+
+  // Courier RPCs: the subject needs courier#act on courier_id; the domain
+  // rejects actions on a delivery or offer of another courier.
+  rpc UpdateCourierLocation(UpdateCourierLocationRequest) returns (UpdateCourierLocationResponse);
+  rpc SetCourierAvailability(SetCourierAvailabilityRequest) returns (SetCourierAvailabilityResponse);
+  rpc ListAvailableDeliveryOffers(ListAvailableDeliveryOffersRequest) returns (ListAvailableDeliveryOffersResponse);
+  rpc AcceptDeliveryOffer(AcceptDeliveryOfferRequest) returns (AcceptDeliveryOfferResponse);
+  rpc RejectDeliveryOffer(RejectDeliveryOfferRequest) returns (RejectDeliveryOfferResponse);
+  rpc ConfirmPickup(ConfirmPickupRequest) returns (ConfirmPickupResponse);
+  rpc ConfirmDelivery(ConfirmDeliveryRequest) returns (ConfirmDeliveryResponse);
+  // The assigned courier (courier#act) or a dispatcher (platform dispatch_delivery).
+  rpc ReportDeliveryFailure(ReportDeliveryFailureRequest) returns (ReportDeliveryFailureResponse);
 }
 
 message GetCourierCurrentDeliveryRequest {
@@ -54,4 +69,118 @@ message CancelDeliveryResponse {
   bool cancelled = 2;
   // Business reason when cancellation is rejected by state, for example already_picked_up.
   string rejection_reason = 3;
+}
+
+message RegisterCourierRequest {
+  // User id of the courier: that user gets courier#act on courier:<courier_id>.
+  string courier_id = 1;
+}
+
+message RegisterCourierResponse {
+  string courier_id = 1;
+  CourierStatus status = 2;
+}
+
+message UpdateCourierLocationRequest {
+  string courier_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+}
+
+message UpdateCourierLocationResponse {
+  string courier_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+  // Time delivery recorded the position at.
+  int64 recorded_at_epoch_seconds = 4;
+}
+
+message SetCourierAvailabilityRequest {
+  string courier_id = 1;
+  CourierAvailability availability = 2;
+}
+
+message SetCourierAvailabilityResponse {
+  string courier_id = 1;
+  CourierStatus status = 2;
+  // false when the requested availability was already in effect.
+  bool changed = 3;
+}
+
+message ListAvailableDeliveryOffersRequest {
+  string courier_id = 1;
+}
+
+message ListAvailableDeliveryOffersResponse {
+  string courier_id = 1;
+  repeated DeliveryOffer offers = 2;
+}
+
+message AcceptDeliveryOfferRequest {
+  string offer_id = 1;
+  string courier_id = 2;
+}
+
+message AcceptDeliveryOfferResponse {
+  string offer_id = 1;
+  string delivery_id = 2;
+  string courier_id = 3;
+  // true when the same courier had already accepted this offer.
+  bool already_accepted = 4;
+}
+
+message RejectDeliveryOfferRequest {
+  string offer_id = 1;
+  string courier_id = 2;
+}
+
+message RejectDeliveryOfferResponse {
+  string offer_id = 1;
+  string delivery_id = 2;
+  // false when the same courier had already rejected this offer.
+  bool changed = 3;
+}
+
+message ConfirmPickupRequest {
+  string delivery_id = 1;
+  string courier_id = 2;
+}
+
+message ConfirmPickupResponse {
+  string delivery_id = 1;
+  DeliveryState state = 2;
+  // false when the same courier had already confirmed the Pickup.
+  bool changed = 3;
+}
+
+message ConfirmDeliveryRequest {
+  string delivery_id = 1;
+  string courier_id = 2;
+}
+
+message ConfirmDeliveryResponse {
+  string delivery_id = 1;
+  DeliveryState state = 2;
+  // false when the same courier had already confirmed the completion.
+  bool changed = 3;
+}
+
+message ReportDeliveryFailureRequest {
+  string delivery_id = 1;
+  // The assigned courier reporting on its own assignment; empty when an
+  // authorized dispatcher reports.
+  string courier_id = 2;
+  // Code of the Delivery Failure Reason catalog, for example customer_unreachable.
+  string reason = 3;
+  // Optional free text; empty means no detail.
+  string detail = 4;
+}
+
+message ReportDeliveryFailureResponse {
+  string delivery_id = 1;
+  // Catalog code of the recorded reason.
+  string reason = 2;
+  string detail = 3;
+  // Courier whose assignment the failure ended.
+  string released_courier_id = 4;
 }

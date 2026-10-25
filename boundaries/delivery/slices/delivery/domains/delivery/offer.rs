@@ -105,6 +105,7 @@ pub struct DeliveryOffer {
 }
 
 impl DeliveryOffer {
+    /// A new pending offer; records [`DomainEvent::DeliveryOffered`].
     pub fn new(
         id: DeliveryOfferId,
         delivery_id: DeliveryId,
@@ -112,14 +113,21 @@ impl DeliveryOffer {
         offered_at_epoch_seconds: i64,
         expires_at_epoch_seconds: i64,
     ) -> Result<Self, DeliveryOfferError> {
-        Self::restore(
+        let mut offer = Self::restore(
             id,
             delivery_id,
             courier_id,
             offered_at_epoch_seconds,
             expires_at_epoch_seconds,
             OfferState::Pending,
-        )
+        )?;
+        offer.events.push(DomainEvent::DeliveryOffered {
+            delivery_id: offer.delivery_id.clone(),
+            offer_id: offer.id.clone(),
+            courier_id: offer.courier_id.clone(),
+            expires_at_epoch_seconds,
+        });
+        Ok(offer)
     }
 
     pub fn restore(

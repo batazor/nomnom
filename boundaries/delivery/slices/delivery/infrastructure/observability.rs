@@ -25,7 +25,7 @@
 //!   code of the Delivery Failure Reason catalog when it is in the closed set
 //!   given by the composition root, otherwise `other`; the free-text detail is
 //!   never an attribute;
-//! - `DeliveryCancelled` → no metric in the registry.
+//! - `DeliveryOffered`, `DeliveryCancelled` → no metric in the registry.
 //!
 //! A committed `DeliveryFailed` is also logged and set on the active span by
 //! [`FailureLog`] when the composition root passes one.
@@ -196,7 +196,7 @@ impl DomainMetrics {
                     1,
                     &[KeyValue::new(REASON, self.failure_reason(reason.as_str()))],
                 ),
-                DomainEvent::DeliveryCancelled { .. } => {}
+                DomainEvent::DeliveryOffered { .. } | DomainEvent::DeliveryCancelled { .. } => {}
             }
         }
     }

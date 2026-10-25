@@ -51,6 +51,15 @@ pub enum DomainEvent {
         released_courier_id: Option<CourierId>,
         reason: Option<DeliveryCancellationReason>,
     },
+    /// A waiting Delivery was offered to a courier until the deadline (Offer
+    /// Delivery, Replan Delivery, Dispatch Deliveries). Internal: not
+    /// published.
+    DeliveryOffered {
+        delivery_id: DeliveryId,
+        offer_id: DeliveryOfferId,
+        courier_id: CourierId,
+        expires_at_epoch_seconds: i64,
+    },
     /// The addressee accepted a Delivery Offer; the Courier Assignment is
     /// [`DomainEvent::CourierAssignedToDelivery`] of the same transaction.
     DeliveryOfferAccepted {
@@ -84,6 +93,7 @@ impl DomainEvent {
             | Self::DeliveryCompleted { delivery_id, .. }
             | Self::DeliveryFailed { delivery_id, .. }
             | Self::DeliveryCancelled { delivery_id, .. }
+            | Self::DeliveryOffered { delivery_id, .. }
             | Self::DeliveryOfferAccepted { delivery_id, .. }
             | Self::DeliveryOfferRejected { delivery_id, .. }
             | Self::DeliveryOfferExpired { delivery_id, .. } => delivery_id,

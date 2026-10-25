@@ -8,7 +8,7 @@ use crate::slices::courier::domains::courier::{Courier, CourierId, CourierReposi
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryRepository, OfferState, OrderId,
+    DeliveryPosition, DeliveryRepository, OfferState, OrderId, State,
 };
 
 use super::{DeliveryRecord, MemoryStore};
@@ -108,6 +108,37 @@ impl DeliveryRepository for MemoryStore {
         stored.version += 1;
         Ok(())
     }
+
+    fn list_waiting_without_pending_offer(
+        &self,
+        after: Option<&DeliveryPosition>,
+        limit: usize,
+    ) -> Result<Vec<Delivery>, RepositoryError> {
+        let state = self.available()?;
+        let mut waiting: Vec<Delivery> = state
+            .deliveries
+            .values()
+            .filter(|record| record.state == State::Waiting)
+            .filter(|record| {
+                !state.offers.iter().any(|offer| {
+                    offer.delivery_id() == &record.id && offer.state() == OfferState::Pending
+                })
+            })
+            .map(DeliveryRecord::to_domain)
+            .collect::<Result<_, _>>()?;
+        waiting.sort_by(|left, right| {
+            DeliveryPosition::of(left)
+                .key()
+                .cmp(&DeliveryPosition::of(right).key())
+        });
+        Ok(waiting
+            .into_iter()
+            .filter(|delivery| {
+                after.is_none_or(|after| DeliveryPosition::of(delivery).key() > after.key())
+            })
+            .take(limit)
+            .collect())
+    }
 }
 
 impl DeliveryOfferRepository for MemoryStore {
@@ -159,7 +190,7 @@ impl DeliveryOfferRepository for MemoryStore {
         if state.offers.iter().any(|stored| stored.id() == offer.id()) {
             return Err(RepositoryError::Conflict);
         }
-        state.offers.push(offer.clone());
+        state.offers.push(snapshot(offer, offer.version())?);
         Ok(())
     }
 
@@ -173,9 +204,23 @@ impl DeliveryOfferRepository for MemoryStore {
         if stored.version() != offer.version() {
             return Err(RepositoryError::ConcurrentModification);
         }
-        *stored = offer.clone().with_version(offer.version() + 1);
+        *stored = snapshot(offer, offer.version() + 1)?;
         Ok(())
     }
+}
+
+/// Persistence copy of an offer: domain events are never stored.
+fn snapshot(offer: &DeliveryOffer, version: u64) -> Result<DeliveryOffer, RepositoryError> {
+    DeliveryOffer::restore(
+        offer.id().clone(),
+        offer.delivery_id().clone(),
+        offer.courier_id().clone(),
+        offer.offered_at_epoch_seconds(),
+        offer.expires_at_epoch_seconds(),
+        offer.state(),
+    )
+    .map(|stored| stored.with_version(version))
+    .map_err(|error| RepositoryError::Unavailable(format!("corrupt delivery offer: {error}")))
 }
 
 impl DeliveryOutbox for MemoryStore {

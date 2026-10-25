@@ -22,7 +22,7 @@ use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryRe
 use super::courier_locator::CourierLocator;
 use super::error::DeliveryApplicationError;
 use super::find_courier::{Outcome, select_candidate};
-use super::offer_delivery::{self, make_offer};
+use super::offer_delivery::{self, OfferPorts, make_offer};
 use super::outbox::DeliveryOutbox;
 use super::policy::AssignmentPolicy;
 use super::reassign_courier::end_assignment;
@@ -95,11 +95,14 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 Outcome::CandidateFound { courier_id, .. } => Some(make_offer(
                     &delivery,
                     courier_id,
-                    self.couriers,
-                    self.offers,
-                    self.ids,
-                    self.clock,
-                    self.policy,
+                    &OfferPorts {
+                        couriers: self.couriers,
+                        offers: self.offers,
+                        outbox: self.outbox,
+                        ids: self.ids,
+                        clock: self.clock,
+                        policy: self.policy,
+                    },
                 )?),
                 Outcome::NoCandidate => None,
             };

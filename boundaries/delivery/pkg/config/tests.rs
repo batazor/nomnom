@@ -303,6 +303,8 @@ fn offers_expiry_defaults() {
         OffersConfig {
             expiry_interval: Duration::from_secs(15),
             expiry_batch: 100,
+            dispatch_interval: Duration::from_secs(2),
+            dispatch_batch: 100,
         }
     );
     assert_eq!(config.offers, OffersConfig::default());
@@ -325,10 +327,27 @@ fn loads_offers_expiry_from_toml_and_validates() {
 }
 
 #[test]
+fn loads_offers_dispatch_from_toml_and_validates() {
+    let config = load_toml(
+        "offers-dispatch",
+        "[offers]\ndispatch_interval = \"500ms\"\ndispatch_batch = 10\n",
+    )
+    .expect("load config");
+    assert_eq!(config.offers.dispatch_interval, Duration::from_millis(500));
+    assert_eq!(config.offers.dispatch_batch, 10);
+
+    assert!(load_toml("dispatch-zero", "[offers]\ndispatch_interval = \"0s\"\n").is_err());
+    assert!(load_toml("dispatch-empty-batch", "[offers]\ndispatch_batch = 0\n").is_err());
+    assert!(load_toml("dispatch-big-batch", "[offers]\ndispatch_batch = 5000\n").is_err());
+}
+
+#[test]
 fn offers_env_overrides_defaults() {
     let env = std::collections::HashMap::from([
         (OFFERS_EXPIRY_INTERVAL_ENV, "1m"),
         (OFFERS_EXPIRY_BATCH_ENV, "7"),
+        (OFFERS_DISPATCH_INTERVAL_ENV, "5s"),
+        (OFFERS_DISPATCH_BATCH_ENV, "3"),
     ]);
     let builder = configure_settings(ConfigLoader::builder(), &OFFERS_SETTINGS, |name| {
         env.get(name).map(|value| (*value).to_owned())
@@ -341,6 +360,8 @@ fn offers_env_overrides_defaults() {
         .expect("offers");
     assert_eq!(offers.expiry_interval, Duration::from_secs(60));
     assert_eq!(offers.expiry_batch, 7);
+    assert_eq!(offers.dispatch_interval, Duration::from_secs(5));
+    assert_eq!(offers.dispatch_batch, 3);
 }
 
 #[test]
