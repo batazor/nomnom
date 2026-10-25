@@ -11,6 +11,7 @@ source "${KIND_DIR}/versions.env"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-nomnom-test}"
 KUBE_CONTEXT="kind-${KIND_CLUSTER_NAME}"
 BFF_HOST_PORT="${BFF_HOST_PORT:-18080}"
+WEBHOOKS_HOST_PORT="${WEBHOOKS_HOST_PORT:-18085}"
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${KIND_DIR}/.artifacts}"
 
 APP_NAMESPACES=(nomnom-orders nomnom-restaurants nomnom-delivery nomnom-payments nomnom-bff)

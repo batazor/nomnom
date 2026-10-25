@@ -85,14 +85,22 @@ tcp() {
 # customer_id=c1; дополнительные curl-аргументы — $1. Результат:
 # "<curl exit code> <HTTP status> <grpc-status> <grpc-message>".
 grpc_orders_authenticated() {
-  local result rc=0
-  result="$(k -n nomnom-bff exec deploy/grpc-caller -- sh -c \
-    "printf '\\000\\000\\000\\000\\004\\012\\002c1' | curl -sS -o /dev/null \
-      -w '%{http_code} %header{grpc-status} %header{grpc-message}' \
-      --connect-timeout 3 --max-time 5 --http2-prior-knowledge -X POST \
-      -H 'content-type: application/grpc' -H 'te: trailers' \
-      -H \"authorization: Bearer \$(cat /var/run/secrets/nomnom/identity/nomnom.orders)\" ${1:-} \
-      --data-binary @- '${GATEWAY}/nomnom.orders.v1.OrdersService/ListCustomerOrders'" 2>/dev/null)" || rc=$?
+  local result rc attempt
+  # Изредка Envoy получает RST от orders до headers (grpc-status 14, remote reset) на любом
+  # вызове: это отдельная проблема соединения gateway ↔ orders, не проверяемое свойство.
+  # Повтор только на этот ответ, каждый случай попадает в отчёт.
+  for attempt in 1 2 3; do
+    rc=0
+    result="$(k -n nomnom-bff exec deploy/grpc-caller -- sh -c \
+      "printf '\\000\\000\\000\\000\\004\\012\\002c1' | curl -sS -o /dev/null \
+        -w '%{http_code} %header{grpc-status} %header{grpc-message}' \
+        --connect-timeout 3 --max-time 5 --http2-prior-knowledge -X POST \
+        -H 'content-type: application/grpc' -H 'te: trailers' \
+        -H \"authorization: Bearer \$(cat /var/run/secrets/nomnom/identity/nomnom.orders)\" ${1:-} \
+        --data-binary @- '${GATEWAY}/nomnom.orders.v1.OrdersService/ListCustomerOrders'" 2>/dev/null)" || rc=$?
+    [[ "${result}" == *"reset reason: remote reset"* ]] || break
+    printf 'NOTE     orders сбросил stream до headers (попытка %s)\n' "${attempt}" | tee -a "${REPORT}" >&2
+  done
   # shellcheck disable=SC2086 # нормализация пробелов: при timeout grpc-status пуст
   printf '%s %s\n' "${rc}" "$(echo ${result:-000})"
 }
@@ -169,7 +177,22 @@ section "4–5. Metadata, status, trace context, deadlines, retries"
 # metadata дошла до backend, grpc-status и grpc-message backend'а дошли до вызывающего.
 expect "4.1 authorization metadata через gateway: PERMISSION_DENIED от SpiceDB" \
   "0 200 7 permission denied: service:bff view_orders on customer:c1" "$(grpc_orders_authenticated)"
-blocked "4.2 traceparent caller → backend: orders не экспортирует traces (только metrics, ADR 9)"
+# Trace id и span id вызывающего случайны на каждый прогон: server span orders в приёмнике
+# trace-capture должен принадлежать тому же trace и иметь parent — span вызывающего.
+trace_id="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+parent_id="$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+grpc_orders_authenticated "-H 'traceparent: 00-${trace_id}-${parent_id}-01'" >/dev/null
+captured=no
+for _ in $(seq 1 20); do
+  # BatchSpanProcessor отправляет spans раз в 5 секунд.
+  if k -n nomnom-observability logs deploy/trace-capture --since=2m 2>/dev/null |
+    grep -A2 "Trace ID *: ${trace_id}" | grep -q "Parent ID *: ${parent_id}"; then
+    captured=yes
+    break
+  fi
+  sleep 1
+done
+expect "4.2 traceparent вызывающего продолжен server span orders через gateway" yes "${captured}"
 # Текст context deadline exceeded формирует gRPC server orders, а не Envoy (upstream request
 # timeout): deadline вызывающего дошёл до backend, а не сработал route timeout gateway.
 expect "5.1 deadline вызывающего (grpc-timeout 1u) соблюдается backend'ом" \

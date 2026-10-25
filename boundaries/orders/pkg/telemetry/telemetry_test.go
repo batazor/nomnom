@@ -8,6 +8,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
@@ -79,9 +82,30 @@ func TestEnvironmentOverridesServiceName(t *testing.T) {
 func TestStartWithoutEndpointDoesNotExport(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
 	m, err := telemetry.Start(context.Background(), "orders-consumer")
 	require.NoError(t, err)
+	assert.Nil(t, m.TracerProvider)
 	require.NoError(t, m.Shutdown(context.Background()))
+}
+
+// traceparent вызывающего продолжается в процессе, а spans экспортируются по OTLP.
+func TestStartContinuesW3CTraceContextAndExportsTraces(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:1")
+	m, err := telemetry.Start(context.Background(), "orders")
+	require.NoError(t, err)
+	require.NotNil(t, m.TracerProvider)
+
+	carrier := propagation.MapCarrier{"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+	ctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+	_, span := otel.Tracer("test").Start(ctx, "rpc")
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", span.SpanContext().TraceID().String())
+	assert.True(t, trace.SpanContextFromContext(ctx).IsRemote())
+	span.End()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = m.Shutdown(shutdownCtx) // collector недоступен: важна только ограниченность shutdown
 }
 
 // Counters Temporal SDK монотонные: в Mimir — counter с _total, а не gauge.

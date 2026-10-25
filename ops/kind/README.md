@@ -52,6 +52,19 @@ make kind-down
   тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
   `nomnom-infra`. Kafka и Temporal применяет `before`-hook helm-деплоера и ждёт их readiness:
   consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
+- Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
+  [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) применяет `before`-hook helm-деплоера
+  до charts: SpiceDB в `nomnom-authz`, PostgreSQL `orders`, `payments`, `delivery` и MongoDB
+  `restaurants` в `nomnom-data` (`emptyDir`). Пароли и DSN создают `scripts/postgres.sh` и
+  `scripts/mongodb.sh`; Secret DSN кладётся в неймспейс приложения (для `delivery` —
+  `delivery-postgres`, ключ `dsn`), а init container `delivery-migrate` применяет миграции до
+  старта процесса.
+- [`manifests/observability/trace-capture.yaml`](manifests/observability/trace-capture.yaml) —
+  приёмник traces проверки 4.2 в `nomnom-observability`: OpenTelemetry Collector с OTLP gRPC
+  `:4317` и debug exporter в stdout. Traces не хранятся и не заменяют Alloy
+  ([ADR 9](../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md));
+  `orders` отправляет в него traces через `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` из
+  [`values/orders.yaml`](values/orders.yaml), metrics по-прежнему уходят только в Alloy.
 - Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в
   `nomnom-observability` и OTLP метрик `orders`/`orders-consumer` в Grafana Cloud free tier;
   настройка и лимиты — [`ops/grafana-cloud`](../grafana-cloud/README.md).
@@ -78,6 +91,9 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура для ingress-проверок |
+| `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению |
+| `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
+| `nomnom-observability` | `trace-capture` всегда; Alloy — только с `GRAFANA_CLOUD=1` |
 | `nomnom-infra` | single-node Kafka (KRaft, `apache/kafka`) и Temporal dev server для `orders-consumer` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir` |
 
 ## Internal gateway
@@ -89,9 +105,9 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 
 Адрес gateway для приложений: `INTERNAL_GATEWAY_ADDR=internal-gateway.envoy-gateway-system.svc.cluster.local:8080`.
 
-Реестр маршрутов — `GRPCRoute` в `nomnom-gateway`. Бизнес-RPC bounded contexts ещё не
-реализованы, поэтому реестр пуст и любой вызов получает 404 (gRPC `UNIMPLEMENTED`). Новый
-бизнес-RPC публикуется так:
+Реестр маршрутов — `GRPCRoute` в `nomnom-gateway`. Сейчас в нём один route `orders-v1`
+(сервис `nomnom.orders.v1.OrdersService`); вызов незарегистрированного сервиса получает 404
+(gRPC `UNIMPLEMENTED`). Новый бизнес-RPC публикуется так:
 
 1. `GRPCRoute` в `nomnom-gateway` с `method.type: Exact`, полным именем сервиса и методом;
    файл добавляется в `manifests.rawYaml` модуля `apps`. Методы с автоматическими retries —
@@ -109,12 +125,12 @@ Retries сейчас не включены ни для одного метода
 | # | Проверка | Статус |
 | --- | --- | --- |
 | A | без NetworkPolicy `orders → restaurants` и `outsider → restaurants` напрямую отвечают 200, gateway доступен | выполняется |
-| 1 | вызов бизнес-API через gateway достигает backend | **заблокирована**: нет gRPC API и маршрутов |
-| 2 | с NetworkPolicy прямые `orders ↔ restaurants` получают silent drop (curl timeout, не DNS и не refused) при выполненных условиях: backend Available, имя резолвится, gateway доступен; Hubble фиксирует `DROPPED`; `nomnom-outsider` не достаёт ни backend, ни gateway | выполняется; условие «тот же вызов через gateway проходит» **заблокировано** |
+| 1 | вызов Orders RPC через gateway достигает backend и требует identity (`UNAUTHENTICATED`) | выполняется |
+| 2 | с NetworkPolicy прямые `orders ↔ restaurants` получают silent drop (curl timeout, не DNS и не refused) при выполненных условиях: backend Available, имя резолвится, gateway доступен и Orders RPC через него проходит; Hubble фиксирует `DROPPED`; `nomnom-outsider` не достаёт ни backend, ни gateway | выполняется |
 | 3 | неизвестный gRPC-сервис через gateway → HTTP 404 (`UNIMPLEMENTED`) | выполняется |
-| 4 | `traceparent` caller'а совпадает с полученным backend'ом | **заблокирована** |
-| 5 | короткий deadline → `DEADLINE_EXCEEDED`, длинный не обрезается; retries только у идемпотентных методов | **заблокирована**; route timeout 300 s задан `BackendTrafficPolicy` |
-| 6 | инфраструктурные подключения под политиками | DNS выполняется; Kafka, Temporal, PostgreSQL, MongoDB, Alloy **заблокированы**: не развёрнуты, приложения их не используют |
+| 4 | authorization metadata доходит до backend (`PERMISSION_DENIED` от SpiceDB); случайный `traceparent` вызывающего продолжен server span `orders` (тот же trace id, parent — span вызывающего) в логах `trace-capture` | выполняется |
+| 5 | deadline вызывающего соблюдается backend'ом (`context deadline exceeded` от orders, а не timeout Envoy); retries только у идемпотентных методов | deadline выполняется; retries **заблокированы**: в реестре нет методов с retries; route timeout 300 s задан `BackendTrafficPolicy` |
+| 6 | инфраструктурные подключения под политиками | DNS, `orders` → свой PostgreSQL, Kafka, Temporal, Kafka из других контекстов, запрет чужой БД и Temporal для не-`orders` выполняются; Alloy — только с `GRAFANA_CLOUD=1`; MongoDB `restaurants` **заблокирована**: приложение её ещё не использует |
 | 6a | после применения политик pod Available, без рестартов и проваленных kubelet-проб (Envoy Proxy, CoreDNS, Cilium) | выполняется; пробы приложений выключены до health contract (ADR 12) |
 | E2E | через публичный API BFF | **заблокирована**: образ BFF не определён (ADR 10); port mapping подготовлен |
 

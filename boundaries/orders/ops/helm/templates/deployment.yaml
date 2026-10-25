@@ -47,6 +47,17 @@ spec:
           securityContext:
             {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
           {{- end }}
+          # Migrate валидирует ту же конфигурацию процесса, что и workload.
+          {{- if or .Values.env .Values.envFrom }}
+          envFrom:
+            {{- if .Values.env }}
+            - configMapRef:
+                name: {{ include "common.names.fullname" . }}
+            {{- end }}
+            {{- with .Values.envFrom }}
+            {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
+            {{- end }}
+          {{- end }}
           env:
             {{- include "orders.postgresEnv" . | nindent 12 }}
       {{- end }}

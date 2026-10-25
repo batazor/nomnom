@@ -1,0 +1,126 @@
+# Public gateway: входящие вызовы внешних систем (webhooks платёжного провайдера).
+# Отдельный от internal gateway data plane: внешний трафик не попадает на listener
+# service-to-service вызовов. Публикуется только явно перечисленные HTTP-пути.
+#
+# kind: NodePort 30085 → host 127.0.0.1:${WEBHOOKS_HOST_PORT} (cluster.yaml). Production
+# ставит перед ним TLS-терминацию (listener HTTPS + сертификат) и, если провайдер их
+# публикует, allowlist его IP-адресов.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: public-gateway
+  namespace: nomnom-gateway
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        name: public-gateway
+        type: NodePort
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - name: http-8080
+                  port: 8080
+                  nodePort: 30085
+      envoyDeployment:
+        replicas: 1
+        pod:
+          labels:
+            nomnom.dev/component: public-gateway
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: nomnom-public
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: public-gateway
+    namespace: nomnom-gateway
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: public
+  namespace: nomnom-gateway
+spec:
+  gatewayClassName: nomnom-public
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 8080
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
+---
+# Webhook провайдера быстрый: короткий timeout, без retries (провайдер повторяет сам).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: public-gateway-defaults
+  namespace: nomnom-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+  timeout:
+    http:
+      requestTimeout: 15s
+---
+# Ограничение размера тела совпадает с MAX_BODY_BYTES payments (64 KiB).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: public-gateway-client
+  namespace: nomnom-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+  connection:
+    bufferLimit: 64Ki
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: payments-provider-webhooks
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: public
+      sectionName: http
+  rules:
+    - matches:
+        - method: POST
+          path:
+            type: Exact
+            value: /webhooks/provider
+      backendRefs:
+        - name: payments
+          namespace: nomnom-payments
+          port: 8085
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-public-gateway
+  namespace: nomnom-payments
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: nomnom-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: payments

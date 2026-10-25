@@ -12,7 +12,7 @@ apply() {
   for namespace in "${APP_NAMESPACES[@]}"; do
     k -n "${namespace}" apply -f "${netpol}/app-baseline.yaml"
   done
-  k apply -f "${netpol}/app-infrastructure.yaml" -f "${netpol}/gateway.yaml"
+  k apply -f "${netpol}/app-infrastructure.yaml" -f "${netpol}/gateway.yaml" -f "${netpol}/public-gateway.yaml"
 }
 
 delete() {
@@ -20,7 +20,7 @@ delete() {
   for namespace in "${APP_NAMESPACES[@]}"; do
     k -n "${namespace}" delete -f "${netpol}/app-baseline.yaml" --ignore-not-found
   done
-  k delete -f "${netpol}/app-infrastructure.yaml" -f "${netpol}/gateway.yaml" --ignore-not-found
+  k delete -f "${netpol}/app-infrastructure.yaml" -f "${netpol}/gateway.yaml" -f "${netpol}/public-gateway.yaml" --ignore-not-found
 }
 
 case "${1:-}" in

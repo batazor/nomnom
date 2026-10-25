@@ -11,6 +11,9 @@ podLabels:
 env:
   # Единственный адрес для синхронных вызовов бизнес-API других приложений.
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+  # Traces → приёмник проверок kind (manifests/observability/trace-capture.yaml); metrics
+  # по-прежнему уходят только в Alloy профиля grafana-cloud.
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://trace-capture.nomnom-observability.svc.cluster.local:4317
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # создаёт scripts/identity-jwks.sh) и allowlist вызывающих workloads.

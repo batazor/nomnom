@@ -17,10 +17,13 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,6 +45,8 @@ var SecondsBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5,
 type Metrics struct {
 	Registry      *prometheus.Registry
 	MeterProvider *sdkmetric.MeterProvider
+	// TracerProvider задаёт Start при настроенном OTLP traces endpoint; nil — traces не экспортируются.
+	TracerProvider *sdktrace.TracerProvider
 }
 
 // ReaderFactory создаёт reader поверх producer bridge; в тестах — ManualReader.
@@ -67,11 +72,25 @@ func Start(ctx context.Context, serviceName string) (*Metrics, error) {
 		return nil, err
 	}
 	otel.SetMeterProvider(m.MeterProvider)
+	// W3C Trace Context и Baggage: otelgrpc продолжает trace вызывающего из traceparent
+	// и передаёт его соседям; без propagator контекст теряется на каждом hop.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	if tracesEndpointConfigured() {
+		exporter, err := otlptracegrpc.New(ctx)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("create OTLP trace exporter: %w", err), m.MeterProvider.Shutdown(ctx))
+		}
+		res, err := newResource(ctx, serviceName)
+		if err != nil {
+			return nil, errors.Join(err, m.MeterProvider.Shutdown(ctx))
+		}
+		m.TracerProvider = sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter), sdktrace.WithResource(res))
+		otel.SetTracerProvider(m.TracerProvider)
+	}
 	return m, nil
 }
 
-// New собирает pipeline без регистрации глобального провайдера; newReader nil — без экспорта.
-func New(ctx context.Context, serviceName string, newReader ReaderFactory) (*Metrics, error) {
+func newResource(ctx context.Context, serviceName string) (*resource.Resource, error) {
 	res, err := resource.New(ctx,
 		resource.WithAttributes(semconv.ServiceName(serviceName), semconv.ServiceNamespace(ServiceNamespace)),
 		resource.WithFromEnv(),
@@ -79,6 +98,15 @@ func New(ctx context.Context, serviceName string, newReader ReaderFactory) (*Met
 	)
 	if err != nil && !errors.Is(err, resource.ErrPartialResource) {
 		return nil, fmt.Errorf("build telemetry resource: %w", err)
+	}
+	return res, nil
+}
+
+// New собирает pipeline без регистрации глобального провайдера; newReader nil — без экспорта.
+func New(ctx context.Context, serviceName string, newReader ReaderFactory) (*Metrics, error) {
+	res, err := newResource(ctx, serviceName)
+	if err != nil {
+		return nil, err
 	}
 
 	registry := prometheus.NewRegistry()
@@ -124,10 +152,20 @@ func (m *Metrics) TemporalMetricsHandler() client.MetricsHandler {
 // Shutdown выполняет финальный export; вызывается после drain, до выхода процесса
 // (docs/cloud-native-runtime.md#observability-lifecycle).
 func (m *Metrics) Shutdown(ctx context.Context) error {
-	if err := m.MeterProvider.Shutdown(ctx); err != nil {
-		return fmt.Errorf("shutdown meter provider: %w", err)
+	var errs []error
+	if m.TracerProvider != nil {
+		if err := m.TracerProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("shutdown tracer provider: %w", err))
+		}
 	}
-	return nil
+	if err := m.MeterProvider.Shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("shutdown meter provider: %w", err))
+	}
+	return errors.Join(errs...)
+}
+
+func tracesEndpointConfigured() bool {
+	return os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != "" || os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != ""
 }
 
 func endpointConfigured() bool {

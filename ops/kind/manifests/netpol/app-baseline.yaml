@@ -77,6 +77,29 @@ spec:
         - protocol: TCP
           port: grpc
 ---
+# Webhooks внешних систем: только порт webhooks и только от Envoy Proxy public gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-webhooks-from-public-gateway
+spec:
+  podSelector:
+    matchLabels:
+      nomnom.dev/business-api: "true"
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: public
+              gateway.envoyproxy.io/owning-gateway-namespace: nomnom-gateway
+      ports:
+        - protocol: TCP
+          port: webhooks
+---
 # Технические подключения: отправка telemetry в Alloy (OTLP gRPC/HTTP, Pyroscope).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -100,6 +123,17 @@ spec:
           port: 4318
         - protocol: TCP
           port: 4040
+    # Приёмник traces проверок kind (manifests/observability/trace-capture.yaml).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trace-capture
+      ports:
+        - protocol: TCP
+          port: 4317
 ---
 # Технические подключения: scrape Prometheus-compatible endpoint с именем порта metrics.
 apiVersion: networking.k8s.io/v1

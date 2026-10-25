@@ -17,3 +17,8 @@ nodes:
         hostPort: __BFF_HOST_PORT__
         listenAddress: 127.0.0.1
         protocol: TCP
+      # Public gateway (webhooks внешних систем): NodePort 30085 → 127.0.0.1:${WEBHOOKS_HOST_PORT}.
+      - containerPort: 30085
+        hostPort: __WEBHOOKS_HOST_PORT__
+        listenAddress: 127.0.0.1
+        protocol: TCP

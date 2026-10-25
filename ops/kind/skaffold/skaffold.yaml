@@ -92,7 +92,9 @@ manifests:
     - ../manifests/data/postgres-delivery.yaml
     - ../manifests/data/mongodb-restaurants.yaml
     - ../manifests/gateway/gateway.yaml
+    - ../manifests/gateway/public-gateway.yaml
     - ../manifests/fixtures/net-probe.yaml
+    - ../manifests/observability/trace-capture.yaml
 deploy:
   statusCheckDeadlineSeconds: 300
   kubectl:
@@ -107,6 +109,7 @@ deploy:
                 set -eu
                 k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
                 k wait gatewayclass/nomnom-internal --for=condition=Accepted --timeout=300s
+                k wait gatewayclass/nomnom-public --for=condition=Accepted --timeout=300s
                 k -n nomnom-gateway wait gateway/internal --for=condition=Accepted --timeout=300s
                 k -n nomnom-gateway wait gateway/internal --for=condition=Programmed --timeout=300s
                 k -n nomnom-gateway wait grpcroute/orders-v1 --timeout=300s \
@@ -115,6 +118,11 @@ deploy:
                   --for=jsonpath='{.status.ancestors[0].conditions[?(@.type=="Accepted")].status}'=True
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
                   -l gateway.envoyproxy.io/owning-gateway-name=internal
+                k -n nomnom-gateway wait gateway/public --for=condition=Programmed --timeout=300s
+                k -n nomnom-gateway wait httproute/payments-provider-webhooks --timeout=300s \
+                  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True
+                k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
+                  -l gateway.envoyproxy.io/owning-gateway-name=public
                 test "$(k -n envoy-gateway-system get service internal-gateway -o jsonpath='{.spec.type}')" = ClusterIP
   # Bounded contexts ставятся собственными charts (ADR 12) с values тестового окружения.
   # BFF chart не устанавливается: образ BFF ещё не определён (ADR 10).

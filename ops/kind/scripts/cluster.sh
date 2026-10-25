@@ -58,7 +58,7 @@ create() {
   else
     mkdir -p "${ARTIFACTS_DIR}"
     local config="${ARTIFACTS_DIR}/cluster.${KIND_CLUSTER_NAME}.yaml"
-    sed "s|__BFF_HOST_PORT__|${BFF_HOST_PORT}|" "${KIND_DIR}/cluster.yaml" >"${config}"
+    sed -e "s|__BFF_HOST_PORT__|${BFF_HOST_PORT}|" -e "s|__WEBHOOKS_HOST_PORT__|${WEBHOOKS_HOST_PORT}|" "${KIND_DIR}/cluster.yaml" >"${config}"
     log "creating cluster ${KIND_CLUSTER_NAME} (${KIND_NODE_IMAGE%@*})"
     kind create cluster --name "${KIND_CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --config "${config}"
   fi

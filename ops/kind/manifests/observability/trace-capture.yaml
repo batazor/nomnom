@@ -1,0 +1,81 @@
+# Приёмник traces для проверок kind (verify.sh 4.2): OTLP gRPC → debug exporter в stdout.
+# Не заменяет Alloy (ADR 9): traces не хранятся и никуда не отправляются.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-observability
+  labels:
+    nomnom.dev/tier: infra
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trace-capture
+  namespace: nomnom-observability
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+    exporters:
+      debug:
+        verbosity: detailed
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [debug]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trace-capture
+  namespace: nomnom-observability
+  labels:
+    app.kubernetes.io/name: trace-capture
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trace-capture
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trace-capture
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: otelcol
+          image: docker.io/otel/opentelemetry-collector:0.163.2@sha256:63e5e8eccf4268be02388ba9f2dc36b80b5e47721291293411c0e83152d75bda
+          imagePullPolicy: IfNotPresent
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+      volumes:
+        - name: config
+          configMap:
+            name: trace-capture
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trace-capture
+  namespace: nomnom-observability
+spec:
+  selector:
+    app.kubernetes.io/name: trace-capture
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
