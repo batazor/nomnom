@@ -1,0 +1,15 @@
+# Все NetworkPolicy тестового окружения (ADR 16): kubectl apply -k / delete -k.
+# Применяют make kind-policies и тесты Chainsaw (ops/kind/e2e/templates/netpol-applied.yaml);
+# фаза без политик (ops/kind/e2e/netpol) удаляет их и восстанавливает при cleanup.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces/nomnom-orders
+  - namespaces/nomnom-restaurants
+  - namespaces/nomnom-delivery
+  - namespaces/nomnom-payments
+  - namespaces/nomnom-bff
+  - app-infrastructure.yaml
+  - gateway.yaml
+  - public-gateway.yaml
+  - fixtures.yaml

@@ -1,0 +1,134 @@
+# PostgreSQL владельцев тестового окружения (ADR 8): emptyDir, данные не переживают
+# пересоздание Pod. Пароль — Secret postgres-<owner> (nomnom-data), DSN приложения — Secret
+# <owner>-postgres (nomnom-<owner>, ключ dsn); оба из одного значения, сохраняемого между deploy.
+{{- $dsns := dict }}
+{{- range $owner := .Values.postgres.owners }}
+{{- $password := include "bootstrap.secretValue" (dict "namespace" "nomnom-data" "name" (printf "postgres-%s" $owner) "key" "password" "length" 48) }}
+{{- $dsn := printf "postgres://%s:%s@postgres-%s.nomnom-data.svc.cluster.local:5432/%s?sslmode=disable" $owner $password $owner $owner }}
+{{- $_ := set $dsns (printf "POSTGRES_%s_DSN" (upper $owner)) $dsn }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-{{ $owner }}
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" $ | nindent 4 }}
+type: Opaque
+data:
+  password: {{ $password | b64enc }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $owner }}-postgres
+  namespace: nomnom-{{ $owner }}
+  labels:
+    {{- include "bootstrap.labels" $ | nindent 4 }}
+type: Opaque
+data:
+  dsn: {{ $dsn | b64enc }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-{{ $owner }}
+  namespace: nomnom-data
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: {{ $owner }}
+    {{- include "bootstrap.labels" $ | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/instance: {{ $owner }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/instance: {{ $owner }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ $.Values.images.postgres }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ $owner }}
+            - name: POSTGRES_USER
+              value: {{ $owner }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-{{ $owner }}
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ $owner }}", "-d", "{{ $owner }}"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-{{ $owner }}
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: {{ $owner }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}
+---
+# DSN экспортеров PostgreSQL Alloy (profile grafana-cloud, ADR 9): POSTGRES_<OWNER>_DSN.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alloy-postgres
+  namespace: nomnom-observability
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  {{- range $name, $dsn := $dsns }}
+  {{ $name }}: {{ $dsn | b64enc }}
+  {{- end }}

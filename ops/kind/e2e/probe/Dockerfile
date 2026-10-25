@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1.7
 # Образ проверок kind E2E (ops/kind/e2e): grpcurl и descriptor sets всех gRPC-контрактов
 # nomnom, чтобы Chainsaw вызывал бизнес-API настоящим gRPC-клиентом изнутри неймспейса
-# приложения (под его NetworkPolicy). Контекст сборки — корень репозитория; лишнее
-# отсекает Dockerfile.dockerignore.
+# приложения (под его NetworkPolicy). Тот же образ у всех fixtures проверок
+# (manifests/fixtures/net-probe.yaml): grpcurl, nc и nslookup (busybox), curl для GraphQL BFF.
+# Контекст сборки — корень репозитория; лишнее отсекает Dockerfile.dockerignore.
 
 FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.24@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS grpcurl
 ARG TARGETOS
@@ -21,11 +22,15 @@ COPY boundaries/delivery/infrastructure/grpc/nomnom boundaries/delivery/infrastr
 COPY boundaries/payments/infrastructure/grpc/nomnom boundaries/payments/infrastructure/grpc/nomnom
 COPY ops/kind/e2e/probe/proto /fixtures
 # Buf image совместим с FileDescriptorSet и уже содержит импорты (well-known types).
+# google/rpc из googleapis (закреплённый commit BSR) — чтобы grpcurl декодировал детали
+# ошибок (google.rpc.ErrorInfo) и проверки сверяли reason.
 RUN mkdir /out && buf build --exclude-source-info -o /out/nomnom.binpb && \
-    buf build /fixtures --exclude-source-info -o /out/fixtures.binpb
+    buf build /fixtures --exclude-source-info -o /out/fixtures.binpb && \
+    buf build buf.build/googleapis/googleapis:8ac61b9e502343289c8c42b17aa5b245 --path google/rpc \
+      --exclude-source-info -o /out/googleapis.binpb
 
 FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
-# curl нужен проверкам verify.sh, которые ещё не перенесены в Chainsaw.
+# curl — HTTP-клиент проверок GraphQL BFF; nc и nslookup даёт busybox базового образа.
 RUN apk add --no-cache curl
 COPY --from=grpcurl /grpcurl /usr/local/bin/grpcurl
 COPY --from=protos /out /protos

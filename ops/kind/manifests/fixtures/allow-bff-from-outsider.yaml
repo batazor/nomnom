@@ -1,0 +1,24 @@
+# Временный ingress к BFF для проверки ops/kind/e2e/bff: BFF наружу не опубликован, и внешнего
+# клиента изображает net-probe из nomnom-outsider (вне прикладного контура). Применяется и
+# удаляется самим тестом; базовые политики nomnom-bff (default deny) не меняются.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: e2e-allow-bff-from-outsider
+  namespace: nomnom-bff
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bff
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nomnom-outsider
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: net-probe
+      ports:
+        - protocol: TCP
+          port: http

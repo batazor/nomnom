@@ -1,5 +1,6 @@
-# Тестовые pod для сетевых проверок (curl, nslookup). В неймспейсах приложений они получают
-# те же NetworkPolicy, что и приложения; outsider находится вне прикладного контура.
+# Тестовые pod проверок kind E2E (ops/kind/e2e): вызовы изнутри неймспейсов приложений под их
+# NetworkPolicy (net-probe, без service identity), из nomnom-outsider вне прикладного контура
+# и с service identity (grpc-caller). Образ у всех — e2e/probe.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -22,9 +23,9 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: net-probe
-          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
+          image: nomnom/e2e-probe
           imagePullPolicy: IfNotPresent
-          command: ["sleep", "infinity"]
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -56,9 +57,9 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: net-probe
-          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
+          image: nomnom/e2e-probe
           imagePullPolicy: IfNotPresent
-          command: ["sleep", "infinity"]
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -90,9 +91,9 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: net-probe
-          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
+          image: nomnom/e2e-probe
           imagePullPolicy: IfNotPresent
-          command: ["sleep", "infinity"]
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -124,9 +125,9 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: net-probe
-          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
+          image: nomnom/e2e-probe
           imagePullPolicy: IfNotPresent
-          command: ["sleep", "infinity"]
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -158,9 +159,9 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: net-probe
-          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
+          image: nomnom/e2e-probe
           imagePullPolicy: IfNotPresent
-          command: ["sleep", "infinity"]
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080

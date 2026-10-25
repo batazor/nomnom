@@ -12,13 +12,13 @@ env:
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
 
 # ADR 8: Inbox, Order и Outbox consumer'а — в PostgreSQL orders (Secret создаёт
-# scripts/postgres.sh). Миграции выполняет init container release orders и этого release.
+# chart ops/kind/bootstrap). Миграции выполняет init container release orders и этого release.
 postgres:
   dsnSecret:
     name: orders-postgres
 
 # ADR 18: Record Courier Assignment пишет order#courier/order#delivery в SpiceDB до
-# commit Inbox; без endpoint consumer не стартует. Secret создаёт scripts/authz.sh.
+# commit Inbox; без endpoint consumer не стартует. Secret создаёт chart ops/kind/bootstrap.
 spicedb:
   endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
   insecure: true

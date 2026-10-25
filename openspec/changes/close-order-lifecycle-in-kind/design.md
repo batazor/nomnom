@@ -16,7 +16,9 @@
 2. для каждой — в своём Unit of Work: кандидат через `select_candidate`, исключая курьеров, которым эту доставку уже предлагали; `make_offer`;
 3. доставка без кандидата остаётся ожидающей и берётся в следующем цикле.
 
-Без subject и без permission check, как Expire Delivery Offers: это работа процесса, а не вызов. Конкурентное изменение доставки (optimistic concurrency) пропускает её. Worker — тот же цикл, что у истечения предложений (`OFFERS__DISPATCH_INTERVAL`, по умолчанию 2 s), в процессе `delivery`.
+Без subject и без permission check, как Expire Delivery Offers: это работа процесса, а не вызов. Конкурентное изменение доставки (optimistic concurrency) пропускает её. Worker устроен как у истечения предложений, но со своими настройками в секции `[offers]`: `OFFERS__DISPATCH_INTERVAL` (по умолчанию 2 s) и `OFFERS__DISPATCH_BATCH` (`batch_size`, 1..1000, по умолчанию 100).
+
+Выбор ожидающих доставок — отдельный read-порт use case, а не новый метод `DeliveryRepository`: его реализует только PostgreSQL, in-memory реализации нет. Use case тестируется на моке порта, SQL-выборка — интеграционным тестом на PostgreSQL в testcontainers.
 
 Replan из `orders` по таймауту назначения остаётся эскалацией: он снимает назначение и ищет заново.
 
@@ -36,8 +38,7 @@ Replan из `orders` по таймауту назначения остаётся
 
 ### 3. Входящие заказы и Get Kitchen Queue по gRPC
 
-Get Kitchen Queue по своей спецификации содержит только принятые (`QUEUED`) заказы. Новый заказ ждёт решения кухни, поэтому нужен отдельный query **List Incoming Orders**: заказы в `RECEIVED` по возрастанию времени получения. Это доска «входящие» кухни, а не изменение смысла очереди.
-
+Get Kitchen Queue по своей спецификации содержит только принятые (`QUEUED`) заказы. Новый заказ ждёт решения кухни, поэтому нужен отдельный query **List Incoming Orders**: заказы в `RECEIVED` по возрастанию времени получения. Это доска «входящие» кухни, а не изменение смысла очереди. Projection-порт query реализует только MongoDB, in-memory реализации нет: query тестируется на моке порта, выборка — на MongoDB в testcontainers.
 
 `GetKitchenQueue(restaurant_id)` возвращает заказы очереди кухни в рекомендованном порядке с `restaurant_order_id`, `order_id`, состоянием и версией. Проверка — `restaurant#operate_kitchen`, как у команд кухни.
 
@@ -50,7 +51,7 @@ Chart `boundaries/orders/ops/helm` уже содержит `values-worker.yaml` 
 У кухни и курьера пока нет клиентов и операций в BFF. Их роль в kind играет fixture **`e2e-driver`** (Deployment в `nomnom-bff` из образа `e2e/probe` с projected tokens для `nomnom.restaurants` и `nomnom.delivery`).
 
 - Только kind-values `restaurants` и `delivery` добавляют `nomnom-bff/e2e-driver=e2e-driver` в allowlist и `e2e-driver` в `userDelegates`. Chart-default и другие окружения не меняются.
-- User assertion для сотрудника, курьера и оператора выпускает тест тем же kind-ключом BFF, что и проверки раздела 7 (`scripts/mint-jwt.py`).
+- User assertion для оператора, владельца, сотрудника и курьера выпускает тест тем же kind-ключом BFF, что и проверки раздела 7 (`scripts/mint-jwt.py`).
 - Покупатель идёт настоящим путём: access token IdP-fixture → BFF GraphQL `placeOrder` и `order(id)`.
 
 Заменять e2e-driver на операции BFF — дело будущих клиентов кухни и курьера.

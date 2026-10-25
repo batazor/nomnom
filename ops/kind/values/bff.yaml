@@ -10,21 +10,22 @@ serviceAccount:
   name: bff
 
 # ADR 15: контексты вызываются только через internal gateway; egress BFF ограничен базовыми
-# политиками неймспейса (manifests/netpol/app-baseline.yaml). Публикации наружу нет:
-# проверки обращаются к BFF через kubectl port-forward.
+# политиками неймспейса (manifests/netpol/app-baseline). Публикации наружу нет: проверка
+# ops/kind/e2e/bff на время прогона открывает ingress к BFF из nomnom-outsider.
 internalGateway:
   address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
 
 # ADR 32. ТОЛЬКО для kind: identity provider — тестовый (tests/identity/fixtures, ConfigMap
 # idp-jwks), его ключ подписи лежит в репозитории. Ключ подписи user assertions (Secret
-# bff-assertion-key) создаётся один раз на кластер. Оба создаёт scripts/bff-identity.sh.
+# bff-assertion-key) выпускает cert-manager один раз на кластер: ECDSA P-256 в PKCS#8, ключ
+# tls.key, rotationPolicy Never. Оба создаёт chart ops/kind/bootstrap (ADR 34).
 identity:
   idpIssuer: https://idp.nomnom.test
   idpAudience: nomnom-bff
   idpJwksConfigMap: idp-jwks
   assertionKeySecret:
     name: bff-assertion-key
-    key: key.pem
+    key: tls.key
   assertionKeyId: nomnom-bff-kind
   tokenAudiences:
     - nomnom.orders

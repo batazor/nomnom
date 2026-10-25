@@ -1,5 +1,5 @@
-# Базовые политики прикладного неймспейса. Файл не содержит namespace и применяется
-# к каждому неймспейсу с label nomnom.dev/tier=app (см. scripts/policies.sh).
+# Базовые политики прикладного неймспейса. Файл не содержит namespace: kustomization.yaml
+# применяет его к каждому неймспейсу с label nomnom.dev/tier=app (overlays namespaces/<ns>).
 #
 # Бизнес-API: ingress только от Envoy Proxy internal gateway; прямой ingress от других
 # приложений и egress к чужим backend'ам запрещены default deny.

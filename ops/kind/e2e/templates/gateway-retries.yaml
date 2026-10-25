@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+# Сколько раз internal gateway повторил один вызов (ADR 15): счётчик Envoy
+# upstream_rq_retry кластера route до и после вызова из grpc-caller (с его token).
+# Статистика читается с порта Prometheus Envoy Proxy (metrics, 19001) через proxy API server
+# (kubectl get --raw — тот же запрос, что делает операция Chainsaw proxy; в v0.2.15 proxy
+# теряет outputs) и разбирается x_metrics_decode. Счётчик общий для всех вызовов route,
+# поэтому тест, использующий шаблон, не должен быть concurrent.
+#
+# Bindings (обязательные): route — имя GRPCRoute в nomnom-gateway; method, request, code,
+# message — вызов и ожидаемый ответ; retries — ожидаемое число повторов.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: gateway-retries
+spec:
+  bindings:
+    - name: stats
+      value: (join('', ['/api/v1/namespaces/envoy-gateway-system/pods/', x_k8s_list($client, 'v1', 'Pod', 'envoy-gateway-system').items[?metadata.labels."gateway.envoyproxy.io/owning-gateway-name" == 'internal'] | [0].metadata.name, ':19001/proxy/stats/prometheus?filter=upstream_rq_retry$']))
+  try:
+    - script:
+        # Bindings шаблона вычисляются до bindings with, поэтому кластер route — binding операции.
+        bindings:
+          - name: cluster
+            value: (join('', ['grpcroute/nomnom-gateway/', $route, '/rule/0']))
+        env:
+          - name: STATS
+            value: ($stats)
+        content: kubectl get --raw "$STATS"
+        outputs:
+          # x_metrics_decode возвращает model.Vector: to_string/json_parse дают его JSON-вид
+          # [{metric: {labels}, value: [timestamp, "значение"]}].
+          - name: before
+            value: (json_parse(to_string(x_metrics_decode($stdout)))[?metric.envoy_cluster_name == $cluster] | to_number([0].value[1]))
+    - script:
+        env:
+          - name: METHOD
+            value: ($method)
+          - name: REQUEST
+            value: ($request)
+        content: |
+          kubectl -n nomnom-bff exec deploy/grpc-caller -- sh -c '
+            grpcurl -plaintext -max-time 20 -format-error \
+              -protoset /protos/nomnom.binpb -protoset /protos/googleapis.binpb \
+              -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/nomnom.orders)" \
+              -d "$0" internal-gateway.envoy-gateway-system.svc.cluster.local:8080 "$1" 2>&1 || true
+          ' "$REQUEST" "$METHOD"
+        check:
+          ($error): ~
+          (json_parse($stdout).code): ($code)
+          (json_parse($stdout).message): ($message)
+    - script:
+        bindings:
+          - name: cluster
+            value: (join('', ['grpcroute/nomnom-gateway/', $route, '/rule/0']))
+        env:
+          - name: STATS
+            value: ($stats)
+        content: kubectl get --raw "$STATS"
+        check:
+          ($error): ~
+          (subtract(json_parse(to_string(x_metrics_decode($stdout)))[?metric.envoy_cluster_name == $cluster] | to_number([0].value[1]), $before)): ($retries)

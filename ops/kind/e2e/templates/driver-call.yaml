@@ -61,7 +61,8 @@ spec:
           subject="$(jq -rn --argjson s "$state" "$SUBJECT")"
           key="$(mktemp)"
           trap 'rm -f "$key"' EXIT
-          kubectl -n nomnom-bff get secret bff-assertion-key -o jsonpath='{.data.key\.pem}' | base64 -d >"$key"
+          # Ключ BFF выпускает cert-manager (tls.key); прежний bootstrap хранил его в key.pem.
+          kubectl -n nomnom-bff get secret bff-assertion-key -o json | jq -r '.data["tls.key"] // .data["key.pem"]' | base64 -d >"$key"
           deadline=$(($(date +%s) + WAIT))
           while :; do
             assertion="$(python3 -I "$root/ops/kind/scripts/mint-jwt.py" user-assertion "$key" nomnom-bff-kind "$AUDIENCE" "$subject")"

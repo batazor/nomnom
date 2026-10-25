@@ -63,7 +63,8 @@ spec:
               root="$(git rev-parse --show-toplevel)"
               key="$(mktemp)"
               trap 'rm -f "$key"' EXIT
-              kubectl -n nomnom-bff get secret bff-assertion-key -o jsonpath='{.data.key\.pem}' | base64 -d >"$key"
+              # Ключ BFF выпускает cert-manager (tls.key); прежний bootstrap хранил его в key.pem.
+              kubectl -n nomnom-bff get secret bff-assertion-key -o json | jq -r '.data["tls.key"] // .data["key.pem"]' | base64 -d >"$key"
               assertion="$(python3 -I "$root/ops/kind/scripts/mint-jwt.py" user-assertion "$key" nomnom-bff-kind nomnom.delivery "$COURIER")"
               kubectl -n nomnom-bff exec deploy/e2e-driver -- sh -c '
                 grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb \

@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+# TCP-подключение (nc -z, 3 s) из pod fixture (manifests/fixtures/net-probe.yaml) — из его
+# неймспейса и под его NetworkPolicy.
+#
+# Bindings (все обязательные: bindings шаблона перекрывают bindings сценария): from_namespace
+# и from — неймспейс и Deployment вызывающего; host и port — получатель; expect — open
+# (подключение установлено), closed (не установлено по любой причине) или dropped (silent
+# drop: timeout, а не ошибка DNS «bad address» и не connection refused).
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: tcp-connect
+spec:
+  try:
+    - script:
+        env:
+          - name: FROM_NAMESPACE
+            value: ($from_namespace)
+          - name: FROM
+            value: ($from)
+          - name: HOST
+            value: ($host)
+          - name: PORT
+            value: (to_string($port))
+        content: kubectl -n "$FROM_NAMESPACE" exec "deploy/$FROM" -- nc -z -v -w 3 "$HOST" "$PORT"
+        check:
+          (($error == null) == ($expect == 'open')): true
+          # busybox nc: «Operation timed out» — timeout, «bad address» — DNS, refused — без текста.
+          ($expect != 'dropped' || contains($stderr, 'Operation timed out')): true

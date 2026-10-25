@@ -6,11 +6,16 @@ access-token <idp-key.pem> <idp-jwks.json> <idp-vectors.json> <sub>
     iss and aud from idp-vectors.json, typ at+jwt, scope, 120 s lifetime. Only for kind.
 user-assertion <bff-key.pem> <kid> <audience> <sub>
     ES256 user assertion shaped like the ones BFF signs: iss nomnom-bff, 30 s lifetime, jti.
+
+A key argument env:<NAME> reads the PEM from the environment variable NAME, so a check can
+pass a key from a Secret without writing it to disk itself.
 """
 import base64
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -25,6 +30,11 @@ def signing_input(header: dict, claims: dict) -> str:
 
 
 def openssl_sign(data: str, key_file: str) -> bytes:
+    if key_file.startswith("env:"):
+        with tempfile.NamedTemporaryFile("w", suffix=".pem") as key:
+            key.write(os.environ[key_file[len("env:") :]])
+            key.flush()
+            return openssl_sign(data, key.name)
     return subprocess.run(
         ["openssl", "dgst", "-sha256", "-sign", key_file], input=data.encode(), capture_output=True, check=True
     ).stdout

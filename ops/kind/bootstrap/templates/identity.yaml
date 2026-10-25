@@ -1,0 +1,190 @@
+# Identity тестового окружения (ADR 27, ADR 32). ТОЛЬКО для kind.
+#   - Certificate bff-assertion-key (nomnom-bff): cert-manager создаёт ключ подписи user
+#     assertions BFF (ECDSA P-256, PKCS#8) в Secret bff-assertion-key (tls.key, tls.crt);
+#     rotationPolicy Never — ключ живёт столько же, сколько кластер. BFF читает tls.key.
+#   - ConfigMap idp-jwks (nomnom-bff): JWKS тестового identity provider из
+#     tests/identity/fixtures; реального provider в kind нет.
+#   - Job identity-jwks: ConfigMap cluster-jwks и bff-jwks в неймспейсах контекстов
+#     (files/publish-jwks.py) при каждом install/upgrade.
+{{- $namespaces := list }}
+{{- range .Values.contexts }}
+{{- $namespaces = append $namespaces (printf "nomnom-%s" .) }}
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bff-assertion-key
+  namespace: nomnom-bff
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  # Сертификат — только контейнер ключа: Job берёт публичный ключ из tls.crt, tls.key не
+  # использует. Подписи user assertions проверяются по JWKS, не по цепочке X.509.
+  commonName: nomnom-bff user assertions
+  secretName: bff-assertion-key
+  duration: 87600h
+  usages:
+    - digital signature
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    encoding: PKCS8
+    rotationPolicy: Never
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: nomnom-selfsigned-bootstrap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: idp-jwks
+  namespace: nomnom-bff
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+data:
+  jwks.json: {{ required "identity.idpJwks: --set-file identity.idpJwks=tests/identity/fixtures/idp-jwks.json" .Values.identity.idpJwks | toJson }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: identity-jwks
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+---
+# Сертификат BFF: get одного Secret. /openid/v1/jwks и /.well-known/openid-configuration
+# открыты всем ServiceAccount встроенной ClusterRole system:service-account-issuer-discovery.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: identity-jwks
+  namespace: nomnom-bff
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [bff-assertion-key]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: identity-jwks
+  namespace: nomnom-bff
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: identity-jwks
+subjects:
+  - kind: ServiceAccount
+    name: identity-jwks
+    namespace: nomnom-data
+{{- range $namespace := $namespaces }}
+---
+# Server-side apply двух ConfigMap: create (имя в create не ограничивается) и patch только их.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: identity-jwks
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "bootstrap.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [cluster-jwks, bff-jwks]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: identity-jwks
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "bootstrap.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: identity-jwks
+subjects:
+  - kind: ServiceAccount
+    name: identity-jwks
+    namespace: nomnom-data
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identity-jwks
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+data:
+  publish-jwks.py: {{ .Files.Get "files/publish-jwks.py" | toJson }}
+---
+# Hook пересоздаётся при каждом upgrade: JWKS кластера обновляется после ротации его signing
+# key, bff-jwks — после перевыпуска ключа BFF. Pod в nomnom-data: на этот неймспейс не
+# действуют NetworkPolicy контекстов, egress к API server открыт.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: identity-jwks
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 420
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: identity-jwks
+    spec:
+      restartPolicy: Never
+      serviceAccountName: identity-jwks
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: publish
+          image: {{ .Values.images.python }}
+          command: ["python3", "-I", "/job/publish-jwks.py"]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: EXPECTED_ISSUER
+              value: {{ .Values.identity.issuer | quote }}
+            - name: BFF_NAMESPACE
+              value: nomnom-bff
+            - name: BFF_SECRET
+              value: bff-assertion-key
+            - name: BFF_KEY_ID
+              value: {{ .Values.identity.bffKeyId | quote }}
+            - name: JWKS_NAMESPACES
+              value: {{ join " " $namespaces | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: job
+              mountPath: /job
+              readOnly: true
+      volumes:
+        - name: job
+          configMap:
+            name: identity-jwks

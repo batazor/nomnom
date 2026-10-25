@@ -30,20 +30,38 @@ Accepted
 
 ## Decision
 
-Kind E2E пишутся как тесты Kyverno Chainsaw в `ops/kind/e2e/` по областям (`gateway/`, …):
+Kind E2E пишутся как тесты Kyverno Chainsaw в `ops/kind/e2e/` по областям (`gateway/`,
+`netpol/`, `calls/`, `infra/`, `bff/`); bash-проверок (`verify.sh`) больше нет:
 
-- состояние ресурсов проверяется операциями `assert` с JMESPath, без `kubectl` и `jsonpath`;
-- бизнес-API вызывается настоящим gRPC-клиентом — `grpcurl` с descriptor sets всех
-  контрактов из buf workspace — изнутри неймспейса приложения (fixture `grpc-caller`, образ
-  `ops/kind/e2e/probe`), под его NetworkPolicy и с его service identity. Ответ проверяется
-  по `code` и `message`;
-- повторяющийся шаг — `StepTemplate` (`templates/grpc-call.yaml`), параметры —
-  `scenarios` и bindings, а не функции в shell;
+- состояние ресурсов проверяется операциями `assert`/`error` с JMESPath, без `kubectl` и
+  `jsonpath`; кластерные инварианты (deployments Available, нет рестартов и проваленных проб
+  после политик) — `assert` без ресурса по спискам `x_k8s_list`;
+- вызовы идут из pod fixtures (`manifests/fixtures/net-probe.yaml`, образ
+  `ops/kind/e2e/probe`) в нужных неймспейсах, под их NetworkPolicy: `net-probe` в неймспейсах
+  приложений и в `nomnom-outsider`, `grpc-caller` в `nomnom-bff` с service identity.
+  Клиенты настоящие: бизнес-API — `grpcurl` с descriptor sets всех контрактов из buf
+  workspace и `google/rpc` из googleapis (ответ сверяется по `code`, `message` и reason
+  `google.rpc.ErrorInfo`), сеть — `nc` и `nslookup`, GraphQL BFF — `curl`;
+- повторяющийся шаг — `StepTemplate` (`templates/`: `grpc-call`, `tcp-connect`,
+  `dns-lookup`, `gateway-retries`, `netpol-applied`), параметры — `scenarios` и bindings, а не
+  функции в shell. Шаг `script` — одна команда, утверждения — в `check`;
+- фазы NetworkPolicy описаны тестами: фаза A (`netpol-without-policies`, не `concurrent`, до
+  остальных тестов) удаляет политики и восстанавливает их в `cleanup`, тесты фазы B
+  применяют их сами (`netpol-applied`, политики остаются). Политики — kustomization
+  `manifests/netpol` (`kubectl apply -k`): базовые политики без namespace размножаются по
+  неймспейсам приложений overlays, а операция Chainsaw `apply` помещает ресурс без namespace
+  только в неймспейс теста. Временные fixtures (deny к SpiceDB, ingress к BFF) применяются
+  `apply` и удаляются Chainsaw в конце теста;
+- trace context и deadline проверяются по server span `orders` в логе `trace-capture`,
+  retries — по счётчику Envoy `upstream_rq_retry` с порта Prometheus Envoy Proxy через proxy
+  API server и `x_metrics_decode` (операция `proxy` в v0.2.15 теряет outputs, поэтому запрос —
+  `kubectl get --raw`); тесты на общих счётчиках и fixture отказа SpiceDB не `concurrent`;
+- диагностика при ошибке — `catch` тестов (pod logs, events, describe, Hubble DROPPED);
+  полный снимок окружения по-прежнему собирает `make kind-diagnostics`;
 - версия Chainsaw закрепляется в `ops/kind/versions.env` и запускается через `go run` без
-  установки; `make kind-test` и `make kind-e2e` запускают его вместе с ещё не перенесёнными
-  проверками `verify.sh`.
+  установки; `make kind-test` и `make kind-e2e` запускают только Chainsaw.
 
-Проверки переносятся из `verify.sh` по секциям; новые проверки сразу пишутся в Chainsaw.
+Новые проверки сразу пишутся в Chainsaw.
 
 ## Consequences
 
@@ -51,5 +69,9 @@ Kind E2E пишутся как тесты Kyverno Chainsaw в `ops/kind/e2e/` п
 Повторяющаяся логика живёт в шаблонах шагов, а не в вспомогательных функциях. Появляется
 собственный образ проверок, который пересобирается при изменении proto. Шаг `script`
 по-прежнему исполняет одну команду в pod (`kubectl exec … grpcurl`), но логики в нём нет.
-Детали ошибок (`google.rpc.ErrorInfo`) grpcurl пока не декодирует: в descriptor sets нет
-googleapis.
+Шаги `script` не повторяются до успеха, поэтому ожидание асинхронных эффектов (отправка
+spans, применение политик Cilium) — явный `sleep`. Outputs операций видны только внутри
+шага: замеры «до и после» (retries) собраны в один шаблон шага. Вызов BFF идёт не через
+`kubectl port-forward`, а из `nomnom-outsider` через временно открытый ingress: проверка
+не держит фоновых процессов. Проверки инфраструктуры, которой нет в окружении, не выводятся
+как заблокированные: ожидание выражено условием (Alloy доступен, только если развёрнут).

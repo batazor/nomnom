@@ -52,7 +52,7 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order
 | `RequestOrderCancellation`: `NOT_FOUND`, `PERMISSION_DENIED` | error `NOT_FOUND` |
 | остальные сбои | error `UNAVAILABLE` без внутренних деталей |
 
-Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — раздел 7 `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
+Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — тест `bff-end-to-end` в `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
 
 ### Слайс `catalog`
 
@@ -288,7 +288,7 @@ docker run --rm -p 3010:3010 nomnom/bff:local   # /health/live, /health/ready, P
 
 Helm chart и команды его проверки описаны в [ops/README.md](ops/README.md). Probes — штатные `/health/live` и `/health/ready` Router на порту `http`: отдельного технического порта для health у Router нет (исключение из ADR 17).
 
-В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders` и `nomnom.restaurants`. Ключ подписи user assertions создаётся один раз на кластер (`ops/kind/scripts/bff-identity.sh`, Secret `bff-assertion-key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Наружу BFF не опубликован: проверки обращаются к нему через `kubectl port-forward`.
+В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders` и `nomnom.restaurants`. Ключ подписи user assertions выпускает cert-manager один раз на кластер (chart `ops/kind/bootstrap`, Secret `bff-assertion-key`, ключ `tls.key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Наружу BFF не опубликован: проверки обращаются к нему через `kubectl port-forward`.
 
 ## Следующие шаги
 

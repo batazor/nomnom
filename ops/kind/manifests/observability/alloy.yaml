@@ -1,16 +1,11 @@
 # Grafana Alloy тестового окружения (ADR 9): приём OTLP метрик приложений и отправка в
-# Grafana Cloud (free tier). Подключается Skaffold profile grafana-cloud; Secret
-# grafana-cloud-otlp создаёт scripts/grafana-cloud.sh из ops/grafana-cloud/.env.grafana-cloud.
+# Grafana Cloud (free tier). Подключается Skaffold profile grafana-cloud через
+# kustomization.yaml рядом: Secret grafana-cloud-otlp генерируется из
+# ops/grafana-cloud/.env.grafana-cloud, Secret alloy-postgres создаёт chart ops/kind/bootstrap.
+# Namespace nomnom-observability — manifests/base/namespaces.yaml.
 # Free tier ограничен активными series, поэтому уходят только метрики service.namespace=nomnom
 # и allowlist инфраструктуры (SpiceDB, PostgreSQL, pods nomnom-*), traces процессов nomnom и
 # stdout-логи прикладных неймспейсов; без profiles и собственных метрик Alloy.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: nomnom-observability
-  labels:
-    nomnom.dev/tier: infra
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -221,7 +216,7 @@ data:
     }
 
     // PostgreSQL: по экспортеру на владельца (ADR 8); DSN из Secret alloy-postgres
-    // (scripts/grafana-cloud.sh). Только своя база владельца, без pg_settings.
+    // (chart ops/kind/bootstrap). Только своя база владельца, без pg_settings.
     prometheus.exporter.postgres "orders" {
       data_source_names  = [sys.env("POSTGRES_ORDERS_DSN")]
       enabled_collectors = ["database", "stat_database"]
@@ -439,9 +434,30 @@ spec:
         runAsGroup: 473
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # Без endpoint, instance ID или token Alloy молча отбрасывал бы метрики: pod не
+        # стартует, и Skaffold status check падает с этим сообщением.
+        - name: require-grafana-cloud
+          image: docker.io/grafana/alloy:v1.21.2@sha256:89a5a320168387336b9ac3c850609c3ba7757eadd4ae5f1d819deb35e9854b18
+          command:
+            - sh
+            - -c
+            - >-
+              test -n "$GRAFANA_CLOUD_OTLP_ENDPOINT" && test -n "$GRAFANA_CLOUD_OTLP_INSTANCE_ID" &&
+              test -n "$GRAFANA_CLOUD_OTLP_TOKEN" || {
+              echo "GRAFANA_CLOUD_OTLP_ENDPOINT, GRAFANA_CLOUD_OTLP_INSTANCE_ID and GRAFANA_CLOUD_OTLP_TOKEN
+              must be set in ops/grafana-cloud/.env.grafana-cloud" >&2; exit 1; }
+          envFrom:
+            - secretRef:
+                name: grafana-cloud-otlp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
       containers:
         - name: alloy
-          image: docker.io/grafana/alloy:v1.21.2
+          image: docker.io/grafana/alloy:v1.21.2@sha256:89a5a320168387336b9ac3c850609c3ba7757eadd4ae5f1d819deb35e9854b18
           args:
             - run
             - /etc/alloy/config.alloy
@@ -451,7 +467,7 @@ spec:
           envFrom:
             - secretRef:
                 name: grafana-cloud-otlp
-            # POSTGRES_<OWNER>_DSN экспортеров PostgreSQL (scripts/grafana-cloud.sh).
+            # POSTGRES_<OWNER>_DSN экспортеров PostgreSQL (chart ops/kind/bootstrap).
             - secretRef:
                 name: alloy-postgres
           ports:

@@ -122,7 +122,7 @@ Secret-ресурсы chart не создаёт.
 container `migrate` (`/usr/local/bin/delivery-migrate`, `database.migrate: true`) получают
 `DATABASE__URL` из Secret `database.urlSecret` (по умолчанию `delivery-postgres`, ключ `dsn`)
 и `DATABASE__MAX_CONNS` (`database.maxConns`). Secret создаёт развёртывание: в kind —
-`ops/kind/scripts/postgres.sh` вместе с базой `postgres-delivery`. Без Secret init container не
+chart `ops/kind/bootstrap` вместе с базой `postgres-delivery`. Без Secret init container не
 рендерится, а процесс завершается ошибкой startup (`DATABASE__URL is required`).
 
 ## Service identity
