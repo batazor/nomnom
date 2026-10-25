@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pkg.application import UnitOfWork
 from slices.payment.domains.payment import OperationId
 
-from ..errors import InvalidPaymentRequest
+from ..errors import InvalidPaymentRequestError
 from ..operation_flow import ProviderResultApplication, ProviderResultApplier, to_domain_outcome
 from ..ports import ProviderOperationOutcome
 
@@ -32,7 +32,7 @@ class ApplyProviderOperationResultHandler:
         self, command: ApplyProviderOperationResultInput
     ) -> ApplyProviderOperationResultResult:
         if not command.operation_id.strip():
-            raise InvalidPaymentRequest("operation id is required")
+            raise InvalidPaymentRequestError("operation id is required")
         operation_id = OperationId(command.operation_id)
         to_domain_outcome(command.outcome)
         return self._uow.run(

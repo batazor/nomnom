@@ -16,7 +16,7 @@ from slices.payment.domains.payment import (
 )
 
 from ..access import require_permission
-from ..errors import InvalidPaymentRequest, PaymentNotFound
+from ..errors import InvalidPaymentRequestError, PaymentNotFoundError
 from ..ports import PaymentPermission, PaymentPermissionChecker, PaymentResource
 
 
@@ -60,7 +60,7 @@ class ListPaymentOperationsHandler:
 
     def handle(self, query: ListPaymentOperationsInput) -> ListPaymentOperationsResult:
         if not query.payment_id.strip():
-            raise InvalidPaymentRequest("payment id is required")
+            raise InvalidPaymentRequestError("payment id is required")
         payment_id = PaymentId(query.payment_id)
         require_permission(
             self._permissions,
@@ -69,7 +69,7 @@ class ListPaymentOperationsHandler:
             PaymentResource(payment_id),
         )
         if self._payments.get(payment_id) is None:
-            raise PaymentNotFound(payment_id)
+            raise PaymentNotFoundError(payment_id)
         operations = self._operations.list_for_payment(payment_id)
         return ListPaymentOperationsResult(payment_id, tuple(_view(op) for op in operations))
 

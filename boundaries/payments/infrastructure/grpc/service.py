@@ -14,9 +14,9 @@ import grpc
 
 from infrastructure.grpc.identity import SubjectResolver
 from pkg.application import (
-    AuthorizationUnavailable,
-    ConcurrencyConflict,
-    PermissionDenied,
+    AuthorizationUnavailableError,
+    ConcurrencyConflictError,
+    PermissionDeniedError,
 )
 from pkg.lifecycle import DrainTimeoutError, LifecycleError
 from slices.payment.applications.authorize_payment import (
@@ -36,14 +36,14 @@ from slices.payment.applications.create_payment import (
     CreatePaymentInput,
 )
 from slices.payment.applications.errors import (
-    IdempotencyKeyConflict,
-    InvalidPaymentRequest,
-    OperationInProgress,
-    PaymentAlreadyExists,
-    PaymentNotFound,
-    PaymentOperationNotFound,
-    PaymentStateConflict,
-    ProviderResultConflict,
+    IdempotencyKeyConflictError,
+    InvalidPaymentRequestError,
+    OperationInProgressError,
+    PaymentAlreadyExistsError,
+    PaymentNotFoundError,
+    PaymentOperationNotFoundError,
+    PaymentStateConflictError,
+    ProviderResultConflictError,
 )
 from slices.payment.applications.get_payment_status import (
     GetPaymentStatusHandler,
@@ -53,7 +53,7 @@ from slices.payment.applications.operation_flow import (
     OperationStatus,
     PaymentOperationResult,
 )
-from slices.payment.applications.ports import ProviderUnavailable
+from slices.payment.applications.ports import ProviderUnavailableError
 from slices.payment.applications.refund_payment import (
     RefundPaymentHandler,
     RefundPaymentInput,
@@ -83,18 +83,18 @@ class PaymentsHandlers:
 
 # Ordered: the first matching application error decides the gRPC status code.
 _ERROR_CODES: tuple[tuple[type[Exception], grpc.StatusCode], ...] = (
-    (InvalidPaymentRequest, grpc.StatusCode.INVALID_ARGUMENT),
-    (PaymentNotFound, grpc.StatusCode.NOT_FOUND),
-    (PaymentOperationNotFound, grpc.StatusCode.NOT_FOUND),
-    (PermissionDenied, grpc.StatusCode.PERMISSION_DENIED),
-    (AuthorizationUnavailable, grpc.StatusCode.UNAVAILABLE),
-    (ProviderUnavailable, grpc.StatusCode.UNAVAILABLE),
-    (PaymentAlreadyExists, grpc.StatusCode.ALREADY_EXISTS),
-    (PaymentStateConflict, grpc.StatusCode.FAILED_PRECONDITION),
-    (IdempotencyKeyConflict, grpc.StatusCode.FAILED_PRECONDITION),
-    (OperationInProgress, grpc.StatusCode.ABORTED),
-    (ConcurrencyConflict, grpc.StatusCode.ABORTED),
-    (ProviderResultConflict, grpc.StatusCode.ABORTED),
+    (InvalidPaymentRequestError, grpc.StatusCode.INVALID_ARGUMENT),
+    (PaymentNotFoundError, grpc.StatusCode.NOT_FOUND),
+    (PaymentOperationNotFoundError, grpc.StatusCode.NOT_FOUND),
+    (PermissionDeniedError, grpc.StatusCode.PERMISSION_DENIED),
+    (AuthorizationUnavailableError, grpc.StatusCode.UNAVAILABLE),
+    (ProviderUnavailableError, grpc.StatusCode.UNAVAILABLE),
+    (PaymentAlreadyExistsError, grpc.StatusCode.ALREADY_EXISTS),
+    (PaymentStateConflictError, grpc.StatusCode.FAILED_PRECONDITION),
+    (IdempotencyKeyConflictError, grpc.StatusCode.FAILED_PRECONDITION),
+    (OperationInProgressError, grpc.StatusCode.ABORTED),
+    (ConcurrencyConflictError, grpc.StatusCode.ABORTED),
+    (ProviderResultConflictError, grpc.StatusCode.ABORTED),
 )
 
 
@@ -107,7 +107,7 @@ def _application_errors(context: grpc.ServicerContext) -> Iterator[None]:
     """
     try:
         yield
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - supervisor must catch every failure
         for error_type, code in _ERROR_CODES:
             if isinstance(error, error_type):
                 _abort(context, code, str(error))
@@ -119,7 +119,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
         self._handlers = handlers
         self._subjects = subjects
 
-    def GetPaymentStatus(  # noqa: N802
+    def GetPaymentStatus(  # noqa: N802 - name fixed by the generated servicer
         self,
         request: service_pb2.GetPaymentStatusRequest,
         context: grpc.ServicerContext,
@@ -142,7 +142,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
             )
         )
 
-    def CreatePayment(  # noqa: N802
+    def CreatePayment(  # noqa: N802 - name fixed by the generated servicer
         self,
         request: service_pb2.CreatePaymentRequest,
         context: grpc.ServicerContext,
@@ -163,7 +163,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
             created=result.created,
         )
 
-    def AuthorizePayment(  # noqa: N802
+    def AuthorizePayment(  # noqa: N802 - name fixed by the generated servicer
         self,
         request: service_pb2.AuthorizePaymentRequest,
         context: grpc.ServicerContext,
@@ -175,7 +175,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
             )
         return service_pb2.AuthorizePaymentResponse(operation=_operation(result))
 
-    def CapturePayment(  # noqa: N802
+    def CapturePayment(  # noqa: N802 - name fixed by the generated servicer
         self,
         request: service_pb2.CapturePaymentRequest,
         context: grpc.ServicerContext,
@@ -187,7 +187,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
             )
         return service_pb2.CapturePaymentResponse(operation=_operation(result))
 
-    def CancelAuthorization(  # noqa: N802
+    def CancelAuthorization(  # noqa: N802 - name fixed by the generated servicer
         self,
         request: service_pb2.CancelAuthorizationRequest,
         context: grpc.ServicerContext,
@@ -199,7 +199,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
             )
         return service_pb2.CancelAuthorizationResponse(operation=_operation(result))
 
-    def RefundPayment(  # noqa: N802
+    def RefundPayment(  # noqa: N802 - name fixed by the generated servicer
         self,
         request: service_pb2.RefundPaymentRequest,
         context: grpc.ServicerContext,

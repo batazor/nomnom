@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from .vo.money import CurrencyMismatch, Money
+from .vo.money import CurrencyMismatchError, Money
 
 
 class PaymentPolicyReason(StrEnum):
@@ -33,7 +33,7 @@ class PaymentRefundContext:
     requested_amount: Money
 
 
-def PaymentRefundable(context: PaymentRefundContext) -> SpecificationResult:
+def PaymentRefundable(context: PaymentRefundContext) -> SpecificationResult:  # noqa: N802 - name fixed by the gRPC/specification contract
     reasons: list[PaymentPolicyReason] = []
     if context.now > context.captured_at + context.refund_window:
         reasons.append(PaymentPolicyReason.REFUND_WINDOW_EXPIRED)
@@ -56,7 +56,7 @@ class PaymentCaptureContext:
     requested_amount: Money
 
 
-def PaymentCapturable(context: PaymentCaptureContext) -> SpecificationResult:
+def PaymentCapturable(context: PaymentCaptureContext) -> SpecificationResult:  # noqa: N802 - name fixed by the gRPC/specification contract
     reasons: list[PaymentPolicyReason] = []
     if context.now > context.authorized_at + context.authorization_window:
         reasons.append(PaymentPolicyReason.AUTHORIZATION_EXPIRED)
@@ -72,5 +72,5 @@ def PaymentCapturable(context: PaymentCaptureContext) -> SpecificationResult:
 def _exceeds_available(requested: Money, total: Money, consumed: Money) -> bool:
     currencies = {requested.currency, total.currency, consumed.currency}
     if len(currencies) != 1:
-        raise CurrencyMismatch("payment policy requires one currency")
+        raise CurrencyMismatchError("payment policy requires one currency")
     return requested.amount > total.amount - consumed.amount

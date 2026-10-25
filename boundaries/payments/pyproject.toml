@@ -26,7 +26,19 @@ line-length = 100
 extend-exclude = ["infrastructure/grpc/gen"]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+select = [
+    "E4", "E7", "E9", "F", "I", "B", "UP",
+    "SIM", "RUF", "RET", "BLE", "S", "T20", "LOG", "N",
+    "DTZ", "PERF", "C4", "PIE", "PTH", "ERA", "G", "FURB", "ISC",
+]
+# Docstrings and comments are written in Russian.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# unittest suites: plain asserts and fixed test secrets are expected.
+"tests/**" = ["S101", "S105", "S106", "BLE001"]
+# Process entrypoints report startup failures on stderr and turn any error into exit code 1.
+"entrypoints/**" = ["T201", "BLE001"]
 
 [tool.ty.environment]
 python-version = "3.14"

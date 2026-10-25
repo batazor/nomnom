@@ -13,7 +13,12 @@ from infrastructure.authorization import (
     DenyAllPermissions,
     SpiceDBPermissionChecker,
 )
-from pkg.application import AuthorizationUnavailable, PermissionDenied, Subject, SubjectKind
+from pkg.application import (
+    AuthorizationUnavailableError,
+    PermissionDeniedError,
+    Subject,
+    SubjectKind,
+)
 from pkg.config import SpiceDBSettings, load_settings
 from slices.payment.applications.access import require_permission
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
@@ -57,7 +62,7 @@ class FakePermissionsClient:
         self.requests: list[CheckPermissionRequest] = []
         self.timeouts: list[float] = []
 
-    def CheckPermission(  # noqa: N802
+    def CheckPermission(  # noqa: N802 - name fixed by the gRPC/specification contract
         self, request: CheckPermissionRequest, *, timeout: float
     ) -> CheckPermissionResponse:
         self.requests.append(request)
@@ -131,21 +136,25 @@ class DecisionTest(unittest.TestCase):
         for error in errors:
             with self.subTest(error=error):
                 checker = SpiceDBPermissionChecker(FakePermissionsClient(error=error), 1.0)
-                with self.assertLogs("infrastructure.authorization.spicedb", "WARNING"):
-                    with self.assertRaises(AuthorizationUnavailable):
-                        checker.is_allowed(WORKER, PaymentPermission.CAPTURE, RESOURCE)
+                with (
+                    self.assertLogs("infrastructure.authorization.spicedb", "WARNING"),
+                    self.assertRaises(AuthorizationUnavailableError),
+                ):
+                    checker.is_allowed(WORKER, PaymentPermission.CAPTURE, RESOURCE)
 
     def test_use_case_check_propagates_unavailable_and_denial(self) -> None:
         unavailable = SpiceDBPermissionChecker(
             FakePermissionsClient(error=_RpcFailure(grpc.StatusCode.DEADLINE_EXCEEDED)), 1.0
         )
-        with self.assertLogs("infrastructure.authorization.spicedb", "WARNING"):
-            with self.assertRaises(AuthorizationUnavailable):
-                require_permission(unavailable, WORKER, PaymentPermission.REFUND, RESOURCE)
+        with (
+            self.assertLogs("infrastructure.authorization.spicedb", "WARNING"),
+            self.assertRaises(AuthorizationUnavailableError),
+        ):
+            require_permission(unavailable, WORKER, PaymentPermission.REFUND, RESOURCE)
         denied = SpiceDBPermissionChecker(
             FakePermissionsClient(Permissionship.PERMISSIONSHIP_NO_PERMISSION), 1.0
         )
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(PermissionDeniedError):
             require_permission(denied, WORKER, PaymentPermission.REFUND, RESOURCE)
 
     def test_rejects_non_positive_timeout(self) -> None:
@@ -203,18 +212,20 @@ class SettingsTest(unittest.TestCase):
 
     def test_endpoint_without_key_is_startup_error(self) -> None:
         environment = {"SPICEDB__ENDPOINT": "localhost:50051", "SPICEDB__PRESHARED_KEY": " "}
-        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
-            with self.assertRaises(ValidationError):
-                load_settings()
+        with (
+            patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True),
+            self.assertRaises(ValidationError),
+        ):
+            load_settings()
 
     def test_rejects_invalid_timeout(self) -> None:
         for value in ("0s", "2", "PT2S", "-1s"):
-            with self.subTest(value=value):
-                with patch.dict(
-                    os.environ, {**REQUIRED_ENV, "SPICEDB__TIMEOUT": value}, clear=True
-                ):
-                    with self.assertRaises(ValidationError):
-                        load_settings()
+            with (
+                self.subTest(value=value),
+                patch.dict(os.environ, {**REQUIRED_ENV, "SPICEDB__TIMEOUT": value}, clear=True),
+                self.assertRaises(ValidationError),
+            ):
+                load_settings()
 
 
 if __name__ == "__main__":

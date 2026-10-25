@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from pkg.application import Subject
 from slices.payment.domains.payment import (
-    DuplicatePayment,
-    InvalidMoney,
+    DuplicatePaymentError,
+    InvalidMoneyError,
     Money,
     OrderId,
     Payment,
@@ -15,7 +15,7 @@ from slices.payment.domains.payment import (
 )
 
 from ..access import require_permission
-from ..errors import InvalidPaymentRequest, PaymentAlreadyExists
+from ..errors import InvalidPaymentRequestError, PaymentAlreadyExistsError
 from ..ports import PaymentIdentifiers, PaymentPermission, PaymentPermissionChecker, PaymentResource
 
 
@@ -52,7 +52,7 @@ class CreatePaymentHandler:
 
     def handle(self, command: CreatePaymentInput) -> CreatePaymentResult:
         if not command.order_id.strip():
-            raise InvalidPaymentRequest("order id is required")
+            raise InvalidPaymentRequestError("order id is required")
         order_id = OrderId(command.order_id)
         amount = _positive_money(command.amount, command.currency)
         payment_id = self._ids.new_payment_id()
@@ -69,7 +69,7 @@ class CreatePaymentHandler:
         payment = Payment(payment_id, order_id, amount)
         try:
             self._payments.add(payment)
-        except DuplicatePayment:
+        except DuplicatePaymentError:
             concurrent = self._payments.get_by_order(order_id)
             if concurrent is None:
                 raise
@@ -80,14 +80,14 @@ class CreatePaymentHandler:
 def _positive_money(amount: str, currency: str) -> Money:
     try:
         money = Money.parse(amount, currency)
-    except InvalidMoney as error:
-        raise InvalidPaymentRequest(str(error)) from error
+    except InvalidMoneyError as error:
+        raise InvalidPaymentRequestError(str(error)) from error
     if money.amount <= 0:
-        raise InvalidPaymentRequest("payment amount must be positive")
+        raise InvalidPaymentRequestError("payment amount must be positive")
     return money
 
 
 def _same_terms(existing: Payment, amount: Money) -> CreatePaymentResult:
     if existing.amount != amount:
-        raise PaymentAlreadyExists(existing.order_id)
+        raise PaymentAlreadyExistsError(existing.order_id)
     return CreatePaymentResult(existing.id, existing.state, created=False)

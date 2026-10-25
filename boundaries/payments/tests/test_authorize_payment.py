@@ -2,23 +2,23 @@ import unittest
 
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from pkg.application import AggregateRef, AuthorizationUnavailable, PermissionDenied
+from pkg.application import AggregateRef, AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
 from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
 from slices.payment.applications.errors import (
-    IdempotencyKeyConflict,
-    InvalidPaymentRequest,
-    OperationInProgress,
-    PaymentNotFound,
+    IdempotencyKeyConflictError,
+    InvalidPaymentRequestError,
+    OperationInProgressError,
+    PaymentNotFoundError,
 )
 from slices.payment.applications.operation_flow import OperationStatus
 from slices.payment.applications.ports import (
     PaymentPermission,
     ProviderOperationOutcome,
-    ProviderUnavailable,
+    ProviderUnavailableError,
 )
 from slices.payment.domains.payment import (
     Money,
@@ -87,7 +87,7 @@ class AuthorizePaymentTest(unittest.TestCase):
         )
 
     def test_ac_406_missing_idempotency_key_is_rejected(self) -> None:
-        with self.assertRaises(InvalidPaymentRequest):
+        with self.assertRaises(InvalidPaymentRequestError):
             self.handler.handle(self.authorize(key="  "))
 
         self.assertEqual(self.kit.provider.requests, [])
@@ -107,7 +107,7 @@ class AuthorizePaymentTest(unittest.TestCase):
 
     def test_ac_408_repeat_after_unknown_result_completes_same_operation(self) -> None:
         self.kit.provider.lost_responses = 1
-        with self.assertRaises(ProviderUnavailable):
+        with self.assertRaises(ProviderUnavailableError):
             self.handler.handle(self.authorize())
 
         result = self.handler.handle(self.authorize())
@@ -123,9 +123,9 @@ class AuthorizePaymentTest(unittest.TestCase):
         other_payment = self.kit.given_payment(payment_id="payment-other", order_id="order-2")
         capture = CapturePaymentHandler(self.kit.executor())
 
-        with self.assertRaises(IdempotencyKeyConflict):
+        with self.assertRaises(IdempotencyKeyConflictError):
             self.handler.handle(self.authorize(payment_id=other_payment))
-        with self.assertRaises(IdempotencyKeyConflict):
+        with self.assertRaises(IdempotencyKeyConflictError):
             capture.handle(CapturePaymentInput(ORCHESTRATOR, self.payment_id, KEY))
 
         self.assertEqual(len(self.kit.provider.requests), 1)
@@ -134,7 +134,7 @@ class AuthorizePaymentTest(unittest.TestCase):
     def test_ac_411_another_pending_operation_blocks_new_one(self) -> None:
         self.kit.given_operation(self.payment_id, OperationKind.AUTHORIZE, "other-key")
 
-        with self.assertRaises(OperationInProgress):
+        with self.assertRaises(OperationInProgressError):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.provider.requests, [])
@@ -142,7 +142,7 @@ class AuthorizePaymentTest(unittest.TestCase):
     def test_ac_418_unavailable_provider_keeps_state_and_pending_operation(self) -> None:
         self.kit.provider.unavailable_times = 1
 
-        with self.assertRaises(ProviderUnavailable):
+        with self.assertRaises(ProviderUnavailableError):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.payment_state(self.payment_id), PaymentState.PENDING)
@@ -163,7 +163,7 @@ class AuthorizePaymentTest(unittest.TestCase):
     def test_ac_426_denied_permission_does_not_reach_provider(self) -> None:
         self.kit.permissions.denied.add(PaymentPermission.AUTHORIZE)
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(PermissionDeniedError):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.provider.requests, [])
@@ -173,7 +173,7 @@ class AuthorizePaymentTest(unittest.TestCase):
     def test_ac_427_unavailable_authorization_fails_closed(self) -> None:
         self.kit.permissions.unavailable = True
 
-        with self.assertRaises(AuthorizationUnavailable):
+        with self.assertRaises(AuthorizationUnavailableError):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.provider.requests, [])
@@ -197,7 +197,7 @@ class AuthorizePaymentTest(unittest.TestCase):
         self.assertEqual(len(self.kit.published()), 1)
 
     def test_unknown_payment_is_not_found(self) -> None:
-        with self.assertRaises(PaymentNotFound):
+        with self.assertRaises(PaymentNotFoundError):
             self.handler.handle(self.authorize(payment_id="missing"))
 
         self.assertEqual(self.kit.provider.requests, [])
@@ -217,7 +217,7 @@ class AuthorizePaymentTest(unittest.TestCase):
         self.kit.given_operation(self.payment_id, OperationKind.AUTHORIZE, "other-key")
         self.kit.operations.stale_lookups = True
 
-        with self.assertRaises(OperationInProgress):
+        with self.assertRaises(OperationInProgressError):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.provider.requests, [])

@@ -5,7 +5,7 @@ class ApplicationError(Exception):
     """Base class of typed application errors mapped to transport codes by adapters."""
 
 
-class PermissionDenied(ApplicationError):
+class PermissionDeniedError(ApplicationError):
     """The subject has no permission for the requested action on the resource."""
 
     def __init__(self, permission: str) -> None:
@@ -13,11 +13,11 @@ class PermissionDenied(ApplicationError):
         self.permission = permission
 
 
-class AuthorizationUnavailable(ApplicationError):
+class AuthorizationUnavailableError(ApplicationError):
     """The authorization check failed technically; protected use cases fail closed."""
 
 
-class ConcurrencyConflict(ApplicationError):
+class ConcurrencyConflictError(ApplicationError):
     """The aggregate version changed since it was loaded."""
 
     def __init__(self, aggregate_type: str, aggregate_id: str) -> None:

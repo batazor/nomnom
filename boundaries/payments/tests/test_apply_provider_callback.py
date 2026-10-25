@@ -7,9 +7,9 @@ from slices.payment.applications.apply_provider_callback import (
     ApplyProviderCallbackInput,
 )
 from slices.payment.applications.errors import (
-    InvalidPaymentRequest,
-    PaymentOperationNotFound,
-    ProviderResultConflict,
+    InvalidPaymentRequestError,
+    PaymentOperationNotFoundError,
+    ProviderResultConflictError,
 )
 from slices.payment.applications.operation_flow import OperationStatus, ProviderResultStatus
 from slices.payment.applications.ports import ProviderOperationOutcome
@@ -71,7 +71,7 @@ class ApplyProviderCallbackTest(unittest.TestCase):
         self.assertEqual(len(self.kit.published()), 1)
 
     def test_ac_422_unknown_operation_is_rejected_and_message_not_registered(self) -> None:
-        with self.assertRaises(PaymentOperationNotFound):
+        with self.assertRaises(PaymentOperationNotFoundError):
             self.handler.handle(self.callback(operation_id="unknown"))
 
         self.assertEqual(self.kit.store.provider_messages, set())
@@ -80,7 +80,7 @@ class ApplyProviderCallbackTest(unittest.TestCase):
     def test_conflicting_result_rolls_back_message_registration(self) -> None:
         self.handler.handle(self.callback())
 
-        with self.assertRaises(ProviderResultConflict):
+        with self.assertRaises(ProviderResultConflictError):
             self.handler.handle(
                 self.callback(
                     message_id="message-2", outcome=ProviderOperationOutcome.declined("late")
@@ -97,9 +97,8 @@ class ApplyProviderCallbackTest(unittest.TestCase):
             self.callback(message_id=" "),
         ]
         for command in cases:
-            with self.subTest(command=command):
-                with self.assertRaises(InvalidPaymentRequest):
-                    self.handler.handle(command)
+            with self.subTest(command=command), self.assertRaises(InvalidPaymentRequestError):
+                self.handler.handle(command)
         self.assertEqual(self.kit.store.provider_messages, set())
 
 

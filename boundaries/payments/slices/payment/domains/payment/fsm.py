@@ -30,7 +30,7 @@ class TransitionResult:
 
 
 @dataclass(eq=True)
-class InvalidTransition(Exception):
+class InvalidTransitionError(Exception):
     from_state: PaymentState
     trigger: PaymentTrigger
 
@@ -39,7 +39,7 @@ class InvalidTransition(Exception):
 
 
 @dataclass(eq=True)
-class GuardFailed(Exception):
+class GuardFailedError(Exception):
     reason: str
 
     def __str__(self) -> str:
@@ -47,7 +47,7 @@ class GuardFailed(Exception):
 
 
 @dataclass(eq=True)
-class AlreadyInState(Exception):
+class AlreadyInStateError(Exception):
     state: PaymentState
 
     def __str__(self) -> str:
@@ -77,7 +77,7 @@ class _TransitionDefinition:
 def _provider_reference_is_present(transition_input: TransitionInput) -> None:
     reference = transition_input.provider_reference
     if reference is None or not reference.strip():
-        raise GuardFailed("provider_reference_required")
+        raise GuardFailedError("provider_reference_required")
 
 
 _ALLOWED = _Outcome.ALLOWED
@@ -147,6 +147,6 @@ def ensure_allowed(from_state: PaymentState, trigger: PaymentTrigger) -> None:
     """Check the table outcome for ``trigger`` without evaluating guards."""
     definition = _TRANSITION_TABLE.get((from_state, trigger), _INVALID)
     if definition.outcome is _Outcome.INVALID:
-        raise InvalidTransition(from_state, trigger)
+        raise InvalidTransitionError(from_state, trigger)
     if definition.outcome is _Outcome.ALREADY_APPLIED:
-        raise AlreadyInState(from_state)
+        raise AlreadyInStateError(from_state)

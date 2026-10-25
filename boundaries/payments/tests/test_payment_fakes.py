@@ -2,13 +2,13 @@ import unittest
 
 from payment_fakes import PaymentsTestKit
 
-from pkg.application import AggregateRef, ConcurrencyConflict
-from slices.payment.applications.ports import ProviderOperationRequest, ProviderUnavailable
+from pkg.application import AggregateRef, ConcurrencyConflictError
+from slices.payment.applications.ports import ProviderOperationRequest, ProviderUnavailableError
 from slices.payment.domains.payment import (
-    DuplicateIdempotencyKey,
-    DuplicatePayment,
+    DuplicateIdempotencyKeyError,
+    DuplicatePaymentError,
     Money,
-    OperationAlreadyPending,
+    OperationAlreadyPendingError,
     OperationId,
     OperationKind,
     OrderId,
@@ -55,14 +55,14 @@ class InMemoryAdaptersTest(unittest.TestCase):
     def test_payment_repository_enforces_order_uniqueness_and_version(self) -> None:
         amount = Money.parse("5", "EUR")
         self.kit.payments.add(Payment(PaymentId("p-1"), OrderId("o-1"), amount))
-        with self.assertRaises(DuplicatePayment):
+        with self.assertRaises(DuplicatePaymentError):
             self.kit.payments.add(Payment(PaymentId("p-2"), OrderId("o-1"), amount))
 
         first = self.kit.payments.get(PaymentId("p-1"))
         second = self.kit.payments.get(PaymentId("p-1"))
         assert first is not None and second is not None
         self.assertEqual(self.kit.payments.save(first), 2)
-        with self.assertRaises(ConcurrencyConflict):
+        with self.assertRaises(ConcurrencyConflictError):
             self.kit.payments.save(second)
 
     def test_operation_repository_enforces_key_and_single_pending(self) -> None:
@@ -76,9 +76,9 @@ class InMemoryAdaptersTest(unittest.TestCase):
             )
 
         self.kit.operations.add(operation("op-1", "key-1"))
-        with self.assertRaises(DuplicateIdempotencyKey):
+        with self.assertRaises(DuplicateIdempotencyKeyError):
             self.kit.operations.add(operation("op-2", "key-1"))
-        with self.assertRaises(OperationAlreadyPending):
+        with self.assertRaises(OperationAlreadyPendingError):
             self.kit.operations.add(operation("op-3", "key-2"))
 
     def test_fake_provider_deduplicates_by_idempotency_key(self) -> None:
@@ -92,7 +92,7 @@ class InMemoryAdaptersTest(unittest.TestCase):
         )
         self.kit.provider.lost_responses = 1
 
-        with self.assertRaises(ProviderUnavailable):
+        with self.assertRaises(ProviderUnavailableError):
             self.kit.provider.execute(request)
         outcome = self.kit.provider.execute(request)
 

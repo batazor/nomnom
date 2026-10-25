@@ -24,7 +24,7 @@ class IdentityConfigError(ValueError):
     """Identity configuration that must stop the process at startup."""
 
 
-class _TokenRejected(Exception):
+class _TokenRejectedError(Exception):
     """Specific rejection reason; logged, never returned to the caller."""
 
 
@@ -76,15 +76,15 @@ def _bearer_token(context: grpc.ServicerContext) -> str:
         if key.lower() == "authorization"
     ]
     if not values:
-        raise _TokenRejected("authorization metadata is missing")
+        raise _TokenRejectedError("authorization metadata is missing")
     if len(values) > 1:
-        raise _TokenRejected("multiple authorization metadata values")
+        raise _TokenRejectedError("multiple authorization metadata values")
     value = values[0]
     if isinstance(value, bytes):
-        raise _TokenRejected("authorization metadata is binary")
+        raise _TokenRejectedError("authorization metadata is binary")
     scheme, _, token = value.partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
-        raise _TokenRejected("authorization scheme is not Bearer")
+        raise _TokenRejectedError("authorization scheme is not Bearer")
     return token.strip()
 
 
@@ -101,5 +101,5 @@ def _unverified_jti(token: str) -> object:
 def _numeric_claim(claims: Mapping[str, object], name: str) -> float:
     value = claims.get(name)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise _TokenRejected(f"claim {name} is not a number")
+        raise _TokenRejectedError(f"claim {name} is not a number")
     return float(value)

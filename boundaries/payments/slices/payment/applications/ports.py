@@ -38,11 +38,11 @@ class PaymentPermissionChecker(Protocol):
     def is_allowed(
         self, subject: Subject, permission: PaymentPermission, resource: PaymentResource
     ) -> bool:
-        """Return the decision; raise ``AuthorizationUnavailable`` on error or timeout."""
+        """Return the decision; raise ``AuthorizationUnavailableError`` on error or timeout."""
         ...
 
 
-class ProviderUnavailable(ApplicationError):
+class ProviderUnavailableError(ApplicationError):
     """The payment provider could not be reached or returned a technical error."""
 
 
@@ -90,7 +90,7 @@ class PaymentProviderGateway(Protocol):
         The provider MUST deduplicate by ``idempotency_key``: a repeated request returns
         the original result without a second financial effect. ``operation_id`` is sent
         as the merchant reference used to correlate callbacks. Technical failures raise
-        ``ProviderUnavailable``.
+        ``ProviderUnavailableError``.
         """
         ...
 

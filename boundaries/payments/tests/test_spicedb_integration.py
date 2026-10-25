@@ -9,7 +9,7 @@ import time
 import unittest
 
 from infrastructure.authorization import SpiceDBPermissionChecker, create_spicedb_client
-from pkg.application import AuthorizationUnavailable, Subject, SubjectKind
+from pkg.application import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
 from slices.payment.domains.payment import OrderId, PaymentId
@@ -60,18 +60,22 @@ class SpiceDBIntegrationTest(unittest.TestCase):
     def test_wrong_preshared_key_is_unavailable(self) -> None:
         checker = _checker(ENDPOINT, key="wrong-key")
         worker = Subject(SubjectKind.SERVICE, "orders-worker")
-        with self.assertLogs("infrastructure.authorization.spicedb", "WARNING"):
-            with self.assertRaises(AuthorizationUnavailable):
-                checker.is_allowed(worker, PaymentPermission.AUTHORIZE, RESOURCE)
+        with (
+            self.assertLogs("infrastructure.authorization.spicedb", "WARNING"),
+            self.assertRaises(AuthorizationUnavailableError),
+        ):
+            checker.is_allowed(worker, PaymentPermission.AUTHORIZE, RESOURCE)
 
     def test_unreachable_spicedb_is_unavailable_within_timeout(self) -> None:
         # AC-466: no answer within SPICEDB__TIMEOUT fails closed.
         checker = _checker("localhost:1", timeout="300ms")
         worker = Subject(SubjectKind.SERVICE, "orders-worker")
         started = time.monotonic()
-        with self.assertLogs("infrastructure.authorization.spicedb", "WARNING"):
-            with self.assertRaises(AuthorizationUnavailable):
-                checker.is_allowed(worker, PaymentPermission.AUTHORIZE, RESOURCE)
+        with (
+            self.assertLogs("infrastructure.authorization.spicedb", "WARNING"),
+            self.assertRaises(AuthorizationUnavailableError),
+        ):
+            checker.is_allowed(worker, PaymentPermission.AUTHORIZE, RESOURCE)
         self.assertLess(time.monotonic() - started, 2.0)
 
 

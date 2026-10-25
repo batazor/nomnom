@@ -14,7 +14,7 @@ from .payment import Payment
 
 
 @dataclass(eq=True)
-class DuplicatePayment(Exception):
+class DuplicatePaymentError(Exception):
     """A Payment for the Order already exists (one Payment per Order)."""
 
     order_id: OrderId
@@ -24,7 +24,7 @@ class DuplicatePayment(Exception):
 
 
 @dataclass(eq=True)
-class DuplicateIdempotencyKey(Exception):
+class DuplicateIdempotencyKeyError(Exception):
     """A Payment Operation with the idempotency key already exists."""
 
     idempotency_key: str
@@ -34,7 +34,7 @@ class DuplicateIdempotencyKey(Exception):
 
 
 @dataclass(eq=True)
-class OperationAlreadyPending(Exception):
+class OperationAlreadyPendingError(Exception):
     """The Payment already has an operation without a final result."""
 
     payment_id: PaymentId
@@ -49,7 +49,7 @@ class PaymentRepository(Protocol):
     def get_by_order(self, order_id: OrderId) -> Payment | None: ...
 
     def add(self, payment: Payment) -> int:
-        """Persist a new Payment and return its version; raises ``DuplicatePayment``."""
+        """Persist a new Payment and return its version; raises ``DuplicatePaymentError``."""
         ...
 
     def save(self, payment: Payment) -> int:
@@ -71,7 +71,7 @@ class PaymentOperationRepository(Protocol):
     def add(self, operation: PaymentOperation) -> None:
         """Persist a new pending operation.
 
-        Raises ``DuplicateIdempotencyKey`` or ``OperationAlreadyPending``.
+        Raises ``DuplicateIdempotencyKeyError`` or ``OperationAlreadyPendingError``.
         """
         ...
 

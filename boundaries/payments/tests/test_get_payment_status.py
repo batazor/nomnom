@@ -4,8 +4,8 @@ from decimal import Decimal
 
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
-from pkg.application import PermissionDenied
-from slices.payment.applications.errors import PaymentNotFound
+from pkg.application import PermissionDeniedError
+from slices.payment.applications.errors import PaymentNotFoundError
 from slices.payment.applications.get_payment_status import (
     GetPaymentStatusHandler,
     GetPaymentStatusInput,
@@ -35,13 +35,13 @@ class GetPaymentStatusTest(unittest.TestCase):
         self.assertEqual(self.kit.store, before)
 
     def test_ac_429_unknown_payment_is_not_found(self) -> None:
-        with self.assertRaises(PaymentNotFound):
+        with self.assertRaises(PaymentNotFoundError):
             self.handler.handle(GetPaymentStatusInput(ORCHESTRATOR, "missing"))
 
     def test_denied_subject_learns_nothing_about_existence(self) -> None:
         self.kit.permissions.denied.add(PaymentPermission.VIEW)
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(PermissionDeniedError):
             self.handler.handle(GetPaymentStatusInput(OPERATOR, "missing"))
 
 

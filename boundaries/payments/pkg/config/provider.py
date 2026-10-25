@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from .duration import _duration
 
 PROVIDER_KIND_ENV = "PROVIDER__KIND"
-PROVIDER_WEBHOOK_SECRET_ENV = "PROVIDER__WEBHOOK_SECRET"
+PROVIDER_WEBHOOK_SECRET_ENV = "PROVIDER__WEBHOOK_SECRET"  # noqa: S105 - env var name, not a secret
 PROVIDER_WEBHOOK_TOLERANCE_ENV = "PROVIDER__WEBHOOK_TOLERANCE"
 DEFAULT_PROVIDER_WEBHOOK_TOLERANCE = timedelta(minutes=5)
 PROVIDER_KINDS = ("unconfigured", "fake")

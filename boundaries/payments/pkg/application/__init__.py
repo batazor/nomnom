@@ -3,9 +3,9 @@
 from .clock import Clock
 from .errors import (
     ApplicationError,
-    AuthorizationUnavailable,
-    ConcurrencyConflict,
-    PermissionDenied,
+    AuthorizationUnavailableError,
+    ConcurrencyConflictError,
+    PermissionDeniedError,
 )
 from .outbox import AggregateRef
 from .subject import Subject, SubjectKind
@@ -14,10 +14,10 @@ from .unit_of_work import UnitOfWork
 __all__ = [
     "AggregateRef",
     "ApplicationError",
-    "AuthorizationUnavailable",
+    "AuthorizationUnavailableError",
     "Clock",
-    "ConcurrencyConflict",
-    "PermissionDenied",
+    "ConcurrencyConflictError",
+    "PermissionDeniedError",
     "Subject",
     "SubjectKind",
     "UnitOfWork",

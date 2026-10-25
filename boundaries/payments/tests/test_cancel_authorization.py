@@ -6,9 +6,9 @@ from slices.payment.applications.cancel_authorization import (
     CancelAuthorizationHandler,
     CancelAuthorizationInput,
 )
-from slices.payment.applications.errors import PaymentStateConflict
+from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
-from slices.payment.applications.ports import ProviderOperationOutcome, ProviderUnavailable
+from slices.payment.applications.ports import ProviderOperationOutcome, ProviderUnavailableError
 from slices.payment.domains.payment import (
     Money,
     OperationKind,
@@ -65,7 +65,7 @@ class CancelAuthorizationTest(unittest.TestCase):
     def test_repeated_compensation_has_one_effect(self) -> None:
         payment_id = self.kit.given_payment(PaymentState.AUTHORIZED)
         self.kit.provider.lost_responses = 1
-        with self.assertRaises(ProviderUnavailable):
+        with self.assertRaises(ProviderUnavailableError):
             self.handler.handle(self.cancel(payment_id))
 
         result = self.handler.handle(self.cancel(payment_id))
@@ -79,7 +79,7 @@ class CancelAuthorizationTest(unittest.TestCase):
     def test_cancellation_of_captured_payment_is_rejected(self) -> None:
         payment_id = self.kit.given_payment(PaymentState.CAPTURED)
 
-        with self.assertRaises(PaymentStateConflict):
+        with self.assertRaises(PaymentStateConflictError):
             self.handler.handle(self.cancel(payment_id))
 
         self.assertEqual(self.kit.provider.requests, [])

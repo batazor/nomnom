@@ -32,7 +32,7 @@ class WorkerGroup:
         def serve(worker: Worker) -> None:
             try:
                 worker.run()
-            except BaseException as error:
+            except BaseException as error:  # noqa: BLE001 - supervisor must catch every failure
                 errors.append(error)
             finally:
                 exited.set()
@@ -48,7 +48,7 @@ class WorkerGroup:
         for worker in self._workers:
             try:
                 worker.shutdown(deadline)
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - supervisor must catch every failure
                 errors.append(error)
         if errors:
             raise errors[0]

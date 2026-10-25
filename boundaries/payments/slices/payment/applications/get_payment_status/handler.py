@@ -8,7 +8,7 @@ from pkg.application import Subject
 from slices.payment.domains.payment import OrderId, Payment, PaymentId, PaymentState
 
 from ..access import require_permission
-from ..errors import InvalidPaymentRequest, PaymentNotFound
+from ..errors import InvalidPaymentRequestError, PaymentNotFoundError
 from ..ports import PaymentPermission, PaymentPermissionChecker, PaymentResource
 
 
@@ -42,14 +42,14 @@ class GetPaymentStatusHandler:
 
     def handle(self, query: GetPaymentStatusInput) -> GetPaymentStatusResult:
         if not query.payment_id.strip():
-            raise InvalidPaymentRequest("payment id is required")
+            raise InvalidPaymentRequestError("payment id is required")
         payment_id = PaymentId(query.payment_id)
         require_permission(
             self._permissions, query.subject, PaymentPermission.VIEW, PaymentResource(payment_id)
         )
         payment = self._payments.get(payment_id)
         if payment is None:
-            raise PaymentNotFound(payment_id)
+            raise PaymentNotFoundError(payment_id)
         return GetPaymentStatusResult(
             payment_id=payment.id,
             order_id=payment.order_id,

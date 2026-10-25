@@ -33,7 +33,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler `ApplyProviderOperationResultHandler` в [`handler.py`](handler.py), требования FR-410, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Совпадающий с зафиксированным результат — no-op, противоречащий — `ProviderResultConflict` без изменений.
+Handler `ApplyProviderOperationResultHandler` в [`handler.py`](handler.py), требования FR-410, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Совпадающий с зафиксированным результат — no-op, противоречащий — `ProviderResultConflictError` без изменений.
 
 ## Acceptance
 

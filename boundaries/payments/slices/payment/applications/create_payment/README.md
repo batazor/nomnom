@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler `CreatePaymentHandler` в [`handler.py`](handler.py), требования FR-400, FR-411 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Естественный ключ идемпотентности — `order_id`: повтор с теми же суммой и валютой возвращает существующий `Payment`, с другими — `PaymentAlreadyExists`. Одиночная запись без Unit of Work; provider не вызывается, факт не публикуется.
+Handler `CreatePaymentHandler` в [`handler.py`](handler.py), требования FR-400, FR-411 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Естественный ключ идемпотентности — `order_id`: повтор с теми же суммой и валютой возвращает существующий `Payment`, с другими — `PaymentAlreadyExistsError`. Одиночная запись без Unit of Work; provider не вызывается, факт не публикуется.
 
 ## Acceptance
 

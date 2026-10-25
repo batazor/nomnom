@@ -19,7 +19,7 @@ from test_service_identity import (
     JWKS_FILE,
     REQUIRED_ENV,
     FakeContext,
-    _Aborted,
+    _AbortedError,
     _handlers,
 )
 
@@ -96,9 +96,8 @@ class _ResolverCase(unittest.TestCase):
         return self.resolver.resolve(cast(grpc.ServicerContext, context))
 
     def _assert_rejected(self, context: FakeContext) -> list[str]:
-        with self.assertLogs(LOGGER, level="WARNING") as logs:
-            with self.assertRaises(_Aborted):
-                self._resolve(context)
+        with self.assertLogs(LOGGER, level="WARNING") as logs, self.assertRaises(_AbortedError):
+            self._resolve(context)
         self.assertEqual(context.code, grpc.StatusCode.UNAUTHENTICATED)
         self.assertEqual(context.details, "invalid caller identity")
         return logs.output
@@ -193,7 +192,7 @@ class UserAssertionClockTest(unittest.TestCase):
         try:
             with self.assertLogs(LOGGER, level="INFO"):
                 resolver.resolve(cast(grpc.ServicerContext, context))
-        except _Aborted:
+        except _AbortedError:
             return False
         return True
 
@@ -285,9 +284,8 @@ class UserIdentityConfigTest(_ResolverCase):
 
     def test_malformed_delegates_are_a_config_error(self) -> None:
         for value in ("bff,", ",bff", "bff,,orders", "bff orders", "bff,bff"):
-            with self.subTest(value=value):
-                with self.assertRaises(ValidationError):
-                    _settings(IDENTITY__USER_DELEGATES=value)
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                _settings(IDENTITY__USER_DELEGATES=value)
 
     def test_without_user_settings_assertion_is_rejected_but_service_call_passes(self) -> None:
         # AC-529: the same delegate call is the service subject bff without an assertion.
@@ -372,11 +370,10 @@ class UserIdentityGrpcTest(unittest.TestCase):
         self.assertEqual([check[0] for check in self.kit.permissions.checks], [CUSTOMER])
 
     def test_assertion_of_other_workload_is_unauthenticated(self) -> None:
-        with self.assertLogs(LOGGER, level="WARNING"):
-            with self.assertRaises(grpc.RpcError) as raised:
-                self._get(
-                    _metadata(USER_VECTORS["non_delegate_token"], USER_VECTORS["tokens"]["valid"])
-                )
+        with self.assertLogs(LOGGER, level="WARNING"), self.assertRaises(grpc.RpcError) as raised:
+            self._get(
+                _metadata(USER_VECTORS["non_delegate_token"], USER_VECTORS["tokens"]["valid"])
+            )
         error = cast(grpc.Call, raised.exception)
         self.assertEqual(error.code(), grpc.StatusCode.UNAUTHENTICATED)
         self.assertEqual(self.kit.permissions.checks, [])

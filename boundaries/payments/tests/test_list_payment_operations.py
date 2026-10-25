@@ -4,13 +4,13 @@ from datetime import timedelta
 
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
-from pkg.application import PermissionDenied
+from pkg.application import PermissionDeniedError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
 from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
-from slices.payment.applications.errors import PaymentNotFound
+from slices.payment.applications.errors import PaymentNotFoundError
 from slices.payment.applications.list_payment_operations import (
     ListPaymentOperationsHandler,
     ListPaymentOperationsInput,
@@ -61,11 +61,11 @@ class ListPaymentOperationsTest(unittest.TestCase):
     def test_ac_431_subject_without_permission_is_rejected(self) -> None:
         self.kit.permissions.denied.add(PaymentPermission.VIEW_OPERATIONS)
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(PermissionDeniedError):
             self.handler.handle(ListPaymentOperationsInput(OPERATOR, self.payment_id))
 
     def test_unknown_payment_is_not_found(self) -> None:
-        with self.assertRaises(PaymentNotFound):
+        with self.assertRaises(PaymentNotFoundError):
             self.handler.handle(ListPaymentOperationsInput(OPERATOR, "missing"))
 
     def test_payment_without_operations_has_empty_history(self) -> None:

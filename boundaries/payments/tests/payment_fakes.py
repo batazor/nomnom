@@ -20,8 +20,8 @@ from di.resources import sections
 from infrastructure.postgres import PostgresDatabase, create_database
 from pkg.application import (
     AggregateRef,
-    AuthorizationUnavailable,
-    ConcurrencyConflict,
+    AuthorizationUnavailableError,
+    ConcurrencyConflictError,
     Subject,
     SubjectKind,
 )
@@ -35,13 +35,13 @@ from slices.payment.applications.ports import (
     PaymentResource,
     ProviderOperationOutcome,
     ProviderOperationRequest,
-    ProviderUnavailable,
+    ProviderUnavailableError,
 )
 from slices.payment.domains.payment import (
-    DuplicateIdempotencyKey,
-    DuplicatePayment,
+    DuplicateIdempotencyKeyError,
+    DuplicatePaymentError,
     Money,
-    OperationAlreadyPending,
+    OperationAlreadyPendingError,
     OperationId,
     OperationKind,
     OperationState,
@@ -153,14 +153,14 @@ class InMemoryPaymentRepository:
 
     def add(self, payment: Payment) -> int:
         if any(r.order_id == payment.order_id for r in self._store.payments.values()):
-            raise DuplicatePayment(payment.order_id)
+            raise DuplicatePaymentError(payment.order_id)
         self._store.payments[payment.id] = self._to_record(payment, version=1)
         return 1
 
     def save(self, payment: Payment) -> int:
         current = self._store.payments.get(payment.id)
         if current is None or current.version != payment.version:
-            raise ConcurrencyConflict("Payment", payment.id)
+            raise ConcurrencyConflictError("Payment", payment.id)
         version = payment.version + 1
         self._store.payments[payment.id] = self._to_record(payment, version)
         return version
@@ -222,15 +222,15 @@ class InMemoryPaymentOperationRepository:
     def add(self, operation: PaymentOperation) -> None:
         self.stale_lookups = False
         if self.get_by_idempotency_key(operation.idempotency_key) is not None:
-            raise DuplicateIdempotencyKey(operation.idempotency_key)
+            raise DuplicateIdempotencyKeyError(operation.idempotency_key)
         if self.find_pending(operation.payment_id) is not None:
-            raise OperationAlreadyPending(operation.payment_id)
+            raise OperationAlreadyPendingError(operation.payment_id)
         self._store.operations[operation.id] = self._to_record(operation, version=1)
 
     def save(self, operation: PaymentOperation) -> int:
         current = self._store.operations.get(operation.id)
         if current is None or current.version != operation.version:
-            raise ConcurrencyConflict("PaymentOperation", operation.id)
+            raise ConcurrencyConflictError("PaymentOperation", operation.id)
         version = operation.version + 1
         self._store.operations[operation.id] = self._to_record(operation, version)
         return version
@@ -312,7 +312,7 @@ class FakePaymentProvider:
         self.requests.append(request)
         if self.unavailable_times > 0:
             self.unavailable_times -= 1
-            raise ProviderUnavailable("provider is unavailable")
+            raise ProviderUnavailableError("provider is unavailable")
         outcome = self.effects.get(request.idempotency_key)
         if outcome is None:
             outcome = self.outcomes.get(
@@ -322,7 +322,7 @@ class FakePaymentProvider:
             self.effects[request.idempotency_key] = outcome
         if self.lost_responses > 0:
             self.lost_responses -= 1
-            raise ProviderUnavailable("response lost after the provider applied the operation")
+            raise ProviderUnavailableError("response lost after the provider applied the operation")
         return outcome
 
     def effect_count(self, kind: OperationKind) -> int:
@@ -341,7 +341,7 @@ class FakePermissions:
     ) -> bool:
         self.checks.append((subject, permission, resource))
         if self.unavailable:
-            raise AuthorizationUnavailable("authorization check timed out")
+            raise AuthorizationUnavailableError("authorization check timed out")
         return permission not in self.denied
 
 

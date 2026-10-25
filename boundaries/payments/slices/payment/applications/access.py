@@ -1,6 +1,6 @@
 """Authoritative permission check performed before any protected domain operation."""
 
-from pkg.application import PermissionDenied, Subject
+from pkg.application import PermissionDeniedError, Subject
 
 from .ports import PaymentPermission, PaymentPermissionChecker, PaymentResource
 
@@ -11,6 +11,6 @@ def require_permission(
     permission: PaymentPermission,
     resource: PaymentResource,
 ) -> None:
-    """Fail closed: a denial raises ``PermissionDenied``; checker errors propagate."""
+    """Fail closed: a denial raises ``PermissionDeniedError``; checker errors propagate."""
     if not checker.is_allowed(subject, permission, resource):
-        raise PermissionDenied(permission.value)
+        raise PermissionDeniedError(permission.value)

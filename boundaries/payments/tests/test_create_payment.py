@@ -7,12 +7,12 @@ from payment_fakes import (
     PaymentsTestKit,
 )
 
-from pkg.application import AuthorizationUnavailable, PermissionDenied
+from pkg.application import AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.create_payment import (
     CreatePaymentHandler,
     CreatePaymentInput,
 )
-from slices.payment.applications.errors import InvalidPaymentRequest, PaymentAlreadyExists
+from slices.payment.applications.errors import InvalidPaymentRequestError, PaymentAlreadyExistsError
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
 from slices.payment.domains.payment import (
     Money,
@@ -61,9 +61,11 @@ class CreatePaymentTest(unittest.TestCase):
         first = self.handler.handle(self.create())
 
         for amount, currency in (("30.00", "EUR"), ("25.00", "USD")):
-            with self.subTest(amount=amount, currency=currency):
-                with self.assertRaises(PaymentAlreadyExists):
-                    self.handler.handle(self.create(amount=amount, currency=currency))
+            with (
+                self.subTest(amount=amount, currency=currency),
+                self.assertRaises(PaymentAlreadyExistsError),
+            ):
+                self.handler.handle(self.create(amount=amount, currency=currency))
         self.assertEqual(list(self.kit.store.payments), [first.payment_id])
         self.assertEqual(self.kit.store.payments[first.payment_id].version, 1)
 
@@ -76,17 +78,19 @@ class CreatePaymentTest(unittest.TestCase):
             ("10", "eur"),
         ]
         for amount, currency in cases:
-            with self.subTest(amount=amount, currency=currency):
-                with self.assertRaises(InvalidPaymentRequest):
-                    self.handler.handle(self.create(amount=amount, currency=currency))
-        with self.assertRaises(InvalidPaymentRequest):
+            with (
+                self.subTest(amount=amount, currency=currency),
+                self.assertRaises(InvalidPaymentRequestError),
+            ):
+                self.handler.handle(self.create(amount=amount, currency=currency))
+        with self.assertRaises(InvalidPaymentRequestError):
             self.handler.handle(self.create(order_id=" "))
         self.assertEqual(self.kit.store.payments, {})
 
     def test_ac_426_denied_permission_creates_nothing(self) -> None:
         self.kit.permissions.denied.add(PaymentPermission.CREATE)
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(PermissionDeniedError):
             self.handler.handle(self.create())
 
         self.assertEqual(self.kit.store.payments, {})
@@ -94,7 +98,7 @@ class CreatePaymentTest(unittest.TestCase):
     def test_ac_427_unavailable_authorization_fails_closed(self) -> None:
         self.kit.permissions.unavailable = True
 
-        with self.assertRaises(AuthorizationUnavailable):
+        with self.assertRaises(AuthorizationUnavailableError):
             self.handler.handle(self.create())
 
         self.assertEqual(self.kit.store.payments, {})

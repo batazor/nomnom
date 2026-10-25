@@ -13,14 +13,14 @@ from http.server import BaseHTTPRequestHandler
 
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.applications.errors import (
-    InvalidPaymentRequest,
-    PaymentNotFound,
-    PaymentOperationNotFound,
-    PaymentStateConflict,
-    ProviderResultConflict,
+    InvalidPaymentRequestError,
+    PaymentNotFoundError,
+    PaymentOperationNotFoundError,
+    PaymentStateConflictError,
+    ProviderResultConflictError,
 )
 
-from .webhook import SIGNATURE_HEADER, InvalidWebhook, WebhookVerifier, parse_callback
+from .webhook import SIGNATURE_HEADER, InvalidWebhookError, WebhookVerifier, parse_callback
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +29,12 @@ MAX_BODY_BYTES = 64 * 1024
 
 # Ordered: the first matching error decides the status code.
 _ERROR_STATUS: tuple[tuple[type[Exception], int], ...] = (
-    (InvalidWebhook, 400),
-    (InvalidPaymentRequest, 400),
-    (PaymentOperationNotFound, 404),
-    (PaymentNotFound, 404),
-    (ProviderResultConflict, 409),
-    (PaymentStateConflict, 409),
+    (InvalidWebhookError, 400),
+    (InvalidPaymentRequestError, 400),
+    (PaymentOperationNotFoundError, 404),
+    (PaymentNotFoundError, 404),
+    (ProviderResultConflictError, 409),
+    (PaymentStateConflictError, 409),
 )
 
 
@@ -46,7 +46,7 @@ def create_webhook_handler(
     class WebhookHandler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             if self.path != WEBHOOK_PATH:
                 self._reply(404, {"error": "not found"})
                 return
@@ -80,7 +80,7 @@ def create_webhook_handler(
             self.end_headers()
             self.wfile.write(data)
 
-        def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        def log_message(self, format: str, *args: object) -> None:
             logger.debug(format, *args)
 
     return WebhookHandler

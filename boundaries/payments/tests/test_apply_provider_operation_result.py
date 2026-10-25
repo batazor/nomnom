@@ -10,7 +10,10 @@ from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
-from slices.payment.applications.errors import PaymentOperationNotFound, ProviderResultConflict
+from slices.payment.applications.errors import (
+    PaymentOperationNotFoundError,
+    ProviderResultConflictError,
+)
 from slices.payment.applications.operation_flow import OperationStatus, ProviderResultStatus
 from slices.payment.applications.ports import ProviderOperationOutcome
 from slices.payment.domains.payment import (
@@ -74,7 +77,7 @@ class ApplyProviderOperationResultTest(unittest.TestCase):
             decline_reason="card_declined",
         )
 
-        with self.assertRaises(ProviderResultConflict):
+        with self.assertRaises(ProviderResultConflictError):
             self.handler.handle(
                 ApplyProviderOperationResultInput(
                     operation_id, ProviderOperationOutcome.succeeded("auth-ref")
@@ -86,7 +89,7 @@ class ApplyProviderOperationResultTest(unittest.TestCase):
         self.assertEqual(self.kit.published(), [])
 
     def test_unknown_operation_is_not_found(self) -> None:
-        with self.assertRaises(PaymentOperationNotFound):
+        with self.assertRaises(PaymentOperationNotFoundError):
             self.handler.handle(
                 ApplyProviderOperationResultInput("missing", ProviderOperationOutcome.succeeded())
             )

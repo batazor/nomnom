@@ -11,12 +11,12 @@ from typing import Any
 from psycopg import errors
 from psycopg.types.json import Jsonb
 
-from pkg.application import AggregateRef, ConcurrencyConflict
+from pkg.application import AggregateRef, ConcurrencyConflictError
 from slices.payment.domains.payment import (
-    DuplicateIdempotencyKey,
-    DuplicatePayment,
+    DuplicateIdempotencyKeyError,
+    DuplicatePaymentError,
     Money,
-    OperationAlreadyPending,
+    OperationAlreadyPendingError,
     OperationId,
     OperationKind,
     OperationState,
@@ -52,17 +52,17 @@ class PostgresPaymentRepository:
         self._db = database
 
     def get(self, payment_id: PaymentId) -> Payment | None:
-        return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE id = %s", payment_id)
+        return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE id = %s", payment_id)  # noqa: S608 - only fixed column/condition constants are interpolated
 
     def get_by_order(self, order_id: OrderId) -> Payment | None:
-        return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE order_id = %s", order_id)
+        return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE order_id = %s", order_id)  # noqa: S608 - only fixed column/condition constants are interpolated
 
     def add(self, payment: Payment) -> int:
         with self._db.connection() as conn:
             try:
                 with conn.transaction():
                     conn.execute(
-                        f"INSERT INTO payments ({_PAYMENT_COLUMNS}) "
+                        f"INSERT INTO payments ({_PAYMENT_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
                         "VALUES (%s, %s, %s, %s, %s, %s, 1)",
                         (
                             payment.id,
@@ -75,7 +75,7 @@ class PostgresPaymentRepository:
                     )
             except errors.UniqueViolation as error:
                 if _constraint(error) == PAYMENT_ORDER_UNIQUE:
-                    raise DuplicatePayment(payment.order_id) from error
+                    raise DuplicatePaymentError(payment.order_id) from error
                 raise
         return 1
 
@@ -87,7 +87,7 @@ class PostgresPaymentRepository:
                 (payment.state.value, payment.provider_reference, payment.id, payment.version),
             ).fetchone()
         if row is None:
-            raise ConcurrencyConflict("Payment", payment.id)
+            raise ConcurrencyConflictError("Payment", payment.id)
         return int(row[0])
 
     def _one(self, query: str, value: str) -> Payment | None:
@@ -122,7 +122,7 @@ class PostgresPaymentOperationRepository:
     def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperation]:
         with self._db.connection() as conn:
             rows = conn.execute(
-                f"SELECT {_OPERATION_COLUMNS} FROM payment_operations "
+                f"SELECT {_OPERATION_COLUMNS} FROM payment_operations "  # noqa: S608 - only fixed column/condition constants are interpolated
                 "WHERE payment_id = %s ORDER BY requested_at, id",
                 (payment_id,),
             ).fetchall()
@@ -133,7 +133,7 @@ class PostgresPaymentOperationRepository:
             try:
                 with conn.transaction():
                     conn.execute(
-                        f"INSERT INTO payment_operations ({_OPERATION_COLUMNS}) "
+                        f"INSERT INTO payment_operations ({_OPERATION_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
                         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1)",
                         (
                             operation.id,
@@ -152,9 +152,9 @@ class PostgresPaymentOperationRepository:
             except errors.UniqueViolation as error:
                 constraint = _constraint(error)
                 if constraint == OPERATION_KEY_UNIQUE:
-                    raise DuplicateIdempotencyKey(operation.idempotency_key) from error
+                    raise DuplicateIdempotencyKeyError(operation.idempotency_key) from error
                 if constraint == OPERATION_PENDING_UNIQUE:
-                    raise OperationAlreadyPending(operation.payment_id) from error
+                    raise OperationAlreadyPendingError(operation.payment_id) from error
                 raise
 
     def save(self, operation: PaymentOperation) -> int:
@@ -173,13 +173,13 @@ class PostgresPaymentOperationRepository:
                 ),
             ).fetchone()
         if row is None:
-            raise ConcurrencyConflict("PaymentOperation", operation.id)
+            raise ConcurrencyConflictError("PaymentOperation", operation.id)
         return int(row[0])
 
     def _first(self, condition: str, value: str) -> PaymentOperation | None:
         with self._db.connection() as conn:
             row = conn.execute(
-                f"SELECT {_OPERATION_COLUMNS} FROM payment_operations WHERE {condition} LIMIT 1",
+                f"SELECT {_OPERATION_COLUMNS} FROM payment_operations WHERE {condition} LIMIT 1",  # noqa: S608 - only fixed column/condition constants are interpolated
                 (value,),
             ).fetchone()
         return None if row is None else _operation(row)

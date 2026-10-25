@@ -53,7 +53,7 @@ VALID_EXP = 4_102_444_800
 REQUIRED_ENV = {"DATABASE__URL": "postgresql://payments@localhost/payments"}
 
 
-class _Aborted(Exception):
+class _AbortedError(Exception):
     pass
 
 
@@ -71,7 +71,7 @@ class FakeContext:
     def abort(self, code: grpc.StatusCode, details: str) -> None:
         self.code = code
         self.details = details
-        raise _Aborted(details)
+        raise _AbortedError(details)
 
 
 def _bearer(token: str) -> FakeContext:
@@ -109,9 +109,11 @@ class ServiceTokenVectorsTest(unittest.TestCase):
         return self.resolver.resolve(cast(grpc.ServicerContext, context))
 
     def _assert_rejected(self, context: FakeContext) -> None:
-        with self.assertLogs("infrastructure.grpc.identity", level="WARNING"):
-            with self.assertRaises(_Aborted):
-                self._resolve(context)
+        with (
+            self.assertLogs("infrastructure.grpc.identity", level="WARNING"),
+            self.assertRaises(_AbortedError),
+        ):
+            self._resolve(context)
         self.assertEqual(context.code, grpc.StatusCode.UNAUTHENTICATED)
         self.assertEqual(context.details, "invalid caller identity")
 
@@ -156,9 +158,11 @@ class ServiceTokenVectorsTest(unittest.TestCase):
 
     def test_rejection_reason_is_logged_not_returned(self) -> None:
         context = _bearer(VECTORS["tokens"]["unknown_subject"])
-        with self.assertLogs("infrastructure.grpc.identity", level="WARNING") as logs:
-            with self.assertRaises(_Aborted):
-                self._resolve(context)
+        with (
+            self.assertLogs("infrastructure.grpc.identity", level="WARNING") as logs,
+            self.assertRaises(_AbortedError),
+        ):
+            self._resolve(context)
         self.assertIn("not allowed", "\n".join(logs.output))
         self.assertEqual(context.details, "invalid caller identity")
 
@@ -172,7 +176,7 @@ class ServiceTokenClockTest(unittest.TestCase):
         try:
             with patch.object(identity.logger, "warning"):
                 resolver.resolve(cast(grpc.ServicerContext, context))
-        except _Aborted:
+        except _AbortedError:
             return False
         return True
 
@@ -223,18 +227,22 @@ class EcdsaTokenTest(unittest.TestCase):
     def test_token_without_kid_is_rejected(self) -> None:
         token = jwt.encode(_claims(), self.private_key, algorithm="ES256")
         context = _bearer(token)
-        with self.assertLogs("infrastructure.grpc.identity", level="WARNING"):
-            with self.assertRaises(_Aborted):
-                self.resolver.resolve(cast(grpc.ServicerContext, context))
+        with (
+            self.assertLogs("infrastructure.grpc.identity", level="WARNING"),
+            self.assertRaises(_AbortedError),
+        ):
+            self.resolver.resolve(cast(grpc.ServicerContext, context))
         self.assertEqual(context.code, grpc.StatusCode.UNAUTHENTICATED)
 
     def test_es384_token_is_rejected(self) -> None:
         key = ec.generate_private_key(ec.SECP384R1())
         token = jwt.encode(_claims(), key, algorithm="ES384", headers={"kid": "ec-key"})
         context = _bearer(token)
-        with self.assertLogs("infrastructure.grpc.identity", level="WARNING"):
-            with self.assertRaises(_Aborted):
-                self.resolver.resolve(cast(grpc.ServicerContext, context))
+        with (
+            self.assertLogs("infrastructure.grpc.identity", level="WARNING"),
+            self.assertRaises(_AbortedError),
+        ):
+            self.resolver.resolve(cast(grpc.ServicerContext, context))
 
 
 class IdentityConfigTest(unittest.TestCase):
@@ -283,7 +291,7 @@ class IdentityConfigTest(unittest.TestCase):
         with self.assertLogs("infrastructure.grpc.identity", level="WARNING"):
             resolver = create_subject_resolver(settings)
         context = _bearer(VECTORS["tokens"]["valid"])
-        with self.assertRaises(_Aborted):
+        with self.assertRaises(_AbortedError):
             resolver.resolve(cast(grpc.ServicerContext, context))
         self.assertEqual(context.code, grpc.StatusCode.UNAUTHENTICATED)
 
@@ -303,15 +311,16 @@ class IdentityConfigTest(unittest.TestCase):
             "nomnom/orders-worker=orders-worker,",
             "nomnom/orders-worker=a,nomnom/orders-worker=b",
         ):
-            with self.subTest(value=value):
-                with self.assertRaises(ValidationError):
-                    _vector_settings(IDENTITY__SERVICE_ACCOUNTS=value)
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                _vector_settings(IDENTITY__SERVICE_ACCOUNTS=value)
 
     def test_malformed_allowlist_fails_load_settings(self) -> None:
         environment = {"IDENTITY__SERVICE_ACCOUNTS": "broken"}
-        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
-            with self.assertRaises(ValidationError):
-                load_settings()
+        with (
+            patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True),
+            self.assertRaises(ValidationError),
+        ):
+            load_settings()
 
     def test_unreadable_or_invalid_jwks_is_a_startup_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -328,9 +337,8 @@ class IdentityConfigTest(unittest.TestCase):
                 path = Path(directory) / name
                 if content is not None:
                     path.write_text(content, encoding="utf-8")
-                with self.subTest(jwks=name):
-                    with self.assertRaises(IdentityConfigError):
-                        create_subject_resolver(_vector_settings(IDENTITY__JWKS_FILE=str(path)))
+                with self.subTest(jwks=name), self.assertRaises(IdentityConfigError):
+                    create_subject_resolver(_vector_settings(IDENTITY__JWKS_FILE=str(path)))
 
     def test_default_worker_fails_before_listening_on_invalid_jwks(self) -> None:
         container = payments_container()
@@ -380,12 +388,14 @@ class ServiceIdentityGrpcTest(unittest.TestCase):
         self.assertEqual([check[0] for check in self.kit.permissions.checks], [ORDERS_WORKER])
 
     def test_token_of_other_context_is_unauthenticated(self) -> None:
-        with self.assertLogs("infrastructure.grpc.identity", level="WARNING"):
-            with self.assertRaises(grpc.RpcError) as raised:
-                self.client.GetPaymentStatus(
-                    service_pb2.GetPaymentStatusRequest(payment_id="payment-1"),
-                    metadata=(("authorization", f"Bearer {VECTORS['tokens']['wrong_audience']}"),),
-                )
+        with (
+            self.assertLogs("infrastructure.grpc.identity", level="WARNING"),
+            self.assertRaises(grpc.RpcError) as raised,
+        ):
+            self.client.GetPaymentStatus(
+                service_pb2.GetPaymentStatusRequest(payment_id="payment-1"),
+                metadata=(("authorization", f"Bearer {VECTORS['tokens']['wrong_audience']}"),),
+            )
         error = cast(grpc.Call, raised.exception)
         self.assertEqual(error.code(), grpc.StatusCode.UNAUTHENTICATED)
         self.assertEqual(error.details(), "invalid caller identity")

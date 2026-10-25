@@ -23,7 +23,7 @@ class OperationTrigger(StrEnum):
 
 
 @dataclass(eq=True)
-class InvalidOperationTransition(Exception):
+class InvalidOperationTransitionError(Exception):
     from_state: OperationState
     trigger: OperationTrigger
 
@@ -35,7 +35,7 @@ class InvalidOperationTransition(Exception):
 
 
 @dataclass(eq=True)
-class OperationAlreadyCompleted(Exception):
+class OperationAlreadyCompletedError(Exception):
     state: OperationState
 
     def __str__(self) -> str:
@@ -43,7 +43,7 @@ class OperationAlreadyCompleted(Exception):
 
 
 @dataclass(eq=True)
-class OperationMismatch(Exception):
+class OperationMismatchError(Exception):
     """Raised when an operation is completed against a payment it does not belong to."""
 
     operation_id: OperationId
@@ -82,8 +82,8 @@ def _transition(state: OperationState, trigger: OperationTrigger) -> OperationSt
     if target is not None:
         return target
     if _TARGET_OF[trigger] is state:
-        raise OperationAlreadyCompleted(state)
-    raise InvalidOperationTransition(state, trigger)
+        raise OperationAlreadyCompletedError(state)
+    raise InvalidOperationTransitionError(state, trigger)
 
 
 class PaymentOperation:
@@ -242,9 +242,9 @@ def complete_operation(
     Returns the domain events recorded by both objects, operation events first.
     """
     if operation.payment_id != payment.id:
-        raise OperationMismatch(operation.id, payment.id)
+        raise OperationMismatchError(operation.id, payment.id)
     if operation.is_completed:
-        raise OperationAlreadyCompleted(operation.state)
+        raise OperationAlreadyCompletedError(operation.state)
     if outcome.succeeded:
         _apply_success(payment, operation.kind, outcome.provider_reference)
         operation.succeed(outcome.provider_reference, completed_at)

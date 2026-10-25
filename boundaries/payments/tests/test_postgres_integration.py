@@ -6,6 +6,7 @@ Skipped unless ``DATABASE_URL`` is set, e.g.
 postgres:18.6-alpine3.24``. Tables are truncated before every test.
 """
 
+import contextlib
 import os
 import unittest
 import uuid
@@ -28,7 +29,7 @@ from infrastructure.postgres import (
     migrate,
     outbox_event_id,
 )
-from pkg.application import AggregateRef, ConcurrencyConflict
+from pkg.application import AggregateRef, ConcurrencyConflictError
 from pkg.config import DatabaseSettings
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -36,10 +37,10 @@ from slices.payment.applications.authorize_payment import (
 )
 from slices.payment.applications.operation_flow import PaymentOperationExecutor
 from slices.payment.domains.payment import (
-    DuplicateIdempotencyKey,
-    DuplicatePayment,
+    DuplicateIdempotencyKeyError,
+    DuplicatePaymentError,
     Money,
-    OperationAlreadyPending,
+    OperationAlreadyPendingError,
     OperationId,
     OperationKind,
     OperationState,
@@ -152,7 +153,7 @@ class PostgresIntegrationTest(unittest.TestCase):
 
     def test_second_payment_for_order_is_duplicate(self) -> None:
         self._payment()
-        with self.assertRaises(DuplicatePayment):
+        with self.assertRaises(DuplicatePaymentError):
             self.payments.add(Payment(PaymentId("payment-2"), OrderId("order-1"), AMOUNT))
 
     def test_save_with_stale_version_is_concurrency_conflict(self) -> None:
@@ -162,7 +163,7 @@ class PostgresIntegrationTest(unittest.TestCase):
         first.authorize("auth-ref")
         self.assertEqual(self.payments.save(first), 2)
         second.authorize("other-ref")
-        with self.assertRaises(ConcurrencyConflict):
+        with self.assertRaises(ConcurrencyConflictError):
             self.payments.save(second)
         stored = self.payments.get(first.id)
         assert stored is not None
@@ -174,9 +175,9 @@ class PostgresIntegrationTest(unittest.TestCase):
         self._payment()
         self._payment("payment-2", "order-2")
         self.operations.add(self._operation("operation-1", "key-1"))
-        with self.assertRaises(DuplicateIdempotencyKey):
+        with self.assertRaises(DuplicateIdempotencyKeyError):
             self.operations.add(self._operation("operation-2", "key-1", "payment-2"))
-        with self.assertRaises(OperationAlreadyPending):
+        with self.assertRaises(OperationAlreadyPendingError):
             self.operations.add(self._operation("operation-3", "key-3"))
 
     def test_completed_operation_frees_pending_slot_and_history_is_ordered(self) -> None:
@@ -187,7 +188,7 @@ class PostgresIntegrationTest(unittest.TestCase):
         assert loaded is not None
         loaded.decline("insufficient funds", NOW + timedelta(minutes=2))
         self.assertEqual(self.operations.save(loaded), 2)
-        with self.assertRaises(ConcurrencyConflict):
+        with self.assertRaises(ConcurrencyConflictError):
             self.operations.save(loaded)
         self.operations.add(self._operation("operation-0", "key-0", minutes=0))
 
@@ -219,10 +220,8 @@ class PostgresIntegrationTest(unittest.TestCase):
         self.operations.add(self._operation("operation-1", "key-1"))
 
         def work() -> str:
-            try:
+            with contextlib.suppress(DuplicateIdempotencyKeyError):
                 self.operations.add(self._operation("operation-2", "key-1"))
-            except DuplicateIdempotencyKey:
-                pass
             # Nested run joins the same transaction.
             return self.uow.run(lambda: str(self.operations.get(OperationId("operation-1"))))
 

@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from pkg.application import Clock, Subject, UnitOfWork
 from slices.payment.domains.payment import (
     PAYMENT_TRIGGER_OF,
-    AlreadyInState,
-    DuplicateIdempotencyKey,
-    InvalidTransition,
-    OperationAlreadyPending,
+    AlreadyInStateError,
+    DuplicateIdempotencyKeyError,
+    InvalidTransitionError,
+    OperationAlreadyPendingError,
     OperationId,
     OperationKind,
     PaymentId,
@@ -31,12 +31,12 @@ from slices.payment.domains.payment import (
 
 from .access import require_permission
 from .errors import (
-    IdempotencyKeyConflict,
-    InvalidPaymentRequest,
-    OperationInProgress,
-    PaymentNotFound,
-    PaymentOperationNotFound,
-    PaymentStateConflict,
+    IdempotencyKeyConflictError,
+    InvalidPaymentRequestError,
+    OperationInProgressError,
+    PaymentNotFoundError,
+    PaymentOperationNotFoundError,
+    PaymentStateConflictError,
 )
 from .operation_result import PAYMENT_AGGREGATE, OperationStatus, PaymentOperationResult
 from .ports import (
@@ -110,9 +110,9 @@ class PaymentOperationExecutor:
     ) -> PaymentOperationResult:
         key = idempotency_key.strip()
         if not key:
-            raise InvalidPaymentRequest("idempotency key is required")
+            raise InvalidPaymentRequestError("idempotency key is required")
         if not payment_id.strip():
-            raise InvalidPaymentRequest("payment id is required")
+            raise InvalidPaymentRequestError("payment id is required")
         target = PaymentId(payment_id)
         require_permission(
             self._permissions, subject, _PERMISSION_OF[kind], PaymentResource(target)
@@ -148,18 +148,18 @@ class PaymentOperationExecutor:
         def reserve() -> _Reservation:
             payment = self._payments.get(payment_id)
             if payment is None:
-                raise PaymentNotFound(payment_id)
+                raise PaymentNotFoundError(payment_id)
             existing = self._operations.get_by_idempotency_key(key)
             if existing is not None:
                 if not existing.is_for(payment_id, kind):
-                    raise IdempotencyKeyConflict(key)
+                    raise IdempotencyKeyConflictError(key)
                 return _Reservation(existing, payment.state, payment.provider_reference)
             try:
                 payment.ensure_can(PAYMENT_TRIGGER_OF[kind])
-            except (InvalidTransition, AlreadyInState) as error:
-                raise PaymentStateConflict(payment.id, payment.state, kind.value) from error
+            except (InvalidTransitionError, AlreadyInStateError) as error:
+                raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
             if self._operations.find_pending(payment_id) is not None:
-                raise OperationInProgress(payment_id)
+                raise OperationInProgressError(payment_id)
             operation = PaymentOperation(
                 operation_id, payment_id, kind, key, payment.amount, requested_at
             )
@@ -170,15 +170,15 @@ class PaymentOperationExecutor:
 
         try:
             return self._uow.run(reserve)
-        except DuplicateIdempotencyKey:
+        except DuplicateIdempotencyKeyError:
             pass
-        except OperationAlreadyPending as error:
-            raise OperationInProgress(payment_id) from error
+        except OperationAlreadyPendingError as error:
+            raise OperationInProgressError(payment_id) from error
         # A concurrent request recorded the same key first: continue with its operation.
         return self._uow.run(reserve)
 
     def _stored(self, operation_id: OperationId) -> PaymentOperation:
         operation = self._operations.get(operation_id)
         if operation is None:
-            raise PaymentOperationNotFound(operation_id)
+            raise PaymentOperationNotFoundError(operation_id)
         return operation

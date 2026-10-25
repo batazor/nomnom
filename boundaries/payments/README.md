@@ -64,7 +64,7 @@ Python.
 | Неожиданная внутренняя ошибка | `INTERNAL` | `INTERNAL_ERROR` |
 | Платёжный провайдер недоступен | `UNAVAILABLE` | `PAYMENT_PROVIDER_UNAVAILABLE` |
 
-Остальные application errors: `PaymentOperationNotFound` — `NOT_FOUND`, `IdempotencyKeyConflict` — `FAILED_PRECONDITION`, `OperationInProgress` — `ABORTED` (повтор с тем же ключом после завершения начатой попытки), `PermissionDenied` — `PERMISSION_DENIED`, `AuthorizationUnavailable` — `UNAVAILABLE` (fail closed), `ProviderResultConflict` и `ConcurrencyConflict` — `ABORTED`.
+Остальные application errors: `PaymentOperationNotFoundError` — `NOT_FOUND`, `IdempotencyKeyConflictError` — `FAILED_PRECONDITION`, `OperationInProgressError` — `ABORTED` (повтор с тем же ключом после завершения начатой попытки), `PermissionDeniedError` — `PERMISSION_DENIED`, `AuthorizationUnavailableError` — `UNAVAILABLE` (fail closed), `ProviderResultConflictError` и `ConcurrencyConflictError` — `ABORTED`.
 
 Командные RPC для Order Fulfillment Workflow `orders` (FR-427):
 
@@ -132,7 +132,7 @@ User assertions принимаются, только если заданы вс�
 | `create`, `authorize`, `capture`, `cancel_authorization`, `refund` | `platform:nomnom#manage_payments` |
 | `view`, `view_operations` | `platform:nomnom#view_payments` |
 
-Subject: `user` → `user:<id>`, `service` → `service:<id>`. Consistency `minimize_latency`. Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional permission — отказ (`PermissionDenied` → `PERMISSION_DENIED`). Любая ошибка gRPC, неверный ключ, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationUnavailable` → `UNAVAILABLE` (fail closed, AC-466); причина пишется в log (`WARNING`).
+Subject: `user` → `user:<id>`, `service` → `service:<id>`. Consistency `minimize_latency`. Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional permission — отказ (`PermissionDeniedError` → `PERMISSION_DENIED`). Любая ошибка gRPC, неверный ключ, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationUnavailableError` → `UNAVAILABLE` (fail closed, AC-466); причина пишется в log (`WARNING`).
 
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
@@ -141,7 +141,7 @@ Subject: `user` → `user:<id>`, `service` → `service:<id>`. Consistency `mini
 | `SPICEDB__INSECURE` | `false` | Plaintext gRPC без TLS — только kind и локальный запуск. |
 | `SPICEDB__TIMEOUT` | `2s` | Deadline одного `CheckPermission`, `<int>(ms|s|m)`, `> 0`. |
 
-Unit-тесты маппинга и fail-closed поведения с fake клиентом — `tests/test_spicedb_authorization.py`. Integration-тесты `tests/test_spicedb_integration.py` пропускаются без `SPICEDB_ENDPOINT`; против SpiceDB с `authorization/bootstrap.yaml` (plaintext, ключ `devkey`) они проверяют, что `service:orders-worker` имеет все payment permissions (AC-465), `service:bff` — ни одного, а недоступный endpoint даёт `AuthorizationUnavailable`:
+Unit-тесты маппинга и fail-closed поведения с fake клиентом — `tests/test_spicedb_authorization.py`. Integration-тесты `tests/test_spicedb_integration.py` пропускаются без `SPICEDB_ENDPOINT`; против SpiceDB с `authorization/bootstrap.yaml` (plaintext, ключ `devkey`) они проверяют, что `service:orders-worker` имеет все payment permissions (AC-465), `service:bff` — ни одного, а недоступный endpoint даёт `AuthorizationUnavailableError`:
 
 ```bash
 SPICEDB_ENDPOINT=localhost:50051 uv run python -m unittest tests.test_spicedb_integration
@@ -269,7 +269,7 @@ docker stop payments-kafka
 - Схема — `infrastructure/postgres/migrations/*.sql` (forward-only), применяется `python -m entrypoints.payments_migrate.main` под advisory lock; версии — в `schema_migrations`. Таблицы `payments`, `payment_operations`, `outbox`, `inbox`.
 - `PostgresUnitOfWork` — одна локальная транзакция; repositories, Outbox и Inbox внутри `run` используют её соединение (context variable), вложенный `run` присоединяется. Вне Unit of Work каждый вызов берёт своё соединение из пула.
 - Outbox по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md): `seq`, `event_id` (UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`), `event_type` (полное имя Protobuf-сообщения), `topic`, `payload` (Protobuf, `BYTEA`), `metadata` (`traceparent`), `published_at`, `attempts`, `last_error`. Какие Domain Events публикуются, решает внедряемый `OutboxEventMapper` (`infrastructure/postgres/outbox.py`); событие без контракта (mapper вернул `None`) в Outbox не пишется. `NoPublishedContracts` — mapper без опубликованных контрактов для тестовых сборок; контейнер `di/payments.py` передаёт `PaymentEventsMapper` — см. [Публикация Integration Events](#публикация-integration-events).
-- Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePayment`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKey`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPending`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflict`.
+- Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePaymentError`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKeyError`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPendingError`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflictError`.
 - `DATABASE__URL` обязателен: пустое значение завершает процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). `DATABASE__MAX_CONNS` — размер пула (по умолчанию `10`).
 - Integration-тесты `tests/test_postgres_integration.py` запускаются при заданном `DATABASE_URL`:
 

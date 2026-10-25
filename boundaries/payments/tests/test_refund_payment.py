@@ -2,8 +2,8 @@ import unittest
 
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
-from pkg.application import PermissionDenied
-from slices.payment.applications.errors import PaymentStateConflict
+from pkg.application import PermissionDeniedError
+from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
 from slices.payment.applications.ports import PaymentPermission, ProviderOperationOutcome
 from slices.payment.applications.refund_payment import RefundPaymentHandler, RefundPaymentInput
@@ -43,7 +43,7 @@ class RefundPaymentTest(unittest.TestCase):
             with self.subTest(state=state):
                 payment_id = self.kit.given_payment(state, payment_id=f"payment-{state.value}")
 
-                with self.assertRaises(PaymentStateConflict):
+                with self.assertRaises(PaymentStateConflictError):
                     self.handler.handle(RefundPaymentInput(ORCHESTRATOR, payment_id, KEY))
 
         self.assertEqual(self.kit.provider.requests, [])
@@ -66,7 +66,7 @@ class RefundPaymentTest(unittest.TestCase):
         payment_id = self.kit.given_payment(PaymentState.CAPTURED)
         self.kit.permissions.denied.add(PaymentPermission.REFUND)
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(PermissionDeniedError):
             self.handler.handle(RefundPaymentInput(OPERATOR, payment_id, KEY))
 
         self.assertEqual(self.kit.payment_state(payment_id), PaymentState.CAPTURED)

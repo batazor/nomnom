@@ -3,7 +3,7 @@ import unittest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
 from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
-from slices.payment.applications.errors import PaymentStateConflict
+from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
 from slices.payment.applications.ports import ProviderOperationOutcome
 from slices.payment.domains.payment import (
@@ -76,7 +76,7 @@ class CapturePaymentTest(unittest.TestCase):
     def test_ac_410_capture_before_authorization_is_rejected(self) -> None:
         payment_id = self.kit.given_payment(PaymentState.PENDING)
 
-        with self.assertRaises(PaymentStateConflict) as raised:
+        with self.assertRaises(PaymentStateConflictError) as raised:
             self.handler.handle(self.capture(payment_id))
 
         self.assertEqual(raised.exception.state, PaymentState.PENDING)
@@ -86,7 +86,7 @@ class CapturePaymentTest(unittest.TestCase):
     def test_new_key_for_already_captured_payment_is_rejected(self) -> None:
         payment_id = self.kit.given_payment(PaymentState.CAPTURED)
 
-        with self.assertRaises(PaymentStateConflict):
+        with self.assertRaises(PaymentStateConflictError):
             self.handler.handle(self.capture(payment_id))
 
         self.assertEqual(self.kit.provider.requests, [])

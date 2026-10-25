@@ -6,7 +6,7 @@ from decimal import Decimal
 from slices.payment.applications.ports import (
     ProviderOperationOutcome,
     ProviderOperationRequest,
-    ProviderUnavailable,
+    ProviderUnavailableError,
 )
 from slices.payment.domains.payment import OperationKind
 
@@ -16,7 +16,7 @@ DECLINE_AMOUNT = Decimal("666.00")
 
 class UnconfiguredProvider:
     def execute(self, request: ProviderOperationRequest) -> ProviderOperationOutcome:
-        raise ProviderUnavailable("payment provider is not configured")
+        raise ProviderUnavailableError("payment provider is not configured")
 
 
 class FakePaymentProvider:

@@ -6,9 +6,9 @@ from enum import StrEnum
 
 from pkg.application import AggregateRef, Clock
 from slices.payment.domains.payment import (
-    AlreadyInState,
-    GuardFailed,
-    InvalidTransition,
+    AlreadyInStateError,
+    GuardFailedError,
+    InvalidTransitionError,
     OperationId,
     OperationOutcome,
     OperationState,
@@ -22,11 +22,11 @@ from slices.payment.domains.payment import (
 )
 
 from .errors import (
-    InvalidPaymentRequest,
-    PaymentNotFound,
-    PaymentOperationNotFound,
-    PaymentStateConflict,
-    ProviderResultConflict,
+    InvalidPaymentRequestError,
+    PaymentNotFoundError,
+    PaymentOperationNotFoundError,
+    PaymentStateConflictError,
+    ProviderResultConflictError,
 )
 from .operation_result import _STATUS_OF, PAYMENT_AGGREGATE, OperationStatus
 from .ports import PaymentOutbox, ProviderOperationOutcome, ProviderOperationStatus
@@ -63,16 +63,18 @@ class ProviderResultApplier:
         domain_outcome = to_domain_outcome(outcome)
         operation = self._operations.get(operation_id)
         if operation is None:
-            raise PaymentOperationNotFound(operation_id)
+            raise PaymentOperationNotFoundError(operation_id)
         payment = self._payments.get(operation.payment_id)
         if payment is None:
-            raise PaymentNotFound(operation.payment_id)
+            raise PaymentNotFoundError(operation.payment_id)
         if operation.is_completed:
             received = (
                 OperationState.SUCCEEDED if domain_outcome.succeeded else OperationState.DECLINED
             )
             if operation.state is not received:
-                raise ProviderResultConflict(operation.id, operation.state.value, received.value)
+                raise ProviderResultConflictError(
+                    operation.id, operation.state.value, received.value
+                )
             return AppliedProviderResult(operation, payment.state, applied=False)
 
         events = self._complete(payment, operation, domain_outcome, self._clock.now())
@@ -90,10 +92,12 @@ class ProviderResultApplier:
     ) -> list[PaymentDomainEvent]:
         try:
             return complete_operation(payment, operation, outcome, completed_at)
-        except (InvalidTransition, AlreadyInState) as error:
-            raise PaymentStateConflict(payment.id, payment.state, operation.kind.value) from error
-        except GuardFailed as error:
-            raise InvalidPaymentRequest(f"provider result rejected: {error.reason}") from error
+        except (InvalidTransitionError, AlreadyInStateError) as error:
+            raise PaymentStateConflictError(
+                payment.id, payment.state, operation.kind.value
+            ) from error
+        except GuardFailedError as error:
+            raise InvalidPaymentRequestError(f"provider result rejected: {error.reason}") from error
 
 
 def to_domain_outcome(outcome: ProviderOperationOutcome) -> OperationOutcome:
@@ -102,9 +106,9 @@ def to_domain_outcome(outcome: ProviderOperationOutcome) -> OperationOutcome:
     if outcome.status is ProviderOperationStatus.DECLINED:
         reason = (outcome.decline_reason or "").strip()
         if not reason:
-            raise InvalidPaymentRequest("declined provider result requires a reason")
+            raise InvalidPaymentRequestError("declined provider result requires a reason")
         return OperationOutcome.declined(reason)
-    raise InvalidPaymentRequest("provider result must be final: succeeded or declined")
+    raise InvalidPaymentRequestError("provider result must be final: succeeded or declined")
 
 
 class ProviderResultStatus(StrEnum):

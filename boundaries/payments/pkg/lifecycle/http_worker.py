@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import socket
 import threading
@@ -42,7 +43,7 @@ class _TrackingHTTPServer(FastBindMixin, HTTPServer):
     def _process_request_thread(self, request, client_address) -> None:
         try:
             self.finish_request(request, client_address)
-        except Exception:
+        except Exception:  # noqa: BLE001 - supervisor must catch every failure
             self.handle_error(request, client_address)
         finally:
             self.shutdown_request(request)
@@ -50,7 +51,7 @@ class _TrackingHTTPServer(FastBindMixin, HTTPServer):
                 self._connections.pop(threading.current_thread(), None)
 
     def handle_error(self, request, client_address) -> None:  # type: ignore[override]
-        logger.warning("http request from %s failed", client_address, exc_info=True)
+        logger.warning("http request from %s failed", client_address, exc_info=True)  # noqa: LOG014 - called from an except block by socketserver
 
     def connections(self) -> list[tuple[threading.Thread, socket.socket]]:
         with self._lock:
@@ -121,8 +122,6 @@ class HttpWorker:
 
 
 def _shutdown_socket(connection: socket.socket, how: int) -> None:
-    try:
+    # Соединение уже закрыто клиентом или обработчиком.
+    with contextlib.suppress(OSError):
         connection.shutdown(how)
-    except OSError:
-        # Соединение уже закрыто клиентом или обработчиком.
-        pass

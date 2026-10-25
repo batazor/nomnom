@@ -30,7 +30,7 @@ class LifecycleConfig:
     # Deadline на завершение начатой работы, в секундах.
     drain_timeout: float
     # Технический порт слушает адрес pod, а не localhost: probes приходят с адреса узла.
-    management_host: str = "0.0.0.0"
+    management_host: str = "0.0.0.0"  # noqa: S104 - containers listen on all interfaces
 
 
 class Worker(Protocol):
@@ -62,7 +62,7 @@ class _RunThread(threading.Thread):
     def run(self) -> None:
         try:
             self._worker.run()
-        except BaseException as error:
+        except BaseException as error:  # noqa: BLE001 - supervisor must catch every failure
             self.error = error
         finally:
             self._exited.set()
@@ -133,7 +133,7 @@ class Lifecycle:
         errors: list[BaseException] = []
         try:
             worker.shutdown(deadline)
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - supervisor must catch every failure
             errors.append(error)
 
         run_thread.join(max(0.0, deadline - time.monotonic()) + _RUN_JOIN_GRACE)

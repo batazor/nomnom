@@ -10,7 +10,7 @@ from di.payments import create_provider
 from infrastructure.provider import (
     DECLINE_AMOUNT,
     FakePaymentProvider,
-    InvalidWebhook,
+    InvalidWebhookError,
     UnconfiguredProvider,
     WebhookVerifier,
     parse_callback,
@@ -20,7 +20,7 @@ from pkg.config import ProviderSettings, load_settings
 from slices.payment.applications.ports import (
     ProviderOperationRequest,
     ProviderOperationStatus,
-    ProviderUnavailable,
+    ProviderUnavailableError,
 )
 from slices.payment.domains.payment import Money, OperationId, OperationKind, PaymentId
 
@@ -66,7 +66,7 @@ class FakeProviderTest(unittest.TestCase):
         )
 
     def test_unconfigured_provider_is_unavailable(self) -> None:
-        with self.assertRaises(ProviderUnavailable):
+        with self.assertRaises(ProviderUnavailableError):
             UnconfiguredProvider().execute(_request(OperationKind.AUTHORIZE, "k1"))
 
     def test_create_provider_by_kind(self) -> None:
@@ -75,9 +75,11 @@ class FakeProviderTest(unittest.TestCase):
         self.assertIsInstance(create_provider(None), UnconfiguredProvider)
 
     def test_rejects_unknown_kind(self) -> None:
-        with patch.dict(os.environ, {"PROVIDER__KIND": "stripe"}, clear=True):
-            with self.assertRaises(ValidationError):
-                load_settings()
+        with (
+            patch.dict(os.environ, {"PROVIDER__KIND": "stripe"}, clear=True),
+            self.assertRaises(ValidationError),
+        ):
+            load_settings()
 
 
 class WebhookTest(unittest.TestCase):
@@ -99,27 +101,27 @@ class WebhookTest(unittest.TestCase):
 
     def test_tampered_body_is_rejected(self) -> None:
         header = sign_payload(SECRET, int(NOW.timestamp()), self.body)
-        with self.assertRaises(InvalidWebhook):
+        with self.assertRaises(InvalidWebhookError):
             self._verifier().verify(header, self.body + b" ", NOW)
 
     def test_other_secret_is_rejected(self) -> None:
         header = sign_payload("other", int(NOW.timestamp()), self.body)
-        with self.assertRaises(InvalidWebhook):
+        with self.assertRaises(InvalidWebhookError):
             self._verifier().verify(header, self.body, NOW)
 
     def test_stale_timestamp_is_rejected(self) -> None:
         header = sign_payload(SECRET, int((NOW - timedelta(minutes=6)).timestamp()), self.body)
-        with self.assertRaises(InvalidWebhook):
+        with self.assertRaises(InvalidWebhookError):
             self._verifier().verify(header, self.body, NOW)
 
     def test_missing_or_malformed_header_is_rejected(self) -> None:
         for header in (None, "", "v1=abc", "t=abc,v1=abc", f"t={int(NOW.timestamp())}"):
-            with self.subTest(header=header), self.assertRaises(InvalidWebhook):
+            with self.subTest(header=header), self.assertRaises(InvalidWebhookError):
                 self._verifier().verify(header, self.body, NOW)
 
     def test_without_secret_every_webhook_is_rejected(self) -> None:
         header = sign_payload("", int(NOW.timestamp()), self.body)
-        with self.assertRaises(InvalidWebhook):
+        with self.assertRaises(InvalidWebhookError):
             self._verifier("").verify(header, self.body, NOW)
 
     def test_parse_maps_succeeded_and_declined(self) -> None:
@@ -141,7 +143,7 @@ class WebhookTest(unittest.TestCase):
             b'{"id": "m"}',
             b'{"id":"m","operation_id":"o","status":"accepted"}',
         ):
-            with self.subTest(body=body), self.assertRaises(InvalidWebhook):
+            with self.subTest(body=body), self.assertRaises(InvalidWebhookError):
                 parse_callback(body)
 
 

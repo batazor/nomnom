@@ -2,15 +2,15 @@ import unittest
 from datetime import UTC, datetime
 
 from slices.payment.domains.payment import (
-    AlreadyInState,
-    GuardFailed,
-    InvalidOperationTransition,
-    InvalidTransition,
+    AlreadyInStateError,
+    GuardFailedError,
+    InvalidOperationTransitionError,
+    InvalidTransitionError,
     Money,
-    OperationAlreadyCompleted,
+    OperationAlreadyCompletedError,
     OperationId,
     OperationKind,
-    OperationMismatch,
+    OperationMismatchError,
     OperationOutcome,
     OperationState,
     OperationTrigger,
@@ -58,9 +58,9 @@ class PaymentOperationLifecycleTest(unittest.TestCase):
         self.assertEqual(operation.state, OperationState.SUCCEEDED)
         self.assertEqual(operation.provider_reference, "capture-1")
         self.assertEqual(operation.completed_at, NOW)
-        with self.assertRaises(OperationAlreadyCompleted):
+        with self.assertRaises(OperationAlreadyCompletedError):
             operation.succeed("capture-1", NOW)
-        with self.assertRaises(InvalidOperationTransition):
+        with self.assertRaises(InvalidOperationTransitionError):
             operation.decline("late", NOW)
 
     def test_decline_records_event_once(self) -> None:
@@ -78,9 +78,9 @@ class PaymentOperationLifecycleTest(unittest.TestCase):
             ],
         )
         self.assertEqual(operation.pull_events(), [])
-        with self.assertRaises(OperationAlreadyCompleted):
+        with self.assertRaises(OperationAlreadyCompletedError):
             operation.decline("again", NOW)
-        with self.assertRaises(InvalidOperationTransition):
+        with self.assertRaises(InvalidOperationTransitionError):
             operation.succeed(None, NOW)
 
     def test_requires_idempotency_key_and_valid_restore(self) -> None:
@@ -186,21 +186,21 @@ class CompleteOperationTest(unittest.TestCase):
                 self.assertEqual([type(event) for event in events], [PaymentOperationDeclined])
 
     def test_rejects_inadmissible_or_inconsistent_completion(self) -> None:
-        with self.assertRaises(InvalidTransition):
+        with self.assertRaises(InvalidTransitionError):
             complete_operation(
                 make_payment(PaymentState.PENDING),
                 make_operation(OperationKind.CAPTURE),
                 OperationOutcome.success(),
                 NOW,
             )
-        with self.assertRaises(AlreadyInState):
+        with self.assertRaises(AlreadyInStateError):
             complete_operation(
                 make_payment(PaymentState.CAPTURED),
                 make_operation(OperationKind.CAPTURE),
                 OperationOutcome.declined("late"),
                 NOW,
             )
-        with self.assertRaises(OperationMismatch):
+        with self.assertRaises(OperationMismatchError):
             complete_operation(
                 make_payment(),
                 make_operation(OperationKind.AUTHORIZE, PaymentId("other")),
@@ -212,7 +212,7 @@ class CompleteOperationTest(unittest.TestCase):
         payment = make_payment()
         operation = make_operation(OperationKind.AUTHORIZE)
 
-        with self.assertRaises(GuardFailed):
+        with self.assertRaises(GuardFailedError):
             complete_operation(payment, operation, OperationOutcome.success(None), NOW)
 
         self.assertEqual(operation.state, OperationState.PENDING)
@@ -223,7 +223,7 @@ class CompleteOperationTest(unittest.TestCase):
         operation = make_operation(OperationKind.CAPTURE)
         complete_operation(payment, operation, OperationOutcome.success(), NOW)
 
-        with self.assertRaises(OperationAlreadyCompleted):
+        with self.assertRaises(OperationAlreadyCompletedError):
             complete_operation(payment, operation, OperationOutcome.success(), NOW)
 
 

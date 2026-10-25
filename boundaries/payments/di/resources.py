@@ -84,7 +84,7 @@ def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
 
 
 def listen_all(port: int) -> tuple[str, int]:
-    return ("0.0.0.0", port)
+    return ("0.0.0.0", port)  # noqa: S104 - containers listen on all interfaces
 
 
 def seconds(value: timedelta) -> float:

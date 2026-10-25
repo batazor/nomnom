@@ -10,15 +10,15 @@ from slices.payment.domains.payment.events import (
 )
 from slices.payment.domains.payment.fsm import (
     _TRANSITION_TABLE,
-    AlreadyInState,
-    GuardFailed,
-    InvalidTransition,
+    AlreadyInStateError,
+    GuardFailedError,
+    InvalidTransitionError,
     PaymentState,
     PaymentTrigger,
 )
 from slices.payment.domains.payment.ids import OrderId, PaymentId
 from slices.payment.domains.payment.payment import Payment
-from slices.payment.domains.payment.vo.money import CurrencyMismatch, InvalidMoney, Money
+from slices.payment.domains.payment.vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
 
 class PaymentDomainTest(unittest.TestCase):
@@ -33,7 +33,7 @@ class PaymentDomainTest(unittest.TestCase):
         self.assertEqual(authorized.to_state, PaymentState.AUTHORIZED)
         self.assertEqual(payment.provider_reference, "provider-1")
 
-        with self.assertRaises(AlreadyInState) as duplicate:
+        with self.assertRaises(AlreadyInStateError) as duplicate:
             payment.authorize("provider-1")
         self.assertEqual(duplicate.exception.state, PaymentState.AUTHORIZED)
 
@@ -50,13 +50,13 @@ class PaymentDomainTest(unittest.TestCase):
         )
         self.assertEqual(payment.pull_events(), [])
 
-        with self.assertRaises(AlreadyInState):
+        with self.assertRaises(AlreadyInStateError):
             payment.refund()
         self.assertEqual(payment.pull_events(), [])
 
     def test_authorization_guard_requires_provider_reference(self) -> None:
         payment = self.payment()
-        with self.assertRaises(GuardFailed) as raised:
+        with self.assertRaises(GuardFailedError) as raised:
             payment.authorize("  ")
         self.assertEqual(raised.exception.reason, "provider_reference_required")
         self.assertEqual(payment.state, PaymentState.PENDING)
@@ -73,12 +73,12 @@ class PaymentDomainTest(unittest.TestCase):
             payment.pull_events()[-1],
             PaymentAuthorizationCancelled(payment.id, payment.order_id, payment.amount),
         )
-        with self.assertRaises(AlreadyInState):
+        with self.assertRaises(AlreadyInStateError):
             payment.cancel_authorization()
 
     def test_invalid_transition_does_not_change_state(self) -> None:
         payment = self.payment()
-        with self.assertRaises(InvalidTransition) as raised:
+        with self.assertRaises(InvalidTransitionError) as raised:
             payment.capture()
         self.assertEqual(raised.exception.from_state, PaymentState.PENDING)
         self.assertEqual(raised.exception.trigger, PaymentTrigger.CAPTURE)
@@ -88,9 +88,9 @@ class PaymentDomainTest(unittest.TestCase):
         payment = self.payment()
 
         payment.ensure_can(PaymentTrigger.AUTHORIZE)
-        with self.assertRaises(InvalidTransition):
+        with self.assertRaises(InvalidTransitionError):
             payment.ensure_can(PaymentTrigger.CAPTURE)
-        with self.assertRaises(AlreadyInState):
+        with self.assertRaises(AlreadyInStateError):
             payment.ensure_can(PaymentTrigger.CANCEL_AUTHORIZATION)
         self.assertEqual(payment.state, PaymentState.PENDING)
         self.assertEqual(payment.pull_events(), [])
@@ -111,12 +111,12 @@ class PaymentDomainTest(unittest.TestCase):
         self.assertEqual(first.add(second), Money.parse("0.30", "EUR"))
 
         floating_amount: Any = 0.1
-        with self.assertRaises(InvalidMoney):
+        with self.assertRaises(InvalidMoneyError):
             Money.parse(floating_amount, "EUR")
         for not_finite in ("NaN", "Infinity"):
-            with self.assertRaises(InvalidMoney):
+            with self.assertRaises(InvalidMoneyError):
                 Money.parse(not_finite, "EUR")
-        with self.assertRaises(CurrencyMismatch):
+        with self.assertRaises(CurrencyMismatchError):
             first.add(Money.parse("1", "USD"))
         with self.assertRaises(ValueError):
             Payment(PaymentId("payment-2"), OrderId("order-1"), Money.parse("0", "EUR"))

@@ -11,9 +11,9 @@ from .events import (
     PaymentRefunded,
 )
 from .fsm import (
-    AlreadyInState,
-    GuardFailed,
-    InvalidTransition,
+    AlreadyInStateError,
+    GuardFailedError,
+    InvalidTransitionError,
     PaymentState,
     PaymentTrigger,
     TransitionResult,
@@ -21,9 +21,9 @@ from .fsm import (
 from .ids import OperationId, OperationKind, OrderId, PaymentId
 from .operation import (
     PAYMENT_TRIGGER_OF,
-    InvalidOperationTransition,
-    OperationAlreadyCompleted,
-    OperationMismatch,
+    InvalidOperationTransitionError,
+    OperationAlreadyCompletedError,
+    OperationMismatchError,
     OperationOutcome,
     OperationState,
     OperationTrigger,
@@ -32,9 +32,9 @@ from .operation import (
 )
 from .payment import Payment
 from .repository import (
-    DuplicateIdempotencyKey,
-    DuplicatePayment,
-    OperationAlreadyPending,
+    DuplicateIdempotencyKeyError,
+    DuplicatePaymentError,
+    OperationAlreadyPendingError,
     PaymentOperationRepository,
     PaymentRepository,
 )
@@ -46,24 +46,24 @@ from .specifications import (
     PaymentRefundContext,
     SpecificationResult,
 )
-from .vo.money import CurrencyMismatch, InvalidMoney, Money
+from .vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
 __all__ = [
     "PAYMENT_TRIGGER_OF",
-    "AlreadyInState",
-    "CurrencyMismatch",
-    "DuplicateIdempotencyKey",
-    "DuplicatePayment",
-    "GuardFailed",
-    "InvalidMoney",
-    "InvalidOperationTransition",
-    "InvalidTransition",
+    "AlreadyInStateError",
+    "CurrencyMismatchError",
+    "DuplicateIdempotencyKeyError",
+    "DuplicatePaymentError",
+    "GuardFailedError",
+    "InvalidMoneyError",
+    "InvalidOperationTransitionError",
+    "InvalidTransitionError",
     "Money",
-    "OperationAlreadyCompleted",
-    "OperationAlreadyPending",
+    "OperationAlreadyCompletedError",
+    "OperationAlreadyPendingError",
     "OperationId",
     "OperationKind",
-    "OperationMismatch",
+    "OperationMismatchError",
     "OperationOutcome",
     "OperationState",
     "OperationTrigger",
@@ -71,8 +71,8 @@ __all__ = [
     "Payment",
     "PaymentAuthorizationCancelled",
     "PaymentAuthorized",
-    "PaymentCaptureContext",
     "PaymentCapturable",
+    "PaymentCaptureContext",
     "PaymentCaptured",
     "PaymentDomainEvent",
     "PaymentEvent",
@@ -83,8 +83,8 @@ __all__ = [
     "PaymentOperationRepository",
     "PaymentPolicyReason",
     "PaymentRefundContext",
-    "PaymentRefunded",
     "PaymentRefundable",
+    "PaymentRefunded",
     "PaymentRepository",
     "PaymentState",
     "PaymentTrigger",

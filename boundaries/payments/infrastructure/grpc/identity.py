@@ -29,7 +29,7 @@ from .identity_tokens import (
     IdentityConfigError,
     _bearer_token,
     _numeric_claim,
-    _TokenRejected,
+    _TokenRejectedError,
     _unverified_jti,
     load_jwks,
     load_user_jwks,
@@ -100,10 +100,10 @@ class ServiceTokenSubjectResolver:
         self._user_assertions = user_assertions
         self._user_delegates = frozenset(user_delegates)
 
-    def resolve(self, context: grpc.ServicerContext) -> Subject:
+    def resolve(self, context: grpc.ServicerContext) -> Subject:  # noqa: RET503 - _abort raises
         try:
             service = self._verify(_bearer_token(context))
-        except _TokenRejected as error:
+        except _TokenRejectedError as error:
             reason = str(error)
         except jwt.PyJWTError as error:
             reason = f"{type(error).__name__}: {error}"
@@ -112,7 +112,7 @@ class ServiceTokenSubjectResolver:
         logger.warning("rejected caller identity: %s", reason)
         self._abort(context)
 
-    def _resolve_user(self, context: grpc.ServicerContext, service: Subject) -> Subject:
+    def _resolve_user(self, context: grpc.ServicerContext, service: Subject) -> Subject:  # noqa: RET503 - _abort raises
         values = [
             value
             for key, value in (context.invocation_metadata() or ())
@@ -123,17 +123,17 @@ class ServiceTokenSubjectResolver:
         jti: object = None
         try:
             if len(values) > 1:
-                raise _TokenRejected(f"multiple {USER_ASSERTION_METADATA} metadata values")
+                raise _TokenRejectedError(f"multiple {USER_ASSERTION_METADATA} metadata values")
             token = values[0]
             if isinstance(token, bytes) or not token.strip():
-                raise _TokenRejected(f"{USER_ASSERTION_METADATA} metadata is empty or binary")
+                raise _TokenRejectedError(f"{USER_ASSERTION_METADATA} metadata is empty or binary")
             jti = _unverified_jti(token)
             if self._user_assertions is None:
-                raise _TokenRejected("user assertions are not configured")
+                raise _TokenRejectedError("user assertions are not configured")
             if service.id not in self._user_delegates:
-                raise _TokenRejected(f"service {service.id!r} is not a user delegate")
+                raise _TokenRejectedError(f"service {service.id!r} is not a user delegate")
             user, jti = self._user_assertions.verify(token.strip())
-        except _TokenRejected as error:
+        except _TokenRejectedError as error:
             reason = str(error)
         except jwt.PyJWTError as error:
             reason = f"{type(error).__name__}: {error}"
@@ -152,15 +152,15 @@ class ServiceTokenSubjectResolver:
         header = jwt.get_unverified_header(token)
         algorithm = header.get("alg")
         if algorithm not in ALLOWED_ALGORITHMS:
-            raise _TokenRejected(f"algorithm {algorithm!r} is not allowed")
+            raise _TokenRejectedError(f"algorithm {algorithm!r} is not allowed")
         kid = header.get("kid")
         if not isinstance(kid, str) or not kid:
-            raise _TokenRejected("token has no kid")
+            raise _TokenRejectedError("token has no kid")
         key = self._keys.get(kid)
         if key is None:
-            raise _TokenRejected(f"unknown kid {kid!r}")
+            raise _TokenRejectedError(f"unknown kid {kid!r}")
         if key.algorithm_name != algorithm:
-            raise _TokenRejected(f"algorithm {algorithm!r} does not match key {kid!r}")
+            raise _TokenRejectedError(f"algorithm {algorithm!r} does not match key {kid!r}")
 
         # exp/nbf are checked below against the injectable clock.
         claims = jwt.decode(
@@ -179,14 +179,14 @@ class ServiceTokenSubjectResolver:
         now = self._clock()
         expires_at = _numeric_claim(claims, "exp")
         if expires_at <= now - LEEWAY_SECONDS:
-            raise _TokenRejected("token is expired")
+            raise _TokenRejectedError("token is expired")
         if "nbf" in claims and _numeric_claim(claims, "nbf") > now + LEEWAY_SECONDS:
-            raise _TokenRejected("token is not yet valid")
+            raise _TokenRejectedError("token is not yet valid")
 
         subject = claims.get("sub")
         service = self._service_accounts.get(subject) if isinstance(subject, str) else None
         if service is None:
-            raise _TokenRejected(f"service account {subject!r} is not allowed")
+            raise _TokenRejectedError(f"service account {subject!r} is not allowed")
         return Subject(SubjectKind.SERVICE, service)
 
 

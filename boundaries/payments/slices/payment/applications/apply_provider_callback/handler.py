@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pkg.application import UnitOfWork
 from slices.payment.domains.payment import OperationId
 
-from ..errors import InvalidPaymentRequest
+from ..errors import InvalidPaymentRequestError
 from ..operation_flow import (
     ProviderResultApplication,
     ProviderResultApplier,
@@ -41,9 +41,9 @@ class ApplyProviderCallbackHandler:
     def handle(self, command: ApplyProviderCallbackInput) -> ApplyProviderCallbackResult:
         message_id = command.provider_message_id.strip()
         if not message_id:
-            raise InvalidPaymentRequest("provider message id is required")
+            raise InvalidPaymentRequestError("provider message id is required")
         if not command.operation_id.strip():
-            raise InvalidPaymentRequest("operation id is required")
+            raise InvalidPaymentRequestError("operation id is required")
         operation_id = OperationId(command.operation_id)
         to_domain_outcome(command.outcome)
 

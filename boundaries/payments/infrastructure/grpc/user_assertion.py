@@ -13,7 +13,7 @@ from .identity_tokens import (
     USER_ASSERTION_MAX_TTL_SECONDS,
     IdentityConfigError,
     _numeric_claim,
-    _TokenRejected,
+    _TokenRejectedError,
 )
 
 
@@ -42,13 +42,13 @@ class UserAssertionVerifier:
         header = jwt.get_unverified_header(token)
         algorithm = header.get("alg")
         if algorithm != USER_ASSERTION_ALGORITHM:
-            raise _TokenRejected(f"assertion algorithm {algorithm!r} is not allowed")
+            raise _TokenRejectedError(f"assertion algorithm {algorithm!r} is not allowed")
         kid = header.get("kid")
         if not isinstance(kid, str) or not kid:
-            raise _TokenRejected("assertion has no kid")
+            raise _TokenRejectedError("assertion has no kid")
         key = self._keys.get(kid)
         if key is None:
-            raise _TokenRejected(f"unknown assertion kid {kid!r}")
+            raise _TokenRejectedError(f"unknown assertion kid {kid!r}")
 
         # exp/nbf are checked below against the injectable clock.
         claims = jwt.decode(
@@ -67,16 +67,16 @@ class UserAssertionVerifier:
         now = self._clock()
         expires_at = _numeric_claim(claims, "exp")
         if expires_at <= now - LEEWAY_SECONDS:
-            raise _TokenRejected("assertion is expired")
+            raise _TokenRejectedError("assertion is expired")
         if "nbf" in claims and _numeric_claim(claims, "nbf") > now + LEEWAY_SECONDS:
-            raise _TokenRejected("assertion is not yet valid")
+            raise _TokenRejectedError("assertion is not yet valid")
         if expires_at - _numeric_claim(claims, "iat") > USER_ASSERTION_MAX_TTL_SECONDS:
-            raise _TokenRejected("assertion lifetime exceeds 60 s")
+            raise _TokenRejectedError("assertion lifetime exceeds 60 s")
 
         subject = claims.get("sub")
         if not isinstance(subject, str) or not subject or subject != subject.strip():
-            raise _TokenRejected("assertion sub is empty or padded")
+            raise _TokenRejectedError("assertion sub is empty or padded")
         jti = claims.get("jti")
         if not isinstance(jti, str) or not jti.strip():
-            raise _TokenRejected("assertion jti is empty")
+            raise _TokenRejectedError("assertion jti is empty")
         return subject, jti

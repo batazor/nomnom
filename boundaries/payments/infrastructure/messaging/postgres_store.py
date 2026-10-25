@@ -1,5 +1,6 @@
 """Postgres side of the payments Outbox relay: queries and the advisory lock session."""
 
+import contextlib
 import json
 import logging
 from datetime import datetime
@@ -62,10 +63,8 @@ class PostgresOutboxStore:
     def _close_lock_conn(self) -> None:
         conn, self._lock_conn = self._lock_conn, None
         if conn is not None:
-            try:
+            with contextlib.suppress(psycopg.Error):
                 conn.close()
-            except psycopg.Error:
-                pass
 
     def fetch_pending(self, limit: int) -> list[OutboxRecord]:
         with self._db.connection() as conn:

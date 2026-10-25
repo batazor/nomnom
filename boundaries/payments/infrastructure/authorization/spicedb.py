@@ -18,7 +18,7 @@ from authzed.api.v1 import (
 )
 from grpcutil import bearer_token_credentials
 
-from pkg.application import AuthorizationUnavailable, Subject, SubjectKind
+from pkg.application import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
 from slices.payment.applications.ports import (
     PaymentPermission,
@@ -52,7 +52,7 @@ _SUBJECT_TYPES: dict[SubjectKind, str] = {
 class PermissionsClient(Protocol):
     """The part of the authzed client used by the adapter."""
 
-    def CheckPermission(  # noqa: N802 - authzed stub method name
+    def CheckPermission(  # noqa: N802 - name fixed by the gRPC/specification contract
         self, request: CheckPermissionRequest, *, timeout: float
     ) -> CheckPermissionResponse: ...
 
@@ -72,7 +72,7 @@ def check_request(
 
 
 class SpiceDBPermissionChecker:
-    """Fail closed: only ``HAS_PERMISSION`` allows; any error raises ``AuthorizationUnavailable``.
+    """Fail closed: only ``HAS_PERMISSION`` allows; any error raises ``AuthorizationUnavailableError``.
 
     ``NO_PERMISSION`` and ``CONDITIONAL_PERMISSION`` (missing caveat context) deny.
     """
@@ -99,7 +99,7 @@ class SpiceDBPermissionChecker:
                 request.subject.object.object_id,
                 reason,
             )
-            raise AuthorizationUnavailable("authorization unavailable") from error
+            raise AuthorizationUnavailableError("authorization unavailable") from error
         return (
             response.permissionship
             == CheckPermissionResponse.Permissionship.PERMISSIONSHIP_HAS_PERMISSION
@@ -112,7 +112,7 @@ def _reason(error: Exception) -> str:
     if callable(code):
         try:
             return str(code())
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - supervisor must catch every failure
             pass
     return type(error).__name__
 
