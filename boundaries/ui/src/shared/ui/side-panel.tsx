@@ -1,4 +1,11 @@
-import { Drawer } from "@astra-rn/react/drawer";
+import {
+  Button,
+  CloseButton,
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+} from "@headlessui/react";
 import type { ReactNode } from "react";
 
 export type SidePanelProps = Readonly<{
@@ -19,23 +26,21 @@ export function SidePanel({
   children,
 }: SidePanelProps) {
   return (
-    <Drawer
-      isOpen={isOpen}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <Drawer.Backdrop>
-        <Drawer.Content className="nomnom-side-panel" placement="right">
-          <Drawer.Dialog>
-            <Drawer.Header>
-              <Drawer.Heading>{title}</Drawer.Heading>
-              <Drawer.CloseTrigger aria-label={closeLabel} />
-            </Drawer.Header>
-            <Drawer.Body>{children}</Drawer.Body>
-          </Drawer.Dialog>
-        </Drawer.Content>
-      </Drawer.Backdrop>
-    </Drawer>
+    <Dialog className="nomnom-side-panel-root" onClose={onClose} open={isOpen}>
+      <DialogBackdrop className="nomnom-side-panel-backdrop" transition />
+      <DialogPanel className="nomnom-side-panel" transition>
+        <header className="nomnom-side-panel-header">
+          <DialogTitle className="nomnom-side-panel-title">{title}</DialogTitle>
+          <CloseButton
+            aria-label={closeLabel}
+            as={Button}
+            className="nomnom-side-panel-close"
+          >
+            <span aria-hidden="true">×</span>
+          </CloseButton>
+        </header>
+        <div className="nomnom-side-panel-body">{children}</div>
+      </DialogPanel>
+    </Dialog>
   );
 }

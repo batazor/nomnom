@@ -7,14 +7,14 @@ import { Button } from "./button";
 
 describe("Button façade", () => {
   it("preserves keyboard activation and visible focus semantics", async () => {
-    const onPress = vi.fn();
+    const onClick = vi.fn();
     const user = userEvent.setup();
-    render(<Button onPress={onPress}>Проверить подключение</Button>);
+    render(<Button onClick={onClick}>Проверить подключение</Button>);
 
     await user.tab();
     expect(screen.getByRole("button")).toHaveFocus();
     await user.keyboard("{Enter}");
-    expect(onPress).toHaveBeenCalledOnce();
+    expect(onClick).toHaveBeenCalledOnce();
   });
 
   it("has no detectable accessibility violations", async () => {

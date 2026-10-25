@@ -4,7 +4,7 @@ Date: 2026-10-24
 
 ## Status
 
-Accepted
+Superseded by [ADR 38](0038-headless-ui-as-the-frontend-component-foundation.md) (component layer)
 
 ## Context
 

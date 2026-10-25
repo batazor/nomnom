@@ -88,7 +88,7 @@ export function CancelOrder({
           </p>
           <Button
             autoFocus={state.kind === "idle" && state.returnsFocus}
-            onPress={() => setState({ kind: "confirming" })}
+            onClick={() => setState({ kind: "confirming" })}
             variant="outline"
           >
             {t("order.cancel.action")}
@@ -101,13 +101,13 @@ export function CancelOrder({
           <legend>{t("order.cancel.confirmTitle")}</legend>
           <p>{t("order.cancel.confirmDetail")}</p>
           <div className="order-cancel-actions">
-            <Button onPress={send} variant="danger">
+            <Button onClick={send} variant="danger">
               {t("order.cancel.confirm")}
             </Button>
             {/* The safe choice takes focus when the confirmation opens. */}
             <Button
               autoFocus
-              onPress={() => setState({ kind: "idle", returnsFocus: true })}
+              onClick={() => setState({ kind: "idle", returnsFocus: true })}
               variant="ghost"
             >
               {t("order.cancel.keep")}
@@ -121,7 +121,7 @@ export function CancelOrder({
           <p className="order-cancel-error">
             {t("order.cancel.transportError")}
           </p>
-          <Button onPress={send} variant="outline">
+          <Button onClick={send} variant="outline">
             {t("order.cancel.retry")}
           </Button>
         </div>

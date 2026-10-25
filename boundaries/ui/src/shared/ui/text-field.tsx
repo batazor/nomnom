@@ -1,19 +1,16 @@
-import { Description } from "@astra-rn/react/description";
-import { FieldError } from "@astra-rn/react/field-error";
-import { Input } from "@astra-rn/react/input";
-import { Label } from "@astra-rn/react/label";
-import type { TextFieldProps as AstraTextFieldProps } from "@astra-rn/react/textfield";
-import { TextField as AstraTextField } from "@astra-rn/react/textfield";
+import type { InputProps } from "@headlessui/react";
+import { Description, Field, Input, Label } from "@headlessui/react";
 import type { Ref } from "react";
 
 export type TextFieldProps = Omit<
-  AstraTextFieldProps,
-  "className" | "children" | "isInvalid"
+  InputProps,
+  "className" | "children" | "as" | "invalid" | "onChange"
 > & {
   label: string;
   description?: string;
   // Shown under the field and marks it invalid while set.
   errorMessage?: string | null;
+  onChange?: (value: string) => void;
   className?: string;
   inputRef?: Ref<HTMLInputElement>;
 };
@@ -22,6 +19,7 @@ export function TextField({
   label,
   description,
   errorMessage,
+  onChange,
   className,
   inputRef,
   ...props
@@ -29,17 +27,21 @@ export function TextField({
   const classes = ["nomnom-text-field", className].filter(Boolean).join(" ");
 
   return (
-    <AstraTextField
-      className={classes}
-      fullWidth
-      isInvalid={Boolean(errorMessage)}
-      validationBehavior="aria"
-      {...props}
-    >
-      <Label>{label}</Label>
-      <Input ref={inputRef} />
-      {description ? <Description>{description}</Description> : null}
-      <FieldError>{errorMessage}</FieldError>
-    </AstraTextField>
+    <Field className={classes}>
+      <Label className="nomnom-label">{label}</Label>
+      <Input
+        className="nomnom-input"
+        invalid={Boolean(errorMessage)}
+        onChange={(event) => onChange?.(event.target.value)}
+        ref={inputRef}
+        {...props}
+      />
+      {description ? (
+        <Description className="nomnom-description">{description}</Description>
+      ) : null}
+      {errorMessage ? (
+        <Description className="nomnom-field-error">{errorMessage}</Description>
+      ) : null}
+    </Field>
   );
 }

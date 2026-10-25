@@ -18,15 +18,13 @@
     "check": "npm run lint && npm run typecheck && npm run test"
   },
   "dependencies": {
-    "@astra-rn/react": "1.0.1",
-    "@astra-rn/styles": "1.0.1",
     "@grafana/faro-react": "2.13.0",
     "@grafana/faro-web-tracing": "2.13.0",
+    "@headlessui/react": "2.2.10",
     "graphql": "17.0.2",
     "graphql-sse": "2.6.3",
     "motion": "14.6.0",
     "react": "19.3.1",
-    "react-aria-components": "1.22.1",
     "react-dom": "19.3.1",
     "react-router-dom": "7.18.4",
     "urql": "5.0.4"

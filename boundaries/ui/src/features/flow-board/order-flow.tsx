@@ -194,7 +194,7 @@ export function OrderTimeline({
               ? t("board.next", { actor: t(next.actor), step: t(next.label) })
               : t("board.done")}
         </p>
-        <Button onPress={onDetails} size="sm" variant="outline">
+        <Button onClick={onDetails} size="sm" variant="outline">
           {t("board.details")}
         </Button>
       </div>

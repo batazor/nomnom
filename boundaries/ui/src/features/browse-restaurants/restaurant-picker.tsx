@@ -31,7 +31,7 @@ export function RestaurantPicker({
     return (
       <div className="catalog-message" role="alert">
         <p>{t("restaurants.error.title")}</p>
-        <Button onPress={pages.retry} size="sm">
+        <Button onClick={pages.retry} size="sm">
           {t("restaurants.retry")}
         </Button>
       </div>
@@ -78,7 +78,7 @@ export function RestaurantPicker({
       {pages.hasMore || pages.loadingMore || pages.moreFailed ? (
         <Button
           isPending={pages.loadingMore}
-          onPress={pages.moreFailed ? pages.retry : pages.loadMore}
+          onClick={pages.moreFailed ? pages.retry : pages.loadMore}
           size="sm"
           variant="ghost"
         >

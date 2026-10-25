@@ -129,7 +129,7 @@ export function PlaceOrder({
         description={t("checkout.addressHint")}
         errorMessage={addressMissing ? t("checkout.addressRequired") : null}
         inputRef={addressInput}
-        isRequired
+        required
         label={t("checkout.address")}
         name="deliveryAddress"
         onChange={(value) => {

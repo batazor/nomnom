@@ -37,7 +37,7 @@ export function RestaurantOrdering({
     return (
       <RestaurantMessage
         action={
-          <Button onPress={() => reexecute({ requestPolicy: "network-only" })}>
+          <Button onClick={() => reexecute({ requestPolicy: "network-only" })}>
             {t("restaurant.retry")}
           </Button>
         }

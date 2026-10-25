@@ -237,7 +237,7 @@ function KitchenOrderCard({
         {next ? (
           <Button
             isPending={fetching}
-            onPress={() => send(next.action)}
+            onClick={() => send(next.action)}
             size="sm"
           >
             {t(next.label)}
@@ -249,8 +249,8 @@ function KitchenOrderCard({
         )}
         {order.stage === "RECEIVED" ? (
           <Button
-            isDisabled={fetching}
-            onPress={() => send("REJECT")}
+            disabled={fetching}
+            onClick={() => send("REJECT")}
             size="sm"
             variant="ghost"
           >

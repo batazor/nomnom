@@ -129,7 +129,7 @@ export function CourierColumn({
         {courier.availability === "BUSY" ? null : (
           <Button
             isPending={availability.fetching}
-            onPress={async () => {
+            onClick={async () => {
               const result = await setAvailability({
                 availability:
                   courier.availability === "AVAILABLE"
@@ -179,7 +179,7 @@ export function CourierColumn({
           <div className="board-card-actions">
             <Button
               isPending={acting.fetching}
-              onPress={async () => {
+              onClick={async () => {
                 const result = await applyAction({
                   deliveryId: delivery.id,
                   action:
@@ -225,7 +225,7 @@ export function CourierColumn({
                   <div className="board-card-actions">
                     <Button
                       isPending={accepting.fetching}
-                      onPress={async () => {
+                      onClick={async () => {
                         const result = await acceptOffer({ offerId: offer.id });
                         settle({
                           error: result.error,

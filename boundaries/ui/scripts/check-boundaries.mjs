@@ -23,8 +23,8 @@ export function checkSource(filename, source) {
   const violations = [];
   const normalized = filename.replaceAll("\\", "/");
 
-  if (!normalized.includes("/shared/ui/") && /["']@astra-rn\//.test(source)) {
-    violations.push("Astra must be imported through src/shared/ui");
+  if (!normalized.includes("/shared/ui/") && /["']@headlessui\/react/.test(source)) {
+    violations.push("Headless UI must be imported through src/shared/ui");
   }
 
   if (forbiddenBackendImports.some((pattern) => pattern.test(source))) {
@@ -36,8 +36,8 @@ export function checkSource(filename, source) {
 
 function runSelfTest() {
   assert.deepEqual(
-    checkSource("src/app/bad.ts", 'import {Button} from "@astra-rn/react";'),
-    ["Astra must be imported through src/shared/ui"],
+    checkSource("src/app/bad.ts", 'import {Button} from "@headlessui/react";'),
+    ["Headless UI must be imported through src/shared/ui"],
   );
   assert.deepEqual(
     checkSource(
@@ -49,7 +49,7 @@ function runSelfTest() {
   assert.deepEqual(
     checkSource(
       "src/shared/ui/button.tsx",
-      'import {Button} from "@astra-rn/react/button";',
+      'import {Button} from "@headlessui/react";',
     ),
     [],
   );

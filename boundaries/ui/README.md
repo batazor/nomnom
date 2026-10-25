@@ -101,7 +101,7 @@ npm run check
 - React 19, TypeScript 7 и Vite 8;
 - Tailwind CSS 4;
 - React Aria Components как accessibility foundation;
-- бесплатные web packages Astra `@astra-rn/react` и `@astra-rn/styles`;
+- [Headless UI](https://headlessui.com/) `@headlessui/react` для поведения и accessibility компонентов;
 - React Router;
 - provisional urql client;
 - GraphQL Code Generator с `client` preset;
@@ -118,7 +118,7 @@ src/
     graphql/           client, generated types и mocks
     i18n/              typed messages и Intl formatters
     tokens/            semantic CSS tokens
-    ui/                Astra façade и nomnom wrappers
+    ui/                Headless UI façade и nomnom wrappers
   test/                общий test setup
 ops/                   будущие runtime/deployment artifacts
 ```
@@ -138,18 +138,14 @@ GRAPHQL_SCHEMA=https://example.test/graphql npm run codegen
 
 Локальный default schema source — `../bff/client-schema.graphql`: композиция subgraphs BFF, включая subscriptions (`npm run compose` в `boundaries/bff`). Generated files не редактируются вручную.
 
-## Astra ownership
+## Headless UI ownership
 
-Актуальный web distribution Astra package-based: `@astra-rn/react` и `@astra-rn/styles` версии 1.0.1 публикуются с MIT metadata. Это отличается от исходного предположения о vendoring исходников. Pro и React Native/Expo animations не используются.
+Интерактивные компоненты строятся на `@headlessui/react` (exact pin, [ADR 38](../../docs/adr/0038-headless-ui-as-the-frontend-component-foundation.md)); внешний вид — собственные tokens и CSS. Feature и `app/` импортируют только façade из `src/shared/ui/`. Новый интерактивный примитив сначала ищется в Headless UI и оборачивается в `shared/ui/`. Для обновления Headless UI нужно:
 
-Feature и `app/` импортируют только façade из `src/shared/ui/`. Для обновления Astra нужно:
-
-1. проверить latest-версии и license metadata через npm registry;
-2. обновить exact pins и lockfile;
+1. проверить latest-версию через npm registry;
+2. обновить exact pin и lockfile;
 3. проверить API локальных wrappers;
 4. выполнить `npm run check` и `npm run build`;
 5. выполнить visual и accessibility regression check light/dark и mobile/desktop.
-
-Exit strategy: заменить реализацию wrappers на React Aria Components, сохранив imports потребителей из `shared/ui/`. Второй component framework не добавляется.
 
 Подробные conventions и open decisions описаны в [архитектуре UI](../../docs/ui.md).

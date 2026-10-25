@@ -44,10 +44,10 @@ export function Menu({
                 <Button
                   aria-describedby={item.available ? undefined : soldOutId}
                   aria-label={t("menu.addLabel", { item: item.name })}
-                  isDisabled={
+                  disabled={
                     !item.available || !acceptingOrders || inCart >= maxQuantity
                   }
-                  onPress={() => onAdd(item)}
+                  onClick={() => onAdd(item)}
                   size="sm"
                   variant="outline"
                 >

@@ -33,7 +33,7 @@ export function OrderDetails({ orderId }: { orderId: string }) {
   if (order === undefined && failed) {
     return (
       <OrderMessage
-        action={<Button onPress={refresh}>{t("order.error.retry")}</Button>}
+        action={<Button onClick={refresh}>{t("order.error.retry")}</Button>}
         detail={t("order.error.detail")}
         title={t("order.error.title")}
       />
@@ -93,7 +93,7 @@ function OrderView({
       {failed ? (
         <div className="order-stale" role="status">
           <p>{t("order.stale")}</p>
-          <Button onPress={onRefresh} size="sm" variant="outline">
+          <Button onClick={onRefresh} size="sm" variant="outline">
             {t("order.refresh")}
           </Button>
         </div>

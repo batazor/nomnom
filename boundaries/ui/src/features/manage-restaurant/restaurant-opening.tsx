@@ -76,7 +76,7 @@ export function RestaurantOpening({
       className="manage-opening"
     >
       <Switch
-        isSelected={isOpen}
+        checked={isOpen}
         label={restaurant.name ?? t("manage.opening.title")}
         onChange={() => void toggle()}
       />

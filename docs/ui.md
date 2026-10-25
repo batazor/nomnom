@@ -22,15 +22,15 @@ Vertical UI slices: `browse-restaurants` (`/`), `view-restaurant` с корзи�
 
 `src/shared/` содержит только реально переиспользуемые механизмы: UI façade, tokens, GraphQL transport/generated artifacts, config и i18n. Глобальные `components/`, `hooks/`, `services/` и `utils/` запрещены. Feature не импортирует внутренности другой feature.
 
-## Astra и design tokens
+## Headless UI и design tokens
 
-React Aria Components задаёт accessibility semantics, Tailwind CSS 4 — styling foundation, Astra — styled web layer. Astra импортируется только внутри `src/shared/ui/`; consumers используют локальную façade. Текущий официальный web distribution package-based и имеет MIT metadata, поэтому upstream source не называется vendored. Pro и React Native/Expo packages не используются.
+[Headless UI](https://headlessui.com/) (`@headlessui/react`) задаёт поведение и accessibility semantics интерактивных компонентов, Tailwind CSS 4 и собственные semantic tokens — весь внешний вид ([ADR 38](adr/0038-headless-ui-as-the-frontend-component-foundation.md)). Headless UI импортируется только внутри `src/shared/ui/`; consumers используют локальную façade. Новый интерактивный примитив сначала берётся из Headless UI.
 
 CSS variables разделены на semantic color, typography, spacing, radius, shadow и motion roles. Light и dark theme поддерживают system preference и будущий явный override. `prefers-reduced-motion` отключает non-essential transitions. Компоненты не содержат hardcoded palette values.
 
 ## Accessibility и responsive
 
-Интерактивные элементы сохраняют keyboard activation, logical focus order, visible focus ring, semantic labels и screen-reader state. Dialog/Drawer/Alert Dialog в будущем строятся на React Aria/Astra primitives, а не на `div`-эмуляции. Contrast проверяется в обеих темах.
+Интерактивные элементы сохраняют keyboard activation, logical focus order, visible focus ring, semantic labels и screen-reader state. Dialog/Drawer/Alert Dialog в будущем строятся на Headless UI primitives, а не на `div`-эмуляции. Contrast проверяется в обеих темах.
 
 Layout начинается с mobile viewport, не создаёт horizontal overflow и расширяется на tablet/desktop без изменения порядка задач пользователя. Accessibility проверяется component-тестами и axe; критические journeys позже проверяются реальным браузером.
 

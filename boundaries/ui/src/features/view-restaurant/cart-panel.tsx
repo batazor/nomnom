@@ -93,7 +93,7 @@ export function CartPanel({
                           aria-label={t("cart.decrease", { item: item.name })}
                           isIconOnly
                           // Below one the line leaves the cart, as with "Remove".
-                          onPress={() =>
+                          onClick={() =>
                             line.quantity <= 1
                               ? remove(item.id)
                               : onQuantity(item.id, line.quantity - 1)
@@ -112,11 +112,11 @@ export function CartPanel({
                         </output>
                         <Button
                           aria-label={t("cart.increase", { item: item.name })}
-                          isDisabled={
+                          disabled={
                             !item.available || line.quantity >= maxQuantity
                           }
                           isIconOnly
-                          onPress={() => onQuantity(item.id, line.quantity + 1)}
+                          onClick={() => onQuantity(item.id, line.quantity + 1)}
                           size="sm"
                           variant="outline"
                         >
@@ -125,7 +125,7 @@ export function CartPanel({
                       </fieldset>
                       <Button
                         aria-label={t("cart.removeLabel", { item: item.name })}
-                        onPress={() => remove(item.id)}
+                        onClick={() => remove(item.id)}
                         size="sm"
                         variant="ghost"
                       >

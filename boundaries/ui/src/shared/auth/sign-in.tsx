@@ -199,7 +199,7 @@ export function SignInButton({
         <span className="sign-in-user">
           {t("auth.signedInAs", { role: roleLabel, user: login.user })}
         </span>
-        <Button onPress={() => remove(role)} variant="secondary">
+        <Button onClick={() => remove(role)} variant="secondary">
           {t("auth.signOut")}
         </Button>
       </span>
@@ -228,7 +228,7 @@ export function SignInButton({
 
   return (
     <span className="sign-in">
-      <Button isPending={pending || restoring.has(role)} onPress={signIn}>
+      <Button isPending={pending || restoring.has(role)} onClick={signIn}>
         {demo ? t("auth.signInDemo") : t("auth.signIn", { role: roleLabel })}
       </Button>
       {failed ? (
