@@ -208,6 +208,7 @@ func orderState(state order.State) ordersv1.OrderState {
 // fail-closed authorization wraps it, and the caller may retry it.
 func transportError(err error) error {
 	code, reason, message := codes.Internal, "INTERNAL_ERROR", "internal error"
+	var metadata map[string]string
 	var notOrderable order.NotOrderable
 	var invalidTransition order.InvalidTransition
 	var cancellationNotAllowed order.CancellationNotAllowed
@@ -222,7 +223,10 @@ func transportError(err error) error {
 		code, reason, message = codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS", err.Error()
 	case errors.Is(err, application.ErrInvalidInput):
 		code, reason, message = codes.InvalidArgument, "INVALID_ARGUMENT", err.Error()
-	case errors.Is(err, vo.ErrInvalidValue), errors.As(err, &notOrderable),
+	case errors.As(err, &notOrderable):
+		code, reason, message = codes.FailedPrecondition, "ORDER_NOT_ORDERABLE", err.Error()
+		metadata = notOrderableMetadata(notOrderable)
+	case errors.Is(err, vo.ErrInvalidValue),
 		errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem):
 		code, reason, message = codes.InvalidArgument, "INVALID_ORDER", err.Error()
 	case errors.As(err, &cancellationNotAllowed):
@@ -240,13 +244,36 @@ func transportError(err error) error {
 	}
 
 	withDetails, detailsErr := status.New(code, message).WithDetails(&errdetails.ErrorInfo{
-		Reason: reason,
-		Domain: errorDomain,
+		Reason:   reason,
+		Domain:   errorDomain,
+		Metadata: metadata,
 	})
 	if detailsErr != nil {
 		return status.Error(code, message)
 	}
 	return withDetails.Err()
+}
+
+// notOrderableMetadata names the reasons of an unsatisfied OrderItemsOrderable
+// policy (FR-498): `codes` lists each reason code once in upper case,
+// `menu_item_ids` the Menu Items the reasons refer to, both comma-separated.
+func notOrderableMetadata(err order.NotOrderable) map[string]string {
+	var reasonCodes, menuItemIDs []string
+	seen := make(map[string]struct{}, len(err.Reasons))
+	for _, reason := range err.Reasons {
+		reasonCode := strings.ToUpper(string(reason.Code))
+		if _, duplicate := seen[reasonCode]; !duplicate {
+			seen[reasonCode] = struct{}{}
+			reasonCodes = append(reasonCodes, reasonCode)
+		}
+		if reason.MenuItemID != "" {
+			menuItemIDs = append(menuItemIDs, string(reason.MenuItemID))
+		}
+	}
+	return map[string]string{
+		"codes":         strings.Join(reasonCodes, ","),
+		"menu_item_ids": strings.Join(menuItemIDs, ","),
+	}
 }
 
 // cancellationReason names the cancellation window rule that refused the

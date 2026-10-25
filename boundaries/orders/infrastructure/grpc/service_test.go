@@ -3,6 +3,7 @@ package grpcadapter_test
 import (
 	"context"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -247,6 +248,62 @@ func TestPlaceOrderMapsRestaurantRefusals(t *testing.T) {
 			assert.False(t, placed)
 		})
 	}
+}
+
+func catalogClient(t *testing.T, snapshot placeorder.CatalogSnapshot) ordersv1.OrdersServiceClient {
+	t.Helper()
+	ports := newCommandPorts()
+	catalog := memory.NewCatalog()
+	catalog.Put("restaurant-1", snapshot)
+	ports.catalog = catalog
+	return newClientWithPorts(t, fixedSubject{subject: customer}, memory.NewStore(), memory.NewAuthorizer(), ports)
+}
+
+// AC-567: an unavailable Menu Item is ORDER_NOT_ORDERABLE with its code and id.
+func TestPlaceOrderNamesUnorderableItems(t *testing.T) {
+	client := catalogClient(t, placeorder.CatalogSnapshot{
+		Currency: "EUR",
+		Items: map[order.MenuItemID]placeorder.CatalogItem{
+			"pizza":      {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+			"menu-gyoza": {UnitPrice: ordertest.Money(t, "4.00"), Available: false},
+		},
+		MinimumTotal: ordertest.Money(t, "0"),
+		MaximumTotal: ordertest.Money(t, "100"),
+	})
+	request := placeRequest()
+	request.Items = append(request.Items, &ordersv1.PlaceOrderItem{MenuItemId: "menu-gyoza", Quantity: 1})
+
+	_, err := client.PlaceOrder(context.Background(), request)
+	requireReason(t, err, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE")
+	assert.Equal(t, map[string]string{"codes": "ORDER_ITEM_UNAVAILABLE", "menu_item_ids": "menu-gyoza"}, errorInfo(t, err).GetMetadata())
+}
+
+func TestPlaceOrderNamesEveryReasonCodeOnce(t *testing.T) {
+	client := catalogClient(t, placeorder.CatalogSnapshot{
+		Currency:     "EUR",
+		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+		MinimumTotal: ordertest.Money(t, "0"),
+		MaximumTotal: ordertest.Money(t, "10"),
+	})
+	request := placeRequest()
+	request.Items = append(request.Items,
+		&ordersv1.PlaceOrderItem{MenuItemId: "menu-gyoza", Quantity: 1},
+		&ordersv1.PlaceOrderItem{MenuItemId: "menu-tea", Quantity: 1})
+
+	_, err := client.PlaceOrder(context.Background(), request)
+	requireReason(t, err, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE")
+	metadata := errorInfo(t, err).GetMetadata()
+	assert.ElementsMatch(t, []string{"ORDER_ITEM_UNAVAILABLE", "ORDER_TOTAL_ABOVE_MAXIMUM"}, strings.Split(metadata["codes"], ","))
+	assert.ElementsMatch(t, []string{"menu-gyoza", "menu-tea"}, strings.Split(metadata["menu_item_ids"], ","))
+}
+
+func errorInfo(t *testing.T, err error) *errdetails.ErrorInfo {
+	t.Helper()
+	details := status.Convert(err).Details()
+	require.Len(t, details, 1)
+	info, ok := details[0].(*errdetails.ErrorInfo)
+	require.True(t, ok)
+	return info
 }
 
 // AC-510: a service subject is not a Customer.

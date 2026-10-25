@@ -29,6 +29,7 @@ func TestClassifySeparatesRejectionsFromFailures(t *testing.T) {
 		"invalid transition":   {fmt.Errorf("apply: %w", order.InvalidTransition{}), rejected("invalid_transition")},
 		"guard failed":         {order.GuardFailed{Reason: "paid"}, rejected("guard_failed")},
 		"domain rule":          {order.ErrDuplicateMenuItem, rejected("domain_rule")},
+		"not orderable":        {order.NotOrderable{Reasons: []order.PolicyReason{{Code: order.OrderItemUnavailable}}}, rejected("domain_rule")},
 		"cancellation refused": {fulfillment.ErrCancellationRefused, rejected("cancellation_refused")},
 		"concurrency conflict": {application.ErrConcurrencyConflict, failed("concurrency_conflict")},
 		"corrupted snapshot":   {order.ErrInvalidSnapshot, failed("internal")},
