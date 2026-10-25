@@ -16,7 +16,7 @@ use crate::pkg::telemetry::usecase::{Failure, UseCase, UseCaseTelemetry};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    expire_delivery_offers, find_courier, get_courier_current_delivery,
+    dispatch_deliveries, expire_delivery_offers, find_courier, get_courier_current_delivery,
     list_available_delivery_offers, offer_delivery, reassign_courier, reject_delivery_offer,
     replan_delivery, report_delivery_failure,
 };
@@ -37,6 +37,7 @@ pub const REPORT_DELIVERY_FAILURE: UseCase = UseCase::command("report_delivery_f
 pub const CANCEL_DELIVERY: UseCase = UseCase::command("cancel_delivery");
 pub const REPLAN_DELIVERY: UseCase = UseCase::command("replan_delivery");
 pub const EXPIRE_DELIVERY_OFFERS: UseCase = UseCase::command("expire_delivery_offers");
+pub const DISPATCH_DELIVERIES: UseCase = UseCase::command("dispatch_deliveries");
 
 /// `nomnom.outcome` and `error.type` of a failed call.
 #[must_use]
@@ -220,6 +221,15 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
             .observe(EXPIRE_DELIVERY_OFFERS, classify, || {
                 self.inner.expire_delivery_offers(input)
             })
+    }
+
+    fn dispatch_deliveries(
+        &self,
+        input: dispatch_deliveries::Input,
+    ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError> {
+        self.telemetry.observe(DISPATCH_DELIVERIES, classify, || {
+            self.inner.dispatch_deliveries(input)
+        })
     }
 }
 

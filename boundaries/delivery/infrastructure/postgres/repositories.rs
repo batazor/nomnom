@@ -205,9 +205,9 @@ impl DeliveryRepository for PostgresStore {
                                WHERE o.delivery_id = deliveries.id AND o.state = $4)
              ORDER BY COALESCE(created_at, 0), id LIMIT $5"
         );
-        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
-            statement
-        ))
+        sql!(self, "SELECT", |connection| sqlx::query(
+            sqlx::AssertSqlSafe(statement)
+        )
         .bind(delivery_state(State::Waiting))
         .bind(created_at)
         .bind(id)

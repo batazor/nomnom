@@ -123,7 +123,7 @@ pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule
 /// позиции курьеров) и выбранными авторизацией и relationships — для
 /// транспортных тестов, которые проверяют состояние хранилища.
 #[cfg(test)]
-pub(crate) fn build_over(
+pub(crate) fn build_over_memory(
     store: &Arc<MemoryStore>,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn super::ProcessRelationships>,

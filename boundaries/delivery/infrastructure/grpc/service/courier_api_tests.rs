@@ -157,7 +157,7 @@ impl Api {
     async fn start(authorization: StaticAuthorization) -> Self {
         let store = Arc::new(MemoryStore::new());
         let relationships = Arc::new(RecordingRelationships::new());
-        let module = crate::di::build_over(
+        let module = crate::di::build_over_memory(
             &store,
             Box::new(authorization),
             Box::new(SharedRelationships(Arc::clone(&relationships))),
@@ -595,7 +595,7 @@ async fn user_assertion_reaches_the_courier_handler_as_user_subject() {
     let vectors = super::super::identity::fixtures::user_vectors();
     let user = vectors.expected_subject.clone();
     let store = Arc::new(MemoryStore::new());
-    let module = crate::di::build_over(
+    let module = crate::di::build_over_memory(
         &store,
         Box::new(authorization(&[user.as_str()], &[])),
         Box::new(RecordingRelationships::new()),
