@@ -60,7 +60,15 @@ JSON — артефакт генератора: правки вносятся в
 | Subgraph calls: errors | TODO | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Subgraph calls: p95 | TODO | [`router_http_request_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
-Живых панелей: 0 из 13. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+### Certificates
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Time to expiry | live | — |
+| Time to scheduled renewal | live | — |
+| Ready | live | — |
+
+Живых панелей: 3 из 16. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 

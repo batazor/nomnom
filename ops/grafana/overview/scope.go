@@ -96,6 +96,13 @@ func Max(by, inner string) string {
 	return "max by (" + by + ") (" + inner + ")"
 }
 
+func Min(by, inner string) string {
+	if by == "" {
+		return "min(" + inner + ")"
+	}
+	return "min by (" + by + ") (" + inner + ")"
+}
+
 // Percentiles — p50/p95/p99 одной histogram.
 func (s Scope) Percentiles(prefix, by, histogram string, matchers ...string) []Query {
 	var qs []Query

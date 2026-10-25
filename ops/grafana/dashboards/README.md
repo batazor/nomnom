@@ -60,7 +60,15 @@ Environment и version не фильтруются: у Prometheus-метрик �
 | Memory working set by namespace | live | — |
 | Network by namespace | live | — |
 
-Живых панелей: 21 из 21. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+### Certificates
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Time to expiry | live | — |
+| Time to scheduled renewal | live | — |
+| Ready | live | — |
+
+Живых панелей: 24 из 24. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
@@ -75,4 +83,6 @@ Rule group `platform` в folder `nomnom` ([`../alerts/platform.json`](../alerts/
 | Pods: crash looping | critical | активно | — |
 | Pods: restarting | warning | активно | — |
 | Pods: not ready | warning | активно | — |
+| Certificates: expiring | warning | активно | — |
+| Certificates: not ready | critical | активно | — |
 

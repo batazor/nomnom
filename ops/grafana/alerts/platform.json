@@ -337,6 +337,102 @@
       "ruleGroup": "platform",
       "title": "Pods: not ready",
       "uid": "nomnom-pod-not-ready"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "До NotAfter сертификата меньше 14 дней: cert-manager его не продлил."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "min by (namespace, name) (certmanager_certificate_not_after_timestamp_seconds{job=\"infra/cert-manager\"}) - time()",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003c 1.2096e+06",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "1h",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "Certificates: expiring",
+      "uid": "nomnom-certificate-expiring"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Certificate не Ready: сертификат не выпущен, просрочен или issuer его не выпускает."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "min by (namespace, name) (certmanager_certificate_ready_status{job=\"infra/cert-manager\", condition=\"True\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003c 1",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "15m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "Certificates: not ready",
+      "uid": "nomnom-certificate-not-ready"
     }
   ],
   "title": "platform"

@@ -49,9 +49,10 @@ var AllServices = []string{Orders, OrdersWorker, OrdersConsumer, Restaurants, De
 const (
 	SpiceDB          = "spicedb"
 	PostgreSQLServer = "postgresql"
+	CertManager      = "cert-manager"
 )
 
-var InfraTargets = []string{SpiceDB, PostgreSQLServer}
+var InfraTargets = []string{SpiceDB, PostgreSQLServer, CertManager}
 
 // Bounded contexts с ролями на технологиях, а не на имени.
 var (
@@ -130,6 +131,7 @@ var Sections = []Section{
 	{"pods", "Pods (Kubernetes)", "Alloy: cAdvisor kubelet через API server proxy и kube-state-metrics (только pods прикладных неймспейсов), `job=\"infra/kubernetes\"`. Метрики Prometheus, без `target_info`: сервис выбирается `namespace` и префиксом `pod`. Row Pods в overview каждого сервиса и в Platform / Overview."},
 	{"spicedb", "SpiceDB (сервер)", "Alloy scrape `:9090` pod SpiceDB, `job=\"infra/spicedb\"`. Серверная сторона; клиентская — row Authorization сервисов. Platform / Overview."},
 	{"postgresql", "PostgreSQL (сервер)", "Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job=\"infra/postgresql\"`, label `owner`; `stat_database` и размер — только база владельца. Клиентская сторона — row Dependencies сервисов. Platform / Overview."},
+	{"certificates", "Certificates (cert-manager)", "Alloy scrape `:9402` controller cert-manager, `job=\"infra/cert-manager\"`: все `Certificate` кластера, `namespace`/`name` — неймспейс и имя ресурса. Row Certificates в Platform / Overview и в overview контекстов, у которых есть свои сертификаты (BFF: `bff-assertion-key`)."},
 }
 
 var Metrics = []Metric{
@@ -294,6 +296,11 @@ var Metrics = []Metric{
 	{Name: "pg_stat_database_conflicts", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
 	{Name: "pg_stat_database_temp_bytes", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer}), Note: "Запросы, вылезшие за `work_mem`."},
 	{Name: "pg_database_size_bytes", Section: "postgresql", Type: Gauge, Source: "postgres_exporter `database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
+
+	// certificates (Alloy scrape cert-manager controller :9402, job infra/cert-manager)
+	{Name: "certmanager_certificate_not_after_timestamp_seconds", Section: "certificates", Type: Gauge, Source: "cert-manager v1.21 controller", Labels: []string{"namespace", "name", "issuer_name", "issuer_kind"}, Status: verified([]string{CertManager}), Note: "NotAfter выпущенного сертификата, Unix seconds."},
+	{Name: "certmanager_certificate_renewal_timestamp_seconds", Section: "certificates", Type: Gauge, Source: "cert-manager v1.21 controller", Labels: []string{"namespace", "name", "issuer_name", "issuer_kind"}, Status: verified([]string{CertManager}), Note: "Плановое продление (`renewBefore`); прошедшее время при Ready — продление не удаётся."},
+	{Name: "certmanager_certificate_ready_status", Section: "certificates", Type: Gauge, Source: "cert-manager v1.21 controller", Labels: []string{"namespace", "name", "condition", "issuer_name", "issuer_kind"}, Status: verified([]string{CertManager}), Note: "В Alloy остаётся только `condition=\"True\"`: 0 — Certificate не Ready."},
 }
 
 // postgresPoolNote — источники пулов PostgreSQL orders и payments.

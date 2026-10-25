@@ -18,7 +18,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 119; пар «метрика × сервис» со статусом «есть»: 126.
+Метрик в инвентаре: 122; пар «метрика × сервис» со статусом «есть»: 129.
 
 Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`): 2026-10-25 подтверждены rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -324,4 +324,16 @@ Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job="infr
 | `pg_stat_database_conflicts` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | — |
 | `pg_stat_database_temp_bytes` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | Запросы, вылезшие за `work_mem`. |
 | `pg_database_size_bytes` | postgres_exporter `database` | gauge | `owner`, `datname` | `postgresql`: есть | — |
+
+<a id="certificates"></a>
+
+## Certificates (cert-manager)
+
+Alloy scrape `:9402` controller cert-manager, `job="infra/cert-manager"`: все `Certificate` кластера, `namespace`/`name` — неймспейс и имя ресурса. Row Certificates в Platform / Overview и в overview контекстов, у которых есть свои сертификаты (BFF: `bff-assertion-key`).
+
+| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
+| --- | --- | --- | --- | --- | --- |
+| `certmanager_certificate_not_after_timestamp_seconds` | cert-manager v1.21 controller | gauge | `namespace`, `name`, `issuer_name`, `issuer_kind` | `cert-manager`: есть | NotAfter выпущенного сертификата, Unix seconds. |
+| `certmanager_certificate_renewal_timestamp_seconds` | cert-manager v1.21 controller | gauge | `namespace`, `name`, `issuer_name`, `issuer_kind` | `cert-manager`: есть | Плановое продление (`renewBefore`); прошедшее время при Ready — продление не удаётся. |
+| `certmanager_certificate_ready_status` | cert-manager v1.21 controller | gauge | `namespace`, `name`, `condition`, `issuer_name`, `issuer_kind` | `cert-manager`: есть | В Alloy остаётся только `condition="True"`: 0 — Certificate не Ready. |
 

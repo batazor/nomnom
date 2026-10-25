@@ -5,11 +5,12 @@ import "nomnom/ops/grafana/inventory"
 // PlatformAlertsPath — rule group Platform / Overview.
 const PlatformAlertsPath = "ops/grafana/alerts/platform.json"
 
-// PlatformAlerts — SpiceDB, PostgreSQL и pods (Platform / Overview).
+// PlatformAlerts — SpiceDB, PostgreSQL, pods и сертификаты (Platform / Overview).
 func PlatformAlerts() (AlertGroup, error) {
 	spicedb := Scope{Services: []string{inventory.SpiceDB}, Job: "infra/spicedb"}
 	postgres := Scope{Services: []string{inventory.PostgreSQLServer}, Job: "infra/postgresql"}
 	pods := Scope{Services: inventory.AllServices, Job: jobKubernetes}
+	certs := Scope{Services: []string{inventory.CertManager}, Job: jobCertManager}
 	alerts := []Alert{
 		{Slug: "spicedb-errors", Title: "SpiceDB: errors", Severity: Critical, For: "10m", Op: ">", Threshold: 0.05, DashboardID: PlatformUID,
 			Summary: "Больше 5% запросов к SpiceDB не OK: клиенты fail-closed, пользователи получают отказ в доступе.",
@@ -32,6 +33,12 @@ func PlatformAlerts() (AlertGroup, error) {
 		{Slug: "pod-not-ready", Title: "Pods: not ready", Severity: Warning, For: "10m", Op: "<", Threshold: 1, DashboardID: PlatformUID,
 			Summary: "Pod не проходит readinessProbe и выведен из Service.",
 			Value:   Max("namespace, pod", pods.Gauge("kube_pod_status_ready", `condition="true"`))},
+		{Slug: "certificate-expiring", Title: "Certificates: expiring", Severity: Warning, For: "1h", Op: "<", Threshold: 14 * 24 * 3600, DashboardID: PlatformUID,
+			Summary: "До NotAfter сертификата меньше 14 дней: cert-manager его не продлил.",
+			Value:   Min("namespace, name", certs.Gauge("certmanager_certificate_not_after_timestamp_seconds")) + " - time()"},
+		{Slug: "certificate-not-ready", Title: "Certificates: not ready", Severity: Critical, For: "15m", Op: "<", Threshold: 1, DashboardID: PlatformUID,
+			Summary: "Certificate не Ready: сертификат не выпущен, просрочен или issuer его не выпускает.",
+			Value:   Min("namespace, name", certs.Gauge("certmanager_certificate_ready_status", certReady))},
 	}
-	return buildGroup("platform", Scope{Services: append([]string{inventory.SpiceDB, inventory.PostgreSQLServer}, inventory.AllServices...)}, alerts)
+	return buildGroup("platform", Scope{Services: append([]string{inventory.SpiceDB, inventory.PostgreSQLServer, inventory.CertManager}, inventory.AllServices...)}, alerts)
 }

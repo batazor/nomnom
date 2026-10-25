@@ -60,7 +60,9 @@ type Options struct {
 	Temporal      *Temporal
 	Kitchen       bool
 	Authorization bool
-	Domain        func(Scope) []Panel
+	// Certificates — у контекста есть свои Certificate cert-manager в nomnom-<context>.
+	Certificates bool
+	Domain       func(Scope) []Panel
 	// DomainAlerts — alert rules бизнес-метрик сервиса (scope без variables).
 	DomainAlerts func(Scope) []Alert
 }
@@ -177,6 +179,10 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 	}
 	if opts.Authorization {
 		rows = append(rows, row{title: "Authorization", scope: main, collapsed: true, panels: authorization(main)})
+	}
+	if opts.Certificates {
+		certs := contextCertificates(opts)
+		rows = append(rows, row{title: "Certificates", scope: certs, collapsed: true, panels: certificates(certs)})
 	}
 
 	layout := dashboard.Rows()

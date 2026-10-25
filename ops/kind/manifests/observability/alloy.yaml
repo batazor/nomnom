@@ -76,7 +76,22 @@ data:
       limit          = "200MiB"
       output {
         metrics = [otelcol.processor.filter.nomnom.input]
-        traces  = [otelcol.processor.filter.nomnom.input]
+        traces  = [otelcol.processor.transform.router_plugin.input]
+      }
+    }
+
+    // Plugin BFF: Cosmo router-plugin задаёт resource сам (service.name, wg.is_plugin) и не
+    // принимает другие attributes; namespace nomnom получает только он, по имени и флагу.
+    otelcol.processor.transform "router_plugin" {
+      error_mode = "ignore"
+      trace_statements {
+        context    = "resource"
+        statements = [
+          `set(attributes["service.namespace"], "nomnom") where attributes["service.name"] == "bff-plugin" and attributes["wg.is_plugin"] == true`,
+        ]
+      }
+      output {
+        traces = [otelcol.processor.filter.nomnom.input]
       }
     }
 
@@ -434,6 +449,51 @@ data:
         source_labels = ["__name__"]
         regex         = "hubble_drop_total|hubble_flows_processed_total"
         action        = "keep"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
+    // cert-manager controller: срок действия, плановое продление и Ready всех Certificate
+    // кластера (CA, public gateway, ключ assertions BFF). Label namespace метрики —
+    // неймспейс Certificate, pod controller'а в labels не нужен.
+    discovery.kubernetes "cert_manager" {
+      role = "pod"
+      namespaces {
+        names = ["cert-manager"]
+      }
+      selectors {
+        role  = "pod"
+        label = "app.kubernetes.io/name=cert-manager,app.kubernetes.io/component=controller"
+      }
+    }
+
+    discovery.relabel "cert_manager" {
+      targets = discovery.kubernetes.cert_manager.targets
+      rule {
+        source_labels = ["__meta_kubernetes_pod_ip"]
+        target_label  = "__address__"
+        replacement   = "$1:9402"
+      }
+    }
+
+    prometheus.scrape "cert_manager" {
+      targets         = discovery.relabel.cert_manager.output
+      job_name        = "infra/cert-manager"
+      scrape_interval = "60s"
+      forward_to      = [prometheus.relabel.cert_manager.receiver]
+    }
+
+    prometheus.relabel "cert_manager" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "certmanager_certificate_(not_after|renewal)_timestamp_seconds|certmanager_certificate_ready_status"
+        action        = "keep"
+      }
+      // Только текущее состояние: series False/Unknown со значением 0 не нужны.
+      rule {
+        source_labels = ["__name__", "condition"]
+        regex         = "certmanager_certificate_ready_status;(False|Unknown)"
+        action        = "drop"
       }
       forward_to = [otelcol.receiver.prometheus.infra.receiver]
     }

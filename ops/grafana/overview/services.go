@@ -42,7 +42,7 @@ func Services() []Options {
 		{
 			Context: "bff", Title: "BFF", Language: Cosmo,
 			Services: []string{inventory.BFF},
-			GraphQL:  true,
+			GraphQL:  true, Certificates: true,
 		},
 	}
 }

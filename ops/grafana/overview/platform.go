@@ -24,7 +24,7 @@ var appNamespaces = []string{"nomnom-orders", "nomnom-payments", "nomnom-deliver
 func PlatformOverview() (Dashboard, error) {
 	g := &generator{opts: Options{Context: "platform", Title: "Platform"}}
 	g.dash = dashboard.NewDashboardBuilder("Platform / Overview").
-		Description("Серверная сторона SpiceDB и PostgreSQL и pods прикладных неймспейсов: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.").
+		Description("Серверная сторона SpiceDB и PostgreSQL, pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.").
 		Tags([]string{"nomnom", "platform", "overview", "generated"}).
 		Editable(false).
 		CursorSync(dashboard.DashboardCursorSyncCrosshair).
@@ -34,12 +34,14 @@ func PlatformOverview() (Dashboard, error) {
 	spicedb := Scope{Services: []string{inventory.SpiceDB}, Job: "infra/spicedb"}
 	postgres := Scope{Services: []string{inventory.PostgreSQLServer}, Job: "infra/postgresql", Matchers: []string{`owner=~"$owner"`}}
 	pods := Scope{Services: inventory.AllServices, Job: jobKubernetes, Matchers: []string{`namespace=~"$namespace"`}}
+	certs := Scope{Services: []string{inventory.CertManager}, Job: jobCertManager}
 
 	layout := dashboard.Rows()
 	for _, r := range []row{
 		{title: "SpiceDB", scope: spicedb, panels: spicedbPanels(spicedb)},
 		{title: "PostgreSQL", scope: postgres, panels: postgresPanels(postgres)},
 		{title: "Pods", scope: pods, panels: platformPods(pods)},
+		{title: "Certificates", scope: certs, panels: certificates(certs)},
 	} {
 		layout.Row(g.row(r))
 	}
@@ -122,5 +124,27 @@ func platformPods(sc Scope) []Panel {
 			{Sum("namespace", sc.Rate("container_network_receive_bytes_total")), "{{namespace}} rx"},
 			{Sum("namespace", sc.Rate("container_network_transmit_bytes_total")), "{{namespace}} tx"},
 		}},
+	}
+}
+
+const jobCertManager = "infra/cert-manager"
+
+// contextCertificates — Certificate неймспейса контекста.
+func contextCertificates(o Options) Scope {
+	return Scope{Services: []string{inventory.CertManager}, Job: jobCertManager, Matchers: []string{fmt.Sprintf(`namespace="nomnom-%s"`, o.Context)}}
+}
+
+const certReady = `condition="True"`
+
+// certificates — Certificate cert-manager: срок действия, плановое продление и Ready.
+// Без matchers scope — все сертификаты кластера, с namespace — сертификаты контекста.
+func certificates(sc Scope) []Panel {
+	return []Panel{
+		{Title: "Time to expiry", Unit: "s", Queries: []Query{{Min("namespace, name", sc.Gauge("certmanager_certificate_not_after_timestamp_seconds")) + " - time()", "{{namespace}}/{{name}}"}},
+			Description: "До NotAfter. cert-manager продлевает заранее (renewBefore), срок не должен приближаться к нулю."},
+		{Title: "Time to scheduled renewal", Unit: "s", Queries: []Query{{Min("namespace, name", sc.Gauge("certmanager_certificate_renewal_timestamp_seconds")) + " - time()", "{{namespace}}/{{name}}"}},
+			Description: "Отрицательное значение — продление просрочено: issuer не выпускает сертификат."},
+		{Title: "Ready", Unit: "short", Queries: []Query{{Min("namespace, name", sc.Gauge("certmanager_certificate_ready_status", certReady)), "{{namespace}}/{{name}}"}},
+			Description: "0 — Certificate не Ready: сертификат не выпущен, просрочен или не совпадает со spec."},
 	}
 }
