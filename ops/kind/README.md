@@ -32,7 +32,7 @@ make kind-down
 | `KIND_CLUSTER_NAME` | `nomnom-test` | имя кластера; контекст всегда `kind-${KIND_CLUSTER_NAME}` |
 | `BFF_HOST_PORT` | `18080` | host-порт для NodePort `30080` будущего публичного API BFF (сейчас BFF не публикуется) |
 | `WEBHOOKS_HOST_PORT` | `18085` | host-порт для NodePort `30085` public gateway |
-| `KIND_STAND` | `full` для kind-deploy, `core` для kind-dev | `core` — без fixtures проверок (net-probe, grpc-caller) и trace-capture, traces orders выключены; `make kind-test` требует `full` |
+| `KIND_STAND` | `full` для kind-deploy, `core` для kind-dev | `core` — без fixtures проверок (net-probe, grpc-caller); `make kind-test` требует `full` |
 | `KIND_KEEP` | `0` | `1` — не удалять кластер после `make kind-e2e` |
 
 Все команды явно используют контекст `kind-${KIND_CLUSTER_NAME}`. Отчёт проверок (JUnit) и
@@ -59,19 +59,21 @@ make kind-down
   тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
   `nomnom-infra`. Kafka и Temporal применяет `before`-hook helm-деплоера и ждёт их readiness:
   consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
-- `orders-worker` (Temporal worker Order Fulfillment Workflow) и `orders-forwarder`
-  ([ADR 13](../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md), Outbox `orders` → Kafka) — releases chart `orders` с `values-worker.yaml`
-  / `values-forwarder.yaml` и [`values/orders-worker.yaml`](values/orders-worker.yaml) /
-  [`values/orders-forwarder.yaml`](values/orders-forwarder.yaml): тот же образ, своя `command`, без
-  Service, `dependsOn: [orders]`. Worker опрашивает Temporal в `nomnom-infra` (Search Attribute стадии
+- `orders-worker` (Temporal worker Order Fulfillment Workflow) — release chart `orders` с
+  `values-worker.yaml` и [`values/orders-worker.yaml`](values/orders-worker.yaml): тот же образ,
+  своя `command`, без Service, `dependsOn: [orders]`. Worker опрашивает Temporal в `nomnom-infra` (Search Attribute стадии
   создаёт сам: `TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true`, dev server держит namespace в памяти) и
   вызывает restaurants, delivery и payments через internal gateway с projected tokens их audiences;
   ServiceAccount `nomnom-orders/orders-worker` — в allowlist всех трёх. Egress к PostgreSQL, Kafka и
   Temporal разрешён `manifests/netpol/app-infrastructure.yaml` для всех pod `nomnom-orders`.
-- `payments-relay`, `delivery-relay`, `restaurants-relay` ([ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md)) —
-  releases charts контекстов с `values-relay.yaml` и `values/<context>-relay.yaml`: тот же образ,
-  своя `command`, без Service и миграций (их выполняет основной release), один экземпляр.
-  Публикуют Outbox в Kafka `nomnom-infra`; topics создаются при первой публикации.
+- Outbox всех контекстов доставляет в Kafka Debezium в Kafka Connect `nomnom-infra`
+  ([ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)): PostgreSQL — из WAL
+  (`wal_level=logical`, publication `<context>_outbox` создают миграции), MongoDB `restaurants` —
+  из change streams. Процессов relay нет. Коннектор `<context>-outbox` регистрирует hook Job
+  основного release контекста (`cdc.enabled` в `values/<context>.yaml`) через REST Connect;
+  пароли Connect читает из Secret `cdc-credentials` (chart [`bootstrap`](#bootstrap)).
+  Состояние: `kubectl -n nomnom-infra exec deploy/kafka-connect -- curl -s localhost:8083/connectors?expand=status`.
+  Topics создаются при первой публикации.
 - `restaurants-consumer` ([ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md),
   [ADR 28](../../docs/adr/0028-selective-use-of-watermill-cqrs.md)) — release chart `restaurants` с
   `values-consumer.yaml` и [`values/restaurants-consumer.yaml`](values/restaurants-consumer.yaml): тот же
@@ -86,14 +88,7 @@ make kind-down
   `payments`, `delivery` и MongoDB `restaurants` в `nomnom-data` (`emptyDir`). Secret DSN
   кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`), а init
   container `delivery-migrate` применяет миграции до старта процесса.
-- [`manifests/observability/trace-capture.yaml`](manifests/observability/trace-capture.yaml) —
-  приёмник traces проверок `e2e/calls` в `nomnom-observability`: OpenTelemetry Collector с OTLP gRPC
-  `:4317` и debug exporter в stdout. Traces не хранятся и не заменяют Alloy
-  ([ADR 9](../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md));
-  `orders` отправляет в него traces через `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` из
-  [`values/orders.yaml`](values/orders.yaml), metrics по-прежнему уходят только в Alloy. Сюда же
-  internal gateway отправляет свои spans (`ingress` и `egress` на каждую попытку,
-  [`manifests/gateway`](manifests/gateway/gateway.yaml)); profile `grafana-cloud` переключает их на Alloy.
+
 - Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в
   `nomnom-observability` и OTLP метрик `orders`/`orders-consumer` в Grafana Cloud free tier;
   настройка и лимиты — [`ops/grafana-cloud`](../grafana-cloud/README.md).
@@ -189,8 +184,8 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура: ingress-проверки и внешний клиент BFF |
 | `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
-| `nomnom-observability` | `trace-capture` всегда; Alloy — только с `GRAFANA_CLOUD=1` |
-| `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir` |
+| `nomnom-observability` | Alloy — только с `GRAFANA_CLOUD=1` |
+| `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`), Kafka Connect с Debezium для Outbox (Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера |
 
 ## Internal gateway
 
@@ -281,7 +276,7 @@ Traces браузера идут через тот же фильтр `service.na
 fetch `customer-ui`, под ним `query <Operation>` сервиса `bff`, вызов plugin `bff-plugin` и его
 gRPC client span, `ingress`/`egress` internal gateway, затем server span и usecase контекста
 (`restaurants`, `orders` с SpiceDB и SQL). Цепочка целая только после `make kind-deploy
-GRAFANA_CLOUD=1`: без profile internal gateway и контексты пишут в trace-capture, и в Tempo
+GRAFANA_CLOUD=1`: без profile internal gateway и контексты traces не пишут, и в Tempo
 остаются только spans BFF. Для проверки из браузера —
 конфигурация `customer-ui-kind` в `.claude/launch.json` (BFF на `localhost:3010`, Faro на
 `localhost:12347` через port-forward).
@@ -335,8 +330,8 @@ kubectl -n nomnom-bff port-forward svc/bff 3010
 развёрнутого окружения; отчёт JUnit — `.artifacts/chainsaw-report.xml`, диагностика при ошибке —
 `catch` тестов в выводе.
 
-Вызовы идут из pod fixtures ([`manifests/fixtures/net-probe.yaml`](manifests/fixtures/net-probe.yaml),
-[`manifests/fixtures/e2e-driver.yaml`](manifests/fixtures/e2e-driver.yaml),
+Вызовы идут из pod fixtures ([`e2e/chart/templates/probes.yaml`](e2e/chart/templates/probes.yaml),
+[`e2e/chart/templates/e2e-driver.yaml`](e2e/chart/templates/e2e-driver.yaml),
 образ `e2e/probe`) в нужном неймспейсе и под его NetworkPolicy: `net-probe` в неймспейсах
 приложений и в `nomnom-outsider`, `grpc-caller` в `nomnom-bff` с projected token. Клиенты —
 `grpcurl` с descriptor sets всех контрактов и `google/rpc`, `nc`, `nslookup`, `curl` (GraphQL).
@@ -365,8 +360,6 @@ kubectl -n nomnom-bff port-forward svc/bff 3010
 | `gateway-rejects-unregistered` | незарегистрированный сервис: `UNIMPLEMENTED` от Envoy (3) |
 | `netpol-without-policies` | без NetworkPolicy `orders → restaurants` и `outsider → restaurants` напрямую доходят до backend'а (`NOT_FOUND`), gateway доступен (A1–A3) |
 | `netpol-blocks-direct-calls` | с NetworkPolicy при выполненных условиях (restaurants Available, имя резолвится, gateway доступен и Orders RPC через него проходит) прямые `orders ↔ restaurants` получают silent drop; `nomnom-outsider` не достаёт ни backend, ни gateway; Hubble фиксирует `DROPPED` (2.1–2.9) |
-| `gateway-call-metadata` | authorization metadata доходит до backend'а (`PERMISSION_DENIED` от SpiceDB, reason `OPERATION_NOT_ALLOWED`); случайный `traceparent` вызывающего продолжен span `ingress` gateway, а server span `orders` — потомок gateway, а не вызывающего, в логе `trace-capture` (4.1–4.2) |
-| `gateway-retries-and-deadlines` | при недоступном SpiceDB (`fixtures/deny-orders-spicedb.yaml`) `ListCustomerOrders` — `UNAVAILABLE`, повторён ровно 2 раза, `RequestOrderCancellation` — ни разу; deadline 1 s вызывающего соблюдается backend'ом: ответ `DEADLINE_EXCEEDED` или remote reset, server span `orders` заканчивается по deadline, а не по таймауту SpiceDB (5a.1–5a.4, 5.1) |
 | `infra-connectivity` | под политиками `orders` → свой PostgreSQL, Kafka, Temporal; Kafka из restaurants, delivery, payments; restaurants → своя MongoDB; чужая БД и Temporal для не-`orders` закрыты; `orders` → Alloy OTLP открыт, если Alloy развёрнут (`GRAFANA_CLOUD=1`) (6.2–6.7, 6.9, 6.10) |
 | `infra-workloads` | DNS из `orders` под политиками; `orders` и `orders-consumer` Available — они падают на старте без PostgreSQL, Kafka и Temporal (6.1, 6.8) |
 | `workloads-healthy-under-policies` | после применения политик deployments неймспейсов приложений, `envoy-gateway-system` и `kube-system` Available, ни один контейнер не перезапускался и нет проваленных kubelet-проб (6a.1–6a.3) |

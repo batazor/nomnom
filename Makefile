@@ -13,8 +13,8 @@ KIND_SCRIPTS := ops/kind/scripts
 SKAFFOLD := cd ops/kind/skaffold && skaffold
 SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
 # GRAFANA_CLOUD=1: kind-deploy/kind-dev с profile grafana-cloud (ops/grafana-cloud/README.md).
-# KIND_STAND=core: без fixtures проверок и trace-capture (profile core); по умолчанию kind-dev — core,
-# kind-deploy — full (нужен make kind-test). core стоит перед grafana-cloud: тот перекрывает traces.
+# KIND_STAND=core: без fixtures проверок (profile core); по умолчанию kind-dev — core,
+# kind-deploy — full (нужен make kind-test).
 skaffold_app_flags = --module apps $(SKAFFOLD_FLAGS) $(if $(filter core,$(or $(KIND_STAND),$(1))),-p core) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
 
 .PHONY: buf-check buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop

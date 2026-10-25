@@ -1,0 +1,7 @@
+apiVersion: v2
+name: kind-e2e
+description: >-
+  Fixtures проверок kind E2E (ops/kind/e2e): net-probe, grpc-caller и e2e-driver. Helm-релиз, а не rawYaml: выключенные флагами ресурсы удаляет
+  helm upgrade (профиль core в skaffold.yaml). ТОЛЬКО для kind.
+type: application
+version: 0.1.0

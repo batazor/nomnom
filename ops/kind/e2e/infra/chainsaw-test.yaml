@@ -54,13 +54,14 @@ spec:
         - {name: host, value: temporal.nomnom-infra.svc.cluster.local}
         - {name: port, value: 7233}
         - {name: expect, value: closed}
-    # Alloy развёрнут только с GRAFANA_CLOUD=1; без него имя не резолвится и порт закрыт.
+    # Alloy развёрнут только с GRAFANA_CLOUD=1; без него имя не резолвится и порт закрыт. После
+    # make kind-grafana-cloud-stop Service остаётся, но реплик 0 — порт тоже закрыт.
     - bindings:
         - {name: from_namespace, value: nomnom-orders}
         - {name: host, value: alloy.nomnom-observability.svc.cluster.local}
         - {name: port, value: 4317}
         - name: expect
-          value: (x_k8s_exists($client, 'v1', 'Service', 'nomnom-observability', 'alloy') && 'open' || 'closed')
+          value: (x_k8s_exists($client, 'v1', 'Service', 'nomnom-observability', 'alloy') && x_k8s_exists($client, 'apps/v1', 'Deployment', 'nomnom-observability', 'alloy') && x_k8s_get($client, 'apps/v1', 'Deployment', 'nomnom-observability', 'alloy').status.readyReplicas > `0` && 'open' || 'closed')
   steps:
     - name: policies applied
       use:

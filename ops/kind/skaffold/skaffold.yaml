@@ -125,9 +125,6 @@ manifests:
   rawYaml:
     - ../manifests/base/namespaces.yaml
     - ../manifests/gateway/public-gateway.yaml
-    - ../manifests/fixtures/net-probe.yaml
-    - ../manifests/fixtures/e2e-driver.yaml
-    - ../manifests/observability/trace-capture.yaml
   # Internal gateway: profile grafana-cloud заменяет путь на ../manifests/observability,
   # которая включает его и переключает spans gateway на Alloy.
   kustomize:
@@ -252,42 +249,6 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
           image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
-      # Outbox relay payments (ADR 31): тот же образ и chart, один активный экземпляр.
-      - name: payments-relay
-        chartPath: ../../../boundaries/payments/ops/helm
-        namespace: nomnom-payments
-        createNamespace: true
-        dependsOn: [payments]
-        valuesFiles:
-          - ../../../boundaries/payments/ops/helm/values-relay.yaml
-          - ../values/payments-relay.yaml
-        setValueTemplates:
-          image.repository: "{{.IMAGE_REPO_nomnom_payments}}"
-          image.tag: "{{.IMAGE_TAG_nomnom_payments}}"
-      # Outbox relay delivery (ADR 31): тот же образ и chart, один активный экземпляр.
-      - name: delivery-relay
-        chartPath: ../../../boundaries/delivery/ops/helm
-        namespace: nomnom-delivery
-        createNamespace: true
-        dependsOn: [delivery]
-        valuesFiles:
-          - ../../../boundaries/delivery/ops/helm/values-relay.yaml
-          - ../values/delivery-relay.yaml
-        setValueTemplates:
-          image.repository: "{{.IMAGE_REPO_nomnom_delivery}}"
-          image.tag: "{{.IMAGE_TAG_nomnom_delivery}}"
-      # Outbox relay restaurants (ADR 31): тот же образ и chart, один активный экземпляр.
-      - name: restaurants-relay
-        chartPath: ../../../boundaries/restaurants/ops/helm
-        namespace: nomnom-restaurants
-        createNamespace: true
-        dependsOn: [restaurants]
-        valuesFiles:
-          - ../../../boundaries/restaurants/ops/helm/values-relay.yaml
-          - ../values/restaurants-relay.yaml
-        setValueTemplates:
-          image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
-          image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
       # Kafka consumer restaurants (ADR 11, ADR 28): тот же образ и chart, OrderPlaced →
       # Restaurant Order через Inbox. После restaurants: его init container создаёт Inbox.
       - name: restaurants-consumer
@@ -314,18 +275,6 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
           image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
-      # Outbox forwarder orders (ADR 13): тот же образ и chart, один активный экземпляр.
-      - name: orders-forwarder
-        chartPath: ../../../boundaries/orders/ops/helm
-        namespace: nomnom-orders
-        createNamespace: true
-        dependsOn: [orders]
-        valuesFiles:
-          - ../../../boundaries/orders/ops/helm/values-forwarder.yaml
-          - ../values/orders-forwarder.yaml
-        setValueTemplates:
-          image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
-          image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
       # BFF (ADR 32): контексты только через internal gateway; access tokens тестового identity
       # provider, ключ assertions — Secret bff-assertion-key от cert-manager (chart ../bootstrap).
       # Последний release: индексы в patches профилей не меняются.
@@ -337,28 +286,28 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_bff}}"
           image.tag: "{{.IMAGE_TAG_nomnom_bff}}"
+      # Fixtures проверок kind E2E (ADR 33): Helm-релиз, чтобы профиль core выключал их флагами,
+      # а helm upgrade удалял (rawYaml Skaffold только применяет). Индекс 8 — в patches core.
+      - name: e2e
+        chartPath: ../e2e/chart
+        namespace: nomnom-bff
+        createNamespace: true
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_e2e_probe}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_e2e_probe}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
-  # (net-probe, grpc-caller) и приёмника trace-capture — make kind-test на нём не проходит.
-  # e2e-driver остаётся: через него hook наполняет демо-данные (scripts/seed-demo.py).
-  # Идёт перед grafana-cloud: тот возвращает traces orders в Alloy.
-  # Индексы releases: 0 — orders, 9 — orders-worker.
+  # (net-probe, grpc-caller; chart ../e2e/chart) — make kind-test на нём не проходит. e2e-driver
+  # остаётся: через него hook наполняет демо-данные (scripts/seed-demo.py).
   - name: core
     patches:
-      - op: replace
-        path: /manifests/rawYaml
+      # Индекс releases: 8 — e2e; выключенные fixtures удаляет helm upgrade.
+      - op: add
+        path: /deploy/helm/releases/8/setValues
         value:
-          - ../manifests/base/namespaces.yaml
-          - ../manifests/gateway/public-gateway.yaml
-          - ../manifests/fixtures/e2e-driver.yaml
-      - op: add
-        path: /deploy/helm/releases/0/valuesFiles/-
-        value: ../values/core.yaml
-      - op: add
-        path: /deploy/helm/releases/9/valuesFiles/-
-        value: ../values/core.yaml
+          probes.enabled: false
   # make kind-deploy GRAFANA_CLOUD=1: метрики, traces и логи сервисов → Alloy → Grafana Cloud.
-  # Индексы releases 0–10 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
+  # Индексы releases 0–6 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
   # своя telemetry); при изменении порядка releases поправить patches.
   - name: grafana-cloud
     patches:
@@ -390,21 +339,9 @@ profiles:
       - op: add
         path: /deploy/helm/releases/6/valuesFiles/-
         value: ../values/grafana-cloud.yaml
-      - op: add
-        path: /deploy/helm/releases/7/valuesFiles/-
-        value: ../values/grafana-cloud.yaml
-      - op: add
-        path: /deploy/helm/releases/8/valuesFiles/-
-        value: ../values/grafana-cloud.yaml
-      - op: add
-        path: /deploy/helm/releases/9/valuesFiles/-
-        value: ../values/grafana-cloud.yaml
-      - op: add
-        path: /deploy/helm/releases/10/valuesFiles/-
-        value: ../values/grafana-cloud.yaml
       # BFF (Cosmo Router): свои переменные telemetry, не OTEL_* charts сервисов.
       - op: add
-        path: /deploy/helm/releases/11/valuesFiles/-
+        path: /deploy/helm/releases/7/valuesFiles/-
         value: ../values/bff-grafana-cloud.yaml
   # make kind-dev: restaurants и payments собираются из stage dev и получают file sync —
   # правка исходников копируется в контейнер, процесс перезапускает node --watch / watchfiles.
@@ -437,13 +374,9 @@ profiles:
       - op: add
         path: /deploy/helm/releases/1/valuesFiles/-
         value: ../values/restaurants-dev.yaml
-      # Индекс releases: 7 — restaurants-relay.
+      # Индекс releases: 5 — restaurants-consumer.
       - op: add
-        path: /deploy/helm/releases/7/valuesFiles/-
-        value: ../values/restaurants-relay-dev.yaml
-      # Индекс releases: 8 — restaurants-consumer.
-      - op: add
-        path: /deploy/helm/releases/8/valuesFiles/-
+        path: /deploy/helm/releases/5/valuesFiles/-
         value: ../values/restaurants-consumer-dev.yaml
       - op: replace
         path: /build/artifacts/3/docker/target

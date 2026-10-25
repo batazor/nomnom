@@ -1,4 +1,0 @@
-# Профиль core (skaffold.yaml): приёмника trace-capture нет — пустой endpoint выключает
-# экспорт traces orders вместо бесконечных повторов в несуществующий Service.
-env:
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""

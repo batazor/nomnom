@@ -1,3 +1,4 @@
+{{- if .Values.probes.enabled }}
 # Тестовые pod проверок kind E2E (ops/kind/e2e): вызовы изнутри неймспейсов приложений под их
 # NetworkPolicy (net-probe, без service identity), из nomnom-outsider вне прикладного контура
 # и с service identity (grpc-caller). Образ у всех — e2e/probe.
@@ -24,8 +25,8 @@ spec:
       containers:
         - name: net-probe
           # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
-          image: nomnom/e2e-probe
-          imagePullPolicy: IfNotPresent
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -33,7 +34,7 @@ spec:
             requests:
               memory: 4Mi
             limits:
-              memory: 64Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -63,8 +64,8 @@ spec:
       containers:
         - name: net-probe
           # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
-          image: nomnom/e2e-probe
-          imagePullPolicy: IfNotPresent
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -72,7 +73,7 @@ spec:
             requests:
               memory: 4Mi
             limits:
-              memory: 64Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -102,8 +103,8 @@ spec:
       containers:
         - name: net-probe
           # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
-          image: nomnom/e2e-probe
-          imagePullPolicy: IfNotPresent
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -111,7 +112,7 @@ spec:
             requests:
               memory: 4Mi
             limits:
-              memory: 64Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -141,8 +142,8 @@ spec:
       containers:
         - name: net-probe
           # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
-          image: nomnom/e2e-probe
-          imagePullPolicy: IfNotPresent
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -150,7 +151,7 @@ spec:
             requests:
               memory: 4Mi
             limits:
-              memory: 64Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -180,8 +181,8 @@ spec:
       containers:
         - name: net-probe
           # Образ проверок kind E2E (e2e/probe): grpcurl, nc, nslookup, curl.
-          image: nomnom/e2e-probe
-          imagePullPolicy: IfNotPresent
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: INTERNAL_GATEWAY_ADDR
               value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
@@ -189,7 +190,7 @@ spec:
             requests:
               memory: 4Mi
             limits:
-              memory: 64Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -231,13 +232,13 @@ spec:
       containers:
         - name: grpc-caller
           # Образ проверок kind E2E (e2e/probe): grpcurl и descriptor sets контрактов.
-          image: nomnom/e2e-probe
-          imagePullPolicy: IfNotPresent
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
             requests:
               memory: 4Mi
             limits:
-              memory: 64Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -256,3 +257,4 @@ spec:
                   audience: nomnom.orders
                   path: nomnom.orders
                   expirationSeconds: 3600
+{{- end }}

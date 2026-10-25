@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
-# TCP-подключение (nc -z, 3 s) из pod fixture (manifests/fixtures/net-probe.yaml) — из его
+# TCP-подключение (nc -z, 3 s) из pod fixture (e2e/chart/templates/probes.yaml) — из его
 # неймспейса и под его NetworkPolicy.
 #
 # Bindings (все обязательные: bindings шаблона перекрывают bindings сценария): from_namespace

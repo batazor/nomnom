@@ -276,7 +276,7 @@ const processRegistrations = (
       setMenuItemAvailability: cradle.setMenuItemAvailability,
     });
     // Server spans continue the caller's traceparent (tracingInterceptor).
-    return createGrpcServer(service);
+    return createGrpcServer(service, cradle.logger);
   }).singleton(),
   // Reconciliation (FR-445) runs in this process and stops before the gRPC
   // drain.

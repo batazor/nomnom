@@ -1,6 +1,6 @@
 # Alloy → Grafana Cloud (ADR 9) для Skaffold profile grafana-cloud: alloy.yaml, route Faro и
-# internal gateway (../gateway) со spans в Alloy вместо trace-capture; без профиля Skaffold
-# применяет ../gateway напрямую. trace-capture.yaml применяется rawYaml всегда. Secret grafana-cloud-otlp генерируется из
+# internal gateway (../gateway) со spans в Alloy; без профиля Skaffold применяет ../gateway
+# напрямую, и gateway spans не пишет. Secret grafana-cloud-otlp генерируется из
 # ops/grafana-cloud/.env.grafana-cloud (вне каталога kustomization, поэтому Skaffold передаёт
 # --load-restrictor LoadRestrictionsNone). Суффикс-хеш имени Secret перезапускает Alloy при
 # изменении файла. Без файла рендер падает сразу; пустые значения отвергает init container.
@@ -27,11 +27,28 @@ patches:
       data:
         GRAFANA_CLOUD_STACK_URL: null
         GRAFANA_CLOUD_SA_TOKEN: null
-  # Spans internal gateway — туда же, куда spans сервисов (values/grafana-cloud.yaml).
+  # Span gateway между client span вызывающего и server span backend'а: без него время в
+  # gateway (очередь, retries, connect) не видно в trace. Envoy продолжает traceparent
+  # вызывающего и передаёт backend'у свой; spans — туда же, куда spans сервисов.
   - patch: |-
-      - op: replace
-        path: /spec/telemetry/tracing/provider/backendRefs/0/name
-        value: alloy
+      - op: add
+        path: /spec/telemetry
+        value:
+          tracing:
+            # Решение о sampling принимает вызывающий (parent-based); 100 — для запросов без него.
+            samplingRate: 100
+            provider:
+              type: OpenTelemetry
+              serviceName: internal-gateway
+              openTelemetry:
+                # service.namespace проходит фильтр nomnom Alloy (только процессы nomnom).
+                resourceAttributes:
+                  service.namespace: nomnom
+                  deployment.environment.name: kind
+              backendRefs:
+                - name: alloy
+                  namespace: nomnom-observability
+                  port: 4317
     target:
       group: gateway.envoyproxy.io
       kind: EnvoyProxy

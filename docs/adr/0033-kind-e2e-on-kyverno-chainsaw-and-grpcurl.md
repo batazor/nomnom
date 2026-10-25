@@ -36,7 +36,7 @@ Kind E2E пишутся как тесты Kyverno Chainsaw в `ops/kind/e2e/` п
 - состояние ресурсов проверяется операциями `assert`/`error` с JMESPath, без `kubectl` и
   `jsonpath`; кластерные инварианты (deployments Available, нет рестартов и проваленных проб
   после политик) — `assert` без ресурса по спискам `x_k8s_list`;
-- вызовы идут из pod fixtures (`manifests/fixtures/net-probe.yaml`, образ
+- вызовы идут из pod fixtures (`e2e/chart/templates/probes.yaml`, образ
   `ops/kind/e2e/probe`) в нужных неймспейсах, под их NetworkPolicy: `net-probe` в неймспейсах
   приложений и в `nomnom-outsider`, `grpc-caller` в `nomnom-bff` с service identity.
   Клиенты настоящие: бизнес-API — `grpcurl` с descriptor sets всех контрактов из buf
@@ -52,8 +52,7 @@ Kind E2E пишутся как тесты Kyverno Chainsaw в `ops/kind/e2e/` п
   неймспейсам приложений overlays, а операция Chainsaw `apply` помещает ресурс без namespace
   только в неймспейс теста. Временные fixtures (deny к SpiceDB, ingress к BFF) применяются
   `apply` и удаляются Chainsaw в конце теста;
-- trace context и deadline проверяются по server span `orders` в логе `trace-capture`,
-  retries — по счётчику Envoy `upstream_rq_retry` с порта Prometheus Envoy Proxy через proxy
+- retries — по счётчику Envoy `upstream_rq_retry` с порта Prometheus Envoy Proxy через proxy
   API server и `x_metrics_decode` (операция `proxy` в v0.2.15 теряет outputs, поэтому запрос —
   `kubectl get --raw`); тесты на общих счётчиках и fixture отказа SpiceDB не `concurrent`;
 - диагностика при ошибке — `catch` тестов (pod logs, events, describe, Hubble DROPPED);

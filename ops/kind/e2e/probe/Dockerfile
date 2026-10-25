@@ -2,7 +2,7 @@
 # Образ проверок kind E2E (ops/kind/e2e): grpcurl и descriptor sets всех gRPC-контрактов
 # nomnom, чтобы Chainsaw вызывал бизнес-API настоящим gRPC-клиентом изнутри неймспейса
 # приложения (под его NetworkPolicy). Тот же образ у всех fixtures проверок
-# (manifests/fixtures/net-probe.yaml): grpcurl, nc и nslookup (busybox), curl для GraphQL BFF.
+# (e2e/chart/templates/probes.yaml): grpcurl, nc и nslookup (busybox), curl для GraphQL BFF.
 # Контекст сборки — корень репозитория; лишнее отсекает Dockerfile.dockerignore.
 
 FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.24@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS grpcurl

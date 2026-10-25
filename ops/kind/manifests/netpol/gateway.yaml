@@ -78,16 +78,14 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Spans gateway (OTLP gRPC): Alloy в profile grafana-cloud, иначе trace-capture.
+    # Spans gateway (OTLP gRPC): Alloy в profile grafana-cloud.
     - to:
         - namespaceSelector:
             matchLabels:
               nomnom.dev/tier: infra
           podSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values: [alloy, trace-capture]
+            matchLabels:
+              app.kubernetes.io/name: alloy
       ports:
         - protocol: TCP
           port: 4317

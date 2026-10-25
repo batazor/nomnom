@@ -11,9 +11,6 @@ podLabels:
 env:
   # Единственный адрес для синхронных вызовов бизнес-API других приложений.
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
-  # Traces → приёмник проверок kind (manifests/observability/trace-capture.yaml); metrics
-  # по-прежнему уходят только в Alloy профиля grafana-cloud.
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://trace-capture.nomnom-observability.svc.cluster.local:4317
   # Place Order и Request Order Cancellation обращаются к fulfillment workflow; client
   # lazy, поэтому старт API от Temporal не зависит.
   TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
@@ -24,7 +21,7 @@ env:
 identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  # grpc-caller — фикстура проверок (manifests/fixtures/net-probe.yaml): допущенный
+  # grpc-caller — фикстура проверок (e2e/chart/templates/probes.yaml): допущенный
   # workload, но не делегат; с ним проверяется отказ assertion от чужого workload.
   serviceAccounts: nomnom-bff/bff=bff,nomnom-bff/grpc-caller=grpc-caller
   # Каталог Place Order читает GetRestaurant и GetMenu restaurants через gateway с
@@ -58,3 +55,14 @@ resources:
     memory: 32Mi
   limits:
     memory: 256Mi
+
+# ADR 37: коннектор Debezium orders-outbox (Outbox → Kafka из WAL) регистрирует hook Job этого
+# release. Пароль Kafka Connect читает из Secret cdc-credentials (chart ../bootstrap).
+cdc:
+  enabled: true
+  connectUrl: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
+  database:
+    hostname: postgres-orders.nomnom-data.svc.cluster.local
+    name: orders
+    user: orders
+    password: ${dir:/etc/nomnom/cdc:orders-password}

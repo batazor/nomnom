@@ -33,13 +33,13 @@ spec:
       containers:
         - name: e2e-driver
           # Образ проверок kind E2E (e2e/probe): grpcurl, curl и descriptor sets контрактов.
-          image: nomnom/e2e-probe
-          imagePullPolicy: IfNotPresent
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
             requests:
               memory: 8Mi
             limits:
-              memory: 128Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true

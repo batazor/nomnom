@@ -33,6 +33,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+    # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-connect
+      ports:
+        - protocol: TCP
+          port: 8083
     - to:
         - namespaceSelector:
             matchLabels:
@@ -86,6 +97,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+    # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-connect
+      ports:
+        - protocol: TCP
+          port: 8083
     # SpiceDB (ADR 18): authorization checks и relationship writes.
     - to:
         - namespaceSelector:
@@ -129,6 +151,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+    # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-connect
+      ports:
+        - protocol: TCP
+          port: 8083
     # SpiceDB (ADR 18): authorization checks и relationship writes.
     - to:
         - namespaceSelector:
@@ -172,6 +205,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+    # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-connect
+      ports:
+        - protocol: TCP
+          port: 8083
     # SpiceDB (ADR 18): authorization checks и relationship writes.
     - to:
         - namespaceSelector:

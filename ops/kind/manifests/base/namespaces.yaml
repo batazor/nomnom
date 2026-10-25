@@ -72,7 +72,16 @@ metadata:
   labels:
     nomnom.dev/tier: infra
 ---
-# Observability (ADR 9): trace-capture всегда, Alloy — с profile grafana-cloud. Нужен до chart
+# Брокер, Temporal и Kafka Connect CDC (ADR 37). Нужен до chart kind-bootstrap: в нём Secret
+# cdc-credentials для коннекторов Outbox.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-infra
+  labels:
+    nomnom.dev/tier: infra
+---
+# Observability (ADR 9): Alloy — с profile grafana-cloud. Нужен до chart
 # kind-bootstrap: в нём Secret alloy-postgres.
 apiVersion: v1
 kind: Namespace

@@ -31,5 +31,13 @@ export function transportError(error: unknown): ConnectError {
     const status = STATUS_BY_ERROR_CODE[String(error.code)];
     if (status !== undefined) return new ConnectError(error.message, status);
   }
-  return new ConnectError("internal error", Code.Internal);
+  // The client sees no details; the cause stays for the server log
+  // (errorLoggingInterceptor).
+  return new ConnectError(
+    "internal error",
+    Code.Internal,
+    undefined,
+    undefined,
+    error,
+  );
 }

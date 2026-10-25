@@ -18,7 +18,7 @@ identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
   # bff — courier-экран (RPC курьера от имени пользователя). e2e-driver — fixture e2e пути
-  # заказа (manifests/fixtures/e2e-driver.yaml): играет оператора и курьера. Только в kind:
+  # заказа (e2e/chart/templates/e2e-driver.yaml): играет оператора и курьера. Только в kind:
   # chart-default его не содержит (AC-741).
   serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-bff/bff=bff,nomnom-bff/e2e-driver=e2e-driver
   # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);
@@ -34,6 +34,17 @@ spicedb:
   insecure: true
   presharedKeySecret:
     name: spicedb-preshared-key
+
+# ADR 37: Outbox публикует коннектор Debezium delivery-outbox в Kafka Connect nomnom-infra;
+# пароль Connect читает из Secret cdc-credentials (ключ delivery-password).
+cdc:
+  enabled: true
+  connectUrl: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
+  database:
+    hostname: postgres-delivery.nomnom-data.svc.cluster.local
+    name: delivery
+    user: delivery
+    password: ${dir:/etc/nomnom/cdc:delivery-password}
 
 # Burstable без CPU limit: request — доля CPU под конкуренцией, limit троттлит и при
 # свободной ноде. Memory request — steady state в kind, limit — пик e2e (Chainsaw, 54 теста)

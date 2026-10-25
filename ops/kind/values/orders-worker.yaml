@@ -14,8 +14,6 @@ env:
   # Temporal dev server держит namespace в памяти: Search Attribute стадии workflow создаёт
   # сам worker при старте, иначе он не стартует.
   TEMPORAL__REGISTER_SEARCH_ATTRIBUTES: "true"
-  # Traces → приёмник проверок kind (manifests/observability/trace-capture.yaml).
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://trace-capture.nomnom-observability.svc.cluster.local:4317
 
 # ADR 8: состояние Order Fulfillment — в PostgreSQL orders (Secret создаёт scripts/postgres.sh).
 postgres:

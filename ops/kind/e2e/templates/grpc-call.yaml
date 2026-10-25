@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
 # Вызов gRPC-метода настоящим клиентом (grpcurl с descriptor sets контрактов, образ e2e/probe)
-# изнутри pod fixture (manifests/fixtures/net-probe.yaml) — из его неймспейса и под его
+# изнутри pod fixture (e2e/chart/templates/probes.yaml) — из его неймспейса и под его
 # NetworkPolicy. По умолчанию вызывающий — grpc-caller в nomnom-bff с projected token
 # ServiceAccount grpc-caller (ADR 27), адрес — internal gateway.
 #

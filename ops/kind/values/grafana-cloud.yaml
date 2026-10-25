@@ -3,7 +3,6 @@
 # service.name задаёт процесс.
 env:
   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.nomnom-observability.svc.cluster.local:4317
-  # Перекрывает trace-capture проверок kind (values/orders.yaml): traces идут в Grafana Cloud.
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://alloy.nomnom-observability.svc.cluster.local:4317
   # Free tier Grafana Cloud считает data points per minute: одна точка на series в минуту.
   OTEL_METRIC_EXPORT_INTERVAL: "60000"
