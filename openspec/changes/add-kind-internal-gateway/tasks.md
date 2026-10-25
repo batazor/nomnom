@@ -17,7 +17,7 @@
 
 - [x] 3.1 Gateway с ClusterIP Service `internal-gateway`; проверить 404 (`UNIMPLEMENTED`) для неизвестного gRPC-сервиса (проверка 3)
 - [x] 3.2 Явный route timeout 300s в `BackendTrafficPolicy` Gateway; проверить `Accepted` политики
-- [ ] 3.3 Первый `nomnom.orders.v1.OrdersService` опубликован в `GRPCRoute`; проверить в kind маршрутизацию, metadata, status, `traceparent`, deadlines и retries (проверки 1, 4, 5) — маршрутизация, metadata, status, `traceparent` и deadline проверены (1.1, 2.4, 4.1, 4.2, 5.1; вызывающий `nomnom-bff/grpc-caller` с projected token, traces orders → `trace-capture`); открыто: retries — в реестре нет методов с включёнными retries
+- [x] 3.3 Первый `nomnom.orders.v1.OrdersService` опубликован в `GRPCRoute`; проверить в kind маршрутизацию, metadata, status, `traceparent`, deadlines и retries (проверки 1, 4, 5): маршрутизация, metadata, status, `traceparent`, deadline (1.1, 2.4, 4.1, 4.2, 5.1) и retries только идемпотентных чтений (5a, route `orders-v1-reads`)
 
 ## 4. Сетевая изоляция
 

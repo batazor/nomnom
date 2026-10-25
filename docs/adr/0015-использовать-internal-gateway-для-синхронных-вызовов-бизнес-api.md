@@ -63,9 +63,9 @@ Alloy для telemetry ([ADR 9](0009-использовать-opentelemetry-и-g
   идемпотентности: такие методы выносятся в отдельный `GRPCRoute` с собственной
   `BackendTrafficPolicy`. Повторы — не более 2, только на `unavailable`, `connect-failure`,
   `refused-stream`, `reset-before-request`, без per-try timeout, в пределах deadline клиента.
-  `cancelled` и `deadline-exceeded` не повторяются. Бизнес-RPC ещё не реализованы, поэтому
-  реестр маршрутов пуст и retries не включены ни для одного метода; каждый новый метод
-  добавляется в реестр с явным решением о повторах.
+  `cancelled` и `deadline-exceeded` не повторяются. Сейчас retries включены для чтений
+  `OrdersService.GetOrder` и `ListCustomerOrders` (route `orders-v1-reads`); команды orders
+  не повторяются. Каждый новый метод добавляется в реестр с явным решением о повторах.
 
 ## Consequences
 

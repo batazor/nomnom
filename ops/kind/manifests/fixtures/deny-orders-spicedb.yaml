@@ -1,0 +1,16 @@
+# Временный отказ зависимости для проверки retries (verify.sh 5a): orders не достаёт до
+# SpiceDB и отвечает UNAVAILABLE (DEPENDENCY_UNAVAILABLE) после таймаута клиента SpiceDB.
+# Применяется и удаляется самой проверкой; deny в Cilium приоритетнее любых allow.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: deny-spicedb-egress
+  namespace: nomnom-orders
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: orders
+  egressDeny:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: nomnom-authz

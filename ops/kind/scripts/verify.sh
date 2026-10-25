@@ -197,7 +197,38 @@ case "${deadline_result}" in
     pass "5.1 deadline вызывающего (grpc-timeout 1u) соблюдается backend'ом: ${deadline_result}" ;;
   *) fail "5.1 deadline вызывающего (grpc-timeout 1u) соблюдается backend'ом (got '${deadline_result}')" ;;
 esac
-blocked "5a retries: в реестре нет методов, для которых они включены"
+# Retries (ADR 15): идемпотентные чтения orders-v1-reads повторяются не более 2 раз на
+# UNAVAILABLE, команды orders-v1 не повторяются. Отказ зависимости — Cilium deny orders →
+# SpiceDB; повторы считаются по статистике Envoy (upstream_rq_retry кластера route).
+envoy_retries() { # route → upstream_rq_retry
+  curl -s "localhost:19100/stats?filter=grpcroute/nomnom-gateway/$1/rule/0.upstream_rq_retry\$" |
+    awk -F': ' '{print $2}'
+}
+envoy_pod="$(k -n "${GATEWAY_SYSTEM_NAMESPACE}" get pod -l gateway.envoyproxy.io/owning-gateway-name=internal \
+  -o jsonpath='{.items[0].metadata.name}')"
+k -n "${GATEWAY_SYSTEM_NAMESPACE}" port-forward "pod/${envoy_pod}" 19100:19000 >/dev/null 2>&1 &
+port_forward=$!
+sleep 2
+k apply -f "${KIND_DIR}/manifests/fixtures/deny-orders-spicedb.yaml" >/dev/null
+sleep 3
+reads_before="$(envoy_retries orders-v1-reads)"
+commands_before="$(envoy_retries orders-v1)"
+expect "5a.1 ListCustomerOrders при недоступном SpiceDB: UNAVAILABLE" \
+  "0 200 14 dependency unavailable" "$(grpc_orders_authenticated "--max-time 20")"
+expect "5a.2 чтение повторено gateway ровно 2 раза" 2 \
+  "$(( $(envoy_retries orders-v1-reads) - reads_before ))"
+# RequestOrderCancellation{order_id: o1, request_id: r1}: команда с той же причиной отказа.
+cancellation="$(k -n nomnom-bff exec deploy/grpc-caller -- sh -c \
+  "printf '\\000\\000\\000\\000\\010\\012\\002o1\\022\\002r1' | curl -sS -o /dev/null \
+    -w '%{http_code} %header{grpc-status} %header{grpc-message}' --max-time 20 \
+    --http2-prior-knowledge -X POST -H 'content-type: application/grpc' -H 'te: trailers' \
+    -H \"authorization: Bearer \$(cat /var/run/secrets/nomnom/identity/nomnom.orders)\" \
+    --data-binary @- '${GATEWAY}/nomnom.orders.v1.OrdersService/RequestOrderCancellation'" 2>/dev/null)"
+expect "5a.3 RequestOrderCancellation при недоступном SpiceDB: UNAVAILABLE" \
+  "200 14 dependency unavailable" "${cancellation}"
+expect "5a.4 команда не повторяется gateway" 0 "$(( $(envoy_retries orders-v1) - commands_before ))"
+k delete -f "${KIND_DIR}/manifests/fixtures/deny-orders-spicedb.yaml" >/dev/null
+kill "${port_forward}" 2>/dev/null || true
 
 section "6. Инфраструктурные подключения под политиками"
 expect "6.1 DNS из orders под политиками" yes "$(resolves nomnom-orders kubernetes.default.svc.cluster.local)"

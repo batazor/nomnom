@@ -109,8 +109,9 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 
 Адрес gateway для приложений: `INTERNAL_GATEWAY_ADDR=internal-gateway.envoy-gateway-system.svc.cluster.local:8080`.
 
-Реестр маршрутов — `GRPCRoute` в `nomnom-gateway`. Сейчас в нём один route `orders-v1`
-(сервис `nomnom.orders.v1.OrdersService`); вызов незарегистрированного сервиса получает 404
+Реестр маршрутов — `GRPCRoute` в `nomnom-gateway`. Сейчас в нём два route сервиса
+`nomnom.orders.v1.OrdersService`: `orders-v1-reads` (`GetOrder`, `ListCustomerOrders`, с retries)
+и `orders-v1` (остальные методы, без retries); вызов незарегистрированного сервиса получает 404
 (gRPC `UNIMPLEMENTED`). Новый бизнес-RPC публикуется так:
 
 1. `GRPCRoute` в `nomnom-gateway` с `method.type: Exact`, полным именем сервиса и методом;
@@ -120,7 +121,8 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 2. `ReferenceGrant` в неймспейсе backend'а для `GRPCRoute` из `nomnom-gateway`.
 3. Порт pod с именем `grpc` и label `nomnom.dev/business-api: "true"` в values окружения.
 
-Retries сейчас не включены ни для одного метода.
+Retries включены только для `orders-v1-reads`: не более 2 повторов на `unavailable`,
+`connect-failure`, `refused-stream` и `reset-before-request`, без per-try timeout.
 
 ## Public gateway и TLS
 
@@ -152,7 +154,7 @@ curl --cacert "$(ops/kind/scripts/local-ca.sh)" --resolve webhooks.nomnom.localh
 | 2 | с NetworkPolicy прямые `orders ↔ restaurants` получают silent drop (curl timeout, не DNS и не refused) при выполненных условиях: backend Available, имя резолвится, gateway доступен и Orders RPC через него проходит; Hubble фиксирует `DROPPED`; `nomnom-outsider` не достаёт ни backend, ни gateway | выполняется |
 | 3 | неизвестный gRPC-сервис через gateway → HTTP 404 (`UNIMPLEMENTED`) | выполняется |
 | 4 | authorization metadata доходит до backend (`PERMISSION_DENIED` от SpiceDB); случайный `traceparent` вызывающего продолжен server span `orders` (тот же trace id, parent — span вызывающего) в логах `trace-capture` | выполняется |
-| 5 | deadline вызывающего соблюдается backend'ом (`context deadline exceeded` от orders, а не timeout Envoy); retries только у идемпотентных методов | deadline выполняется; retries **заблокированы**: в реестре нет методов с retries; route timeout 300 s задан `BackendTrafficPolicy` |
+| 5 | deadline вызывающего соблюдается backend'ом (`context deadline exceeded` от orders, а не timeout Envoy); retries только у идемпотентных методов | deadline выполняется; при недоступном SpiceDB (Cilium deny `fixtures/deny-orders-spicedb.yaml`) `ListCustomerOrders` повторяется ровно 2 раза, `RequestOrderCancellation` — ни разу (статистика Envoy `upstream_rq_retry`); route timeout 300 s задан `BackendTrafficPolicy` |
 | 6 | инфраструктурные подключения под политиками | DNS, `orders` → свой PostgreSQL, Kafka, Temporal, Kafka из других контекстов, запрет чужой БД и Temporal для не-`orders` выполняются; Alloy — только с `GRAFANA_CLOUD=1`; MongoDB `restaurants` **заблокирована**: приложение её ещё не использует |
 | 6a | после применения политик pod Available, без рестартов и проваленных kubelet-проб (Envoy Proxy, CoreDNS, Cilium) | выполняется; пробы приложений выключены до health contract (ADR 12) |
 | E2E | через публичный API BFF | **заблокирована**: образ BFF не определён (ADR 10); port mapping подготовлен |

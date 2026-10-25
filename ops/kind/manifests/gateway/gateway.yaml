@@ -60,7 +60,7 @@ spec:
 # Транспортные политики по умолчанию для всех маршрутов gateway.
 # Встроенный request timeout Envoy Gateway (15s) обрезал бы длинные gRPC deadlines,
 # поэтому задан явный верхний предел; фактический deadline определяет grpc-timeout клиента.
-# Retries по умолчанию не включены.
+# Retries по умолчанию не включены; методы с retries — в отдельных route со своей политикой.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
@@ -93,6 +93,58 @@ spec:
         - name: orders
           namespace: nomnom-orders
           port: 8081
+---
+# Идемпотентные чтения orders (ADR 15): отдельный route с retries. Совпадение по методу
+# точнее совпадения по сервису, поэтому эти RPC не попадают в orders-v1.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: orders-v1-reads
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.orders.v1.OrdersService
+            method: GetOrder
+        - method:
+            type: Exact
+            service: nomnom.orders.v1.OrdersService
+            method: ListCustomerOrders
+      backendRefs:
+        - name: orders
+          namespace: nomnom-orders
+          port: 8081
+---
+# Политика route заменяет политику Gateway, поэтому верхний предел 300s повторяется.
+# Не более 2 повторов только на отказы до обработки или UNAVAILABLE; без per-try timeout,
+# поэтому все попытки укладываются в deadline клиента. cancelled и deadline-exceeded
+# не повторяются.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: orders-v1-reads
+  namespace: nomnom-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: orders-v1-reads
+  timeout:
+    http:
+      requestTimeout: 300s
+  retry:
+    numRetries: 2
+    retryOn:
+      triggers:
+        - unavailable
+        - connect-failure
+        - refused-stream
+        - reset-before-request
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
