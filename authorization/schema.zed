@@ -31,6 +31,8 @@ definition platform {
 	permission coordinate_delivery = fulfillment
 	permission register_restaurant = operator
 	permission register_courier = operator
+	/** delivery: dispatcher actions on any delivery (Report Delivery Failure). */
+	permission dispatch_delivery = operator
 }
 
 /** Owner: orders. */
@@ -40,14 +42,18 @@ definition order {
 	/** Written with customer in the same placement request. */
 	relation restaurant: restaurant
 	/**
-	 * Assigned courier and its Delivery; written by the orders consumer from
-	 * delivery.v1 CourierAssignedToDelivery (reassignment replaces both).
+	 * Delivery of the Order; written by the orders consumer from delivery.v1
+	 * CourierAssignedToDelivery and removed on DeliveryCancelled. Who the
+	 * courier is right now is decided by delivery alone (delivery#courier
+	 * follows the active assignment).
 	 */
-	relation courier: user
 	relation delivery: delivery
 
-	/** Restaurant staff and the assigned courier read the Order; only the customer cancels it. */
-	permission view = customer + restaurant->view_orders + courier + delivery->act_as_courier
+	/**
+	 * Restaurant staff and the courier of the active assignment read the
+	 * Order; only the customer cancels it.
+	 */
+	permission view = customer + restaurant->view_orders + delivery->act_as_courier
 	permission cancel = customer
 }
 

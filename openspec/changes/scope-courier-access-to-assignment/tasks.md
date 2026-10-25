@@ -2,7 +2,7 @@
 
 ## 1. Schema
 
-- [ ] 1.1 `authorization/schema.zed`: убрать `order#courier`, `view = customer + restaurant->view_orders + delivery->act_as_courier`; `platform#dispatch_delivery = operator`. `validation.yaml`: assertions AC-517, AC-695; `make authz-validate`.
+- [x] 1.1 `authorization/schema.zed`: убрать `order#courier`, `view = customer + restaurant->view_orders + delivery->act_as_courier`; `platform#dispatch_delivery = operator`. `validation.yaml`: assertions AC-517, AC-695; `make authz-validate`.
 
 ## 2. delivery
 
