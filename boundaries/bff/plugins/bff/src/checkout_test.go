@@ -127,10 +127,5 @@ func TestPlaceOrderErrors(t *testing.T) {
 	svc.checkout = nil
 	_, err = svc.MutationPlaceOrder(ctx, placeOrderRequest())
 	assert.Equal(t, codes.Unavailable, status.Code(err), "checkout is not connected")
-}
-
-func TestCheckoutNeedsOrderTracking(t *testing.T) {
-	checkout, err := newCheckout(nil, func(string) string { return "gateway:8080" }, &orderTracking{})
-	require.NoError(t, err)
-	assert.Nil(t, checkout, "no identity")
+	assert.Contains(t, status.Convert(err).Message(), "checkout operations")
 }

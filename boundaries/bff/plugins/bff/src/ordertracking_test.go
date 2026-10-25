@@ -65,8 +65,8 @@ func newService(t *testing.T, getOrder *fakeGetOrder, cancel *fakeCancellation) 
 	t.Helper()
 	verifier, token := accessToken(t)
 	svc := &BffService{
-		identity: &identity.Identity{AccessTokens: verifier},
-		tracking: &orderTracking{getOrder: getOrder, requestCancellation: cancel},
+		accessTokens: verifier,
+		tracking:     &orderTracking{getOrder: getOrder, requestCancellation: cancel},
 	}
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
 	return svc, ctx
@@ -147,13 +147,18 @@ func TestRequestOrderCancellationMapsOutcomeAndProblem(t *testing.T) {
 
 func TestCustomerResolversWithoutGatewayAreUnavailable(t *testing.T) {
 	verifier, token := accessToken(t)
-	svc := &BffService{identity: &identity.Identity{AccessTokens: verifier}}
+	svc := &BffService{accessTokens: verifier}
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
 
 	_, err := svc.QueryOrder(ctx, &service.QueryOrderRequest{Id: "order-1"})
 	assert.Equal(t, codes.Unavailable, status.Code(err))
+	assert.Contains(t, status.Convert(err).Message(), "order operations")
+}
 
-	tracking, err := newOrderTracking(nil, func(string) string { return "gateway:8080" })
-	require.NoError(t, err)
-	assert.Nil(t, tracking, "no identity")
+// AC-641: a status the presenter does not know is an error, not UNSPECIFIED.
+func TestQueryOrderWithUnknownStatusIsAnError(t *testing.T) {
+	svc, ctx := newService(t, &fakeGetOrder{view: applications.OrderView{ID: "order-1", Status: "LOST"}}, &fakeCancellation{})
+	response, err := svc.QueryOrder(ctx, &service.QueryOrderRequest{Id: "order-1"})
+	assert.Equal(t, codes.Unavailable, status.Code(err))
+	assert.Nil(t, response)
 }

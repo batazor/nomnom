@@ -7,6 +7,7 @@ import (
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/gateway"
 	routerplugin "github.com/wundergraph/cosmo/router-plugin"
 	"google.golang.org/grpc"
 )
@@ -14,19 +15,13 @@ import (
 const serviceVersion = "0.1.0"
 
 func main() {
-	// A partial identity configuration stops the plugin: customer operations
-	// must not run without a verified customer (ADR 32).
-	customers, err := identity.Load(identity.ConfigFromEnv(os.Getenv))
+	bff, err := newBffService(configFromEnv(os.Getenv), gateway.Dial)
 	if err != nil {
-		log.Fatalf("load identity: %v", err)
+		log.Fatalf("assemble BFF: %v", err)
 	}
 
-	tracking := loadOrderTracking(customers)
-	catalog := loadRestaurantCatalog(customers)
-	checkout := loadCheckout(customers, tracking)
-
 	plugin, err := routerplugin.NewRouterPlugin(func(server *grpc.Server) {
-		server.RegisterService(&service.BffService_ServiceDesc, &BffService{identity: customers, tracking: tracking, catalog: catalog, checkout: checkout})
+		server.RegisterService(&service.BffService_ServiceDesc, bff)
 	}, routerplugin.WithTracing())
 	if err != nil {
 		log.Fatalf("create router plugin: %v", err)
@@ -37,9 +32,9 @@ func main() {
 
 type BffService struct {
 	service.UnimplementedBffServiceServer
-	// identity is nil until BFF identity is configured; customer resolvers
-	// verify the access token and sign user assertions with it.
-	identity *identity.Identity
+	// accessTokens is nil until BFF identity is configured; customer resolvers
+	// verify the access token with it.
+	accessTokens *identity.AccessTokenVerifier
 	// tracking, catalog and checkout are nil until identity and the internal
 	// gateway are configured.
 	tracking *orderTracking
