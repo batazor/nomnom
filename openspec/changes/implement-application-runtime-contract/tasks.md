@@ -9,4 +9,5 @@
 - [x] Обновить `docs/cloud-native-runtime.md` и README приложений.
 - [x] Helm charts `restaurants`, `delivery`, `payments`: порт `metrics`, `startupProbe`/`livenessProbe`/`readinessProbe`, `terminationGracePeriodSeconds`, library chart `bitnami/common`.
 - [x] Helm chart `orders`: те же изменения, порт `management` переименован в `metrics`.
-- [ ] Прогон `make kind-e2e` с обновлёнными charts.
+- [x] Прогон `make kind-e2e` с обновлёнными charts: probes на `/health/*` порта `metrics`, рестартов и проваленных проб нет.
+- [x] `payments`: OTLP traces и metrics, flush providers с `shutdown.telemetry_flush_timeout`.

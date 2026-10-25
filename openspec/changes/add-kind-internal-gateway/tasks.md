@@ -17,13 +17,13 @@
 
 - [x] 3.1 Gateway с ClusterIP Service `internal-gateway`; проверить 404 (`UNIMPLEMENTED`) для неизвестного gRPC-сервиса (проверка 3)
 - [x] 3.2 Явный route timeout 300s в `BackendTrafficPolicy` Gateway; проверить `Accepted` политики
-- [ ] 3.3 Первый `nomnom.orders.v1.OrdersService` опубликован в `GRPCRoute`; проверить в kind маршрутизацию, metadata, status, `traceparent`, deadlines и retries (проверки 1, 4, 5)
+- [ ] 3.3 Первый `nomnom.orders.v1.OrdersService` опубликован в `GRPCRoute`; проверить в kind маршрутизацию, metadata, status, `traceparent`, deadlines и retries (проверки 1, 4, 5) — маршрутизация и status проверены (1.1, 2.4: `UNAUTHENTICATED` от backend); `traceparent`, deadlines и retries заблокированы: нет authenticated caller, long-running RPC и методов с retries
 
 ## 4. Сетевая изоляция
 
 - [x] 4.1 NetworkPolicy прикладных неймспейсов и gateway; A/B-проверка прямого вызова `orders ↔ restaurants` с Hubble `DROPPED` (проверка 2)
 - [x] 4.2 Проверить DNS, kubelet-пробы и системные компоненты под политиками (проверки 6.1 и 6a)
-- [ ] 4.3 Проверить подключения к Kafka, Temporal, PostgreSQL, MongoDB и Alloy под политиками — заблокировано: инфраструктура не развёрнута
+- [x] 4.3 Проверить подключения к Kafka, Temporal, PostgreSQL, MongoDB и Alloy под политиками (проверки 6.2–6.10): PostgreSQL, Kafka, Temporal и изоляция владельцев проверены; MongoDB не развёрнута, Alloy проверяется только с `GRAFANA_CLOUD=1`
 
 ## 5. Документация
 

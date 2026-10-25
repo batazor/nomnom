@@ -73,6 +73,14 @@ grpc_orders() {
   printf '%s %s\n' "${rc}" "$(echo ${result:-000})"
 }
 
+# tcp <namespace> <host> <port> → "open" или "closed": TCP connect из net-probe под политиками
+# этого неймспейса. Silent drop и отказ одинаково дают closed за 3 секунды; недоступный
+# net-probe даёт пустой результат, а не closed.
+tcp() {
+  k -n "$1" exec deploy/net-probe -- sh -c "nc -z -w 3 '$2' '$3' >/dev/null 2>&1 && echo open || echo closed" \
+    2>/dev/null || true
+}
+
 resolves() {
   k -n "$1" exec deploy/net-probe -- nslookup "$2" >/dev/null 2>&1 && echo yes || echo no
 }
@@ -147,7 +155,32 @@ blocked "5a retries: в реестре нет методов, для котор�
 
 section "6. Инфраструктурные подключения под политиками"
 expect "6.1 DNS из orders под политиками" yes "$(resolves nomnom-orders kubernetes.default.svc.cluster.local)"
-blocked "6.2 Kafka, Temporal, PostgreSQL, MongoDB, Alloy не развёрнуты: приложения их ещё не используют"
+POSTGRES_ORDERS=postgres-orders.nomnom-data.svc.cluster.local
+KAFKA=kafka.nomnom-infra.svc.cluster.local
+TEMPORAL=temporal.nomnom-infra.svc.cluster.local
+expect "6.2 orders → PostgreSQL orders" open "$(tcp nomnom-orders "${POSTGRES_ORDERS}" 5432)"
+expect "6.3 orders → Kafka" open "$(tcp nomnom-orders "${KAFKA}" 9092)"
+expect "6.4 orders → Temporal" open "$(tcp nomnom-orders "${TEMPORAL}" 7233)"
+for namespace in nomnom-restaurants nomnom-delivery nomnom-payments; do
+  expect "6.5 ${namespace} → Kafka" open "$(tcp "${namespace}" "${KAFKA}" 9092)"
+done
+expect "6.6 restaurants → PostgreSQL orders: БД доступна только владельцу" closed \
+  "$(tcp nomnom-restaurants "${POSTGRES_ORDERS}" 5432)"
+expect "6.7 payments → Temporal: Temporal доступен только orders" closed \
+  "$(tcp nomnom-payments "${TEMPORAL}" 7233)"
+# Приложения падают на старте без обязательной инфраструктуры: Available под политиками
+# означает реальное подключение orders и orders-consumer к PostgreSQL, Kafka и Temporal.
+for deployment in orders orders-consumer; do
+  expect "6.8 ${deployment} Available под политиками" True \
+    "$(k -n nomnom-orders get deployment "${deployment}" \
+      -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')"
+done
+blocked "6.9 MongoDB restaurants не развёрнута: restaurants её ещё не использует"
+if k -n nomnom-observability get service alloy >/dev/null 2>&1; then
+  expect "6.10 orders → Alloy OTLP" open "$(tcp nomnom-orders alloy.nomnom-observability.svc.cluster.local 4317)"
+else
+  blocked "6.10 Alloy развёрнут только с GRAFANA_CLOUD=1"
+fi
 
 section "6a. Kubelet-пробы и системные компоненты под политиками"
 sleep 20
