@@ -198,7 +198,7 @@ helm template payments ops/helm \
 
 ## PostgreSQL
 
-Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). DSN передаётся из внешнего Secret `database.urlSecret.name`/`key` (env `DATABASE__URL`); без него переменная не задаётся и процесс не стартует. Процесс сам применяет недостающие forward-only SQL-миграции при старте, до открытия портов, библиотекой yoyo-migrations под её lock-ом (строка `yoyo_lock`): реплики не мешают друг другу, при ошибке миграции процесс завершается с кодом 1. Отдельного шага или init container нет.
+Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). DSN передаётся из внешнего Secret `database.urlSecret.name`/`key` (env `DATABASE__URL`); без него переменная не задаётся и процесс не стартует. Процесс сам применяет недостающие forward-only SQL-миграции при старте, до открытия портов, библиотекой yoyo-migrations под session advisory lock PostgreSQL: реплики не мешают друг другу, при ошибке миграции процесс завершается с кодом 1. Отдельного шага или init container нет.
 
 Пулер перед базой — только session mode; replicas × maxConns должна помещаться в `pool_size` пулера ([README](../README.md#пулер-postgresql)). Длительности — `<int>(ms|s|m)`, chart отклоняет другой формат и `minConns` вне 0–1.
 
@@ -213,7 +213,7 @@ helm template payments ops/helm \
 | `database.connectTimeout` | `5s` | `connect_timeout` libpq (`DATABASE__CONNECT_TIMEOUT`). |
 | `database.acquireTimeout` | `5s` | Ожидание соединения пула (`DATABASE__ACQUIRE_TIMEOUT`). |
 
-Роль базы должна владеть схемой (создаёт таблицы и служебные таблицы yoyo-migrations `_yoyo_migration`, `_yoyo_log`, `_yoyo_version`, `yoyo_lock`). Пример для kind:
+Роль базы должна владеть схемой (создаёт таблицы и служебные таблицы yoyo-migrations `_yoyo_migration`, `_yoyo_log`, `_yoyo_version`, `yoyo_lock` — последнюю yoyo создаёт, но не использует). Пример для kind:
 
 ```bash
 helm upgrade --install payments ops/helm \

@@ -36,7 +36,8 @@ ORM и ODM не используются. Запросы пишутся на SQL
 | `restaurants` (TS) | официальный `mongodb` | BSON-запросы драйвера | [migrate-mongo](https://github.com/seppevs/migrate-mongo) (changelog и lock библиотеки) |
 
 - Блокировку одновременного старта нескольких pods ([ADR 38](0038-schema-migrations-at-process-startup.md))
-  даёт сама библиотека миграций: advisory lock golang-migrate и sqlx, lock-таблица yoyo,
+  даёт сама библиотека миграций: advisory lock golang-migrate и sqlx, в `payments` — `pg_advisory_lock` вокруг yoyo (lock-строка
+  yoyo после убитого процесса осталась бы и требовала ручного `yoyo break-lock`),
   lock-коллекция migrate-mongo. У migrate-mongo `up` при занятом lock отказывает, а не ждёт, и
   вставляет lock без атомарной проверки: `restaurants` делает вставку атомарной unique index'ом
   на lock-коллекции и повторяет `up`, пока lock занят; миграции идемпотентны

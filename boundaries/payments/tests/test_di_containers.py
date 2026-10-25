@@ -32,7 +32,7 @@ from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
 from infrastructure.postgres import PostgresDatabase, PostgresPaymentOutbox
-from infrastructure.postgres.migrate import migrations
+from infrastructure.postgres.migrate import _LOCK_KEY, migrate, migrations
 from infrastructure.provider import (
     SIGNATURE_HEADER,
     WEBHOOK_PATH,
@@ -197,17 +197,52 @@ class StartupMigrationTest(unittest.TestCase):
         self.assertEqual(after, before)
 
     def test_empty_database_gets_every_migration(self) -> None:
-        name = f"startup_{uuid.uuid4().hex}"
-        with psycopg.connect(self.dsn, autocommit=True) as admin:
-            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
-        self.addCleanup(self._drop, name)
-        dsn = self.dsn.rsplit("/", 1)[0] + f"/{name}"
+        dsn = self._empty_database()
         logs = self.start(dsn)
         ids = [migration.id for migration in migrations()]
         self.assertIn(f"payments migrations applied: {', '.join(ids)}", logs[-1])
         with psycopg.connect(dsn) as conn:
             applied = conn.execute("SELECT migration_id FROM _yoyo_migration ORDER BY migration_id")
             self.assertEqual([row[0] for row in applied], ids)
+
+    def test_replicas_starting_together_apply_migrations_once(self) -> None:
+        dsn = self._empty_database()
+        settings = DatabaseSettings(DATABASE__URL=dsn)
+        results: list[list[str]] = []
+        threads = [
+            threading.Thread(target=lambda: results.append(migrate(settings))) for _ in range(4)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        ids = [migration.id for migration in migrations()]
+        self.assertEqual(sorted(results, key=len), [[], [], [], ids])
+        with psycopg.connect(dsn) as conn:
+            count = conn.execute("SELECT count(*) FROM _yoyo_migration").fetchone()
+        self.assertEqual(count, (len(ids),))
+
+    def test_lock_of_a_killed_process_is_released_with_its_connection(self) -> None:
+        dsn = self._empty_database()
+        holder = psycopg.connect(dsn, autocommit=True)
+        holder.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
+        results: list[list[str]] = []
+        waiting = threading.Thread(
+            target=lambda: results.append(migrate(DatabaseSettings(DATABASE__URL=dsn)))
+        )
+        waiting.start()
+        waiting.join(timeout=1)
+        self.assertTrue(waiting.is_alive())
+        holder.close()
+        waiting.join()
+        self.assertEqual(results, [[migration.id for migration in migrations()]])
+
+    def _empty_database(self) -> str:
+        name = f"startup_{uuid.uuid4().hex}"
+        with psycopg.connect(self.dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        self.addCleanup(self._drop, name)
+        return self.dsn.rsplit("/", 1)[0] + f"/{name}"
 
     def _drop(self, name: str) -> None:
         with psycopg.connect(self.dsn, autocommit=True) as admin:
