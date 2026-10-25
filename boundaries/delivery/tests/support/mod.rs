@@ -1,24 +1,33 @@
 //! Containers of the integration tests (testcontainers): one migrated
-//! PostgreSQL per test binary. Tests use unique ids, so they share the
+//! PostgreSQL and one SpiceDB per test binary. Tests use unique ids, so they share the
 //! database. Containers live in statics, which are never dropped, so they are
 //! removed when the test binary exits.
 
 #![allow(dead_code)]
 
 use std::any::Any;
+use std::path::Path;
 use std::sync::{Mutex, OnceLock, PoisonError};
+use std::time::Duration;
 
 use delivery::infrastructure::postgres::migrate;
-use delivery::pkg::config::DatabaseConfig;
+use delivery::pkg::config::{DatabaseConfig, SpiceDbConfig};
 use testcontainers_modules::postgres::Postgres;
+use testcontainers_modules::testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers_modules::testcontainers::runners::SyncRunner;
-use testcontainers_modules::testcontainers::{Container, Image, ImageExt};
+use testcontainers_modules::testcontainers::{Container, GenericImage, Image, ImageExt};
 
 /// Image of the platform PostgreSQL (ops).
 const POSTGRES_TAG: &str = "18.6-alpine3.24";
+/// Image of the platform SpiceDB (`ops/kind/bootstrap/values.yaml`).
+const SPICEDB_IMAGE: &str = "authzed/spicedb";
+const SPICEDB_TAG: &str = "v1.57.0";
+const SPICEDB_KEY: &str = "devkey";
+const SPICEDB_GRPC: u16 = 50051;
 
 static CONTAINERS: Mutex<Vec<Box<dyn Any + Send>>> = Mutex::new(Vec::new());
 static DATABASE: OnceLock<String> = OnceLock::new();
+static SPICEDB: OnceLock<String> = OnceLock::new();
 
 extern "C" fn remove_containers() {
     CONTAINERS
@@ -45,28 +54,82 @@ pub fn off_runtime<T: Send>(work: impl FnOnce() -> T + Send) -> T {
 
 /// Migrated database of the shared PostgreSQL container.
 pub fn database() -> DatabaseConfig {
-    let url = DATABASE.get_or_init(|| {
-        off_runtime(|| {
-            let container = Postgres::default()
-                .with_tag(POSTGRES_TAG)
-                .with_cmd(["postgres", "-c", "max_connections=500"])
-                .start()
-                .expect("start postgres container");
-            let host = container.get_host().expect("container host");
-            let port = container.get_host_port_ipv4(5432).expect("container port");
-            keep(container);
-            let url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
-            migrate(&DatabaseConfig {
-                url: url.clone(),
-                ..DatabaseConfig::default()
-            })
-            .expect("migrate");
-            url
-        })
-    });
+    pooled(DATABASE.get_or_init(|| off_runtime(start_postgres)))
+}
+
+/// Migrated database of a PostgreSQL container of its own, for a test that
+/// scans every row (reconciliation) and must not see parallel tests.
+pub fn own_database() -> DatabaseConfig {
+    pooled(&off_runtime(start_postgres))
+}
+
+fn pooled(url: &str) -> DatabaseConfig {
     DatabaseConfig {
-        url: url.clone(),
+        url: url.to_owned(),
         max_conns: 4,
         ..DatabaseConfig::default()
+    }
+}
+
+fn start_postgres() -> String {
+    let container = Postgres::default()
+        .with_tag(POSTGRES_TAG)
+        .with_cmd(["postgres", "-c", "max_connections=500"])
+        .start()
+        .expect("start postgres container");
+    let host = container.get_host().expect("container host");
+    let port = container.get_host_port_ipv4(5432).expect("container port");
+    keep(container);
+    let url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
+    migrate(&DatabaseConfig {
+        url: url.clone(),
+        ..DatabaseConfig::default()
+    })
+    .expect("migrate");
+    url
+}
+
+/// SpiceDB of the shared container: in-memory datastore bootstrapped with
+/// `authorization/bootstrap.yaml` (schema plus deployment grants).
+pub fn spicedb(timeout: Duration) -> SpiceDbConfig {
+    let endpoint = SPICEDB.get_or_init(|| {
+        off_runtime(|| {
+            let authorization = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../authorization");
+            let container = GenericImage::new(SPICEDB_IMAGE, SPICEDB_TAG)
+                .with_exposed_port(SPICEDB_GRPC.tcp())
+                .with_wait_for(WaitFor::message_on_stderr("grpc server started serving"))
+                .with_working_dir("/authorization")
+                .with_copy_to(
+                    "/authorization/bootstrap.yaml",
+                    authorization.join("bootstrap.yaml"),
+                )
+                .with_copy_to(
+                    "/authorization/schema.zed",
+                    authorization.join("schema.zed"),
+                )
+                .with_cmd([
+                    "serve",
+                    "--grpc-preshared-key",
+                    SPICEDB_KEY,
+                    "--datastore-engine",
+                    "memory",
+                    "--datastore-bootstrap-files",
+                    "bootstrap.yaml",
+                ])
+                .start()
+                .expect("start spicedb container");
+            let host = container.get_host().expect("container host");
+            let port = container
+                .get_host_port_ipv4(SPICEDB_GRPC)
+                .expect("container port");
+            keep(container);
+            format!("{host}:{port}")
+        })
+    });
+    SpiceDbConfig {
+        endpoint: endpoint.clone(),
+        preshared_key: SPICEDB_KEY.to_owned(),
+        insecure: true,
+        timeout,
     }
 }

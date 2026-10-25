@@ -1,11 +1,7 @@
-//! Integration-тесты SpiceDB-адаптера (FR-435, AC-465, AC-466) против SpiceDB,
-//! поднятого с `authorization/bootstrap.yaml`. Запускаются только при заданном
-//! `SPICEDB_ENDPOINT` (например, `localhost:50051`, ключ `devkey`, plaintext):
-//!
-//! `SPICEDB_ENDPOINT=localhost:50051 cargo test --test spicedb_authorization`
-//!
-//! Без переменной тесты завершаются сразу, кроме проверки недоступного
-//! endpoint, которой SpiceDB не нужен.
+//! Integration-тесты SpiceDB-адаптера (FR-435, AC-465, AC-466) против SpiceDB
+//! из testcontainers, поднятого с `authorization/bootstrap.yaml`.
+
+mod support;
 
 use std::time::Duration;
 
@@ -20,29 +16,14 @@ use delivery::slices::delivery::applications::authorization::{
 };
 use delivery::slices::delivery::domains::delivery::{DeliveryId, OrderId};
 
-const ENDPOINT_ENV: &str = "SPICEDB_ENDPOINT";
-const PRESHARED_KEY_ENV: &str = "SPICEDB_PRESHARED_KEY";
-const DEV_KEY: &str = "devkey";
-
-fn authorization(endpoint: &str, timeout: Duration) -> SpiceDbAuthorization {
-    let config = SpiceDbConfig {
-        endpoint: endpoint.to_owned(),
-        preshared_key: std::env::var(PRESHARED_KEY_ENV).unwrap_or_else(|_| DEV_KEY.to_owned()),
-        insecure: true,
-        timeout,
-    };
-    SpiceDbAuthorization::from_config(&config)
+fn authorization(config: &SpiceDbConfig) -> SpiceDbAuthorization {
+    SpiceDbAuthorization::from_config(config)
         .expect("valid config")
         .expect("endpoint is set")
 }
 
-/// `None` — SpiceDB не задан, тест пропускается.
-fn live() -> Option<SpiceDbAuthorization> {
-    let Ok(endpoint) = std::env::var(ENDPOINT_ENV) else {
-        eprintln!("{ENDPOINT_ENV} is not set; skipping SpiceDB integration test");
-        return None;
-    };
-    Some(authorization(&endpoint, Duration::from_secs(2)))
+fn live() -> SpiceDbAuthorization {
+    authorization(&support::spicedb(Duration::from_secs(2)))
 }
 
 fn service(name: &str) -> Subject {
@@ -77,7 +58,7 @@ fn fulfillment_commands() -> [(DeliveryPermission, DeliveryResource); 3] {
 
 #[test]
 fn orders_worker_coordinates_delivery() {
-    let Some(authorization) = live() else { return };
+    let authorization = live();
 
     for (permission, resource) in fulfillment_commands() {
         assert_eq!(
@@ -95,7 +76,7 @@ fn orders_worker_coordinates_delivery() {
 
 #[test]
 fn other_service_is_denied_fulfillment_commands() {
-    let Some(authorization) = live() else { return };
+    let authorization = live();
 
     for (permission, resource) in fulfillment_commands() {
         assert_eq!(
@@ -108,7 +89,7 @@ fn other_service_is_denied_fulfillment_commands() {
 
 #[test]
 fn orders_worker_cannot_register_courier() {
-    let Some(authorization) = live() else { return };
+    let authorization = live();
 
     assert_eq!(
         CourierAuthorization::check(
@@ -123,7 +104,7 @@ fn orders_worker_cannot_register_courier() {
 
 #[test]
 fn courier_without_relationship_is_denied() {
-    let Some(authorization) = live() else { return };
+    let authorization = live();
 
     assert_eq!(
         delivery(
@@ -139,7 +120,12 @@ fn courier_without_relationship_is_denied() {
 /// AC-466: SpiceDB не отвечает в пределах timeout — authorization unavailable.
 #[test]
 fn unreachable_spicedb_is_unavailable() {
-    let authorization = authorization("127.0.0.1:1", Duration::from_millis(300));
+    let authorization = authorization(&SpiceDbConfig {
+        endpoint: "127.0.0.1:1".to_owned(),
+        preshared_key: "devkey".to_owned(),
+        insecure: true,
+        timeout: Duration::from_millis(300),
+    });
 
     let outcome = delivery(
         &authorization,
@@ -157,7 +143,7 @@ fn unreachable_spicedb_is_unavailable() {
 /// Синхронный порт вызывается из async handler на multi-thread runtime.
 #[tokio::test(flavor = "multi_thread")]
 async fn check_from_async_handler_does_not_block_runtime() {
-    let Some(authorization) = live() else { return };
+    let authorization = live();
 
     assert_eq!(
         delivery(

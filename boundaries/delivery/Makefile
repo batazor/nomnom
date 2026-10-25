@@ -20,10 +20,9 @@ run:
 test:
 	$(CARGO) test
 
-# Integration-тесты против SpiceDB с authorization/bootstrap.yaml.
-SPICEDB_ENDPOINT ?= localhost:50051
+# Integration-тесты против SpiceDB из testcontainers с authorization/bootstrap.yaml.
 test-spicedb:
-	SPICEDB_ENDPOINT=$(SPICEDB_ENDPOINT) $(CARGO) test --test spicedb_authorization --test spicedb_relationships
+	$(CARGO) test --test spicedb_authorization --test spicedb_relationships
 
 lint:
 	$(CARGO) clippy --all-targets --all-features

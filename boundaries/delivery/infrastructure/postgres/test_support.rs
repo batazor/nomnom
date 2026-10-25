@@ -9,6 +9,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+use std::time::Duration;
 
 use sqlx::Connection as _;
 use testcontainers_modules::postgres::Postgres;
@@ -106,10 +107,14 @@ fn admin(server: &str, statement: &str) {
     });
 }
 
+/// Боевой `acquire_timeout` (5s) не переживает сотни параллельных
+/// `CREATE DATABASE ... TEMPLATE` в одном контейнере: первое соединение пула
+/// под такой нагрузкой ждёт дольше.
 fn config(url: String) -> DatabaseConfig {
     DatabaseConfig {
         url,
         max_conns: 4,
+        acquire_timeout: Duration::from_secs(60),
         ..DatabaseConfig::default()
     }
 }

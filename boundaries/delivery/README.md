@@ -174,11 +174,10 @@ Fail closed: разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `N
 
 `SPICEDB__ENDPOINT` обязателен: при пустом значении процесс завершается ошибкой startup. `StaticAuthorization` из `infrastructure/memory` используется только тестовым графом `di::build()`.
 
-Integration-тесты (`tests/spicedb_authorization.rs`) выполняются против SpiceDB с `authorization/bootstrap.yaml`, только если задан `SPICEDB_ENDPOINT` (ключ `devkey` или `SPICEDB_PRESHARED_KEY`, plaintext); без переменной они пропускаются, кроме проверки недоступного endpoint:
+Integration-тесты (`tests/spicedb_authorization.rs`) выполняются против SpiceDB, который тест сам поднимает через testcontainers (`authzed/spicedb` той же версии, что в `ops/kind/bootstrap/values.yaml`, memory datastore с `authorization/bootstrap.yaml`, ключ `devkey`, `tests/support/mod.rs`). Переменных окружения и внешних инстансов нет, нужен только Docker:
 
 ```bash
-make test-spicedb                          # SPICEDB_ENDPOINT=localhost:50051
-SPICEDB_ENDPOINT=localhost:50051 cargo test --test spicedb_authorization
+make test-spicedb   # cargo test --test spicedb_authorization --test spicedb_relationships
 ```
 
 ## Relationships и reconciliation (SpiceDB)
@@ -206,10 +205,10 @@ Reconciliation (`infrastructure/reconcile.rs`, порт алгоритма `orde
 
 По change [`add-authorization-revisions`](../../openspec/changes/add-authorization-revisions/) (FR-447, FR-448, AC-483, AC-484) writers возвращают ZedToken записи (`written_at`), а use cases сохраняют его в техническом поле `authorization_revision` ресурса в той же операции save: `Courier` — Register Courier (`TOUCH`), `Delivery` — Accept (`TOUCH`), Reassign/Replan, Cancel, Confirm Delivery и Report Delivery Failure (`DELETE`). Repeat без записи revision не меняет; старые snapshots загружаются без неё. `SpiceDbAuthorization` читает revision через порт `RevisionReader` (`RepositoryRevisions` поверх репозиториев) и проверяет `courier:<id>`/`delivery:<id>` с `at_least_as_fresh`, поэтому собственная запись видна сразу (назначенный курьер сразу `act_as_courier`, снятый — сразу отказ); без revision и для `platform:nomnom` — `minimize_latency`. Ошибка чтения revision — authorization unavailable (fail closed). Reconciler, восстанавливая missing связь `TOUCH`, сохраняет её revision в курьера/доставку; удаление orphan revision не меняет.
 
-Stubs `authzed.api.v1` теперь включают `CheckPermission`, `WriteRelationships` и `ReadRelationships` (`make generate-spicedb`). Integration-тесты `tests/spicedb_relationships.rs` (только при `SPICEDB_ENDPOINT`): регистрация → `courier#act`, принятие offer → `delivery#act_as_courier`, Reassign, Cancel, Confirm Delivery и Report Delivery Failure → доступ пропадает, operator платформы → `dispatch_delivery`, reconciler восстанавливает потерянную связь и удаляет сироту только после grace. Проверки идут через адаптер с revisions из хранилища и решаются сразу, без повторов; ждут окна квантования только сироты без revision (`minimize_latency`):
+Stubs `authzed.api.v1` теперь включают `CheckPermission`, `WriteRelationships` и `ReadRelationships` (`make generate-spicedb`). Integration-тесты `tests/spicedb_relationships.rs` (SpiceDB и PostgreSQL из testcontainers; reconciler-тест получает собственный PostgreSQL, потому что сканирует все доставки): регистрация → `courier#act`, принятие offer → `delivery#act_as_courier`, Reassign, Cancel, Confirm Delivery и Report Delivery Failure → доступ пропадает, operator платформы → `dispatch_delivery`, reconciler восстанавливает потерянную связь и удаляет сироту только после grace. Проверки идут через адаптер с revisions из хранилища и решаются сразу, без повторов; ждут окна квантования только сироты без revision (`minimize_latency`):
 
 ```bash
-make test-spicedb   # SPICEDB_ENDPOINT=localhost:50051, оба integration-набора
+make test-spicedb   # оба integration-набора, контейнеры поднимаются сами
 ```
 
 ## Истечение Delivery Offers

@@ -1,9 +1,5 @@
 //! Integration-тесты записи relationships и reconciliation (FR-444, FR-445,
-//! AC-477, AC-690, AC-691) против SpiceDB с `authorization/schema.zed`. Запускаются только при
-//! заданном `SPICEDB_ENDPOINT` (ключ `devkey` или `SPICEDB_PRESHARED_KEY`,
-//! plaintext):
-//!
-//! `SPICEDB_ENDPOINT=localhost:50051 cargo test --test spicedb_relationships`
+//! AC-477, AC-690, AC-691) против SpiceDB из testcontainers с `authorization/bootstrap.yaml`.
 //!
 //! Проверки прав идут через SpiceDB-адаптер с revisions из хранилища
 //! (FR-447, AC-483): ресурс с сохранённой revision проверяется
@@ -15,6 +11,7 @@
 mod support;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use delivery::infrastructure::memory::{ManualClock, StaticAuthorization, StaticCourierLocator};
@@ -25,7 +22,7 @@ use delivery::infrastructure::spicedb::{
     SpiceDbAuthorization, SpiceDbClient, SpiceDbRelationships, courier_self, delivery_courier,
 };
 use delivery::pkg::application::{AuthorizationError, Subject};
-use delivery::pkg::config::SpiceDbConfig;
+use delivery::pkg::config::DatabaseConfig;
 use delivery::pkg::persistence::AuthorizationRevision;
 use delivery::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
@@ -46,35 +43,24 @@ use delivery::slices::delivery::domains::delivery::{
     DeliveryRepository, OrderId,
 };
 
-const ENDPOINT_ENV: &str = "SPICEDB_ENDPOINT";
-const PRESHARED_KEY_ENV: &str = "SPICEDB_PRESHARED_KEY";
-const DEV_KEY: &str = "devkey";
 const NOW: i64 = 1_000;
 /// Больше окна квантования SpiceDB по умолчанию (5s).
 const EVENTUALLY: Duration = Duration::from_secs(15);
 
-/// `None` — SpiceDB не задан, тест пропускается.
-fn live() -> Option<SpiceDbClient> {
-    let Ok(endpoint) = std::env::var(ENDPOINT_ENV) else {
-        eprintln!("{ENDPOINT_ENV} is not set; skipping SpiceDB integration test");
-        return None;
-    };
-    let config = SpiceDbConfig {
-        endpoint,
-        preshared_key: std::env::var(PRESHARED_KEY_ENV).unwrap_or_else(|_| DEV_KEY.to_owned()),
-        insecure: true,
-        timeout: Duration::from_secs(2),
-    };
-    Some(SpiceDbClient::connect(&config).expect("valid config"))
+fn live() -> SpiceDbClient {
+    SpiceDbClient::connect(&support::spicedb(Duration::from_secs(2))).expect("valid config")
 }
 
-/// Уникальный id без точек: тесты делят один SpiceDB.
+/// Уникальный id без точек: тесты делят один SpiceDB и одну базу. Счётчик
+/// различает id параллельных потоков в пределах одного тика часов.
 fn unique(prefix: &str) -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
         .as_nanos();
-    format!("it-{prefix}-{}-{nanos}", std::process::id())
+    let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
+    format!("it-{prefix}-{}-{nanos}-{sequence}", std::process::id())
 }
 
 fn user(id: &str) -> Subject {
@@ -166,7 +152,11 @@ struct Assigned {
 }
 
 fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
-    let store = Arc::new(PostgresStore::connect(&support::database()).expect("connect"));
+    assigned_in(client, tag, &support::database())
+}
+
+fn assigned_in(client: &SpiceDbClient, tag: &str, database: &DatabaseConfig) -> Assigned {
+    let store = Arc::new(PostgresStore::connect(database).expect("connect"));
     let writer = SpiceDbRelationships::new(Arc::new(client.clone()));
     let courier = unique(&format!("{tag}-courier"));
     let delivery = unique(&format!("{tag}-delivery"));
@@ -240,7 +230,7 @@ fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
 /// FR-447: the courier acts for itself right after registration.
 #[test]
 fn registered_courier_acts_for_itself() {
-    let Some(client) = live() else { return };
+    let client = live();
     let store = Arc::new(PostgresStore::connect(&support::database()).expect("connect"));
     let writer = SpiceDbRelationships::new(Arc::new(client.clone()));
     let courier = unique("courier");
@@ -271,7 +261,7 @@ fn registered_courier_acts_for_itself() {
 /// FR-447: the courier acts on the delivery right after Accept Delivery Offer.
 #[test]
 fn accepted_offer_grants_act_as_courier() {
-    let Some(client) = live() else { return };
+    let client = live();
 
     let world = assigned(&client, "t");
 
@@ -281,7 +271,7 @@ fn accepted_offer_grants_act_as_courier() {
 /// AC-477, AC-483: denied right after Reassign Courier.
 #[test]
 fn reassigned_courier_loses_act_as_courier() {
-    let Some(client) = live() else { return };
+    let client = live();
     let world = assigned(&client, "t");
     acts_as_courier(&world, &client, true);
 
@@ -307,7 +297,7 @@ fn reassigned_courier_loses_act_as_courier() {
 /// FR-447: denied right after Cancel Delivery.
 #[test]
 fn cancelled_delivery_courier_loses_act_as_courier() {
-    let Some(client) = live() else { return };
+    let client = live();
     let world = assigned(&client, "t");
     acts_as_courier(&world, &client, true);
 
@@ -351,7 +341,7 @@ fn pick_up(world: &Assigned) {
 /// AC-690: denied right after Confirm Delivery; `courier_id` stays.
 #[test]
 fn delivered_courier_loses_act_as_courier() {
-    let Some(client) = live() else { return };
+    let client = live();
     let world = assigned(&client, "t");
     pick_up(&world);
     acts_as_courier(&world, &client, true);
@@ -387,7 +377,7 @@ fn delivered_courier_loses_act_as_courier() {
 /// AC-691: denied right after a dispatcher reports the failure.
 #[test]
 fn failed_delivery_courier_loses_act_as_courier() {
-    let Some(client) = live() else { return };
+    let client = live();
     let world = assigned(&client, "t");
     acts_as_courier(&world, &client, true);
 
@@ -417,7 +407,7 @@ fn failed_delivery_courier_loses_act_as_courier() {
 /// not assigned to; a user without `operator` is denied.
 #[test]
 fn operator_dispatches_delivery_failure() {
-    let Some(client) = live() else { return };
+    let client = live();
     let operator = unique("operator");
     client
         .write(
@@ -495,10 +485,12 @@ impl RelationshipGraph for ScopedGraph {
 /// orphan only after the grace period on a later pass.
 #[test]
 fn reconciler_restores_lost_and_deletes_orphan_after_grace() {
-    let Some(client) = live() else { return };
+    let client = live();
     // Every resource id of this test carries its own marker.
     let marker = unique("rc");
-    let world = assigned(&client, &marker);
+    // Reconciliation scans every stored delivery: parallel tests must not
+    // share its database.
+    let world = assigned_in(&client, &marker, &support::own_database());
     let graph: Arc<dyn RelationshipGraph> = Arc::new(ScopedGraph {
         inner: client.clone(),
         marker: marker.clone(),
