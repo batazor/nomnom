@@ -46,7 +46,7 @@ const columnTitle: Record<Column, MessageKey> = {
 
 // The whole order flow on one screen: the customer orders, the kitchen cooks,
 // the courier delivers, each column as its own user. Order details open in a
-// side panel; on narrow screens the columns become tabs.
+// side panel. The three columns stay side by side on any screen.
 export function FlowBoard() {
   return (
     <BoardRefreshProvider>
@@ -73,7 +73,6 @@ function Board() {
     string | null
   >(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [activeColumn, setActiveColumn] = useState<Column>("customer");
   const selectedRestaurantId = useOrderRestaurant(selectedOrderId);
 
   const { remove } = orders;
@@ -124,26 +123,7 @@ function Board() {
         ) : null}
       </section>
 
-      <div
-        aria-label={t("board.columns")}
-        className="board-tabs"
-        role="tablist"
-      >
-        {(Object.keys(columnTitle) as Column[]).map((column) => (
-          <button
-            aria-controls={`board-column-${column}`}
-            aria-selected={activeColumn === column}
-            key={column}
-            onClick={() => setActiveColumn(column)}
-            role="tab"
-            type="button"
-          >
-            {t(columnTitle[column])}
-          </button>
-        ))}
-      </div>
-
-      <div className="board-columns" data-active={activeColumn}>
+      <div className="board-columns">
         <BoardColumn column="customer">
           <RestaurantPicker
             onSelect={setCustomerRestaurantId}
@@ -214,8 +194,6 @@ function BoardColumn({
       aria-labelledby={`board-column-${column}-title`}
       className="board-column"
       data-column={column}
-      id={`board-column-${column}`}
-      role="tabpanel"
     >
       <header className="board-column-header">
         <h2 id={`board-column-${column}-title`}>{t(columnTitle[column])}</h2>

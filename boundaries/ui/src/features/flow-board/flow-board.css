@@ -169,47 +169,19 @@
   font-weight: 600;
 }
 
-/* Columns: side by side on wide screens, tabs on narrow ones */
-
-.board-tabs {
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface-muted);
-}
-
-.board-tabs > button {
-  flex: 1;
-  min-height: 2.5rem;
-  border: 0;
-  border-radius: calc(var(--radius-control) - 2px);
-  background: transparent;
-  color: var(--color-muted);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.board-tabs > button[aria-selected="true"] {
-  background: var(--color-surface);
-  color: var(--color-foreground);
-  box-shadow: var(--shadow-floating);
-}
+/* Columns: always side by side; a narrow screen scrolls them sideways. */
 
 .board-columns {
   display: grid;
+  grid-template-columns: minmax(22rem, 1.5fr) minmax(18rem, 1fr) minmax(
+      18rem,
+      1fr
+    );
   gap: var(--space-4);
+  align-items: start;
   min-width: 0;
-}
-
-@media (max-width: 63.99rem) {
-  .board-columns[data-active="customer"] > :not([data-column="customer"]),
-  .board-columns[data-active="kitchen"] > :not([data-column="kitchen"]),
-  .board-columns[data-active="courier"] > :not([data-column="courier"]) {
-    display: none;
-  }
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
 }
 
 .board-column {
@@ -221,6 +193,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
+  scroll-snap-align: start;
 }
 
 .board-column-header h2 {
@@ -239,17 +212,6 @@
   align-content: start;
   gap: var(--space-3);
   min-width: 0;
-}
-
-@media (min-width: 64rem) {
-  .board-tabs {
-    display: none;
-  }
-
-  .board-columns {
-    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
-  }
 }
 
 /* Column content */

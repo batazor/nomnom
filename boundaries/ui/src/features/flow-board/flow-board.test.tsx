@@ -38,7 +38,7 @@ function renderBoard(overrides: Partial<typeof config> = {}) {
 }
 
 function column(name: string) {
-  return screen.getByRole("tabpanel", { name });
+  return screen.getByRole("region", { name });
 }
 
 async function placeOrder(user: ReturnType<typeof userEvent.setup>) {
@@ -213,8 +213,7 @@ describe("flow board", () => {
     ).toBeInTheDocument();
   });
 
-  it("turns the columns into tabs on a phone and passes axe", async () => {
-    const user = userEvent.setup();
+  it("keeps three columns on a phone without page scroll and passes axe", async () => {
     Object.defineProperty(window, "innerWidth", {
       value: 390,
       configurable: true,
@@ -222,12 +221,9 @@ describe("flow board", () => {
     const { container } = renderBoard();
     await screen.findByRole("button", { name: /^Кухня №8/ });
 
-    const tabs = screen.getByRole("tablist", { name: "Участники" });
-    await user.click(within(tabs).getByRole("tab", { name: "Курьер" }));
-    expect(within(tabs).getByRole("tab", { name: "Курьер" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).length,
+    ).toBeGreaterThanOrEqual(3);
     expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
     const result = await axe.run(container, {
