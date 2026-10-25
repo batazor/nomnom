@@ -119,7 +119,7 @@ Definitions и permissions проектируются по согласован�
 | `delivery` | Ports `CourierAuthorization`, `DeliveryAuthorization` с enum permissions по use cases | Resources `Platform`, `Courier(id)`, `Delivery(id)` |
 | `payments` | `PaymentPermission` и `PaymentPermissionChecker` в `slices/payment/applications/ports.py` | Permissions из строки `payment` выше над `PaymentResource(payment_id)` |
 
-Сопоставление с definitions `schema.zed` выполняется при её создании. Provider callback и operation result в `payments` не проходят SpiceDB-проверку: actor не является subject authorization graph, подлинность callback проверяет infrastructure (service-path; см. [design.md change `implement-payments-application-layer`](../openspec/changes/implement-payments-application-layer/design.md)). Решения по каждому контексту — в design.md changes `implement-{orders,restaurants,delivery,payments}-application-layer`.
+Сопоставление с definitions `schema.zed` выполняется при её создании. Provider callback и operation result в `payments` не проходят SpiceDB-проверку: actor не является subject authorization graph, подлинность callback проверяет infrastructure (service-path; см. [design.md change `implement-payments-application-layer`](../openspec/changes/archive/2026-10-25-implement-payments-application-layer/design.md)). Решения по каждому контексту — в design.md changes `implement-{orders,restaurants,delivery,payments}-application-layer`.
 
 Изменения schema проходят review с участием владельцев затронутых definitions и consumers permissions. CI должен выполнять:
 
