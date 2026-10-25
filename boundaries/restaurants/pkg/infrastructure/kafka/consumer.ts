@@ -1,4 +1,5 @@
 import kafka from "@confluentinc/kafka-javascript";
+import { type Counter, metrics } from "@opentelemetry/api";
 
 import type { Worker } from "../../lifecycle/lifecycle.ts";
 import { extractContext, SpanKind, withSpan } from "../../telemetry/tracing.ts";
@@ -27,6 +28,8 @@ export type EachMessage = Readonly<{
     >;
   }>;
 }>;
+
+export const KAFKA_INSTRUMENTATION = "nomnom.restaurants.kafka";
 
 export interface MessageHandler {
   process(
@@ -76,6 +79,12 @@ export function createConsumerClient(
  * `@confluentinc/kafka-javascript`), сообщение доставляется снова. По
  * `shutdown` начатая обработка завершается до deadline, после чего её повторы
  * прерываются; `disconnect` коммитит сохранённые offsets.
+ *
+ * Semconv `messaging.client.consumed.messages` (v1.44.0, inventory section
+ * messaging-otel): one per message delivered to `process`, after it settles;
+ * a rejected `process` (redelivery) carries `error.type` — the error name.
+ * The counter lives on the global MeterProvider and is no-op until telemetry
+ * starts.
  */
 export class KafkaConsumerWorker implements Worker {
   readonly #client: ConsumerClient;
@@ -86,6 +95,7 @@ export class KafkaConsumerWorker implements Worker {
   #resolveStopped: () => void = () => {};
 
   readonly #groupId: string | undefined;
+  readonly #consumed: Counter;
 
   constructor(options: {
     client: ConsumerClient;
@@ -101,6 +111,13 @@ export class KafkaConsumerWorker implements Worker {
     this.#stopped = new Promise((resolve) => {
       this.#resolveStopped = resolve;
     });
+    this.#consumed = metrics
+      .getMeter(KAFKA_INSTRUMENTATION)
+      .createCounter("messaging.client.consumed.messages", {
+        description:
+          "Number of messages that were delivered to the application.",
+        unit: "{message}",
+      });
   }
 
   async start(): Promise<void> {
@@ -135,16 +152,19 @@ export class KafkaConsumerWorker implements Worker {
             },
           },
           () =>
-            this.#handler.process(
-              {
-                topic,
-                partition,
-                offset: message.offset,
-                key: message.key ?? undefined,
-                value: message.value ?? new Uint8Array(),
-                headers,
-              },
-              this.#abort.signal,
+            this.#consumedMessage(
+              topic,
+              this.#handler.process(
+                {
+                  topic,
+                  partition,
+                  offset: message.offset,
+                  key: message.key ?? undefined,
+                  value: message.value ?? new Uint8Array(),
+                  headers,
+                },
+                this.#abort.signal,
+              ),
             ),
         );
       },
@@ -153,6 +173,30 @@ export class KafkaConsumerWorker implements Worker {
 
   run(): Promise<void> {
     return this.#stopped;
+  }
+
+  async #consumedMessage(
+    topic: string,
+    processing: Promise<ProcessOutcome>,
+  ): Promise<ProcessOutcome> {
+    const attributes = {
+      "messaging.system": "kafka",
+      "messaging.destination.name": topic,
+      ...(this.#groupId === undefined
+        ? {}
+        : { "messaging.consumer.group.name": this.#groupId }),
+    };
+    try {
+      const outcome = await processing;
+      this.#consumed.add(1, attributes);
+      return outcome;
+    } catch (error) {
+      this.#consumed.add(1, {
+        ...attributes,
+        "error.type": error instanceof Error ? error.name : "_OTHER",
+      });
+      throw error;
+    }
   }
 
   async shutdown(deadline: AbortSignal): Promise<void> {

@@ -18,6 +18,7 @@ import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
+import { ObservedPermissionsClient } from "../infrastructure/spicedb/check-telemetry.ts";
 import {
   createSpiceDbClient,
   type SpiceDbClient,
@@ -217,11 +218,12 @@ const infrastructureRegistrations = (
     .singleton()
     .disposer((client) => client.close()),
   // Checks of `restaurant:<id>` read the stored ZedToken from the same
-  // repository the use cases save it to (at_least_as_fresh, FR-447).
+  // repository the use cases save it to (at_least_as_fresh, FR-447). Every
+  // check records nomnom.authz.checks and nomnom.authz.check.duration.
   spicedbAccessControl: asFunction(
     ({ spicedb, restaurants, spicedbConfig }: RestaurantsCradle) =>
       new SpiceDbAccessControl({
-        client: spicedb,
+        client: new ObservedPermissionsClient(spicedb),
         revisions: restaurants,
         timeoutMs: spicedbConfig.timeoutMs,
       }),

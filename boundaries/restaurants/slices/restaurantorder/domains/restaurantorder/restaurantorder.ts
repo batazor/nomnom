@@ -174,6 +174,11 @@ export class RestaurantOrder {
     };
   }
 
+  /** Domain Events recorded since the last {@link pullEvents}, not removed. */
+  get recordedEvents(): readonly RestaurantOrderEvent[] {
+    return [...this.#events];
+  }
+
   pullEvents(): RestaurantOrderEvent[] {
     const events = this.#events;
     this.#events = [];
