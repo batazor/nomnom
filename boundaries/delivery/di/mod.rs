@@ -8,9 +8,10 @@
 //! - [`migrate`] — `cmd/delivery-migrate` ([`migrate::MigrateModule`]).
 //!
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
-//! PostgreSQL (`infrastructure::postgres`, ADR 0001 контекста). Тестовый граф
-//! [`build`] и locator пока закрываются in-memory адаптерами из
-//! `infrastructure::memory`.
+//! PostgreSQL (`infrastructure::postgres`, ADR 0001 контекста), идентификаторы —
+//! UUIDv7 (`infrastructure::ids`), locator — сохранённые позиции курьеров
+//! (`infrastructure::locator`). Только тестовый граф [`build`] закрывается
+//! in-memory адаптерами из `infrastructure::memory`.
 
 mod http_worker;
 pub mod infrastructure;

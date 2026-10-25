@@ -6,7 +6,9 @@ use std::sync::Arc;
 
 use shaku::{HasComponent, module};
 
-use crate::infrastructure::memory::{MemoryStore, RecordingRelationships, StaticCourierLocator};
+use crate::infrastructure::memory::{
+    MemoryStore, RecordingRelationships, SequentialIdGenerator, StaticCourierLocator,
+};
 use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
 
@@ -58,12 +60,14 @@ pub fn build() -> ServiceModule {
     build_with_authorization(Box::new(local_authorization()))
 }
 
-/// Собирает тестовый граф над in-memory хранилищем с выбранной авторизацией.
+/// Собирает тестовый граф над in-memory хранилищем с выбранной авторизацией:
+/// последовательные id и пустой статический locator — только для тестов.
 #[must_use]
 pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) -> ServiceModule {
     service(infrastructure(
         Arc::new(MemoryStore::new()),
-        StaticCourierLocator::new(Vec::new()),
+        Box::new(SequentialIdGenerator::new("delivery")),
+        Box::new(StaticCourierLocator::new(Vec::new())),
         authorization,
         Box::new(RecordingRelationships::new()),
     ))
@@ -74,7 +78,8 @@ pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) ->
 pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule {
     service(infrastructure(
         Arc::new(MemoryStore::new()),
-        locator,
+        Box::new(SequentialIdGenerator::new("delivery")),
+        Box::new(locator),
         Box::new(local_authorization()),
         Box::new(RecordingRelationships::new()),
     ))

@@ -1,8 +1,11 @@
-//! Query read models and the reconciliation reads of [`PostgresStore`].
+//! Query read models, the courier positions of the locator and the
+//! reconciliation reads of [`PostgresStore`].
 
+use crate::infrastructure::locator::CourierPositions;
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
-use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::applications::update_courier_location::CourierPosition;
+use crate::slices::courier::domains::courier::{CourierId, CourierStatus, Location};
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
@@ -11,8 +14,8 @@ use crate::slices::delivery::applications::list_available_delivery_offers::{
 };
 use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId};
 
-use super::rows::{address, column, parse_delivery_state};
-use super::{PostgresStore, limit, storage_error};
+use super::rows::{address, column, courier_status, parse_delivery_state};
+use super::{PostgresStore, corrupt, limit, storage_error};
 
 impl CourierCurrentDeliveryReadModel for PostgresStore {
     fn active_delivery_for(
@@ -60,6 +63,29 @@ impl PendingDeliveryOffersReadModel for PostgresStore {
                 pickup_address: address(column(row, "pickup_address")?)?,
                 dropoff_address: address(column(row, "dropoff_address")?)?,
                 expires_at_epoch_seconds: column(row, "expires_at")?,
+            })
+        })
+        .collect()
+    }
+}
+
+impl CourierPositions for PostgresStore {
+    fn available_positions(&self) -> Result<Vec<CourierPosition>, RepositoryError> {
+        sql!(self, |connection| sqlx::query(
+            "SELECT p.courier_id, p.latitude, p.longitude, p.recorded_at
+             FROM courier_positions p JOIN couriers c ON c.id = p.courier_id
+             WHERE c.status = $1
+             ORDER BY p.courier_id"
+        )
+        .bind(courier_status(CourierStatus::Available))
+        .fetch_all(connection))?
+        .iter()
+        .map(|row| {
+            Ok(CourierPosition {
+                courier_id: CourierId::new(column::<String>(row, "courier_id")?),
+                location: Location::new(column(row, "latitude")?, column(row, "longitude")?)
+                    .map_err(|error| corrupt("courier position", error))?,
+                recorded_at_epoch_seconds: column(row, "recorded_at")?,
             })
         })
         .collect()

@@ -10,10 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use shaku::{Component, Interface, module};
 
-use crate::infrastructure::memory::{
-    MemoryStore, RecordingRelationships, SequentialIdGenerator, StaticAuthorization,
-    StaticCourierLocator,
-};
+use crate::infrastructure::memory::{MemoryStore, RecordingRelationships, StaticAuthorization};
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::application::{Clock, IdGenerator, TransactionScope};
 use crate::slices::courier::applications::assignment::CourierAssignment;
@@ -173,6 +170,20 @@ impl SharedRelationships for LocalRelationships {
     }
 }
 
+/// Генератор идентификаторов `Delivery` и offer: UUIDv7 в процессе
+/// ([`UuidIdGenerator`](crate::infrastructure::ids::UuidIdGenerator)),
+/// последовательный только в тестах (FR-541).
+pub trait ProcessIds: IdGenerator + Send + Sync {}
+
+impl<T: IdGenerator + Send + Sync> ProcessIds for T {}
+
+/// Локатор курьеров: сохранённые позиции в процессе
+/// ([`StoredCourierLocator`](crate::infrastructure::locator::StoredCourierLocator)),
+/// статический только в тестах (FR-542).
+pub trait ProcessLocator: CourierLocator + Send + Sync {}
+
+impl<T: CourierLocator + Send + Sync> ProcessLocator for T {}
+
 pub trait ProcessClock: Clock + Interface {}
 
 impl<T: Clock + Interface> ProcessClock for T {}
@@ -237,10 +248,8 @@ pub struct LocalDeliveryPorts {
     clock: Arc<dyn ProcessClock>,
     #[shaku(inject)]
     relationships: Arc<dyn SharedRelationships>,
-    #[shaku(default = StaticCourierLocator::new(Vec::new()))]
-    locator: StaticCourierLocator,
-    #[shaku(default = SequentialIdGenerator::new("delivery"))]
-    ids: SequentialIdGenerator,
+    locator: Box<dyn ProcessLocator>,
+    ids: Box<dyn ProcessIds>,
 }
 
 impl DeliveryPorts for LocalDeliveryPorts {
@@ -281,7 +290,7 @@ impl DeliveryPorts for LocalDeliveryPorts {
     }
 
     fn locator(&self) -> &dyn CourierLocator {
-        &self.locator
+        &*self.locator
     }
 
     fn clock(&self) -> &dyn Clock {
@@ -289,7 +298,7 @@ impl DeliveryPorts for LocalDeliveryPorts {
     }
 
     fn ids(&self) -> &dyn IdGenerator {
-        &self.ids
+        &*self.ids
     }
 
     fn relationships(&self) -> &dyn DeliveryRelationshipWriter {
@@ -330,7 +339,8 @@ impl DeliveryDependencies for InfrastructureModule {}
 #[must_use]
 pub(super) fn infrastructure(
     store: Arc<dyn ProcessStore>,
-    locator: StaticCourierLocator,
+    ids: Box<dyn ProcessIds>,
+    locator: Box<dyn ProcessLocator>,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn ProcessRelationships>,
 ) -> Arc<InfrastructureModule> {
@@ -345,7 +355,7 @@ pub(super) fn infrastructure(
             })
             .with_component_parameters::<LocalDeliveryPorts>(LocalDeliveryPortsParameters {
                 locator,
-                ids: SequentialIdGenerator::new("delivery"),
+                ids,
             })
             .build(),
     )
