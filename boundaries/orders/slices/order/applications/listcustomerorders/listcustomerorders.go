@@ -34,6 +34,8 @@ type OrderSummary struct {
 	State        order.State
 	Total        vo.Money
 	PlacedAt     time.Time
+	// Cursor continues the history after this Order, like Page.NextCursor.
+	Cursor string
 }
 
 // Page lists orders from newest to oldest; NextCursor is empty on the last page.

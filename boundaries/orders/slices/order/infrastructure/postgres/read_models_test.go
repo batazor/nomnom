@@ -38,6 +38,11 @@ func TestReadModels(t *testing.T) {
 	require.Len(t, first.Orders, 2)
 	assert.Equal(t, []order.ID{ids[2], ids[1]}, []order.ID{first.Orders[0].OrderID, first.Orders[1].OrderID})
 	require.NotEmpty(t, first.NextCursor)
+	assert.Equal(t, first.NextCursor, first.Orders[1].Cursor, "the last order continues the page")
+
+	resumed, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, Limit: 2, Cursor: first.Orders[0].Cursor})
+	require.NoError(t, err)
+	assert.Equal(t, []order.ID{ids[1], ids[0]}, []order.ID{resumed.Orders[0].OrderID, resumed.Orders[1].OrderID}, "any order cursor resumes after it")
 
 	second, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, Limit: 2, Cursor: first.NextCursor})
 	require.NoError(t, err)

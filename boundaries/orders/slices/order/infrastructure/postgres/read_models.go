@@ -85,6 +85,7 @@ func (s *Store) ListCustomerOrders(ctx context.Context, request listcustomerorde
 			return listcustomerorders.Page{}, fmt.Errorf("order %s total: %w", summary.OrderID, err)
 		}
 		summary.PlacedAt = summary.PlacedAt.UTC()
+		summary.Cursor = encodeCursor(summary.PlacedAt, string(summary.OrderID))
 		page.Orders = append(page.Orders, summary)
 	}
 	if err := rows.Err(); err != nil {
@@ -92,8 +93,7 @@ func (s *Store) ListCustomerOrders(ctx context.Context, request listcustomerorde
 	}
 	if len(page.Orders) > request.Limit {
 		page.Orders = page.Orders[:request.Limit]
-		last := page.Orders[len(page.Orders)-1]
-		page.NextCursor = encodeCursor(last.PlacedAt, string(last.OrderID))
+		page.NextCursor = page.Orders[len(page.Orders)-1].Cursor
 	}
 	return page, nil
 }

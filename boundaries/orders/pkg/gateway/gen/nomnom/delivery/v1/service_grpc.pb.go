@@ -38,6 +38,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DeliveryServiceClient interface {
+	// Courier view of its work: current status and the assigned or picked up
+	// Delivery with its addresses. Requires courier#act; an unregistered courier
+	// is NOT_FOUND.
 	GetCourierCurrentDelivery(ctx context.Context, in *GetCourierCurrentDeliveryRequest, opts ...grpc.CallOption) (*GetCourierCurrentDeliveryResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(ctx context.Context, in *CreateDeliveryRequest, opts ...grpc.CallOption) (*CreateDeliveryResponse, error)
@@ -200,6 +203,9 @@ func (c *deliveryServiceClient) ReportDeliveryFailure(ctx context.Context, in *R
 // All implementations must embed UnimplementedDeliveryServiceServer
 // for forward compatibility.
 type DeliveryServiceServer interface {
+	// Courier view of its work: current status and the assigned or picked up
+	// Delivery with its addresses. Requires courier#act; an unregistered courier
+	// is NOT_FOUND.
 	GetCourierCurrentDelivery(context.Context, *GetCourierCurrentDeliveryRequest) (*GetCourierCurrentDeliveryResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error)

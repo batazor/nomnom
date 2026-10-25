@@ -185,13 +185,16 @@ func (CourierAvailability) EnumDescriptor() ([]byte, []int) {
 }
 
 type Delivery struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DeliveryId    string                 `protobuf:"bytes,1,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
-	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	CourierId     string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
-	State         DeliveryState          `protobuf:"varint,4,opt,name=state,proto3,enum=nomnom.delivery.v1.DeliveryState" json:"state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	DeliveryId string                 `protobuf:"bytes,1,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	OrderId    string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	CourierId  string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
+	State      DeliveryState          `protobuf:"varint,4,opt,name=state,proto3,enum=nomnom.delivery.v1.DeliveryState" json:"state,omitempty"`
+	// Set by GetCourierCurrentDelivery for the courier's own active Delivery.
+	PickupAddress  string `protobuf:"bytes,5,opt,name=pickup_address,json=pickupAddress,proto3" json:"pickup_address,omitempty"`
+	DropoffAddress string `protobuf:"bytes,6,opt,name=dropoff_address,json=dropoffAddress,proto3" json:"dropoff_address,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Delivery) Reset() {
@@ -250,6 +253,20 @@ func (x *Delivery) GetState() DeliveryState {
 		return x.State
 	}
 	return DeliveryState_DELIVERY_STATE_UNSPECIFIED
+}
+
+func (x *Delivery) GetPickupAddress() string {
+	if x != nil {
+		return x.PickupAddress
+	}
+	return ""
+}
+
+func (x *Delivery) GetDropoffAddress() string {
+	if x != nil {
+		return x.DropoffAddress
+	}
+	return ""
 }
 
 // Pending, not yet expired Delivery Offer addressed to a courier.
@@ -333,14 +350,16 @@ var File_nomnom_delivery_v1_delivery_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
-	"!nomnom/delivery/v1/delivery.proto\x12\x12nomnom.delivery.v1\"\x9e\x01\n" +
+	"!nomnom/delivery/v1/delivery.proto\x12\x12nomnom.delivery.v1\"\xee\x01\n" +
 	"\bDelivery\x12\x1f\n" +
 	"\vdelivery_id\x18\x01 \x01(\tR\n" +
 	"deliveryId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x12\x1d\n" +
 	"\n" +
 	"courier_id\x18\x03 \x01(\tR\tcourierId\x127\n" +
-	"\x05state\x18\x04 \x01(\x0e2!.nomnom.delivery.v1.DeliveryStateR\x05state\"\xd4\x01\n" +
+	"\x05state\x18\x04 \x01(\x0e2!.nomnom.delivery.v1.DeliveryStateR\x05state\x12%\n" +
+	"\x0epickup_address\x18\x05 \x01(\tR\rpickupAddress\x12'\n" +
+	"\x0fdropoff_address\x18\x06 \x01(\tR\x0edropoffAddress\"\xd4\x01\n" +
 	"\rDeliveryOffer\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +

@@ -63,4 +63,6 @@ message OrderSummary {
   OrderState state = 3;
   Money total = 4;
   google.protobuf.Timestamp placed_at = 5;
+  // page_token of ListCustomerOrders that continues after this Order.
+  string cursor = 6;
 }

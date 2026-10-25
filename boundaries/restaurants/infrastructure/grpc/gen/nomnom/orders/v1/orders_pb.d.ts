@@ -230,6 +230,13 @@ export declare type OrderSummary = Message<"nomnom.orders.v1.OrderSummary"> & {
    * @generated from field: google.protobuf.Timestamp placed_at = 5;
    */
   placedAt?: Timestamp | undefined;
+
+  /**
+   * page_token of ListCustomerOrders that continues after this Order.
+   *
+   * @generated from field: string cursor = 6;
+   */
+  cursor: string;
 };
 
 /**

@@ -19,7 +19,7 @@ Handler: [`listcustomerorders.go`](listcustomerorders.go), unit-тесты: [`li
 
 - **Вход:** `Query{Subject, CustomerID, Limit, Cursor}`; `Limit` по умолчанию 20, максимум 100.
 - **Порядок:** собственная история Customer фильтруется по `customer_id` без authorization graph; другой subject проходит `view_orders` на `customer:<id>` (fail closed) → `Reader.ListCustomerOrders`.
-- **Результат:** `Page{Orders, NextCursor}` от новых к старым по `placedAt`, затем по `order_id`.
+- **Результат:** `Page{Orders, NextCursor}` от новых к старым по `placedAt`, затем по `order_id`; у каждого `OrderSummary` есть `Cursor` — продолжение истории после него (cursor ребра GraphQL `customerOrders` в BFF), у последнего на странице он равен `NextCursor`.
 - **Требования:** FR-116; AC-128, AC-129 в OpenSpec change `implement-orders-application-layer`.
 
 ## Acceptance

@@ -34,6 +34,7 @@ const (
 	RestaurantsService_ReportPreparationFailure_FullMethodName     = "/nomnom.restaurants.v1.RestaurantsService/ReportPreparationFailure"
 	RestaurantsService_GetKitchenQueue_FullMethodName              = "/nomnom.restaurants.v1.RestaurantsService/GetKitchenQueue"
 	RestaurantsService_ListIncomingOrders_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/ListIncomingOrders"
+	RestaurantsService_ListActiveRestaurantOrders_FullMethodName   = "/nomnom.restaurants.v1.RestaurantsService/ListActiveRestaurantOrders"
 	RestaurantsService_RegisterRestaurant_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant"
 	RestaurantsService_AssignStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/AssignStaff"
 	RestaurantsService_RevokeStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/RevokeStaff"
@@ -86,6 +87,11 @@ type RestaurantsServiceClient interface {
 	// awaiting Accept or Reject, by ascending received_at, then by id. Requires
 	// restaurant#operate_kitchen. An accepted order leaves this list.
 	ListIncomingOrders(ctx context.Context, in *ListIncomingOrdersRequest, opts ...grpc.CallOption) (*ListIncomingOrdersResponse, error)
+	// Active orders of a restaurant's kitchen board: Restaurant Orders in
+	// RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY with their items, by
+	// ascending received_at, then by id. Requires restaurant#operate_kitchen.
+	// The recommended order of the QUEUED ones is GetKitchenQueue.
+	ListActiveRestaurantOrders(ctx context.Context, in *ListActiveRestaurantOrdersRequest, opts ...grpc.CallOption) (*ListActiveRestaurantOrdersResponse, error)
 	// Restaurant administration. RegisterRestaurant requires platform#register_restaurant
 	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
 	// and write restaurant#staff before saving. Staff commands are idempotent.
@@ -269,6 +275,16 @@ func (c *restaurantsServiceClient) ListIncomingOrders(ctx context.Context, in *L
 	return out, nil
 }
 
+func (c *restaurantsServiceClient) ListActiveRestaurantOrders(ctx context.Context, in *ListActiveRestaurantOrdersRequest, opts ...grpc.CallOption) (*ListActiveRestaurantOrdersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListActiveRestaurantOrdersResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ListActiveRestaurantOrders_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *restaurantsServiceClient) RegisterRestaurant(ctx context.Context, in *RegisterRestaurantRequest, opts ...grpc.CallOption) (*RegisterRestaurantResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterRestaurantResponse)
@@ -400,6 +416,11 @@ type RestaurantsServiceServer interface {
 	// awaiting Accept or Reject, by ascending received_at, then by id. Requires
 	// restaurant#operate_kitchen. An accepted order leaves this list.
 	ListIncomingOrders(context.Context, *ListIncomingOrdersRequest) (*ListIncomingOrdersResponse, error)
+	// Active orders of a restaurant's kitchen board: Restaurant Orders in
+	// RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY with their items, by
+	// ascending received_at, then by id. Requires restaurant#operate_kitchen.
+	// The recommended order of the QUEUED ones is GetKitchenQueue.
+	ListActiveRestaurantOrders(context.Context, *ListActiveRestaurantOrdersRequest) (*ListActiveRestaurantOrdersResponse, error)
 	// Restaurant administration. RegisterRestaurant requires platform#register_restaurant
 	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
 	// and write restaurant#staff before saving. Staff commands are idempotent.
@@ -477,6 +498,9 @@ func (UnimplementedRestaurantsServiceServer) GetKitchenQueue(context.Context, *G
 }
 func (UnimplementedRestaurantsServiceServer) ListIncomingOrders(context.Context, *ListIncomingOrdersRequest) (*ListIncomingOrdersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListIncomingOrders not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ListActiveRestaurantOrders(context.Context, *ListActiveRestaurantOrdersRequest) (*ListActiveRestaurantOrdersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListActiveRestaurantOrders not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) RegisterRestaurant(context.Context, *RegisterRestaurantRequest) (*RegisterRestaurantResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterRestaurant not implemented")
@@ -796,6 +820,24 @@ func _RestaurantsService_ListIncomingOrders_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RestaurantsService_ListActiveRestaurantOrders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListActiveRestaurantOrdersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ListActiveRestaurantOrders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ListActiveRestaurantOrders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ListActiveRestaurantOrders(ctx, req.(*ListActiveRestaurantOrdersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RestaurantsService_RegisterRestaurant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterRestaurantRequest)
 	if err := dec(in); err != nil {
@@ -1024,6 +1066,10 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListIncomingOrders",
 			Handler:    _RestaurantsService_ListIncomingOrders_Handler,
+		},
+		{
+			MethodName: "ListActiveRestaurantOrders",
+			Handler:    _RestaurantsService_ListActiveRestaurantOrders_Handler,
 		},
 		{
 			MethodName: "RegisterRestaurant",

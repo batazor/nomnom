@@ -172,6 +172,7 @@ func orderSummary(summary listcustomerorders.OrderSummary) *ordersv1.OrderSummar
 		State:        orderState(summary.State),
 		Total:        money(summary.Total),
 		PlacedAt:     timestamppb.New(summary.PlacedAt),
+		Cursor:       summary.Cursor,
 	}
 }
 

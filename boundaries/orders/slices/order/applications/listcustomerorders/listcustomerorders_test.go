@@ -58,13 +58,16 @@ func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
 	assert.Equal(t, []order.ID{"order-c", "order-b"}, ids(first))
 	assert.Equal(t, []order.ID{"order-a"}, ids(second))
 	assert.Empty(t, second.NextCursor)
+	last := second.Orders[0]
+	assert.NotEmpty(t, last.Cursor, "every order carries the cursor that continues after it")
+	last.Cursor = ""
 	assert.Equal(t, listcustomerorders.OrderSummary{
 		OrderID:      "order-a",
 		RestaurantID: "restaurant-1",
 		State:        order.StatePlaced,
 		Total:        ordertest.Money(t, "20"),
 		PlacedAt:     ordertest.PlacedAt,
-	}, second.Orders[0])
+	}, last)
 	assert.Empty(t, authorizer.Checks())
 }
 

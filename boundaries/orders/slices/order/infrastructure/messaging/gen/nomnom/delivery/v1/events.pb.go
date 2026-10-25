@@ -190,10 +190,19 @@ func (x *DeliveryCompleted) GetDeliveryId() string {
 
 // Delivery не удалась по бизнес-причине.
 type DeliveryFailed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	DeliveryId    string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
-	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OrderId    string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	DeliveryId string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	// Код каталога Delivery Failure Reason: customer_unreachable,
+	// address_not_found, no_access, customer_refused, order_damaged,
+	// courier_incident, other. Набор закрыт и может расширяться новыми кодами;
+	// потребитель должен трактовать неизвестный код как other. До каталога поле
+	// содержало свободный текст.
+	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Необязательное пояснение в свободной форме (нормализованные пробелы, не
+	// длиннее 500 символов); пусто, если не указано. Не метка метрик и не
+	// основание для бизнес-решений.
+	Detail        string `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -245,6 +254,13 @@ func (x *DeliveryFailed) GetDeliveryId() string {
 func (x *DeliveryFailed) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *DeliveryFailed) GetDetail() string {
+	if x != nil {
+		return x.Detail
 	}
 	return ""
 }
@@ -391,12 +407,13 @@ const file_nomnom_delivery_v1_events_proto_rawDesc = "" +
 	"\x11DeliveryCompleted\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
-	"deliveryId\"d\n" +
+	"deliveryId\"|\n" +
 	"\x0eDeliveryFailed\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"z\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x16\n" +
+	"\x06detail\x18\x04 \x01(\tR\x06detail\"z\n" +
 	"\x1dCourierUnassignedFromDelivery\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
