@@ -1,0 +1,92 @@
+# Seed демо-данных: Job с номером revision в имени — новый на каждый install/upgrade, удаляется
+# через ttlSecondsAfterFinished и pod между deploy не держит. Не Helm hook: hook держал бы
+# helm до конца Job, а internal gateway Skaffold применяет уже после charts — Job ждёт его
+# повторами (seed.py, backoffLimit). ServiceAccount nomnom-bff/demo-seed допущен allowlist и
+# userDelegates restaurants и delivery только в kind (values/restaurants.yaml,
+# values/delivery.yaml): Job вызывает их через internal gateway от имени оператора, владельца
+# и курьера с user assertion, подписанным ключом BFF (ADR 32).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-seed
+  namespace: nomnom-bff
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-seed
+  namespace: nomnom-bff
+data:
+  seed.json: |-
+{{ .Files.Get "files/seed.json" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: demo-seed-{{ .Release.Revision }}
+  namespace: nomnom-bff
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo-seed
+    spec:
+      restartPolicy: Never
+      serviceAccountName: demo-seed
+      automountServiceAccountToken: false
+      containers:
+        - name: seed
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python3", "-I", "/seed/seed.py"]
+          env:
+            - name: ASSERTION_KEY_ID
+              value: {{ .Values.assertionKeyId | quote }}
+          resources:
+            requests:
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: identity
+              mountPath: /var/run/secrets/nomnom/identity
+              readOnly: true
+            - name: assertion-key
+              mountPath: /var/run/secrets/nomnom/assertion-key
+              readOnly: true
+            - name: data
+              mountPath: /etc/demo
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: identity
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: nomnom.restaurants
+                  path: nomnom.restaurants
+                  expirationSeconds: 3600
+              - serviceAccountToken:
+                  audience: nomnom.delivery
+                  path: nomnom.delivery
+                  expirationSeconds: 3600
+        - name: assertion-key
+          secret:
+            secretName: bff-assertion-key
+        - name: data
+          configMap:
+            name: demo-seed
+        - name: tmp
+          emptyDir: {}

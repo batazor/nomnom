@@ -67,7 +67,7 @@ dex:
   # Пользователи, пароль у всех nomnom (bcrypt). sub в tokens — не userID, а
   # base64url(protobuf{userID, "local"}), например ChFub21ub20tZGVtby1vd25lchIFbG9jYWw для
   # demo. Демо ведёт один пользователь: он покупатель, владелец ресторанов, их кухня и курьер.
-  # Его sub — subject демо-данных (ops/kind/demo/seed.json, seed-demo.py) и dev token issuer,
+  # Его sub — subject демо-данных (ops/kind/demo/files/seed.json, chart ops/kind/demo) и dev token issuer,
   # поэтому вход через Dex и demo-токены действуют от одного пользователя. userID
   # nomnom-demo-owner остался от прежнего владельца: рестораны в MongoDB записаны на него.
   users:

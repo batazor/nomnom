@@ -118,14 +118,13 @@ build:
       context: ../../..
       docker:
         dockerfile: ops/kind/e2e/probe/Dockerfile
-    # Seed демо-данных (chart ../demo): образ проверок с python3 и openssl.
+    # Seed демо-данных (chart ../demo): стадия demo-seed того же Dockerfile — образ проверок
+    # с python3 и openssl.
     - image: nomnom/demo-seed
-      context: ..
+      context: ../../..
       docker:
-        dockerfile: demo/seed/Dockerfile
-      requires:
-        - image: nomnom/e2e-probe
-          alias: PROBE_IMAGE
+        dockerfile: ops/kind/e2e/probe/Dockerfile
+        target: demo-seed
 manifests:
   # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) ставит chart ../bootstrap из
   # before-hook: rawYaml и releases Skaffold получают pod template label skaffold.dev/run-id, и

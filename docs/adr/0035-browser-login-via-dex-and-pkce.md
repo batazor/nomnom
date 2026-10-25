@@ -56,7 +56,7 @@ Cosmo Router и BFF. Регистрация, восстановление пар
   конфигурацию Router, BFF и UI.
 - Subjects пользователей Dex в SpiceDB (`ops/kind/authz/bootstrap-kind.yaml`, `ownerId` при
   регистрации ресторана) — закодированный `sub` Dex, а не `userID`. Демо-данные
-  (`ops/kind/demo/seed.json`) и dev token issuer используют те же `sub`, поэтому вход через Dex
+  (`ops/kind/demo/files/seed.json`) и dev token issuer используют те же `sub`, поэтому вход через Dex
   и demo-токены действуют от одних пользователей: `customer|owner|kitchen|courier|operator@nomnom.test`,
   пароль `nomnom`.
 - Хранение пользователей в конфигурации и storage `memory` не подходят для production: при

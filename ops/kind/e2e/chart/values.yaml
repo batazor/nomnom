@@ -1,5 +1,5 @@
 # Values chart kind-e2e. image задаёт Skaffold (setValueTemplates) тегом локальной сборки
-# e2e/probe; профиль core (skaffold.yaml) выключает probes.
+# e2e/probe; профиль core (skaffold.yaml) выключает chart целиком.
 
 image:
   repository: nomnom/e2e-probe
@@ -7,8 +7,5 @@ image:
   # Образ загружен через kind load.
   pullPolicy: IfNotPresent
 
-# net-probe в неймспейсах приложений и nomnom-outsider, grpc-caller в nomnom-bff.
-probes:
-  enabled: true
-
-# e2e-driver выключить нельзя: через него hook наполняет демо-данные (scripts/seed-demo.py).
+# net-probe в неймспейсах приложений и nomnom-outsider, grpc-caller и e2e-driver в nomnom-bff.
+enabled: true

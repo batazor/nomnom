@@ -1,0 +1,7 @@
+apiVersion: v2
+name: kind-demo
+description: >-
+  Демо-данные flow board тестового kind-окружения: Helm hook Job после install/upgrade
+  наполняет контексты через internal gateway (ops/kind/demo/files/seed.json). ТОЛЬКО для kind.
+type: application
+version: 0.1.0

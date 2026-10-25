@@ -1,4 +1,4 @@
-{{- if .Values.probes.enabled }}
+{{- if .Values.enabled }}
 # Тестовые pod проверок kind E2E (ops/kind/e2e): вызовы изнутри неймспейсов приложений под их
 # NetworkPolicy (net-probe, без service identity), из nomnom-outsider вне прикладного контура
 # и с service identity (grpc-caller). Образ у всех — e2e/probe.
@@ -202,13 +202,6 @@ spec:
 # nomnom-bff/grpc-caller допущен allowlist orders (values/orders.yaml), но не входит в
 # userDelegates — проверка 7.x предъявляет им user assertion BFF и ждёт UNAUTHENTICATED (ADR 32).
 # ServiceAccount nomnom-bff/bff принадлежит chart BFF.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: grpc-caller
-  namespace: nomnom-bff
-automountServiceAccountToken: false
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -3,3 +3,5 @@
 !buf.lock
 !boundaries/*/infrastructure/grpc/nomnom
 !ops/kind/e2e/probe/proto
+!ops/kind/scripts/mint-jwt.py
+!ops/kind/demo/seed/seed.py

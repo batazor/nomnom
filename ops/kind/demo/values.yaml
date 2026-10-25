@@ -1,0 +1,11 @@
+# Values chart kind-demo. image задаёт Skaffold (setValueTemplates) тегом локальной сборки
+# demo/seed (образ e2e/probe с python3 и openssl).
+
+image:
+  repository: nomnom/demo-seed
+  tag: latest
+  # Образ загружен через kind load.
+  pullPolicy: IfNotPresent
+
+# ADR 32: kid ключа user assertions BFF (Secret bff-assertion-key от chart bootstrap).
+assertionKeyId: nomnom-bff-kind

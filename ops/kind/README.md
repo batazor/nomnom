@@ -299,18 +299,17 @@ Subject — Dex sub пользователя `nomnom-demo-owner` (`ChFub21ub20tZ
 `nomnom-demo-courier` из прежних deploy остаётся в PostgreSQL, но ни один вход им не владеет.
 
 Рестораны: «Пельменная «Сибирь»», «Чайхана «Самарканд»», «Блинная «Теремок у моста»» (5–7 блюд
-каждая). Данные — [`demo/seed.json`](demo/seed.json).
+каждая). Данные — [`demo/files/seed.json`](demo/files/seed.json).
 
-**Seed.** `after`-hook kubectl-деплоера (`make kind-deploy`) запускает
-[`scripts/seed-demo.py`](scripts/seed-demo.py): те же публичные gRPC-вызовы, что e2e пути заказа,
-через fixture `e2e-driver` и user assertion (`scripts/mint-jwt.py`) — `kind-operator`
-регистрирует рестораны и курьера, владелец назначает кухню, заводит меню и открывает рестораны,
-курьер сообщает позицию и выходит на линию. Seed идемпотентен: ресторан ищется по имени в
-`ListOwnedRestaurants` владельца, блюдо — по имени в `GetMenu`, повторный `RegisterCourier`
-допускается. SpiceDB в kind хранит данные в памяти и перезапускается при изменении schema или
-bootstrap, а рестораны и курьер остаются в MongoDB и PostgreSQL; поэтому seed TOUCH-ит их
-relationships (`owner`, `staff`, `self`) одноразовым pod в `nomnom-authz` (grpcurl, reflection
-SpiceDB). Grants в `authz/bootstrap-kind.yaml` не нужны. Запуск вручную: `python3 ops/kind/scripts/seed-demo.py kind-nomnom-test`.
+**Seed.** Chart [`demo`](demo) ставит Job `demo-seed-<revision>` в `nomnom-bff` на каждый
+install/upgrade ([`demo/seed/seed.py`](demo/seed/seed.py), образ — стадия `demo-seed` Dockerfile `e2e/probe`: образ проверок с python3 и openssl): те же публичные gRPC-вызовы через internal gateway, что e2e пути заказа, от
+ServiceAccount `demo-seed` с user assertion ключом BFF — `kind-operator` регистрирует рестораны
+и курьера, владелец назначает кухню, заводит меню и открывает рестораны, курьер сообщает позицию
+и выходит на линию. Seed идемпотентен: ресторан ищется по имени в `ListOwnedRestaurants`
+владельца, блюдо — по имени в `GetMenu`, повторный `RegisterCourier` допускается. Relationships
+SpiceDB (`owner`, `staff`, `self`) после перезапуска SpiceDB восстанавливает reconciliation
+restaurants и delivery из своих хранилищ. Job — не Helm hook: internal gateway применяется после
+charts, и Job ждёт его повторами; законченный Job удаляется через 10 минут.
 
 Subjects демо-пользователей начинаются с `nomnom-`, а не с `demo-`: dispatch без геокодирования
 выбирает среди свободных курьеров первого по id, и `demo-courier` забирал бы предложения курьера

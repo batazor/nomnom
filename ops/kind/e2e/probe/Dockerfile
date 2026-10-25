@@ -29,10 +29,23 @@ RUN mkdir /out && buf build --exclude-source-info -o /out/nomnom.binpb && \
     buf build buf.build/googleapis/googleapis:8ac61b9e502343289c8c42b17aa5b245 --path google/rpc \
       --exclude-source-info -o /out/googleapis.binpb
 
-FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS probe
 # curl — HTTP-клиент проверок GraphQL BFF; nc и nslookup даёт busybox базового образа.
 RUN apk add --no-cache curl
 COPY --from=grpcurl /grpcurl /usr/local/bin/grpcurl
 COPY --from=protos /out /protos
 USER 100:100
 ENTRYPOINT ["sleep", "infinity"]
+
+# Seed демо-данных (chart ops/kind/demo): тот же grpcurl и descriptor sets, python3 и openssl
+# для подписи user assertions (scripts/mint-jwt.py). Skaffold собирает его target demo-seed.
+FROM probe AS demo-seed
+USER root
+RUN apk add --no-cache python3 openssl
+COPY ops/kind/scripts/mint-jwt.py /seed/mint_jwt.py
+COPY ops/kind/demo/seed/seed.py /seed/seed.py
+USER 100:100
+ENTRYPOINT []
+
+# Образ проверок — последняя стадия, чтобы сборка без target давала его.
+FROM probe
