@@ -10,7 +10,7 @@
 #### Scenario: Сотрудник видит новый заказ
 **ID:** AC-737
 
-- **WHEN** ресторан получил заказ, а сотрудник с `operate_kitchen` вызывает `GetKitchenQueue`
+- **WHEN** ресторан принял заказ, а сотрудник с `operate_kitchen` вызывает `GetKitchenQueue`
 - **THEN** ответ содержит заказ с его `restaurant_order_id` и `order_id`
 
 #### Scenario: Посторонний
