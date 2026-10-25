@@ -82,6 +82,7 @@ func (d *Delivery) Offers(ctx context.Context, courierID string) ([]applications
 		offers = append(offers, applications.Offer{
 			ID:             offer.GetOfferId(),
 			DeliveryID:     offer.GetDeliveryId(),
+			OrderID:        offer.GetOrderId(),
 			PickupAddress:  offer.GetPickupAddress(),
 			DropoffAddress: offer.GetDropoffAddress(),
 			ExpiresAt:      time.Unix(offer.GetExpiresAtEpochSeconds(), 0).UTC(),

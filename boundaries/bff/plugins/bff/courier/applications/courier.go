@@ -59,6 +59,7 @@ const (
 type Offer struct {
 	ID             string
 	DeliveryID     string
+	OrderID        string
 	PickupAddress  string
 	DropoffAddress string
 	ExpiresAt      time.Time

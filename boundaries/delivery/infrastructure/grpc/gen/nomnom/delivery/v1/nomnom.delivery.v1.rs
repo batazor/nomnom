@@ -29,6 +29,8 @@ pub struct DeliveryOffer {
     pub dropoff_address: ::prost::alloc::string::String,
     #[prost(int64, tag="5")]
     pub expires_at_epoch_seconds: i64,
+    #[prost(string, tag="6")]
+    pub order_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

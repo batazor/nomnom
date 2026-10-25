@@ -42,6 +42,7 @@ func courierMessage(view applications.CourierView) (*service.Courier, error) {
 		message.Offers = append(message.Offers, &service.DeliveryOffer{
 			Id:             offer.ID,
 			DeliveryId:     offer.DeliveryID,
+			OrderId:        offer.OrderID,
 			PickupAddress:  offer.PickupAddress,
 			DropoffAddress: offer.DropoffAddress,
 			ExpiresAt:      timestamp(offer.ExpiresAt),

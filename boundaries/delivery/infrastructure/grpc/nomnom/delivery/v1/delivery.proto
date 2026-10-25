@@ -43,4 +43,5 @@ message DeliveryOffer {
   string pickup_address = 3;
   string dropoff_address = 4;
   int64 expires_at_epoch_seconds = 5;
+  string order_id = 6;
 }

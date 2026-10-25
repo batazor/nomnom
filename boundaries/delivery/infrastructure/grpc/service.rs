@@ -262,6 +262,7 @@ impl DeliveryService for DeliveryGrpcService {
                 .map(|offer| DeliveryOffer {
                     offer_id: offer.offer_id.as_str().to_owned(),
                     delivery_id: offer.delivery_id.as_str().to_owned(),
+                    order_id: offer.order_id.as_str().to_owned(),
                     pickup_address: offer.pickup_address.as_str().to_owned(),
                     dropoff_address: offer.dropoff_address.as_str().to_owned(),
                     expires_at_epoch_seconds: offer.expires_at_epoch_seconds,

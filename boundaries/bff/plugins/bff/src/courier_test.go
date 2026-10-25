@@ -83,7 +83,7 @@ func TestCourierIsTheVerifiedUser(t *testing.T) {
 	fake := &fakeCourierScenarios{view: applications.CourierView{
 		Availability: applications.AvailabilityAvailable,
 		Offers: []applications.Offer{{
-			ID: "offer-1", DeliveryID: "delivery-1", PickupAddress: "a", DropoffAddress: "b",
+			ID: "offer-1", DeliveryID: "delivery-1", OrderID: "order-1", PickupAddress: "a", DropoffAddress: "b",
 			ExpiresAt: time.Date(2026, 10, 25, 12, 5, 0, 0, time.UTC),
 		}},
 	}}
@@ -97,6 +97,7 @@ func TestCourierIsTheVerifiedUser(t *testing.T) {
 	assert.Equal(t, service.CourierAvailability_COURIER_AVAILABILITY_AVAILABLE, courierMessage.GetAvailability())
 	require.Len(t, courierMessage.GetOffers(), 1)
 	assert.Equal(t, "offer-1", courierMessage.GetOffers()[0].GetId())
+	assert.Equal(t, "order-1", courierMessage.GetOffers()[0].GetOrderId())
 	assert.Equal(t, "2026-10-25T12:05:00Z", courierMessage.GetOffers()[0].GetExpiresAt())
 	assert.Nil(t, courierMessage.GetCurrentDelivery())
 
