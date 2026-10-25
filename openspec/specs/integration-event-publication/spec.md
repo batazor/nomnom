@@ -25,7 +25,7 @@
 ### Requirement: Публикуемые события выбираются явным allowlist
 **ID:** FR-521
 
-Mapper Domain Event → Integration Event SHALL находиться в `infrastructure` контекста и сопоставлять только события, у которых есть Protobuf-контракт. Domain Event вне allowlist MUST NOT попадать в Outbox: mapper возвращает отсутствие контракта, и запись не создаётся. Сборка хранилища по умолчанию (тесты) MUST использовать mapper без контрактов; основной процесс MUST подключать mapper контекста.
+Mapper Domain Event → Integration Event SHALL находиться в `infrastructure` контекста и сопоставлять только события, у которых есть Protobuf-контракт. Domain Event вне allowlist MUST NOT попадать в Outbox. Основной процесс MUST подключать mapper контекста, тестовая сборка хранилища — mapper без контрактов. В `restaurants` allowlist SHALL вести слайс, владеющий aggregate, а mapper процесса MUST выбирать его по `aggregate_type`; событие aggregate неизвестного типа MUST NOT публиковаться.
 
 #### Scenario: Внутренний факт payments не публикуется
 **ID:** AC-602
@@ -36,7 +36,7 @@ Mapper Domain Event → Integration Event SHALL находиться в `infrast
 #### Scenario: Локальные факты и события Restaurant/Menu не публикуются
 **ID:** AC-603
 
-- **WHEN** транзакция `restaurants` записывает `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled` или событие aggregate `Restaurant` либо `Menu`
+- **WHEN** транзакция `restaurants` записывает `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled`, `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged`, `MenuCreated`, `MenuItemAdded` или `MenuItemUpdated` (внутренние события `Restaurant` и `Menu` без контракта)
 - **THEN** коллекция `outbox` не пополняется
 
 #### Scenario: Новый Domain Event delivery требует решения о публикации
@@ -87,7 +87,7 @@ Mapper Domain Event → Integration Event SHALL находиться в `infrast
 ### Requirement: Integration Events restaurants
 **ID:** FR-524
 
-`restaurants` SHALL публиковать в topic `restaurants.v1.restaurant-order-events` по контракту `nomnom/restaurants/v1/events.proto` события aggregate `RestaurantOrder`: `RestaurantOrderAccepted`, `RestaurantOrderRejected`, `PreparationStarted`, `PreparationDelayed`, `PreparationFailed` (для Domain Event `RestaurantOrderFailed`), `RestaurantOrderReady`, `RestaurantOrderCancelled`. Каждое сообщение MUST содержать `order_id`.
+`restaurants` SHALL публиковать в topic `restaurants.v1.restaurant-order-events` по контракту `nomnom/restaurants/v1/events.proto` события aggregate `RestaurantOrder`: `RestaurantOrderAccepted`, `RestaurantOrderRejected`, `PreparationStarted`, `PreparationDelayed`, `PreparationFailed` (Domain Event `RestaurantOrderFailed`), `RestaurantOrderReady`, `RestaurantOrderCancelled`; каждое MUST содержать `order_id`. События `Restaurant` и `Menu` MUST идти в свои стримы (FR-560, FR-561).
 
 #### Scenario: Неудача приготовления публикуется как PreparationFailed
 **ID:** AC-609
@@ -160,13 +160,13 @@ Outbox каждого контекста SHALL читать отдельный �
 ### Requirement: Механизм исключительности relay
 **ID:** FR-537
 
-`payments-relay` и `delivery-relay` SHALL удерживать session-level `pg_try_advisory_lock` с константным ключом контекста на выделенном соединении. `restaurants-relay` SHALL владеть lease-документом `restaurants-relay` в `outbox_leases` с владельцем и сроком `OUTBOX__LEASE_TTL`, продлеваемым каждый цикл; истёкший lease MAY захватить другой экземпляр.
+`payments-relay` и `delivery-relay` SHALL удерживать session-level `pg_try_advisory_lock` на выделенном соединении и MUST проверять живость его сессии перед каждой записью. `restaurants-relay` SHALL владеть lease в `outbox_leases` со сроком `OUTBOX__LEASE_TTL` по времени сервера MongoDB и MUST продлевать его внутри пачки не реже трети TTL; `message.timeout.ms` MUST быть меньше TTL. Потеряв lock или lease, relay MUST остановить пачку до следующей записи; истёкший lease MAY захватить другой экземпляр.
 
 #### Scenario: Failover после потери владельца
 **ID:** AC-615
 
 - **WHEN** соединение с advisory lock разорвано или lease истёк без продления
-- **THEN** standby-экземпляр захватывает lock или lease и продолжает публикацию с первой неопубликованной записи
+- **THEN** standby-экземпляр захватывает lock или lease и продолжает публикацию с первой неопубликованной записи, а прежний экземпляр не публикует следующую запись своей пачки
 
 ### Requirement: Выборка в порядке seq
 **ID:** FR-527
@@ -255,3 +255,60 @@ Helm chart каждого контекста SHALL предоставлять `v
 
 - **WHEN** окружение kind разворачивается через Skaffold
 - **THEN** для каждого из трёх контекстов работает release relay с одним экземпляром, без Service, использующий базу основного release
+
+### Requirement: Integration Events открытости ресторана
+**ID:** FR-560
+
+`restaurants` SHALL публиковать в topic `restaurants.v1.restaurant-events` по контракту `nomnom/restaurants/v1/events.proto` события aggregate `Restaurant` (`aggregate_type = Restaurant`, `aggregate_id` — id ресторана): `RestaurantOpened` и `RestaurantClosed` с полем `restaurant_id`. Запись MUST создаваться в той же Unit of Work, что и изменение открытости.
+
+#### Scenario: Open Restaurant публикует RestaurantOpened
+**ID:** AC-660
+
+- **WHEN** Open Restaurant открывает закрытый ресторан и фиксирует версию 2
+- **THEN** Outbox содержит `nomnom.restaurants.v1.RestaurantOpened` с `restaurant_id`, `aggregate_type = Restaurant`, `aggregate_version = 2` и topic `restaurants.v1.restaurant-events`, а relay публикует его с key, равным id ресторана
+
+#### Scenario: Close Restaurant публикует RestaurantClosed
+**ID:** AC-661
+
+- **WHEN** Close Restaurant закрывает открытый ресторан
+- **THEN** Outbox содержит `nomnom.restaurants.v1.RestaurantClosed` с `restaurant_id` в topic `restaurants.v1.restaurant-events`
+
+#### Scenario: Повтор открытия не публикуется
+**ID:** AC-662
+
+- **WHEN** Open Restaurant выполняется для уже открытого ресторана
+- **THEN** новая запись Outbox не создаётся
+
+### Requirement: Integration Event доступности Menu Item
+**ID:** FR-561
+
+`restaurants` SHALL публиковать в topic `restaurants.v1.menu-events` по контракту `nomnom/restaurants/v1/events.proto` событие aggregate `Menu` (`aggregate_type = Menu`, `aggregate_id` — id меню) `MenuItemAvailabilityChanged` с полями `menu_id`, `restaurant_id`, `menu_item_id` и `available` (новое значение доступности). Событие MUST публиковаться при любой команде, изменившей доступность, и MUST NOT публиковаться при изменении других данных Menu Item.
+
+#### Scenario: Set Menu Item Availability публикует факт
+**ID:** AC-663
+
+- **WHEN** Set Menu Item Availability делает доступное блюдо недоступным
+- **THEN** Outbox содержит `nomnom.restaurants.v1.MenuItemAvailabilityChanged` с `menu_id`, `restaurant_id`, `menu_item_id` и `available = false` в topic `restaurants.v1.menu-events`, а relay публикует его с key, равным id меню
+
+#### Scenario: Update Menu Item с новой доступностью
+**ID:** AC-664
+
+- **WHEN** Update Menu Item меняет название и доступность блюда
+- **THEN** Outbox содержит `MenuItemAvailabilityChanged` с новым значением `available`
+
+#### Scenario: Update Menu Item без изменения доступности
+**ID:** AC-665
+
+- **WHEN** Update Menu Item меняет только название
+- **THEN** новая запись Outbox не создаётся
+
+### Requirement: Один стрим на aggregate restaurants
+**ID:** FR-562
+
+Каждый aggregate `restaurants`, чьи события публикуются, SHALL иметь собственный topic, чтобы порядок записей одного `aggregate_id` сохранялся внутри partition стрима: `RestaurantOrder` → `restaurants.v1.restaurant-order-events`, `Restaurant` → `restaurants.v1.restaurant-events`, `Menu` → `restaurants.v1.menu-events`. Единственный relay MUST публиковать записи всех стримов в порядке `seq`, используя topic записи.
+
+#### Scenario: Mapper процесса разводит aggregates по стримам
+**ID:** AC-666
+
+- **WHEN** основной процесс записывает `RestaurantOpened` ресторана, `MenuItemAvailabilityChanged` меню и `PreparationStarted` Kitchen Order
+- **THEN** записи Outbox получают topics `restaurants.v1.restaurant-events`, `restaurants.v1.menu-events` и `restaurants.v1.restaurant-order-events` соответственно
