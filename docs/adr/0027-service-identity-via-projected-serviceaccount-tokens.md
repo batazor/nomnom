@@ -8,6 +8,8 @@ Accepted
 
 Уточняет [18. SpiceDB for Authorization](0018-spicedb-for-authorization.md)
 
+Уточнён [32. User identity via BFF-signed assertions](0032-user-identity-via-bff-signed-assertions.md)
+
 Связан с [15. Использовать internal gateway для синхронных вызовов бизнес-API](0015-использовать-internal-gateway-для-синхронных-вызовов-бизнес-api.md), [16. Запрещать обход internal gateway](0016-запрещать-обход-internal-gateway-через-cilium-и-networkpolicy.md) и [17. Cloud Native Application Runtime](0017-cloud-native-application-runtime.md)
 
 ## Context
@@ -31,7 +33,7 @@ Workload доказывает свою `service` identity Kubernetes projected S
 
 ### User identity
 
-Пользовательский subject через BFF этим ADR не решается: выбор между propagated access token и BFF-signed internal identity остаётся за проектированием BFF identity flow. Resolver контекста расширяется вторым verifier'ом, не меняя service-проверку.
+Пользовательский subject через BFF этим ADR не решается: выбор между propagated access token и BFF-signed internal identity остаётся за проектированием BFF identity flow. Resolver контекста расширяется вторым verifier'ом, не меняя service-проверку. Решение — [ADR 32. User identity via BFF-signed assertions](0032-user-identity-via-bff-signed-assertions.md).
 
 ## Consequences
 

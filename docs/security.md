@@ -41,7 +41,11 @@ BFF проверяет внешний access token и формирует subject
 1. BFF передаёт исходный access token, и владелец use case самостоятельно проверяет token; либо
 2. BFF выпускает короткоживущую подписанную internal identity, и владелец проверяет signature, issuer, audience, expiry и replay-related claims.
 
-Обычный header `x-user-id`, `x-role`, `x-tenant` или аналогичное значение не является доказательством identity. Internal gateway обязан сохранить authorization metadata, но факт прохождения через gateway и NetworkPolicy не делает её доверенной. Для пользовательского subject выбор между propagated token и signed internal identity остаётся открытым до проектирования BFF identity flow.
+Обычный header `x-user-id`, `x-role`, `x-tenant` или аналогичное значение не является доказательством identity. Internal gateway обязан сохранить authorization metadata, но факт прохождения через gateway и NetworkPolicy не делает её доверенной.
+
+### User identity
+
+Пользовательский subject передаётся вторым механизмом — BFF-signed user assertion ([ADR 32](adr/0032-user-identity-via-bff-signed-assertions.md)). BFF проверяет access token покупателя и на каждый внутренний вызов подписывает ES256 JWT (`iss: nomnom-bff`, `aud` целевого контекста, `sub` пользователя, срок жизни не больше 60 s, `jti`) в metadata `x-nomnom-user-assertion`. Контекст принимает assertion только вместе с service identity BFF по ADR 27 и только от service из allowlist `IDENTITY__USER_DELEGATES`; подпись проверяется по JWKS BFF (`IDENTITY__USER_JWKS_FILE`), `iss` — по `IDENTITY__USER_ISSUER`. Результат — `user:<sub>`; без этих параметров user assertions отклоняются (fail closed).
 
 ### Service identity
 
@@ -326,7 +330,7 @@ Kubernetes/NetworkPolicy and E2E scenarios run in kind.
 ## Открытые вопросы
 
 - definitions, relations and permissions after domain SDD use cases are agreed;
-- propagated access token or signed internal identity for the user subject via BFF (service identity is decided by ADR 27);
+- identity provider and how the browser obtains the access token (user subject propagation is decided by ADR 32);
 - exact local field, serialization and gRPC metadata key for ZedToken;
 - SpiceDB datastore, deployment topology, backups and HA;
 - reconciliation ownership, schedule, batching, repair policy and drift SLO;
