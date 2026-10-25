@@ -20,4 +20,4 @@
 
 ## 5. Проверка
 
-- [ ] 5.1 Тесты и линтеры всех затронутых приложений; `openspec validate add-customer-checkout-flow --strict`.
+- [x] 5.1 Тесты и линтеры всех затронутых приложений; `openspec validate add-customer-checkout-flow --strict`.
