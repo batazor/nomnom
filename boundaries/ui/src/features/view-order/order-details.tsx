@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
-import { Button } from "../../shared/ui";
+import { Button, Illustration } from "../../shared/ui";
 import { CancelOrder } from "./cancel-order";
 import {
   endPresentation,
@@ -101,6 +101,11 @@ function OrderView({
 
       <div className="order-layout">
         <div className="order-now">
+          {order.status === "DELIVERED" ? (
+            <Illustration name="order-delivered" />
+          ) : order.status === "PICKED_UP" ? (
+            <Illustration name="on-the-way" />
+          ) : null}
           {status.step === null ? (
             <EndNotice order={order} />
           ) : (
@@ -245,6 +250,7 @@ function OrderMessage({
       aria-labelledby="order-message-title"
       className="order-page order-message"
     >
+      <Illustration name="empty-mailbox" />
       <h3 id="order-message-title">{title}</h3>
       <p>{detail}</p>
       {action}

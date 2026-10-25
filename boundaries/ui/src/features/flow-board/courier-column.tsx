@@ -12,7 +12,7 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { Button } from "../../shared/ui";
+import { Button, Illustration } from "../../shared/ui";
 import { useDropTarget } from "./board-dnd";
 import { useBoardRefresh, usePolling } from "./use-polling";
 
@@ -230,11 +230,21 @@ export function CourierColumn({
           ))}
         </ul>
       ) : delivery ? null : (
-        <p className="board-empty">
-          {courier.availability === "AVAILABLE"
-            ? t("board.courier.waiting")
-            : t("board.courier.offline")}
-        </p>
+        <div className="board-empty-state">
+          <Illustration
+            name={
+              courier.availability === "AVAILABLE"
+                ? "on-the-way"
+                : "empty-mailbox"
+            }
+            size="sm"
+          />
+          <p className="board-empty">
+            {courier.availability === "AVAILABLE"
+              ? t("board.courier.waiting")
+              : t("board.courier.offline")}
+          </p>
+        </div>
       )}
 
       {problem ? (

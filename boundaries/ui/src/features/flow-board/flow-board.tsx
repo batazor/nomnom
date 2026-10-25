@@ -11,7 +11,7 @@ import {
   useCanActAs,
   useRoleSession,
 } from "../../shared/session/roles";
-import { SidePanel } from "../../shared/ui";
+import { Illustration, SidePanel } from "../../shared/ui";
 import { RestaurantPicker } from "../browse-restaurants";
 import { OrderDetails } from "../view-order";
 import { RestaurantOrdering } from "../view-restaurant";
@@ -140,7 +140,10 @@ function Board() {
               ticket={(submit) => <OrderTicket submit={submit} />}
             />
           ) : (
-            <p className="board-empty">{t("board.customer.pick")}</p>
+            <div className="board-empty-state">
+              <Illustration name="order-food" size="sm" />
+              <p className="board-empty">{t("board.customer.pick")}</p>
+            </div>
           )}
         </BoardColumn>
 
@@ -155,7 +158,13 @@ function Board() {
               selectedOrderId={selectedOrderId}
             />
           ) : (
-            <p className="board-empty">{t(neededKey)}</p>
+            <div className="board-empty-state">
+              <Illustration name="take-out-boxes" size="sm" />
+              <div className="board-empty-state">
+                <Illustration name="delivery-truck" size="sm" />
+                <p className="board-empty">{t(neededKey)}</p>
+              </div>
+            </div>
           )}
         </KitchenDropColumn>
 

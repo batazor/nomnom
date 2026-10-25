@@ -1,0 +1,22 @@
+.illustration {
+  --illustration-ground: var(--color-border);
+
+  display: block;
+  color: var(--color-primary);
+}
+
+.illustration svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.illustration[data-size="sm"] {
+  width: min(9rem, 60%);
+  height: 6.5rem;
+}
+
+.illustration[data-size="md"] {
+  width: min(14rem, 80%);
+  height: 10rem;
+}

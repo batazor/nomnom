@@ -426,3 +426,9 @@
   inherits: false;
   initial-value: 0%;
 }
+
+.order-now > .illustration,
+.order-message > .illustration {
+  justify-self: center;
+  margin-inline: auto;
+}

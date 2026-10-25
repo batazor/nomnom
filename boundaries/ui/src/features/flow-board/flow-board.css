@@ -483,3 +483,11 @@ button.board-card-head {
     transition: background var(--motion-fast) var(--motion-easing);
   }
 }
+
+.board-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+  text-align: center;
+}
