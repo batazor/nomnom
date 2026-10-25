@@ -98,11 +98,13 @@ describe("view restaurant", () => {
     ).toHaveTextContent("2");
     expect(within(cart()).getByText("Предварительно")).toBeVisible();
     expect(screen.getByTestId("cart-subtotal")).toHaveTextContent(/1.?530/);
-    await user.click(
+    await user.hover(
       within(cart()).getByRole("button", { name: "Справка: Предварительно" }),
     );
     expect(
-      await screen.findByText(/Точную сумму ресторан рассчитает/),
+      within(cart()).getByRole("tooltip", {
+        name: /Точную сумму ресторан рассчитает/,
+      }),
     ).toBeVisible();
   });
 
