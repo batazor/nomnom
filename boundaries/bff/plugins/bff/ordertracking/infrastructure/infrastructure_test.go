@@ -159,6 +159,19 @@ func TestOrdersCancellationRefusalCarriesReason(t *testing.T) {
 	assert.Equal(t, applications.OutcomeRequested, outcome)
 }
 
+// AC-642: FAILED_PRECONDITION of GetOrder is an error of the read, not a
+// refusal of cancellation.
+func TestGetOrderFailedPreconditionIsNotACancellationRefusal(t *testing.T) {
+	server := &ordersServer{err: refusal("ORDER_STATE_CONFLICT")}
+	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
+	_, err := orders.GetOrder(customerContext(), "order-1")
+	require.Error(t, err)
+	var refused applications.CancellationRefused
+	assert.NotErrorAs(t, err, &refused)
+	assert.NotErrorIs(t, err, applications.ErrOrderNotFound)
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err), "the cause is kept for the log")
+}
+
 func TestOrdersUnavailableStaysAnError(t *testing.T) {
 	server := &ordersServer{err: status.Error(codes.Unavailable, "down")}
 	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))

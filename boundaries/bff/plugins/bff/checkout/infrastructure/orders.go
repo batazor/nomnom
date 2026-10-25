@@ -6,15 +6,13 @@ package infrastructure
 import (
 	"context"
 	"fmt"
-	"strings"
-
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
 	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpcerr"
 )
 
 // Orders implements applications.Orders.
@@ -51,40 +49,22 @@ func (o *Orders) PlaceOrder(ctx context.Context, input applications.Input) (stri
 // FAILED_PRECONDITION is a business refusal, NOT_FOUND an unknown restaurant
 // and INVALID_ARGUMENT a malformed order.
 func placeOrderError(err error) error {
-	st := status.Convert(err)
-	info := errorInfo(st)
-	switch st.Code() {
+	reason, metadata, hasInfo := grpcerr.Info(err)
+	switch status.Code(err) {
 	case codes.FailedPrecondition:
-		if info != nil {
+		if hasInfo {
 			return applications.PlacementRefused{
-				Reason:      info.GetReason(),
-				Codes:       split(info.GetMetadata()["codes"]),
-				MenuItemIDs: split(info.GetMetadata()["menu_item_ids"]),
+				Reason:      reason,
+				Codes:       grpcerr.List(metadata["codes"]),
+				MenuItemIDs: grpcerr.List(metadata["menu_item_ids"]),
 			}
 		}
 	case codes.NotFound:
-		if info.GetReason() == "RESTAURANT_NOT_FOUND" {
+		if reason == "RESTAURANT_NOT_FOUND" {
 			return applications.ErrRestaurantNotFound
 		}
 	case codes.InvalidArgument:
-		return fmt.Errorf("%w: %s", applications.ErrInvalidOrder, st.Message())
+		return fmt.Errorf("%w: %s", applications.ErrInvalidOrder, status.Convert(err).Message())
 	}
 	return fmt.Errorf("place order: %w", err)
-}
-
-func errorInfo(st *status.Status) *errdetails.ErrorInfo {
-	for _, detail := range st.Details() {
-		if info, ok := detail.(*errdetails.ErrorInfo); ok {
-			return info
-		}
-	}
-	return nil
-}
-
-// split reads a comma-separated metadata value; empty means none.
-func split(value string) []string {
-	if value == "" {
-		return nil
-	}
-	return strings.Split(value, ",")
 }
