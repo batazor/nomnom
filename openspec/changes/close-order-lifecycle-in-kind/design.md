@@ -69,7 +69,7 @@ Chainsaw-тест в `ops/kind/e2e/order-lifecycle/` с уникальными i
 4. Покупатель: `placeOrder` через BFF.
 5. Кухня: ожидает заказ в ListIncomingOrders → AcceptRestaurantOrder; заказ появляется в GetKitchenQueue.
 6. Курьер: ожидает предложение в ListAvailableDeliveryOffers → AcceptDeliveryOffer.
-7. Кухня: StartPreparation → MarkRestaurantOrderReady.
+7. Кухня: StartPreparation → MarkRestaurantOrderAssembled → MarkRestaurantOrderReady.
 8. Курьер: ConfirmPickup → ConfirmDelivery.
 9. Покупатель: `order(id)` в BFF имеет `status = DELIVERED`; milestones содержат `COURIER_ASSIGNED`, `PICKED_UP`, `DELIVERED`.
 
