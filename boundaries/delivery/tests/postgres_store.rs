@@ -567,11 +567,15 @@ async fn works_inside_a_current_thread_runtime() {
 
 #[test]
 fn expired_pending_offers_are_listed_by_deadline_and_stored_as_expired() {
-    let store = store();
+    // The query scans every pending offer: other tests of the shared database
+    // add offers with past deadlines (see waiting_deliveries_*), so a LIMIT 1
+    // batch could return theirs.
+    let store = PostgresStore::connect(&support::own_database())
+        .expect("connect")
+        .with_outbox_mapper(Arc::new(TestMapper));
     let courier_id = CourierId::new(unique("courier"));
     let delivery = new_delivery(&unique("delivery"));
     DeliveryRepository::add(&store, &delivery).expect("delivery");
-    // Deadlines far in the past keep other tests' offers out of the batch.
     let base = -2_000_000_000;
     let offer = |deadline: i64| {
         let offer = DeliveryOffer::new(
