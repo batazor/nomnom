@@ -1,14 +1,11 @@
 """Outbox → payments-relay → real Kafka (ADR 31).
 
-PostgreSQL runs in testcontainers (``tests/conftest.py``). The Kafka part is skipped
-unless ``KAFKA_BROKERS`` is set, e.g. ``KAFKA_BROKERS=localhost:59092`` against
-``docker run --rm -p 59092:9092 apache/kafka:4.1.0`` (single-node KRaft, topic
-auto-creation on). Tables are truncated before every test. The shutdown tests of
+PostgreSQL and Kafka (single-node KRaft, topic auto-creation on) run in testcontainers
+(``tests/conftest.py``). Tables are truncated before every test. The shutdown tests of
 ``KafkaPublisher`` need no broker: they point at an address nobody listens on.
 """
 
 import contextlib
-import os
 import socket
 import threading
 import time
@@ -52,7 +49,6 @@ from slices.payment.applications.operation_flow import (
 )
 from slices.payment.domains.payment import Money, OperationId, OrderId, Payment, PaymentId
 
-BROKERS = os.environ.get("KAFKA_BROKERS", "").strip()
 # Nothing listens here: a broker outage as librdkafka sees it.
 UNREACHABLE_BROKERS = "127.0.0.1:1"
 
@@ -294,8 +290,10 @@ class KafkaPublisherShutdownTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 1.5)
 
 
-@unittest.skipUnless(BROKERS, "KAFKA_BROKERS is not set")
+@pytest.mark.usefixtures("kafka")
 class KafkaRelayIntegrationTest(_DatabaseCase):
+    brokers: str
+
     def _authorize(self) -> Payment:
         payments = PostgresPaymentRepository(self.database)
         order = OrderId(f"order-{uuid.uuid4()}")
@@ -334,7 +332,7 @@ class KafkaRelayIntegrationTest(_DatabaseCase):
         event_id = str(row[0])
 
         store = PostgresOutboxStore(self.database, self.dsn)
-        publisher = KafkaPublisher(BROKERS, "payments-relay-test", delivery_timeout=20.0)
+        publisher = KafkaPublisher(self.brokers, "payments-relay-test", delivery_timeout=20.0)
         relay = OutboxRelay(store, publisher, batch_size=10, retention=timedelta(days=7))
         try:
             result = relay.run_once()
@@ -353,7 +351,7 @@ class KafkaRelayIntegrationTest(_DatabaseCase):
 
         consumer = Consumer(
             {
-                "bootstrap.servers": BROKERS,
+                "bootstrap.servers": self.brokers,
                 "group.id": f"payments-relay-test-{uuid.uuid4()}",
                 "auto.offset.reset": "earliest",
                 "enable.auto.commit": False,

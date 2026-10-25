@@ -141,11 +141,7 @@ Subject: `user` → `user:<id>`, `service` → `service:<id>`. Consistency `mini
 | `SPICEDB__INSECURE` | `false` | Plaintext gRPC без TLS — только kind и локальный запуск. |
 | `SPICEDB__TIMEOUT` | `2s` | Deadline одного `CheckPermission`, `<int>(ms|s|m)`, `> 0`. |
 
-Unit-тесты маппинга и fail-closed поведения с fake клиентом — `tests/test_spicedb_authorization.py`. Integration-тесты `tests/test_spicedb_integration.py` пропускаются без `SPICEDB_ENDPOINT`; против SpiceDB с `authorization/bootstrap.yaml` (plaintext, ключ `devkey`) они проверяют, что `service:orders-worker` имеет все payment permissions (AC-465), `service:bff` — ни одного, а недоступный endpoint даёт `AuthorizationUnavailableError`:
-
-```bash
-SPICEDB_ENDPOINT=localhost:50051 uv run python -m unittest tests.test_spicedb_integration
-```
+Unit-тесты маппинга и fail-closed поведения с fake клиентом — `tests/test_spicedb_authorization.py`. Integration-тесты `tests/test_spicedb_integration.py` против SpiceDB `authzed/spicedb:v1.57.0` в testcontainers (memory datastore, `authorization/bootstrap.yaml` plaintext, ключ `devkey`) проверяют, что `service:orders-worker` имеет все payment permissions (AC-465), `service:bff` — ни одного, а недоступный endpoint даёт `AuthorizationUnavailableError`.
 
 Helm values `spicedb.*` описаны в [ops/README.md](ops/README.md#authorization-spicedb).
 
@@ -223,21 +219,7 @@ Unit of Work охватывает только локальные изменен
 - Kafka headers совпадают с `orders/pkg/messaging/envelope.go`: `event_id`, `event_type`, `occurred_at` (RFC 3339 nano, UTC), `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent` (если был span), плюс `_watermill_message_uuid` = `event_id` для Watermill consumers.
 - Конфигурация relay: `DATABASE__URL` и `KAFKA__BROKERS` (через запятую) обязательны — пустое значение завершает процесс на старте; `KAFKA__CLIENT_ID` (`payments-relay`), `OUTBOX__POLL_INTERVAL` (`1s`), `OUTBOX__BATCH_SIZE` (`100`), `OUTBOX__RETENTION` (7 дней; общий формат длительности — `10080m`). Основной процесс к Kafka не подключается.
 - Метрики (OTel, `pkg/telemetry`, label `stream` = topic): `nomnom_outbox_pending_messages`, `nomnom_outbox_oldest_pending_age_seconds` (только активный экземпляр), `nomnom_outbox_publish_retries_total` (`error_class`: transient | permanent), `nomnom_outbox_publish_duration_seconds` и `nomnom_outbox_publish_lag_seconds` (`occurred_at` → подтверждение брокера; плюс `event_type`).
-- `tests/test_kafka_relay_integration.py` (PostgreSQL — testcontainers) при заданном `KAFKA_BROKERS` проводит Authorize через Outbox и relay в реальную Kafka и читает headers обратно:
-
-```bash
-docker run -d --rm --name payments-kafka -p 59092:9092 \
-  -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller \
-  -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
-  -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:59092 \
-  -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
-  -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
-  -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
-  -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
-  -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 apache/kafka:4.1.0
-KAFKA_BROKERS=localhost:59092 make test
-docker stop payments-kafka
-```
+- `tests/test_kafka_relay_integration.py` проводит Authorize через Outbox и relay в реальную Kafka (`apache/kafka:4.4.0` в testcontainers, как в `ops/kind`) и читает headers обратно.
 
 ## Observability
 
@@ -289,7 +271,7 @@ Histograms в секундах получают явные границы `SECON
 - Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePaymentError`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKeyError`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPendingError`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflictError`.
 - `DATABASE__URL` обязателен: пустое значение завершает процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). Лимиты пула — `DATABASE__MAX_CONNS` (`10`), `DATABASE__MIN_CONNS` (`0`, допустимо 0–1), `DATABASE__MAX_CONN_LIFETIME` (`30m`, psycopg_pool закрывает соединение на 0–5% раньше — jitter), `DATABASE__MAX_CONN_IDLE_TIME` (`5m`), `DATABASE__CONNECT_TIMEOUT` (`5s`, `connect_timeout` libpq в целых секундах), `DATABASE__ACQUIRE_TIMEOUT` (`5s`, ожидание соединения пула, затем `PoolTimeout`); недопустимое значение — ошибка startup. См. [Пулер PostgreSQL](#пулер-postgresql).
 - Репозитории содержат только `get`, поиск по уникальному натуральному ключу (`get_by_order`, `get_by_idempotency_key`), `add` и `save`. Проверка незавершённой операции в командах — application query-порт `PendingOperationQuery`, история операций — read-model порт `PaymentOperationHistory`; оба реализованы в `infrastructure/postgres/queries.py`. Инвариант «не более одной pending-операции» остаётся на уровне БД.
-- Тесты (`make test`, pytest) используют только реальный PostgreSQL: `tests/conftest.py` поднимает один контейнер `postgres:18.6-alpine3.24` через testcontainers на сессию и применяет миграции; классы подключают его через `@pytest.mark.usefixtures("postgres")`, данные изолируются `TRUNCATE` перед каждым тестом. In-memory адаптеров хранилища нет; `tests/payment_fakes.py` содержит только fakes провайдера, permissions, часов и идентификаторов. Нужен Docker.
+- Тесты (`make test`, pytest) используют только реальную инфраструктуру: `tests/conftest.py` поднимает через testcontainers по одному контейнеру на сессию — `postgres:18.6-alpine3.24` (с миграциями), `apache/kafka:4.4.0` и `authzed/spicedb:v1.57.0`; классы подключают их через `@pytest.mark.usefixtures("postgres" | "kafka" | "spicedb")`. Переменных окружения тесты не требуют и не пропускаются; данные изолируются `TRUNCATE` перед каждым тестом. In-memory адаптеров хранилища нет; `tests/payment_fakes.py` содержит только fakes провайдера, permissions, часов и идентификаторов. Нужен Docker.
 
 ### Пулер PostgreSQL
 
