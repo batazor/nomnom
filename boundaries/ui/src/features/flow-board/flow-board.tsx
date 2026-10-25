@@ -4,7 +4,7 @@ import { useQuery } from "urql";
 import { BoardOrderStatusDocument } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { SignInButton } from "../../shared/auth/sign-in";
+import { SignInButton, useSignInAvailable } from "../../shared/auth/sign-in";
 import {
   AsRole,
   type Role,
@@ -59,6 +59,10 @@ function Board() {
   const { t } = useI18n();
   const refreshBoard = useBoardRefresh();
   const session = useRoleSession();
+  const signInAvailable = useSignInAvailable();
+  const neededKey: MessageKey = signInAvailable
+    ? "board.session.neededSignIn"
+    : "board.session.needed";
   const canRunKitchen = useCanActAs("owner");
   const canDeliver = useCanActAs("courier");
   const orders = useBoardOrders();
@@ -84,7 +88,11 @@ function Board() {
 
       {session.kind === "unavailable" ? (
         <p className="board-session" role="status">
-          {t("board.session.unavailable")}
+          {t(
+            signInAvailable
+              ? "board.session.signIn"
+              : "board.session.unavailable",
+          )}
         </p>
       ) : null}
 
@@ -153,7 +161,7 @@ function Board() {
               selectedOrderId={selectedOrderId}
             />
           ) : (
-            <p className="board-empty">{t("board.session.needed")}</p>
+            <p className="board-empty">{t(neededKey)}</p>
           )}
         </BoardColumn>
 
@@ -166,7 +174,7 @@ function Board() {
               />
             </AsRole>
           ) : (
-            <p className="board-empty">{t("board.session.needed")}</p>
+            <p className="board-empty">{t(neededKey)}</p>
           )}
         </BoardColumn>
       </div>

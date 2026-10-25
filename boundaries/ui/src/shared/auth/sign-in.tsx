@@ -63,6 +63,11 @@ export function SignInProvider({
   );
 }
 
+// Whether users can sign in through the identity provider.
+export function useSignInAvailable(): boolean {
+  return useContext(SignInContext).config !== undefined;
+}
+
 // Access token of the user signed in as role, while it is valid.
 export function useSignedInToken(role: string): string | undefined {
   const { signIns } = useContext(SignInContext);

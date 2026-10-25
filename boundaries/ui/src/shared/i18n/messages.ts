@@ -212,6 +212,9 @@ export const messages = {
       "Не получилось. Проверьте соединение и попробуйте ещё раз.",
     "board.session.unavailable":
       "Нет доступа за кухню и курьера: не удалось получить тестовые входы. Каталог работает.",
+    "board.session.signIn":
+      "Тестовые входы не загрузились: войдите в колонках кухни и курьера своими пользователями.",
+    "board.session.neededSignIn": "Войдите, чтобы открыть колонку.",
     "board.session.needed":
       "Колонка станет доступна, когда загрузятся тестовые входы.",
     "board.kitchen.restaurant": "Ресторан",
@@ -477,6 +480,9 @@ export const messages = {
       "That did not work. Check your connection and try again.",
     "board.session.unavailable":
       "Kitchen and courier are unavailable: could not get the test sign-ins. The catalog works.",
+    "board.session.signIn":
+      "The test sign-ins did not load: sign in to the kitchen and courier columns as your own users.",
+    "board.session.neededSignIn": "Sign in to open this column.",
     "board.session.needed": "This column opens once the test sign-ins load.",
     "board.kitchen.restaurant": "Restaurant",
     "board.kitchen.none": "The owner has no restaurants yet.",

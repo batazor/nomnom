@@ -13,12 +13,13 @@ const publicSchemaPath = resolve(
 );
 
 // Origins the built UI talks to: the public BFF, the optional Faro collector
-// and the optional dev token issuer.
+// the optional dev token issuer and the optional OIDC provider.
 function connectOrigins(env: Record<string, string>): string[] {
   return [
     env.VITE_PUBLIC_GRAPHQL_URL,
     env.VITE_FARO_URL,
     env.VITE_DEV_TOKENS_URL,
+    env.VITE_OIDC_ISSUER,
   ]
     .filter(Boolean)
     .map((url) => new URL(url).origin);
