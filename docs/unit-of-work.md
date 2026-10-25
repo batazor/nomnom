@@ -460,7 +460,7 @@ Application-слой всех четырёх boundaries уже реализов�
 | `reassign_courier` | Да | Завершение текущего назначения + `Delivery` + освобождение курьера + [Outbox] |
 | `replan_delivery` | Да | Одна UoW под одной проверкой `ReplanDelivery`: [завершение назначения, как `reassign_courier`] + выбор кандидата + offer |
 | `confirm_pickup` | Да | `Delivery` + Outbox |
-| `confirm_delivery`, `report_delivery_failure` | Да | `Delivery` + освобождение `Courier` + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md)) |
+| `confirm_delivery`, `report_delivery_failure` | Да | `Delivery` + освобождение `Courier` и DELETE `delivery#courier` до commit + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md)) |
 | `cancel_delivery` | Да | `Delivery` (`waiting\|assigned → cancelled`) + освобождение `Courier`, если он был назначен + Outbox |
 | `create_delivery`, `offer_delivery` | Если публикуют событие или хранят idempotency key отдельно | Запись + [idempotency] + [Outbox] |
 | `register_courier`, `set_courier_availability`, `reject_delivery_offer`, `find_courier` | Нет по умолчанию | Одиночное изменение |
