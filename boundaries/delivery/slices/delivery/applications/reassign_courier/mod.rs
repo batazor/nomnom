@@ -1,0 +1,152 @@
+//! Reassign Courier: the assignment process or an authorized dispatcher ends
+//! the Courier Assignment of a not yet picked up Delivery. The delivery
+//! returns to waiting, the courier is released and the fact is written to the
+//! Outbox. The replacement search is started by the caller, not here.
+
+use crate::pkg::application::{Subject, UnitOfWork};
+use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryRepository};
+
+use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
+use super::error::DeliveryApplicationError;
+use super::outbox::{DeliveryOutbox, publish};
+use super::{delivery_id, load_courier, load_delivery};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Input {
+    pub delivery_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Output {
+    pub delivery_id: DeliveryId,
+    pub released_courier_id: CourierId,
+}
+
+pub struct Handler<'a, U: UnitOfWork> {
+    pub authorization: &'a dyn DeliveryAuthorization,
+    pub unit_of_work: &'a U,
+    pub deliveries: &'a dyn DeliveryRepository,
+    pub couriers: &'a dyn CourierRepository,
+    pub outbox: &'a dyn DeliveryOutbox,
+}
+
+impl<U: UnitOfWork> Handler<'_, U> {
+    pub fn execute(
+        &self,
+        subject: &Subject,
+        input: Input,
+    ) -> Result<Output, DeliveryApplicationError> {
+        let delivery_id = delivery_id(&input.delivery_id)?;
+        self.authorization.check(
+            subject,
+            DeliveryPermission::ReassignCourier,
+            &DeliveryResource::Delivery(delivery_id.clone()),
+        )?;
+
+        self.unit_of_work.run(|| {
+            let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
+            let assigned = delivery.courier_id().cloned();
+            delivery.unassign()?;
+            let released_courier_id = assigned.ok_or_else(|| {
+                DeliveryApplicationError::Internal("unassigned delivery had no courier".to_owned())
+            })?;
+            let mut courier = load_courier(self.couriers, &released_courier_id)?;
+            courier.release()?;
+
+            self.deliveries.save(&delivery)?;
+            self.couriers.save(&courier)?;
+            publish(self.outbox, delivery.pull_events())?;
+            Ok(Output {
+                delivery_id: delivery_id.clone(),
+                released_courier_id,
+            })
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::slices::courier::domains::courier::CourierStatus;
+    use crate::slices::delivery::applications::outbox::OutboxMessage;
+    use crate::slices::delivery::applications::test_support::{World, subject};
+    use crate::slices::delivery::domains::delivery::{
+        DeliveryError, DomainEvent, OrderId, State, TransitionError, Trigger,
+    };
+
+    fn handler(world: &World) -> Handler<'_, MemoryStore> {
+        Handler {
+            authorization: &world.authorization,
+            unit_of_work: &world.store,
+            deliveries: &world.store,
+            couriers: &world.store,
+            outbox: &world.store,
+        }
+    }
+
+    fn input() -> Input {
+        Input {
+            delivery_id: "delivery-1".to_owned(),
+        }
+    }
+
+    /// AC-331
+    #[test]
+    fn reassignment_returns_delivery_to_waiting_and_releases_courier() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+
+        let output = handler(&world)
+            .execute(&subject("dispatcher-1"), input())
+            .expect("reassigned");
+
+        assert_eq!(output.released_courier_id, CourierId::new("courier-1"));
+        let delivery = world.delivery("delivery-1");
+        assert_eq!(delivery.state(), State::Waiting);
+        assert_eq!(delivery.courier_id(), None);
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
+        assert_eq!(
+            world.store.outbox_messages(),
+            vec![OutboxMessage::delivery(
+                DomainEvent::CourierUnassignedFromDelivery {
+                    delivery_id: DeliveryId::new("delivery-1"),
+                    order_id: OrderId::new("order-of-delivery-1"),
+                    courier_id: CourierId::new("courier-1"),
+                }
+            )]
+        );
+    }
+
+    /// AC-332
+    #[test]
+    fn picked_up_delivery_cannot_be_reassigned() {
+        let world = World::new();
+        world.picked_up_delivery("delivery-1", "courier-1");
+
+        assert_eq!(
+            handler(&world).execute(&subject("dispatcher-1"), input()),
+            Err(DeliveryApplicationError::DeliveryPrecondition(
+                DeliveryError::Transition(TransitionError::InvalidTransition {
+                    from: State::PickedUp,
+                    trigger: Trigger::Unassign,
+                })
+            ))
+        );
+        assert_eq!(world.delivery_state("delivery-1"), State::PickedUp);
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
+        assert!(world.store.outbox_messages().is_empty());
+    }
+
+    #[test]
+    fn denied_subject_cannot_reassign() {
+        let world = World::with_authorization(StaticAuthorization::deny_all());
+        world.assigned_delivery("delivery-1", "courier-1");
+        assert_eq!(
+            handler(&world).execute(&subject("courier-2"), input()),
+            Err(DeliveryApplicationError::PermissionDenied)
+        );
+        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+    }
+}

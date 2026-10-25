@@ -1,0 +1,11 @@
+[server]
+port = 8083
+
+[management]
+# Технический порт с /health/startup, /health/live и /health/ready.
+port = 9083
+
+[shutdown]
+# Ожидание распространения not ready до остановки приёма работы.
+readiness_delay = "5s"
+drain_timeout = "20s"

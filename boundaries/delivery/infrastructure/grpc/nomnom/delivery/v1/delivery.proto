@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package nomnom.delivery.v1;
+
+enum DeliveryState {
+  DELIVERY_STATE_UNSPECIFIED = 0;
+  DELIVERY_STATE_SEARCHING_COURIER = 1;
+  DELIVERY_STATE_ASSIGNED = 2;
+  DELIVERY_STATE_PICKED_UP = 3;
+  DELIVERY_STATE_COMPLETED = 4;
+  DELIVERY_STATE_FAILED = 5;
+  DELIVERY_STATE_CANCELLED = 6;
+}
+
+message Delivery {
+  string delivery_id = 1;
+  string order_id = 2;
+  string courier_id = 3;
+  DeliveryState state = 4;
+}

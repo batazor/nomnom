@@ -1,0 +1,89 @@
+pub mod accept_delivery_offer;
+pub mod authorization;
+pub mod cancel_delivery;
+pub mod confirm_delivery;
+pub mod confirm_pickup;
+pub mod courier_locator;
+pub mod create_delivery;
+pub mod error;
+pub mod find_courier;
+pub mod list_available_delivery_offers;
+pub mod offer_delivery;
+pub mod outbox;
+pub mod policy;
+pub mod reassign_courier;
+pub mod reject_delivery_offer;
+pub mod replan_delivery;
+pub mod report_delivery_failure;
+
+#[cfg(test)]
+mod test_support;
+
+use crate::pkg::application::required_identifier;
+use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository};
+use crate::slices::delivery::domains::delivery::{
+    Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
+    DeliveryRepository, OrderId,
+};
+
+use error::{DeliveryApplicationError, InvalidDeliveryRequest};
+
+fn identifier(value: &str, field: &'static str) -> Result<String, DeliveryApplicationError> {
+    required_identifier(value)
+        .map(str::to_owned)
+        .ok_or(DeliveryApplicationError::InvalidRequest(
+            InvalidDeliveryRequest::EmptyIdentifier(field),
+        ))
+}
+
+fn delivery_id(value: &str) -> Result<DeliveryId, DeliveryApplicationError> {
+    identifier(value, "delivery_id").map(DeliveryId::new)
+}
+
+fn courier_id(value: &str) -> Result<CourierId, DeliveryApplicationError> {
+    identifier(value, "courier_id").map(CourierId::new)
+}
+
+fn offer_id(value: &str) -> Result<DeliveryOfferId, DeliveryApplicationError> {
+    identifier(value, "offer_id").map(DeliveryOfferId::new)
+}
+
+fn order_id(value: &str) -> Result<OrderId, DeliveryApplicationError> {
+    identifier(value, "order_id").map(OrderId::new)
+}
+
+fn load_delivery(
+    deliveries: &dyn DeliveryRepository,
+    id: &DeliveryId,
+) -> Result<Delivery, DeliveryApplicationError> {
+    deliveries
+        .get(id)?
+        .ok_or_else(|| DeliveryApplicationError::DeliveryNotFound(id.clone()))
+}
+
+fn load_delivery_by_order(
+    deliveries: &dyn DeliveryRepository,
+    order_id: &OrderId,
+) -> Result<Delivery, DeliveryApplicationError> {
+    deliveries
+        .find_by_order(order_id)?
+        .ok_or_else(|| DeliveryApplicationError::DeliveryForOrderNotFound(order_id.clone()))
+}
+
+fn load_courier(
+    couriers: &dyn CourierRepository,
+    id: &CourierId,
+) -> Result<Courier, DeliveryApplicationError> {
+    couriers
+        .get(id)?
+        .ok_or_else(|| DeliveryApplicationError::CourierNotFound(id.clone()))
+}
+
+fn load_offer(
+    offers: &dyn DeliveryOfferRepository,
+    id: &DeliveryOfferId,
+) -> Result<DeliveryOffer, DeliveryApplicationError> {
+    offers
+        .get(id)?
+        .ok_or_else(|| DeliveryApplicationError::DeliveryOfferNotFound(id.clone()))
+}

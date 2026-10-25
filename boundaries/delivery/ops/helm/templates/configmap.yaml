@@ -1,0 +1,17 @@
+{{- /*
+ConfigMap только для несекретной конфигурации. Секреты подключаются внешними
+Kubernetes Secret через envFrom или extraEnv[].valueFrom и этим chart не создаются.
+*/ -}}
+{{- if .Values.env -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels:
+    {{- include "delivery.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.env }}
+  {{ $key }}: {{ $value | toString | quote }}
+  {{- end }}
+{{- end }}

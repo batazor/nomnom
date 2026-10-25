@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package nomnom.delivery.v1;
+
+import "nomnom/delivery/v1/delivery.proto";
+
+service DeliveryService {
+  rpc GetCourierCurrentDelivery(GetCourierCurrentDeliveryRequest) returns (GetCourierCurrentDeliveryResponse);
+
+  // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
+  rpc CreateDelivery(CreateDeliveryRequest) returns (CreateDeliveryResponse);
+  rpc ReplanDelivery(ReplanDeliveryRequest) returns (ReplanDeliveryResponse);
+  rpc CancelDelivery(CancelDeliveryRequest) returns (CancelDeliveryResponse);
+}
+
+message GetCourierCurrentDeliveryRequest {
+  string courier_id = 1;
+}
+
+message GetCourierCurrentDeliveryResponse {
+  Delivery delivery = 1;
+}
+
+message CreateDeliveryRequest {
+  string order_id = 1;
+  string pickup_address = 2;
+  string dropoff_address = 3;
+}
+
+message CreateDeliveryResponse {
+  string delivery_id = 1;
+  // false when an identical earlier request already created it.
+  bool created = 2;
+}
+
+message ReplanDeliveryRequest {
+  string order_id = 1;
+}
+
+message ReplanDeliveryResponse {
+  string delivery_id = 1;
+  // Courier offered the Delivery by this replan; empty when no candidate was found.
+  string offered_courier_id = 2;
+}
+
+message CancelDeliveryRequest {
+  string order_id = 1;
+  string reason = 2;
+}
+
+message CancelDeliveryResponse {
+  string delivery_id = 1;
+  // true when the Delivery is cancelled, including a repeated cancellation.
+  bool cancelled = 2;
+  // Business reason when cancellation is rejected by state, for example already_picked_up.
+  string rejection_reason = 3;
+}

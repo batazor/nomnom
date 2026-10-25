@@ -1,0 +1,30 @@
+{{ .Chart.Name }}: release "{{ .Release.Name }}" установлен в namespace "{{ .Release.Namespace }}".
+
+Deployment: {{ include "common.names.fullname" . }}
+Service:    {{ include "common.names.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+Image:      {{ include "delivery.image" . | default "<не задан>" }}
+{{- if not .Values.image.repository }}
+
+ВНИМАНИЕ: image.repository пуст. Deployment не запустится, пока образ приложения не задан через values.
+{{- else if not .Values.image.tag }}
+
+ВНИМАНИЕ: image.tag пуст, Kubernetes использует tag "latest". Задайте image.tag явно для окружения.
+{{- end }}
+
+Состояние pod'ов:
+  kubectl --namespace {{ .Release.Namespace }} get pods \
+    -l "app.kubernetes.io/name={{ include "common.names.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+Service предназначен для internal gateway и технических механизмов Kubernetes; бизнес-вызовы
+между сервисами идут через gateway, а не напрямую в Service. Для локальной отладки:
+  kubectl --namespace {{ .Release.Namespace }} port-forward \
+    svc/{{ include "common.names.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+
+Health contract на техническом порту metrics ({{ .Values.management.port }}):
+  kubectl --namespace {{ .Release.Namespace }} port-forward \
+    deploy/{{ include "common.names.fullname" . }} {{ .Values.management.port }}:metrics
+  curl -i localhost:{{ .Values.management.port }}/health/ready
+{{- if not (and .Values.startupProbe.enabled .Values.livenessProbe.enabled .Values.readinessProbe.enabled) }}
+
+ВНИМАНИЕ: часть probes отключена в values; runtime contract требует startup, liveness и readiness.
+{{- end }}
