@@ -164,7 +164,7 @@ fn relationship_deleted_by_an_uncommitted_writer_is_not_resurrected() {
     assert!(!h.graph.contains(&released));
 }
 
-/// FR-563: between the two passes the courier was re-assigned and revoked
+/// FR-563, AC-760: between the two passes the courier was re-assigned and revoked
 /// again (two commits, the subject is the same on both passes). Each commit
 /// bumped the row version, so the second pass does not restore: the
 /// relationship it sees missing may come from the newer writer's DELETE.

@@ -40,12 +40,12 @@ OTel resource в Mimir: `job="nomnom/<service.name>"`, `instance=<service.instan
 
 ## gRPC (server и client через internal gateway)
 
-`otelgrpc` v0.72 (stats handler) в `orders`; grpc-node / tonic / grpcio — при подключении в других контекстах. Используются актуальные semconv RPC: `rpc.server.call.duration`/`rpc.client.call.duration` в секундах, статус — имя кода в `rpc_response_status_code`, сервис и метод — в `rpc_method`.
+Актуальные semconv RPC во всех контекстах: `rpc.server.call.duration`/`rpc.client.call.duration` в секундах, статус — имя кода в `rpc_response_status_code`, сервис и метод — в `rpc_method`. `orders` — `otelgrpc` (stats handler); `restaurants` — Connect server interceptor и grpc-js client interceptor; `payments` — собственные grpcio interceptors; `delivery` — tower layer сервера и клиент SpiceDB. Явные границы buckets в секундах.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `rpc_server_call_duration_seconds` | `rpc.server.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code` | `orders`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `rpc_method` — `Service/Method`; `rpc_response_status_code` — имя кода (`OK`, `NOT_FOUND`). Инструментации других runtime закрепляются на тех же semconv-именах. |
-| `rpc_client_call_duration_seconds` | `rpc.client.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code`, `error_type`, `server_address`, `server_port` | `orders-worker`: есть<br>`bff`: ожидается | Вызовы через internal gateway (ADR 15); `server_address`/`server_port` — адрес gateway. SpiceDB — в row Authorization. |
+| `rpc_client_call_duration_seconds` | `rpc.client.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code`, `error_type`, `server_address`, `server_port` | `orders-worker`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается<br>`bff`: ожидается | Вызовы через internal gateway (ADR 15); `server_address`/`server_port` — адрес gateway. SpiceDB — в row Authorization. |
 
 <a id="graphql"></a>
 
@@ -63,7 +63,7 @@ OTel resource в Mimir: `job="nomnom/<service.name>"`, `instance=<service.instan
 
 ## Runtime
 
-Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). Node.js: `@opentelemetry/instrumentation-runtime-node`. Python: `opentelemetry-instrumentation-system-metrics`. Rust: semconv process metrics; метрики tokio runtime не имеют semconv и не инвентаризированы.
+Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). Node.js: `@opentelemetry/instrumentation-runtime-node` и `process.*`/`v8js.memory.heap.limit` своими callbacks. Python и Rust: `process.cpu.time`, `process.memory.usage`, `process.thread.count` своими callbacks (Python — ещё `cpython.gc.collections`; Rust читает procfs), потому что готовые instrumentations пишут устаревшие labels. Метрики tokio runtime не имеют semconv и не инвентаризированы.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
@@ -117,7 +117,7 @@ Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver в `r
 
 ## Kafka: semconv messaging (не-Go контексты)
 
-Kafka-клиенты TypeScript, Rust и Python не выбраны; при выборе используется OTel messaging semconv.
+Kafka-клиенты: kafkajs (`restaurants`), confluent-kafka (`payments`), rdkafka (`delivery`). Trace context: Outbox хранит `traceparent` span, в котором событие записано; relay публикует в PRODUCER span `send <topic>`, header `traceparent` несёт его; consumer — CONSUMER span `process <topic>` дочерним. Метрики semconv messaging не инвентаризированы.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
@@ -162,7 +162,7 @@ SQL-метрики Forwarder-роли (опрос таблицы Outbox), не p
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_usecase_duration_seconds` | Use case decorator (`pkg/telemetry`) | histogram | `nomnom_usecase_name`, `nomnom_usecase_kind`, `nomnom_outcome`, `error_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | `kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`. |
+| `nomnom_usecase_duration_seconds` | Use case decorator (`pkg/telemetry`) | histogram | `nomnom_usecase_name`, `nomnom_usecase_kind`, `nomnom_outcome`, `error_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`. |
 
 <a id="uow"></a>
 

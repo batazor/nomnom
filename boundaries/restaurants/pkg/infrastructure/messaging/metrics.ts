@@ -9,10 +9,15 @@ const AGE_BUCKETS = [
   0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300, 900, 3600,
 ];
 
+// Attributes из registry ops/semconv (make semconv-check), те же, что у orders-consumer.
+const HANDLER = "nomnom.messaging.handler";
+const EVENT_TYPE = "nomnom.event.type";
+const DESTINATION = "messaging.destination.name";
+const ERROR_CLASS = "nomnom.error.class";
+
 /**
- * Метрики consumer по docs/observability/metric-inventory.md, те же имена,
- * что у orders-consumer. Labels: `handler_name`, `event_type`, `stream`,
- * `error_class`; без event и aggregate id.
+ * Метрики consumer по docs/observability/metric-inventory.md: OTel-имена registry
+ * ops/semconv, в Mimir — те же, что у orders-consumer; без event и aggregate id.
  */
 export class OtelConsumerMetrics implements ConsumerMetrics {
   readonly #duration;
@@ -23,7 +28,7 @@ export class OtelConsumerMetrics implements ConsumerMetrics {
 
   constructor(meter: Meter = metrics.getMeter("restaurants-consumer")) {
     this.#duration = meter.createHistogram(
-      "nomnom_messaging_process_duration_seconds",
+      "nomnom.messaging.process.duration",
       {
         description:
           "Processing of one inbound message, including retries; error_class only on failure.",
@@ -31,21 +36,20 @@ export class OtelConsumerMetrics implements ConsumerMetrics {
         advice: { explicitBucketBoundaries: DURATION_BUCKETS },
       },
     );
-    this.#retries = meter.createCounter(
-      "nomnom_messaging_retry_attempts_total",
-      { description: "In-process retries of transient failures." },
-    );
-    this.#poison = meter.createCounter(
-      "nomnom_messaging_poison_messages_total",
-      {
-        description: "Messages sent to <stream>.dlq.",
-      },
-    );
-    this.#duplicates = meter.createCounter("nomnom_inbox_duplicates_total", {
+    this.#retries = meter.createCounter("nomnom.messaging.retry.attempts", {
+      description: "In-process retries of transient failures.",
+      unit: "{attempt}",
+    });
+    this.#poison = meter.createCounter("nomnom.messaging.poison.messages", {
+      description: "Messages sent to <stream>.dlq.",
+      unit: "{message}",
+    });
+    this.#duplicates = meter.createCounter("nomnom.inbox.duplicates", {
+      unit: "{message}",
       description:
         "Messages whose (consumer, event_id) is already in the Inbox.",
     });
-    this.#age = meter.createHistogram("nomnom_messaging_message_age_seconds", {
+    this.#age = meter.createHistogram("nomnom.messaging.message.age", {
       description: "now - occurred_at when processing starts.",
       unit: "s",
       advice: { explicitBucketBoundaries: AGE_BUCKETS },
@@ -55,7 +59,7 @@ export class OtelConsumerMetrics implements ConsumerMetrics {
   processed(labels: MessageLabels, durationS: number, errorClass?: string) {
     this.#duration.record(durationS, {
       ...attributes(labels),
-      ...(errorClass === undefined ? {} : { error_class: errorClass }),
+      ...(errorClass === undefined ? {} : { [ERROR_CLASS]: errorClass }),
     });
   }
 
@@ -64,7 +68,7 @@ export class OtelConsumerMetrics implements ConsumerMetrics {
   }
 
   poisoned(labels: MessageLabels, errorClass: string) {
-    this.#poison.add(1, { ...attributes(labels), error_class: errorClass });
+    this.#poison.add(1, { ...attributes(labels), [ERROR_CLASS]: errorClass });
   }
 
   duplicate(labels: MessageLabels) {
@@ -77,7 +81,7 @@ export class OtelConsumerMetrics implements ConsumerMetrics {
 }
 
 const attributes = (labels: MessageLabels) => ({
-  handler_name: labels.handlerName,
-  event_type: labels.eventType,
-  stream: labels.stream,
+  [HANDLER]: labels.handlerName,
+  [EVENT_TYPE]: labels.eventType,
+  [DESTINATION]: labels.stream,
 });
