@@ -1,12 +1,8 @@
 # Customer UI
 
-Customer web-приложение BiteRoute находится в отдельной application boundary `boundaries/ui/`. Оно отвечает за будущие пользовательские сценарии поиска ресторанов, меню, корзины и заказов, но не владеет backend-доменной моделью и не обращается к внутренним сервисам напрямую.
+Customer web-приложение BiteRoute находится в отдельной application boundary `boundaries/ui/`. Оно отвечает за пользовательские сценарии каталога ресторанов, меню, корзины и заказов, но не владеет backend-доменной моделью и не обращается к внутренним сервисам напрямую.
 
-Поверх foundation добавлен один комплексный customer journey preview: restaurant/menu selection, checkout summary и активная доставка с customer-facing courier context одновременно видны на route `/`. Он нужен для визуальной проверки связности будущего продукта, а не задаёт production navigation.
-
-Preview полностью работает на typed fixtures и локальном presentation state. Он не выполняет GraphQL business operations, payment, authentication, geolocation или courier worker actions; показанные totals, адрес, order stage и courier являются демонстрационными данными, а backend contract остаётся source of truth.
-
-Preview намеренно не дробится механически на под-компоненты. Customer operations уже есть в BFF schema; preview заменяется production features по сценариям — `browse-restaurants`, `cart`/`place-order` и `view-order` — каждая со своими operations рядом с кодом, а `customer-journey-preview` удаляется. Первой начата `view-order` (см. «MSW-моки customer API»).
+Customer journey работает на публичном GraphQL-контракте BFF: каталог открытых ресторанов на `/`, меню с корзиной и оформлением заказа на `/restaurants/:restaurantId` и экран заказа на `/orders/:orderId`. Каждый сценарий — отдельная feature со своими operations рядом с кодом (см. «Каталог, корзина и оформление» и «Экран заказа»).
 
 ## Запуск
 
@@ -38,7 +34,20 @@ Customer-схема BFF зафиксирована раньше resolvers (OpenS
 | `order-live` | каждый запрос продвигает заказ на следующий шаг; окно отмены открыто 5 минут |
 | любой другой | `null` (отсутствующий или чужой заказ) |
 
+Каталог: `restaurants` отдаёт только рестораны, принимающие заказы (как `ListRestaurants` по умолчанию), — семь открытых, то есть две страницы при размере страницы 6; `restaurant(id)` отдаёт и закрытую «Ночную пекарню» (`restaurant-night-bakery`). В меню «Кухни №8» (`restaurant-kitchen-8`) позиция «Гёдза с уткой» недоступна, у «Кофейни на углу» (`restaurant-corner-coffee`) меню не опубликовано.
+
 Mutations: `placeOrder` идемпотентен по `idempotencyKey` и возвращает problems `RESTAURANT_NOT_ACCEPTING_ORDERS` и `ORDER_ITEM_UNAVAILABLE`; `requestOrderCancellation` идемпотентен по `requestId` и возвращает `ALREADY_CANCELLED`, `ORDER_ALREADY_FINAL` или `CANCELLATION_WINDOW_EXPIRED`.
+
+## Каталог, корзина и оформление
+
+На моках сценарий начинается с `http://localhost:4173/`.
+
+- `browse-restaurants` (`src/features/browse-restaurants/`, route `/`): operation `BrowseRestaurants`; открытые рестораны страницами по 6 через `restaurants(first, after)`, «Показать ещё» запрашивает страницу после `endCursor` и переводит фокус на первый новый ресторан. Ошибка следующей страницы оставляет загруженные рестораны и предлагает повтор.
+- `view-restaurant` (`src/features/view-restaurant/`, route `/restaurants/:restaurantId`): operation `ViewRestaurant`; меню, недоступные позиции видны с пометкой «Нет в наличии», но кнопка добавления неактивна. Закрытый ресторан показывает меню без возможности заказать, `null` — «Ресторан не найден».
+- Корзина (`cart.ts`) — local-first, одна на ресторан: в `localStorage` под ключом `nomnom.cart.v1.<restaurantId>` хранятся только `menuItemId` и количество, цены всегда берутся из текущего меню. Каждый доступ к storage обёрнут в `try/catch`: без storage корзина живёт в памяти страницы. Позиции, которых больше нет в меню, при открытии удаляются.
+- Сумма корзины подписана как предварительная и считается точно по десятичным строкам `Money.amount` через `BigInt` (`money.ts`), без float; авторитетная сумма — в заказе от `placeOrder`.
+- `place-order` (`src/features/place-order/`): operation `PlaceOrder`, поле адреса и действие «Оформить заказ». `idempotencyKey` (`crypto.randomUUID()`) создаётся на попытку и переиспользуется при ручном повторе после transport error; изменение корзины или адреса начинает новую попытку с новым ключом; автоматического retry нет. Problems с `menuItemIds` показываются у этих позиций корзины, problems без позиций — над формой; корзина при этом не очищается. Успех очищает корзину и открывает `/orders/:id`. Другие features импортируют `place-order` только через `index.ts`.
+- Адрес доставки не сохраняется в браузере.
 
 ## Экран заказа
 
@@ -79,7 +88,7 @@ npm run check
 ```text
 src/
   app/                 bootstrap, providers, router и layout
-  features/            feature-owned GraphQL operations и будущие UI slices
+  features/            vertical UI slices с их GraphQL operations
   shared/
     config/            validated public runtime config
     graphql/           client, generated types и mocks
@@ -90,7 +99,7 @@ src/
 ops/                   будущие runtime/deployment artifacts
 ```
 
-Feature-specific code размещается внутри feature. Глобальные `components/`, `hooks/`, `services/` и `utils/` не создаются; код переносится в `shared/` только после реального повторного использования.
+Feature-specific code размещается внутри feature; другая feature использует её только через `index.ts`. Глобальные `components/`, `hooks/`, `services/` и `utils/` не создаются; код переносится в `shared/` только после реального повторного использования.
 
 ## GraphQL boundary
 

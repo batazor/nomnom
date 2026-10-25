@@ -18,7 +18,7 @@ UI не является источником бизнес-правил, authori
 
 ## Feature organization
 
-Будущие vertical UI slices: `browse-restaurants`, `view-restaurant`, `cart`, `place-order`, `view-order`, `order-history`, `cancel-order`. GraphQL documents, UI, tests и presentation mapping одной feature colocated внутри `src/features/<feature>/`.
+Vertical UI slices: `browse-restaurants` (`/`), `view-restaurant` с корзиной (`/restaurants/:restaurantId`), `place-order` и `view-order` с отменой (`/orders/:orderId`); позже — `order-history`. GraphQL documents, UI, tests и presentation mapping одной feature colocated внутри `src/features/<feature>/`. Если одна feature встраивает другую (`view-restaurant` показывает `place-order` под корзиной), она импортирует только публичный `index.ts` этой feature.
 
 `src/shared/` содержит только реально переиспользуемые механизмы: UI façade, tokens, GraphQL transport/generated artifacts, config и i18n. Глобальные `components/`, `hooks/`, `services/` и `utils/` запрещены. Feature не импортирует внутренности другой feature.
 
@@ -41,6 +41,8 @@ Layout начинается с mobile viewport, не создаёт horizontal o
 ## State и GraphQL
 
 Server state принадлежит GraphQL client cache. Local UI state хранит только modal/selection/preferences, form state принадлежит форме. Глобальный store-копия GraphQL entities не вводится.
+
+Корзина — local-first, одна на ресторан: feature `view-restaurant` хранит в `localStorage` только `menuItemId` и количество (ключ `nomnom.cart.v1.<restaurantId>`), без цен и персональных данных; адрес доставки не сохраняется. Каждый доступ к storage обёрнут в `try/catch`, без storage корзина работает в памяти. Цены берутся из текущего меню, сумма корзины считается точно по десятичным строкам и показывается как предварительная; авторитетны состав и итог заказа из `placeOrder`. Серверная корзина и перенос между устройствами — вне текущего scope.
 
 Operations colocated в `features/**/*.graphql`; документы и TypeScript-типы генерируются `graphql-codegen` client preset из публичной schema. Runtime client сейчас provisional urql и скрыт provider/transport boundary; окончательный выбор между urql и Apollo принимается после реальных cache, pagination, offline и auth-refresh требований.
 
@@ -74,7 +76,7 @@ Default обновления — bounded polling только пока экра�
 
 Блок отмены показывается, пока не истёк `Order.cancellation.availableUntil`. `cancellation` BFF заполняет только после того, как `orders` начнёт публиковать окно отмены в `GetOrder`; до этого поле `null` и отмена не предлагается. `requestOrderCancellation` получает `requestId`, созданный на попытку и переиспользуемый при ручном retry.
 
-Checkout attempt создаёт idempotency key один раз и переиспользует его при ручном retry. Формат ключа и header/input определяет backend contract; UI не изобретает их самостоятельно.
+Checkout attempt создаёт `idempotencyKey` (`PlaceOrderInput`) один раз через `crypto.randomUUID()` и переиспользует его при ручном retry после transport error; изменение корзины или адреса начинает новую попытку. Problems `placeOrder` с `menuItemIds` показываются у позиций корзины, без них — над формой; корзина очищается только после оформленного заказа.
 
 ## Observability
 
@@ -97,7 +99,7 @@ Playwright и Storybook не добавляются пустыми зависи�
 - Vite SPA или SSR/SSG после SEO, metadata, Web Vitals и latency discovery;
 - окончательный GraphQL client;
 - OIDC/session и token storage contract;
-- local-first или server-backed cart и merge/identity semantics;
+- server-backed cart и merge/identity semantics после появления customer session;
 - canonical publication public GraphQL schema для CI;
 - polling либо subscriptions/SSE после измерений;
 - browser error reporting/OTel SDK и privacy/consent policy;
