@@ -7,3 +7,9 @@ env:
   KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
   TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
   TEMPORAL__NAMESPACE: default
+
+# ADR 8: Inbox, Order и Outbox consumer'а — в PostgreSQL orders (Secret создаёт
+# scripts/postgres.sh). Миграции выполняет init container release orders и этого release.
+postgres:
+  dsnSecret:
+    name: orders-postgres

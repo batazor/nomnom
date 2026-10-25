@@ -111,22 +111,30 @@ deploy:
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
                   -l gateway.envoyproxy.io/owning-gateway-name=internal
                 test "$(k -n envoy-gateway-system get service internal-gateway -o jsonpath='{.spec.type}')" = ClusterIP
-        # ADR 27: JWKS кластера для проверки projected ServiceAccount tokens (до установки charts).
-        - host:
-            command: ["sh", "-c", "../scripts/identity-jwks.sh \"$SKAFFOLD_KUBE_CONTEXT\""]
-        # ADR 18: schema, grants и preshared key SpiceDB (до установки charts).
-        - host:
-            command: ["sh", "-c", "../scripts/authz.sh \"$SKAFFOLD_KUBE_CONTEXT\""]
-        # ADR 8: пароль и DSN PostgreSQL orders (до установки charts).
-        - host:
-            command: ["sh", "-c", "../scripts/postgres.sh \"$SKAFFOLD_KUBE_CONTEXT\""]
   # Bounded contexts ставятся собственными charts (ADR 12) с values тестового окружения.
   # BFF chart не устанавливается: образ BFF ещё не определён (ADR 10).
   helm:
     hooks:
       before:
+        # Skaffold применяет rawYaml после helm, поэтому всё, что charts читают при старте,
+        # создаётся здесь: namespaces, JWKS (ADR 27), bootstrap и preshared key SpiceDB
+        # (ADR 18), Secrets и сам PostgreSQL orders (ADR 8). Повторный rawYaml идемпотентен.
+        - host:
+            command:
+              - sh
+              - -c
+              - |
+                set -eu
+                k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
+                k apply -f ../manifests/base/namespaces.yaml
+                ../scripts/identity-jwks.sh "$SKAFFOLD_KUBE_CONTEXT"
+                ../scripts/authz.sh "$SKAFFOLD_KUBE_CONTEXT"
+                ../scripts/postgres.sh "$SKAFFOLD_KUBE_CONTEXT"
+                k apply -f ../manifests/authz/spicedb.yaml -f ../manifests/data/postgres-orders.yaml
+                k -n nomnom-authz wait deployment/spicedb --for=condition=Available --timeout=300s
+                k -n nomnom-data wait deployment/postgres-orders --for=condition=Available --timeout=300s
         # Kafka и Temporal dev server для orders-consumer (ADR 28) нужны до установки charts:
-        # consumer подключается к ним при startup. Skaffold применяет rawYaml после helm.
+        # consumer подключается к ним при startup.
         - host:
             command:
               - sh
