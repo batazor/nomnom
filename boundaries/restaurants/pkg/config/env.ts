@@ -40,16 +40,15 @@ export const MONGODB_POOL_SIZE_LIMIT = 100;
  * Processes of restaurants that open a MongoClient; each sizes its own pool
  * to its concurrency.
  */
-export type MongoDbProcess = "api" | "relay" | "consumer" | "migrate";
+export type MongoDbProcess = "api" | "consumer" | "migrate";
 /**
  * Default `maxPoolSize` per process: the API serves concurrent RPCs, the
- * relay polls one batch at a time (plus lease renewal and cleanup), the
  * consumer processes one message at a time with its Inbox transaction, and
  * migrate runs sequential DDL.
  */
 export const DEFAULT_MONGODB_MAX_POOL_SIZE: Readonly<
   Record<MongoDbProcess, number>
-> = Object.freeze({ api: 20, relay: 3, consumer: 5, migrate: 2 });
+> = Object.freeze({ api: 20, consumer: 5, migrate: 2 });
 export const RECONCILER_INTERVAL_ENV = "RECONCILER__INTERVAL";
 export const DEFAULT_RECONCILER_INTERVAL = "5m";
 export const RECONCILER_GRACE_ENV = "RECONCILER__GRACE";
@@ -66,15 +65,7 @@ export const DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION = "reject";
 
 export const KAFKA_BROKERS_ENV = "KAFKA__BROKERS";
 export const KAFKA_CLIENT_ID_ENV = "KAFKA__CLIENT_ID";
-export const DEFAULT_KAFKA_CLIENT_ID = "restaurants-relay";
-export const OUTBOX_RETENTION_ENV = "OUTBOX__RETENTION";
-export const DEFAULT_OUTBOX_RETENTION = "7d";
-export const OUTBOX_POLL_INTERVAL_ENV = "OUTBOX__POLL_INTERVAL";
-export const DEFAULT_OUTBOX_POLL_INTERVAL = "1s";
-export const OUTBOX_BATCH_SIZE_ENV = "OUTBOX__BATCH_SIZE";
-export const DEFAULT_OUTBOX_BATCH_SIZE = 100;
-export const OUTBOX_LEASE_TTL_ENV = "OUTBOX__LEASE_TTL";
-export const DEFAULT_OUTBOX_LEASE_TTL = "15s";
+export const DEFAULT_KAFKA_CLIENT_ID = "restaurants-consumer";
 export const KAFKA_CONSUMER_GROUP_ENV = "KAFKA__CONSUMER_GROUP";
 export const DEFAULT_KAFKA_CONSUMER_GROUP = "restaurants";
 export const KAFKA_INITIAL_OFFSET_ENV = "KAFKA__INITIAL_OFFSET";

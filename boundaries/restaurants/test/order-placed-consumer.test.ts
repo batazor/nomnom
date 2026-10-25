@@ -4,13 +4,15 @@ import test from "node:test";
 import { create, toBinary } from "@bufbuild/protobuf";
 
 import { OrderPlacedSchema } from "../infrastructure/grpc/gen/nomnom/orders/v1/events_pb.js";
-import type { InboundMessage } from "../pkg/infrastructure/messaging/envelope.ts";
+import type {
+  InboundMessage,
+  IntegrationMessage,
+} from "../pkg/infrastructure/messaging/envelope.ts";
 import { MessageProcessor } from "../pkg/infrastructure/messaging/processor.ts";
 import {
   INBOX_COLLECTION,
   MongoInbox,
 } from "../pkg/infrastructure/mongodb/inbox.ts";
-import type { IntegrationMessage } from "../pkg/infrastructure/outbox/relay.ts";
 import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {

@@ -187,22 +187,25 @@ func (g *generator) dependencies(sc Scope) []Panel {
 func (g *generator) kafka(sc Scope) []Panel {
 	k := g.opts.Kafka
 	lag := Sum("topic", `kafka_consumergroup_lag{consumergroup="`+k.ConsumerGroup+`"}`)
-	var consumed, produced, failures []Query
+	// Outbox публикует Debezium (ADR 37): метрики коннектора контекста из Kafka Connect.
+	connector := `{name="` + k.Connector + `"}`
+	produced := []Query{{Sum("", "rate(debezium_metrics_TotalNumberOfEventsSeen"+connector+"[$__rate_interval])"), "events"}}
+	cdcLag := []Query{{Max("", "debezium_metrics_MilliSecondsBehindSource"+connector) + " / 1000", "behind source"}}
+	var consumed, failures []Query
 	var processed Query
 	if k.Watermill {
 		consumed = []Query{{Sum("handler_name, acked", sc.Rate("watermill_consumer_subscriber_messages_received_total")), "{{handler_name}} acked={{acked}}"}}
-		produced = []Query{{Sum("publisher_name, success", sc.Rate("watermill_outbox_forwarder_publish_time_seconds_count")), "{{publisher_name}} success={{success}}"}}
 		failures = []Query{{Sum("handler_name", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "{{handler_name}}"}}
 		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
 	} else {
 		consumed = []Query{{Sum("messaging_destination_name", sc.Rate("messaging_client_consumed_messages_total")), "{{messaging_destination_name}}"}}
-		produced = []Query{{Sum("messaging_destination_name", sc.Rate("messaging_client_sent_messages_total")), "{{messaging_destination_name}}"}}
 		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
 	}
 	failures = append(failures, Query{Sum("nomnom_error_class", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`)), "{{nomnom_error_class}}"})
 	return []Panel{
 		{Title: "Consumed", Unit: "ops", Queries: consumed},
-		{Title: "Produced (Outbox Forwarder)", Unit: "ops", Queries: produced},
+		{Title: "Produced (Outbox, Debezium)", Unit: "ops", Queries: produced,
+			Description: "События Outbox, которые коннектор `" + k.Connector + "` прочитал из журнала базы и отправил в Kafka (ADR 37)."},
 		{Title: "Processing failures", Unit: "ops", Queries: failures, Traces: true,
 			Description: "Технические сбои обработки по `error_class` (permanent, deserialization, transient); business rejections подтверждаются (ack) и показаны в Service health отдельно."},
 		{Title: "Consumer lag", Unit: "short", Queries: []Query{{lag, "{{topic}}"}},
@@ -216,9 +219,8 @@ func (g *generator) kafka(sc Scope) []Panel {
 			Description: "`now − occurred_at` в момент обработки."},
 		{Title: "Inbox: processed / duplicates", Unit: "ops", Queries: []Query{processed, {Sum("", sc.Rate("nomnom_inbox_duplicates_total")), "duplicates"}},
 			Description: "Duplicate = конфликт уникальности `(consumer, event_id)` в Inbox; failures — панель Processing failures."},
-		{Title: "Outbox pending", Unit: "short", Queries: []Query{{Sum("messaging_destination_name", sc.Gauge("nomnom_outbox_pending_messages")), "{{messaging_destination_name}}"}}},
-		{Title: "Outbox oldest pending age", Unit: "s", Queries: []Query{{Max("messaging_destination_name", sc.Gauge("nomnom_outbox_oldest_pending_age_seconds")), "{{messaging_destination_name}}"}}},
-		{Title: "Outbox publish retries", Unit: "ops", Queries: []Query{{Sum("messaging_destination_name, nomnom_error_class", sc.Rate("nomnom_outbox_publish_retries_total")), "{{messaging_destination_name}} {{nomnom_error_class}}"}}},
+		{Title: "Outbox CDC lag", Unit: "s", Queries: cdcLag,
+			Description: "Отставание коннектора `" + k.Connector + "` от журнала базы: время от commit записи Outbox до её чтения."},
 	}
 }
 

@@ -1,5 +1,5 @@
 // Package messaging owns the Watermill/Kafka transport conventions shared by
-// orders publishers, forwarders and consumers.
+// orders publishers and consumers.
 package messaging
 
 import (
@@ -36,19 +36,6 @@ func NewEventMessage(eventID, orderID string, payload []byte) (*message.Message,
 	msg.Metadata.Set(PartitionKeyMetadata, orderID)
 	msg.Metadata.Set(AggregateIDMetadata, orderID)
 	return msg, nil
-}
-
-// NewPublisher publishes Integration Events keyed by aggregate_id, so events of
-// one aggregate stay in one partition. The Forwarder publishes the original
-// message after unwrapping its Outbox envelope, so the key is read from there.
-func NewPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (*watermillkafka.Publisher, error) {
-	return newPublisher(cfg, logger, func(_ string, msg *message.Message) (string, error) {
-		key := msg.Metadata.Get(AggregateIDMetadata)
-		if key == "" {
-			return "", fmt.Errorf("message %q has no %s metadata", msg.UUID, AggregateIDMetadata)
-		}
-		return key, nil
-	})
 }
 
 // NewDeadLetterPublisher publishes messages rejected by the consumer to the DLQ

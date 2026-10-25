@@ -105,7 +105,7 @@ func EventName(event proto.Message) string {
 }
 
 // ErrPublishOutsideOutbox is returned by EnvelopeMarshaler.Marshal: Integration
-// Events leave orders only through the Outbox and the Forwarder (ADR 13).
+// Events leave orders only through the Outbox and Debezium (ADR 13, ADR 37).
 var ErrPublishOutsideOutbox = errors.New("integration events are published only through the outbox")
 
 // EnvelopeMarshaler is the cqrs.CommandEventMarshaler of inbound Integration

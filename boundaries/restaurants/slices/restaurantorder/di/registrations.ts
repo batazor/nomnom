@@ -89,7 +89,7 @@ export interface RestaurantOrderDependencies {
 export interface RestaurantOrderCradle {
   /**
    * Only Kitchen Order facts with a contract in events.proto are written to
-   * the Outbox (explicit allowlist); restaurants-relay publishes them (ADR 31).
+   * the Outbox (explicit allowlist); Debezium publishes them (ADR 37).
    * Composed by `aggregate_type` with the other slices in di/restaurants.ts.
    */
   readonly restaurantOrderOutboxEventMapper: OutboxEventMapper;

@@ -8,19 +8,11 @@ import {
   DEFAULT_CONSUMER_RETRY_MAX_INTERVAL,
   DEFAULT_KAFKA_CONSUMER_GROUP,
   DEFAULT_KAFKA_INITIAL_OFFSET,
-  DEFAULT_OUTBOX_BATCH_SIZE,
-  DEFAULT_OUTBOX_LEASE_TTL,
-  DEFAULT_OUTBOX_POLL_INTERVAL,
-  DEFAULT_OUTBOX_RETENTION,
   DEFAULT_RECONCILER_GRACE,
   DEFAULT_RECONCILER_INTERVAL,
   DEFAULT_RECONCILER_PAGE_SIZE,
   KAFKA_CONSUMER_GROUP_ENV,
   KAFKA_INITIAL_OFFSET_ENV,
-  OUTBOX_BATCH_SIZE_ENV,
-  OUTBOX_LEASE_TTL_ENV,
-  OUTBOX_POLL_INTERVAL_ENV,
-  OUTBOX_RETENTION_ENV,
   RECONCILER_GRACE_ENV,
   RECONCILER_INTERVAL_ENV,
   RECONCILER_PAGE_SIZE_ENV,
@@ -37,16 +29,6 @@ export interface ReconcilerConfig {
   readonly graceMs: number;
   /** ReadRelationships page size. */
   readonly pageSize: number;
-}
-
-/** Polling relay Outbox (ADR 31). */
-export interface OutboxRelayConfig {
-  /** Опубликованные записи старше этого срока удаляются. */
-  readonly retentionMs: number;
-  readonly pollIntervalMs: number;
-  readonly batchSize: number;
-  /** Срок lease единственного активного relay; продлевается каждый цикл. */
-  readonly leaseTtlMs: number;
 }
 
 /** Kafka consumer restaurants-consumer (ADR 11, ADR 28). */
@@ -86,37 +68,6 @@ export function loadReconcilerConfig(
         DEFAULT_RECONCILER_PAGE_SIZE,
     );
   return Object.freeze({ intervalMs, graceMs, pageSize });
-}
-
-export function loadOutboxRelayConfig(
-  environment: Record<string, string | undefined>,
-): OutboxRelayConfig {
-  const positive = (name: string) =>
-    durationSchema.refine((value) => value > 0, `${name} must be positive`);
-  const retentionMs = positive(OUTBOX_RETENTION_ENV).parse(
-    environment[OUTBOX_RETENTION_ENV]?.trim() || DEFAULT_OUTBOX_RETENTION,
-  );
-  const pollIntervalMs = positive(OUTBOX_POLL_INTERVAL_ENV).parse(
-    environment[OUTBOX_POLL_INTERVAL_ENV]?.trim() ||
-      DEFAULT_OUTBOX_POLL_INTERVAL,
-  );
-  const leaseTtlMs = positive(OUTBOX_LEASE_TTL_ENV).parse(
-    environment[OUTBOX_LEASE_TTL_ENV]?.trim() || DEFAULT_OUTBOX_LEASE_TTL,
-  );
-  if (leaseTtlMs <= pollIntervalMs) {
-    throw new Error(
-      `${OUTBOX_LEASE_TTL_ENV} must be longer than ${OUTBOX_POLL_INTERVAL_ENV}`,
-    );
-  }
-  const batchSize = z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(10_000)
-    .parse(
-      environment[OUTBOX_BATCH_SIZE_ENV]?.trim() || DEFAULT_OUTBOX_BATCH_SIZE,
-    );
-  return Object.freeze({ retentionMs, pollIntervalMs, batchSize, leaseTtlMs });
 }
 
 const CONSUMER_GROUP = /^[A-Za-z0-9._-]{1,249}$/;

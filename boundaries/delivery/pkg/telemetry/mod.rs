@@ -20,15 +20,12 @@
 
 pub mod db;
 pub mod log;
-pub mod messaging;
 pub mod process;
 pub mod rpc;
 mod trace;
 pub mod usecase;
 
-pub use trace::{
-    TRACEPARENT, context_of_traceparent, current_traceparent, extract_context, traceparent_of,
-};
+pub use trace::{current_traceparent, extract_context, traceparent_of};
 
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::MeterProvider as _;

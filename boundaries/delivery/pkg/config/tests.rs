@@ -433,50 +433,6 @@ fn rejects_zero_port() {
 }
 
 #[test]
-fn outbox_and_kafka_defaults() {
-    let config = load_toml("outbox-defaults", "").expect("load config");
-    assert_eq!(config.outbox, OutboxConfig::default());
-    assert_eq!(
-        config.outbox.retention,
-        Duration::from_secs(7 * 24 * 60 * 60)
-    );
-    assert_eq!(config.kafka.client_id, DEFAULT_KAFKA_CLIENT_ID);
-    // Основной процесс стартует без Kafka; relay требует brokers.
-    assert!(config.kafka.require().is_err());
-}
-
-#[test]
-fn loads_outbox_and_kafka_from_toml_and_validates() {
-    let config = load_toml(
-        "outbox-toml",
-        "[kafka]\nbrokers = \"kafka:9092\"\n[outbox]\nretention = \"1d\"\nbatch_size = 10\n",
-    )
-    .expect("load config");
-    assert_eq!(config.kafka.brokers, "kafka:9092");
-    assert!(config.kafka.require().is_ok());
-    assert_eq!(config.outbox.retention, Duration::from_secs(24 * 60 * 60));
-    assert_eq!(config.outbox.batch_size, 10);
-
-    let error =
-        load_toml("outbox-zero-batch", "[outbox]\nbatch_size = 0\n").expect_err("zero batch");
-    assert!(error.to_string().contains("batch_size"));
-}
-
-#[test]
-fn outbox_env_overrides_file_values() {
-    let builder = configure_settings(ConfigLoader::builder(), &OUTBOX_SETTINGS, |name| {
-        (name == OUTBOX_RETENTION_ENV).then(|| "2d".to_owned())
-    })
-    .expect("configure");
-    let config: OutboxConfig = builder
-        .build()
-        .expect("build")
-        .get("outbox")
-        .expect("outbox");
-    assert_eq!(config.retention, Duration::from_secs(2 * 24 * 60 * 60));
-}
-
-#[test]
 fn database_pool_defaults_and_env_overrides() {
     let defaults: DatabaseConfig =
         configure_settings(ConfigLoader::builder(), &DATABASE_SETTINGS, |_| None)

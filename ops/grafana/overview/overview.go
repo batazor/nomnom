@@ -72,6 +72,8 @@ type Kafka struct {
 	Watermill     bool
 	ConsumerGroup string
 	Consumers     []string
+	// Connector — коннектор Debezium, который публикует Outbox контекста (ADR 37).
+	Connector string
 }
 
 type Temporal struct {

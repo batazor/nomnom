@@ -32,7 +32,7 @@ var migrations embed.FS
 // One connection would deadlock.
 const migrateMaxConns = 2
 
-// Store shares one pool between the API, worker, consumer and forwarder of
+// Store shares one pool between the API, worker and consumer of
 // orders. The transaction of a Unit of Work travels in context.
 type Store struct {
 	pool    *pgxpool.Pool
@@ -93,7 +93,7 @@ func (s *Store) Close() {
 	s.pool.Close()
 }
 
-// Pool exposes the pool for the Outbox forwarder subscriber.
+// Pool exposes the pool for test fixtures and read-only checks.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // Migrate applies the embedded migrations under a PostgreSQL advisory lock,

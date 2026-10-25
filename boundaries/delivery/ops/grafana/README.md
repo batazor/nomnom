@@ -77,16 +77,14 @@ JSON — артефакт генератора: правки вносятся в
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
 | Consumed | TODO | [`messaging_client_consumed_messages_total`](../../../../docs/observability/metric-inventory.md#messaging-otel) |
-| Produced (Outbox Forwarder) | TODO | [`messaging_client_sent_messages_total`](../../../../docs/observability/metric-inventory.md#messaging-otel) |
+| Produced (Outbox, Debezium) | TODO | [`debezium_metrics_TotalNumberOfEventsSeen`](../../../../docs/observability/metric-inventory.md#cdc) |
 | Processing failures | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Consumer lag | TODO | [`kafka_consumergroup_lag`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Retries and poison (DLQ) | TODO | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_retry_attempts_total`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Processing duration p95 by event_type | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Message age at processing p95 | TODO | [`nomnom_messaging_message_age_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Inbox: processed / duplicates | TODO | [`nomnom_inbox_duplicates_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Outbox pending | TODO | [`nomnom_outbox_pending_messages`](../../../../docs/observability/metric-inventory.md#outbox) |
-| Outbox oldest pending age | TODO | [`nomnom_outbox_oldest_pending_age_seconds`](../../../../docs/observability/metric-inventory.md#outbox) |
-| Outbox publish retries | TODO | [`nomnom_outbox_publish_retries_total`](../../../../docs/observability/metric-inventory.md#outbox) |
+| Outbox CDC lag | TODO | [`debezium_metrics_MilliSecondsBehindSource`](../../../../docs/observability/metric-inventory.md#cdc) |
 
 ### Transactions
 
@@ -124,7 +122,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 16 из 47. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 16 из 45. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 

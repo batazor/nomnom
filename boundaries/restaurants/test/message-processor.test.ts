@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { IntegrationMessage } from "../pkg/infrastructure/messaging/envelope.ts";
 import {
   type InboundMessage,
   PermanentMessageError,
@@ -16,7 +17,6 @@ import {
   type InboxDocument,
   MongoInbox,
 } from "../pkg/infrastructure/mongodb/inbox.ts";
-import type { IntegrationMessage } from "../pkg/infrastructure/outbox/relay.ts";
 import { createTestDatabase } from "./support/mongodb.ts";
 
 const TOPIC = "orders.v1.order-events";

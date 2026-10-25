@@ -7,9 +7,8 @@ import {
 } from "../../pkg/infrastructure/mongodb/migrate.ts";
 import { inboxCollectionSpec } from "../../pkg/infrastructure/mongodb/inbox.ts";
 import {
+  dropOutboxRelayMigration,
   outboxCollectionSpec,
-  outboxCountersCollectionSpec,
-  outboxLeasesCollectionSpec,
 } from "../../pkg/infrastructure/mongodb/outbox.ts";
 import { restaurantOrderCollectionSpec } from "../../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
 import { menuCollectionSpec } from "../../slices/menu/infrastructure/mongodb/menus.ts";
@@ -21,8 +20,6 @@ export const COLLECTIONS: readonly CollectionSpec[] = [
   menuCollectionSpec,
   restaurantOrderCollectionSpec,
   outboxCollectionSpec,
-  outboxCountersCollectionSpec,
-  outboxLeasesCollectionSpec,
   inboxCollectionSpec,
 ];
 
@@ -31,7 +28,9 @@ export const COLLECTIONS: readonly CollectionSpec[] = [
  * format change bumps the document `schemaVersion`, readers accept the
  * previous version until the migration has run everywhere.
  */
-export const MIGRATIONS: readonly DocumentMigration[] = [];
+export const MIGRATIONS: readonly DocumentMigration[] = [
+  dropOutboxRelayMigration,
+];
 
 export const migrateRestaurantsDatabase = (
   db: Db,

@@ -1,7 +1,6 @@
-// Event Envelope входящего Integration Event (ADR 25, ADR 28): Kafka headers
-// того же формата, что публикуют orders (pkg/messaging/envelope.go) и
-// restaurants-relay (pkg/infrastructure/outbox/relay.ts). Payload — Protobuf
-// контракта; event_type — полное имя сообщения.
+// Event Envelope Integration Event (ADR 25, ADR 28): Kafka headers того же
+// формата, что Debezium собирает из записей Outbox контекстов (ADR 37). Payload
+// — Protobuf контракта; event_type — полное имя сообщения.
 
 /** Kafka message, прочитанное consumer'ом, без зависимостей от клиента Kafka. */
 export type InboundMessage = Readonly<{
@@ -12,6 +11,19 @@ export type InboundMessage = Readonly<{
   value: Uint8Array;
   headers: Readonly<Record<string, string>>;
 }>;
+
+/** Исходящее Kafka message: dead letter consumer'а. */
+export type IntegrationMessage = Readonly<{
+  topic: string;
+  key: string;
+  value: Uint8Array;
+  headers: Readonly<Record<string, string>>;
+}>;
+
+export interface MessagePublisher {
+  /** Завершается только после подтверждения брокера (acks=all). */
+  publish(message: IntegrationMessage): Promise<void>;
+}
 
 export type Envelope = Readonly<{
   eventId: string;

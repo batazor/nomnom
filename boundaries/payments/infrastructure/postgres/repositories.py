@@ -6,10 +6,10 @@ means a concurrent modification.
 """
 
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Any
 
 from psycopg import errors
-from psycopg.types.json import Jsonb
 
 from pkg.application import AggregateRef, ConcurrencyConflictError
 from slices.payment.domains.payment import (
@@ -29,12 +29,14 @@ from slices.payment.domains.payment import (
 )
 
 from .database import PostgresDatabase
-from .outbox import OutboxEventMapper, outbox_event_id, outbox_metadata
+from .outbox import OutboxEventMapper, outbox_event_id, outbox_traceparent
 
 PAYMENT_ORDER_UNIQUE = "payments_order_id_key"
 OPERATION_KEY_UNIQUE = "payment_operations_idempotency_key_key"
 OPERATION_PENDING_UNIQUE = "payment_operations_one_pending"
 PROVIDER_CONSUMER = "payment-provider"
+# ADR 37: an Outbox row is needed only until Debezium reads its insert from the WAL.
+OUTBOX_RETENTION = timedelta(hours=1)
 
 _PAYMENT_COLUMNS = "id, order_id, amount, currency, state, provider_reference, version"
 _OPERATION_COLUMNS = (
@@ -233,10 +235,11 @@ def _operation(row: tuple[Any, ...]) -> PaymentOperation:
 
 
 class PostgresPaymentOutbox:
-    """Writes Integration Events into ``outbox`` inside the active Unit of Work (ADR 31).
+    """Writes Integration Events into ``payments_outbox`` inside the active Unit of Work.
 
-    The injected ``mapper`` decides which Domain Events have a published contract;
-    events it maps to ``None`` are not written.
+    Debezium reads the inserts from the WAL (ADR 37); a row carries every field of the
+    Kafka message. The injected ``mapper`` decides which Domain Events have a published
+    contract; events it maps to ``None`` are not written.
     """
 
     def __init__(self, database: PostgresDatabase, mapper: OutboxEventMapper) -> None:
@@ -244,16 +247,28 @@ class PostgresPaymentOutbox:
         self._mapper = mapper
 
     def add(self, aggregate: AggregateRef, events: Sequence[PaymentDomainEvent]) -> None:
-        """Write the mapped events with the current ``traceparent``; unmapped events are skipped."""
+        """Write the mapped events with the current ``traceparent``; unmapped events are skipped.
+
+        Rows older than ``OUTBOX_RETENTION`` are deleted in the same transaction: the WAL
+        keeps an insert for Debezium independently of the row, and the publication
+        ignores deletes.
+        """
         messages = [m for m in (self._mapper.map(aggregate, e) for e in events) if m is not None]
         if not messages:
             return
-        metadata = Jsonb(outbox_metadata())
+        traceparent = outbox_traceparent()
         with self._db.connection() as conn, conn.cursor() as cursor:
+            # SKIP LOCKED: concurrent Units of Work do not wait on the same old rows.
+            cursor.execute(
+                "DELETE FROM payments_outbox WHERE event_id IN ("
+                "SELECT event_id FROM payments_outbox WHERE created_at < now() - %s "
+                "FOR UPDATE SKIP LOCKED)",
+                (OUTBOX_RETENTION,),
+            )
             cursor.executemany(
-                "INSERT INTO outbox (event_id, event_type, aggregate_type, aggregate_id, "
-                "aggregate_version, topic, payload, metadata) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                "INSERT INTO payments_outbox (event_id, event_type, aggregate_type, "
+                "aggregate_id, aggregate_version, occurred_at, topic, payload, traceparent) "
+                "VALUES (%s, %s, %s, %s, %s, now(), %s, %s, %s)",
                 [
                     (
                         outbox_event_id(aggregate, m.event_type),
@@ -263,7 +278,7 @@ class PostgresPaymentOutbox:
                         aggregate.version,
                         m.topic,
                         m.payload,
-                        metadata,
+                        traceparent,
                     )
                     for m in messages
                 ],

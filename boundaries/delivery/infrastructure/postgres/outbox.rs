@@ -1,10 +1,13 @@
 //! Transactional Outbox of [`PostgresStore`] (ADR 13, ADR 31): the Domain
-//! Event → Integration Event mapper and the stable `event_id`.
+//! Event → Integration Event mapper and the stable `event_id`. Debezium
+//! publishes the inserted rows from the WAL (ADR 37): a row carries every
+//! field of the Kafka message, and each Outbox write deletes rows older than
+//! an hour in the same statement.
 
 use uuid::Uuid;
 
 use crate::pkg::persistence::RepositoryError;
-use crate::pkg::telemetry::{TRACEPARENT, current_traceparent};
+use crate::pkg::telemetry::current_traceparent;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 
 use super::{PostgresStore, storage_error};
@@ -36,8 +39,6 @@ pub struct OutboxRecord {
     pub event_type: String,
     /// Protobuf payload of the contract.
     pub payload: Vec<u8>,
-    /// `traceparent`, `causation_id`.
-    pub metadata: serde_json::Value,
 }
 
 /// Mapper Domain Event → Integration Event. `None` — the event has no
@@ -55,21 +56,28 @@ impl OutboxMapper for NoIntegrationEvents {
     }
 }
 
-/// Adds the `traceparent` of the current span (the gRPC server span of the
-/// command) to the row metadata; the relay sends it as a Kafka header. The
-/// process consumes no Integration Events, so there is no `causation_id`.
-fn with_trace_context(metadata: serde_json::Value) -> serde_json::Value {
-    let Some(traceparent) = current_traceparent() else {
-        return metadata;
+/// `traceparent` column of a row: the current span (the gRPC server span of
+/// the command), `''` without one; Debezium sends it as the `traceparent`
+/// header. The process consumes no Integration Events, so there is no
+/// `causation_id`.
+pub(super) fn row_traceparent() -> String {
+    current_traceparent().unwrap_or_default()
+}
+
+/// Retention of the Outbox (ADR 37) as a CTE `expired` of every Outbox
+/// write: rows older than an hour go in the transaction of the next write,
+/// without a background job; the replication slot keeps the WAL of rows
+/// Debezium has not read yet, and the publication ignores deletes. `SKIP
+/// LOCKED`: concurrent writes neither wait for nor deadlock on each other's
+/// deletes.
+macro_rules! expire_outbox {
+    () => {
+        "expired AS (
+            DELETE FROM delivery_outbox WHERE event_id IN (
+                SELECT event_id FROM delivery_outbox
+                WHERE created_at < now() - interval '1 hour'
+                FOR UPDATE SKIP LOCKED))"
     };
-    let mut metadata = match metadata {
-        serde_json::Value::Object(fields) => fields,
-        _ => serde_json::Map::new(),
-    };
-    metadata
-        .entry(TRACEPARENT)
-        .or_insert(serde_json::Value::String(traceparent));
-    serde_json::Value::Object(metadata)
 }
 
 /// Kafka topic of Courier Change Notifications (ADR 36): the BFF Router turns
@@ -78,21 +86,21 @@ fn with_trace_context(metadata: serde_json::Value) -> serde_json::Value {
 pub const COURIER_CHANGES_TOPIC: &str = "delivery.v1.courier-changes";
 
 /// SQL tail that writes the Change Notification of every courier id a CTE
-/// `changed (id)` returns: a write and its notification are one statement,
-/// atomic with or without a Unit of Work. `$1` is the row metadata.
-pub(super) const NOTIFY_CHANGED_COURIERS: &str = "
+/// `changed (id)` returns: a write, its notification and the Outbox
+/// retention are one statement, atomic with or without a Unit of Work. `$1`
+/// is the [`row_traceparent`].
+pub(super) const NOTIFY_CHANGED_COURIERS: &str = concat!(
+    ", ",
+    expire_outbox!(),
+    "
     INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
-        aggregate_version, topic, payload, metadata)
+        aggregate_version, topic, payload, traceparent)
     SELECT gen_random_uuid(), 'CourierChanged', 'Courier', id, 0,
         'delivery.v1.courier-changes',
         convert_to(json_build_object('__typename', 'Courier', 'id', id)::text, 'UTF8'),
-        $1::jsonb
-    FROM changed";
-
-/// Row metadata of a Change Notification: the current `traceparent`.
-pub(super) fn notification_metadata() -> String {
-    with_trace_context(serde_json::json!({})).to_string()
-}
+        $1
+    FROM changed"
+);
 
 impl PostgresStore {
     /// Writes the Change Notification of `Courier(courier_id)` next to the
@@ -102,17 +110,19 @@ impl PostgresStore {
     /// UUIDv7 rather than the aggregate-version UUIDv5 of Integration Events.
     pub(super) fn notify_courier(&self, courier_id: &str) -> Result<(), RepositoryError> {
         let payload = serde_json::json!({ "__typename": "Courier", "id": courier_id }).to_string();
-        let metadata = notification_metadata();
-        sql!(self, "INSERT", |connection| sqlx::query(
-            "INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
-                 aggregate_version, topic, payload, metadata)
-             VALUES ($1::uuid, 'CourierChanged', 'Courier', $2, 0, $3, $4, $5::jsonb)"
-        )
+        sql!(self, "INSERT", |connection| sqlx::query(concat!(
+            "WITH ",
+            expire_outbox!(),
+            "
+             INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
+                 aggregate_version, topic, payload, traceparent)
+             VALUES ($1::uuid, 'CourierChanged', 'Courier', $2, 0, $3, $4, $5)"
+        ))
         .bind(Uuid::now_v7().to_string())
         .bind(courier_id)
         .bind(COURIER_CHANGES_TOPIC)
         .bind(payload.into_bytes())
-        .bind(&metadata)
+        .bind(row_traceparent())
         .execute(connection))
         .map(drop)
     }
@@ -145,12 +155,14 @@ impl DeliveryOutbox for PostgresStore {
             &record.event_type,
         )
         .to_string();
-        let metadata = with_trace_context(record.metadata).to_string();
-        sql!(self, "INSERT", |connection| sqlx::query(
-            "INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
-                 aggregate_version, topic, payload, metadata)
-             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8::jsonb)"
-        )
+        sql!(self, "INSERT", |connection| sqlx::query(concat!(
+            "WITH ",
+            expire_outbox!(),
+            "
+             INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
+                 aggregate_version, topic, payload, traceparent)
+             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)"
+        ))
         .bind(&id)
         .bind(&record.event_type)
         .bind(message.aggregate_type)
@@ -158,7 +170,7 @@ impl DeliveryOutbox for PostgresStore {
         .bind(version)
         .bind(OUTBOX_TOPIC)
         .bind(&record.payload)
-        .bind(&metadata)
+        .bind(row_traceparent())
         .execute(connection))
         .map(drop)
     }
@@ -174,15 +186,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn metadata_without_a_span_is_unchanged() {
-        assert_eq!(
-            with_trace_context(serde_json::json!({})),
-            serde_json::json!({})
-        );
+    fn traceparent_without_a_span_is_empty() {
+        assert_eq!(row_traceparent(), "");
     }
 
     #[test]
-    fn metadata_carries_the_current_traceparent() {
+    fn traceparent_is_the_current_span() {
         let span = SpanContext::new(
             TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").expect("trace id"),
             SpanId::from_hex("00f067aa0ba902b7").expect("span id"),
@@ -192,11 +201,8 @@ mod tests {
         );
         let _guard = Context::new().with_remote_span_context(span).attach();
         assert_eq!(
-            with_trace_context(serde_json::json!({"causation_id": "c-1"})),
-            serde_json::json!({
-                "causation_id": "c-1",
-                "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-            })
+            row_traceparent(),
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
         );
     }
 }

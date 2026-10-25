@@ -10,7 +10,6 @@
     "lint": "biome lint .",
     "proto:check": "cd ../.. && buf format --diff --exit-code && buf lint && buf build",
     "start": "node cmd/restaurants/main.ts",
-    "relay": "node cmd/restaurants-relay/main.ts",
     "consumer": "node cmd/restaurants-consumer/main.ts",
     "typecheck": "tsc --project tsconfig.test.json",
     "test": "node --test --test-global-setup=test/support/global-containers.ts test/*.test.ts",

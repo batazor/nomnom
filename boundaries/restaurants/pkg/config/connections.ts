@@ -82,9 +82,9 @@ export type MongoDbPoolConfig = Readonly<{
 export type MongoDbConfig = Readonly<{ enabled: false }> | MongoDbEnabledConfig;
 
 /**
- * Kafka брокеры relay (ADR 31) и consumer (ADR 28). `enabled: false` при
- * пустом `KAFKA__BROKERS`; restaurants-relay и restaurants-consumer в этом
- * случае не стартуют, основной процесс к Kafka не подключается.
+ * Kafka брокеры consumer (ADR 28). `enabled: false` при пустом
+ * `KAFKA__BROKERS`; restaurants-consumer в этом случае не стартует, основной
+ * процесс к Kafka не подключается (Outbox публикует Debezium, ADR 37).
  */
 export type KafkaConfig =
   | Readonly<{ enabled: false }>
@@ -186,7 +186,7 @@ export function loadMongoDbPoolConfig(
     maxPoolSize,
     DEFAULT_MONGODB_MIN_POOL_SIZE,
   );
-  // Default не превышает маленький пул (migrate, relay); явное значение больше
+  // Default не превышает маленький пул (migrate); явное значение больше
   // maxPoolSize бессмысленно и отклоняется.
   const maxConnecting = integer(
     MONGODB_MAX_CONNECTING_ENV,

@@ -23,6 +23,7 @@ chart сейчас не используется. Решение зафикси�
 | `Service` (`ClusterIP`, порт `8084`) | Backend target для internal gateway и технических механизмов Kubernetes. |
 | `ServiceAccount` | Отдельный аккаунт с `automountServiceAccountToken: false`. |
 | `ConfigMap` | Несекретная конфигурация из `env`; создаётся только если `env` не пуст. |
+| `ConfigMap` + `Job` (hook) | Регистрация коннектора Debezium в Kafka Connect при `cdc.enabled` (см. [CDC Outbox](#cdc-outbox)). |
 
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
 к `Service` напрямую и проходят через internal gateway. Ingress, `HTTPRoute`/`GRPCRoute`,
@@ -98,7 +99,7 @@ OpenTelemetry ([ADR 9](../../../docs/adr/0009-использовать-opentelem
 ```yaml
 telemetry:
   endpoint: http://alloy.nomnom-observability.svc.cluster.local:4317  # OTEL_EXPORTER_OTLP_ENDPOINT
-  serviceName: ""        # OTEL_SERVICE_NAME; пусто — имя процесса (payments, payments-relay)
+  serviceName: ""        # OTEL_SERVICE_NAME; пусто — имя процесса (payments)
   resourceAttributes:
     deployment.environment.name: local
 ```
@@ -200,13 +201,13 @@ helm template payments ops/helm \
 
 Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). DSN передаётся из внешнего Secret `database.urlSecret.name`/`key` (env `DATABASE__URL`); без него переменная не задаётся и процесс не стартует. При `database.migrate: true` Pod получает init container `python -m entrypoints.payments_migrate.main` (forward-only SQL-миграции под advisory lock).
 
-Пулер перед базой — только session mode; Σ(replicas × maxConns) всех release плюс lock-соединение relay должна помещаться в `pool_size` пулера ([README](../README.md#пулер-postgresql)). Длительности — `<int>(ms|s|m)`, chart отклоняет другой формат и `minConns` вне 0–1.
+Пулер перед базой — только session mode; replicas × maxConns должна помещаться в `pool_size` пулера ([README](../README.md#пулер-postgresql)). Длительности — `<int>(ms|s|m)`, chart отклоняет другой формат и `minConns` вне 0–1.
 
 | Значение | По умолчанию | Назначение |
 | --- | --- | --- |
 | `database.urlSecret.name` | `""` | Secret с DSN; создаётся развёртыванием, не chart. |
 | `database.urlSecret.key` | `dsn` | Ключ в Secret. |
-| `database.maxConns` | `10` | Размер пула процесса (`DATABASE__MAX_CONNS`); relay — `2` в `values-relay.yaml`, init container migrate — `1`. |
+| `database.maxConns` | `10` | Размер пула процесса (`DATABASE__MAX_CONNS`); init container migrate — `1`. |
 | `database.minConns` | `1` | Минимум соединений пула, 0 или 1 (`DATABASE__MIN_CONNS`); migrate — `0`. |
 | `database.maxConnLifetime` | `30m` | Lifetime соединения (`DATABASE__MAX_CONN_LIFETIME`), jitter 0–5% добавляет psycopg_pool. |
 | `database.maxConnIdleTime` | `5m` | Закрытие простаивающего соединения (`DATABASE__MAX_CONN_IDLE_TIME`). |
@@ -220,6 +221,31 @@ helm template payments ops/helm \
 helm upgrade --install payments ops/helm \
   --set database.urlSecret.name=payments-postgres
 ```
+
+## CDC Outbox
+
+Outbox `payments_outbox` публикует коннектор Debezium `payments-outbox` в Kafka Connect
+([ADR 37](../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)); процесса relay нет.
+При `cdc.enabled` hook Job после install/upgrade кладёт конфигурацию в Kafka Connect
+(`PUT <cdc.connectUrl>/connectors/payments-outbox/config`: создаёт или обновляет) и повторяет
+запрос, пока Connect поднимается. Конфигурация — `cdc.connector.config` (контракт Outbox:
+publication и слот `payments_outbox`, топик из поля `topic`, ключ `aggregate_id`, заголовки
+Event Envelope) поверх `cdc.database`. `cdc.database.password` — ссылка config provider
+Connect (`${dir:/etc/nomnom/cdc:payments-password}`), а не пароль: Secret `cdc-credentials`
+монтирует сам Connect. Publication создаёт миграция `00002_cdc_outbox.sql`, слот — коннектор;
+PostgreSQL нужен `wal_level = logical`.
+
+```bash
+helm template payments ops/helm \
+  --set cdc.enabled=true \
+  --set cdc.connectUrl=http://kafka-connect.nomnom-infra.svc.cluster.local:8083 \
+  --set cdc.database.hostname=postgres-payments.nomnom-data.svc.cluster.local \
+  --set cdc.database.name=payments --set cdc.database.user=payments \
+  --set 'cdc.database.password=${dir:/etc/nomnom/cdc:payments-password}'
+```
+
+Состояние коннектора — `GET /connectors/payments-outbox/status`; запись, нарушающая контракт,
+останавливает его до `POST /connectors/payments-outbox/restart?includeTasks=true`.
 
 ## Ресурсы
 

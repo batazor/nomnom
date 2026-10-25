@@ -4,7 +4,7 @@ use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMete
 
 use super::*;
 
-const STAT: &str = "4242 (delivery relay) S 1 4242 4242 0 -1 4194560 2391 0 0 0 \
+const STAT: &str = "4242 (delivery migrate) S 1 4242 4242 0 -1 4194560 2391 0 0 0 \
                     250 75 0 0 20 0 9 0 12345 123456789 3000 18446744073709551615";
 const STATUS: &str = "Name:\tdelivery\nVmPeak:\t  200000 kB\nVmRSS:\t   12000 kB\nThreads:\t9\n";
 

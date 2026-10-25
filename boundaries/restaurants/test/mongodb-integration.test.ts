@@ -14,16 +14,14 @@ import {
   type MongoDbConnection,
 } from "../pkg/infrastructure/mongodb/client.ts";
 import {
+  dropOutboxRelayMigration,
   MongoOutbox,
   MongoOutboxOutsideUnitOfWorkError,
   OUTBOX_COLLECTION,
-  OUTBOX_LEASES_COLLECTION,
   type OutboxEventMapper,
-  type OutboxLeaseDocument,
   outboxEventId,
   uuidV5,
 } from "../pkg/infrastructure/mongodb/outbox.ts";
-import { MongoOutboxRelayStore } from "../pkg/infrastructure/mongodb/outbox-relay-store.ts";
 import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
@@ -135,11 +133,54 @@ describe("MongoDB storage", () => {
       "menus",
       "restaurant_orders",
       OUTBOX_COLLECTION,
-      "outbox_counters",
-      "outbox_leases",
     ]) {
       assert.ok(collections.includes(name), name);
     }
+    const outboxIndexes = await mongo.db
+      .collection(OUTBOX_COLLECTION)
+      .indexes();
+    assert.deepEqual(outboxIndexes.map((index) => index.name).sort(), [
+      "_id_",
+      "outbox_created_at_ttl",
+      "outbox_event_id_unique",
+    ]);
+    assert.equal(
+      outboxIndexes.find((index) => index.name === "outbox_created_at_ttl")
+        ?.expireAfterSeconds,
+      3600,
+    );
+  });
+
+  test("CDC migration removes what the polling relay left behind", async () => {
+    const outbox = mongo.db.collection(OUTBOX_COLLECTION);
+    await mongo.db.createCollection("outbox_counters");
+    await mongo.db.createCollection("outbox_leases");
+    await outbox.createIndex(
+      { publishedAt: 1, seq: 1 },
+      { name: "outbox_pending_by_seq" },
+    );
+    const relayRecord = randomUUID();
+    await outbox.insertOne(
+      { _id: relayRecord as never, seq: 1, publishedAt: null },
+      { bypassDocumentValidation: true },
+    );
+
+    // Twice: a crash before `schema_migrations` is written runs it again.
+    await dropOutboxRelayMigration.up(mongo.db);
+    await dropOutboxRelayMigration.up(mongo.db);
+
+    assert.equal(await outbox.countDocuments({ _id: relayRecord as never }), 0);
+    assert.equal(
+      (await outbox.indexes()).some(
+        (index) => index.name === "outbox_pending_by_seq",
+      ),
+      false,
+    );
+    const collections = (
+      await mongo.db.listCollections({}, { nameOnly: true }).toArray()
+    ).map((collection) => collection.name);
+    assert.equal(collections.includes("outbox_counters"), false);
+    assert.equal(collections.includes("outbox_leases"), false);
   });
 
   test("validator rejects a malformed restaurant document", async () => {
@@ -268,15 +309,12 @@ describe("MongoDB storage", () => {
         "nomnom.restaurants.v1.RestaurantOrderReceived",
       ),
     );
-    assert.equal(record?.publishedAt, null);
-    assert.equal(record?.attempts, 0);
     assert.equal(record?.topic, "restaurants.test");
-    assert.equal(record?.metadata.traceparent, "00-abc-def-01");
+    assert.equal(record?.traceparent, "00-abc-def-01");
     assert.equal(
       Buffer.from(record?.payload.buffer).toString(),
       "RestaurantOrderReceived",
     );
-    assert.ok(record?.seq >= 1);
 
     // Same aggregate version and type again: duplicate eventId aborts.
     await assert.rejects(
@@ -287,20 +325,60 @@ describe("MongoDB storage", () => {
       ),
       (error) => error instanceof MongoServerError && error.code === 11000,
     );
+  });
 
-    // seq grows monotonically across transactions.
-    const next = receive();
-    await unitOfWork.run(async () => {
-      const version = await repository.save(next);
-      await outbox.add(
-        { type: "RestaurantOrder", id: next.id, version },
-        next.pullEvents(),
-      );
-    });
-    const nextRecord = await mongo.db
-      .collection(OUTBOX_COLLECTION)
-      .findOne({ aggregateId: next.id });
-    assert.ok((nextRecord?.seq ?? 0) > (record?.seq ?? 0));
+  test("outbox records carry every field of the CDC contract (ADR 37)", async () => {
+    const outbox = new MongoOutbox(mongo.db, unitOfWork);
+    const aggregateId = randomUUID();
+    await unitOfWork.run(() =>
+      outbox.notify(
+        { type: "Restaurant", id: aggregateId, version: 3 },
+        {
+          type: "KitchenChanged",
+          topic: "restaurants.test.changes",
+          entity: { __typename: "Kitchen", restaurantId: aggregateId },
+          occurredAt: now,
+        },
+      ),
+    );
+    const collection = mongo.db.collection(OUTBOX_COLLECTION);
+    // MongoEventRouter turns these BSON types into the envelope headers; a
+    // missing header field stops the connector.
+    assert.equal(
+      await collection.countDocuments({
+        aggregateId,
+        eventId: { $type: "string" },
+        eventType: "KitchenChanged",
+        aggregateType: "Restaurant",
+        aggregateVersion: { $type: "long" },
+        occurredAt: now,
+        topic: "restaurants.test.changes",
+        payload: { $type: "binData" },
+        traceparent: "",
+        createdAt: { $type: "date" },
+      }),
+      1,
+    );
+    const record = await collection.findOne({ aggregateId });
+    assert.deepEqual(Object.keys(record ?? {}).sort(), [
+      "_id",
+      "aggregateId",
+      "aggregateType",
+      "aggregateVersion",
+      "createdAt",
+      "eventId",
+      "eventType",
+      "occurredAt",
+      "payload",
+      "schemaVersion",
+      "topic",
+      "traceparent",
+    ]);
+    assert.equal(record?.aggregateVersion, 3);
+    assert.deepEqual(
+      JSON.parse(Buffer.from(record?.payload.buffer).toString()),
+      { __typename: "Kitchen", restaurantId: aggregateId },
+    );
   });
 
   test("default mapper writes no outbox records", async () => {
@@ -356,33 +434,6 @@ describe("MongoDB storage", () => {
       ]),
       MongoOutboxOutsideUnitOfWorkError,
     );
-  });
-
-  test("relay lease expiry uses the server clock, not the relay clock", async () => {
-    const store = new MongoOutboxRelayStore(mongo.db, {
-      leaseId: `lease-${randomUUID()}`,
-    });
-    const leases = mongo.db.collection<OutboxLeaseDocument>(
-      OUTBOX_LEASES_COLLECTION,
-    );
-    const farFuture = new Date(Date.UTC(2100, 0, 1));
-    const farPast = new Date(Date.UTC(2000, 0, 1));
-
-    // A relay clock far in the past still gets a lease valid from server time.
-    assert.equal(await store.acquireLease("relay-a", farPast, 60_000), true);
-    const lease = await leases.findOne({ owner: "relay-a" });
-    assert.ok(lease);
-    assert.ok(
-      Math.abs(lease.expiresAt.getTime() - (Date.now() + 60_000)) < 10_000,
-      "expiry is server now + TTL",
-    );
-    // A relay whose clock runs ahead cannot take the live lease.
-    assert.equal(await store.acquireLease("relay-b", farFuture, 60_000), false);
-    // The owner renews; after server-side expiry another relay takes over.
-    assert.equal(await store.acquireLease("relay-a", farPast, 1), true);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.equal(await store.acquireLease("relay-b", farPast, 60_000), true);
-    assert.equal(await store.acquireLease("relay-a", farFuture, 60_000), false);
   });
 
   test("orderId is unique and the board queries by state", async () => {

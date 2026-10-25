@@ -4,7 +4,7 @@ Date: 2026-10-25
 
 ## Status
 
-Accepted
+Accepted; доставка Outbox (polling relay и relay-библиотеки) заменена [37. Доставка Outbox через CDC на Debezium](0037-outbox-delivery-via-debezium-cdc.md)
 
 Дополняет [8. Storage Strategy: PostgreSQL and MongoDB](0008-storage-strategy-postgresql-and-mongodb.md) и [13. Transactional Outbox for Integration Event Publishing](0013-transactional-outbox-for-integration-event-publishing.md)
 

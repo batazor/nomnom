@@ -3,7 +3,7 @@
 # <owner>-postgres (nomnom-<owner>, ключ dsn); оба из одного значения, сохраняемого между deploy.
 {{- $dsns := dict }}
 {{- range $owner := .Values.postgres.owners }}
-{{- $password := include "bootstrap.secretValue" (dict "namespace" "nomnom-data" "name" (printf "postgres-%s" $owner) "key" "password" "length" 48) }}
+{{- $password := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" (printf "postgres-%s" $owner) "key" "password" "length" 48) }}
 {{- $dsn := printf "postgres://%s:%s@postgres-%s.nomnom-data.svc.cluster.local:5432/%s?sslmode=disable" $owner $password $owner $owner }}
 {{- $_ := set $dsns (printf "POSTGRES_%s_DSN" (upper $owner)) $dsn }}
 ---
@@ -63,6 +63,8 @@ spec:
       containers:
         - name: postgres
           image: {{ $.Values.images.postgres }}
+          # ADR 37: Debezium читает Outbox из WAL через pgoutput.
+          args: ["-c", "wal_level=logical", "-c", "max_replication_slots=4", "-c", "max_wal_senders=4"]
           env:
             - name: POSTGRES_DB
               value: {{ $owner }}

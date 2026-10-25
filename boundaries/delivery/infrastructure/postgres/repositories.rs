@@ -11,7 +11,7 @@ use crate::slices::delivery::domains::delivery::{
     DeliveryOfferRepository, DeliveryRepository, OrderId,
 };
 
-use super::outbox::{NOTIFY_CHANGED_COURIERS, notification_metadata};
+use super::outbox::{NOTIFY_CHANGED_COURIERS, row_traceparent};
 use super::rows::{
     COURIER_COLUMNS, DELIVERY_COLUMNS, OFFER_COLUMNS, column, courier_from_row, courier_status,
     delivery_from_row, delivery_state, offer_from_row, offer_state,
@@ -69,7 +69,7 @@ impl CourierRepository for PostgresStore {
         let inserted = sql!(self, "INSERT", |connection| sqlx::query(
             sqlx::AssertSqlSafe(statement)
         )
-        .bind(notification_metadata())
+        .bind(row_traceparent())
         .bind(courier.id().as_str())
         .bind(courier_status(courier.status()))
         .bind(
@@ -97,7 +97,7 @@ impl CourierRepository for PostgresStore {
         let updated = sql!(self, "UPDATE", |connection| sqlx::query(
             sqlx::AssertSqlSafe(statement)
         )
-        .bind(notification_metadata())
+        .bind(row_traceparent())
         .bind(courier.id().as_str())
         .bind(version)
         .bind(courier_status(courier.status()))

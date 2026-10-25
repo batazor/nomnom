@@ -9,8 +9,8 @@ import (
 )
 
 // MessageStore persists Integration Event messages for a destination topic in
-// the Transactional Outbox of the active Unit of Work; the Forwarder publishes
-// them after commit.
+// the Transactional Outbox of the active Unit of Work; Debezium publishes them
+// from the WAL after commit (ADR 37).
 type MessageStore interface {
 	AppendMessages(ctx context.Context, topic string, messages ...*message.Message) error
 }

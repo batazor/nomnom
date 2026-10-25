@@ -43,14 +43,7 @@ import {
   type EachMessage,
   KafkaConsumerWorker,
 } from "../pkg/infrastructure/kafka/consumer.ts";
-import { sendWithTraceContext } from "../pkg/infrastructure/kafka/publisher.ts";
 import { MongoCommandTelemetry } from "../pkg/infrastructure/mongodb/command-telemetry.ts";
-import {
-  type IntegrationMessage,
-  OutboxRelay,
-  type RelayRecord,
-  type RelayStore,
-} from "../pkg/infrastructure/outbox/relay.ts";
 import { createLogger, REDACTED } from "../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../pkg/telemetry/resource.ts";
 import { RPC_DURATION_BUCKETS } from "../pkg/telemetry/rpc.ts";
@@ -121,18 +114,7 @@ const unused = {
 
 const parentOf = (span: ReadableSpan) => span.parentSpanContext?.spanId;
 
-/** Outbox relay store holding the given records. */
-const storeOf = (records: RelayRecord[]): RelayStore => ({
-  acquireLease: async () => true,
-  releaseLease: async () => {},
-  fetchPending: async () => records.splice(0),
-  markPublished: async () => {},
-  markFailed: async () => {},
-  deletePublishedBefore: async () => 0,
-  pendingStats: async () => [],
-});
-
-test("one trace spans the gRPC call, the use case, the Outbox relay and the Kafka consumer", async () => {
+test("one trace spans the gRPC call, the use case and, through the Outbox, the Kafka consumer", async () => {
   const { exporter, telemetry, collect } = startTestTelemetry("restaurants");
   try {
     // API: Open Restaurant over HTTP/2 with the caller's traceparent.
@@ -214,52 +196,15 @@ test("one trace spans the gRPC call, the use case, the Outbox relay and the Kafk
       `00-${TRACE_ID}-${useCase.spanContext().spanId}-01`,
     );
 
-    // Relay: the publish continues the trace captured in the Outbox and
-    // injects the PRODUCER span into the Kafka headers.
-    const sent: IntegrationMessage[] = [];
-    const relay = new OutboxRelay({
-      store: storeOf([
-        {
-          id: "o-1",
-          seq: 1,
-          eventId: "e-1",
-          eventType: "nomnom.restaurants.v1.RestaurantOpened",
-          aggregateType: "Restaurant",
-          aggregateId: restaurantId,
-          aggregateVersion: 2,
-          occurredAt: new Date(),
-          topic: TOPIC,
-          payload: new Uint8Array(),
-          metadata: metadata[0] ?? {},
-          attempts: 0,
-        },
-      ]),
-      publisher: {
-        publish: (message) =>
-          sendWithTraceContext(message, async (headers) => {
-            sent.push({ ...message, headers });
-          }),
-      },
-      owner: "relay-1",
-      batchSize: 10,
-      leaseTtlMs: 30_000,
-      retentionMs: 60_000,
-    });
-    assert.equal((await relay.cycle()).published, 1);
-    const producer = spanNamed(exporter, `send ${TOPIC}`);
-    assert.equal(producer.kind, SpanKind.PRODUCER);
-    assert.equal(producer.spanContext().traceId, TRACE_ID);
-    assert.equal(parentOf(producer), useCase.spanContext().spanId);
-    assert.equal(producer.attributes["messaging.destination.name"], TOPIC);
-    assert.equal(producer.attributes["messaging.message.id"], "e-1");
-    const headers = sent[0]?.headers ?? {};
-    assert.equal(
-      headers.traceparent,
-      `00-${TRACE_ID}-${producer.spanContext().spanId}-01`,
-    );
-    assert.equal(headers.event_id, "e-1", "envelope headers are kept");
+    // Debezium (ADR 37) copies the Outbox traceparent into the Kafka headers
+    // as is: no PRODUCER span between the use case and the consumer.
+    const headers: Record<string, string> = {
+      event_id: "e-1",
+      event_type: "nomnom.restaurants.v1.RestaurantOpened",
+      traceparent: metadata[0]?.traceparent ?? "",
+    };
 
-    // Consumer: the process span is the child of the producer span.
+    // Consumer: the process span is the child of the use case span.
     let eachMessage: ((payload: EachMessage) => Promise<void>) | undefined;
     const kafka: ConsumerClient = {
       connect: async () => {},
@@ -292,7 +237,7 @@ test("one trace spans the gRPC call, the use case, the Outbox relay and the Kafk
     const process = spanNamed(exporter, `process ${TOPIC}`);
     assert.equal(process.kind, SpanKind.CONSUMER);
     assert.equal(process.spanContext().traceId, TRACE_ID);
-    assert.equal(parentOf(process), producer.spanContext().spanId);
+    assert.equal(parentOf(process), useCase.spanContext().spanId);
     assert.equal(
       process.attributes["messaging.consumer.group.name"],
       "delivery",
@@ -591,19 +536,18 @@ test("MongoDB commands become client spans and db.client.operation.duration with
 });
 
 test("MongoDB commands outside a trace record the metric but open no root span", async () => {
-  const { exporter, telemetry, collect } =
-    startTestTelemetry("restaurants-relay");
+  const { exporter, telemetry, collect } = startTestTelemetry("restaurants");
   try {
     const mongo = new MongoCommandTelemetry();
-    // Relay lease polling runs outside any trace.
+    // The reconciler loop runs outside any trace.
     mongo.started(
       {
         databaseName: "restaurants",
         address: "mongodb-0:27017",
         connectionId: 1,
         requestId: 7,
-        commandName: "findAndModify",
-        command: { findAndModify: "outbox_leases" },
+        commandName: "find",
+        command: { find: "restaurants" },
       } as never,
       ROOT_CONTEXT,
     );
@@ -616,8 +560,8 @@ test("MongoDB commands outside a trace record the metric but open no root span",
     assert.deepEqual(labels, [
       {
         "db.system.name": "mongodb",
-        "db.operation.name": "findAndModify",
-        "db.collection.name": "outbox_leases",
+        "db.operation.name": "find",
+        "db.collection.name": "restaurants",
       },
     ]);
   } finally {
@@ -685,15 +629,15 @@ test("logs are one JSON line with the service identity and trace_id only inside 
   try {
     const lines: string[] = [];
     const logger = createLogger({
-      resource: telemetryResource("restaurants-relay", {
+      resource: telemetryResource("restaurants-consumer", {
         OTEL_RESOURCE_ATTRIBUTES:
           "service.version=1.2.3,deployment.environment.name=local",
       }),
       write: (line) => lines.push(line),
       now: () => new Date("2026-10-25T12:00:00+08:00"),
     });
-    const relay = logger.child({ operation: "outbox.relay" });
-    relay.info("lease acquired");
+    const consumer = logger.child({ operation: "consumer" });
+    consumer.info("partitions assigned");
     let spanContext = trace
       .wrapSpanContext({
         traceId: "",
@@ -706,7 +650,7 @@ test("logs are one JSON line with the service identity and trace_id only inside 
       { parent: ROOT_CONTEXT, kind: SpanKind.PRODUCER },
       async (span) => {
         spanContext = span.spanContext();
-        relay.error("publish failed", {
+        consumer.error("dead letter failed", {
           "messaging.destination.name": "restaurants.v1.menu-events",
           token: "abc",
           uri: "mongodb://restaurants:pa55@mongo:27017",
@@ -723,17 +667,17 @@ test("logs are one JSON line with the service identity and trace_id only inside 
     assert.deepEqual(outside, {
       timestamp: "2026-10-25T04:00:00.000Z",
       severity: "INFO",
-      message: "lease acquired",
+      message: "partitions assigned",
       "service.namespace": "nomnom",
-      "service.name": "restaurants-relay",
+      "service.name": "restaurants-consumer",
       "service.version": "1.2.3",
       "deployment.environment.name": "local",
-      operation: "outbox.relay",
+      operation: "consumer",
     });
     assert.equal(inside?.severity, "ERROR");
     assert.equal(inside?.trace_id, spanContext.traceId);
     assert.equal(inside?.span_id, spanContext.spanId);
-    assert.equal(inside?.operation, "outbox.relay");
+    assert.equal(inside?.operation, "consumer");
     assert.equal(inside?.token, REDACTED);
     assert.equal(inside?.uri, `mongodb://restaurants:${REDACTED}@mongo:27017`);
     assert.equal(inside?.["error.type"], "Error");

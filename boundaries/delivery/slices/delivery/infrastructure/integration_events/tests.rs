@@ -36,7 +36,6 @@ fn maps_courier_assignment() {
             courier_id: "courier-1".to_owned(),
         }
     );
-    assert_eq!(record.metadata, serde_json::json!({}));
 }
 
 #[test]

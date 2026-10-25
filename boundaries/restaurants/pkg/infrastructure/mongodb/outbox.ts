@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { Binary, type Collection, type Db } from "mongodb";
+import { Binary, type Collection, type Db, Long } from "mongodb";
 
 import type {
   AggregateRef,
@@ -9,14 +9,16 @@ import type {
   Outbox,
   PublishableEvent,
 } from "../../application/outbox.ts";
-import type { CollectionSpec } from "./migrate.ts";
+import type { CollectionSpec, DocumentMigration } from "./migrate.ts";
 import type { MongoUnitOfWork } from "./unit-of-work.ts";
 
 export const OUTBOX_COLLECTION = "outbox";
-export const OUTBOX_COUNTERS_COLLECTION = "outbox_counters";
-export const OUTBOX_LEASES_COLLECTION = "outbox_leases";
-export const OUTBOX_SCHEMA_VERSION = 1;
-const SEQ_COUNTER_ID = "outbox_seq";
+export const OUTBOX_SCHEMA_VERSION = 2;
+/**
+ * TTL of a record (ADR 37): Debezium reads it from the change stream right
+ * after commit, the stream keeps it independently of the collection.
+ */
+export const OUTBOX_RETENTION_SECONDS = 60 * 60;
 
 /** UUIDv5 namespace of Outbox event ids (ADR 31). */
 export const OUTBOX_EVENT_ID_NAMESPACE = "8f1d3c2a-5b7e-4a90-9c61-2e4f7b8d0a13";
@@ -44,33 +46,33 @@ export type OutboxEventMapper = (
 /** Default mapper until Protobuf contracts exist: nothing is published. */
 export const noIntegrationEvents: OutboxEventMapper = () => undefined;
 
-/** Persisted Outbox record (ADR 13, ADR 31). */
+/**
+ * Persisted Outbox record (ADR 13, ADR 31) in the CDC contract of ADR 37:
+ * Debezium MongoEventRouter builds the Kafka message from these fields only
+ * (key `aggregateId`, topic `topic`, value `payload`, the other contract
+ * fields as Event Envelope headers). A document without one of the header
+ * fields stops the connector, so every field is always present.
+ */
 export type OutboxDocument = {
   _id: string;
-  /** Monotonic insertion order from `outbox_counters`, same transaction. */
-  seq: number;
   schemaVersion: number;
   /** UUIDv5 of `aggregateType:aggregateId:aggregateVersion:eventType`. */
   eventId: string;
   eventType: string;
   aggregateType: string;
   aggregateId: string;
-  aggregateVersion: number;
+  aggregateVersion: Long;
   occurredAt: Date;
   topic: string;
   payload: Binary;
-  metadata: { traceparent?: string; causationId?: string };
-  publishedAt: Date | null;
-  attempts: number;
-  lastError?: string;
+  /** W3C trace context of the writing call; `""` without one. */
+  traceparent: string;
+  /** Write time; the TTL index removes the record an hour later. */
+  createdAt: Date;
 };
 
-/** Lease of the single active relay instance (ADR 31). */
-export type OutboxLeaseDocument = {
-  _id: string;
-  owner: string;
-  expiresAt: Date;
-};
+/** Trace context of the operation that writes the records. */
+export type OutboxTraceContext = { traceparent?: string };
 
 export class MongoOutboxOutsideUnitOfWorkError extends Error {
   readonly code = "outbox_outside_unit_of_work";
@@ -104,32 +106,31 @@ export const outboxEventId = (
   );
 
 /**
- * Transactional Outbox in the same database: records and the `seq` counter
- * are written with the session of the active {@link MongoUnitOfWork}, so they
- * commit or abort together with the aggregate. Events the mapper skips are
- * not written. A duplicate `eventId` aborts the transaction.
+ * Transactional Outbox in the same database: records are written with the
+ * session of the active {@link MongoUnitOfWork}, so they commit or abort
+ * together with the aggregate; Debezium publishes them from the change stream
+ * in commit order (ADR 37). Events the mapper skips are not written. A
+ * duplicate `eventId` aborts the transaction.
  */
 export class MongoOutbox implements Outbox, ChangeNotifications {
   readonly #collection: Collection<OutboxDocument>;
-  readonly #counters: Collection<{ _id: string; value: number }>;
   readonly #unitOfWork: MongoUnitOfWork;
   readonly #mapper: OutboxEventMapper;
-  readonly #metadata: () => OutboxDocument["metadata"];
+  readonly #traceContext: () => OutboxTraceContext;
 
   constructor(
     db: Db,
     unitOfWork: MongoUnitOfWork,
     options: {
       mapper?: OutboxEventMapper;
-      /** Trace context of the current operation (traceparent, causationId). */
-      metadata?: () => OutboxDocument["metadata"];
+      /** Trace context of the current operation (traceparent). */
+      metadata?: () => OutboxTraceContext;
     } = {},
   ) {
     this.#collection = db.collection<OutboxDocument>(OUTBOX_COLLECTION);
-    this.#counters = db.collection(OUTBOX_COUNTERS_COLLECTION);
     this.#unitOfWork = unitOfWork;
     this.#mapper = options.mapper ?? noIntegrationEvents;
-    this.#metadata = options.metadata ?? (() => ({}));
+    this.#traceContext = options.metadata ?? (() => ({}));
   }
 
   async add(
@@ -182,32 +183,24 @@ export class MongoOutbox implements Outbox, ChangeNotifications {
       throw new MongoOutboxOutsideUnitOfWorkError();
     }
     if (mapped.length === 0) return;
-    const counter = await this.#counters.findOneAndUpdate(
-      { _id: SEQ_COUNTER_ID },
-      { $inc: { value: mapped.length } },
-      { upsert: true, returnDocument: "after", session },
-    );
-    const last = counter?.value ?? mapped.length;
-    const first = last - mapped.length + 1;
-    const metadata = this.#metadata();
+    const traceparent = this.#traceContext().traceparent ?? "";
+    const createdAt = new Date();
     await this.#collection.insertMany(
-      mapped.map(({ occurredAt, integration }, index) => {
+      mapped.map(({ occurredAt, integration }) => {
         const eventId = outboxEventId(aggregate, integration.eventType);
         return {
           _id: eventId,
-          seq: first + index,
           schemaVersion: OUTBOX_SCHEMA_VERSION,
           eventId,
           eventType: integration.eventType,
           aggregateType: aggregate.type,
           aggregateId: aggregate.id,
-          aggregateVersion: aggregate.version,
+          aggregateVersion: Long.fromNumber(aggregate.version),
           occurredAt,
           topic: integration.topic,
           payload: new Binary(integration.payload),
-          metadata,
-          publishedAt: null,
-          attempts: 0,
+          traceparent,
+          createdAt,
         };
       }),
       { session },
@@ -222,7 +215,6 @@ export const outboxCollectionSpec: CollectionSpec = {
       bsonType: "object",
       required: [
         "_id",
-        "seq",
         "schemaVersion",
         "eventId",
         "eventType",
@@ -232,13 +224,11 @@ export const outboxCollectionSpec: CollectionSpec = {
         "occurredAt",
         "topic",
         "payload",
-        "metadata",
-        "publishedAt",
-        "attempts",
+        "traceparent",
+        "createdAt",
       ],
       properties: {
         _id: { bsonType: "string" },
-        seq: { bsonType: ["int", "long"], minimum: 1 },
         schemaVersion: { bsonType: "int", minimum: 1 },
         eventId: {
           bsonType: "string",
@@ -248,58 +238,51 @@ export const outboxCollectionSpec: CollectionSpec = {
         eventType: { bsonType: "string", minLength: 1 },
         aggregateType: { bsonType: "string", minLength: 1 },
         aggregateId: { bsonType: "string", minLength: 1 },
-        aggregateVersion: { bsonType: ["int", "long"], minimum: 1 },
+        aggregateVersion: { bsonType: "long", minimum: 1 },
         occurredAt: { bsonType: "date" },
         topic: { bsonType: "string", minLength: 1 },
         payload: { bsonType: "binData" },
-        metadata: {
-          bsonType: "object",
-          properties: {
-            traceparent: { bsonType: "string" },
-            causationId: { bsonType: "string" },
-          },
-        },
-        publishedAt: { bsonType: ["date", "null"] },
-        attempts: { bsonType: ["int", "long"], minimum: 0 },
-        lastError: { bsonType: "string" },
+        traceparent: { bsonType: "string" },
+        createdAt: { bsonType: "date" },
       },
     },
   },
   indexes: [
     { key: { eventId: 1 }, name: "outbox_event_id_unique", unique: true },
-    { key: { seq: 1 }, name: "outbox_seq_unique", unique: true },
-    // Relay: `{ publishedAt: null }` sorted by seq.
-    { key: { publishedAt: 1, seq: 1 }, name: "outbox_pending_by_seq" },
+    // Retention (ADR 37): MongoDB removes records older than an hour.
+    {
+      key: { createdAt: 1 },
+      name: "outbox_created_at_ttl",
+      expireAfterSeconds: OUTBOX_RETENTION_SECONDS,
+    },
   ],
 };
 
-export const outboxCountersCollectionSpec: CollectionSpec = {
-  name: OUTBOX_COUNTERS_COLLECTION,
-  validator: {
-    $jsonSchema: {
-      bsonType: "object",
-      required: ["_id", "value"],
-      properties: {
-        _id: { bsonType: "string" },
-        value: { bsonType: ["int", "long"], minimum: 0 },
-      },
-    },
+/**
+ * Removes what the polling relay (ADR 31) left behind once CDC publishes the
+ * Outbox (ADR 37): its indexes, the `seq` counter and lease collections and
+ * the records written before, which the change stream never delivers
+ * (`snapshot.mode=no_data`) and which have no `createdAt` for the TTL.
+ * Idempotent: missing indexes and collections are skipped.
+ */
+export const dropOutboxRelayMigration: DocumentMigration = {
+  id: "0001-outbox-cdc-drop-relay",
+  async up(db) {
+    const outbox = db.collection(OUTBOX_COLLECTION);
+    const indexes = new Set(
+      (await outbox.listIndexes().toArray()).map((index) => index.name),
+    );
+    for (const name of ["outbox_seq_unique", "outbox_pending_by_seq"]) {
+      if (indexes.has(name)) await outbox.dropIndex(name);
+    }
+    await outbox.deleteMany({ createdAt: { $exists: false } });
+    const collections = new Set(
+      (await db.listCollections({}, { nameOnly: true }).toArray()).map(
+        (collection) => collection.name,
+      ),
+    );
+    for (const name of ["outbox_counters", "outbox_leases"]) {
+      if (collections.has(name)) await db.dropCollection(name);
+    }
   },
-  indexes: [],
-};
-
-export const outboxLeasesCollectionSpec: CollectionSpec = {
-  name: OUTBOX_LEASES_COLLECTION,
-  validator: {
-    $jsonSchema: {
-      bsonType: "object",
-      required: ["_id", "owner", "expiresAt"],
-      properties: {
-        _id: { bsonType: "string", minLength: 1 },
-        owner: { bsonType: "string", minLength: 1 },
-        expiresAt: { bsonType: "date" },
-      },
-    },
-  },
-  indexes: [{ key: { expiresAt: 1 }, name: "outbox_leases_expires" }],
 };

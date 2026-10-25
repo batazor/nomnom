@@ -19,14 +19,14 @@ identity:
   jwksConfigMap: cluster-jwks
   # orders — API orders (каталог Place Order: GetRestaurant, GetMenu). e2e-driver — fixture
   # e2e пути заказа (e2e/chart/templates/e2e-driver.yaml): играет оператора, владельца и кухню,
-  # клиентов которых ещё нет. Только в kind: chart-default его не содержит (AC-741).
-  serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-orders/orders=orders,nomnom-bff/bff=bff,nomnom-bff/e2e-driver=e2e-driver
+  # клиентов которых ещё нет; demo-seed — Job демо-данных (chart ops/kind/demo). Только в kind: chart-default его не содержит (AC-741).
+  serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-orders/orders=orders,nomnom-bff/bff=bff,nomnom-bff/e2e-driver=e2e-driver,nomnom-bff/demo-seed=demo-seed
   # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);
-  # передавать user subject могут service bff и, только в kind, e2e-driver — его assertion
-  # тест подписывает тем же kind-ключом BFF.
+  # передавать user subject могут service bff и, только в kind, e2e-driver и demo-seed — их assertion
+  # тест и Job подписывают тем же kind-ключом BFF.
   userJwksConfigMap: bff-jwks
   userIssuer: nomnom-bff
-  userDelegates: bff,e2e-driver
+  userDelegates: bff,e2e-driver,demo-seed
 
 # ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:

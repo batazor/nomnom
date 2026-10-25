@@ -39,8 +39,7 @@ from .buckets import SECONDS_BUCKETS
 from .logs import JsonFormatter, configure_logging, redact
 from .propagation import (
     BAGGAGE_ALLOWLIST,
-    extract_trace_context,
-    inject_trace_context,
+    current_traceparent,
     install_propagator,
 )
 from .resource import SERVICE_NAMESPACE, build_resource, identity
@@ -57,9 +56,8 @@ __all__ = [
     "configure_process_logging",
     "create_meter_provider",
     "create_tracer_provider",
-    "extract_trace_context",
+    "current_traceparent",
     "identity",
-    "inject_trace_context",
     "redact",
     "setup",
 ]
@@ -132,9 +130,8 @@ class Telemetry:
 class SkipOrphanClientSpans(Sampler):
     """Root sampler: a client call outside any operation is not traced.
 
-    Pool checks, the relay lock poll and Outbox queries between publishes would
-    otherwise each start a one-span trace. Client spans inside a server, use case or
-    producer span follow their parent (``ParentBased``).
+    Pool checks would otherwise each start a one-span trace. Client spans inside a
+    server or use case span follow their parent (``ParentBased``).
     """
 
     @override

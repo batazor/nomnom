@@ -118,6 +118,14 @@ build:
       context: ../../..
       docker:
         dockerfile: ops/kind/e2e/probe/Dockerfile
+    # Seed демо-данных (chart ../demo): образ проверок с python3 и openssl.
+    - image: nomnom/demo-seed
+      context: ..
+      docker:
+        dockerfile: demo/seed/Dockerfile
+      requires:
+        - image: nomnom/e2e-probe
+          alias: PROBE_IMAGE
 manifests:
   # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) ставит chart ../bootstrap из
   # before-hook: rawYaml и releases Skaffold получают pod template label skaffold.dev/run-id, и
@@ -161,10 +169,6 @@ deploy:
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
                   -l gateway.envoyproxy.io/owning-gateway-name=public
                 test "$(k -n envoy-gateway-system get service internal-gateway -o jsonpath='{.spec.type}')" = ClusterIP
-        # Демо-данные flow board (только kind): рестораны с меню, персонал, курьер на линии —
-        # идемпотентно, через e2e-driver.
-        - host:
-            command: [sh, -c, 'python3 -I ../scripts/seed-demo.py "$SKAFFOLD_KUBE_CONTEXT"']
   # Bounded contexts и BFF ставятся собственными charts (ADR 12) с values тестового окружения.
   helm:
     # Releases независимы и ставятся параллельно; порядок задаёт dependsOn.
@@ -295,17 +299,26 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_e2e_probe}}"
           image.tag: "{{.IMAGE_TAG_nomnom_e2e_probe}}"
+      # Демо-данные flow board (только kind): Job наполняет контексты через internal gateway —
+      # рестораны с меню, персонал, курьер на линии, идемпотентно.
+      - name: demo
+        chartPath: ../demo
+        namespace: nomnom-bff
+        createNamespace: true
+        dependsOn: [orders, restaurants, delivery, payments, bff]
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_demo_seed}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_demo_seed}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
-  # (net-probe, grpc-caller; chart ../e2e/chart) — make kind-test на нём не проходит. e2e-driver
-  # остаётся: через него hook наполняет демо-данные (scripts/seed-demo.py).
+  # (chart ../e2e/chart выключен целиком) — make kind-test на нём не проходит.
   - name: core
     patches:
-      # Индекс releases: 8 — e2e; выключенные fixtures удаляет helm upgrade.
+      # Индекс releases: 8 — e2e; helm upgrade удаляет его ресурсы.
       - op: add
         path: /deploy/helm/releases/8/setValues
         value:
-          probes.enabled: false
+          enabled: false
   # make kind-deploy GRAFANA_CLOUD=1: метрики, traces и логи сервисов → Alloy → Grafana Cloud.
   # Индексы releases 0–6 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
   # своя telemetry); при изменении порядка releases поправить patches.

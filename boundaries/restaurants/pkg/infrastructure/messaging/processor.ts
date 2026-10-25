@@ -10,10 +10,10 @@
 // которые этот consumer не потребляет.
 import { setTimeout as delay } from "node:timers/promises";
 
-import type { MessagePublisher } from "../outbox/relay.ts";
 import {
   type Envelope,
   type InboundMessage,
+  type MessagePublisher,
   PermanentMessageError,
   parseEnvelope,
 } from "./envelope.ts";

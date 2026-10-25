@@ -9,8 +9,8 @@ use opentelemetry::propagation::{Extractor, TextMapPropagator as _};
 use opentelemetry::trace::TraceContextExt as _;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 
-/// W3C header and Outbox `metadata` key.
-pub const TRACEPARENT: &str = "traceparent";
+/// W3C header and Outbox column.
+const TRACEPARENT: &str = "traceparent";
 
 struct Headers<'a>(&'a http::HeaderMap);
 
@@ -29,17 +29,6 @@ impl Extractor for Headers<'_> {
 #[must_use]
 pub fn extract_context(headers: &http::HeaderMap) -> Context {
     TraceContextPropagator::new().extract(&Headers(headers))
-}
-
-/// Remote context of a stored `traceparent` (an Outbox row); an absent or
-/// malformed value is the empty context (a new trace).
-#[must_use]
-pub fn context_of_traceparent(traceparent: Option<&str>) -> Context {
-    let Some(traceparent) = traceparent.filter(|value| !value.is_empty()) else {
-        return Context::new();
-    };
-    let carrier = HashMap::from([(TRACEPARENT.to_owned(), traceparent.to_owned())]);
-    TraceContextPropagator::new().extract(&carrier)
 }
 
 /// `traceparent` of the current span, if the current context has a valid one.

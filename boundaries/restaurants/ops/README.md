@@ -53,8 +53,8 @@ multi-document транзакции. Пока `mongodb.uriSecret.name` пуст,
 validators, индексы и применяет миграции документов до старта процесса, как `orders-migrate`.
 Лимиты connection pool задаёт `mongodb.pool` (`maxPoolSize` 20, `minPoolSize` 0, `maxIdleTime`
 `5m`, `waitQueueTimeout` `5s`, `maxConnecting` 2) → `MONGODB__MAX_POOL_SIZE`, `MONGODB__MIN_POOL_SIZE`,
-`MONGODB__MAX_IDLE_TIME`, `MONGODB__WAIT_QUEUE_TIMEOUT`, `MONGODB__MAX_CONNECTING`; `values-relay.yaml`
-задаёт `maxPoolSize` 3, `values-consumer.yaml` — 5, init container `migrate` берёт
+`MONGODB__MAX_IDLE_TIME`, `MONGODB__WAIT_QUEUE_TIMEOUT`, `MONGODB__MAX_CONNECTING`;
+`values-consumer.yaml` задаёт `maxPoolSize` 5, init container `migrate` берёт
 `mongodb.migrate.maxPoolSize` (2) и остальные лимиты из `mongodb.pool`.
 С неверным `mongodb.database`, `mongodb.timeout` или лимитом пула вне диапазона приложения chart не
 рендерится.
@@ -102,13 +102,34 @@ helm uninstall restaurants
 
 | Release | Values | Процесс |
 | --- | --- | --- |
-| `restaurants-relay` | `values-relay.yaml` | Outbox → Kafka, один активный экземпляр по lease (ADR 31) |
 | `restaurants-consumer` | `values-consumer.yaml` | `orders.v1.order-events` → Inbox → Restaurant Order по `OrderPlaced` (ADR 11, ADR 28); реплики делят consumer group `restaurants` |
 
 ```bash
 helm upgrade --install restaurants-consumer ops/helm -f ops/helm/values-consumer.yaml \
   --set env.KAFKA__BROKERS=kafka:9092 --set mongodb.uriSecret.name=restaurants-mongodb
 ```
+
+Отдельного процесса публикации Outbox нет: его доставляет Debezium (см. ниже).
+
+### CDC-коннектор Outbox
+
+Outbox `restaurants` доставляет в Kafka коннектор Debezium `restaurants-outbox` в общем Kafka
+Connect ([ADR 37](../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)): change streams
+коллекции `restaurants.outbox`, `MongoEventRouter`, топик — поле `topic`, key — `aggregateId`, value —
+`payload`, Event Envelope — заголовки из полей записи. Включается `cdc.enabled` только в release
+`restaurants` (API): post-install/post-upgrade hook Job (`curl`, образ `cdc.registrar.image`) кладёт
+конфигурацию в `PUT <cdc.connectUrl>/connectors/restaurants-outbox/config` — создаёт или обновляет
+коннектор.
+
+| Параметр | Назначение |
+| --- | --- |
+| `cdc.enabled` | Регистрировать коннектор; по умолчанию `false`. |
+| `cdc.connectUrl` | REST Kafka Connect, например `http://kafka-connect.nomnom-infra.svc.cluster.local:8083`. |
+| `cdc.connectionString` | `mongodb.connection.string` коннектора — ссылка config provider Connect, например `${dir:/etc/nomnom/cdc:restaurants-uri}`, не URI с паролем. |
+| `cdc.connector.config` | Контракт Outbox (общий для окружений); меняется вместе с `pkg/infrastructure/mongodb/outbox.ts`. |
+
+Состояние — `GET /connectors/restaurants-outbox/status`; после исправления документа, остановившего
+коннектор, — `POST /connectors/restaurants-outbox/restart?includeTasks=true`.
 
 ## Образ
 
@@ -141,7 +162,7 @@ helm upgrade --install restaurants ops/helm --set image.tag=local
 
 OpenTelemetry задаётся секцией `telemetry`, а не `env`: chart сам выставляет
 `OTEL_SERVICE_NAME` (`telemetry.serviceName`: `restaurants`, в `values-consumer.yaml` —
-`restaurants-consumer`, в `values-relay.yaml` — `restaurants-relay`),
+`restaurants-consumer`),
 `OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя pod через downward API `POD_NAME`,
 `service.version` — `image.tag`, иначе digest, иначе `unknown`, плюс
 `telemetry.resourceAttributes`) и, если `telemetry.endpoint` задан,

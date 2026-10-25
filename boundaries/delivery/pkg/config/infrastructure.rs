@@ -1,4 +1,4 @@
-//! Конфигурация инфраструктуры процесса: Kafka, Outbox relay, PostgreSQL,
+//! Конфигурация инфраструктуры процесса: PostgreSQL,
 //! reconciliation, истечение Delivery Offers, Dispatch Deliveries и SpiceDB.
 
 use std::time::Duration;
@@ -7,99 +7,17 @@ use config::ConfigError;
 use serde::Deserialize;
 
 use super::{
-    KAFKA_BROKERS_ENV, KAFKA_CLIENT_ID_ENV, MAX_OFFERS_DISPATCH_BATCH, MAX_OFFERS_EXPIRY_BATCH,
-    MAX_RECONCILER_PAGE_SIZE, OFFERS_DISPATCH_BATCH_ENV, OFFERS_DISPATCH_INTERVAL_ENV,
-    OFFERS_EXPIRY_BATCH_ENV, OFFERS_EXPIRY_INTERVAL_ENV, SPICEDB_ENDPOINT_ENV,
-    SPICEDB_PRESHARED_KEY_ENV,
+    MAX_OFFERS_DISPATCH_BATCH, MAX_OFFERS_EXPIRY_BATCH, MAX_RECONCILER_PAGE_SIZE,
+    OFFERS_DISPATCH_BATCH_ENV, OFFERS_DISPATCH_INTERVAL_ENV, OFFERS_EXPIRY_BATCH_ENV,
+    OFFERS_EXPIRY_INTERVAL_ENV, SPICEDB_ENDPOINT_ENV, SPICEDB_PRESHARED_KEY_ENV,
 };
-
-/// Kafka-клиент `delivery-relay`.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct KafkaConfig {
-    /// `host:port` через запятую (`bootstrap.servers`).
-    pub brokers: String,
-    /// `client.id` producer'а.
-    pub client_id: String,
-}
-
-impl KafkaConfig {
-    /// Brokers обязательны для relay: пустое значение — ошибка конфигурации.
-    pub fn require(&self) -> Result<(), ConfigError> {
-        if self.brokers.trim().is_empty() {
-            return Err(ConfigError::Message(format!(
-                "{KAFKA_BROKERS_ENV} is required"
-            )));
-        }
-        if self.client_id.trim().is_empty() {
-            return Err(ConfigError::Message(format!(
-                "{KAFKA_CLIENT_ID_ENV} must not be empty"
-            )));
-        }
-        Ok(())
-    }
-}
-
-/// Polling relay Outbox (ADR 31).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct OutboxConfig {
-    /// Пауза между циклами опроса.
-    #[serde(with = "humantime_serde")]
-    pub poll_interval: Duration,
-    /// Максимум записей одной пачки.
-    pub batch_size: u32,
-    /// Deadline подтверждения брокера одной записи (`message.timeout.ms`).
-    #[serde(with = "humantime_serde")]
-    pub publish_timeout: Duration,
-    /// Опубликованные записи старше retention удаляются.
-    #[serde(with = "humantime_serde")]
-    pub retention: Duration,
-    /// Интервал очистки по retention.
-    #[serde(with = "humantime_serde")]
-    pub cleanup_interval: Duration,
-}
-
-impl Default for OutboxConfig {
-    fn default() -> Self {
-        Self {
-            poll_interval: Duration::from_secs(1),
-            batch_size: 100,
-            publish_timeout: Duration::from_secs(10),
-            retention: Duration::from_secs(7 * 24 * 60 * 60),
-            cleanup_interval: Duration::from_secs(60 * 60),
-        }
-    }
-}
-
-impl OutboxConfig {
-    pub(super) fn validate(&self) -> Result<(), ConfigError> {
-        let positive = [
-            ("poll_interval", self.poll_interval),
-            ("publish_timeout", self.publish_timeout),
-            ("retention", self.retention),
-            ("cleanup_interval", self.cleanup_interval),
-        ];
-        if let Some((name, _)) = positive.iter().find(|(_, value)| value.is_zero()) {
-            return Err(ConfigError::Message(format!(
-                "outbox {name} must be positive"
-            )));
-        }
-        if self.batch_size == 0 {
-            return Err(ConfigError::Message(
-                "outbox batch_size must be positive".to_owned(),
-            ));
-        }
-        Ok(())
-    }
-}
 
 /// Хранилище `delivery`. URL обязателен для процесса и миграций: пустое
 /// значение завершает startup (см. `di::postgres`). URL приходит из Secret.
 ///
-/// Пул процесса ограничен: размер задаёт Helm на процесс (API ~10, relay 2,
-/// migrate 1). Pooler перед PostgreSQL работает только в session mode: relay
-/// и миграции держат session-level advisory lock.
+/// Пул процесса ограничен: размер задаёт Helm на процесс (API ~10, migrate 1).
+/// Pooler перед PostgreSQL работает только в session mode: миграции держат
+/// session-level advisory lock.
 #[derive(Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DatabaseConfig {

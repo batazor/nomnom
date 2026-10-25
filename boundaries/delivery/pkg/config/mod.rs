@@ -7,8 +7,8 @@ use config::ConfigError;
 use serde::Deserialize;
 
 pub use infrastructure::{
-    DatabaseConfig, KafkaConfig, MAX_DATABASE_MAX_CONNS, MAX_DATABASE_MIN_CONNS, OffersConfig,
-    OutboxConfig, ReconcilerConfig, SpiceDbConfig,
+    DatabaseConfig, MAX_DATABASE_MAX_CONNS, MAX_DATABASE_MIN_CONNS, OffersConfig, ReconcilerConfig,
+    SpiceDbConfig,
 };
 pub use load::load;
 #[cfg(test)]
@@ -126,34 +126,6 @@ pub const DATABASE_IDLE_TIMEOUT_ENV: &str = "DATABASE__IDLE_TIMEOUT";
 pub const DATABASE_ACQUIRE_TIMEOUT_ENV: &str = "DATABASE__ACQUIRE_TIMEOUT";
 pub const DEFAULT_DATABASE_MAX_CONNS: &str = "10";
 
-/// Kafka (ADR 31): ключ, переменная, значение по умолчанию. Brokers обязательны
-/// только для `delivery-relay`; основной процесс к Kafka не подключается.
-const KAFKA_SETTINGS: [(&str, &str, &str); 2] = [
-    ("kafka.brokers", KAFKA_BROKERS_ENV, ""),
-    (
-        "kafka.client_id",
-        KAFKA_CLIENT_ID_ENV,
-        DEFAULT_KAFKA_CLIENT_ID,
-    ),
-];
-pub const KAFKA_BROKERS_ENV: &str = "KAFKA__BROKERS";
-pub const KAFKA_CLIENT_ID_ENV: &str = "KAFKA__CLIENT_ID";
-pub const DEFAULT_KAFKA_CLIENT_ID: &str = "delivery-relay";
-
-/// Outbox relay (ADR 13, ADR 31): ключ, переменная, значение по умолчанию.
-const OUTBOX_SETTINGS: [(&str, &str, &str); 5] = [
-    ("outbox.poll_interval", OUTBOX_POLL_INTERVAL_ENV, "1s"),
-    ("outbox.batch_size", OUTBOX_BATCH_SIZE_ENV, "100"),
-    ("outbox.publish_timeout", OUTBOX_PUBLISH_TIMEOUT_ENV, "10s"),
-    ("outbox.retention", OUTBOX_RETENTION_ENV, "7d"),
-    ("outbox.cleanup_interval", OUTBOX_CLEANUP_INTERVAL_ENV, "1h"),
-];
-pub const OUTBOX_POLL_INTERVAL_ENV: &str = "OUTBOX__POLL_INTERVAL";
-pub const OUTBOX_BATCH_SIZE_ENV: &str = "OUTBOX__BATCH_SIZE";
-pub const OUTBOX_PUBLISH_TIMEOUT_ENV: &str = "OUTBOX__PUBLISH_TIMEOUT";
-pub const OUTBOX_RETENTION_ENV: &str = "OUTBOX__RETENTION";
-pub const OUTBOX_CLEANUP_INTERVAL_ENV: &str = "OUTBOX__CLEANUP_INTERVAL";
-
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ServerConfig {
@@ -215,8 +187,6 @@ pub struct AppConfig {
     pub reconciler: ReconcilerConfig,
     pub offers: OffersConfig,
     pub database: DatabaseConfig,
-    pub kafka: KafkaConfig,
-    pub outbox: OutboxConfig,
 }
 
 impl ShutdownConfig {

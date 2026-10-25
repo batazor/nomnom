@@ -1,4 +1,4 @@
-"""Configuration of payments and payments-relay from env; a validation error stops the process."""
+"""Configuration of payments from env; a validation error stops the process."""
 
 from dataclasses import dataclass
 
@@ -31,21 +31,6 @@ from .provider import (
     PROVIDER_WEBHOOK_TOLERANCE_ENV,
     ProviderSettings,
 )
-from .relay import (
-    DEFAULT_KAFKA_CLIENT_ID,
-    DEFAULT_OUTBOX_BATCH_SIZE,
-    DEFAULT_OUTBOX_POLL_INTERVAL,
-    DEFAULT_OUTBOX_RETENTION,
-    KAFKA_BROKERS_ENV,
-    KAFKA_CLIENT_ID_ENV,
-    OUTBOX_BATCH_SIZE_ENV,
-    OUTBOX_POLL_INTERVAL_ENV,
-    OUTBOX_RETENTION_ENV,
-    KafkaSettings,
-    OutboxSettings,
-    RelaySettings,
-    load_relay_settings,
-)
 from .runtime import (
     DEFAULT_DRAIN_TIMEOUT,
     DEFAULT_MANAGEMENT_PORT,
@@ -75,11 +60,7 @@ __all__ = [
     "DATABASE_URL_ENV",
     "DEFAULT_DATABASE_MAX_CONNS",
     "DEFAULT_DRAIN_TIMEOUT",
-    "DEFAULT_KAFKA_CLIENT_ID",
     "DEFAULT_MANAGEMENT_PORT",
-    "DEFAULT_OUTBOX_BATCH_SIZE",
-    "DEFAULT_OUTBOX_POLL_INTERVAL",
-    "DEFAULT_OUTBOX_RETENTION",
     "DEFAULT_PORT",
     "DEFAULT_PROVIDER_WEBHOOK_PORT",
     "DEFAULT_PROVIDER_WEBHOOK_TOLERANCE",
@@ -94,12 +75,7 @@ __all__ = [
     "IDENTITY_USER_DELEGATES_ENV",
     "IDENTITY_USER_ISSUER_ENV",
     "IDENTITY_USER_JWKS_FILE_ENV",
-    "KAFKA_BROKERS_ENV",
-    "KAFKA_CLIENT_ID_ENV",
     "MANAGEMENT_PORT_ENV",
-    "OUTBOX_BATCH_SIZE_ENV",
-    "OUTBOX_POLL_INTERVAL_ENV",
-    "OUTBOX_RETENTION_ENV",
     "PORT_ENV",
     "PROVIDER_KINDS",
     "PROVIDER_KIND_ENV",
@@ -114,16 +90,12 @@ __all__ = [
     "TELEMETRY_FLUSH_TIMEOUT_ENV",
     "DatabaseSettings",
     "IdentitySettings",
-    "KafkaSettings",
     "ManagementSettings",
-    "OutboxSettings",
     "ProviderSettings",
-    "RelaySettings",
     "ServerSettings",
     "Settings",
     "ShutdownSettings",
     "SpiceDBSettings",
-    "load_relay_settings",
     "load_settings",
     "parse_duration",
     "parse_service_accounts",

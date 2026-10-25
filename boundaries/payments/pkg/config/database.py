@@ -17,7 +17,7 @@ DATABASE_CONNECT_TIMEOUT_ENV = "DATABASE__CONNECT_TIMEOUT"
 DATABASE_ACQUIRE_TIMEOUT_ENV = "DATABASE__ACQUIRE_TIMEOUT"
 
 # Значения по умолчанию рассчитаны на API-процесс за пулером в session mode; Helm задаёт
-# max_conns под конкурентность каждого процесса (API, relay).
+# max_conns под конкурентность каждого процесса.
 DEFAULT_DATABASE_MAX_CONNS = 10
 DEFAULT_DATABASE_MIN_CONNS = 0
 # psycopg_pool сам добавляет jitter: соединение закрывается на 0-5% раньше max_lifetime.

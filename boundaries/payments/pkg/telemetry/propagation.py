@@ -5,7 +5,7 @@ dropped by the W3C propagator, so the next span starts a new trace. Baggage is
 untrusted input: only allowlisted keys are extracted and injected, the rest is dropped.
 """
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, override
 
 from opentelemetry import baggage, propagate
@@ -25,9 +25,6 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 # Ключи baggage, которые процесс принимает и передаёт дальше; пусто — baggage не
 # распространяется. Новый ключ добавляется вместе с политикой данных для него.
 BAGGAGE_ALLOWLIST: frozenset[str] = frozenset[str]()
-
-# Trace Context header names of W3C, the only ones the Outbox keeps.
-TRACE_CONTEXT_FIELDS = ("traceparent", "tracestate")
 
 
 class AllowlistBaggagePropagator(TextMapPropagator):
@@ -82,16 +79,11 @@ def install_propagator(allowed_baggage: Iterable[str] = BAGGAGE_ALLOWLIST) -> No
     propagate.set_global_textmap(create_propagator(allowed_baggage))
 
 
-def extract_trace_context(carrier: Mapping[str, str]) -> Context:
-    """Context of W3C Trace Context fields only, e.g. stored in an Outbox record."""
-    return TraceContextTextMapPropagator().extract(dict(carrier))
-
-
-def inject_trace_context(context: Context | None = None) -> dict[str, str]:
-    """``traceparent``/``tracestate`` of ``context`` (default: current) for storage."""
+def current_traceparent(context: Context | None = None) -> str:
+    """W3C ``traceparent`` of ``context`` (default: current), ``''`` without a valid span."""
     carrier: dict[str, str] = {}
     TraceContextTextMapPropagator().inject(carrier, context)
-    return {key: value for key, value in carrier.items() if key in TRACE_CONTEXT_FIELDS}
+    return carrier.get("traceparent", "")
 
 
 def metadata_carrier(metadata: Sequence[tuple[str, Any]] | None) -> dict[str, str]:

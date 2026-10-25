@@ -23,6 +23,7 @@ chart сейчас не используется. Решение зафикси�
 | `Service` (`ClusterIP`, порт `8083`) | Backend target для internal gateway и технических механизмов Kubernetes. |
 | `ServiceAccount` | Отдельный аккаунт с `automountServiceAccountToken: false`. |
 | `ConfigMap` | Несекретная конфигурация из `env`; создаётся только если `env` не пуст. |
+| `ConfigMap` + `Job` `<release>-cdc-connector` | Только при `cdc.enabled`: hook post-install/post-upgrade регистрирует коннектор Debezium Outbox в Kafka Connect. |
 
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
 к `Service` напрямую и проходят через internal gateway. Ingress, `HTTPRoute`/`GRPCRoute`,
@@ -124,6 +125,31 @@ container `migrate` (`/usr/local/bin/delivery-migrate`, `database.migrate: true`
 и `DATABASE__MAX_CONNS` (`database.maxConns`). Secret создаёт развёртывание: в kind —
 chart `ops/kind/bootstrap` вместе с базой `postgres-delivery`. Без Secret init container не
 рендерится, а процесс завершается ошибкой startup (`DATABASE__URL is required`).
+
+## CDC Outbox
+
+Outbox `delivery_outbox` публикует коннектор Debezium `delivery-outbox` в Kafka Connect
+([ADR 37](../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)); процесса relay нет.
+При `cdc.enabled` hook Job после install/upgrade кладёт конфигурацию в Kafka Connect
+(`PUT <cdc.connectUrl>/connectors/delivery-outbox/config`: создаёт или обновляет) и повторяет
+запрос, пока Connect поднимается. Конфигурация — `cdc.connector.config` (контракт Outbox:
+publication и слот `delivery_outbox`, топик из поля `topic`, ключ `aggregate_id`, заголовки
+Event Envelope) поверх `cdc.database`. `cdc.database.password` — ссылка config provider
+Connect (`${dir:/etc/nomnom/cdc:delivery-password}`), а не пароль: Secret `cdc-credentials`
+монтирует сам Connect. Publication создаёт миграция, слот — коннектор; PostgreSQL нужен
+`wal_level = logical`.
+
+```bash
+helm template delivery boundaries/delivery/ops/helm \
+  --set cdc.enabled=true \
+  --set cdc.connectUrl=http://kafka-connect.nomnom-infra.svc.cluster.local:8083 \
+  --set cdc.database.hostname=postgres-delivery.nomnom-data.svc.cluster.local \
+  --set cdc.database.name=delivery --set cdc.database.user=delivery \
+  --set 'cdc.database.password=${dir:/etc/nomnom/cdc:delivery-password}'
+```
+
+Состояние коннектора — `GET /connectors/delivery-outbox/status`; запись, нарушающая контракт,
+останавливает его до `POST /connectors/delivery-outbox/restart?includeTasks=true`.
 
 ## Service identity
 

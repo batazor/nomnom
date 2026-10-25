@@ -22,6 +22,7 @@ import {
   type ConsumerClient,
   KafkaConsumerWorker,
 } from "../pkg/infrastructure/kafka/consumer.ts";
+import type { MessagePublisher } from "../pkg/infrastructure/messaging/envelope.ts";
 import { OtelConsumerMetrics } from "../pkg/infrastructure/messaging/metrics.ts";
 import {
   type ConsumerMetrics,
@@ -33,7 +34,6 @@ import type { MongoDbConnection } from "../pkg/infrastructure/mongodb/client.ts"
 import { MongoInbox } from "../pkg/infrastructure/mongodb/inbox.ts";
 import { MongoOutbox } from "../pkg/infrastructure/mongodb/outbox.ts";
 import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
-import type { MessagePublisher } from "../pkg/infrastructure/outbox/relay.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";

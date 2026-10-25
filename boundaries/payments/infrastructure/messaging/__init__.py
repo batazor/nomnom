@@ -1,21 +1,5 @@
-"""Integration Event publication of payments (ADR 31): Protobuf mapper and polling relay."""
+"""Integration Event contracts of payments (ADR 31): Protobuf mapper for the Outbox."""
 
 from .events import PaymentEventsMapper
-from .relay import (
-    KafkaPublisher,
-    OutboxRecord,
-    OutboxRelay,
-    PostgresOutboxStore,
-    RelayWorker,
-    kafka_headers,
-)
 
-__all__ = [
-    "KafkaPublisher",
-    "OutboxRecord",
-    "OutboxRelay",
-    "PaymentEventsMapper",
-    "PostgresOutboxStore",
-    "RelayWorker",
-    "kafka_headers",
-]
+__all__ = ["PaymentEventsMapper"]

@@ -14,7 +14,7 @@
 {{- $_ := set $shared "relationships" (printf "%s\n%s" (trimSuffix "\n" $shared.relationships) (trim $kind.relationships)) }}
 {{- $bootstrap = toYaml $shared }}
 {{- end }}
-{{- $key := include "bootstrap.secretValue" (dict "namespace" "nomnom-authz" "name" "spicedb-preshared-key" "key" "preshared-key" "length" 64) }}
+{{- $key := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-authz" "name" "spicedb-preshared-key" "key" "preshared-key" "length" 64) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

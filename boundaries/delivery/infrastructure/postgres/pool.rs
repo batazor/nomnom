@@ -16,8 +16,8 @@
 //! - `db.client.operation.duration` (`db.system.name`, `db.operation.name`,
 //!   `db.collection.name`, `error.type`) — every statement of the store.
 //!
-//! The pool works behind a session-mode pooler only: the relay lock and the
-//! migrations take session-level advisory locks.
+//! The pool works behind a session-mode pooler only: the migrations take a
+//! session-level advisory lock.
 
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, PoisonError, Weak};

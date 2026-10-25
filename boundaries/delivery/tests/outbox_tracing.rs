@@ -1,8 +1,8 @@
 //! Trace context of a gRPC command reaches its Outbox row (ADR 13): the
 //! `delivery` server span continues the incoming `traceparent`, and the
 //! Integration Event written in the same Unit of Work stores the server
-//! span's `traceparent` in `metadata`. PostgreSQL comes from testcontainers
-//! (`tests/support`).
+//! span's `traceparent` in its `traceparent` column (ADR 37). PostgreSQL
+//! comes from testcontainers (`tests/support`).
 
 mod support;
 
@@ -92,8 +92,8 @@ async fn command_with_traceparent_writes_it_to_the_outbox_row() {
     assert!(cancelled.cancelled);
 
     let db = sqlx::PgPool::connect(&config.url).await.expect("pool");
-    let traceparents: Vec<Option<String>> = sqlx::query_scalar(
-        "SELECT metadata->>'traceparent' FROM delivery_outbox
+    let traceparents: Vec<String> = sqlx::query_scalar(
+        "SELECT traceparent FROM delivery_outbox
          WHERE aggregate_id = $1 AND event_type = 'nomnom.delivery.v1.DeliveryCancelled'",
     )
     .bind(&created.delivery_id)
@@ -101,7 +101,7 @@ async fn command_with_traceparent_writes_it_to_the_outbox_row() {
     .await
     .expect("outbox rows");
     assert_eq!(traceparents.len(), 1, "one cancellation event");
-    let traceparent = traceparents[0].clone().expect("traceparent in metadata");
+    let traceparent = traceparents[0].clone();
 
     provider.force_flush().expect("flush");
     let spans = exporter.get_finished_spans().expect("spans");

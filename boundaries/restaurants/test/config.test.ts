@@ -85,13 +85,12 @@ test("MongoDB config defaults the database and timeout", () => {
 
 test("MongoDB pool defaults depend on the process", () => {
   const environment = { MONGODB__URI: "mongodb://m" };
-  const maxPoolSize = (process?: "api" | "relay" | "consumer" | "migrate") => {
+  const maxPoolSize = (process?: "api" | "consumer" | "migrate") => {
     const { mongodb } = loadConfig(environment, { process });
     assert.ok(mongodb.enabled);
     return [mongodb.pool.maxPoolSize, mongodb.pool.maxConnecting];
   };
   assert.deepEqual(maxPoolSize(), [20, 2]);
-  assert.deepEqual(maxPoolSize("relay"), [3, 2]);
   assert.deepEqual(maxPoolSize("consumer"), [5, 2]);
   assert.deepEqual(maxPoolSize("migrate"), [2, 2]);
 });
@@ -156,24 +155,19 @@ test("MongoDB config rejects malformed values", () => {
 });
 
 test("durations accept hours and days", () => {
-  const config = loadConfig({ OUTBOX__RETENTION: "36h" });
-  assert.equal(config.outbox.retentionMs, 36 * 3_600_000);
+  assert.equal(
+    loadConfig({ RECONCILER__INTERVAL: "36h" }).reconciler.intervalMs,
+    36 * 3_600_000,
+  );
   assert.equal(
     loadConfig({ RECONCILER__GRACE: "1d" }).reconciler.graceMs,
     86_400_000,
   );
-  assert.throws(() => loadConfig({ OUTBOX__RETENTION: "7w" }));
+  assert.throws(() => loadConfig({ RECONCILER__GRACE: "7w" }));
 });
 
-test("Kafka is disabled without KAFKA__BROKERS and the relay has defaults", () => {
-  const config = loadConfig({});
-  assert.deepEqual(config.kafka, { enabled: false });
-  assert.deepEqual(config.outbox, {
-    retentionMs: 7 * 86_400_000,
-    pollIntervalMs: 1000,
-    batchSize: 100,
-    leaseTtlMs: 15_000,
-  });
+test("Kafka is disabled without KAFKA__BROKERS", () => {
+  assert.deepEqual(loadConfig({}).kafka, { enabled: false });
 });
 
 test("Kafka config parses brokers and rejects malformed ones", () => {
@@ -182,18 +176,11 @@ test("Kafka config parses brokers and rejects malformed ones", () => {
     {
       enabled: true,
       brokers: ["kafka-0:9092", "kafka-1:9092"],
-      clientId: "restaurants-relay",
+      clientId: "restaurants-consumer",
     },
   );
   assert.throws(() => loadConfig({ KAFKA__BROKERS: "kafka-0" }));
   assert.throws(() => loadConfig({ KAFKA__BROKERS: "a:1,,b:2" }));
-});
-
-test("Outbox relay config rejects a lease shorter than the poll interval", () => {
-  assert.throws(() =>
-    loadConfig({ OUTBOX__LEASE_TTL: "1s", OUTBOX__POLL_INTERVAL: "2s" }),
-  );
-  assert.throws(() => loadConfig({ OUTBOX__BATCH_SIZE: "0" }));
 });
 
 test("the consumer reads its group from the oldest offset with bounded retries by default", () => {

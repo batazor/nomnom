@@ -154,7 +154,7 @@ class StdoutHandler(logging.StreamHandler[TextIO]):
 
 
 def configure_logging(identity: Mapping[str, str], level: int = logging.INFO) -> None:
-    """Route every logger (gRPC, Kafka, lifecycle, SDK) to one JSON handler on stdout.
+    """Route every logger (gRPC, lifecycle, SDK) to one JSON handler on stdout.
 
     Replaces the root handlers, so a repeated call (tests) does not duplicate lines.
     """

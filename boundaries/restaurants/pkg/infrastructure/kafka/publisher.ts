@@ -3,19 +3,21 @@ import { context } from "@opentelemetry/api";
 
 import type { KafkaConfig } from "../../config/config.ts";
 import { injectContext, SpanKind, withSpan } from "../../telemetry/tracing.ts";
-import type { IntegrationMessage, MessagePublisher } from "../outbox/relay.ts";
+import type {
+  IntegrationMessage,
+  MessagePublisher,
+} from "../messaging/envelope.ts";
 
 type Producer = ReturnType<
   InstanceType<typeof kafka.KafkaJS.Kafka>["producer"]
 >;
 
 /**
- * Idempotent Kafka producer with `acks=all` (ADR 31): `publish` resolves after
- * the broker acknowledged the message, so the relay sets `publishedAt` only
- * for confirmed records. Each publish is a PRODUCER span `send <topic>` that
- * continues the active context (the Outbox relay activates the context
- * captured when the event was written); its W3C `traceparent`/`tracestate`
- * replace those of `message.headers`.
+ * Idempotent Kafka producer with `acks=all` of the consumer dead letters
+ * (ADR 28): `publish` resolves after the broker acknowledged the message, so
+ * the offset is committed only for a stored dead letter. Each publish is a
+ * PRODUCER span `send <topic>` that continues the active context; its W3C
+ * `traceparent`/`tracestate` replace those of `message.headers`.
  */
 export class KafkaPublisher implements MessagePublisher {
   readonly #producer: Producer;
@@ -32,12 +34,6 @@ export class KafkaPublisher implements MessagePublisher {
        * допускает его политика: dead letters `<stream>.dlq` consumer'а.
        */
       allowAutoTopicCreation?: boolean;
-      /**
-       * `message.timeout.ms`: upper bound of one `publish` including retries.
-       * The relay keeps it well below its lease TTL so a publish never
-       * outlives the lease (librdkafka default is 300 s).
-       */
-      messageTimeoutMs?: number;
     } = {},
   ): Promise<KafkaPublisher> {
     const client = new kafka.KafkaJS.Kafka({
@@ -48,9 +44,6 @@ export class KafkaPublisher implements MessagePublisher {
       },
     });
     const producer = client.producer({
-      ...(options.messageTimeoutMs === undefined
-        ? {}
-        : { "message.timeout.ms": options.messageTimeoutMs }),
       kafkaJS: {
         idempotent: true,
         acks: -1,

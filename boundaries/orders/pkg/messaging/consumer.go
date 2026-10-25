@@ -56,13 +56,11 @@ type ConsumerConfig struct {
 	Prometheus prometheus.Registerer
 }
 
-// Namespace и subsystem встроенных метрик Watermill consumer-роли: имена
-// watermill_consumer_* не пересекаются с ролью outbox_forwarder.
+// Namespace и subsystem встроенных метрик Watermill consumer-роли:
+// watermill_consumer_*.
 const (
 	WatermillMetricsNamespace = "watermill"
 	ConsumerMetricsSubsystem  = "consumer"
-	// ForwarderMetricsSubsystem — роль orders-forwarder (Outbox → Kafka).
-	ForwarderMetricsSubsystem = "outbox_forwarder"
 )
 
 // NewConsumerRouter builds the Watermill router of the consumer process: one

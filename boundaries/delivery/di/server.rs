@@ -64,7 +64,7 @@ pub fn spicedb(config: &SpiceDbConfig) -> Result<SpiceDbClient, SpiceDbConfigErr
 /// база — ошибка startup (fail fast).
 ///
 /// Domain Events с контрактом `nomnom/delivery/v1/events.proto` пишутся в
-/// Outbox той же транзакцией (ADR 31); публикует их `delivery-relay`.
+/// Outbox той же транзакцией (ADR 31); публикует их коннектор Debezium (ADR 37).
 pub fn postgres(config: &DatabaseConfig) -> Result<PostgresStore, String> {
     PostgresStore::connect(config)
         .map(|store| store.with_outbox_mapper(Arc::new(DeliveryIntegrationEvents)))

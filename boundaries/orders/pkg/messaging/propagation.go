@@ -15,10 +15,9 @@ const TraceStateMetadata = "tracestate"
 var traceContext = propagation.TraceContext{}
 
 // InjectTraceContext записывает traceparent и tracestate span'а из ctx в
-// metadata сообщений. Outbox вызывает его при записи события: metadata
-// сохраняется в envelope Forwarder'а, Kafka marshaler Watermill переносит её в
-// headers, а producer span otelsarama продолжает этот контекст. Вне span
-// metadata не меняется.
+// metadata сообщений. Outbox вызывает его при записи события: traceparent
+// хранится в строке Outbox, и Debezium отдаёт его заголовком Kafka (ADR 37), так
+// что обработка у consumer продолжает span записи. Вне span metadata не меняется.
 func InjectTraceContext(ctx context.Context, messages ...*message.Message) {
 	for _, msg := range messages {
 		if msg.Metadata == nil {

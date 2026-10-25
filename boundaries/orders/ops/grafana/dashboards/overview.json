@@ -1434,8 +1434,8 @@
         "kind": "Panel",
         "spec": {
           "id": 27,
-          "title": "Produced (Outbox Forwarder)",
-          "description": "Метрики: `watermill_outbox_forwarder_publish_time_seconds`.",
+          "title": "Produced (Outbox, Debezium)",
+          "description": "События Outbox, которые коннектор `orders-outbox` прочитал из журнала базы и отправил в Kafka (ADR 37).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1452,7 +1452,7 @@
             "spec": {
               "options": {
                 "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`watermill_outbox_forwarder_publish_time_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#watermill) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (publisher_name, success) (rate(watermill_outbox_forwarder_publish_time_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`debezium_metrics_TotalNumberOfEventsSeen`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#cdc) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(rate(debezium_metrics_TotalNumberOfEventsSeen{name=\"orders-outbox\"}[$__rate_interval]))\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1973,8 +1973,8 @@
         "kind": "Panel",
         "spec": {
           "id": 34,
-          "title": "Outbox pending",
-          "description": "Метрики: `nomnom_outbox_pending_messages`.",
+          "title": "Outbox CDC lag",
+          "description": "Отставание коннектора `orders-outbox` от журнала базы: время от commit записи Outbox до её чтения.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1991,7 +1991,7 @@
             "spec": {
               "options": {
                 "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_outbox_pending_messages`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#outbox) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (messaging_destination_name) (nomnom_outbox_pending_messages{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`debezium_metrics_MilliSecondsBehindSource`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#cdc) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax(debezium_metrics_MilliSecondsBehindSource{name=\"orders-outbox\"}) / 1000\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2005,70 +2005,6 @@
         "kind": "Panel",
         "spec": {
           "id": 35,
-          "title": "Outbox oldest pending age",
-          "description": "Метрики: `nomnom_outbox_oldest_pending_age_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_outbox_oldest_pending_age_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#outbox) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax by (messaging_destination_name) (nomnom_outbox_oldest_pending_age_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-36": {
-        "kind": "Panel",
-        "spec": {
-          "id": 36,
-          "title": "Outbox publish retries",
-          "description": "Метрики: `nomnom_outbox_publish_retries_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_outbox_publish_retries_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#outbox) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (messaging_destination_name, nomnom_error_class) (rate(nomnom_outbox_publish_retries_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-37": {
-        "kind": "Panel",
-        "spec": {
-          "id": 37,
           "title": "Calls by outcome",
           "description": "success, rejected (отказ по правилам use case) и error (технический сбой).",
           "links": [],
@@ -2129,10 +2065,10 @@
           }
         }
       },
-      "panel-38": {
+      "panel-36": {
         "kind": "Panel",
         "spec": {
-          "id": 38,
+          "id": 36,
           "title": "Rejections by use case",
           "description": "Метрики: `nomnom_usecase_duration_seconds`.",
           "links": [],
@@ -2193,10 +2129,10 @@
           }
         }
       },
-      "panel-39": {
+      "panel-37": {
         "kind": "Panel",
         "spec": {
-          "id": 39,
+          "id": 37,
           "title": "Errors by use case",
           "description": "Метрики: `nomnom_usecase_duration_seconds`.",
           "links": [],
@@ -2251,6 +2187,102 @@
                   "unit": "ops",
                   "custom": {}
                 },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-38": {
+        "kind": "Panel",
+        "spec": {
+          "id": 38,
+          "title": "Duration p95 by use case",
+          "description": "Метрики: `nomnom_usecase_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "histogram_quantile(0.95, sum by (nomnom_usecase_name, le) (rate(nomnom_usecase_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
+                        "legendFormat": "{{nomnom_usecase_name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "s",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-39": {
+        "kind": "Panel",
+        "spec": {
+          "id": 39,
+          "title": "Transactions by outcome",
+          "description": "committed, rolled_back и commit_failed Unit of Work.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_uow_transactions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_outcome) (rate(nomnom_uow_transactions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
                 "overrides": []
               }
             }
@@ -2376,8 +2408,296 @@
         "kind": "Panel",
         "spec": {
           "id": 40,
-          "title": "Duration p95 by use case",
-          "description": "Метрики: `nomnom_usecase_duration_seconds`.",
+          "title": "Transaction duration",
+          "description": "Метрики: `nomnom_uow_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_uow_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-41": {
+        "kind": "Panel",
+        "spec": {
+          "id": 41,
+          "title": "Retries by conflict",
+          "description": "serialization, deadlock, write_conflict — классы retry Unit of Work.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_uow_retries_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_reason) (rate(nomnom_uow_retries_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-42": {
+        "kind": "Panel",
+        "spec": {
+          "id": 42,
+          "title": "Transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-43": {
+        "kind": "Panel",
+        "spec": {
+          "id": 43,
+          "title": "Invalid transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_from_state, nomnom_fsm_trigger) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"rejected\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-44": {
+        "kind": "Panel",
+        "spec": {
+          "id": 44,
+          "title": "Terminal transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\", nomnom_fsm_terminal=\"true\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-45": {
+        "kind": "Panel",
+        "spec": {
+          "id": 45,
+          "title": "Orders: placed / completed / cancelled / failed",
+          "description": "Метрики: `nomnom_orders_placed_total`, `nomnom_orders_completed_total`, `nomnom_orders_cancelled_total`, `nomnom_orders_failed_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_cancelled_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_completed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_failed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_placed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(rate(nomnom_orders_placed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_completed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_cancelled_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_failed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-46": {
+        "kind": "Panel",
+        "spec": {
+          "id": 46,
+          "title": "Cancellation requests",
+          "description": "Метрики: `nomnom_orders_cancellation_requests_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_cancellation_requests_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_outcome) (rate(nomnom_orders_cancellation_requests_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-47": {
+        "kind": "Panel",
+        "spec": {
+          "id": 47,
+          "title": "Fulfillment duration",
+          "description": "Метрики: `nomnom_orders_fulfillment_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_fulfillment_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_orders_fulfillment_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_orders_fulfillment_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_orders_fulfillment_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-48": {
+        "kind": "Panel",
+        "spec": {
+          "id": 48,
+          "title": "Orders currently in state",
+          "description": "Требует projection/polling; из counters не выводится.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_in_state`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax by (nomnom_order_state) (nomnom_orders_in_state{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-49": {
+        "kind": "Panel",
+        "spec": {
+          "id": 49,
+          "title": "Workflows started",
+          "description": "Клиентский StartWorkflowExecution (`$service`).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -2394,8 +2714,8 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "histogram_quantile(0.95, sum by (nomnom_usecase_name, le) (rate(nomnom_usecase_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
-                        "legendFormat": "{{nomnom_usecase_name}}",
+                        "expr": "sum(rate(temporal_request_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", operation=\"StartWorkflowExecution\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "started",
                         "range": true
                       }
                     },
@@ -2427,297 +2747,9 @@
               },
               "fieldConfig": {
                 "defaults": {
-                  "unit": "s",
+                  "unit": "ops",
                   "custom": {}
                 },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-41": {
-        "kind": "Panel",
-        "spec": {
-          "id": 41,
-          "title": "Transactions by outcome",
-          "description": "committed, rolled_back и commit_failed Unit of Work.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_uow_transactions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_outcome) (rate(nomnom_uow_transactions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-42": {
-        "kind": "Panel",
-        "spec": {
-          "id": 42,
-          "title": "Transaction duration",
-          "description": "Метрики: `nomnom_uow_duration_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_uow_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-43": {
-        "kind": "Panel",
-        "spec": {
-          "id": 43,
-          "title": "Retries by conflict",
-          "description": "serialization, deadlock, write_conflict — классы retry Unit of Work.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_uow_retries_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_reason) (rate(nomnom_uow_retries_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-44": {
-        "kind": "Panel",
-        "spec": {
-          "id": 44,
-          "title": "Transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-45": {
-        "kind": "Panel",
-        "spec": {
-          "id": 45,
-          "title": "Invalid transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_from_state, nomnom_fsm_trigger) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"rejected\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-46": {
-        "kind": "Panel",
-        "spec": {
-          "id": 46,
-          "title": "Terminal transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\", nomnom_fsm_terminal=\"true\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-47": {
-        "kind": "Panel",
-        "spec": {
-          "id": 47,
-          "title": "Orders: placed / completed / cancelled / failed",
-          "description": "Метрики: `nomnom_orders_placed_total`, `nomnom_orders_completed_total`, `nomnom_orders_cancelled_total`, `nomnom_orders_failed_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_cancelled_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_completed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_failed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_placed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(rate(nomnom_orders_placed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_completed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_cancelled_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_failed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-48": {
-        "kind": "Panel",
-        "spec": {
-          "id": 48,
-          "title": "Cancellation requests",
-          "description": "Метрики: `nomnom_orders_cancellation_requests_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_cancellation_requests_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_outcome) (rate(nomnom_orders_cancellation_requests_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-49": {
-        "kind": "Panel",
-        "spec": {
-          "id": 49,
-          "title": "Fulfillment duration",
-          "description": "Метрики: `nomnom_orders_fulfillment_duration_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_fulfillment_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_orders_fulfillment_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_orders_fulfillment_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_orders_fulfillment_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
                 "overrides": []
               }
             }
@@ -2792,102 +2824,6 @@
         "kind": "Panel",
         "spec": {
           "id": 50,
-          "title": "Orders currently in state",
-          "description": "Требует projection/polling; из counters не выводится.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_in_state`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax by (nomnom_order_state) (nomnom_orders_in_state{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-51": {
-        "kind": "Panel",
-        "spec": {
-          "id": 51,
-          "title": "Workflows started",
-          "description": "Клиентский StartWorkflowExecution (`$service`).",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum(rate(temporal_request_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", operation=\"StartWorkflowExecution\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "started",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "ops",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-52": {
-        "kind": "Panel",
-        "spec": {
-          "id": 52,
           "title": "Workflows completed / failed",
           "description": "Метрики: `temporal_workflow_completed_total`, `temporal_workflow_failed_total`.",
           "links": [],
@@ -2968,10 +2904,10 @@
           }
         }
       },
-      "panel-53": {
+      "panel-51": {
         "kind": "Panel",
         "spec": {
-          "id": 53,
+          "id": 51,
           "title": "Workflow end-to-end latency p95",
           "description": "Метрики: `temporal_workflow_endtoend_latency_seconds`.",
           "links": [],
@@ -3032,10 +2968,10 @@
           }
         }
       },
-      "panel-54": {
+      "panel-52": {
         "kind": "Panel",
         "spec": {
-          "id": 54,
+          "id": 52,
           "title": "Oldest running fulfillment",
           "description": "Возраст старейшего выполняющегося workflow: polling Visibility, SDK метрики не даёт.",
           "links": [],
@@ -3064,10 +3000,10 @@
           }
         }
       },
-      "panel-55": {
+      "panel-53": {
         "kind": "Panel",
         "spec": {
-          "id": 55,
+          "id": 53,
           "title": "Activities executed / failed attempts",
           "description": "Каждая неуспешная попытка, кроме последней, ведёт к retry по Retry Policy.",
           "links": [
@@ -3159,10 +3095,10 @@
           }
         }
       },
-      "panel-56": {
+      "panel-54": {
         "kind": "Panel",
         "spec": {
-          "id": 56,
+          "id": 54,
           "title": "Activity latency p95",
           "description": "Метрики: `temporal_activity_execution_latency_seconds`.",
           "links": [],
@@ -3223,10 +3159,10 @@
           }
         }
       },
-      "panel-57": {
+      "panel-55": {
         "kind": "Panel",
         "spec": {
-          "id": 57,
+          "id": 55,
           "title": "Worker task slots",
           "description": "Метрики: `temporal_worker_task_slots_used`, `temporal_worker_task_slots_available`.",
           "links": [],
@@ -3307,10 +3243,10 @@
           }
         }
       },
-      "panel-58": {
+      "panel-56": {
         "kind": "Panel",
         "spec": {
-          "id": 58,
+          "id": 56,
           "title": "Compensations",
           "description": "Метрики: `nomnom_orders_compensations_total`.",
           "links": [],
@@ -3339,10 +3275,10 @@
           }
         }
       },
-      "panel-59": {
+      "panel-57": {
         "kind": "Panel",
         "spec": {
-          "id": 59,
+          "id": 57,
           "title": "Checks by result",
           "description": "Метрики: `nomnom_authz_checks_total`.",
           "links": [],
@@ -3362,6 +3298,81 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-58": {
+        "kind": "Panel",
+        "spec": {
+          "id": 58,
+          "title": "Denied by permission",
+          "description": "DENIED — решение политики, не сбой SpiceDB.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-59": {
+        "kind": "Panel",
+        "spec": {
+          "id": 59,
+          "title": "Errors and timeouts",
+          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
+          "links": [
+            {
+              "title": "Traces: ошибки сервиса в интервале",
+              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+              "targetBlank": true
+            },
+            {
+              "title": "Traces: медленные (\u003e 1s)",
+              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+duration+%3E+1s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+              "targetBlank": true
+            }
+          ],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -3439,81 +3450,6 @@
         "kind": "Panel",
         "spec": {
           "id": 60,
-          "title": "Denied by permission",
-          "description": "DENIED — решение политики, не сбой SpiceDB.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-61": {
-        "kind": "Panel",
-        "spec": {
-          "id": 61,
-          "title": "Errors and timeouts",
-          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
-          "links": [
-            {
-              "title": "Traces: ошибки сервиса в интервале",
-              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-              "targetBlank": true
-            },
-            {
-              "title": "Traces: медленные (\u003e 1s)",
-              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+duration+%3E+1s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-              "targetBlank": true
-            }
-          ],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-62": {
-        "kind": "Panel",
-        "spec": {
-          "id": 62,
           "title": "Check latency",
           "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
           "links": [],
@@ -4265,32 +4201,6 @@
                           "name": "panel-34"
                         }
                       }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 24,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-35"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 24,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-36"
-                        }
-                      }
                     }
                   ]
                 }
@@ -4315,7 +4225,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-37"
+                          "name": "panel-35"
                         }
                       }
                     },
@@ -4328,7 +4238,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-38"
+                          "name": "panel-36"
                         }
                       }
                     },
@@ -4341,7 +4251,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-39"
+                          "name": "panel-37"
                         }
                       }
                     },
@@ -4354,7 +4264,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-40"
+                          "name": "panel-38"
                         }
                       }
                     }
@@ -4381,7 +4291,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-41"
+                          "name": "panel-39"
                         }
                       }
                     },
@@ -4394,7 +4304,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-42"
+                          "name": "panel-40"
                         }
                       }
                     },
@@ -4407,7 +4317,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-43"
+                          "name": "panel-41"
                         }
                       }
                     }
@@ -4434,7 +4344,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-44"
+                          "name": "panel-42"
                         }
                       }
                     },
@@ -4447,7 +4357,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-45"
+                          "name": "panel-43"
                         }
                       }
                     },
@@ -4460,7 +4370,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-46"
+                          "name": "panel-44"
                         }
                       }
                     }
@@ -4487,7 +4397,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-47"
+                          "name": "panel-45"
                         }
                       }
                     },
@@ -4500,7 +4410,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-48"
+                          "name": "panel-46"
                         }
                       }
                     },
@@ -4513,7 +4423,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-49"
+                          "name": "panel-47"
                         }
                       }
                     },
@@ -4526,7 +4436,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-50"
+                          "name": "panel-48"
                         }
                       }
                     }
@@ -4553,7 +4463,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-51"
+                          "name": "panel-49"
                         }
                       }
                     },
@@ -4566,7 +4476,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-52"
+                          "name": "panel-50"
                         }
                       }
                     },
@@ -4579,7 +4489,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-53"
+                          "name": "panel-51"
                         }
                       }
                     },
@@ -4587,6 +4497,32 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-52"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-53"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
                         "y": 8,
                         "width": 8,
                         "height": 8,
@@ -4599,8 +4535,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 8,
-                        "y": 8,
+                        "x": 0,
+                        "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -4612,39 +4548,13 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-56"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 16,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-57"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
                         "x": 8,
                         "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-58"
+                          "name": "panel-56"
                         }
                       }
                     }
@@ -4696,7 +4606,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-59"
+                          "name": "panel-57"
                         }
                       }
                     },
@@ -4709,7 +4619,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-60"
+                          "name": "panel-58"
                         }
                       }
                     },
@@ -4722,7 +4632,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-61"
+                          "name": "panel-59"
                         }
                       }
                     },
@@ -4735,7 +4645,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-62"
+                          "name": "panel-60"
                         }
                       }
                     }

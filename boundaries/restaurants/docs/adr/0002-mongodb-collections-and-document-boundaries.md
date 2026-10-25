@@ -23,9 +23,7 @@ Use cases уже работают через порты `RestaurantRepository`, 
 | `restaurants` | aggregate `Restaurant` | профиль, `staff` (множество user id, ограничено командой ресторана), `authorizationRevision` (ZedToken) | — |
 | `menus` | aggregate `Menu` | `items` — Menu Item с ценой `{ amount: decimal string, currency }` | `restaurantId` |
 | `restaurant_orders` | aggregate `RestaurantOrder` | Preparation Items, `timeline`, причины отказа/сбоя/отмены | `restaurantId`, `orderId` (Order контекста `orders`) |
-| `outbox` | одно Integration Event ([ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md)) | `payload` — Protobuf-байты контракта (BinData), `metadata` (`traceparent`, `causationId`) | `aggregateType`, `aggregateId`, `aggregateVersion` |
-| `outbox_counters` | счётчик `seq` Outbox | — | — |
-| `outbox_leases` | lease единственного активного relay | — | — |
+| `outbox` | одно Integration Event или Change Notification ([ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md), контракт CDC — [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)) | `payload` — байты контракта (BinData), `traceparent` (`""` без trace context) | `aggregateType`, `aggregateId`, `aggregateVersion` (Long) |
 | `inbox` | факт обработки Integration Event consumer'ом ([ADR 11](../../../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md)), `_id` — `{consumer}:{eventId}` | — | `eventId`, `aggregateId`, `topic` |
 | `schema_migrations` | применённая миграция документов | — | — |
 
@@ -46,9 +44,7 @@ Restaurant вместе с меню и заказами не объединяе�
 | `restaurant_orders` | `{ restaurantId: 1, state: 1, "timeline.preparationStartedAt": 1 }` | очередь и активные приготовления |
 | `restaurant_orders` | `{ restaurantId: 1, state: 1, "timeline.readyAt": 1 }` | готовые к выдаче |
 | `outbox` | `{ eventId: 1 }` unique | UUIDv5 от `aggregateType:aggregateId:aggregateVersion:eventType`; конфликт откатывает транзакцию |
-| `outbox` | `{ seq: 1 }` unique | монотонный порядок вставки |
-| `outbox` | `{ publishedAt: 1, seq: 1 }` | relay: `{ publishedAt: null }` по `seq` |
-| `outbox_leases` | `{ expiresAt: 1 }` | поиск истёкшего lease |
+| `outbox` | `{ createdAt: 1 }` TTL 1 час | retention Outbox: Debezium читает запись из change stream сразу после commit (ADR 37) |
 | `inbox` | `{ consumer: 1, eventId: 1 }` unique | дедупликация; конфликт откатывает транзакцию и считается duplicate |
 | `inbox` | `{ processedAt: 1 }` TTL 30 дней | retention Inbox |
 
@@ -61,7 +57,7 @@ Restaurant вместе с меню и заказами не объединяе�
 ### Атомарность
 
 - Изменение одного aggregate без событий (Register Restaurant, Assign/Revoke Staff, запись ZedToken reconciler'ом) опирается на single-document atomicity и `version`.
-- Изменение aggregate вместе с записями Outbox и изменения нескольких aggregate выполняются в `UnitOfWork` = multi-document транзакция MongoDB (`readConcern: snapshot`, `writeConcern: majority`, чтение с primary). Сессия активной транзакции передаётся через `AsyncLocalStorage`, поэтому порты не зависят от драйвера. Driver повторяет `work` при `TransientTransactionError`, что допускает контракт `UnitOfWork`. Outbox вне активной транзакции отклоняет запись. `seq` выделяется `$inc` документа `outbox_counters` в той же транзакции. Domain Event превращается в запись внедрённым mapper'ом (`eventType` — полное имя Protobuf-сообщения, `topic`, `payload`); `undefined` — запись не создаётся. Пока контрактов нет, используется mapper по умолчанию, не публикующий ничего.
+- Изменение aggregate вместе с записями Outbox и изменения нескольких aggregate выполняются в `UnitOfWork` = multi-document транзакция MongoDB (`readConcern: snapshot`, `writeConcern: majority`, чтение с primary). Сессия активной транзакции передаётся через `AsyncLocalStorage`, поэтому порты не зависят от драйвера. Driver повторяет `work` при `TransientTransactionError`, что допускает контракт `UnitOfWork`. Outbox вне активной транзакции отклоняет запись. Порядок доставки задаёт change stream (порядок commit), отдельного счётчика нет. Domain Event превращается в запись внедрённым mapper'ом (`eventType` — полное имя Protobuf-сообщения, `topic`, `payload`); `undefined` — запись не создаётся. Пока контрактов нет, используется mapper по умолчанию, не публикующий ничего.
 - Транзакции требуют replica set (в kind — single-node replica set). Межконтекстных транзакций нет.
 
 ### Подключение
@@ -74,4 +70,4 @@ Restaurant вместе с меню и заказами не объединяе�
 
 Окружения обязаны предоставлять replica set; standalone MongoDB не поддерживается. Каждое изменение формата документа требует обновления validator, `schemaVersion` и, при необходимости, миграции документов. In-memory адаптеры остаются только для unit-тестов; поведение MongoDB-адаптеров проверяют интеграционные тесты (`test/mongodb-integration.test.ts`, `MONGODB_URI`).
 
-Relay `restaurants-relay` (polling с lease, ADR 31), Protobuf-mappers, Kafka и событийные проекции этим решением не реализуются; Inbox и consumer `OrderPlaced` добавлены change `add-restaurants-order-placed-consumer`.
+Доставка Outbox в Kafka (Debezium, ADR 37), Protobuf-mappers и событийные проекции этим решением не реализуются; Inbox и consumer `OrderPlaced` добавлены change `add-restaurants-order-placed-consumer`.

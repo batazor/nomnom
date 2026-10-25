@@ -4,24 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
-	"github.com/ThreeDotsLabs/watermill"
-	watermillsql "github.com/ThreeDotsLabs/watermill-sql/v4/pkg/sql"
-	"github.com/ThreeDotsLabs/watermill/components/forwarder"
 	"github.com/ThreeDotsLabs/watermill/message"
 
 	"nomnom/orders/pkg/messaging"
 )
 
-// OutboxTopic is the watermill-sql topic read by the Forwarder (ADR 13).
-const OutboxTopic = "orders_outbox"
-
 // ErrOutboxOutsideTransaction: Outbox records exist only with a business change.
 var ErrOutboxOutsideTransaction = errors.New("outbox append requires an active unit of work")
 
-// AppendMessages stores ready Integration Event messages for topic in the
-// active transaction; the Forwarder publishes them after commit. Mapping of
-// Domain Events belongs to messaging/outbound.
+// outboxRetention keeps rows only as long as they may be needed: Debezium
+// reads them from the WAL right after commit, the table is not the queue.
+const outboxRetention = time.Hour
+
+// AppendMessages stores ready messages for topic in the active transaction;
+// Debezium publishes each row after commit (ADR 37). The Event Envelope comes
+// from the message metadata. Mapping of Domain Events belongs to
+// messaging/outbound.
 func (s *Store) AppendMessages(ctx context.Context, topic string, messages ...*message.Message) error {
 	if len(messages) == 0 {
 		return nil
@@ -30,17 +31,35 @@ func (s *Store) AppendMessages(ctx context.Context, topic string, messages ...*m
 	if !ok {
 		return ErrOutboxOutsideTransaction
 	}
-	publisher, err := watermillsql.NewPublisher(watermillsql.TxFromPgx(tx), watermillsql.PublisherConfig{
-		SchemaAdapter: watermillsql.DefaultPostgreSQLSchema{},
-	}, watermill.NopLogger{})
-	if err != nil {
-		return fmt.Errorf("outbox publisher: %w", err)
-	}
-	// Trace context операции, записавшей событие, едет в metadata до Kafka headers.
+	// Trace context операции, записавшей событие, едет в Outbox до Kafka headers.
 	messaging.InjectTraceContext(ctx, messages...)
-	outbox := forwarder.NewPublisher(publisher, forwarder.PublisherConfig{ForwarderTopic: OutboxTopic})
-	if err := outbox.Publish(topic, messages...); err != nil {
-		return fmt.Errorf("append outbox for %s: %w", topic, err)
+	for _, msg := range messages {
+		version, err := strconv.ParseUint(msg.Metadata.Get(messaging.AggregateVersionMetadata), 10, 64)
+		if err != nil {
+			return fmt.Errorf("outbox %s aggregate_version: %w", msg.UUID, err)
+		}
+		occurredAt, err := time.Parse(time.RFC3339Nano, msg.Metadata.Get(messaging.OccurredAtMetadata))
+		if err != nil {
+			return fmt.Errorf("outbox %s occurred_at: %w", msg.UUID, err)
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO orders_outbox (event_id, event_type, aggregate_type, aggregate_id,
+				aggregate_version, occurred_at, topic, payload, traceparent)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			msg.UUID, msg.Metadata.Get(messaging.EventTypeMetadata),
+			msg.Metadata.Get(messaging.AggregateTypeMetadata), msg.Metadata.Get(messaging.AggregateIDMetadata),
+			version, occurredAt, topic, []byte(msg.Payload), msg.Metadata.Get(messaging.TraceParentMetadata))
+		if err != nil {
+			return fmt.Errorf("append outbox %s for %s: %w", msg.UUID, topic, err)
+		}
+	}
+	// SKIP LOCKED: concurrent Units of Work do not wait on the same old rows.
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM orders_outbox WHERE event_id IN (
+			SELECT event_id FROM orders_outbox WHERE created_at < now() - $1::interval
+			FOR UPDATE SKIP LOCKED)`,
+		outboxRetention.String()); err != nil {
+		return fmt.Errorf("outbox retention: %w", err)
 	}
 	return nil
 }

@@ -31,7 +31,6 @@ from pkg import telemetry
 from pkg.config import (
     DatabaseSettings,
     ManagementSettings,
-    RelaySettings,
     Settings,
     ShutdownSettings,
 )
@@ -50,7 +49,7 @@ class ProcessResource[T](providers.Resource[T]):
 _SECTION_KEYS = {"provider": "payment_provider"}
 
 
-def sections(settings: Settings | RelaySettings) -> dict[str, Any]:
+def sections(settings: Settings) -> dict[str, Any]:
     """Validated pydantic settings by section for ``providers.Configuration.from_dict``.
 
     Sections stay typed settings objects: adapters receive ``config.<section>`` as is.
@@ -61,14 +60,12 @@ def sections(settings: Settings | RelaySettings) -> dict[str, Any]:
     }
 
 
-def telemetry_providers(
-    flush_timeout: timedelta, service_name: str = "payments"
-) -> Iterator[telemetry.Telemetry]:
+def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetry]:
     """Global tracer and meter providers; flushed within ``flush_timeout`` on shutdown.
 
-    ``service_name`` is the default ``service.name``; ``OTEL_SERVICE_NAME`` overrides it.
+    The default ``service.name`` is ``payments``; ``OTEL_SERVICE_NAME`` overrides it.
     """
-    owner = telemetry.setup(service_name)
+    owner = telemetry.setup("payments")
     try:
         yield owner
     finally:
@@ -91,11 +88,6 @@ def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
 def listen_all(port: int) -> tuple[str, int]:
     """Bind address on every interface of the container for ``port``."""
     return ("0.0.0.0", port)  # noqa: S104 - containers listen on all interfaces
-
-
-def seconds(value: timedelta) -> float:
-    """Convert a configured duration to the float seconds that adapters expect."""
-    return value.total_seconds()
 
 
 def create_lifecycle(management: ManagementSettings, shutdown: ShutdownSettings) -> Lifecycle:

@@ -3,7 +3,7 @@
 # Root-пароль, пароль restaurants и keyFile — Secret mongodb-restaurants, URI приложения —
 # Secret restaurants-mongodb (nomnom-restaurants); значения сохраняются между deploy.
 # rs.initiate и пользователя restaurants создаёт post-install/post-upgrade Job.
-{{- $secret := dict "namespace" "nomnom-data" "name" "mongodb-restaurants" }}
+{{- $secret := dict "root" $ "namespace" "nomnom-data" "name" "mongodb-restaurants" }}
 {{- $rootPassword := include "bootstrap.secretValue" (merge (dict "key" "root-password" "length" 48) $secret) }}
 {{- $password := include "bootstrap.secretValue" (merge (dict "key" "password" "length" 48) $secret) }}
 {{- $keyfile := include "bootstrap.secretValue" (merge (dict "key" "keyfile" "length" 756) $secret) }}

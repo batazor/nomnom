@@ -207,7 +207,7 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
     mongo.db
       .collection<OutboxDocument>(OUTBOX_COLLECTION)
       .find({ aggregateId })
-      .sort({ seq: 1 })
+      .sort({ aggregateVersion: 1 })
       .toArray();
 
   test("AC-711 OpenRestaurant over gRPC writes RestaurantOpened to the Outbox in the caller's trace", async () => {
@@ -226,9 +226,8 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
     assert.equal(record?.topic, RESTAURANT_EVENTS_TOPIC);
     assert.equal(record?.aggregateType, RESTAURANT_AGGREGATE_TYPE);
     assert.equal(record?.aggregateVersion, 2);
-    assert.equal(record?.publishedAt, null);
     assert.match(
-      record?.metadata.traceparent ?? "",
+      record?.traceparent ?? "",
       new RegExp(`^00-${TRACE_ID}-[0-9a-f]{16}-01$`),
     );
 

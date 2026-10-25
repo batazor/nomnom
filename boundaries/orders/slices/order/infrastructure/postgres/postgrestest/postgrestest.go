@@ -11,14 +11,13 @@ package postgrestest
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -148,8 +147,8 @@ func (s *Store) InboxSize() int {
 	return count
 }
 
-// OutboxRecord is a committed Outbox entry: the Integration Event message the
-// Forwarder will publish. OccurredAt keeps the RFC 3339 metadata value.
+// OutboxRecord is a committed Outbox row: the Kafka message Debezium will
+// publish (ADR 37). OccurredAt is RFC 3339 like the occurred_at header.
 type OutboxRecord struct {
 	Topic            string
 	EventID          string
@@ -161,38 +160,27 @@ type OutboxRecord struct {
 	Payload          []byte
 }
 
-// envelope is the forwarder envelope stored in the Outbox payload.
-type envelope struct {
-	DestinationTopic string            `json:"destination_topic"`
-	Payload          []byte            `json:"payload"`
-	Metadata         map[string]string `json:"metadata"`
-}
-
-// OutboxRecords returns the Outbox entries in the order they were appended.
+// OutboxRecords returns the Outbox rows in the order they were appended.
 func (s *Store) OutboxRecords() []OutboxRecord {
 	s.t.Helper()
-	rows, err := s.Pool().Query(context.Background(), `SELECT payload FROM watermill_orders_outbox ORDER BY "offset"`)
+	rows, err := s.Pool().Query(context.Background(), `
+		SELECT topic, event_id::text, event_type, occurred_at, aggregate_type, aggregate_id,
+			aggregate_version, payload
+		FROM orders_outbox ORDER BY seq`)
 	require.NoError(s.t, err)
-	payloads, err := pgx.CollectRows(rows, pgx.RowTo[[]byte])
+	records, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (OutboxRecord, error) {
+		var (
+			record     OutboxRecord
+			occurredAt time.Time
+			version    int64
+		)
+		err := row.Scan(&record.Topic, &record.EventID, &record.EventType, &occurredAt,
+			&record.AggregateType, &record.AggregateID, &version, &record.Payload)
+		record.OccurredAt = occurredAt.UTC().Format(time.RFC3339Nano)
+		record.AggregateVersion = uint64(version) //nolint:gosec // versions are non-negative.
+		return record, err
+	})
 	require.NoError(s.t, err)
-
-	records := make([]OutboxRecord, 0, len(payloads))
-	for _, payload := range payloads {
-		var e envelope
-		require.NoError(s.t, json.Unmarshal(payload, &e))
-		version, err := strconv.ParseUint(e.Metadata[messaging.AggregateVersionMetadata], 10, 64)
-		require.NoError(s.t, err)
-		records = append(records, OutboxRecord{
-			Topic:            e.DestinationTopic,
-			EventID:          e.Metadata[messaging.EventIDMetadata],
-			EventType:        e.Metadata[messaging.EventTypeMetadata],
-			OccurredAt:       e.Metadata[messaging.OccurredAtMetadata],
-			AggregateType:    e.Metadata[messaging.AggregateTypeMetadata],
-			AggregateID:      order.ID(e.Metadata[messaging.AggregateIDMetadata]),
-			AggregateVersion: version,
-			Payload:          e.Payload,
-		})
-	}
 	return records
 }
 

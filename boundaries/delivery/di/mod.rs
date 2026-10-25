@@ -5,7 +5,6 @@
 //! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы;
 //! - [`server`] — `cmd/delivery`: gRPC, reconciliation, истечение Delivery
 //!   Offers и Dispatch Deliveries ([`server::ServerModule`]);
-//! - [`relay`] — `cmd/delivery-relay`: Outbox → Kafka ([`relay::RelayModule`]);
 //! - [`migrate`] — `cmd/delivery-migrate` ([`migrate::MigrateModule`]).
 //!
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
@@ -21,7 +20,6 @@ pub mod infrastructure;
 pub mod migrate;
 mod offer_expiry_worker;
 mod reconciling_worker;
-pub mod relay;
 pub mod server;
 pub mod service;
 

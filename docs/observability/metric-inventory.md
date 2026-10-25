@@ -18,7 +18,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 122; пар «метрика × сервис» со статусом «есть»: 129.
+Метрик в инвентаре: 118; пар «метрика × сервис» со статусом «есть»: 129.
 
 Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`): 2026-10-25 подтверждены rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -105,20 +105,19 @@ Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver в `r
 
 ## Kafka: встроенные метрики Watermill
 
-`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`). Экспорт через OTel Prometheus bridge (`orders/pkg/telemetry`) в общий OTLP pipeline; имена Prometheus сохраняются без изменений. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся.
+`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`). Экспорт через OTel Prometheus bridge (`orders/pkg/telemetry`) в общий OTLP pipeline; имена Prometheus сохраняются без изменений. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `watermill_consumer_subscriber_messages_received_total` | `PrometheusMetricsBuilder` subsystem `consumer` | counter | `acked`, `handler_name`, `subscriber_name` | `orders-consumer`: есть | `acked`: acked | nacked. Через OTel Prometheus bridge (`pkg/telemetry`). |
 | `watermill_consumer_handler_execution_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | histogram | `handler_name`, `success` | `orders-consumer`: есть | Снаружи DLQ: `success="false"` — только исчерпанный transient (nack); permanent уходит в DLQ и считается успехом. |
 | `watermill_consumer_publish_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | histogram | `success`, `handler_name`, `publisher_name` | `orders-consumer`: есть | Publisher consumer-роли — dead letters в `<stream>.dlq`. |
-| `watermill_outbox_forwarder_publish_time_seconds` | `PrometheusMetricsBuilder` subsystem `outbox_forwarder` | histogram | `success`, `handler_name`, `publisher_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | Handler `orders-outbox-forwarder` (`cmd/orders-forwarder`); telemetry bootstrap forwarder-роли ещё не подключён. |
 
 <a id="messaging-otel"></a>
 
 ## Kafka: semconv messaging (не-Go контексты)
 
-Kafka-клиенты: kafkajs (`restaurants`), confluent-kafka (`payments`), rdkafka (`delivery`). Trace context: Outbox хранит `traceparent` span, в котором событие записано; relay публикует в PRODUCER span `send <topic>`, header `traceparent` несёт его; consumer — CONSUMER span `process <topic>` дочерним. Метрики semconv messaging не инвентаризированы.
+Kafka-клиенты: kafkajs (`restaurants`), confluent-kafka (`payments`), rdkafka (`delivery`). Trace context: Outbox хранит `traceparent` span, в котором событие записано; Debezium отдаёт его header `traceparent` без изменений (ADR 37); consumer — CONSUMER span `process <topic>` дочерним. Метрики semconv messaging не инвентаризированы.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
@@ -141,19 +140,16 @@ Middleware в composition root поверх Watermill (и эквивалент �
 | `nomnom_inbox_duplicates_total` | OTel middleware / Inbox adapter | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Outcome duplicate Inbox (`(consumer, event_id)` уже обработан). |
 | `kafka_consumergroup_lag` | Alloy `prometheus.exporter.kafka` | gauge | `consumergroup`, `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join. |
 
-<a id="outbox"></a>
+<a id="cdc"></a>
 
-## Outbox
+## Outbox CDC (Debezium)
 
-SQL-метрики Forwarder-роли (опрос таблицы Outbox), не publish-декоратор.
+Outbox публикует Debezium в Kafka Connect (ADR 37). Метрики коннектора — JMX MBeans `debezium.<plugin>:type=connector-metrics,context=streaming,server=<topic.prefix>`; Prometheus JMX exporter в Kafka Connect ещё не подключён.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_outbox_pending_messages` | SQL-метрика Forwarder | gauge | `messaging_destination_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
-| `nomnom_outbox_oldest_pending_age_seconds` | SQL-метрика Forwarder | gauge | `messaging_destination_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
-| `nomnom_outbox_publish_retries_total` | Forwarder / relay | counter | `messaging_destination_name`, `nomnom_event_type`, `nomnom_error_class` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
-| `nomnom_outbox_publish_duration_seconds` | Forwarder / relay | histogram | `messaging_destination_name`, `nomnom_event_type`, `nomnom_outcome` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Publish одной записи до ack брокера; `nomnom_outcome`: success | error. |
-| `nomnom_outbox_publish_lag_seconds` | Forwarder / relay | histogram | `messaging_destination_name`, `nomnom_event_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | occurred_at → ack брокера: задержка доставки события соседям. |
+| `debezium_metrics_TotalNumberOfEventsSeen` | Debezium streaming metrics (JMX) | counter | `name`, `context`, `plugin` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `name` — коннектор контекста (`<context>-outbox`). |
+| `debezium_metrics_MilliSecondsBehindSource` | Debezium streaming metrics (JMX) | gauge | `name`, `context`, `plugin` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Отставание от commit в базе, мс. |
 
 <a id="usecase"></a>
 

@@ -122,8 +122,8 @@ export class MongoCommandTelemetry {
       "db.operation.name": event.commandName,
       ...(collection === undefined ? {} : { "db.collection.name": collection }),
     };
-    // Spans only inside an existing trace: background polling (relay lease, outbox
-    // reads) would otherwise open a root trace per command. The metric is still
+    // Spans only inside an existing trace: background loops (reconciler) would
+    // otherwise open a root trace per command. The metric is still
     // recorded through the non-recording span.
     const parentSpan = trace.getSpanContext(parent);
     const span =

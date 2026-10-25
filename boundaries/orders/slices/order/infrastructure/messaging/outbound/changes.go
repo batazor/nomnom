@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
@@ -35,12 +37,24 @@ func NewChangeNotifier(store MessageStore) ChangeNotifier {
 	return ChangeNotifier{store: store}
 }
 
-func (n ChangeNotifier) Notify(ctx context.Context, id order.ID) error {
+// changeNotificationType is the event_type header of Order Change Notifications.
+const changeNotificationType = "OrderChanged"
+
+// Notify stores the notification of the Order written as aggregateVersion,
+// with the Event Envelope every Outbox row carries (ADR 37).
+func (n ChangeNotifier) Notify(ctx context.Context, id order.ID, aggregateVersion uint64, at time.Time) error {
 	payload, err := json.Marshal(changeNotification{Typename: "Order", ID: string(id)})
 	if err != nil {
 		return fmt.Errorf("change notification of order %s: %w", id, err)
 	}
-	msg := message.NewMessage(uuid.NewString(), payload)
+	eventID := uuid.NewString()
+	msg := message.NewMessage(eventID, payload)
+	msg.Metadata.Set(messaging.EventIDMetadata, eventID)
+	msg.Metadata.Set(messaging.EventTypeMetadata, changeNotificationType)
+	msg.Metadata.Set(messaging.OccurredAtMetadata, at.UTC().Format(time.RFC3339Nano))
+	msg.Metadata.Set(messaging.AggregateTypeMetadata, aggregateType)
+	msg.Metadata.Set(messaging.AggregateIDMetadata, string(id))
+	msg.Metadata.Set(messaging.AggregateVersionMetadata, strconv.FormatUint(aggregateVersion, 10))
 	msg.Metadata.Set(messaging.PartitionKeyMetadata, string(id))
 	return n.store.AppendMessages(ctx, OrderChangesTopic, msg)
 }

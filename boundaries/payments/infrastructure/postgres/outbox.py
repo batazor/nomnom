@@ -1,4 +1,4 @@
-"""Outbox seam of ADR 31: Domain Event → Integration Event mapping and record identity.
+"""Outbox seam of ADR 31/37: Domain Event → Integration Event mapping and record identity.
 
 ``OutboxEventMapper`` is the extension point for the Protobuf mappers of
 ``nomnom/payments/v1/events.proto`` (topic ``payments.v1.payment-events``); the
@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from pkg.application import AggregateRef
-from pkg.telemetry import inject_trace_context
+from pkg.telemetry import current_traceparent
 from slices.payment.domains.payment import PaymentDomainEvent
 
 # ADR 31: namespace of deterministic Outbox event ids.
@@ -58,10 +58,10 @@ def outbox_event_id(aggregate: AggregateRef, event_type: str) -> uuid.UUID:
     )
 
 
-def outbox_metadata() -> dict[str, str]:
-    """W3C ``traceparent``/``tracestate`` of the current span, when there is one.
+def outbox_traceparent() -> str:
+    """W3C ``traceparent`` of the current span, ``''`` without one (ADR 37).
 
-    Stored with the record, so the relay publishes the context in which the event was
-    written, not the relay's own. Baggage is not stored.
+    Stored with the record, so Debezium publishes the context in which the event was
+    written. ``tracestate`` and baggage are not stored.
     """
-    return inject_trace_context()
+    return current_traceparent()

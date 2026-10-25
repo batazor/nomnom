@@ -56,7 +56,6 @@ impl OutboxMapper for TestMapper {
             DomainEvent::CourierAssignedToDelivery { courier_id, .. } => Some(OutboxRecord {
                 event_type: "nomnom.delivery.v1.CourierAssignedToDelivery".to_owned(),
                 payload: courier_id.as_str().as_bytes().to_vec(),
-                metadata: serde_json::json!({"traceparent": "00-test"}),
             }),
             _ => None,
         }
@@ -96,7 +95,7 @@ fn assigned(delivery: &Delivery, courier: &str) -> Delivery {
     .with_version(delivery.version())
 }
 
-/// `(event_id, event_type, aggregate_version, payload, metadata)` of the delivery.
+/// `(event_id, event_type, aggregate_version, payload, traceparent)` of the aggregate.
 type OutboxRow = (String, String, i64, Vec<u8>, String);
 
 fn outbox_rows(aggregate_id: &str) -> Vec<OutboxRow> {
@@ -111,8 +110,8 @@ fn outbox_rows(aggregate_id: &str) -> Vec<OutboxRow> {
                 .await
                 .expect("connect");
             sqlx::query_as(
-                "SELECT event_id::text, event_type, aggregate_version, payload, metadata::text
-                 FROM delivery_outbox WHERE aggregate_id = $1 ORDER BY seq",
+                "SELECT event_id::text, event_type, aggregate_version, payload, traceparent
+                 FROM delivery_outbox WHERE aggregate_id = $1 ORDER BY created_at, event_id",
             )
             .bind(id)
             .fetch_all(&mut connection)
@@ -240,13 +239,103 @@ fn courier_writes_notify_the_courier_entity() {
 
     let rows = outbox_rows(&id);
     assert_eq!(rows.len(), 2, "one notification per committed write");
-    for (_, event_type, _, payload, _) in rows {
+    for (_, event_type, _, payload, traceparent) in rows {
         assert_eq!(event_type, "CourierChanged");
+        assert_eq!(traceparent, "");
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&payload).expect("json"),
             serde_json::json!({ "__typename": "Courier", "id": id })
         );
     }
+}
+
+/// ADR 37: Debezium builds the Kafka message from the record contract
+/// columns only; the publication streams inserts and nothing else.
+#[tokio::test(flavor = "multi_thread")]
+async fn outbox_table_is_the_cdc_record_contract() {
+    let db = sqlx::PgPool::connect(&config().url).await.expect("pool");
+    let columns: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT column_name::text, data_type::text, is_nullable::text
+         FROM information_schema.columns
+         WHERE table_name = 'delivery_outbox' ORDER BY column_name",
+    )
+    .fetch_all(&db)
+    .await
+    .expect("columns");
+    let column =
+        |name: &str, data_type: &str| (name.to_owned(), data_type.to_owned(), "NO".to_owned());
+    assert_eq!(
+        columns,
+        vec![
+            column("aggregate_id", "text"),
+            column("aggregate_type", "text"),
+            column("aggregate_version", "bigint"),
+            column("created_at", "timestamp with time zone"),
+            column("event_id", "uuid"),
+            column("event_type", "text"),
+            column("occurred_at", "timestamp with time zone"),
+            column("payload", "bytea"),
+            column("topic", "text"),
+            column("traceparent", "text"),
+        ]
+    );
+
+    let publication: (bool, bool, bool, bool) = sqlx::query_as(
+        "SELECT pubinsert, pubupdate, pubdelete, pubtruncate
+         FROM pg_publication WHERE pubname = 'delivery_outbox'",
+    )
+    .fetch_one(&db)
+    .await
+    .expect("publication");
+    assert_eq!(publication, (true, false, false, false));
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT tablename::text FROM pg_publication_tables WHERE pubname = 'delivery_outbox'",
+    )
+    .fetch_all(&db)
+    .await
+    .expect("publication tables");
+    assert_eq!(tables, vec!["delivery_outbox".to_owned()]);
+}
+
+/// ADR 37: every Outbox write — the courier CTE, a courier notification of a
+/// delivery write and an Integration Event — deletes rows older than an hour
+/// and keeps fresh ones. Writes of parallel tests delete expired rows too, so
+/// only the absence after each write is asserted.
+#[test]
+fn outbox_writes_delete_rows_older_than_an_hour() {
+    let store = store();
+    let expired = unique("expired");
+    let plant_expired = || {
+        execute(
+            "INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
+                 aggregate_version, topic, payload, created_at)
+             VALUES (gen_random_uuid(), 'CourierChanged', 'Courier', $1, 0, 'test', '',
+                 now() - interval '2 hours')",
+            &expired,
+        );
+    };
+
+    plant_expired();
+    let courier = CourierId::new(unique("courier"));
+    CourierRepository::add(&store, &Courier::new(courier.clone())).expect("courier");
+    assert!(outbox_rows(&expired).is_empty(), "courier CTE write");
+
+    plant_expired();
+    let delivery = new_delivery(&unique("delivery"));
+    DeliveryRepository::add(&store, &assigned(&delivery, courier.as_str())).expect("delivery");
+    assert!(outbox_rows(&expired).is_empty(), "courier notification");
+    assert_eq!(outbox_rows(courier.as_str()).len(), 2);
+
+    plant_expired();
+    let event = DomainEvent::CourierAssignedToDelivery {
+        delivery_id: delivery.id().clone(),
+        order_id: delivery.order_id().clone(),
+        courier_id: courier.clone(),
+        created_at_epoch_seconds: None,
+    };
+    DeliveryOutbox::add(&store, OutboxMessage::delivery(event)).expect("outbox");
+    assert!(outbox_rows(&expired).is_empty(), "Integration Event");
+    assert_eq!(outbox_rows(delivery.id().as_str()).len(), 1);
 }
 
 #[test]
@@ -347,11 +436,12 @@ fn concurrent_updates_conflict_and_only_one_wins() {
     // The loser's Outbox row rolled back with its aggregate write.
     let rows = outbox_rows(delivery.id().as_str());
     assert_eq!(rows.len(), 1);
-    let (id, event_type, version, payload, metadata) = &rows[0];
+    let (id, event_type, version, payload, traceparent) = &rows[0];
     assert_eq!(event_type, "nomnom.delivery.v1.CourierAssignedToDelivery");
     assert_eq!(*version, 1);
     assert!(payload.starts_with(b"courier-"));
-    assert!(metadata.contains("00-test"));
+    // No current span: the header is empty, the column is never NULL (ADR 37).
+    assert_eq!(traceparent, "");
     assert_eq!(
         id,
         &event_id("delivery", delivery.id().as_str(), 1, event_type).to_string()

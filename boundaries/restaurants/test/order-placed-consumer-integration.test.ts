@@ -29,8 +29,8 @@ import { kafkaBrokers } from "./support/global-containers.ts";
 import { mongoUri } from "./support/mongodb.ts";
 
 // OrderPlaced → Kafka → restaurants-consumer → Inbox + Restaurant Order in
-// MongoDB against real infrastructure (see test/outbox-relay-integration.test.ts):
-// MongoDB is the testcontainer of the global setup (test/support/global-containers.ts).
+// MongoDB against real infrastructure: MongoDB and Kafka are the testcontainers
+// of the global setup (test/support/global-containers.ts).
 const uri = mongoUri();
 const brokers = kafkaBrokers();
 
@@ -145,7 +145,7 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
     const items = [{ menuItemId: "pho", quantity: 2 }];
     const eventId = randomUUID();
     await publishOrderPlaced(eventId, orderId, restaurantId, items);
-    // Redelivery of the same event (relay republish) is a duplicate.
+    // Redelivery of the same event (CDC replay after a restart) is a duplicate.
     await publishOrderPlaced(eventId, orderId, restaurantId, items);
     await publishOrderPlaced(randomUUID(), poisonOrderId, restaurantId, []);
 

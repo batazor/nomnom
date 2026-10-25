@@ -60,21 +60,22 @@ helm uninstall orders
 
 Из корня репозитория путь к chart — `boundaries/orders/ops/helm`.
 
-## PostgreSQL и Outbox forwarder
+## PostgreSQL и Outbox
 
 DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`/`key` (env `POSTGRES__DSN`); без него
 процесс не стартует. При `postgres.migrate: true` каждый workload получает init container
 `/orders-migrate` (goose под advisory lock). Пул процесса задают `postgres.maxConns`,
 `minConns`, `maxConnLifetime`, `maxConnLifetimeJitter`, `maxConnIdleTime`, `connectTimeout`,
 `healthCheckPeriod` (env `POSTGRES__*`); values каждой роли задают свой `maxConns` (API 10,
-worker и consumer 5, forwarder и reconciler 2), init container migrate — пул 2. Пулер перед
+worker и consumer 5, reconciler 2), init container migrate — пул 2. Пулер перед
 базой — только session mode, Σ(replicas × maxConns) ≤ `pool_size`
-([README](../README.md#пулер-postgresql)). Forwarder Outbox → Kafka — отдельный release с
-`values-forwarder.yaml` (один экземпляр, без Service):
+([README](../README.md#пулер-postgresql)).
 
-```bash
-helm upgrade --install orders-forwarder ops/helm -f ops/helm/values-forwarder.yaml
-```
+Outbox `orders_outbox` доставляет в Kafka Debezium из WAL
+([ADR 37](../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)): процесса публикации нет.
+Базе нужен `wal_level = logical`, publication `orders_outbox` создаёт миграция. Коннектор
+`orders-outbox` регистрирует hook Job release с `cdc.enabled: true` (API): `cdc.connectUrl` —
+REST Kafka Connect, `cdc.database.*` — адрес базы и ссылка на пароль в config provider Connect.
 
 ## Temporal worker
 
@@ -127,7 +128,7 @@ env:
 
 OpenTelemetry задаётся секцией `telemetry` (не через `env`: явные переменные chart
 перекрывают `envFrom`). Chart сам выставляет `OTEL_SERVICE_NAME` (`telemetry.serviceName`
-роли: `orders`, `orders-worker`, `orders-consumer`, `orders-forwarder`, `orders-reconciler`;
+роли: `orders`, `orders-worker`, `orders-consumer`, `orders-reconciler`;
 init container — `orders-migrate`) и `OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя
 pod, `service.version` — image tag, плюс `telemetry.resourceAttributes`) во всех releases и
 в init container migrate:

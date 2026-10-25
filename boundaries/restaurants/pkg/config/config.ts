@@ -26,9 +26,7 @@ import { durationSchema, portSchema } from "./schemas.ts";
 import {
   type ConsumerConfig,
   loadConsumerConfig,
-  loadOutboxRelayConfig,
   loadReconcilerConfig,
-  type OutboxRelayConfig,
   type ReconcilerConfig,
 } from "./workers.ts";
 
@@ -64,7 +62,6 @@ export interface AppConfig {
   readonly reconciler: ReconcilerConfig;
   readonly kitchen: KitchenConfig;
   readonly kafka: KafkaConfig;
-  readonly outbox: OutboxRelayConfig;
   readonly consumer: ConsumerConfig;
 }
 
@@ -110,7 +107,6 @@ export function loadConfig(
     reconciler: loadReconcilerConfig(environment),
     kitchen: loadKitchenConfig(environment),
     kafka: loadKafkaConfig(environment),
-    outbox: loadOutboxRelayConfig(environment),
     consumer: loadConsumerConfig(environment),
   });
 }

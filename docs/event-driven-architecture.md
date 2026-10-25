@@ -99,7 +99,7 @@ payload        -- Protobuf-сообщение контракта интегра�
 metadata       -- trace context, correlation, причинное событие
 ```
 
-Плюс техническое состояние публикации, определяемое реализацией: например `published_at`, `attempts`, `last_error` или offset consumer group в `watermill-sql`.
+Плюс поля доставки по контракту ADR 37: `topic`, `traceparent` и `created_at` для retention. Состояния публикации (`published_at`, `attempts`) нет: позицию чтения журнала хранит Debezium.
 
 - `event_id` вычисляется в той же транзакции, уникален в хранилище publisher и не меняется при повторной публикации; конфликт уникальности откатывает транзакцию.
 - Payload — контракт интеграционного события, а не сериализация агрегата или persistence-модели. Размещение и правила совместимости event-схем в Buf определяются вместе с контрактами событий.
@@ -122,47 +122,42 @@ metadata       -- trace context, correlation, причинное событие
 
 ### Publisher и порядок публикации
 
-- Записи одного partition key публикуются в порядке вставки; следующая запись ключа не публикуется до подтверждения предыдущей.
-- Упавшая публикация не пропускается: это head-of-line blocking, который сопровождается alert'ом.
-- Poison outbox record — невалидный payload или сообщение, навсегда отклонённое Kafka, — не пропускается молча и не удаляется. Карантин и ручное восстановление определяются отдельно.
-- Параллельные экземпляры publisher не нарушают порядок.
-- Сбой Kafka не останавливает business operation: неопубликованные записи накапливаются и публикуются после восстановления.
-- Неопубликованные записи не удаляются retention.
+- Записи одного partition key публикуются в порядке commit: Debezium читает журнал базы последовательно (ADR 37).
+- Упавшая публикация не пропускается: коннектор останавливается (head-of-line blocking), что сопровождается alert'ом.
+- Poison outbox record — запись, нарушающая контракт ADR 37, или сообщение, навсегда отклонённое Kafka, — не пропускается молча. После исправления задача коннектора перезапускается.
+- Сбой Kafka не останавливает business operation: журнал базы держит события (слот репликации, change stream resume token), они публикуются после восстановления.
+- Retention строк Outbox не теряет событий: Debezium читает журнал, а не таблицу.
 
-### `orders`: Watermill SQL Pub/Sub и Forwarder
+### Доставка Outbox: Debezium CDC
+
+Решение — [ADR 37](adr/0037-outbox-delivery-via-debezium-cdc.md). Ни один контекст не публикует Outbox сам и не опрашивает таблицу.
 
 ```text
 Activity / application handler
     |
     v
-PostgreSQL transaction (orders)
-    +--> Order state
-    +--> watermill-sql publisher(*sql.Tx) --> forwarder envelope в SQL Outbox
+транзакция хранилища контекста
+    +--> state агрегата
+    +--> запись Outbox (topic, key, payload, Event Envelope)
 commit
     |
     v
-Watermill Forwarder (single active)
-    |  unwrap envelope: UUID = event_id, payload, metadata
+журнал базы: PostgreSQL WAL (pgoutput, publication <context>_outbox, только INSERT)
+             MongoDB change streams (коллекция outbox)
+    |
     v
-watermill-kafka publisher
-    |  partitioning marshaler: key из metadata (order_id)
+Kafka Connect: коннектор Debezium <context>-outbox + Outbox Event Router
+    |  топик = поле topic, key = aggregate_id, value = payload как есть,
+    |  заголовки = поля Event Envelope записи
     v
 Kafka
 ```
 
-- [`watermill-sql`](https://watermill.io/pubsubs/sql/) publisher создаётся на `*sql.Tx` бизнес-транзакции, по одному на транзакцию; `AutoInitializeSchema` не используется, потому что `CREATE TABLE` может неявно зафиксировать транзакцию. Схема создаётся миграциями.
-- [Watermill Forwarder](https://watermill.io/advanced/forwarder/) читает SQL Outbox, распаковывает envelope и публикует исходное сообщение в Kafka с его UUID, payload и metadata. UUID сообщения равен `event_id`; значение также записывается в metadata `event_id`, которую marshaler переносит в Kafka header.
-- Kafka key передаётся через metadata исходного сообщения и извлекается partitioning marshaler Kafka publisher'а (`kafka.NewWithPartitioningMarshaler`). Ключ envelope-сообщения SQL Outbox в Kafka не попадает, поэтому без этого требования ordering по `order_id` не сохраняется.
-- Ошибка публикации приводит к nack и повтору той же записи. Forwarder читает SQL topic последовательно, поэтому head-of-line blocking распространяется на весь forwarder topic, а не только на один key.
-- `AckWhenCannotUnwrap` не включается: подтверждение нераспаковываемого envelope означало бы потерю события.
-- PostgreSQL offsets adapter `watermill-sql` блокирует строку consumer group через `FOR UPDATE`, поэтому одновременно читает один активный reader. Forwarder работает как single active instance: replicas служат failover, а не throughput. Резервная replica ожидает блокировку; её readiness остаётся диагностическим сигналом по [runtime contract](cloud-native-runtime.md).
-- Собственный polling или outbox framework не реализуется, пока Watermill покрывает требования. Watermill не импортируется в `domains`.
-
-### Другие языки
-
-`restaurants` (TypeScript), `delivery` (Rust) и `payments` (Python) соблюдают тот же контракт: атомарно сохранить изменение и запись Outbox; опубликовать её отдельным worker'ом; повторять при временном сбое; считать повторную публикацию штатной.
-
-Библиотеки не выбираются до определения storage engines и transaction capabilities. Способ чтения Outbox — polling worker или CDC ([Debezium Outbox Event Router](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html), MongoDB change streams) — открытый вопрос, который решается отдельным ADR после выбора хранилищ.
+- Запись Outbox несёт всё сообщение: `event_id`, `event_type`, `aggregate_type`, `aggregate_id`, `aggregate_version`, `occurred_at`, `topic`, `payload`, `traceparent` (`''` без trace context). Контракт полей — в ADR 37; заголовки совпадают с прежним Event Envelope (`_watermill_message_uuid` = `event_id` для consumers на Watermill), consumers от CDC не зависят.
+- Порядок по агрегату сохраняется: журнал упорядочен по commit, ключ Kafka — `aggregate_id`.
+- Доставка at-least-once: после рестарта Connect возможны повторы с последнего сохранённого offset; их гасит Inbox ([ADR 11](adr/0011-transactional-inbox-and-idempotent-event-processing.md)).
+- Запись, нарушающая контракт, останавливает коннектор (head-of-line): статус `FAILED` в `GET /connectors/<name>/status`, после исправления — restart задачи.
+- Записи Outbox хранятся час (`created_at`, у MongoDB — TTL-индекс): журнал удерживает событие независимо от строки, фоновой очистки нет.
 
 ### Публикация из Temporal-процесса `orders`
 
@@ -407,7 +402,7 @@ Kafka → Watermill Subscriber → EventProcessor → Watermill handler (infrast
 - Custom marshaler: имя события — `event_type` envelope, payload — Protobuf, `event_id` и trace context — в metadata.
 - Топик — stream aggregate контекста-источника (например, `restaurants.v1.restaurant-order-events`), ключ — `aggregate_id`; события внутри стрима маршрутизируются по `event_type`.
 - Handlers одного стрима — одна handler group с общим subscriber'ом, чтобы сохранить порядок событий aggregate. Топик-на-тип-события не используется.
-- `EventBus.Publish()` не используется: публикация только через Outbox и Forwarder.
+- `EventBus.Publish()` не используется: публикация только через Outbox и Debezium (ADR 37).
 
 ## Размещение в коде
 
@@ -505,7 +500,7 @@ Trace context продолжает передаваться через metadata 
 
 ## Retention
 
-Опубликованные записи Outbox не хранятся бесконечно. Retention не меньше окна, нужного для диагностики и replay. Очистка не затрагивает неопубликованные записи: в `watermill-sql` удаляются только записи до подтверждённого offset consumer group Forwarder. Конкретный срок не задаётся.
+Записи Outbox хранятся час после вставки: Debezium читает событие из журнала базы, а не из таблицы, поэтому удаление строки не теряет событие. Срок нужен для диагностики; PostgreSQL-контексты удаляют старые строки в транзакции очередной записи Outbox, MongoDB — TTL-индексом ([ADR 37](adr/0037-outbox-delivery-via-debezium-cdc.md)).
 
 Inbox не обязан храниться бесконечно. Retention учитывает максимальное окно, в течение которого Kafka или операционные процедуры могут повторно доставить старое событие: retention топика, сброс или перемотку offsets, восстановление из dead-letter и повторную публикацию из Outbox.
 
@@ -556,12 +551,9 @@ Inbox не обязан храниться бесконечно. Retention уч�
 
 Go (`orders`):
 
-- имена SQL topics Forwarder, схема `watermill-sql` и миграции;
-- retry middleware Forwarder при временных сбоях Kafka и alert на head-of-line blocking;
-- настройки `watermill-kafka` publisher, сохраняющие порядок внутри partition при retries producer;
+- alert на остановленный коннектор Debezium и лаг слота репликации (ADR 37);
 - обёртка Inbox как Watermill middleware или отдельный адаптер вокруг handler; in-memory дедупликация не заменяет durable Inbox;
 - передача транзакции PostgreSQL в репозитории и Outbox через unit of work и сборка через Google Wire;
-- размещение Forwarder: отдельный процесс или задача существующего worker, и механизм failover;
 - ключ идемпотентности Activity, производный от Workflow ID и шага процесса;
 - подтверждение сообщения и commit offset в `watermill-kafka` строго после commit;
 - связывание `event_id`, Workflow ID, Signal ID и политик повторного запуска workflow в Temporal.
@@ -599,5 +591,5 @@ Python (`payments`):
 - [Guaranteed Delivery](https://www.enterpriseintegrationpatterns.com/GuaranteedMessaging.html)
 - [At-least-once Delivery](https://www.cloudcomputingpatterns.org/at_least_once_delivery/)
 - [Watermill SQL Pub/Sub](https://watermill.io/pubsubs/sql/)
-- [Watermill Forwarder (Outbox pattern)](https://watermill.io/advanced/forwarder/)
+- [Debezium Outbox Event Router](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html)
 - [Debezium Outbox Event Router](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html)

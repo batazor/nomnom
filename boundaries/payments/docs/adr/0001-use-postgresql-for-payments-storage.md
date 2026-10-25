@@ -18,10 +18,10 @@ Accepted
 - Инварианты закреплены ограничениями схемы: `UNIQUE (order_id)`, `UNIQUE (idempotency_key)`, частичный уникальный индекс `(payment_id) WHERE state = 'pending'`; нарушения отображаются в доменные ошибки, insert выполняется в savepoint.
 - Optimistic concurrency — `UPDATE … WHERE id = ? AND version = ?`.
 - Суммы — `NUMERIC` без потери масштаба.
-- `outbox` и `inbox` (`PRIMARY KEY (consumer, event_id)`) живут в той же базе и пишутся в той же транзакции. Формат записи Outbox, детерминированный `event_id` и отбор публикуемых событий mapper'ом — по [ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md).
+- `payments_outbox` и `inbox` (`PRIMARY KEY (consumer, event_id)`) живут в той же базе и пишутся в той же транзакции. Детерминированный `event_id` и отбор публикуемых событий mapper'ом — по [ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md); поля записи, publication `payments_outbox` и удаление записей старше часа в транзакции очередной записи — по [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md).
 - Схема — forward-only SQL-миграции в репозитории, применяемые отдельным entrypoint под advisory lock.
 - `DATABASE__URL` обязателен: пустое значение или недоступная база завершают процесс на старте.
 
 ## Consequences
 
-Атомарность бизнес-изменения, Outbox и Inbox обеспечивает локальная транзакция без распределённых протоколов. Контекст получает зависимость от PostgreSQL и необходимость сопровождать миграции и роль базы в каждом окружении. Outbox publisher, читающий `outbox` по `position`, и Kafka consumers поверх `inbox` реализуются отдельно. Собственный простой migrator заменяется инструментом миграций, если понадобятся откаты или сложные сценарии.
+Атомарность бизнес-изменения, Outbox и Inbox обеспечивает локальная транзакция без распределённых протоколов. Контекст получает зависимость от PostgreSQL и необходимость сопровождать миграции и роль базы в каждом окружении. Outbox публикует Debezium из WAL (ADR 37), поэтому базе нужен `wal_level = logical`, а слот репликации держит WAL, пока коннектор его не прочитал. Kafka consumers поверх `inbox` реализуются отдельно. Собственный простой migrator заменяется инструментом миграций, если понадобятся откаты или сложные сценарии.

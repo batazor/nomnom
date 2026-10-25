@@ -12,7 +12,7 @@ Accepted
 
 Дополнено [25. Integration Event Publication](0025-integration-event-publication.md)
 
-Дополнено [31. Outbox Storage, Polling Relay and Client Libraries](0031-outbox-storage-polling-relay-and-clients.md)
+Дополнено [31. Outbox Storage, Polling Relay and Client Libraries](0031-outbox-storage-polling-relay-and-clients.md); доставка Outbox — CDC, [37](0037-outbox-delivery-via-debezium-cdc.md)
 
 ## Context
 

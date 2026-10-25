@@ -1,7 +1,7 @@
 # integration-event-publication Specification
 
 ## Purpose
-Определяет публикацию Integration Events контекстов `payments`, `delivery` и `restaurants` через Transactional Outbox и polling relay (ADR 13, ADR 31): какие Domain Events становятся Integration Events, как формируется запись Outbox, как relay доставляет её в Kafka с сохранением порядка и подтверждением брокера, формат Event Envelope, retention, метрики, конфигурация и развёртывание relay.
+Определяет публикацию Integration Events контекстов через Transactional Outbox и CDC на Debezium (ADR 13, ADR 31, ADR 37): какие Domain Events становятся Integration Events, как формируется запись Outbox, как коннектор доставляет её в Kafka с сохранением порядка, формат Event Envelope, retention и развёртывание коннекторов.
 
 ## Requirements
 
@@ -20,7 +20,7 @@
 **ID:** AC-601
 
 - **WHEN** транзакция бизнес-изменения откатывается
-- **THEN** ни изменение aggregate, ни запись Outbox не сохраняются, и relay нечего публиковать
+- **THEN** ни изменение aggregate, ни запись Outbox не сохраняются, и в журнале нечего публиковать
 
 ### Requirement: Публикуемые события выбираются явным allowlist
 **ID:** FR-521
@@ -140,121 +140,71 @@ Mapper Domain Event → Integration Event SHALL находиться в `infrast
 - **WHEN** транзакция пытается записать запись Outbox с уже существующим `event_id`
 - **THEN** транзакция откатывается вместе с изменением aggregate
 
-### Requirement: Единственный активный relay
+### Requirement: Outbox доставляет CDC
 **ID:** FR-526
 
-Outbox каждого контекста SHALL читать отдельный процесс `<context>-relay` того же образа, и одновременно MUST быть активен не более одного экземпляра. Экземпляр без lock или lease MUST NOT читать Outbox. При штатной остановке relay MUST освобождать lock или lease.
+Запись Outbox SHALL доставлять в Kafka коннектор Debezium `<context>-outbox` в Kafka Connect из журнала хранилища (PostgreSQL WAL через publication `<context>_outbox` с `publish = 'insert'`, MongoDB change streams коллекции `outbox`) (ADR 37). Сервис MUST NOT публиковать Outbox сам и MUST NOT опрашивать таблицу или коллекцию Outbox.
 
-#### Scenario: Две реплики
-**ID:** AC-614
-
-- **WHEN** запущены два экземпляра relay одного контекста
-- **THEN** публикует только держатель lock или lease, второй остаётся standby и Outbox не читает
-
-#### Scenario: Штатная остановка отдаёт lease
+#### Scenario: Событие в Kafka после commit
 **ID:** AC-616
 
-- **WHEN** активный relay получает `SIGTERM`
-- **THEN** он завершает текущую запись, освобождает lock или удаляет свой lease, и standby не ждёт истечения срока
+- **WHEN** транзакция записала изменение aggregate и запись Outbox и закоммитилась
+- **THEN** коннектор контекста публикует запись в её `topic` без процесса relay
 
-### Requirement: Механизм исключительности relay
-**ID:** FR-537
-
-`payments-relay` и `delivery-relay` SHALL удерживать session-level `pg_try_advisory_lock` на выделенном соединении и MUST проверять живость его сессии перед каждой записью. `restaurants-relay` SHALL владеть lease в `outbox_leases` со сроком `OUTBOX__LEASE_TTL` по времени сервера MongoDB и MUST продлевать его внутри пачки не реже трети TTL; `message.timeout.ms` MUST быть меньше TTL. Без lock или lease relay MUST остановить пачку; истёкший lease MAY захватить другой экземпляр.
-
-#### Scenario: Failover после потери владельца
-**ID:** AC-615
-
-- **WHEN** соединение с advisory lock разорвано или lease истёк без продления
-- **THEN** standby-экземпляр захватывает lock или lease и продолжает публикацию с первой неопубликованной записи, а прежний экземпляр не публикует следующую запись своей пачки
-
-### Requirement: Выборка в порядке seq
+### Requirement: Запись Outbox несёт всё сообщение
 **ID:** FR-527
 
-Цикл relay SHALL читать до `OUTBOX__BATCH_SIZE` записей с пустым `published_at` в порядке возрастания `seq` и публиковать их по одной в этом порядке. Kafka message key MUST быть `aggregate_id`. Relay MUST NOT хранить offset: запись, зафиксированная позже записи с большим `seq`, MUST быть прочитана следующим циклом. `seq` MongoDB MUST выделяться счётчиком `outbox_counters` в той же транзакции.
+Каждая запись Outbox SHALL содержать `event_id`, `event_type`, `aggregate_type`, `aggregate_id`, `aggregate_version`, `occurred_at`, `topic`, `payload` и `traceparent`; `traceparent` MUST быть пустой строкой без trace context, а не отсутствовать (документ MongoDB без поля останавливает коннектор). Состояния публикации (`published_at`, `attempts`, `seq` relay) MUST NOT быть.
 
-#### Scenario: Записи aggregate публикуются по порядку
+#### Scenario: Запись без trace context
 **ID:** AC-617
 
-- **WHEN** в Outbox неопубликованы записи с `seq` 1, 2, 3 одного aggregate
-- **THEN** relay публикует их в Kafka в порядке 1, 2, 3 с key, равным `aggregate_id`
+- **WHEN** use case пишет событие вне span
+- **THEN** запись Outbox содержит `traceparent = ''`, а остальные поля контракта заполнены
 
-### Requirement: Отметка только после подтверждения брокера
+### Requirement: Порядок и повтор
 **ID:** FR-528
 
-Relay SHALL публиковать запись idempotent producer'ом с `acks=all` и выставлять `published_at` только после подтверждения брокера. Повторная публикация записи после сбоя между подтверждением и отметкой MUST считаться штатной: она несёт тот же `event_id`.
+Записи одного `aggregate_id` SHALL публиковаться в порядке commit с Kafka key `aggregate_id`. Доставка at-least-once: повтор после рестарта Connect MUST быть безопасен для consumers (Inbox, ADR 11). Запись, нарушающая контракт, MUST останавливать коннектор, а не пропускаться.
 
-#### Scenario: Сбой после подтверждения
+#### Scenario: Запись нарушает контракт
 **ID:** AC-618
 
-- **WHEN** брокер подтвердил запись, а relay остановился до выставления `published_at`
-- **THEN** следующий активный relay публикует её повторно с тем же `event_id` и затем отмечает опубликованной
-
-### Requirement: Head-of-line остановка пачки
-**ID:** FR-529
-
-Первая неудачная публикация SHALL останавливать пачку: у записи MUST увеличиваться `attempts` и сохраняться усечённый `last_error`, записи после неё в этом цикле MUST NOT публиковаться, а следующий цикл MUST начинаться с неё же.
-
-#### Scenario: Ошибка брокера на второй записи
-**ID:** AC-619
-
-- **WHEN** пачка содержит записи `seq` 1, 2, 3 и публикация записи 2 завершается ошибкой
-- **THEN** запись 1 отмечена опубликованной, у записи 2 `attempts = 1` и заполнен `last_error`, запись 3 не опубликована, и следующий цикл начинает с записи 2
+- **WHEN** коннектор получает запись без поля контракта
+- **THEN** задача коннектора переходит в `FAILED`, последующие записи не публикуются до исправления и restart задачи
 
 ### Requirement: Event Envelope совпадает с orders
 **ID:** FR-530
 
-Relay SHALL передавать Event Envelope в Kafka headers в формате `orders/pkg/messaging/envelope.go`: `event_id`, `_watermill_message_uuid` (= `event_id`), `event_type`, `occurred_at` (UTC в формате Go `time.RFC3339Nano`: дробная часть без хвостовых нулей, суффикс `Z`), `aggregate_type`, `aggregate_id`, `aggregate_version` (десятичная строка). `traceparent` MUST передаваться только если записан в `metadata`. Payload сообщения MUST быть сериализованным Protobuf контракта без обёртки.
+Коннектор SHALL передавать Event Envelope в Kafka headers строками (`SimpleHeaderConverter`): `event_id`, `_watermill_message_uuid` (= `event_id`), `event_type`, `occurred_at` (RFC 3339 UTC), `aggregate_type`, `aggregate_id`, `aggregate_version` (десятичная строка), `traceparent` (пустой без trace context). Value MUST быть `payload` без изменений (`ByteArrayConverter`): Protobuf контракта или JSON Change Notification.
 
 #### Scenario: Headers опубликованного события
 **ID:** AC-620
 
-- **WHEN** relay публикует запись с `occurred_at = 2026-10-25T10:15:30.120000Z` без `traceparent`
-- **THEN** сообщение несёт все headers Envelope с `occurred_at = 2026-10-25T10:15:30.12Z`, header `traceparent` отсутствует, а Go consumer `orders` читает `event_id` как UUID сообщения Watermill
+- **WHEN** коннектор публикует запись с `occurred_at = 2026-10-25T10:15:30.120000Z` без trace context
+- **THEN** сообщение несёт все headers Envelope, `occurred_at` — RFC 3339 UTC, `traceparent` пустой, а Go consumer `orders` читает `event_id` как UUID сообщения Watermill
 
-### Requirement: Retention опубликованных записей
+### Requirement: Retention записей Outbox
 **ID:** FR-531
 
-Активный relay SHALL удалять записи, опубликованные раньше `now − OUTBOX__RETENTION` (по умолчанию 7 дней), не чаще своего интервала очистки. Неопубликованные записи MUST NOT удаляться независимо от возраста.
+Записи Outbox SHALL удаляться через час после вставки (`created_at`) без фонового процесса: PostgreSQL-контексты — в транзакции очередной записи Outbox (`FOR UPDATE SKIP LOCKED`), MongoDB — TTL-индексом. Удаление MUST NOT попадать в поток: Debezium читает событие из журнала.
 
-#### Scenario: Очистка не трогает backlog
+#### Scenario: Старые записи уходят со следующей записью
 **ID:** AC-621
 
-- **WHEN** в Outbox есть опубликованная запись старше retention и неопубликованная запись того же возраста
-- **THEN** после очистки остаётся только неопубликованная запись
+- **WHEN** в Outbox есть запись старше часа и транзакция пишет новую запись Outbox
+- **THEN** после commit старой записи нет, а новая есть
 
-### Requirement: Метрики relay
-**ID:** FR-532
-
-Relay SHALL экспортировать через OpenTelemetry instruments `nomnom.outbox.pending.messages` и `nomnom.outbox.oldest_pending.age` по topic (`messaging.destination.name`), счётчик неудачных попыток `nomnom.outbox.publish.retries` (`messaging.destination.name`, `nomnom.event.type`, `nomnom.error.class`), histograms `nomnom.outbox.publish.duration` и `nomnom.outbox.publish.lag` (от `occurred_at` до подтверждения брокера). Backlog MUST сообщать только активный экземпляр.
-
-#### Scenario: Публикация и сбой видны в метриках
-**ID:** AC-622
-
-- **WHEN** активный relay публикует одну запись и не может опубликовать следующую
-- **THEN** histograms duration и lag получили по наблюдению с `event_type` первой записи, `retries` увеличился на 1 с классом ошибки, а pending отражает оставшийся backlog topic
-
-### Requirement: Конфигурация relay
-**ID:** FR-533
-
-Relay SHALL требовать хранилище (`DATABASE__URL` для `payments` и `delivery`, `MONGODB__URI` для `restaurants`) и `KAFKA__BROKERS`; пустое значение MUST завершать процесс ошибкой на старте. Relay MUST следовать runtime contract `pkg/lifecycle` (только технический порт).
-
-#### Scenario: Relay без брокеров не стартует
-**ID:** AC-623
-
-- **WHEN** `<context>-relay` запускается с пустым `KAFKA__BROKERS` или пустым адресом хранилища
-- **THEN** процесс завершается с ошибкой конфигурации до открытия портов и не переходит на in-memory адаптеры
-
-### Requirement: Развёртывание relay
+### Requirement: Развёртывание коннектора
 **ID:** FR-538
 
-Helm chart каждого контекста SHALL предоставлять `values-relay.yaml` для отдельного release того же образа с `replicaCount: 1`, без Service и без применения миграций. Тестовое kind-окружение SHALL разворачивать releases `payments-relay`, `delivery-relay` и `restaurants-relay` с `KAFKA__BROKERS` кластера.
+Helm chart каждого контекста SHALL содержать конфигурацию коннектора (`cdc.*`) и hook Job, который при `cdc.enabled` регистрирует её в Kafka Connect (`PUT /connectors/<name>/config`). Пароли коннектора MUST браться config provider Kafka Connect (`${dir:...}`), а не храниться в конфигурации. Тестовое kind-окружение SHALL разворачивать Kafka Connect с Debezium в `nomnom-infra` и включать `cdc` в основном release каждого контекста.
 
-#### Scenario: Relay в kind
+#### Scenario: Коннекторы в kind
 **ID:** AC-624
 
 - **WHEN** окружение kind разворачивается через Skaffold
-- **THEN** для каждого из трёх контекстов работает release relay с одним экземпляром, без Service, использующий базу основного release
+- **THEN** коннекторы `orders-outbox`, `payments-outbox`, `delivery-outbox` и `restaurants-outbox` в состоянии `RUNNING`, и процессов relay нет
 
 ### Requirement: Integration Events открытости ресторана
 **ID:** FR-560
@@ -265,7 +215,7 @@ Helm chart каждого контекста SHALL предоставлять `v
 **ID:** AC-660
 
 - **WHEN** Open Restaurant открывает закрытый ресторан и фиксирует версию 2
-- **THEN** Outbox содержит `nomnom.restaurants.v1.RestaurantOpened` с `restaurant_id`, `aggregate_type = Restaurant`, `aggregate_version = 2` и topic `restaurants.v1.restaurant-events`, а relay публикует его с key, равным id ресторана
+- **THEN** Outbox содержит `nomnom.restaurants.v1.RestaurantOpened` с `restaurant_id`, `aggregate_type = Restaurant`, `aggregate_version = 2` и topic `restaurants.v1.restaurant-events`, а коннектор публикует его с key, равным id ресторана
 
 #### Scenario: Close Restaurant публикует RestaurantClosed
 **ID:** AC-661
@@ -288,7 +238,7 @@ Helm chart каждого контекста SHALL предоставлять `v
 **ID:** AC-663
 
 - **WHEN** Set Menu Item Availability делает доступное блюдо недоступным
-- **THEN** Outbox содержит `nomnom.restaurants.v1.MenuItemAvailabilityChanged` с `menu_id`, `restaurant_id`, `menu_item_id` и `available = false` в topic `restaurants.v1.menu-events`, а relay публикует его с key, равным id меню
+- **THEN** Outbox содержит `nomnom.restaurants.v1.MenuItemAvailabilityChanged` с `menu_id`, `restaurant_id`, `menu_item_id` и `available = false` в topic `restaurants.v1.menu-events`, а коннектор публикует его с key, равным id меню
 
 #### Scenario: Update Menu Item с новой доступностью
 **ID:** AC-664
