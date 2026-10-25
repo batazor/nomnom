@@ -91,8 +91,9 @@ type Panel struct {
 	Description string
 	Unit        string
 	Queries     []Query
-	// Traces добавляет data links в Tempo (ошибки и медленные traces сервиса).
-	Traces bool
+	// Traces — TraceQL-условия spans серий по индексу Queries: data link точки
+	// ведёт в Tempo на spans этой серии. "" — у запроса нет ссылки.
+	Traces []string
 }
 
 // Dashboard — готовый ресурс и сведения о панелях для README.
@@ -227,11 +228,20 @@ func (g *generator) row(r row) *dashboard.RowBuilder {
 // panel рендерит живую панель на готовых запросах или TODO-панель.
 func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSummary) {
 	var ready, pending []Query
+	var traces []string
+	if len(p.Traces) > 0 && len(p.Traces) != len(p.Queries) {
+		g.errs = append(g.errs, fmt.Sprintf("%s: %d trace-условий на %d запросов", p.Title, len(p.Traces), len(p.Queries)))
+	}
 	missing := map[string]bool{}
-	for _, q := range p.Queries {
+	for i, q := range p.Queries {
 		ok, miss := g.check(p.Title, q, sc)
 		if ok {
 			ready = append(ready, q)
+			if i < len(p.Traces) {
+				traces = append(traces, p.Traces[i])
+			} else {
+				traces = append(traces, "")
+			}
 		} else {
 			pending = append(pending, q)
 		}
@@ -250,9 +260,6 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 		p.Description = "Метрики: " + strings.Join(metricsOf(p), ", ") + "."
 	}
 	b := dashboard.NewPanelBuilder().Title(p.Title)
-	if p.Traces {
-		b.Links(traceLinks(sc))
-	}
 	if len(ready) == 0 {
 		return b.Description(p.Description).
 			Visualization(text.NewVisualizationV2Builder().Mode(text.TextModeMarkdown).Content(todo(p, sc, names))), summary
@@ -263,17 +270,22 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 		description += "\n\nЧасть запросов ждёт метрик: " + strings.Join(names, ", ") + " (см. " + inventory.DocPath + ")."
 	}
 	group := dashboard.NewQueryGroupBuilder()
+	viz := timeseries.NewVisualizationV2Builder().Unit(p.Unit)
 	for i, q := range ready {
+		ref := string(rune('A' + i))
 		query := prometheus.NewQueryV2Builder().
 			Datasource(dashboard.NewDashboardv2DataQueryKindDatasourceBuilder().Name("${metrics}")).
 			Expr(q.Expr).LegendFormat(q.Legend).Range(true)
 		if inventory.ExemplarsEnabled && strings.Contains(q.Expr, "histogram_quantile") {
 			query.Exemplar(true)
 		}
-		group.Target(dashboard.NewTargetBuilder().RefId(string(rune('A' + i))).Query(query))
+		group.Target(dashboard.NewTargetBuilder().RefId(ref).Query(query))
+		if traces[i] != "" {
+			g.checkTrace(p.Title, q, traces[i])
+			viz.OverrideByQuery(ref, []dashboard.DynamicConfigValue{{Id: "links", Value: seriesLinks(sc, traces[i])}})
+		}
 	}
-	return b.Description(description).Data(group).
-		Visualization(timeseries.NewVisualizationV2Builder().Unit(p.Unit)), summary
+	return b.Description(description).Data(group).Visualization(viz), summary
 }
 
 // check проверяет запрос против инвентаря: метрики инвентаризированы, labels

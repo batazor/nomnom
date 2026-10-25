@@ -107,7 +107,7 @@ func paymentsDomain(sc Scope) []Panel {
 			{Sum("nomnom_outcome", sc.Rate("nomnom_payments_captures_total")), "capture {{nomnom_outcome}}"},
 			{Sum("nomnom_outcome", sc.Rate("nomnom_payments_refunds_total")), "refund {{nomnom_outcome}}"},
 		}},
-		{Title: "Failed payment operations", Unit: "ops", Traces: true, Queries: []Query{
+		{Title: "Failed payment operations", Unit: "ops", Traces: traces("status=error", 3), Queries: []Query{
 			counter(sc, "nomnom_payments_authorizations_total", "authorization", `nomnom_outcome="failed"`),
 			counter(sc, "nomnom_payments_captures_total", "capture", `nomnom_outcome="failed"`),
 			counter(sc, "nomnom_payments_refunds_total", "refund", `nomnom_outcome="failed"`),

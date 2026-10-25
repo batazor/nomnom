@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/grafana/grafana-foundation-sdk/go/cog"
@@ -133,10 +135,56 @@ func profilesURL() string {
 	})
 }
 
-func traceLinks(sc Scope) []cog.Builder[dashboard.DataLink] {
-	return []cog.Builder[dashboard.DataLink]{
-		dashboard.NewDataLinkBuilder().Title("Traces: ошибки сервиса в интервале").Url(tracesURL(sc, " && status=error")).TargetBlank(true),
-		dashboard.NewDataLinkBuilder().Title("Traces: медленные (> 1s)").Url(tracesURL(sc, " && duration > 1s")).TargetBlank(true),
+// seriesLinks — data link серии: spans сервиса по условию серии в интервале dashboard.
+func seriesLinks(sc Scope, cond string) []dashboard.DataLink {
+	return []dashboard.DataLink{{Title: "Traces этой серии", Url: tracesURL(sc, " && "+cond), TargetBlank: cog.ToPtr(true)}}
+}
+
+// spanAttributes — span attribute с тем же значением, что label серии: instrumentation
+// пишет одни attributes в span операции и в её метрику (rpc, db, use case, provider).
+var spanAttributes = map[string]string{
+	"rpc_method":               "rpc.method",
+	"rpc_response_status_code": "rpc.response.status_code",
+	"db_operation_name":        "db.operation.name",
+	"error_type":               "error.type",
+	"nomnom_usecase_name":      "nomnom.usecase.name",
+	"nomnom_outcome":           "nomnom.outcome",
+	"nomnom_payment_operation": "nomnom.payment.operation",
+}
+
+var seriesLabel = regexp.MustCompile(`\$\{__field\.labels\.(\w+)\}`)
+
+// spanLabel — условие на span attribute из label серии.
+func spanLabel(label string) string {
+	return fmt.Sprintf(`span.%s="${__field.labels.%s}"`, spanAttributes[label], label)
+}
+
+// slower — spans не быстрее значения точки; unit — единица histogram (s, ms).
+func slower(unit string) string { return "duration >= ${__value.raw}" + unit }
+
+// traces повторяет условие для каждого запроса панели.
+func traces(cond string, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = cond
+	}
+	return out
+}
+
+// checkTrace — labels серии в условии есть в группировке запроса и сопоставлены span attribute.
+func (g *generator) checkTrace(panel string, q Query, cond string) {
+	a, err := Analyze(q.Expr)
+	if err != nil {
+		g.errs = append(g.errs, fmt.Sprintf("%s: %v", panel, err))
+		return
+	}
+	for _, m := range seriesLabel.FindAllStringSubmatch(cond, -1) {
+		if _, ok := spanAttributes[m[1]]; !ok {
+			g.errs = append(g.errs, fmt.Sprintf("%s: label %s без span attribute", panel, m[1]))
+		}
+		if !slices.Contains(a.Grouping, m[1]) {
+			g.errs = append(g.errs, fmt.Sprintf("%s: label %s не входит в группировку %q", panel, m[1], q.Expr))
+		}
 	}
 }
 

@@ -11,10 +11,24 @@ import (
 // application — дефект или неожиданный сбой; business rejection — отказ по правилам
 // домена/контракта. Бизнес-результаты внутри OK-ответа (PaymentDeclined) ошибками не считаются.
 const (
-	codesTransport   = `rpc_response_status_code=~"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE"`
-	codesApplication = `rpc_response_status_code=~"UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS"`
-	codesBusiness    = `rpc_response_status_code=~"INVALID_ARGUMENT|NOT_FOUND|ALREADY_EXISTS|PERMISSION_DENIED|FAILED_PRECONDITION|ABORTED|OUT_OF_RANGE|UNAUTHENTICATED"`
-	codesTechnical   = `rpc_response_status_code=~"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS"`
+	transport   = "CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE"
+	application = "UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS"
+	business    = "INVALID_ARGUMENT|NOT_FOUND|ALREADY_EXISTS|PERMISSION_DENIED|FAILED_PRECONDITION|ABORTED|OUT_OF_RANGE|UNAUTHENTICATED"
+
+	codesTransport   = `rpc_response_status_code=~"` + transport + `"`
+	codesApplication = `rpc_response_status_code=~"` + application + `"`
+	codesBusiness    = `rpc_response_status_code=~"` + business + `"`
+	codesTechnical   = `rpc_response_status_code=~"` + transport + "|" + application + `"`
+)
+
+// TraceQL-условия spans: те же классы кодов в span attribute rpc.response.status_code.
+const (
+	grpcServerSpan    = `kind=server && span.rpc.method != nil`
+	spansTransport    = `kind=server && span.rpc.response.status_code=~"` + transport + `"`
+	spansApplication  = `kind=server && span.rpc.response.status_code=~"` + application + `"`
+	spansBusiness     = `kind=server && span.rpc.response.status_code=~"` + business + `"`
+	serverErrorSpan   = `kind=server && status=error`
+	consumerErrorSpan = `kind=consumer && status=error`
 )
 
 const (
@@ -30,6 +44,7 @@ func (g *generator) health(sc Scope) []Panel {
 	o := g.opts
 	var rate, errs, ratio []Query
 	var latency []Query
+	var errTraces, latencyTraces []string
 	if o.GRPC {
 		rate = append(rate, Query{Sum("", sc.Rate(rpcServer+"_count")), "gRPC"})
 		errs = append(errs,
@@ -38,7 +53,10 @@ func (g *generator) health(sc Scope) []Panel {
 			Query{Sum("", sc.Rate(rpcServer+"_count", codesBusiness)), "gRPC business rejection"},
 		)
 		ratio = append(ratio, Query{Sum("", sc.Rate(rpcServer+"_count", codesTechnical)) + " / " + Sum("", sc.Rate(rpcServer+"_count")), "gRPC"})
-		latency = append(latency, sc.Percentiles("gRPC ", "", rpcServer)...)
+		errTraces = append(errTraces, spansTransport, spansApplication, spansBusiness)
+		grpc := sc.Percentiles("gRPC ", "", rpcServer)
+		latency = append(latency, grpc...)
+		latencyTraces = append(latencyTraces, traces(grpcServerSpan+" && "+slower("s"), len(grpc))...)
 	}
 	if o.GraphQL {
 		rate = append(rate, Query{Sum("", sc.Rate("router_http_requests_total", clientRequest)), "GraphQL/HTTP"})
@@ -47,36 +65,44 @@ func (g *generator) health(sc Scope) []Panel {
 			Query{Sum("", sc.Rate("router_http_requests_error_total", clientRequest)), "GraphQL errors"},
 		)
 		ratio = append(ratio, Query{Sum("", sc.Rate("router_http_requests_error_total", clientRequest)) + " / " + Sum("", sc.Rate("router_http_requests_total", clientRequest)), "GraphQL"})
-		latency = append(latency, sc.Percentiles("GraphQL ", "", router, clientRequest)...)
+		errTraces = append(errTraces, serverErrorSpan, serverErrorSpan)
+		graphql := sc.Percentiles("GraphQL ", "", router, clientRequest)
+		latency = append(latency, graphql...)
+		latencyTraces = append(latencyTraces, traces("kind=server && "+slower("ms"), len(graphql))...)
 	}
 	if o.Kafka != nil {
 		if o.Kafka.Watermill {
 			rate = append(rate, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count")), "Kafka processing"})
 			errs = append(errs, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "Kafka nack (retries exhausted)"})
+			errTraces = append(errTraces, consumerErrorSpan)
 			ratio = append(ratio, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)) + " / " + Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count")), "Kafka"})
 		} else {
 			rate = append(rate, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka processing"})
 			errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`)), "Kafka technical failure"})
+			errTraces = append(errTraces, consumerErrorSpan)
 			ratio = append(ratio, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!=""`)) + " / " + Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka"})
 		}
 	}
 	if o.Kafka != nil {
 		errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_poison_messages_total")), "Kafka dead letter"},
 			Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class="business"`)), "Kafka business rejection"})
+		// Dead letter и business rejection не помечают span ошибкой: ссылки нет.
+		errTraces = append(errTraces, "", "")
 	}
 	if o.Temporal != nil {
 		rate = append(rate, Query{Sum("", sc.Rate("temporal_activity_execution_latency_seconds_count")), "Temporal activities"})
 		errs = append(errs, Query{Sum("", sc.Rate("temporal_activity_execution_failed_total")), "Temporal activity failure"})
+		errTraces = append(errTraces, "status=error")
 	}
 
 	panels := []Panel{
 		{Title: "Request rate by entry", Unit: "ops", Queries: rate,
 			Description: "Входящая работа по типу входа: gRPC, GraphQL/HTTP, обработка Kafka, Temporal Activities."},
-		{Title: "Errors by class", Unit: "ops", Queries: errs, Traces: true,
+		{Title: "Errors by class", Unit: "ops", Queries: errs, Traces: errTraces,
 			Description: "Transport/availability (CANCELLED, DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE), application (UNKNOWN, UNIMPLEMENTED, INTERNAL, DATA_LOSS) и business rejection (INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS, PERMISSION_DENIED, FAILED_PRECONDITION, ABORTED, OUT_OF_RANGE, UNAUTHENTICATED). Бизнес-результаты в OK-ответе (PaymentDeclined) ошибками не являются."},
 		{Title: "Technical error ratio", Unit: "percentunit", Queries: ratio,
 			Description: "Доля transport + application ошибок; business rejections исключены."},
-		{Title: "Latency p50 / p95 / p99", Unit: latencyUnit(o), Queries: latency, Traces: true,
+		{Title: "Latency p50 / p95 / p99", Unit: latencyUnit(o), Queries: latency, Traces: latencyTraces,
 			Description: "Server-side latency из histograms входа."},
 	}
 	if g.opts.Language == Cosmo {
@@ -144,25 +170,26 @@ func (g *generator) dependencies(sc Scope) []Panel {
 		gateway := `rpc_method!~"authzed.*"`
 		panels = append(panels,
 			Panel{Title: "gRPC via internal gateway: rate", Unit: "ops", Queries: []Query{{Sum("rpc_method", sc.Rate(rpcClient+"_count", gateway)), "{{rpc_method}}"}}},
-			Panel{Title: "gRPC via internal gateway: technical errors", Unit: "ops", Traces: true, Queries: []Query{{Sum("rpc_method, rpc_response_status_code", sc.Rate(rpcClient+"_count", gateway, codesTechnical)), "{{rpc_method}} {{rpc_response_status_code}}"}}},
-			Panel{Title: "gRPC via internal gateway: p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "rpc_method", rpcClient, gateway), "{{rpc_method}}"}}},
+			Panel{Title: "gRPC via internal gateway: technical errors", Unit: "ops", Traces: []string{"kind=client && " + spanLabel("rpc_method") + " && " + spanLabel("rpc_response_status_code")}, Queries: []Query{{Sum("rpc_method, rpc_response_status_code", sc.Rate(rpcClient+"_count", gateway, codesTechnical)), "{{rpc_method}} {{rpc_response_status_code}}"}}},
+			Panel{Title: "gRPC via internal gateway: p95", Unit: "s", Traces: []string{"kind=client && " + spanLabel("rpc_method") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "rpc_method", rpcClient, gateway), "{{rpc_method}}"}}},
 		)
 	}
 	if o.GraphQL {
 		panels = append(panels,
 			Panel{Title: "Subgraph calls: rate", Unit: "ops", Queries: []Query{{Sum("wg_subgraph_name", sc.Rate("router_http_requests_total", subgraphCall)), "{{wg_subgraph_name}}"}}},
-			Panel{Title: "Subgraph calls: errors", Unit: "ops", Traces: true, Queries: []Query{{Sum("wg_subgraph_name", sc.Rate("router_http_requests_error_total", subgraphCall)), "{{wg_subgraph_name}}"}}},
+			Panel{Title: "Subgraph calls: errors", Unit: "ops", Traces: []string{"kind=client && status=error"}, Queries: []Query{{Sum("wg_subgraph_name", sc.Rate("router_http_requests_error_total", subgraphCall)), "{{wg_subgraph_name}}"}}},
 			Panel{Title: "Subgraph calls: p95", Unit: "ms", Queries: []Query{{sc.Quantile("0.95", "wg_subgraph_name", router, subgraphCall), "{{wg_subgraph_name}}"}}},
 		)
 	}
 	if o.Database != "" {
 		db := `db_system_name="` + string(o.Database) + `"`
+		dbSpan := `kind=client && span.db.system.name="` + string(o.Database) + `"`
 		panels = append(panels,
-			Panel{Title: string(o.Database) + ": operations", Unit: "ops", Queries: []Query{
+			Panel{Title: string(o.Database) + ": operations", Unit: "ops", Traces: []string{"", dbSpan + " && " + spanLabel("error_type")}, Queries: []Query{
 				{Sum("db_operation_name", sc.Rate("db_client_operation_duration_seconds_count", db)), "{{db_operation_name}}"},
 				{Sum("error_type", sc.Rate("db_client_operation_duration_seconds_count", db, `error_type!=""`)), "error {{error_type}}"},
 			}},
-			Panel{Title: string(o.Database) + ": p95 by operation", Unit: "s", Traces: true, Queries: []Query{{sc.Quantile("0.95", "db_operation_name", "db_client_operation_duration_seconds", db), "{{db_operation_name}}"}}},
+			Panel{Title: string(o.Database) + ": p95 by operation", Unit: "s", Traces: []string{dbSpan + " && " + spanLabel("db_operation_name") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "db_operation_name", "db_client_operation_duration_seconds", db), "{{db_operation_name}}"}}},
 		)
 		if o.DatabasePool {
 			panels = append(panels, poolPanels(sc, o.Database)...)
@@ -181,8 +208,8 @@ func (g *generator) dependencies(sc Scope) []Panel {
 		panels = append(panels,
 			Panel{Title: "Payment provider: requests", Unit: "ops", Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Rate(provider+"_count")), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}},
 				Description: "`declined` — бизнес-результат провайдера, не технический сбой."},
-			Panel{Title: "Payment provider: errors and timeouts", Unit: "ops", Traces: true, Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Rate(provider+"_count", `nomnom_outcome=~"error|timeout"`)), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}}},
-			Panel{Title: "Payment provider: p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "nomnom_payment_operation", provider), "{{nomnom_payment_operation}}"}}},
+			Panel{Title: "Payment provider: errors and timeouts", Unit: "ops", Traces: []string{spanLabel("nomnom_payment_operation") + " && " + spanLabel("nomnom_outcome")}, Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Rate(provider+"_count", `nomnom_outcome=~"error|timeout"`)), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}}},
+			Panel{Title: "Payment provider: p95", Unit: "s", Traces: []string{spanLabel("nomnom_payment_operation") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "nomnom_payment_operation", provider), "{{nomnom_payment_operation}}"}}},
 		)
 	}
 	return panels
@@ -212,7 +239,7 @@ func (g *generator) kafka(sc Scope) []Panel {
 		{Title: "Consumed", Unit: "ops", Queries: consumed},
 		{Title: "Produced (Outbox, Debezium)", Unit: "ops", Queries: produced,
 			Description: "События Outbox, которые коннектор `" + k.Connector + "` прочитал из журнала базы и отправил в Kafka (ADR 37)."},
-		{Title: "Processing failures", Unit: "ops", Queries: failures, Traces: true,
+		{Title: "Processing failures", Unit: "ops", Queries: failures, Traces: traces(consumerErrorSpan, len(failures)),
 			Description: "Технические сбои обработки по `error_class` (permanent, deserialization, transient); business rejections подтверждаются (ack) и показаны в Service health отдельно."},
 		{Title: "Consumer lag", Unit: "short", Queries: []Query{{lag, "{{topic}}"}},
 			Description: "Lag consumer group `" + k.ConsumerGroup + "` из Alloy Kafka exporter; не путать с очередями предметной области."},
@@ -239,9 +266,9 @@ func useCases(sc Scope) []Panel {
 	return []Panel{
 		{Title: "Calls by outcome", Unit: "ops", Queries: []Query{{Sum("nomnom_outcome", sc.Rate(uc+"_count")), "{{nomnom_outcome}}"}},
 			Description: "success, rejected (отказ по правилам use case) и error (технический сбой)."},
-		{Title: "Rejections by use case", Unit: "ops", Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="rejected"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
-		{Title: "Errors by use case", Unit: "ops", Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="error"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
-		{Title: "Duration p95 by use case", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "nomnom_usecase_name", uc), "{{nomnom_usecase_name}}"}}},
+		{Title: "Rejections by use case", Unit: "ops", Traces: []string{spanLabel("nomnom_usecase_name") + ` && span.nomnom.outcome="rejected" && ` + spanLabel("error_type")}, Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="rejected"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
+		{Title: "Errors by use case", Unit: "ops", Traces: []string{spanLabel("nomnom_usecase_name") + ` && span.nomnom.outcome="error" && ` + spanLabel("error_type")}, Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="error"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
+		{Title: "Duration p95 by use case", Unit: "s", Traces: []string{spanLabel("nomnom_usecase_name") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "nomnom_usecase_name", uc), "{{nomnom_usecase_name}}"}}},
 	}
 }
 
@@ -276,7 +303,7 @@ func temporal(worker, main Scope) []Panel {
 		{Title: "Workflow end-to-end latency p95", Unit: "s", Queries: []Query{{worker.Quantile("0.95", "workflow_type", "temporal_workflow_endtoend_latency_seconds"), "{{workflow_type}}"}}},
 		{Title: "Oldest running fulfillment", Unit: "s", Queries: []Query{{Max("", worker.Gauge("nomnom_orders_fulfillment_oldest_running_age_seconds")), "age"}},
 			Description: "Возраст старейшего выполняющегося workflow: polling Visibility, SDK метрики не даёт."},
-		{Title: "Activities executed / failed attempts", Unit: "ops", Traces: true, Queries: []Query{
+		{Title: "Activities executed / failed attempts", Unit: "ops", Traces: []string{"", "status=error"}, Queries: []Query{
 			{Sum("activity_type", worker.Rate("temporal_activity_execution_latency_seconds_count")), "executed {{activity_type}}"},
 			{Sum("activity_type", worker.Rate("temporal_activity_execution_failed_total")), "failed {{activity_type}}"},
 		}, Description: "Каждая неуспешная попытка, кроме последней, ведёт к retry по Retry Policy."},
@@ -339,7 +366,7 @@ func authorization(sc Scope) []Panel {
 		{Title: "Checks by result", Unit: "ops", Queries: []Query{{Sum("nomnom_authz_result", sc.Rate(checks)), "{{nomnom_authz_result}}"}}},
 		{Title: "Denied by permission", Unit: "ops", Queries: []Query{{Sum("nomnom_authz_resource_type, nomnom_authz_permission", sc.Rate(checks, `nomnom_authz_result="denied"`)), "{{nomnom_authz_resource_type}}#{{nomnom_authz_permission}}"}},
 			Description: "DENIED — решение политики, не сбой SpiceDB."},
-		{Title: "Errors and timeouts", Unit: "ops", Traces: true, Queries: []Query{{Sum("nomnom_authz_result", sc.Rate(checks, `nomnom_authz_result=~"error|timeout"`)), "{{nomnom_authz_result}}"}},
+		{Title: "Errors and timeouts", Unit: "ops", Traces: []string{`kind=client && span.rpc.method=~"authzed.*" && status=error`}, Queries: []Query{{Sum("nomnom_authz_result", sc.Rate(checks, `nomnom_authz_result=~"error|timeout"`)), "{{nomnom_authz_result}}"}},
 			Description: "Технические сбои проверки; fail-closed превращает их в отказ клиенту."},
 		{Title: "Check latency", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_authz_check_duration_seconds")},
 	}

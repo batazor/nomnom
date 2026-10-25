@@ -202,3 +202,20 @@ func TestGeneratorRejectsUninventoriedMetricAndForbiddenLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratorRejectsTraceLabelOutsideSeries(t *testing.T) {
+	g := &generator{opts: Options{}}
+	sc := Scope{Var: "service", Services: []string{inventory.Orders}}
+	q := Query{Expr: Sum("rpc_method", sc.Rate(rpcServer+"_count"))}
+	g.checkTrace("p", q, spanLabel("rpc_method"))
+	if len(g.errs) > 0 {
+		t.Fatalf("label серии отклонён: %v", g.errs)
+	}
+	g.checkTrace("p", q, spanLabel("db_operation_name")+` && span.x="${__field.labels.server_address}"`)
+	joined := strings.Join(g.errs, "\n")
+	for _, want := range []string{"label db_operation_name не входит в группировку", "label server_address без span attribute"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("нет ошибки %q в %q", want, joined)
+		}
+	}
+}

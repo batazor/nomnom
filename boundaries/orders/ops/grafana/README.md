@@ -170,7 +170,7 @@ Rule group `orders` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)
 ## Переходы
 
 - **Logs** — Explore Loki по `service_name`, `deployment_environment_name`, `service_version` и интервалу dashboard. Переход log → trace — derived field `trace_id` data source Loki.
-- **Traces** — Explore Tempo (TraceQL) по сервису и окружению: все, ошибки (`status=error`); панели ошибок и latency содержат data links на ошибочные и медленные traces.
+- **Traces** — Explore Tempo (TraceQL) по сервису и окружению: все, ошибки (`status=error`); у серий панелей ошибок и latency — data link «Traces этой серии»: spans с теми же attributes, что labels серии (`rpc.method`, `rpc.response.status_code`, `db.operation.name`, `nomnom.usecase.name`, `error.type`), у latency — не быстрее значения точки.
 - **Profiles** — Explore Pyroscope (CPU) по service/environment/интервалу. Trace → profile (Span Profiles, только CPU) поддерживается runtime и включается в data source Tempo после проверки end-to-end.
 - **Exemplars** — выключены: не подтверждено, что SDK histograms, Alloy и Mimir сохраняют exemplars (`inventory.ExemplarsEnabled`).
 - **Deployments** — annotation по смене `service_version` в `target_info`; появляется, когда `target_info` получает статус «есть».
