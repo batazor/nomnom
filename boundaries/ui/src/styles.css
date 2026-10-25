@@ -132,6 +132,18 @@ a {
   color: var(--color-on-primary);
 }
 
+/* Astra colours outline and ghost buttons for a light surface; the semantic
+   tokens keep them readable in both themes. */
+.nomnom-button[data-variant="outline"] {
+  border-color: var(--color-border-strong);
+  background: transparent;
+  color: var(--color-foreground);
+}
+
+.nomnom-button[data-variant="ghost"] {
+  color: var(--color-foreground);
+}
+
 .nomnom-card {
   border-color: var(--color-border);
   border-radius: var(--radius-card);
