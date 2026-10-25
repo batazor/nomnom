@@ -153,7 +153,7 @@ authorize(subject, action, resource)
 | --- | --- | --- |
 | `orders` | `OrderItemsOrderable` | Фабрика `order.Place` над catalog snapshot; отказ — `NotOrderable{Reasons}` |
 | `orders` | `WithinCancellationWindow` | `order.CheckCancellation` перед dry-run строки FSM `cancel`; окно приходит из порта `CancellationPolicy` |
-| `restaurants` | `RestaurantAcceptingOrders`, `MenuItemAvailable` | Domain service `evaluateOrderAcceptance` в `kitchenorder`; его результат — guard Accept |
+| `restaurants` | `RestaurantAcceptingOrders`, `MenuItemAvailable` | Domain service `evaluateOrderAcceptance` в `restaurantorder`; его результат — guard Accept |
 | `delivery` | `CourierEligibleForDelivery` | Handler Find Courier для каждого кандидата с параметрами `AssignmentPolicy` |
 | `delivery` | `DeliveryOfferAcceptable` | `DeliveryOffer::accept` с `now` и snapshot курьера: адресат → specification → FSM |
 | `payments` | `PaymentRefundable`, `PaymentCapturable` | Не подключены: authorization и refund windows не определены ([use cases](use-cases.md#open-questions)) |

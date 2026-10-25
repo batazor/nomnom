@@ -411,4 +411,3 @@ Feature: Order ready for pickup
 3. **Use case Report Preparation Failure** как инициатор `FAILED` и `PreparationFailed`.
 4. **Политика повтора** Start Preparation и Mark Ready for Pickup — успешный no-op без нового события.
 5. **Для `orders`** — принято в [ADR 5 orders](../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md): сигналы названы по Integration Events, `PreparationStarted`/`PreparationDelayed`/`PreparationFailed` и `RestaurantOrderRejected` после Acceptance обрабатываются workflow, `RestaurantOrderCancelled` — подтверждение синхронного результата. `PreparationDelayed` и `PreparationFailed` не отражаются в `Order` отдельными use cases: это входы orchestration, а не Fulfillment Facts.
-6. **Переименование слайсов** `kitchenorder`, `start-preparing-order`, `mark-order-ready` в язык `RestaurantOrder` (Start Preparation, Mark Ready for Pickup) — отдельным изменением вместе с кодом.

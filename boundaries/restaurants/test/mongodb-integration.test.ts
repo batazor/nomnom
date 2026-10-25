@@ -22,16 +22,6 @@ import {
   uuidV5,
 } from "../pkg/infrastructure/mongodb/outbox.ts";
 import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
-import {
-  DuplicateOrderIdError,
-  RestaurantOrder,
-  RestaurantOrderState,
-} from "../slices/kitchenorder/domains/restaurantorder/restaurantorder.ts";
-import {
-  createRestaurantOrderCollection,
-  MongoKitchenBoard,
-  MongoRestaurantOrderRepository,
-} from "../slices/kitchenorder/infrastructure/mongodb/restaurant-orders.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
@@ -46,6 +36,16 @@ import {
   MongoRestaurantMemberships,
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+import {
+  DuplicateOrderIdError,
+  RestaurantOrder,
+  RestaurantOrderState,
+} from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import {
+  createRestaurantOrderCollection,
+  MongoKitchenBoard,
+  MongoRestaurantOrderRepository,
+} from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
 
 // Runs against a MongoDB replica set (transactions), for example
 // `docker run -d -p 27017:27017 mongo:8 --replSet rs0` + `rs.initiate()`:

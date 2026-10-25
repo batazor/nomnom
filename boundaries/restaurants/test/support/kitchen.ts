@@ -1,22 +1,22 @@
 import type { Outbox } from "../../pkg/application/outbox.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
 import { SequentialIdGenerator } from "../../pkg/infrastructure/memory/id-generator.ts";
-import { AcceptOrderHandler } from "../../slices/kitchenorder/applications/accept-order/accept-order.ts";
-import { CancelRestaurantOrderHandler } from "../../slices/kitchenorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
-import { GetKitchenQueueHandler } from "../../slices/kitchenorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
-import { GetRestaurantOrderHandler } from "../../slices/kitchenorder/applications/get-restaurant-order/get-restaurant-order.ts";
-import { ListActivePreparationsHandler } from "../../slices/kitchenorder/applications/list-active-preparations/list-active-preparations.ts";
-import { ListReadyOrdersHandler } from "../../slices/kitchenorder/applications/list-ready-orders/list-ready-orders.ts";
-import { MarkAssembledHandler } from "../../slices/kitchenorder/applications/mark-assembled/mark-assembled.ts";
-import { MarkReadyForPickupHandler } from "../../slices/kitchenorder/applications/mark-order-ready/mark-order-ready.ts";
-import { QueueRestaurantOrderHandler } from "../../slices/kitchenorder/applications/queue-restaurant-order/queue-restaurant-order.ts";
-import { ReceiveOrderRequestHandler } from "../../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
-import { RejectOrderHandler } from "../../slices/kitchenorder/applications/reject-order/reject-order.ts";
-import { ReportPreparationDelayHandler } from "../../slices/kitchenorder/applications/report-preparation-delay/report-preparation-delay.ts";
-import { ReportPreparationFailureHandler } from "../../slices/kitchenorder/applications/report-preparation-failure/report-preparation-failure.ts";
-import type { RepeatPolicy } from "../../slices/kitchenorder/applications/restaurant-order-support.ts";
-import { StartPreparationHandler } from "../../slices/kitchenorder/applications/start-preparing-order/start-preparing-order.ts";
-import type { CancellationPolicy } from "../../slices/kitchenorder/domains/restaurantorder/restaurantorder.ts";
+import { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
+import { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
+import { GetRestaurantOrderHandler } from "../../slices/restaurantorder/applications/get-restaurant-order/get-restaurant-order.ts";
+import { ListActivePreparationsHandler } from "../../slices/restaurantorder/applications/list-active-preparations/list-active-preparations.ts";
+import { ListReadyOrdersHandler } from "../../slices/restaurantorder/applications/list-ready-orders/list-ready-orders.ts";
+import { MarkAssembledHandler } from "../../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
+import { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
+import { QueueRestaurantOrderHandler } from "../../slices/restaurantorder/applications/queue-restaurant-order/queue-restaurant-order.ts";
+import { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
+import { RejectOrderHandler } from "../../slices/restaurantorder/applications/reject-order/reject-order.ts";
+import { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
+import { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
+import type { RepeatPolicy } from "../../slices/restaurantorder/applications/restaurant-order-support.ts";
+import { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
+import type { CancellationPolicy } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   createRestaurantOrderStore,
   FifoKitchenQueueOrdering,
@@ -25,7 +25,7 @@ import {
   InMemoryKitchenBoard,
   InMemoryRestaurantOrderRepository,
   StaticAcceptanceConditions,
-} from "../../slices/kitchenorder/infrastructure/memory/restaurant-orders.ts";
+} from "../../slices/restaurantorder/infrastructure/memory/restaurant-orders.ts";
 import { createMenuWorld } from "./menus.ts";
 import { createInfrastructure, type Infrastructure } from "./restaurants.ts";
 

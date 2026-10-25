@@ -5,7 +5,7 @@ import {
   NotFoundError,
   PermissionDeniedError,
 } from "../pkg/application/errors.ts";
-import { GetKitchenQueueHandler } from "../slices/kitchenorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
+import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import {
   cook,
   createKitchenWorld,

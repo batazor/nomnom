@@ -1,47 +1,23 @@
+import { InvalidMenuError, InvalidMenuReason } from "./errors.ts";
+import type {
+  MenuCreated,
+  MenuEvent,
+  MenuEventBase,
+  MenuItemAdded,
+  MenuItemAvailabilityChanged,
+  MenuItemUpdated,
+} from "./events.ts";
 import { Money, type MoneyValue } from "./vo/money.ts";
 
-export const MenuItemAvailabilityReason = {
-  OutsideAvailabilityWindow: "outside_availability_window",
-  TemporarilyUnavailable: "temporarily_unavailable",
-  InsufficientCapacity: "insufficient_capacity",
-} as const;
-
-export type MenuItemAvailabilityReason =
-  (typeof MenuItemAvailabilityReason)[keyof typeof MenuItemAvailabilityReason];
-
-export type MenuItemAvailabilityContext = Readonly<{
-  now: Date;
-  availableFrom: Date;
-  availableUntil: Date;
-  requestedQuantity: number;
-  remainingCapacity: number;
-  temporarilyUnavailable: boolean;
-}>;
-
-export type MenuItemAvailabilityResult = Readonly<{
-  satisfied: boolean;
-  reasons: readonly MenuItemAvailabilityReason[];
-}>;
-
-export const MenuItemAvailable = (
-  context: MenuItemAvailabilityContext,
-): MenuItemAvailabilityResult => {
-  const reasons: MenuItemAvailabilityReason[] = [];
-  const now = context.now.getTime();
-  if (
-    now < context.availableFrom.getTime() ||
-    now > context.availableUntil.getTime()
-  ) {
-    reasons.push(MenuItemAvailabilityReason.OutsideAvailabilityWindow);
-  }
-  if (context.temporarilyUnavailable) {
-    reasons.push(MenuItemAvailabilityReason.TemporarilyUnavailable);
-  }
-  if (context.requestedQuantity > context.remainingCapacity) {
-    reasons.push(MenuItemAvailabilityReason.InsufficientCapacity);
-  }
-  return { satisfied: reasons.length === 0, reasons };
-};
+export * from "./availability.ts";
+export * from "./errors.ts";
+export type {
+  MenuCreated,
+  MenuEvent,
+  MenuItemAdded,
+  MenuItemAvailabilityChanged,
+  MenuItemUpdated,
+} from "./events.ts";
 
 /** Menu Item: entity of {@link Menu}, a dish with its current price and availability. */
 export type MenuItem = Readonly<{
@@ -65,50 +41,6 @@ export type MenuSnapshot = Readonly<{
   restaurantId: string;
   items: readonly MenuItemSnapshot[];
 }>;
-
-type MenuEventBase = Readonly<{
-  menuId: string;
-  restaurantId: string;
-  occurredAt: Date;
-}>;
-
-export type MenuCreated = MenuEventBase & Readonly<{ type: "MenuCreated" }>;
-export type MenuItemAdded = MenuEventBase &
-  Readonly<{ type: "MenuItemAdded"; menuItemId: string }>;
-export type MenuItemUpdated = MenuEventBase &
-  Readonly<{ type: "MenuItemUpdated"; menuItemId: string }>;
-export type MenuItemAvailabilityChanged = MenuEventBase &
-  Readonly<{
-    type: "MenuItemAvailabilityChanged";
-    menuItemId: string;
-    isAvailable: boolean;
-  }>;
-
-export type MenuEvent =
-  | MenuCreated
-  | MenuItemAdded
-  | MenuItemUpdated
-  | MenuItemAvailabilityChanged;
-
-export const InvalidMenuReason = {
-  EmptyItemName: "empty_item_name",
-  DuplicateMenuItem: "duplicate_menu_item",
-  UnknownMenuItem: "unknown_menu_item",
-} as const;
-
-export type InvalidMenuReason =
-  (typeof InvalidMenuReason)[keyof typeof InvalidMenuReason];
-
-export class InvalidMenuError extends Error {
-  readonly code = "invalid_menu";
-  readonly reason: InvalidMenuReason;
-
-  constructor(reason: InvalidMenuReason) {
-    super(`invalid menu: ${reason}`);
-    this.name = "InvalidMenuError";
-    this.reason = reason;
-  }
-}
 
 export type MenuItemChanges = Readonly<{
   name?: string;

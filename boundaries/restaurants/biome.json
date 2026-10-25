@@ -4,9 +4,7 @@
     "includes": [
       "cmd/**/*.ts",
       "di/**/*.ts",
-      "infrastructure/grpc/service.ts",
-      "infrastructure/grpc/subject.ts",
-      "infrastructure/grpc/worker.ts",
+      "infrastructure/grpc/*.ts",
       "infrastructure/spicedb/**/*.ts",
       "pkg/**/*.ts",
       "slices/**/*.ts",

@@ -21,11 +21,11 @@ import {
 import { MongoOutboxRelayStore } from "../pkg/infrastructure/mongodb/outbox-relay-store.ts";
 import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import { OutboxRelay } from "../pkg/infrastructure/outbox/relay.ts";
-import { RestaurantOrderState } from "../slices/kitchenorder/domains/restaurantorder/restaurantorder.ts";
+import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   RESTAURANT_ORDER_EVENTS_TOPIC,
   restaurantOrderEventMapper,
-} from "../slices/kitchenorder/infrastructure/integration/restaurant-order-events.ts";
+} from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 
 // Outbox → restaurants-relay → Kafka against real infrastructure, for example
 //   docker run -d -p 27017:27017 mongo:8 --replSet rs0   (+ rs.initiate())

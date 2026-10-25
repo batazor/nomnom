@@ -10,7 +10,7 @@ import {
   outboxCountersCollectionSpec,
   outboxLeasesCollectionSpec,
 } from "../../pkg/infrastructure/mongodb/outbox.ts";
-import { restaurantOrderCollectionSpec } from "../../slices/kitchenorder/infrastructure/mongodb/restaurant-orders.ts";
+import { restaurantOrderCollectionSpec } from "../../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
 import { menuCollectionSpec } from "../../slices/menu/infrastructure/mongodb/menus.ts";
 import { restaurantCollectionSpec } from "../../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 

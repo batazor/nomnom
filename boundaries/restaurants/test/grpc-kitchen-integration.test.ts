@@ -17,24 +17,6 @@ import {
   OUTBOX_COLLECTION,
 } from "../pkg/infrastructure/mongodb/outbox.ts";
 import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
-import { AcceptOrderHandler } from "../slices/kitchenorder/applications/accept-order/accept-order.ts";
-import { MarkAssembledHandler } from "../slices/kitchenorder/applications/mark-assembled/mark-assembled.ts";
-import { MarkReadyForPickupHandler } from "../slices/kitchenorder/applications/mark-order-ready/mark-order-ready.ts";
-import { ReceiveOrderRequestHandler } from "../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
-import { RejectOrderHandler } from "../slices/kitchenorder/applications/reject-order/reject-order.ts";
-import { ReportPreparationDelayHandler } from "../slices/kitchenorder/applications/report-preparation-delay/report-preparation-delay.ts";
-import { ReportPreparationFailureHandler } from "../slices/kitchenorder/applications/report-preparation-failure/report-preparation-failure.ts";
-import { StartPreparationHandler } from "../slices/kitchenorder/applications/start-preparing-order/start-preparing-order.ts";
-import {
-  FixedPreparationTimeEstimator,
-  UnconstrainedAcceptanceConditions,
-} from "../slices/kitchenorder/infrastructure/acceptance/mvp.ts";
-import { restaurantOrderEventMapper } from "../slices/kitchenorder/infrastructure/integration/restaurant-order-events.ts";
-import { InMemoryKitchenAccessControl } from "../slices/kitchenorder/infrastructure/memory/restaurant-orders.ts";
-import {
-  createRestaurantOrderCollection,
-  MongoRestaurantOrderRepository,
-} from "../slices/kitchenorder/infrastructure/mongodb/restaurant-orders.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
@@ -46,6 +28,24 @@ import {
   createRestaurantCollection,
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+import { AcceptOrderHandler } from "../slices/restaurantorder/applications/accept-order/accept-order.ts";
+import { MarkAssembledHandler } from "../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
+import { MarkReadyForPickupHandler } from "../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
+import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
+import { RejectOrderHandler } from "../slices/restaurantorder/applications/reject-order/reject-order.ts";
+import { ReportPreparationDelayHandler } from "../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
+import { ReportPreparationFailureHandler } from "../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
+import { StartPreparationHandler } from "../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
+import {
+  FixedPreparationTimeEstimator,
+  UnconstrainedAcceptanceConditions,
+} from "../slices/restaurantorder/infrastructure/acceptance/mvp.ts";
+import { restaurantOrderEventMapper } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+import { InMemoryKitchenAccessControl } from "../slices/restaurantorder/infrastructure/memory/restaurant-orders.ts";
+import {
+  createRestaurantOrderCollection,
+  MongoRestaurantOrderRepository,
+} from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
 
 // Kitchen command RPCs composed as in cmd/restaurants/main.ts (MongoDB Unit of
 // Work, MongoOutbox with the Integration Event mapper) against a replica set:

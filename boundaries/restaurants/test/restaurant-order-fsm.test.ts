@@ -13,7 +13,7 @@ import {
   RestaurantOrderState as S,
   TERMINAL_STATES,
   type TransitionRequest,
-} from "../slices/kitchenorder/domains/restaurantorder/fsm.ts";
+} from "../slices/restaurantorder/domains/restaurantorder/fsm.ts";
 
 const at = (minute: number): Date =>
   new Date(Date.UTC(2026, 9, 25, 12, minute));
