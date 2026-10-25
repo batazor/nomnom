@@ -84,6 +84,9 @@ service:
 
 
 # Requests/limits не задаются: профиль потребления приложения ещё не измерен.
+# Go runtime следует limits сам: GOMAXPROCS — по limits.cpu (Go 1.25+), GOMEMLIMIT — 90%
+# limits.memory (automemlimit). Не задавать GOMAXPROCS/GOMEMLIMIT через env без замеров:
+# явное значение отключает автоподстройку.
 resources:
   requests: {}
   limits: {}

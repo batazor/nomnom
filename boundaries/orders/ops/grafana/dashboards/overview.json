@@ -3051,7 +3051,7 @@
         "spec": {
           "id": 7,
           "title": "Heap and runtime memory",
-          "description": "Метрики: `go_memory_used_bytes`, `go_memory_gc_goal_bytes`.",
+          "description": "Метрики: `go_memory_used_bytes`, `go_memory_gc_goal_bytes`, `go_memory_limit_bytes`.\n\nЧасть запросов ждёт метрик: go_memory_limit_bytes (см. docs/observability/metric-inventory.md).",
           "links": [],
           "data": {
             "kind": "QueryGroup",

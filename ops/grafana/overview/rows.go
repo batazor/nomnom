@@ -107,7 +107,7 @@ func (g *generator) runtime(sc Scope) []Panel {
 	switch g.opts.Language {
 	case Go:
 		return []Panel{
-			{Title: "Heap and runtime memory", Unit: "bytes", Queries: []Query{{Sum("job, go_memory_type", sc.Gauge("go_memory_used_bytes")), "{{job}} {{go_memory_type}}"}, {Max("job", sc.Gauge("go_memory_gc_goal_bytes")), "{{job}} GC goal"}}},
+			{Title: "Heap and runtime memory", Unit: "bytes", Queries: []Query{{Sum("job, go_memory_type", sc.Gauge("go_memory_used_bytes")), "{{job}} {{go_memory_type}}"}, {Max("job", sc.Gauge("go_memory_gc_goal_bytes")), "{{job}} GC goal"}, {Max("job", sc.Gauge("go_memory_limit_bytes")), "{{job}} GOMEMLIMIT"}}},
 			{Title: "Allocation rate", Unit: "Bps", Queries: []Query{{Sum("job", sc.Rate("go_memory_allocated_bytes_total")), "{{job}}"}}},
 			{Title: "Goroutines", Unit: "short", Queries: []Query{{Sum("job", sc.Gauge("go_goroutine_count")), "{{job}}"}}},
 			{Title: "GOMAXPROCS", Unit: "short", Queries: []Query{{Max("job", sc.Gauge("go_processor_limit")), "{{job}}"}}},

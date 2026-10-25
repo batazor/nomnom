@@ -152,6 +152,7 @@ var Metrics = []Metric{
 	{Name: "go_memory_used_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.used`", Labels: []string{"go_memory_type"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
 	{Name: "go_memory_allocated_bytes_total", Section: "runtime", Type: Counter, Source: "`go.memory.allocated`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
 	{Name: "go_memory_gc_goal_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.gc.goal`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
+	{Name: "go_memory_limit_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.limit`", Status: expected(Orders, OrdersWorker, OrdersConsumer), Note: "GOMEMLIMIT; automemlimit выставляет 90% memory limit контейнера."},
 	{Name: "go_goroutine_count", Section: "runtime", Type: Gauge, Source: "`go.goroutine.count`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
 	{Name: "go_processor_limit", Section: "runtime", Type: Gauge, Source: "`go.processor.limit`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
 	{Name: "v8js_memory_heap_used_bytes", Section: "runtime", Type: Gauge, Source: "`v8js.memory.heap.used`", Labels: []string{"v8js_heap_space_name"}, Status: expected(Restaurants)},

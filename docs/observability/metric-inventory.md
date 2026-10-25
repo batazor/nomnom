@@ -18,7 +18,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 118; пар «метрика × сервис» со статусом «есть»: 91.
+Метрик в инвентаре: 119; пар «метрика × сервис» со статусом «есть»: 91.
 
 Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`).
 
@@ -73,6 +73,7 @@ Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). 
 | `go_memory_used_bytes` | `go.memory.used` | gauge | `go_memory_type` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
 | `go_memory_allocated_bytes_total` | `go.memory.allocated` | counter | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
 | `go_memory_gc_goal_bytes` | `go.memory.gc.goal` | gauge | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
+| `go_memory_limit_bytes` | `go.memory.limit` | gauge | — | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | GOMEMLIMIT; automemlimit выставляет 90% memory limit контейнера. |
 | `go_goroutine_count` | `go.goroutine.count` | gauge | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
 | `go_processor_limit` | `go.processor.limit` | gauge | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
 | `v8js_memory_heap_used_bytes` | `v8js.memory.heap.used` | gauge | `v8js_heap_space_name` | `restaurants`: ожидается | — |

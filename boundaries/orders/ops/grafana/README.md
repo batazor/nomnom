@@ -48,7 +48,7 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Heap and runtime memory | live | — |
+| Heap and runtime memory | live | [`go_memory_limit_bytes`](../../../../docs/observability/metric-inventory.md#runtime) |
 | Allocation rate | live | — |
 | Goroutines | live | — |
 | GOMAXPROCS | live | — |

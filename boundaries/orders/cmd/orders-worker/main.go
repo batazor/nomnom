@@ -8,6 +8,10 @@ import (
 	"log/slog"
 	"os"
 
+	// GOMEMLIMIT = 90% memory limit cgroup контейнера; явная переменная GOMEMLIMIT имеет приоритет,
+	// без limit — no-op. GOMAXPROCS Go 1.25+ выводит из CPU limit сам.
+	_ "github.com/KimMachineGun/automemlimit"
+
 	"nomnom/orders/di"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/lifecycle"
