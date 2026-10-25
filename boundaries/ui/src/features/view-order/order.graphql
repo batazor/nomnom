@@ -1,0 +1,48 @@
+query ViewOrder($id: ID!) {
+  order(id: $id) {
+    id
+    status
+    endReason
+    restaurant {
+      id
+      name
+    }
+    items {
+      menuItem {
+        id
+        name
+      }
+      quantity
+      unitPrice {
+        amount
+        currency
+      }
+      lineTotal {
+        amount
+        currency
+      }
+    }
+    total {
+      amount
+      currency
+    }
+    deliveryAddress
+    placedAt
+    milestones {
+      kind
+      occurredAt
+    }
+    cancellation {
+      availableUntil
+    }
+  }
+}
+
+mutation RequestOrderCancellation($input: RequestOrderCancellationInput!) {
+  requestOrderCancellation(input: $input) {
+    outcome
+    problem {
+      code
+    }
+  }
+}

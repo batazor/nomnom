@@ -21,6 +21,30 @@ BFF — отдельный сервис и единая прикладная т�
 
 Доменные клиентские сценарии и подключения к внутренним сервисам ещё не реализованы.
 
+## Customer API
+
+Публичная customer-схема в [`plugins/bff/src/schema.graphql`](plugins/bff/src/schema.graphql) зафиксирована раньше resolvers (OpenSpec change [`add-customer-graphql-contract`](../../openspec/changes/add-customer-graphql-contract/)), чтобы customer UI развивался параллельно с bounded contexts на MSW-моках той же схемы.
+
+| Операция | Назначение | Статус |
+| --- | --- | --- |
+| `bffInfo` | метаданные BFF | реализована |
+| `restaurants(first, after)` | рестораны с cursor-пагинацией | только схема |
+| `restaurant(id)` | ресторан с меню | только схема |
+| `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | только схема |
+| `customerOrders(first, after)` | история заказов покупателя | только схема |
+| `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey` | только схема |
+| `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | только схема |
+
+Операции «только схема» возвращают GraphQL error с gRPC `Unimplemented`: `BffService` встраивает `UnimplementedBffServiceServer`.
+
+Правила контракта:
+
+- `Order.status` — customer-представление `OrderStatus`, которое BFF вычисляет из состояния заказа и Fulfillment Facts `orders`; назначение курьера — milestone `COURIER_ASSIGNED`. Имена FSM, Temporal и gRPC-контрактов в схему не попадают.
+- Бизнес-отказы mutations возвращаются в payload (`problems`, `problem`), GraphQL errors — только transport, authentication и нереализованные операции.
+- Покупатель не передаётся аргументом: subject определяется по аутентифицированному запросу.
+- Моменты времени — `String` в RFC 3339, `Money.amount` — десятичная строка; unions и custom scalars не используются.
+- `Order.cancellation` можно заполнить только после публикации окна отмены в `orders` `GetOrder`.
+
 ## Место в архитектуре
 
 ```text
@@ -167,5 +191,5 @@ stages должны собрать плагин и `config.json`, а в непр
 - определить production-схему публикации и получения execution config через Cosmo control plane;
 - выбрать propagated access token или signed internal identity, настроить OIDC/JWT и ограничения операций;
 - сгенерировать внутренние gRPC-клиенты из BSR;
-- реализовать первые GraphQL-сценарии заказов и политику ошибок/частичных результатов;
+- реализовать resolvers customer API и политику частичных результатов;
 - настроить deadlines, cancellation, идемпотентность и наблюдаемость.

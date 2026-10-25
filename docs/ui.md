@@ -44,7 +44,7 @@ Server state принадлежит GraphQL client cache. Local UI state хра�
 
 Operations colocated в `features/**/*.graphql`; документы и TypeScript-типы генерируются `graphql-codegen` client preset из публичной schema. Runtime client сейчас provisional urql и скрыт provider/transport boundary; окончательный выбор между urql и Apollo принимается после реальных cache, pagination, offline и auth-refresh требований.
 
-Mocks MSW используются только в development/tests и обслуживают тот же публичный GraphQL contract. Fixture data не выдаётся за production data и не переносит бизнес-правила во frontend.
+Mocks MSW используются только в development/tests и обслуживают тот же публичный GraphQL contract: handler исполняет каждую operation через `graphql-js` против публичной BFF schema, а тест соответствия прогоняет все feature documents. Fixture data не выдаётся за production data и не переносит бизнес-правила во frontend. Сценарии моков описаны в [README UI](../boundaries/ui/README.md#msw-моки-customer-api).
 
 ## Authentication и authorization
 
@@ -66,9 +66,13 @@ Mutations имеют состояния loading, disabled, success, business err
 
 Feature активного заказа владеет presentation mapping `backend state → UI status → localized label/icon/progress`. Несколько внутренних состояний могут схлопываться. Имена FSM и Temporal workflow не отображаются и не входят в публичный UI contract.
 
-Базовая пользовательская последовательность: `Order received → Restaurant confirmed → Preparing → Courier assigned → Picked up → Delivered`. Точные backend-state mappings появляются вместе с публичной schema.
+Базовая пользовательская последовательность: `Order received → Restaurant confirmed → Preparing → Courier assigned → Picked up → Delivered`.
 
-Default обновления — bounded polling только пока экран активного заказа видим. Интервал, backoff и прекращение polling определяются product/operational requirements. GraphQL subscriptions или SSE требуют отдельного решения.
+Публичный контракт — `Order.status` (`OrderStatus`: `RECEIVED`, `CONFIRMED`, `PREPARING`, `READY_FOR_PICKUP`, `PICKED_UP`, `DELIVERED`, `CANCELLED`, `FAILED`), `Order.endReason` для неуспешного завершения и `milestones`. BFF вычисляет `OrderStatus` из состояния заказа и Fulfillment Facts `orders`; назначение курьера — milestone `COURIER_ASSIGNED`, а не статус. UI сопоставляет каждое значение enum с сообщением, icon и шагом прогресса и не показывает внутренние коды.
+
+Default обновления — bounded polling только пока экран активного заказа видим: интервал 10 с, пауза по `visibilitychange`, остановка на финальных статусах, backoff до 60 с при ошибках и ручное обновление. Смена статуса объявляется через `aria-live`. GraphQL subscriptions или SSE требуют отдельного решения.
+
+Блок отмены показывается, пока не истёк `Order.cancellation.availableUntil`. `cancellation` BFF заполняет только после того, как `orders` начнёт публиковать окно отмены в `GetOrder`; до этого поле `null` и отмена не предлагается. `requestOrderCancellation` получает `requestId`, созданный на попытку и переиспользуемый при ручном retry.
 
 Checkout attempt создаёт idempotency key один раз и переиспользует его при ручном retry. Формат ключа и header/input определяет backend contract; UI не изобретает их самостоятельно.
 

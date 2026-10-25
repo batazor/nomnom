@@ -8,6 +8,48 @@
       "mapped": "QueryBffInfo",
       "request": "QueryBffInfoRequest",
       "response": "QueryBffInfoResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "restaurants",
+      "mapped": "QueryRestaurants",
+      "request": "QueryRestaurantsRequest",
+      "response": "QueryRestaurantsResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "restaurant",
+      "mapped": "QueryRestaurant",
+      "request": "QueryRestaurantRequest",
+      "response": "QueryRestaurantResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "order",
+      "mapped": "QueryOrder",
+      "request": "QueryOrderRequest",
+      "response": "QueryOrderResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "customerOrders",
+      "mapped": "QueryCustomerOrders",
+      "request": "QueryCustomerOrdersRequest",
+      "response": "QueryCustomerOrdersResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "placeOrder",
+      "mapped": "MutationPlaceOrder",
+      "request": "MutationPlaceOrderRequest",
+      "response": "MutationPlaceOrderResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "requestOrderCancellation",
+      "mapped": "MutationRequestOrderCancellation",
+      "request": "MutationRequestOrderCancellationRequest",
+      "response": "MutationRequestOrderCancellationResponse"
     }
   ],
   "typeFieldMappings": [
@@ -17,6 +59,79 @@
         {
           "original": "bffInfo",
           "mapped": "bff_info"
+        },
+        {
+          "original": "restaurants",
+          "mapped": "restaurants",
+          "argumentMappings": [
+            {
+              "original": "first",
+              "mapped": "first"
+            },
+            {
+              "original": "after",
+              "mapped": "after"
+            }
+          ]
+        },
+        {
+          "original": "restaurant",
+          "mapped": "restaurant",
+          "argumentMappings": [
+            {
+              "original": "id",
+              "mapped": "id"
+            }
+          ]
+        },
+        {
+          "original": "order",
+          "mapped": "order",
+          "argumentMappings": [
+            {
+              "original": "id",
+              "mapped": "id"
+            }
+          ]
+        },
+        {
+          "original": "customerOrders",
+          "mapped": "customer_orders",
+          "argumentMappings": [
+            {
+              "original": "first",
+              "mapped": "first"
+            },
+            {
+              "original": "after",
+              "mapped": "after"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Mutation",
+      "fieldMappings": [
+        {
+          "original": "placeOrder",
+          "mapped": "place_order",
+          "argumentMappings": [
+            {
+              "original": "input",
+              "mapped": "input"
+            }
+          ]
+        },
+        {
+          "original": "requestOrderCancellation",
+          "mapped": "request_order_cancellation",
+          "argumentMappings": [
+            {
+              "original": "input",
+              "mapped": "input"
+            }
+          ]
         }
       ]
     },
@@ -30,6 +145,491 @@
         {
           "original": "version",
           "mapped": "version"
+        }
+      ]
+    },
+    {
+      "type": "Money",
+      "fieldMappings": [
+        {
+          "original": "amount",
+          "mapped": "amount"
+        },
+        {
+          "original": "currency",
+          "mapped": "currency"
+        }
+      ]
+    },
+    {
+      "type": "PageInfo",
+      "fieldMappings": [
+        {
+          "original": "hasNextPage",
+          "mapped": "has_next_page"
+        },
+        {
+          "original": "endCursor",
+          "mapped": "end_cursor"
+        }
+      ]
+    },
+    {
+      "type": "Restaurant",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "address",
+          "mapped": "address"
+        },
+        {
+          "original": "acceptingOrders",
+          "mapped": "accepting_orders"
+        },
+        {
+          "original": "menu",
+          "mapped": "menu"
+        }
+      ]
+    },
+    {
+      "type": "Menu",
+      "fieldMappings": [
+        {
+          "original": "items",
+          "mapped": "items"
+        }
+      ]
+    },
+    {
+      "type": "MenuItem",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "description",
+          "mapped": "description"
+        },
+        {
+          "original": "price",
+          "mapped": "price"
+        },
+        {
+          "original": "available",
+          "mapped": "available"
+        }
+      ]
+    },
+    {
+      "type": "RestaurantEdge",
+      "fieldMappings": [
+        {
+          "original": "cursor",
+          "mapped": "cursor"
+        },
+        {
+          "original": "node",
+          "mapped": "node"
+        }
+      ]
+    },
+    {
+      "type": "RestaurantConnection",
+      "fieldMappings": [
+        {
+          "original": "edges",
+          "mapped": "edges"
+        },
+        {
+          "original": "pageInfo",
+          "mapped": "page_info"
+        }
+      ]
+    },
+    {
+      "type": "OrderMilestone",
+      "fieldMappings": [
+        {
+          "original": "kind",
+          "mapped": "kind"
+        },
+        {
+          "original": "occurredAt",
+          "mapped": "occurred_at"
+        }
+      ]
+    },
+    {
+      "type": "OrderedMenuItem",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "name",
+          "mapped": "name"
+        }
+      ]
+    },
+    {
+      "type": "OrderItem",
+      "fieldMappings": [
+        {
+          "original": "menuItem",
+          "mapped": "menu_item"
+        },
+        {
+          "original": "quantity",
+          "mapped": "quantity"
+        },
+        {
+          "original": "unitPrice",
+          "mapped": "unit_price"
+        },
+        {
+          "original": "lineTotal",
+          "mapped": "line_total"
+        }
+      ]
+    },
+    {
+      "type": "OrderCancellationAvailability",
+      "fieldMappings": [
+        {
+          "original": "availableUntil",
+          "mapped": "available_until"
+        }
+      ]
+    },
+    {
+      "type": "Order",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "status",
+          "mapped": "status"
+        },
+        {
+          "original": "endReason",
+          "mapped": "end_reason"
+        },
+        {
+          "original": "restaurant",
+          "mapped": "restaurant"
+        },
+        {
+          "original": "items",
+          "mapped": "items"
+        },
+        {
+          "original": "total",
+          "mapped": "total"
+        },
+        {
+          "original": "deliveryAddress",
+          "mapped": "delivery_address"
+        },
+        {
+          "original": "placedAt",
+          "mapped": "placed_at"
+        },
+        {
+          "original": "milestones",
+          "mapped": "milestones"
+        },
+        {
+          "original": "cancellation",
+          "mapped": "cancellation"
+        }
+      ]
+    },
+    {
+      "type": "OrderEdge",
+      "fieldMappings": [
+        {
+          "original": "cursor",
+          "mapped": "cursor"
+        },
+        {
+          "original": "node",
+          "mapped": "node"
+        }
+      ]
+    },
+    {
+      "type": "OrderConnection",
+      "fieldMappings": [
+        {
+          "original": "edges",
+          "mapped": "edges"
+        },
+        {
+          "original": "pageInfo",
+          "mapped": "page_info"
+        }
+      ]
+    },
+    {
+      "type": "OrderLineInput",
+      "fieldMappings": [
+        {
+          "original": "menuItemId",
+          "mapped": "menu_item_id"
+        },
+        {
+          "original": "quantity",
+          "mapped": "quantity"
+        }
+      ]
+    },
+    {
+      "type": "PlaceOrderInput",
+      "fieldMappings": [
+        {
+          "original": "restaurantId",
+          "mapped": "restaurant_id"
+        },
+        {
+          "original": "items",
+          "mapped": "items"
+        },
+        {
+          "original": "deliveryAddress",
+          "mapped": "delivery_address"
+        },
+        {
+          "original": "idempotencyKey",
+          "mapped": "idempotency_key"
+        }
+      ]
+    },
+    {
+      "type": "PlaceOrderProblem",
+      "fieldMappings": [
+        {
+          "original": "code",
+          "mapped": "code"
+        },
+        {
+          "original": "menuItemIds",
+          "mapped": "menu_item_ids"
+        }
+      ]
+    },
+    {
+      "type": "PlaceOrderPayload",
+      "fieldMappings": [
+        {
+          "original": "order",
+          "mapped": "order"
+        },
+        {
+          "original": "problems",
+          "mapped": "problems"
+        }
+      ]
+    },
+    {
+      "type": "RequestOrderCancellationInput",
+      "fieldMappings": [
+        {
+          "original": "orderId",
+          "mapped": "order_id"
+        },
+        {
+          "original": "requestId",
+          "mapped": "request_id"
+        },
+        {
+          "original": "reason",
+          "mapped": "reason"
+        }
+      ]
+    },
+    {
+      "type": "OrderCancellationProblem",
+      "fieldMappings": [
+        {
+          "original": "code",
+          "mapped": "code"
+        }
+      ]
+    },
+    {
+      "type": "RequestOrderCancellationPayload",
+      "fieldMappings": [
+        {
+          "original": "outcome",
+          "mapped": "outcome"
+        },
+        {
+          "original": "problem",
+          "mapped": "problem"
+        }
+      ]
+    }
+  ],
+  "enumMappings": [
+    {
+      "type": "OrderStatus",
+      "values": [
+        {
+          "original": "RECEIVED",
+          "mapped": "ORDER_STATUS_RECEIVED"
+        },
+        {
+          "original": "CONFIRMED",
+          "mapped": "ORDER_STATUS_CONFIRMED"
+        },
+        {
+          "original": "PREPARING",
+          "mapped": "ORDER_STATUS_PREPARING"
+        },
+        {
+          "original": "READY_FOR_PICKUP",
+          "mapped": "ORDER_STATUS_READY_FOR_PICKUP"
+        },
+        {
+          "original": "PICKED_UP",
+          "mapped": "ORDER_STATUS_PICKED_UP"
+        },
+        {
+          "original": "DELIVERED",
+          "mapped": "ORDER_STATUS_DELIVERED"
+        },
+        {
+          "original": "CANCELLED",
+          "mapped": "ORDER_STATUS_CANCELLED"
+        },
+        {
+          "original": "FAILED",
+          "mapped": "ORDER_STATUS_FAILED"
+        }
+      ]
+    },
+    {
+      "type": "OrderEndReason",
+      "values": [
+        {
+          "original": "CUSTOMER_CANCELLED",
+          "mapped": "ORDER_END_REASON_CUSTOMER_CANCELLED"
+        },
+        {
+          "original": "RESTAURANT_REJECTED",
+          "mapped": "ORDER_END_REASON_RESTAURANT_REJECTED"
+        },
+        {
+          "original": "DELIVERY_FAILED",
+          "mapped": "ORDER_END_REASON_DELIVERY_FAILED"
+        },
+        {
+          "original": "NOT_FULFILLED",
+          "mapped": "ORDER_END_REASON_NOT_FULFILLED"
+        }
+      ]
+    },
+    {
+      "type": "OrderMilestoneKind",
+      "values": [
+        {
+          "original": "PLACED",
+          "mapped": "ORDER_MILESTONE_KIND_PLACED"
+        },
+        {
+          "original": "CONFIRMED",
+          "mapped": "ORDER_MILESTONE_KIND_CONFIRMED"
+        },
+        {
+          "original": "PREPARATION_STARTED",
+          "mapped": "ORDER_MILESTONE_KIND_PREPARATION_STARTED"
+        },
+        {
+          "original": "READY_FOR_PICKUP",
+          "mapped": "ORDER_MILESTONE_KIND_READY_FOR_PICKUP"
+        },
+        {
+          "original": "COURIER_ASSIGNED",
+          "mapped": "ORDER_MILESTONE_KIND_COURIER_ASSIGNED"
+        },
+        {
+          "original": "PICKED_UP",
+          "mapped": "ORDER_MILESTONE_KIND_PICKED_UP"
+        },
+        {
+          "original": "DELIVERED",
+          "mapped": "ORDER_MILESTONE_KIND_DELIVERED"
+        },
+        {
+          "original": "ENDED",
+          "mapped": "ORDER_MILESTONE_KIND_ENDED"
+        }
+      ]
+    },
+    {
+      "type": "PlaceOrderProblemCode",
+      "values": [
+        {
+          "original": "ORDER_ITEM_UNAVAILABLE",
+          "mapped": "PLACE_ORDER_PROBLEM_CODE_ORDER_ITEM_UNAVAILABLE"
+        },
+        {
+          "original": "ORDER_TOTAL_BELOW_MINIMUM",
+          "mapped": "PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_BELOW_MINIMUM"
+        },
+        {
+          "original": "ORDER_TOTAL_ABOVE_MAXIMUM",
+          "mapped": "PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_ABOVE_MAXIMUM"
+        },
+        {
+          "original": "RESTAURANT_NOT_ACCEPTING_ORDERS",
+          "mapped": "PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS"
+        }
+      ]
+    },
+    {
+      "type": "OrderCancellationOutcome",
+      "values": [
+        {
+          "original": "REQUESTED",
+          "mapped": "ORDER_CANCELLATION_OUTCOME_REQUESTED"
+        },
+        {
+          "original": "ALREADY_CANCELLED",
+          "mapped": "ORDER_CANCELLATION_OUTCOME_ALREADY_CANCELLED"
+        }
+      ]
+    },
+    {
+      "type": "OrderCancellationProblemCode",
+      "values": [
+        {
+          "original": "CANCELLATION_WINDOW_NOT_OPEN",
+          "mapped": "ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_NOT_OPEN"
+        },
+        {
+          "original": "CANCELLATION_WINDOW_EXPIRED",
+          "mapped": "ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_EXPIRED"
+        },
+        {
+          "original": "ORDER_ALREADY_FINAL",
+          "mapped": "ORDER_CANCELLATION_PROBLEM_CODE_ORDER_ALREADY_FINAL"
         }
       ]
     }

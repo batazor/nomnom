@@ -3,10 +3,24 @@ package service;
 
 option go_package = "github.com/wundergraph/cosmo/plugin";
 
+import "google/protobuf/wrappers.proto";
+
 // Service definition for BffService
 service BffService {
+  // Place an order for the current customer
+  rpc MutationPlaceOrder(MutationPlaceOrderRequest) returns (MutationPlaceOrderResponse) {}
+  // Request cancellation of an order of the current customer
+  rpc MutationRequestOrderCancellation(MutationRequestOrderCancellationRequest) returns (MutationRequestOrderCancellationResponse) {}
   // Metadata for the client BFF
   rpc QueryBffInfo(QueryBffInfoRequest) returns (QueryBffInfoResponse) {}
+  // Orders of the current customer, newest first
+  rpc QueryCustomerOrders(QueryCustomerOrdersRequest) returns (QueryCustomerOrdersResponse) {}
+  // Order of the current customer, null if it does not exist or belongs to someone else
+  rpc QueryOrder(QueryOrderRequest) returns (QueryOrderResponse) {}
+  // Restaurant by identifier, null if it does not exist
+  rpc QueryRestaurant(QueryRestaurantRequest) returns (QueryRestaurantResponse) {}
+  // Restaurants available to the customer
+  rpc QueryRestaurants(QueryRestaurantsRequest) returns (QueryRestaurantsResponse) {}
 }
 
 // Request message for bffInfo operation: Metadata for the client BFF.
@@ -17,10 +31,341 @@ message QueryBffInfoResponse {
   // Metadata for the client BFF
   BffInfo bff_info = 1;
 }
+// Request message for restaurants operation: Restaurants available to the customer.
+message QueryRestaurantsRequest {
+  int32 first = 1;
+  google.protobuf.StringValue after = 2;
+}
+// Response message for restaurants operation: Restaurants available to the customer.
+message QueryRestaurantsResponse {
+  // Restaurants available to the customer
+  RestaurantConnection restaurants = 1;
+}
+// Request message for restaurant operation: Restaurant by identifier, null if it does not exist.
+message QueryRestaurantRequest {
+  string id = 1;
+}
+// Response message for restaurant operation: Restaurant by identifier, null if it does not exist.
+message QueryRestaurantResponse {
+  // Restaurant by identifier, null if it does not exist
+  Restaurant restaurant = 1;
+}
+// Request message for order operation: Order of the current customer, null if it does not exist or belongs to someone else.
+message QueryOrderRequest {
+  string id = 1;
+}
+// Response message for order operation: Order of the current customer, null if it does not exist or belongs to someone else.
+message QueryOrderResponse {
+  // Order of the current customer, null if it does not exist or belongs to someone else
+  Order order = 1;
+}
+// Request message for customerOrders operation: Orders of the current customer, newest first.
+message QueryCustomerOrdersRequest {
+  int32 first = 1;
+  google.protobuf.StringValue after = 2;
+}
+// Response message for customerOrders operation: Orders of the current customer, newest first.
+message QueryCustomerOrdersResponse {
+  // Orders of the current customer, newest first
+  OrderConnection customer_orders = 1;
+}
+// Request message for placeOrder operation: Place an order for the current customer.
+message MutationPlaceOrderRequest {
+  PlaceOrderInput input = 1;
+}
+// Response message for placeOrder operation: Place an order for the current customer.
+message MutationPlaceOrderResponse {
+  // Place an order for the current customer
+  PlaceOrderPayload place_order = 1;
+}
+// Request message for requestOrderCancellation operation: Request cancellation of an order of the current customer.
+message MutationRequestOrderCancellationRequest {
+  RequestOrderCancellationInput input = 1;
+}
+// Response message for requestOrderCancellation operation: Request cancellation of an order of the current customer.
+message MutationRequestOrderCancellationResponse {
+  // Request cancellation of an order of the current customer
+  RequestOrderCancellationPayload request_order_cancellation = 1;
+}
 
 message BffInfo {
   // Service name
   string name = 1;
   // Service version
   string version = 2;
+}
+
+message RestaurantConnection {
+  // Restaurants of the page
+  repeated RestaurantEdge edges = 1;
+  // Pagination state
+  PageInfo page_info = 2;
+}
+
+// Restaurant as shown to a customer
+message Restaurant {
+  // Restaurant identifier
+  string id = 1;
+  // Display name
+  string name = 2;
+  // Human-readable address
+  string address = 3;
+  // Whether the restaurant accepts new orders now
+  bool accepting_orders = 4;
+  // Current menu, null if the restaurant has not published one
+  Menu menu = 5;
+}
+
+// Order of the current customer
+message Order {
+  // Order identifier
+  string id = 1;
+  // Customer-facing lifecycle status
+  OrderStatus status = 2;
+  // Why the order ended, set only for CANCELLED and FAILED
+  OrderEndReason end_reason = 3;
+  // Restaurant that fulfills the order
+  Restaurant restaurant = 4;
+  // Ordered items
+  repeated OrderItem items = 5;
+  // Total amount of the order
+  Money total = 6;
+  // Delivery address as entered by the customer
+  string delivery_address = 7;
+  // Moment the order was placed in RFC 3339
+  string placed_at = 8;
+  // Milestones in chronological order
+  repeated OrderMilestone milestones = 9;
+  // Cancellation availability, null when cancellation is not possible now
+  OrderCancellationAvailability cancellation = 10;
+}
+
+message OrderConnection {
+  // Orders of the page, newest first
+  repeated OrderEdge edges = 1;
+  // Pagination state
+  PageInfo page_info = 2;
+}
+
+message PlaceOrderInput {
+  // Restaurant to order from
+  string restaurant_id = 1;
+  // Ordered items
+  repeated OrderLineInput items = 2;
+  // Delivery address
+  string delivery_address = 3;
+  // Client-generated key of this checkout attempt, reused on manual retry
+  string idempotency_key = 4;
+}
+
+message PlaceOrderPayload {
+  // Placed order, null if problems is not empty
+  Order order = 1;
+  // Business problems that prevented placing the order
+  repeated PlaceOrderProblem problems = 2;
+}
+
+message RequestOrderCancellationInput {
+  // Order to cancel
+  string order_id = 1;
+  // Client-generated key of this cancellation attempt, reused on manual retry
+  string request_id = 2;
+  // Optional free-text reason given by the customer
+  google.protobuf.StringValue reason = 3;
+}
+
+message RequestOrderCancellationPayload {
+  // Outcome, null if problem is set
+  OrderCancellationOutcome outcome = 1;
+  // Business problem, null if outcome is set
+  OrderCancellationProblem problem = 2;
+}
+
+// Exact monetary amount
+message Money {
+  // Decimal string with a dot separator, for example "12.50"
+  string amount = 1;
+  // ISO 4217 currency code
+  string currency = 2;
+}
+
+// Cursor pagination state of a connection
+message PageInfo {
+  // Whether more items follow endCursor
+  bool has_next_page = 1;
+  // Cursor of the last returned item, null for an empty page
+  google.protobuf.StringValue end_cursor = 2;
+}
+
+// Menu of one restaurant
+message Menu {
+  // Menu items in display order
+  repeated MenuItem items = 1;
+}
+
+// Item of a restaurant menu
+message MenuItem {
+  // Menu item identifier
+  string id = 1;
+  // Display name
+  string name = 2;
+  // Short description, null if absent
+  google.protobuf.StringValue description = 3;
+  // Current price of one unit
+  Money price = 4;
+  // Whether the item can be ordered now
+  bool available = 5;
+}
+
+message RestaurantEdge {
+  // Opaque cursor of this item
+  string cursor = 1;
+  // Restaurant
+  Restaurant node = 2;
+}
+
+// Customer-facing lifecycle of an order
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  // Order is placed and waits for confirmation
+  ORDER_STATUS_RECEIVED = 1;
+  // Order is confirmed and waits for the kitchen
+  ORDER_STATUS_CONFIRMED = 2;
+  // Kitchen is preparing the order
+  ORDER_STATUS_PREPARING = 3;
+  // Order is ready and waits for the courier
+  ORDER_STATUS_READY_FOR_PICKUP = 4;
+  // Courier picked the order up and is on the way
+  ORDER_STATUS_PICKED_UP = 5;
+  // Order is delivered
+  ORDER_STATUS_DELIVERED = 6;
+  // Order is cancelled before fulfillment
+  ORDER_STATUS_CANCELLED = 7;
+  // Order could not be fulfilled
+  ORDER_STATUS_FAILED = 8;
+}
+
+// Why an order ended without delivery
+enum OrderEndReason {
+  ORDER_END_REASON_UNSPECIFIED = 0;
+  // Customer cancelled the order
+  ORDER_END_REASON_CUSTOMER_CANCELLED = 1;
+  // Restaurant could not accept the order
+  ORDER_END_REASON_RESTAURANT_REJECTED = 2;
+  // Delivery did not succeed
+  ORDER_END_REASON_DELIVERY_FAILED = 3;
+  // Order was not fulfilled for another reason
+  ORDER_END_REASON_NOT_FULFILLED = 4;
+}
+
+// Notable moment in the progress of an order
+enum OrderMilestoneKind {
+  ORDER_MILESTONE_KIND_UNSPECIFIED = 0;
+  // Order is placed
+  ORDER_MILESTONE_KIND_PLACED = 1;
+  // Order is confirmed
+  ORDER_MILESTONE_KIND_CONFIRMED = 2;
+  // Kitchen started preparation
+  ORDER_MILESTONE_KIND_PREPARATION_STARTED = 3;
+  // Order is ready for pickup
+  ORDER_MILESTONE_KIND_READY_FOR_PICKUP = 4;
+  // Courier is assigned to the order
+  ORDER_MILESTONE_KIND_COURIER_ASSIGNED = 5;
+  // Courier picked the order up
+  ORDER_MILESTONE_KIND_PICKED_UP = 6;
+  // Order is delivered
+  ORDER_MILESTONE_KIND_DELIVERED = 7;
+  // Order ended without delivery
+  ORDER_MILESTONE_KIND_ENDED = 8;
+}
+
+message OrderMilestone {
+  // Kind of the milestone
+  OrderMilestoneKind kind = 1;
+  // Moment of the milestone in RFC 3339
+  string occurred_at = 2;
+}
+
+// Menu item as recorded in an order
+message OrderedMenuItem {
+  // Menu item identifier
+  string id = 1;
+  // Display name
+  string name = 2;
+}
+
+message OrderItem {
+  // Ordered menu item
+  OrderedMenuItem menu_item = 1;
+  // Number of units
+  int32 quantity = 2;
+  // Price of one unit at the time of ordering
+  Money unit_price = 3;
+  // Price of all units of this line
+  Money line_total = 4;
+}
+
+// Present only while the customer may request cancellation
+message OrderCancellationAvailability {
+  // Moment in RFC 3339 after which cancellation is no longer possible
+  string available_until = 1;
+}
+
+message OrderEdge {
+  // Opaque cursor of this item
+  string cursor = 1;
+  // Order
+  Order node = 2;
+}
+
+message OrderLineInput {
+  // Menu item identifier
+  string menu_item_id = 1;
+  // Number of units, at least 1
+  int32 quantity = 2;
+}
+
+// Business reason why an order cannot be placed
+enum PlaceOrderProblemCode {
+  PLACE_ORDER_PROBLEM_CODE_UNSPECIFIED = 0;
+  // One or more items cannot be ordered now
+  PLACE_ORDER_PROBLEM_CODE_ORDER_ITEM_UNAVAILABLE = 1;
+  // Order total is below the restaurant minimum
+  PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_BELOW_MINIMUM = 2;
+  // Order total is above the allowed maximum
+  PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_ABOVE_MAXIMUM = 3;
+  // Restaurant does not accept orders now
+  PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS = 4;
+}
+
+message PlaceOrderProblem {
+  // Reason code
+  PlaceOrderProblemCode code = 1;
+  // Menu items the problem refers to, empty if it refers to the whole order
+  repeated string menu_item_ids = 2;
+}
+
+// Accepted result of a cancellation request
+enum OrderCancellationOutcome {
+  ORDER_CANCELLATION_OUTCOME_UNSPECIFIED = 0;
+  // Request is accepted and the order will be cancelled asynchronously
+  ORDER_CANCELLATION_OUTCOME_REQUESTED = 1;
+  // Order was already cancelled
+  ORDER_CANCELLATION_OUTCOME_ALREADY_CANCELLED = 2;
+}
+
+// Business reason why cancellation cannot be requested
+enum OrderCancellationProblemCode {
+  ORDER_CANCELLATION_PROBLEM_CODE_UNSPECIFIED = 0;
+  // Cancellation window has not opened yet
+  ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_NOT_OPEN = 1;
+  // Cancellation window has closed
+  ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_EXPIRED = 2;
+  // Order is already delivered or failed
+  ORDER_CANCELLATION_PROBLEM_CODE_ORDER_ALREADY_FINAL = 3;
+}
+
+message OrderCancellationProblem {
+  // Reason code
+  OrderCancellationProblemCode code = 1;
 }

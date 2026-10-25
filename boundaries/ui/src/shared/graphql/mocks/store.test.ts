@@ -1,0 +1,192 @@
+import { execute, parse } from "graphql";
+import { describe, expect, it } from "vitest";
+
+import { kitchenEight, nightBakery } from "./fixtures";
+import { publicSchema } from "./schema";
+import { createMockStore, type MockStore } from "./store";
+
+type OrderData = {
+  order: { id: string; status: string; endReason: string | null } | null;
+};
+type PlaceOrderData = {
+  placeOrder: {
+    order: { id: string; status: string } | null;
+    problems: { code: string; menuItemIds: string[] }[];
+  };
+};
+type CancelData = {
+  requestOrderCancellation: {
+    outcome: string | null;
+    problem: { code: string } | null;
+  };
+};
+
+async function run<T>(
+  store: MockStore,
+  source: string,
+  variables: Record<string, unknown> = {},
+): Promise<T> {
+  const result = await execute({
+    schema: publicSchema,
+    document: parse(source),
+    rootValue: store.rootValue,
+    variableValues: variables,
+  });
+  expect(result.errors).toBeUndefined();
+  return result.data as T;
+}
+
+const orderStatus =
+  "query ($id: ID!) { order(id: $id) { id status endReason } }";
+const placeOrder = `mutation ($input: PlaceOrderInput!) {
+  placeOrder(input: $input) { order { id status } problems { code menuItemIds } }
+}`;
+const cancelOrder = `mutation ($input: RequestOrderCancellationInput!) {
+  requestOrderCancellation(input: $input) { outcome problem { code } }
+}`;
+
+function placeInput(overrides: Record<string, unknown> = {}) {
+  return {
+    input: {
+      restaurantId: kitchenEight.id,
+      items: [{ menuItemId: "menu-tom-yum", quantity: 2 }],
+      deliveryAddress: "ул. Лесная, 12",
+      idempotencyKey: "checkout-1",
+      ...overrides,
+    },
+  };
+}
+
+describe("mock store", () => {
+  it("returns null for a missing order", async () => {
+    const data = await run<OrderData>(createMockStore(), orderStatus, {
+      id: "order-unknown",
+    });
+    expect(data.order).toBeNull();
+  });
+
+  it("maps a restaurant rejection to FAILED with its end reason", async () => {
+    const data = await run<OrderData>(createMockStore(), orderStatus, {
+      id: "order-restaurant-rejected",
+    });
+    expect(data.order).toMatchObject({
+      status: "FAILED",
+      endReason: "RESTAURANT_REJECTED",
+    });
+  });
+
+  it("advances order-live one status per request up to DELIVERED", async () => {
+    const store = createMockStore();
+    const statuses: string[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      statuses.push(
+        (await run<OrderData>(store, orderStatus, { id: "order-live" })).order
+          ?.status ?? "",
+      );
+    }
+    expect(statuses).toEqual([
+      "RECEIVED",
+      "CONFIRMED",
+      "PREPARING",
+      "READY_FOR_PICKUP",
+      "PICKED_UP",
+      "DELIVERED",
+      "DELIVERED",
+      "DELIVERED",
+    ]);
+  });
+
+  it("reports unavailable items and closed restaurants as problems", async () => {
+    const store = createMockStore();
+    const unavailable = await run<PlaceOrderData>(
+      store,
+      placeOrder,
+      placeInput({ items: [{ menuItemId: "menu-gyoza", quantity: 1 }] }),
+    );
+    expect(unavailable.placeOrder).toEqual({
+      order: null,
+      problems: [
+        { code: "ORDER_ITEM_UNAVAILABLE", menuItemIds: ["menu-gyoza"] },
+      ],
+    });
+
+    const closed = await run<PlaceOrderData>(
+      store,
+      placeOrder,
+      placeInput({
+        restaurantId: nightBakery.id,
+        items: [{ menuItemId: "menu-croissant", quantity: 1 }],
+        idempotencyKey: "checkout-2",
+      }),
+    );
+    expect(closed.placeOrder.problems).toEqual([
+      { code: "RESTAURANT_NOT_ACCEPTING_ORDERS", menuItemIds: [] },
+    ]);
+  });
+
+  it("replays placeOrder with the same idempotency key", async () => {
+    const store = createMockStore();
+    const first = await run<PlaceOrderData>(store, placeOrder, placeInput());
+    const second = await run<PlaceOrderData>(store, placeOrder, placeInput());
+    const other = await run<PlaceOrderData>(
+      store,
+      placeOrder,
+      placeInput({ idempotencyKey: "checkout-3" }),
+    );
+
+    expect(first.placeOrder.order?.status).toBe("RECEIVED");
+    expect(second.placeOrder.order?.id).toBe(first.placeOrder.order?.id);
+    expect(other.placeOrder.order?.id).not.toBe(first.placeOrder.order?.id);
+  });
+
+  it("accepts cancellation inside the window and replays it by request id", async () => {
+    const store = createMockStore();
+    const input = {
+      input: { orderId: "order-received", requestId: "cancel-1" },
+    };
+
+    expect(
+      (await run<CancelData>(store, cancelOrder, input))
+        .requestOrderCancellation,
+    ).toEqual({
+      outcome: "REQUESTED",
+      problem: null,
+    });
+    expect(
+      (await run<CancelData>(store, cancelOrder, input))
+        .requestOrderCancellation.outcome,
+    ).toBe("REQUESTED");
+    expect(
+      (await run<OrderData>(store, orderStatus, { id: "order-received" }))
+        .order,
+    ).toMatchObject({
+      status: "CANCELLED",
+      endReason: "CUSTOMER_CANCELLED",
+    });
+    const again = await run<CancelData>(store, cancelOrder, {
+      input: { orderId: "order-received", requestId: "cancel-2" },
+    });
+    expect(again.requestOrderCancellation.outcome).toBe("ALREADY_CANCELLED");
+  });
+
+  it("rejects cancellation after the window closes", async () => {
+    const store = createMockStore();
+    store.setClock(() => new Date(Date.now() + 10 * 60_000));
+    const data = await run<CancelData>(store, cancelOrder, {
+      input: { orderId: "order-received", requestId: "cancel-late" },
+    });
+    expect(data.requestOrderCancellation).toEqual({
+      outcome: null,
+      problem: { code: "CANCELLATION_WINDOW_EXPIRED" },
+    });
+  });
+
+  it("rejects cancellation of a delivered order", async () => {
+    const data = await run<CancelData>(createMockStore(), cancelOrder, {
+      input: { orderId: "order-delivered", requestId: "cancel-final" },
+    });
+    expect(data.requestOrderCancellation.problem).toEqual({
+      code: "ORDER_ALREADY_FINAL",
+    });
+  });
+});

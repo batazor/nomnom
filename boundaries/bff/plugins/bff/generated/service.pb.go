@@ -9,6 +9,7 @@ package plugin
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -19,6 +20,386 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// Customer-facing lifecycle of an order
+type OrderStatus int32
+
+const (
+	OrderStatus_ORDER_STATUS_UNSPECIFIED OrderStatus = 0
+	// Order is placed and waits for confirmation
+	OrderStatus_ORDER_STATUS_RECEIVED OrderStatus = 1
+	// Order is confirmed and waits for the kitchen
+	OrderStatus_ORDER_STATUS_CONFIRMED OrderStatus = 2
+	// Kitchen is preparing the order
+	OrderStatus_ORDER_STATUS_PREPARING OrderStatus = 3
+	// Order is ready and waits for the courier
+	OrderStatus_ORDER_STATUS_READY_FOR_PICKUP OrderStatus = 4
+	// Courier picked the order up and is on the way
+	OrderStatus_ORDER_STATUS_PICKED_UP OrderStatus = 5
+	// Order is delivered
+	OrderStatus_ORDER_STATUS_DELIVERED OrderStatus = 6
+	// Order is cancelled before fulfillment
+	OrderStatus_ORDER_STATUS_CANCELLED OrderStatus = 7
+	// Order could not be fulfilled
+	OrderStatus_ORDER_STATUS_FAILED OrderStatus = 8
+)
+
+// Enum value maps for OrderStatus.
+var (
+	OrderStatus_name = map[int32]string{
+		0: "ORDER_STATUS_UNSPECIFIED",
+		1: "ORDER_STATUS_RECEIVED",
+		2: "ORDER_STATUS_CONFIRMED",
+		3: "ORDER_STATUS_PREPARING",
+		4: "ORDER_STATUS_READY_FOR_PICKUP",
+		5: "ORDER_STATUS_PICKED_UP",
+		6: "ORDER_STATUS_DELIVERED",
+		7: "ORDER_STATUS_CANCELLED",
+		8: "ORDER_STATUS_FAILED",
+	}
+	OrderStatus_value = map[string]int32{
+		"ORDER_STATUS_UNSPECIFIED":      0,
+		"ORDER_STATUS_RECEIVED":         1,
+		"ORDER_STATUS_CONFIRMED":        2,
+		"ORDER_STATUS_PREPARING":        3,
+		"ORDER_STATUS_READY_FOR_PICKUP": 4,
+		"ORDER_STATUS_PICKED_UP":        5,
+		"ORDER_STATUS_DELIVERED":        6,
+		"ORDER_STATUS_CANCELLED":        7,
+		"ORDER_STATUS_FAILED":           8,
+	}
+)
+
+func (x OrderStatus) Enum() *OrderStatus {
+	p := new(OrderStatus)
+	*p = x
+	return p
+}
+
+func (x OrderStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OrderStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_generated_service_proto_enumTypes[0].Descriptor()
+}
+
+func (OrderStatus) Type() protoreflect.EnumType {
+	return &file_generated_service_proto_enumTypes[0]
+}
+
+func (x OrderStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OrderStatus.Descriptor instead.
+func (OrderStatus) EnumDescriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{0}
+}
+
+// Why an order ended without delivery
+type OrderEndReason int32
+
+const (
+	OrderEndReason_ORDER_END_REASON_UNSPECIFIED OrderEndReason = 0
+	// Customer cancelled the order
+	OrderEndReason_ORDER_END_REASON_CUSTOMER_CANCELLED OrderEndReason = 1
+	// Restaurant could not accept the order
+	OrderEndReason_ORDER_END_REASON_RESTAURANT_REJECTED OrderEndReason = 2
+	// Delivery did not succeed
+	OrderEndReason_ORDER_END_REASON_DELIVERY_FAILED OrderEndReason = 3
+	// Order was not fulfilled for another reason
+	OrderEndReason_ORDER_END_REASON_NOT_FULFILLED OrderEndReason = 4
+)
+
+// Enum value maps for OrderEndReason.
+var (
+	OrderEndReason_name = map[int32]string{
+		0: "ORDER_END_REASON_UNSPECIFIED",
+		1: "ORDER_END_REASON_CUSTOMER_CANCELLED",
+		2: "ORDER_END_REASON_RESTAURANT_REJECTED",
+		3: "ORDER_END_REASON_DELIVERY_FAILED",
+		4: "ORDER_END_REASON_NOT_FULFILLED",
+	}
+	OrderEndReason_value = map[string]int32{
+		"ORDER_END_REASON_UNSPECIFIED":         0,
+		"ORDER_END_REASON_CUSTOMER_CANCELLED":  1,
+		"ORDER_END_REASON_RESTAURANT_REJECTED": 2,
+		"ORDER_END_REASON_DELIVERY_FAILED":     3,
+		"ORDER_END_REASON_NOT_FULFILLED":       4,
+	}
+)
+
+func (x OrderEndReason) Enum() *OrderEndReason {
+	p := new(OrderEndReason)
+	*p = x
+	return p
+}
+
+func (x OrderEndReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OrderEndReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_generated_service_proto_enumTypes[1].Descriptor()
+}
+
+func (OrderEndReason) Type() protoreflect.EnumType {
+	return &file_generated_service_proto_enumTypes[1]
+}
+
+func (x OrderEndReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OrderEndReason.Descriptor instead.
+func (OrderEndReason) EnumDescriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{1}
+}
+
+// Notable moment in the progress of an order
+type OrderMilestoneKind int32
+
+const (
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_UNSPECIFIED OrderMilestoneKind = 0
+	// Order is placed
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_PLACED OrderMilestoneKind = 1
+	// Order is confirmed
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_CONFIRMED OrderMilestoneKind = 2
+	// Kitchen started preparation
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_PREPARATION_STARTED OrderMilestoneKind = 3
+	// Order is ready for pickup
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_READY_FOR_PICKUP OrderMilestoneKind = 4
+	// Courier is assigned to the order
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_COURIER_ASSIGNED OrderMilestoneKind = 5
+	// Courier picked the order up
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_PICKED_UP OrderMilestoneKind = 6
+	// Order is delivered
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_DELIVERED OrderMilestoneKind = 7
+	// Order ended without delivery
+	OrderMilestoneKind_ORDER_MILESTONE_KIND_ENDED OrderMilestoneKind = 8
+)
+
+// Enum value maps for OrderMilestoneKind.
+var (
+	OrderMilestoneKind_name = map[int32]string{
+		0: "ORDER_MILESTONE_KIND_UNSPECIFIED",
+		1: "ORDER_MILESTONE_KIND_PLACED",
+		2: "ORDER_MILESTONE_KIND_CONFIRMED",
+		3: "ORDER_MILESTONE_KIND_PREPARATION_STARTED",
+		4: "ORDER_MILESTONE_KIND_READY_FOR_PICKUP",
+		5: "ORDER_MILESTONE_KIND_COURIER_ASSIGNED",
+		6: "ORDER_MILESTONE_KIND_PICKED_UP",
+		7: "ORDER_MILESTONE_KIND_DELIVERED",
+		8: "ORDER_MILESTONE_KIND_ENDED",
+	}
+	OrderMilestoneKind_value = map[string]int32{
+		"ORDER_MILESTONE_KIND_UNSPECIFIED":         0,
+		"ORDER_MILESTONE_KIND_PLACED":              1,
+		"ORDER_MILESTONE_KIND_CONFIRMED":           2,
+		"ORDER_MILESTONE_KIND_PREPARATION_STARTED": 3,
+		"ORDER_MILESTONE_KIND_READY_FOR_PICKUP":    4,
+		"ORDER_MILESTONE_KIND_COURIER_ASSIGNED":    5,
+		"ORDER_MILESTONE_KIND_PICKED_UP":           6,
+		"ORDER_MILESTONE_KIND_DELIVERED":           7,
+		"ORDER_MILESTONE_KIND_ENDED":               8,
+	}
+)
+
+func (x OrderMilestoneKind) Enum() *OrderMilestoneKind {
+	p := new(OrderMilestoneKind)
+	*p = x
+	return p
+}
+
+func (x OrderMilestoneKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OrderMilestoneKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_generated_service_proto_enumTypes[2].Descriptor()
+}
+
+func (OrderMilestoneKind) Type() protoreflect.EnumType {
+	return &file_generated_service_proto_enumTypes[2]
+}
+
+func (x OrderMilestoneKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OrderMilestoneKind.Descriptor instead.
+func (OrderMilestoneKind) EnumDescriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{2}
+}
+
+// Business reason why an order cannot be placed
+type PlaceOrderProblemCode int32
+
+const (
+	PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_UNSPECIFIED PlaceOrderProblemCode = 0
+	// One or more items cannot be ordered now
+	PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_ORDER_ITEM_UNAVAILABLE PlaceOrderProblemCode = 1
+	// Order total is below the restaurant minimum
+	PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_BELOW_MINIMUM PlaceOrderProblemCode = 2
+	// Order total is above the allowed maximum
+	PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_ABOVE_MAXIMUM PlaceOrderProblemCode = 3
+	// Restaurant does not accept orders now
+	PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS PlaceOrderProblemCode = 4
+)
+
+// Enum value maps for PlaceOrderProblemCode.
+var (
+	PlaceOrderProblemCode_name = map[int32]string{
+		0: "PLACE_ORDER_PROBLEM_CODE_UNSPECIFIED",
+		1: "PLACE_ORDER_PROBLEM_CODE_ORDER_ITEM_UNAVAILABLE",
+		2: "PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_BELOW_MINIMUM",
+		3: "PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_ABOVE_MAXIMUM",
+		4: "PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS",
+	}
+	PlaceOrderProblemCode_value = map[string]int32{
+		"PLACE_ORDER_PROBLEM_CODE_UNSPECIFIED":                     0,
+		"PLACE_ORDER_PROBLEM_CODE_ORDER_ITEM_UNAVAILABLE":          1,
+		"PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_BELOW_MINIMUM":       2,
+		"PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_ABOVE_MAXIMUM":       3,
+		"PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS": 4,
+	}
+)
+
+func (x PlaceOrderProblemCode) Enum() *PlaceOrderProblemCode {
+	p := new(PlaceOrderProblemCode)
+	*p = x
+	return p
+}
+
+func (x PlaceOrderProblemCode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PlaceOrderProblemCode) Descriptor() protoreflect.EnumDescriptor {
+	return file_generated_service_proto_enumTypes[3].Descriptor()
+}
+
+func (PlaceOrderProblemCode) Type() protoreflect.EnumType {
+	return &file_generated_service_proto_enumTypes[3]
+}
+
+func (x PlaceOrderProblemCode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PlaceOrderProblemCode.Descriptor instead.
+func (PlaceOrderProblemCode) EnumDescriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{3}
+}
+
+// Accepted result of a cancellation request
+type OrderCancellationOutcome int32
+
+const (
+	OrderCancellationOutcome_ORDER_CANCELLATION_OUTCOME_UNSPECIFIED OrderCancellationOutcome = 0
+	// Request is accepted and the order will be cancelled asynchronously
+	OrderCancellationOutcome_ORDER_CANCELLATION_OUTCOME_REQUESTED OrderCancellationOutcome = 1
+	// Order was already cancelled
+	OrderCancellationOutcome_ORDER_CANCELLATION_OUTCOME_ALREADY_CANCELLED OrderCancellationOutcome = 2
+)
+
+// Enum value maps for OrderCancellationOutcome.
+var (
+	OrderCancellationOutcome_name = map[int32]string{
+		0: "ORDER_CANCELLATION_OUTCOME_UNSPECIFIED",
+		1: "ORDER_CANCELLATION_OUTCOME_REQUESTED",
+		2: "ORDER_CANCELLATION_OUTCOME_ALREADY_CANCELLED",
+	}
+	OrderCancellationOutcome_value = map[string]int32{
+		"ORDER_CANCELLATION_OUTCOME_UNSPECIFIED":       0,
+		"ORDER_CANCELLATION_OUTCOME_REQUESTED":         1,
+		"ORDER_CANCELLATION_OUTCOME_ALREADY_CANCELLED": 2,
+	}
+)
+
+func (x OrderCancellationOutcome) Enum() *OrderCancellationOutcome {
+	p := new(OrderCancellationOutcome)
+	*p = x
+	return p
+}
+
+func (x OrderCancellationOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OrderCancellationOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_generated_service_proto_enumTypes[4].Descriptor()
+}
+
+func (OrderCancellationOutcome) Type() protoreflect.EnumType {
+	return &file_generated_service_proto_enumTypes[4]
+}
+
+func (x OrderCancellationOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OrderCancellationOutcome.Descriptor instead.
+func (OrderCancellationOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{4}
+}
+
+// Business reason why cancellation cannot be requested
+type OrderCancellationProblemCode int32
+
+const (
+	OrderCancellationProblemCode_ORDER_CANCELLATION_PROBLEM_CODE_UNSPECIFIED OrderCancellationProblemCode = 0
+	// Cancellation window has not opened yet
+	OrderCancellationProblemCode_ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_NOT_OPEN OrderCancellationProblemCode = 1
+	// Cancellation window has closed
+	OrderCancellationProblemCode_ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_EXPIRED OrderCancellationProblemCode = 2
+	// Order is already delivered or failed
+	OrderCancellationProblemCode_ORDER_CANCELLATION_PROBLEM_CODE_ORDER_ALREADY_FINAL OrderCancellationProblemCode = 3
+)
+
+// Enum value maps for OrderCancellationProblemCode.
+var (
+	OrderCancellationProblemCode_name = map[int32]string{
+		0: "ORDER_CANCELLATION_PROBLEM_CODE_UNSPECIFIED",
+		1: "ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_NOT_OPEN",
+		2: "ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_EXPIRED",
+		3: "ORDER_CANCELLATION_PROBLEM_CODE_ORDER_ALREADY_FINAL",
+	}
+	OrderCancellationProblemCode_value = map[string]int32{
+		"ORDER_CANCELLATION_PROBLEM_CODE_UNSPECIFIED":                  0,
+		"ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_NOT_OPEN": 1,
+		"ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_EXPIRED":  2,
+		"ORDER_CANCELLATION_PROBLEM_CODE_ORDER_ALREADY_FINAL":          3,
+	}
+)
+
+func (x OrderCancellationProblemCode) Enum() *OrderCancellationProblemCode {
+	p := new(OrderCancellationProblemCode)
+	*p = x
+	return p
+}
+
+func (x OrderCancellationProblemCode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OrderCancellationProblemCode) Descriptor() protoreflect.EnumDescriptor {
+	return file_generated_service_proto_enumTypes[5].Descriptor()
+}
+
+func (OrderCancellationProblemCode) Type() protoreflect.EnumType {
+	return &file_generated_service_proto_enumTypes[5]
+}
+
+func (x OrderCancellationProblemCode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OrderCancellationProblemCode.Descriptor instead.
+func (OrderCancellationProblemCode) EnumDescriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{5}
+}
 
 // Request message for bffInfo operation: Metadata for the client BFF.
 type QueryBffInfoRequest struct {
@@ -108,6 +489,604 @@ func (x *QueryBffInfoResponse) GetBffInfo() *BffInfo {
 	return nil
 }
 
+// Request message for restaurants operation: Restaurants available to the customer.
+type QueryRestaurantsRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	First int32                   `protobuf:"varint,1,opt,name=first,proto3" json:"first,omitempty"`
+	After *wrapperspb.StringValue `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`
+}
+
+func (x *QueryRestaurantsRequest) Reset() {
+	*x = QueryRestaurantsRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QueryRestaurantsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryRestaurantsRequest) ProtoMessage() {}
+
+func (x *QueryRestaurantsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryRestaurantsRequest.ProtoReflect.Descriptor instead.
+func (*QueryRestaurantsRequest) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *QueryRestaurantsRequest) GetFirst() int32 {
+	if x != nil {
+		return x.First
+	}
+	return 0
+}
+
+func (x *QueryRestaurantsRequest) GetAfter() *wrapperspb.StringValue {
+	if x != nil {
+		return x.After
+	}
+	return nil
+}
+
+// Response message for restaurants operation: Restaurants available to the customer.
+type QueryRestaurantsResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Restaurants available to the customer
+	Restaurants *RestaurantConnection `protobuf:"bytes,1,opt,name=restaurants,proto3" json:"restaurants,omitempty"`
+}
+
+func (x *QueryRestaurantsResponse) Reset() {
+	*x = QueryRestaurantsResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QueryRestaurantsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryRestaurantsResponse) ProtoMessage() {}
+
+func (x *QueryRestaurantsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryRestaurantsResponse.ProtoReflect.Descriptor instead.
+func (*QueryRestaurantsResponse) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *QueryRestaurantsResponse) GetRestaurants() *RestaurantConnection {
+	if x != nil {
+		return x.Restaurants
+	}
+	return nil
+}
+
+// Request message for restaurant operation: Restaurant by identifier, null if it does not exist.
+type QueryRestaurantRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *QueryRestaurantRequest) Reset() {
+	*x = QueryRestaurantRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QueryRestaurantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryRestaurantRequest) ProtoMessage() {}
+
+func (x *QueryRestaurantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryRestaurantRequest.ProtoReflect.Descriptor instead.
+func (*QueryRestaurantRequest) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *QueryRestaurantRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// Response message for restaurant operation: Restaurant by identifier, null if it does not exist.
+type QueryRestaurantResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Restaurant by identifier, null if it does not exist
+	Restaurant *Restaurant `protobuf:"bytes,1,opt,name=restaurant,proto3" json:"restaurant,omitempty"`
+}
+
+func (x *QueryRestaurantResponse) Reset() {
+	*x = QueryRestaurantResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QueryRestaurantResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryRestaurantResponse) ProtoMessage() {}
+
+func (x *QueryRestaurantResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryRestaurantResponse.ProtoReflect.Descriptor instead.
+func (*QueryRestaurantResponse) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *QueryRestaurantResponse) GetRestaurant() *Restaurant {
+	if x != nil {
+		return x.Restaurant
+	}
+	return nil
+}
+
+// Request message for order operation: Order of the current customer, null if it does not exist or belongs to someone else.
+type QueryOrderRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *QueryOrderRequest) Reset() {
+	*x = QueryOrderRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QueryOrderRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryOrderRequest) ProtoMessage() {}
+
+func (x *QueryOrderRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryOrderRequest.ProtoReflect.Descriptor instead.
+func (*QueryOrderRequest) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *QueryOrderRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// Response message for order operation: Order of the current customer, null if it does not exist or belongs to someone else.
+type QueryOrderResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Order of the current customer, null if it does not exist or belongs to someone else
+	Order *Order `protobuf:"bytes,1,opt,name=order,proto3" json:"order,omitempty"`
+}
+
+func (x *QueryOrderResponse) Reset() {
+	*x = QueryOrderResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QueryOrderResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryOrderResponse) ProtoMessage() {}
+
+func (x *QueryOrderResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryOrderResponse.ProtoReflect.Descriptor instead.
+func (*QueryOrderResponse) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *QueryOrderResponse) GetOrder() *Order {
+	if x != nil {
+		return x.Order
+	}
+	return nil
+}
+
+// Request message for customerOrders operation: Orders of the current customer, newest first.
+type QueryCustomerOrdersRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	First int32                   `protobuf:"varint,1,opt,name=first,proto3" json:"first,omitempty"`
+	After *wrapperspb.StringValue `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`
+}
+
+func (x *QueryCustomerOrdersRequest) Reset() {
+	*x = QueryCustomerOrdersRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QueryCustomerOrdersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryCustomerOrdersRequest) ProtoMessage() {}
+
+func (x *QueryCustomerOrdersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryCustomerOrdersRequest.ProtoReflect.Descriptor instead.
+func (*QueryCustomerOrdersRequest) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *QueryCustomerOrdersRequest) GetFirst() int32 {
+	if x != nil {
+		return x.First
+	}
+	return 0
+}
+
+func (x *QueryCustomerOrdersRequest) GetAfter() *wrapperspb.StringValue {
+	if x != nil {
+		return x.After
+	}
+	return nil
+}
+
+// Response message for customerOrders operation: Orders of the current customer, newest first.
+type QueryCustomerOrdersResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Orders of the current customer, newest first
+	CustomerOrders *OrderConnection `protobuf:"bytes,1,opt,name=customer_orders,json=customerOrders,proto3" json:"customer_orders,omitempty"`
+}
+
+func (x *QueryCustomerOrdersResponse) Reset() {
+	*x = QueryCustomerOrdersResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QueryCustomerOrdersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryCustomerOrdersResponse) ProtoMessage() {}
+
+func (x *QueryCustomerOrdersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryCustomerOrdersResponse.ProtoReflect.Descriptor instead.
+func (*QueryCustomerOrdersResponse) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *QueryCustomerOrdersResponse) GetCustomerOrders() *OrderConnection {
+	if x != nil {
+		return x.CustomerOrders
+	}
+	return nil
+}
+
+// Request message for placeOrder operation: Place an order for the current customer.
+type MutationPlaceOrderRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Input *PlaceOrderInput `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
+}
+
+func (x *MutationPlaceOrderRequest) Reset() {
+	*x = MutationPlaceOrderRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MutationPlaceOrderRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MutationPlaceOrderRequest) ProtoMessage() {}
+
+func (x *MutationPlaceOrderRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MutationPlaceOrderRequest.ProtoReflect.Descriptor instead.
+func (*MutationPlaceOrderRequest) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *MutationPlaceOrderRequest) GetInput() *PlaceOrderInput {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+// Response message for placeOrder operation: Place an order for the current customer.
+type MutationPlaceOrderResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Place an order for the current customer
+	PlaceOrder *PlaceOrderPayload `protobuf:"bytes,1,opt,name=place_order,json=placeOrder,proto3" json:"place_order,omitempty"`
+}
+
+func (x *MutationPlaceOrderResponse) Reset() {
+	*x = MutationPlaceOrderResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MutationPlaceOrderResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MutationPlaceOrderResponse) ProtoMessage() {}
+
+func (x *MutationPlaceOrderResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MutationPlaceOrderResponse.ProtoReflect.Descriptor instead.
+func (*MutationPlaceOrderResponse) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *MutationPlaceOrderResponse) GetPlaceOrder() *PlaceOrderPayload {
+	if x != nil {
+		return x.PlaceOrder
+	}
+	return nil
+}
+
+// Request message for requestOrderCancellation operation: Request cancellation of an order of the current customer.
+type MutationRequestOrderCancellationRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Input *RequestOrderCancellationInput `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
+}
+
+func (x *MutationRequestOrderCancellationRequest) Reset() {
+	*x = MutationRequestOrderCancellationRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MutationRequestOrderCancellationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MutationRequestOrderCancellationRequest) ProtoMessage() {}
+
+func (x *MutationRequestOrderCancellationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MutationRequestOrderCancellationRequest.ProtoReflect.Descriptor instead.
+func (*MutationRequestOrderCancellationRequest) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *MutationRequestOrderCancellationRequest) GetInput() *RequestOrderCancellationInput {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+// Response message for requestOrderCancellation operation: Request cancellation of an order of the current customer.
+type MutationRequestOrderCancellationResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Request cancellation of an order of the current customer
+	RequestOrderCancellation *RequestOrderCancellationPayload `protobuf:"bytes,1,opt,name=request_order_cancellation,json=requestOrderCancellation,proto3" json:"request_order_cancellation,omitempty"`
+}
+
+func (x *MutationRequestOrderCancellationResponse) Reset() {
+	*x = MutationRequestOrderCancellationResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MutationRequestOrderCancellationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MutationRequestOrderCancellationResponse) ProtoMessage() {}
+
+func (x *MutationRequestOrderCancellationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MutationRequestOrderCancellationResponse.ProtoReflect.Descriptor instead.
+func (*MutationRequestOrderCancellationResponse) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *MutationRequestOrderCancellationResponse) GetRequestOrderCancellation() *RequestOrderCancellationPayload {
+	if x != nil {
+		return x.RequestOrderCancellation
+	}
+	return nil
+}
+
 type BffInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -122,7 +1101,7 @@ type BffInfo struct {
 func (x *BffInfo) Reset() {
 	*x = BffInfo{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[2]
+		mi := &file_generated_service_proto_msgTypes[14]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -135,7 +1114,7 @@ func (x *BffInfo) String() string {
 func (*BffInfo) ProtoMessage() {}
 
 func (x *BffInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[2]
+	mi := &file_generated_service_proto_msgTypes[14]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -148,7 +1127,7 @@ func (x *BffInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BffInfo.ProtoReflect.Descriptor instead.
 func (*BffInfo) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{2}
+	return file_generated_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *BffInfo) GetName() string {
@@ -165,30 +1144,1750 @@ func (x *BffInfo) GetVersion() string {
 	return ""
 }
 
+type RestaurantConnection struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Restaurants of the page
+	Edges []*RestaurantEdge `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
+	// Pagination state
+	PageInfo *PageInfo `protobuf:"bytes,2,opt,name=page_info,json=pageInfo,proto3" json:"page_info,omitempty"`
+}
+
+func (x *RestaurantConnection) Reset() {
+	*x = RestaurantConnection{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RestaurantConnection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestaurantConnection) ProtoMessage() {}
+
+func (x *RestaurantConnection) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestaurantConnection.ProtoReflect.Descriptor instead.
+func (*RestaurantConnection) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RestaurantConnection) GetEdges() []*RestaurantEdge {
+	if x != nil {
+		return x.Edges
+	}
+	return nil
+}
+
+func (x *RestaurantConnection) GetPageInfo() *PageInfo {
+	if x != nil {
+		return x.PageInfo
+	}
+	return nil
+}
+
+// Restaurant as shown to a customer
+type Restaurant struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Restaurant identifier
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Display name
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Human-readable address
+	Address string `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
+	// Whether the restaurant accepts new orders now
+	AcceptingOrders bool `protobuf:"varint,4,opt,name=accepting_orders,json=acceptingOrders,proto3" json:"accepting_orders,omitempty"`
+	// Current menu, null if the restaurant has not published one
+	Menu *Menu `protobuf:"bytes,5,opt,name=menu,proto3" json:"menu,omitempty"`
+}
+
+func (x *Restaurant) Reset() {
+	*x = Restaurant{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[16]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Restaurant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Restaurant) ProtoMessage() {}
+
+func (x *Restaurant) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[16]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Restaurant.ProtoReflect.Descriptor instead.
+func (*Restaurant) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *Restaurant) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Restaurant) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Restaurant) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *Restaurant) GetAcceptingOrders() bool {
+	if x != nil {
+		return x.AcceptingOrders
+	}
+	return false
+}
+
+func (x *Restaurant) GetMenu() *Menu {
+	if x != nil {
+		return x.Menu
+	}
+	return nil
+}
+
+// Order of the current customer
+type Order struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Order identifier
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Customer-facing lifecycle status
+	Status OrderStatus `protobuf:"varint,2,opt,name=status,proto3,enum=service.OrderStatus" json:"status,omitempty"`
+	// Why the order ended, set only for CANCELLED and FAILED
+	EndReason OrderEndReason `protobuf:"varint,3,opt,name=end_reason,json=endReason,proto3,enum=service.OrderEndReason" json:"end_reason,omitempty"`
+	// Restaurant that fulfills the order
+	Restaurant *Restaurant `protobuf:"bytes,4,opt,name=restaurant,proto3" json:"restaurant,omitempty"`
+	// Ordered items
+	Items []*OrderItem `protobuf:"bytes,5,rep,name=items,proto3" json:"items,omitempty"`
+	// Total amount of the order
+	Total *Money `protobuf:"bytes,6,opt,name=total,proto3" json:"total,omitempty"`
+	// Delivery address as entered by the customer
+	DeliveryAddress string `protobuf:"bytes,7,opt,name=delivery_address,json=deliveryAddress,proto3" json:"delivery_address,omitempty"`
+	// Moment the order was placed in RFC 3339
+	PlacedAt string `protobuf:"bytes,8,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
+	// Milestones in chronological order
+	Milestones []*OrderMilestone `protobuf:"bytes,9,rep,name=milestones,proto3" json:"milestones,omitempty"`
+	// Cancellation availability, null when cancellation is not possible now
+	Cancellation *OrderCancellationAvailability `protobuf:"bytes,10,opt,name=cancellation,proto3" json:"cancellation,omitempty"`
+}
+
+func (x *Order) Reset() {
+	*x = Order{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[17]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Order) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Order) ProtoMessage() {}
+
+func (x *Order) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[17]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Order.ProtoReflect.Descriptor instead.
+func (*Order) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *Order) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Order) GetStatus() OrderStatus {
+	if x != nil {
+		return x.Status
+	}
+	return OrderStatus_ORDER_STATUS_UNSPECIFIED
+}
+
+func (x *Order) GetEndReason() OrderEndReason {
+	if x != nil {
+		return x.EndReason
+	}
+	return OrderEndReason_ORDER_END_REASON_UNSPECIFIED
+}
+
+func (x *Order) GetRestaurant() *Restaurant {
+	if x != nil {
+		return x.Restaurant
+	}
+	return nil
+}
+
+func (x *Order) GetItems() []*OrderItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *Order) GetTotal() *Money {
+	if x != nil {
+		return x.Total
+	}
+	return nil
+}
+
+func (x *Order) GetDeliveryAddress() string {
+	if x != nil {
+		return x.DeliveryAddress
+	}
+	return ""
+}
+
+func (x *Order) GetPlacedAt() string {
+	if x != nil {
+		return x.PlacedAt
+	}
+	return ""
+}
+
+func (x *Order) GetMilestones() []*OrderMilestone {
+	if x != nil {
+		return x.Milestones
+	}
+	return nil
+}
+
+func (x *Order) GetCancellation() *OrderCancellationAvailability {
+	if x != nil {
+		return x.Cancellation
+	}
+	return nil
+}
+
+type OrderConnection struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Orders of the page, newest first
+	Edges []*OrderEdge `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
+	// Pagination state
+	PageInfo *PageInfo `protobuf:"bytes,2,opt,name=page_info,json=pageInfo,proto3" json:"page_info,omitempty"`
+}
+
+func (x *OrderConnection) Reset() {
+	*x = OrderConnection{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[18]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OrderConnection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderConnection) ProtoMessage() {}
+
+func (x *OrderConnection) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[18]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderConnection.ProtoReflect.Descriptor instead.
+func (*OrderConnection) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *OrderConnection) GetEdges() []*OrderEdge {
+	if x != nil {
+		return x.Edges
+	}
+	return nil
+}
+
+func (x *OrderConnection) GetPageInfo() *PageInfo {
+	if x != nil {
+		return x.PageInfo
+	}
+	return nil
+}
+
+type PlaceOrderInput struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Restaurant to order from
+	RestaurantId string `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	// Ordered items
+	Items []*OrderLineInput `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	// Delivery address
+	DeliveryAddress string `protobuf:"bytes,3,opt,name=delivery_address,json=deliveryAddress,proto3" json:"delivery_address,omitempty"`
+	// Client-generated key of this checkout attempt, reused on manual retry
+	IdempotencyKey string `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+}
+
+func (x *PlaceOrderInput) Reset() {
+	*x = PlaceOrderInput{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PlaceOrderInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlaceOrderInput) ProtoMessage() {}
+
+func (x *PlaceOrderInput) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlaceOrderInput.ProtoReflect.Descriptor instead.
+func (*PlaceOrderInput) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *PlaceOrderInput) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *PlaceOrderInput) GetItems() []*OrderLineInput {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *PlaceOrderInput) GetDeliveryAddress() string {
+	if x != nil {
+		return x.DeliveryAddress
+	}
+	return ""
+}
+
+func (x *PlaceOrderInput) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+type PlaceOrderPayload struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Placed order, null if problems is not empty
+	Order *Order `protobuf:"bytes,1,opt,name=order,proto3" json:"order,omitempty"`
+	// Business problems that prevented placing the order
+	Problems []*PlaceOrderProblem `protobuf:"bytes,2,rep,name=problems,proto3" json:"problems,omitempty"`
+}
+
+func (x *PlaceOrderPayload) Reset() {
+	*x = PlaceOrderPayload{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PlaceOrderPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlaceOrderPayload) ProtoMessage() {}
+
+func (x *PlaceOrderPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlaceOrderPayload.ProtoReflect.Descriptor instead.
+func (*PlaceOrderPayload) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *PlaceOrderPayload) GetOrder() *Order {
+	if x != nil {
+		return x.Order
+	}
+	return nil
+}
+
+func (x *PlaceOrderPayload) GetProblems() []*PlaceOrderProblem {
+	if x != nil {
+		return x.Problems
+	}
+	return nil
+}
+
+type RequestOrderCancellationInput struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Order to cancel
+	OrderId string `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	// Client-generated key of this cancellation attempt, reused on manual retry
+	RequestId string `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Optional free-text reason given by the customer
+	Reason *wrapperspb.StringValue `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+}
+
+func (x *RequestOrderCancellationInput) Reset() {
+	*x = RequestOrderCancellationInput{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[21]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RequestOrderCancellationInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestOrderCancellationInput) ProtoMessage() {}
+
+func (x *RequestOrderCancellationInput) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[21]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestOrderCancellationInput.ProtoReflect.Descriptor instead.
+func (*RequestOrderCancellationInput) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RequestOrderCancellationInput) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+func (x *RequestOrderCancellationInput) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *RequestOrderCancellationInput) GetReason() *wrapperspb.StringValue {
+	if x != nil {
+		return x.Reason
+	}
+	return nil
+}
+
+type RequestOrderCancellationPayload struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Outcome, null if problem is set
+	Outcome OrderCancellationOutcome `protobuf:"varint,1,opt,name=outcome,proto3,enum=service.OrderCancellationOutcome" json:"outcome,omitempty"`
+	// Business problem, null if outcome is set
+	Problem *OrderCancellationProblem `protobuf:"bytes,2,opt,name=problem,proto3" json:"problem,omitempty"`
+}
+
+func (x *RequestOrderCancellationPayload) Reset() {
+	*x = RequestOrderCancellationPayload{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[22]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RequestOrderCancellationPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestOrderCancellationPayload) ProtoMessage() {}
+
+func (x *RequestOrderCancellationPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[22]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestOrderCancellationPayload.ProtoReflect.Descriptor instead.
+func (*RequestOrderCancellationPayload) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RequestOrderCancellationPayload) GetOutcome() OrderCancellationOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return OrderCancellationOutcome_ORDER_CANCELLATION_OUTCOME_UNSPECIFIED
+}
+
+func (x *RequestOrderCancellationPayload) GetProblem() *OrderCancellationProblem {
+	if x != nil {
+		return x.Problem
+	}
+	return nil
+}
+
+// Exact monetary amount
+type Money struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Decimal string with a dot separator, for example "12.50"
+	Amount string `protobuf:"bytes,1,opt,name=amount,proto3" json:"amount,omitempty"`
+	// ISO 4217 currency code
+	Currency string `protobuf:"bytes,2,opt,name=currency,proto3" json:"currency,omitempty"`
+}
+
+func (x *Money) Reset() {
+	*x = Money{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[23]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Money) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Money) ProtoMessage() {}
+
+func (x *Money) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[23]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Money.ProtoReflect.Descriptor instead.
+func (*Money) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *Money) GetAmount() string {
+	if x != nil {
+		return x.Amount
+	}
+	return ""
+}
+
+func (x *Money) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+// Cursor pagination state of a connection
+type PageInfo struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Whether more items follow endCursor
+	HasNextPage bool `protobuf:"varint,1,opt,name=has_next_page,json=hasNextPage,proto3" json:"has_next_page,omitempty"`
+	// Cursor of the last returned item, null for an empty page
+	EndCursor *wrapperspb.StringValue `protobuf:"bytes,2,opt,name=end_cursor,json=endCursor,proto3" json:"end_cursor,omitempty"`
+}
+
+func (x *PageInfo) Reset() {
+	*x = PageInfo{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[24]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PageInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PageInfo) ProtoMessage() {}
+
+func (x *PageInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[24]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PageInfo.ProtoReflect.Descriptor instead.
+func (*PageInfo) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *PageInfo) GetHasNextPage() bool {
+	if x != nil {
+		return x.HasNextPage
+	}
+	return false
+}
+
+func (x *PageInfo) GetEndCursor() *wrapperspb.StringValue {
+	if x != nil {
+		return x.EndCursor
+	}
+	return nil
+}
+
+// Menu of one restaurant
+type Menu struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Menu items in display order
+	Items []*MenuItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+}
+
+func (x *Menu) Reset() {
+	*x = Menu{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[25]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Menu) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Menu) ProtoMessage() {}
+
+func (x *Menu) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[25]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Menu.ProtoReflect.Descriptor instead.
+func (*Menu) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *Menu) GetItems() []*MenuItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+// Item of a restaurant menu
+type MenuItem struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Menu item identifier
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Display name
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Short description, null if absent
+	Description *wrapperspb.StringValue `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// Current price of one unit
+	Price *Money `protobuf:"bytes,4,opt,name=price,proto3" json:"price,omitempty"`
+	// Whether the item can be ordered now
+	Available bool `protobuf:"varint,5,opt,name=available,proto3" json:"available,omitempty"`
+}
+
+func (x *MenuItem) Reset() {
+	*x = MenuItem{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[26]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MenuItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MenuItem) ProtoMessage() {}
+
+func (x *MenuItem) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[26]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MenuItem.ProtoReflect.Descriptor instead.
+func (*MenuItem) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *MenuItem) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MenuItem) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MenuItem) GetDescription() *wrapperspb.StringValue {
+	if x != nil {
+		return x.Description
+	}
+	return nil
+}
+
+func (x *MenuItem) GetPrice() *Money {
+	if x != nil {
+		return x.Price
+	}
+	return nil
+}
+
+func (x *MenuItem) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+type RestaurantEdge struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Opaque cursor of this item
+	Cursor string `protobuf:"bytes,1,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// Restaurant
+	Node *Restaurant `protobuf:"bytes,2,opt,name=node,proto3" json:"node,omitempty"`
+}
+
+func (x *RestaurantEdge) Reset() {
+	*x = RestaurantEdge{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[27]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RestaurantEdge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestaurantEdge) ProtoMessage() {}
+
+func (x *RestaurantEdge) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[27]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestaurantEdge.ProtoReflect.Descriptor instead.
+func (*RestaurantEdge) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RestaurantEdge) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+func (x *RestaurantEdge) GetNode() *Restaurant {
+	if x != nil {
+		return x.Node
+	}
+	return nil
+}
+
+type OrderMilestone struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Kind of the milestone
+	Kind OrderMilestoneKind `protobuf:"varint,1,opt,name=kind,proto3,enum=service.OrderMilestoneKind" json:"kind,omitempty"`
+	// Moment of the milestone in RFC 3339
+	OccurredAt string `protobuf:"bytes,2,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
+}
+
+func (x *OrderMilestone) Reset() {
+	*x = OrderMilestone{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[28]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OrderMilestone) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderMilestone) ProtoMessage() {}
+
+func (x *OrderMilestone) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[28]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderMilestone.ProtoReflect.Descriptor instead.
+func (*OrderMilestone) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *OrderMilestone) GetKind() OrderMilestoneKind {
+	if x != nil {
+		return x.Kind
+	}
+	return OrderMilestoneKind_ORDER_MILESTONE_KIND_UNSPECIFIED
+}
+
+func (x *OrderMilestone) GetOccurredAt() string {
+	if x != nil {
+		return x.OccurredAt
+	}
+	return ""
+}
+
+// Menu item as recorded in an order
+type OrderedMenuItem struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Menu item identifier
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Display name
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+}
+
+func (x *OrderedMenuItem) Reset() {
+	*x = OrderedMenuItem{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[29]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OrderedMenuItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderedMenuItem) ProtoMessage() {}
+
+func (x *OrderedMenuItem) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[29]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderedMenuItem.ProtoReflect.Descriptor instead.
+func (*OrderedMenuItem) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *OrderedMenuItem) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OrderedMenuItem) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type OrderItem struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Ordered menu item
+	MenuItem *OrderedMenuItem `protobuf:"bytes,1,opt,name=menu_item,json=menuItem,proto3" json:"menu_item,omitempty"`
+	// Number of units
+	Quantity int32 `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	// Price of one unit at the time of ordering
+	UnitPrice *Money `protobuf:"bytes,3,opt,name=unit_price,json=unitPrice,proto3" json:"unit_price,omitempty"`
+	// Price of all units of this line
+	LineTotal *Money `protobuf:"bytes,4,opt,name=line_total,json=lineTotal,proto3" json:"line_total,omitempty"`
+}
+
+func (x *OrderItem) Reset() {
+	*x = OrderItem{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[30]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OrderItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderItem) ProtoMessage() {}
+
+func (x *OrderItem) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[30]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderItem.ProtoReflect.Descriptor instead.
+func (*OrderItem) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *OrderItem) GetMenuItem() *OrderedMenuItem {
+	if x != nil {
+		return x.MenuItem
+	}
+	return nil
+}
+
+func (x *OrderItem) GetQuantity() int32 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
+func (x *OrderItem) GetUnitPrice() *Money {
+	if x != nil {
+		return x.UnitPrice
+	}
+	return nil
+}
+
+func (x *OrderItem) GetLineTotal() *Money {
+	if x != nil {
+		return x.LineTotal
+	}
+	return nil
+}
+
+// Present only while the customer may request cancellation
+type OrderCancellationAvailability struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Moment in RFC 3339 after which cancellation is no longer possible
+	AvailableUntil string `protobuf:"bytes,1,opt,name=available_until,json=availableUntil,proto3" json:"available_until,omitempty"`
+}
+
+func (x *OrderCancellationAvailability) Reset() {
+	*x = OrderCancellationAvailability{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[31]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OrderCancellationAvailability) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderCancellationAvailability) ProtoMessage() {}
+
+func (x *OrderCancellationAvailability) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[31]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderCancellationAvailability.ProtoReflect.Descriptor instead.
+func (*OrderCancellationAvailability) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *OrderCancellationAvailability) GetAvailableUntil() string {
+	if x != nil {
+		return x.AvailableUntil
+	}
+	return ""
+}
+
+type OrderEdge struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Opaque cursor of this item
+	Cursor string `protobuf:"bytes,1,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// Order
+	Node *Order `protobuf:"bytes,2,opt,name=node,proto3" json:"node,omitempty"`
+}
+
+func (x *OrderEdge) Reset() {
+	*x = OrderEdge{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[32]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OrderEdge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderEdge) ProtoMessage() {}
+
+func (x *OrderEdge) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[32]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderEdge.ProtoReflect.Descriptor instead.
+func (*OrderEdge) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *OrderEdge) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+func (x *OrderEdge) GetNode() *Order {
+	if x != nil {
+		return x.Node
+	}
+	return nil
+}
+
+type OrderLineInput struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Menu item identifier
+	MenuItemId string `protobuf:"bytes,1,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	// Number of units, at least 1
+	Quantity int32 `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+}
+
+func (x *OrderLineInput) Reset() {
+	*x = OrderLineInput{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[33]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OrderLineInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderLineInput) ProtoMessage() {}
+
+func (x *OrderLineInput) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[33]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderLineInput.ProtoReflect.Descriptor instead.
+func (*OrderLineInput) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *OrderLineInput) GetMenuItemId() string {
+	if x != nil {
+		return x.MenuItemId
+	}
+	return ""
+}
+
+func (x *OrderLineInput) GetQuantity() int32 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
+type PlaceOrderProblem struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Reason code
+	Code PlaceOrderProblemCode `protobuf:"varint,1,opt,name=code,proto3,enum=service.PlaceOrderProblemCode" json:"code,omitempty"`
+	// Menu items the problem refers to, empty if it refers to the whole order
+	MenuItemIds []string `protobuf:"bytes,2,rep,name=menu_item_ids,json=menuItemIds,proto3" json:"menu_item_ids,omitempty"`
+}
+
+func (x *PlaceOrderProblem) Reset() {
+	*x = PlaceOrderProblem{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[34]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PlaceOrderProblem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlaceOrderProblem) ProtoMessage() {}
+
+func (x *PlaceOrderProblem) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[34]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlaceOrderProblem.ProtoReflect.Descriptor instead.
+func (*PlaceOrderProblem) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *PlaceOrderProblem) GetCode() PlaceOrderProblemCode {
+	if x != nil {
+		return x.Code
+	}
+	return PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_UNSPECIFIED
+}
+
+func (x *PlaceOrderProblem) GetMenuItemIds() []string {
+	if x != nil {
+		return x.MenuItemIds
+	}
+	return nil
+}
+
+type OrderCancellationProblem struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Reason code
+	Code OrderCancellationProblemCode `protobuf:"varint,1,opt,name=code,proto3,enum=service.OrderCancellationProblemCode" json:"code,omitempty"`
+}
+
+func (x *OrderCancellationProblem) Reset() {
+	*x = OrderCancellationProblem{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[35]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OrderCancellationProblem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderCancellationProblem) ProtoMessage() {}
+
+func (x *OrderCancellationProblem) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[35]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderCancellationProblem.ProtoReflect.Descriptor instead.
+func (*OrderCancellationProblem) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *OrderCancellationProblem) GetCode() OrderCancellationProblemCode {
+	if x != nil {
+		return x.Code
+	}
+	return OrderCancellationProblemCode_ORDER_CANCELLATION_PROBLEM_CODE_UNSPECIFIED
+}
+
 var File_generated_service_proto protoreflect.FileDescriptor
 
 var file_generated_service_proto_rawDesc = []byte{
 	0x0a, 0x17, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x65, 0x64, 0x2f, 0x73, 0x65, 0x72, 0x76,
 	0x69, 0x63, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x07, 0x73, 0x65, 0x72, 0x76, 0x69,
-	0x63, 0x65, 0x22, 0x15, 0x0a, 0x13, 0x51, 0x75, 0x65, 0x72, 0x79, 0x42, 0x66, 0x66, 0x49, 0x6e,
+	0x63, 0x65, 0x1a, 0x1e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x62, 0x75, 0x66, 0x2f, 0x77, 0x72, 0x61, 0x70, 0x70, 0x65, 0x72, 0x73, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x22, 0x15, 0x0a, 0x13, 0x51, 0x75, 0x65, 0x72, 0x79, 0x42, 0x66, 0x66, 0x49, 0x6e,
 	0x66, 0x6f, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x43, 0x0a, 0x14, 0x51, 0x75, 0x65,
 	0x72, 0x79, 0x42, 0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
 	0x65, 0x12, 0x2b, 0x0a, 0x08, 0x62, 0x66, 0x66, 0x5f, 0x69, 0x6e, 0x66, 0x6f, 0x18, 0x01, 0x20,
 	0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x42, 0x66,
-	0x66, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x07, 0x62, 0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x22, 0x37,
-	0x0a, 0x07, 0x42, 0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d,
-	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x18, 0x0a,
-	0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
-	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x32, 0x5b, 0x0a, 0x0a, 0x42, 0x66, 0x66, 0x53, 0x65,
-	0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x4d, 0x0a, 0x0c, 0x51, 0x75, 0x65, 0x72, 0x79, 0x42, 0x66,
-	0x66, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x1c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
-	0x51, 0x75, 0x65, 0x72, 0x79, 0x42, 0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x51, 0x75,
-	0x65, 0x72, 0x79, 0x42, 0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x22, 0x00, 0x42, 0x25, 0x5a, 0x23, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
-	0x6f, 0x6d, 0x2f, 0x77, 0x75, 0x6e, 0x64, 0x65, 0x72, 0x67, 0x72, 0x61, 0x70, 0x68, 0x2f, 0x63,
-	0x6f, 0x73, 0x6d, 0x6f, 0x2f, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x62, 0x06, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x33,
+	0x66, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x07, 0x62, 0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x22, 0x63,
+	0x0a, 0x17, 0x51, 0x75, 0x65, 0x72, 0x79, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e,
+	0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x66, 0x69, 0x72,
+	0x73, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x05, 0x66, 0x69, 0x72, 0x73, 0x74, 0x12,
+	0x32, 0x0a, 0x05, 0x61, 0x66, 0x74, 0x65, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
+	0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x05, 0x61, 0x66,
+	0x74, 0x65, 0x72, 0x22, 0x5b, 0x0a, 0x18, 0x51, 0x75, 0x65, 0x72, 0x79, 0x52, 0x65, 0x73, 0x74,
+	0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x3f, 0x0a, 0x0b, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x52,
+	0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74,
+	0x69, 0x6f, 0x6e, 0x52, 0x0b, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x73,
+	0x22, 0x28, 0x0a, 0x16, 0x51, 0x75, 0x65, 0x72, 0x79, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72,
+	0x61, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x22, 0x4e, 0x0a, 0x17, 0x51, 0x75,
+	0x65, 0x72, 0x79, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x33, 0x0a, 0x0a, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72,
+	0x61, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x73, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x2e, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x0a,
+	0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x22, 0x23, 0x0a, 0x11, 0x51, 0x75,
+	0x65, 0x72, 0x79, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x22,
+	0x3a, 0x0a, 0x12, 0x51, 0x75, 0x65, 0x72, 0x79, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x24, 0x0a, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f,
+	0x72, 0x64, 0x65, 0x72, 0x52, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x22, 0x66, 0x0a, 0x1a, 0x51,
+	0x75, 0x65, 0x72, 0x79, 0x43, 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x65, 0x72, 0x4f, 0x72, 0x64, 0x65,
+	0x72, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x66, 0x69, 0x72,
+	0x73, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x05, 0x66, 0x69, 0x72, 0x73, 0x74, 0x12,
+	0x32, 0x0a, 0x05, 0x61, 0x66, 0x74, 0x65, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
+	0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x05, 0x61, 0x66,
+	0x74, 0x65, 0x72, 0x22, 0x60, 0x0a, 0x1b, 0x51, 0x75, 0x65, 0x72, 0x79, 0x43, 0x75, 0x73, 0x74,
+	0x6f, 0x6d, 0x65, 0x72, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x41, 0x0a, 0x0f, 0x63, 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x65, 0x72, 0x5f, 0x6f,
+	0x72, 0x64, 0x65, 0x72, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x6f, 0x6e, 0x6e, 0x65,
+	0x63, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x0e, 0x63, 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x65, 0x72, 0x4f,
+	0x72, 0x64, 0x65, 0x72, 0x73, 0x22, 0x4b, 0x0a, 0x19, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x2e, 0x0a, 0x05, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x18, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x50, 0x6c, 0x61, 0x63,
+	0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x52, 0x05, 0x69, 0x6e, 0x70,
+	0x75, 0x74, 0x22, 0x59, 0x0a, 0x1a, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x6c,
+	0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x3b, 0x0a, 0x0b, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x5f, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
+	0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61,
+	0x64, 0x52, 0x0a, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x22, 0x67, 0x0a,
+	0x27, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x3c, 0x0a, 0x05, 0x69, 0x6e, 0x70, 0x75,
+	0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x26, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61,
+	0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x52,
+	0x05, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x22, 0x92, 0x01, 0x0a, 0x28, 0x4d, 0x75, 0x74, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43,
+	0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x12, 0x66, 0x0a, 0x1a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x6f,
+	0x72, 0x64, 0x65, 0x72, 0x5f, 0x63, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x28, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61,
+	0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61,
+	0x64, 0x52, 0x18, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43,
+	0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x37, 0x0a, 0x07, 0x42,
+	0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x76, 0x65,
+	0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72,
+	0x73, 0x69, 0x6f, 0x6e, 0x22, 0x75, 0x0a, 0x14, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61,
+	0x6e, 0x74, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x2d, 0x0a, 0x05,
+	0x65, 0x64, 0x67, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74,
+	0x45, 0x64, 0x67, 0x65, 0x52, 0x05, 0x65, 0x64, 0x67, 0x65, 0x73, 0x12, 0x2e, 0x0a, 0x09, 0x70,
+	0x61, 0x67, 0x65, 0x5f, 0x69, 0x6e, 0x66, 0x6f, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11,
+	0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x50, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66,
+	0x6f, 0x52, 0x08, 0x70, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x22, 0x98, 0x01, 0x0a, 0x0a,
+	0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61,
+	0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x18,
+	0x0a, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x12, 0x29, 0x0a, 0x10, 0x61, 0x63, 0x63, 0x65,
+	0x70, 0x74, 0x69, 0x6e, 0x67, 0x5f, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x73, 0x18, 0x04, 0x20, 0x01,
+	0x28, 0x08, 0x52, 0x0f, 0x61, 0x63, 0x63, 0x65, 0x70, 0x74, 0x69, 0x6e, 0x67, 0x4f, 0x72, 0x64,
+	0x65, 0x72, 0x73, 0x12, 0x21, 0x0a, 0x04, 0x6d, 0x65, 0x6e, 0x75, 0x18, 0x05, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x0d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4d, 0x65, 0x6e, 0x75,
+	0x52, 0x04, 0x6d, 0x65, 0x6e, 0x75, 0x22, 0xcf, 0x03, 0x0a, 0x05, 0x4f, 0x72, 0x64, 0x65, 0x72,
+	0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64,
+	0x12, 0x2c, 0x0a, 0x06, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e,
+	0x32, 0x14, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72,
+	0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x06, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x36,
+	0x0a, 0x0a, 0x65, 0x6e, 0x64, 0x5f, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01,
+	0x28, 0x0e, 0x32, 0x17, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64,
+	0x65, 0x72, 0x45, 0x6e, 0x64, 0x52, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x52, 0x09, 0x65, 0x6e, 0x64,
+	0x52, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x12, 0x33, 0x0a, 0x0a, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75,
+	0x72, 0x61, 0x6e, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x73, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x2e, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x52,
+	0x0a, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x12, 0x28, 0x0a, 0x05, 0x69,
+	0x74, 0x65, 0x6d, 0x73, 0x18, 0x05, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x73, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x49, 0x74, 0x65, 0x6d, 0x52, 0x05,
+	0x69, 0x74, 0x65, 0x6d, 0x73, 0x12, 0x24, 0x0a, 0x05, 0x74, 0x6f, 0x74, 0x61, 0x6c, 0x18, 0x06,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4d,
+	0x6f, 0x6e, 0x65, 0x79, 0x52, 0x05, 0x74, 0x6f, 0x74, 0x61, 0x6c, 0x12, 0x29, 0x0a, 0x10, 0x64,
+	0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x79, 0x5f, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x18,
+	0x07, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0f, 0x64, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x79, 0x41,
+	0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x12, 0x1b, 0x0a, 0x09, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x64,
+	0x5f, 0x61, 0x74, 0x18, 0x08, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x70, 0x6c, 0x61, 0x63, 0x65,
+	0x64, 0x41, 0x74, 0x12, 0x37, 0x0a, 0x0a, 0x6d, 0x69, 0x6c, 0x65, 0x73, 0x74, 0x6f, 0x6e, 0x65,
+	0x73, 0x18, 0x09, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x4d, 0x69, 0x6c, 0x65, 0x73, 0x74, 0x6f, 0x6e, 0x65,
+	0x52, 0x0a, 0x6d, 0x69, 0x6c, 0x65, 0x73, 0x74, 0x6f, 0x6e, 0x65, 0x73, 0x12, 0x4a, 0x0a, 0x0c,
+	0x63, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x0a, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x26, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64,
+	0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x41, 0x76,
+	0x61, 0x69, 0x6c, 0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x52, 0x0c, 0x63, 0x61, 0x6e, 0x63,
+	0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x6b, 0x0a, 0x0f, 0x4f, 0x72, 0x64, 0x65,
+	0x72, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x28, 0x0a, 0x05, 0x65,
+	0x64, 0x67, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x73, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x45, 0x64, 0x67, 0x65, 0x52, 0x05,
+	0x65, 0x64, 0x67, 0x65, 0x73, 0x12, 0x2e, 0x0a, 0x09, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x6e,
+	0x66, 0x6f, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x2e, 0x50, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x08, 0x70, 0x61, 0x67,
+	0x65, 0x49, 0x6e, 0x66, 0x6f, 0x22, 0xb9, 0x01, 0x0a, 0x0f, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f,
+	0x72, 0x64, 0x65, 0x72, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73,
+	0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x0c, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x2d,
+	0x0a, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x17, 0x2e,
+	0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x4c, 0x69, 0x6e,
+	0x65, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x52, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x12, 0x29, 0x0a,
+	0x10, 0x64, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x79, 0x5f, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73,
+	0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0f, 0x64, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72,
+	0x79, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x12, 0x27, 0x0a, 0x0f, 0x69, 0x64, 0x65, 0x6d,
+	0x70, 0x6f, 0x74, 0x65, 0x6e, 0x63, 0x79, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x04, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x0e, 0x69, 0x64, 0x65, 0x6d, 0x70, 0x6f, 0x74, 0x65, 0x6e, 0x63, 0x79, 0x4b, 0x65,
+	0x79, 0x22, 0x71, 0x0a, 0x11, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x50,
+	0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x24, 0x0a, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
+	0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x12, 0x36, 0x0a, 0x08,
+	0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1a,
+	0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72,
+	0x64, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x52, 0x08, 0x70, 0x72, 0x6f, 0x62,
+	0x6c, 0x65, 0x6d, 0x73, 0x22, 0x8f, 0x01, 0x0a, 0x1d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x5f,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x49,
+	0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64,
+	0x12, 0x34, 0x0a, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x1c, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62,
+	0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x06,
+	0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x22, 0x9b, 0x01, 0x0a, 0x1f, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x3b, 0x0a, 0x07, 0x6f, 0x75,
+	0x74, 0x63, 0x6f, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x21, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65,
+	0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x4f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x52, 0x07,
+	0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x12, 0x3b, 0x0a, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c,
+	0x65, 0x6d, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x52, 0x07, 0x70, 0x72, 0x6f,
+	0x62, 0x6c, 0x65, 0x6d, 0x22, 0x3b, 0x0a, 0x05, 0x4d, 0x6f, 0x6e, 0x65, 0x79, 0x12, 0x16, 0x0a,
+	0x06, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x61,
+	0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x1a, 0x0a, 0x08, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63,
+	0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63,
+	0x79, 0x22, 0x6b, 0x0a, 0x08, 0x50, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x22, 0x0a,
+	0x0d, 0x68, 0x61, 0x73, 0x5f, 0x6e, 0x65, 0x78, 0x74, 0x5f, 0x70, 0x61, 0x67, 0x65, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x08, 0x52, 0x0b, 0x68, 0x61, 0x73, 0x4e, 0x65, 0x78, 0x74, 0x50, 0x61, 0x67,
+	0x65, 0x12, 0x3b, 0x0a, 0x0a, 0x65, 0x6e, 0x64, 0x5f, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61,
+	0x6c, 0x75, 0x65, 0x52, 0x09, 0x65, 0x6e, 0x64, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x22, 0x2f,
+	0x0a, 0x04, 0x4d, 0x65, 0x6e, 0x75, 0x12, 0x27, 0x0a, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x18,
+	0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
+	0x4d, 0x65, 0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x52, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x22,
+	0xb2, 0x01, 0x0a, 0x08, 0x4d, 0x65, 0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x12, 0x0e, 0x0a, 0x02,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04,
+	0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65,
+	0x12, 0x3e, 0x0a, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x18,
+	0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61,
+	0x6c, 0x75, 0x65, 0x52, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e,
+	0x12, 0x24, 0x0a, 0x05, 0x70, 0x72, 0x69, 0x63, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x0e, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4d, 0x6f, 0x6e, 0x65, 0x79, 0x52,
+	0x05, 0x70, 0x72, 0x69, 0x63, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x61, 0x76, 0x61, 0x69, 0x6c, 0x61,
+	0x62, 0x6c, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x08, 0x52, 0x09, 0x61, 0x76, 0x61, 0x69, 0x6c,
+	0x61, 0x62, 0x6c, 0x65, 0x22, 0x51, 0x0a, 0x0e, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61,
+	0x6e, 0x74, 0x45, 0x64, 0x67, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x12, 0x27,
+	0x0a, 0x04, 0x6e, 0x6f, 0x64, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x73,
+	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e,
+	0x74, 0x52, 0x04, 0x6e, 0x6f, 0x64, 0x65, 0x22, 0x62, 0x0a, 0x0e, 0x4f, 0x72, 0x64, 0x65, 0x72,
+	0x4d, 0x69, 0x6c, 0x65, 0x73, 0x74, 0x6f, 0x6e, 0x65, 0x12, 0x2f, 0x0a, 0x04, 0x6b, 0x69, 0x6e,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x1b, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x4d, 0x69, 0x6c, 0x65, 0x73, 0x74, 0x6f, 0x6e, 0x65,
+	0x4b, 0x69, 0x6e, 0x64, 0x52, 0x04, 0x6b, 0x69, 0x6e, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x6f, 0x63,
+	0x63, 0x75, 0x72, 0x72, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x0a, 0x6f, 0x63, 0x63, 0x75, 0x72, 0x72, 0x65, 0x64, 0x41, 0x74, 0x22, 0x35, 0x0a, 0x0f, 0x4f,
+	0x72, 0x64, 0x65, 0x72, 0x65, 0x64, 0x4d, 0x65, 0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x12, 0x0e,
+	0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12,
+	0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61,
+	0x6d, 0x65, 0x22, 0xbc, 0x01, 0x0a, 0x09, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x49, 0x74, 0x65, 0x6d,
+	0x12, 0x35, 0x0a, 0x09, 0x6d, 0x65, 0x6e, 0x75, 0x5f, 0x69, 0x74, 0x65, 0x6d, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72,
+	0x64, 0x65, 0x72, 0x65, 0x64, 0x4d, 0x65, 0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x52, 0x08, 0x6d,
+	0x65, 0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x12, 0x1a, 0x0a, 0x08, 0x71, 0x75, 0x61, 0x6e, 0x74,
+	0x69, 0x74, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x08, 0x71, 0x75, 0x61, 0x6e, 0x74,
+	0x69, 0x74, 0x79, 0x12, 0x2d, 0x0a, 0x0a, 0x75, 0x6e, 0x69, 0x74, 0x5f, 0x70, 0x72, 0x69, 0x63,
+	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x4d, 0x6f, 0x6e, 0x65, 0x79, 0x52, 0x09, 0x75, 0x6e, 0x69, 0x74, 0x50, 0x72, 0x69,
+	0x63, 0x65, 0x12, 0x2d, 0x0a, 0x0a, 0x6c, 0x69, 0x6e, 0x65, 0x5f, 0x74, 0x6f, 0x74, 0x61, 0x6c,
+	0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
+	0x2e, 0x4d, 0x6f, 0x6e, 0x65, 0x79, 0x52, 0x09, 0x6c, 0x69, 0x6e, 0x65, 0x54, 0x6f, 0x74, 0x61,
+	0x6c, 0x22, 0x48, 0x0a, 0x1d, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c,
+	0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x41, 0x76, 0x61, 0x69, 0x6c, 0x61, 0x62, 0x69, 0x6c, 0x69,
+	0x74, 0x79, 0x12, 0x27, 0x0a, 0x0f, 0x61, 0x76, 0x61, 0x69, 0x6c, 0x61, 0x62, 0x6c, 0x65, 0x5f,
+	0x75, 0x6e, 0x74, 0x69, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x61, 0x76, 0x61,
+	0x69, 0x6c, 0x61, 0x62, 0x6c, 0x65, 0x55, 0x6e, 0x74, 0x69, 0x6c, 0x22, 0x47, 0x0a, 0x09, 0x4f,
+	0x72, 0x64, 0x65, 0x72, 0x45, 0x64, 0x67, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x63, 0x75, 0x72, 0x73,
+	0x6f, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72,
+	0x12, 0x22, 0x0a, 0x04, 0x6e, 0x6f, 0x64, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e,
+	0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x04,
+	0x6e, 0x6f, 0x64, 0x65, 0x22, 0x4e, 0x0a, 0x0e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x4c, 0x69, 0x6e,
+	0x65, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x20, 0x0a, 0x0c, 0x6d, 0x65, 0x6e, 0x75, 0x5f, 0x69,
+	0x74, 0x65, 0x6d, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x6d, 0x65,
+	0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x49, 0x64, 0x12, 0x1a, 0x0a, 0x08, 0x71, 0x75, 0x61, 0x6e,
+	0x74, 0x69, 0x74, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x08, 0x71, 0x75, 0x61, 0x6e,
+	0x74, 0x69, 0x74, 0x79, 0x22, 0x6b, 0x0a, 0x11, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64,
+	0x65, 0x72, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x12, 0x32, 0x0a, 0x04, 0x63, 0x6f, 0x64,
+	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x1e, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x62,
+	0x6c, 0x65, 0x6d, 0x43, 0x6f, 0x64, 0x65, 0x52, 0x04, 0x63, 0x6f, 0x64, 0x65, 0x12, 0x22, 0x0a,
+	0x0d, 0x6d, 0x65, 0x6e, 0x75, 0x5f, 0x69, 0x74, 0x65, 0x6d, 0x5f, 0x69, 0x64, 0x73, 0x18, 0x02,
+	0x20, 0x03, 0x28, 0x09, 0x52, 0x0b, 0x6d, 0x65, 0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x49, 0x64,
+	0x73, 0x22, 0x55, 0x0a, 0x18, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c,
+	0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x12, 0x39, 0x0a,
+	0x04, 0x63, 0x6f, 0x64, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x25, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65,
+	0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x43, 0x6f,
+	0x64, 0x65, 0x52, 0x04, 0x63, 0x6f, 0x64, 0x65, 0x2a, 0x8e, 0x02, 0x0a, 0x0b, 0x4f, 0x72, 0x64,
+	0x65, 0x72, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x1c, 0x0a, 0x18, 0x4f, 0x52, 0x44, 0x45,
+	0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x55, 0x53, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49,
+	0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x19, 0x0a, 0x15, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f,
+	0x53, 0x54, 0x41, 0x54, 0x55, 0x53, 0x5f, 0x52, 0x45, 0x43, 0x45, 0x49, 0x56, 0x45, 0x44, 0x10,
+	0x01, 0x12, 0x1a, 0x0a, 0x16, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x55,
+	0x53, 0x5f, 0x43, 0x4f, 0x4e, 0x46, 0x49, 0x52, 0x4d, 0x45, 0x44, 0x10, 0x02, 0x12, 0x1a, 0x0a,
+	0x16, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x55, 0x53, 0x5f, 0x50, 0x52,
+	0x45, 0x50, 0x41, 0x52, 0x49, 0x4e, 0x47, 0x10, 0x03, 0x12, 0x21, 0x0a, 0x1d, 0x4f, 0x52, 0x44,
+	0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x55, 0x53, 0x5f, 0x52, 0x45, 0x41, 0x44, 0x59, 0x5f,
+	0x46, 0x4f, 0x52, 0x5f, 0x50, 0x49, 0x43, 0x4b, 0x55, 0x50, 0x10, 0x04, 0x12, 0x1a, 0x0a, 0x16,
+	0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x55, 0x53, 0x5f, 0x50, 0x49, 0x43,
+	0x4b, 0x45, 0x44, 0x5f, 0x55, 0x50, 0x10, 0x05, 0x12, 0x1a, 0x0a, 0x16, 0x4f, 0x52, 0x44, 0x45,
+	0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x55, 0x53, 0x5f, 0x44, 0x45, 0x4c, 0x49, 0x56, 0x45, 0x52,
+	0x45, 0x44, 0x10, 0x06, 0x12, 0x1a, 0x0a, 0x16, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x53, 0x54,
+	0x41, 0x54, 0x55, 0x53, 0x5f, 0x43, 0x41, 0x4e, 0x43, 0x45, 0x4c, 0x4c, 0x45, 0x44, 0x10, 0x07,
+	0x12, 0x17, 0x0a, 0x13, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x55, 0x53,
+	0x5f, 0x46, 0x41, 0x49, 0x4c, 0x45, 0x44, 0x10, 0x08, 0x2a, 0xcf, 0x01, 0x0a, 0x0e, 0x4f, 0x72,
+	0x64, 0x65, 0x72, 0x45, 0x6e, 0x64, 0x52, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x12, 0x20, 0x0a, 0x1c,
+	0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x45, 0x4e, 0x44, 0x5f, 0x52, 0x45, 0x41, 0x53, 0x4f, 0x4e,
+	0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x27,
+	0x0a, 0x23, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x45, 0x4e, 0x44, 0x5f, 0x52, 0x45, 0x41, 0x53,
+	0x4f, 0x4e, 0x5f, 0x43, 0x55, 0x53, 0x54, 0x4f, 0x4d, 0x45, 0x52, 0x5f, 0x43, 0x41, 0x4e, 0x43,
+	0x45, 0x4c, 0x4c, 0x45, 0x44, 0x10, 0x01, 0x12, 0x28, 0x0a, 0x24, 0x4f, 0x52, 0x44, 0x45, 0x52,
+	0x5f, 0x45, 0x4e, 0x44, 0x5f, 0x52, 0x45, 0x41, 0x53, 0x4f, 0x4e, 0x5f, 0x52, 0x45, 0x53, 0x54,
+	0x41, 0x55, 0x52, 0x41, 0x4e, 0x54, 0x5f, 0x52, 0x45, 0x4a, 0x45, 0x43, 0x54, 0x45, 0x44, 0x10,
+	0x02, 0x12, 0x24, 0x0a, 0x20, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x45, 0x4e, 0x44, 0x5f, 0x52,
+	0x45, 0x41, 0x53, 0x4f, 0x4e, 0x5f, 0x44, 0x45, 0x4c, 0x49, 0x56, 0x45, 0x52, 0x59, 0x5f, 0x46,
+	0x41, 0x49, 0x4c, 0x45, 0x44, 0x10, 0x03, 0x12, 0x22, 0x0a, 0x1e, 0x4f, 0x52, 0x44, 0x45, 0x52,
+	0x5f, 0x45, 0x4e, 0x44, 0x5f, 0x52, 0x45, 0x41, 0x53, 0x4f, 0x4e, 0x5f, 0x4e, 0x4f, 0x54, 0x5f,
+	0x46, 0x55, 0x4c, 0x46, 0x49, 0x4c, 0x4c, 0x45, 0x44, 0x10, 0x04, 0x2a, 0xeb, 0x02, 0x0a, 0x12,
+	0x4f, 0x72, 0x64, 0x65, 0x72, 0x4d, 0x69, 0x6c, 0x65, 0x73, 0x74, 0x6f, 0x6e, 0x65, 0x4b, 0x69,
+	0x6e, 0x64, 0x12, 0x24, 0x0a, 0x20, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x4d, 0x49, 0x4c, 0x45,
+	0x53, 0x54, 0x4f, 0x4e, 0x45, 0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45,
+	0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x1f, 0x0a, 0x1b, 0x4f, 0x52, 0x44, 0x45,
+	0x52, 0x5f, 0x4d, 0x49, 0x4c, 0x45, 0x53, 0x54, 0x4f, 0x4e, 0x45, 0x5f, 0x4b, 0x49, 0x4e, 0x44,
+	0x5f, 0x50, 0x4c, 0x41, 0x43, 0x45, 0x44, 0x10, 0x01, 0x12, 0x22, 0x0a, 0x1e, 0x4f, 0x52, 0x44,
+	0x45, 0x52, 0x5f, 0x4d, 0x49, 0x4c, 0x45, 0x53, 0x54, 0x4f, 0x4e, 0x45, 0x5f, 0x4b, 0x49, 0x4e,
+	0x44, 0x5f, 0x43, 0x4f, 0x4e, 0x46, 0x49, 0x52, 0x4d, 0x45, 0x44, 0x10, 0x02, 0x12, 0x2c, 0x0a,
+	0x28, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x4d, 0x49, 0x4c, 0x45, 0x53, 0x54, 0x4f, 0x4e, 0x45,
+	0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x50, 0x52, 0x45, 0x50, 0x41, 0x52, 0x41, 0x54, 0x49, 0x4f,
+	0x4e, 0x5f, 0x53, 0x54, 0x41, 0x52, 0x54, 0x45, 0x44, 0x10, 0x03, 0x12, 0x29, 0x0a, 0x25, 0x4f,
+	0x52, 0x44, 0x45, 0x52, 0x5f, 0x4d, 0x49, 0x4c, 0x45, 0x53, 0x54, 0x4f, 0x4e, 0x45, 0x5f, 0x4b,
+	0x49, 0x4e, 0x44, 0x5f, 0x52, 0x45, 0x41, 0x44, 0x59, 0x5f, 0x46, 0x4f, 0x52, 0x5f, 0x50, 0x49,
+	0x43, 0x4b, 0x55, 0x50, 0x10, 0x04, 0x12, 0x29, 0x0a, 0x25, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f,
+	0x4d, 0x49, 0x4c, 0x45, 0x53, 0x54, 0x4f, 0x4e, 0x45, 0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x43,
+	0x4f, 0x55, 0x52, 0x49, 0x45, 0x52, 0x5f, 0x41, 0x53, 0x53, 0x49, 0x47, 0x4e, 0x45, 0x44, 0x10,
+	0x05, 0x12, 0x22, 0x0a, 0x1e, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x4d, 0x49, 0x4c, 0x45, 0x53,
+	0x54, 0x4f, 0x4e, 0x45, 0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x50, 0x49, 0x43, 0x4b, 0x45, 0x44,
+	0x5f, 0x55, 0x50, 0x10, 0x06, 0x12, 0x22, 0x0a, 0x1e, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x4d,
+	0x49, 0x4c, 0x45, 0x53, 0x54, 0x4f, 0x4e, 0x45, 0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x44, 0x45,
+	0x4c, 0x49, 0x56, 0x45, 0x52, 0x45, 0x44, 0x10, 0x07, 0x12, 0x1e, 0x0a, 0x1a, 0x4f, 0x52, 0x44,
+	0x45, 0x52, 0x5f, 0x4d, 0x49, 0x4c, 0x45, 0x53, 0x54, 0x4f, 0x4e, 0x45, 0x5f, 0x4b, 0x49, 0x4e,
+	0x44, 0x5f, 0x45, 0x4e, 0x44, 0x45, 0x44, 0x10, 0x08, 0x2a, 0xa4, 0x02, 0x0a, 0x15, 0x50, 0x6c,
+	0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x43,
+	0x6f, 0x64, 0x65, 0x12, 0x28, 0x0a, 0x24, 0x50, 0x4c, 0x41, 0x43, 0x45, 0x5f, 0x4f, 0x52, 0x44,
+	0x45, 0x52, 0x5f, 0x50, 0x52, 0x4f, 0x42, 0x4c, 0x45, 0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f,
+	0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x33, 0x0a,
+	0x2f, 0x50, 0x4c, 0x41, 0x43, 0x45, 0x5f, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x50, 0x52, 0x4f,
+	0x42, 0x4c, 0x45, 0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f,
+	0x49, 0x54, 0x45, 0x4d, 0x5f, 0x55, 0x4e, 0x41, 0x56, 0x41, 0x49, 0x4c, 0x41, 0x42, 0x4c, 0x45,
+	0x10, 0x01, 0x12, 0x36, 0x0a, 0x32, 0x50, 0x4c, 0x41, 0x43, 0x45, 0x5f, 0x4f, 0x52, 0x44, 0x45,
+	0x52, 0x5f, 0x50, 0x52, 0x4f, 0x42, 0x4c, 0x45, 0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f, 0x4f,
+	0x52, 0x44, 0x45, 0x52, 0x5f, 0x54, 0x4f, 0x54, 0x41, 0x4c, 0x5f, 0x42, 0x45, 0x4c, 0x4f, 0x57,
+	0x5f, 0x4d, 0x49, 0x4e, 0x49, 0x4d, 0x55, 0x4d, 0x10, 0x02, 0x12, 0x36, 0x0a, 0x32, 0x50, 0x4c,
+	0x41, 0x43, 0x45, 0x5f, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x50, 0x52, 0x4f, 0x42, 0x4c, 0x45,
+	0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x54, 0x4f, 0x54,
+	0x41, 0x4c, 0x5f, 0x41, 0x42, 0x4f, 0x56, 0x45, 0x5f, 0x4d, 0x41, 0x58, 0x49, 0x4d, 0x55, 0x4d,
+	0x10, 0x03, 0x12, 0x3c, 0x0a, 0x38, 0x50, 0x4c, 0x41, 0x43, 0x45, 0x5f, 0x4f, 0x52, 0x44, 0x45,
+	0x52, 0x5f, 0x50, 0x52, 0x4f, 0x42, 0x4c, 0x45, 0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f, 0x52,
+	0x45, 0x53, 0x54, 0x41, 0x55, 0x52, 0x41, 0x4e, 0x54, 0x5f, 0x4e, 0x4f, 0x54, 0x5f, 0x41, 0x43,
+	0x43, 0x45, 0x50, 0x54, 0x49, 0x4e, 0x47, 0x5f, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x53, 0x10, 0x04,
+	0x2a, 0xa2, 0x01, 0x0a, 0x18, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c,
+	0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x4f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x12, 0x2a, 0x0a,
+	0x26, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x43, 0x41, 0x4e, 0x43, 0x45, 0x4c, 0x4c, 0x41, 0x54,
+	0x49, 0x4f, 0x4e, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50,
+	0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x28, 0x0a, 0x24, 0x4f, 0x52, 0x44,
+	0x45, 0x52, 0x5f, 0x43, 0x41, 0x4e, 0x43, 0x45, 0x4c, 0x4c, 0x41, 0x54, 0x49, 0x4f, 0x4e, 0x5f,
+	0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x52, 0x45, 0x51, 0x55, 0x45, 0x53, 0x54, 0x45,
+	0x44, 0x10, 0x01, 0x12, 0x30, 0x0a, 0x2c, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f, 0x43, 0x41, 0x4e,
+	0x43, 0x45, 0x4c, 0x4c, 0x41, 0x54, 0x49, 0x4f, 0x4e, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d,
+	0x45, 0x5f, 0x41, 0x4c, 0x52, 0x45, 0x41, 0x44, 0x59, 0x5f, 0x43, 0x41, 0x4e, 0x43, 0x45, 0x4c,
+	0x4c, 0x45, 0x44, 0x10, 0x02, 0x2a, 0x8b, 0x02, 0x0a, 0x1c, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43,
+	0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x62, 0x6c,
+	0x65, 0x6d, 0x43, 0x6f, 0x64, 0x65, 0x12, 0x2f, 0x0a, 0x2b, 0x4f, 0x52, 0x44, 0x45, 0x52, 0x5f,
+	0x43, 0x41, 0x4e, 0x43, 0x45, 0x4c, 0x4c, 0x41, 0x54, 0x49, 0x4f, 0x4e, 0x5f, 0x50, 0x52, 0x4f,
+	0x42, 0x4c, 0x45, 0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43,
+	0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x40, 0x0a, 0x3c, 0x4f, 0x52, 0x44, 0x45, 0x52,
+	0x5f, 0x43, 0x41, 0x4e, 0x43, 0x45, 0x4c, 0x4c, 0x41, 0x54, 0x49, 0x4f, 0x4e, 0x5f, 0x50, 0x52,
+	0x4f, 0x42, 0x4c, 0x45, 0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f, 0x43, 0x41, 0x4e, 0x43, 0x45,
+	0x4c, 0x4c, 0x41, 0x54, 0x49, 0x4f, 0x4e, 0x5f, 0x57, 0x49, 0x4e, 0x44, 0x4f, 0x57, 0x5f, 0x4e,
+	0x4f, 0x54, 0x5f, 0x4f, 0x50, 0x45, 0x4e, 0x10, 0x01, 0x12, 0x3f, 0x0a, 0x3b, 0x4f, 0x52, 0x44,
+	0x45, 0x52, 0x5f, 0x43, 0x41, 0x4e, 0x43, 0x45, 0x4c, 0x4c, 0x41, 0x54, 0x49, 0x4f, 0x4e, 0x5f,
+	0x50, 0x52, 0x4f, 0x42, 0x4c, 0x45, 0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f, 0x43, 0x41, 0x4e,
+	0x43, 0x45, 0x4c, 0x4c, 0x41, 0x54, 0x49, 0x4f, 0x4e, 0x5f, 0x57, 0x49, 0x4e, 0x44, 0x4f, 0x57,
+	0x5f, 0x45, 0x58, 0x50, 0x49, 0x52, 0x45, 0x44, 0x10, 0x02, 0x12, 0x37, 0x0a, 0x33, 0x4f, 0x52,
+	0x44, 0x45, 0x52, 0x5f, 0x43, 0x41, 0x4e, 0x43, 0x45, 0x4c, 0x4c, 0x41, 0x54, 0x49, 0x4f, 0x4e,
+	0x5f, 0x50, 0x52, 0x4f, 0x42, 0x4c, 0x45, 0x4d, 0x5f, 0x43, 0x4f, 0x44, 0x45, 0x5f, 0x4f, 0x52,
+	0x44, 0x45, 0x52, 0x5f, 0x41, 0x4c, 0x52, 0x45, 0x41, 0x44, 0x59, 0x5f, 0x46, 0x49, 0x4e, 0x41,
+	0x4c, 0x10, 0x03, 0x32, 0xa8, 0x05, 0x0a, 0x0a, 0x42, 0x66, 0x66, 0x53, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x12, 0x5f, 0x0a, 0x12, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x6c,
+	0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x12, 0x22, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x2e, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x6c, 0x61, 0x63, 0x65,
+	0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x73,
+	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50,
+	0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x22, 0x00, 0x12, 0x89, 0x01, 0x0a, 0x20, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63,
+	0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x30, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x2e, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x73, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x2e, 0x4d, 0x75, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12,
+	0x4d, 0x0a, 0x0c, 0x51, 0x75, 0x65, 0x72, 0x79, 0x42, 0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x12,
+	0x1c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x42,
+	0x66, 0x66, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e,
+	0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x42, 0x66, 0x66,
+	0x49, 0x6e, 0x66, 0x6f, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x62,
+	0x0a, 0x13, 0x51, 0x75, 0x65, 0x72, 0x79, 0x43, 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x65, 0x72, 0x4f,
+	0x72, 0x64, 0x65, 0x72, 0x73, 0x12, 0x23, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
+	0x51, 0x75, 0x65, 0x72, 0x79, 0x43, 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x65, 0x72, 0x4f, 0x72, 0x64,
+	0x65, 0x72, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x24, 0x2e, 0x73, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x43, 0x75, 0x73, 0x74, 0x6f, 0x6d,
+	0x65, 0x72, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x22, 0x00, 0x12, 0x47, 0x0a, 0x0a, 0x51, 0x75, 0x65, 0x72, 0x79, 0x4f, 0x72, 0x64, 0x65, 0x72,
+	0x12, 0x1a, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79,
+	0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1b, 0x2e, 0x73,
+	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x4f, 0x72, 0x64, 0x65,
+	0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x56, 0x0a, 0x0f, 0x51,
+	0x75, 0x65, 0x72, 0x79, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x12, 0x1f,
+	0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x52, 0x65,
+	0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
+	0x20, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x52,
+	0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x22, 0x00, 0x12, 0x59, 0x0a, 0x10, 0x51, 0x75, 0x65, 0x72, 0x79, 0x52, 0x65, 0x73, 0x74,
+	0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x12, 0x20, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e,
+	0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e, 0x73, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72,
+	0x61, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x42, 0x25,
+	0x5a, 0x23, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x77, 0x75, 0x6e,
+	0x64, 0x65, 0x72, 0x67, 0x72, 0x61, 0x70, 0x68, 0x2f, 0x63, 0x6f, 0x73, 0x6d, 0x6f, 0x2f, 0x70,
+	0x6c, 0x75, 0x67, 0x69, 0x6e, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -203,21 +2902,114 @@ func file_generated_service_proto_rawDescGZIP() []byte {
 	return file_generated_service_proto_rawDescData
 }
 
-var file_generated_service_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_generated_service_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_generated_service_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_generated_service_proto_goTypes = []any{
-	(*QueryBffInfoRequest)(nil),  // 0: service.QueryBffInfoRequest
-	(*QueryBffInfoResponse)(nil), // 1: service.QueryBffInfoResponse
-	(*BffInfo)(nil),              // 2: service.BffInfo
+	(OrderStatus)(0),                                 // 0: service.OrderStatus
+	(OrderEndReason)(0),                              // 1: service.OrderEndReason
+	(OrderMilestoneKind)(0),                          // 2: service.OrderMilestoneKind
+	(PlaceOrderProblemCode)(0),                       // 3: service.PlaceOrderProblemCode
+	(OrderCancellationOutcome)(0),                    // 4: service.OrderCancellationOutcome
+	(OrderCancellationProblemCode)(0),                // 5: service.OrderCancellationProblemCode
+	(*QueryBffInfoRequest)(nil),                      // 6: service.QueryBffInfoRequest
+	(*QueryBffInfoResponse)(nil),                     // 7: service.QueryBffInfoResponse
+	(*QueryRestaurantsRequest)(nil),                  // 8: service.QueryRestaurantsRequest
+	(*QueryRestaurantsResponse)(nil),                 // 9: service.QueryRestaurantsResponse
+	(*QueryRestaurantRequest)(nil),                   // 10: service.QueryRestaurantRequest
+	(*QueryRestaurantResponse)(nil),                  // 11: service.QueryRestaurantResponse
+	(*QueryOrderRequest)(nil),                        // 12: service.QueryOrderRequest
+	(*QueryOrderResponse)(nil),                       // 13: service.QueryOrderResponse
+	(*QueryCustomerOrdersRequest)(nil),               // 14: service.QueryCustomerOrdersRequest
+	(*QueryCustomerOrdersResponse)(nil),              // 15: service.QueryCustomerOrdersResponse
+	(*MutationPlaceOrderRequest)(nil),                // 16: service.MutationPlaceOrderRequest
+	(*MutationPlaceOrderResponse)(nil),               // 17: service.MutationPlaceOrderResponse
+	(*MutationRequestOrderCancellationRequest)(nil),  // 18: service.MutationRequestOrderCancellationRequest
+	(*MutationRequestOrderCancellationResponse)(nil), // 19: service.MutationRequestOrderCancellationResponse
+	(*BffInfo)(nil),                                  // 20: service.BffInfo
+	(*RestaurantConnection)(nil),                     // 21: service.RestaurantConnection
+	(*Restaurant)(nil),                               // 22: service.Restaurant
+	(*Order)(nil),                                    // 23: service.Order
+	(*OrderConnection)(nil),                          // 24: service.OrderConnection
+	(*PlaceOrderInput)(nil),                          // 25: service.PlaceOrderInput
+	(*PlaceOrderPayload)(nil),                        // 26: service.PlaceOrderPayload
+	(*RequestOrderCancellationInput)(nil),            // 27: service.RequestOrderCancellationInput
+	(*RequestOrderCancellationPayload)(nil),          // 28: service.RequestOrderCancellationPayload
+	(*Money)(nil),                                    // 29: service.Money
+	(*PageInfo)(nil),                                 // 30: service.PageInfo
+	(*Menu)(nil),                                     // 31: service.Menu
+	(*MenuItem)(nil),                                 // 32: service.MenuItem
+	(*RestaurantEdge)(nil),                           // 33: service.RestaurantEdge
+	(*OrderMilestone)(nil),                           // 34: service.OrderMilestone
+	(*OrderedMenuItem)(nil),                          // 35: service.OrderedMenuItem
+	(*OrderItem)(nil),                                // 36: service.OrderItem
+	(*OrderCancellationAvailability)(nil),            // 37: service.OrderCancellationAvailability
+	(*OrderEdge)(nil),                                // 38: service.OrderEdge
+	(*OrderLineInput)(nil),                           // 39: service.OrderLineInput
+	(*PlaceOrderProblem)(nil),                        // 40: service.PlaceOrderProblem
+	(*OrderCancellationProblem)(nil),                 // 41: service.OrderCancellationProblem
+	(*wrapperspb.StringValue)(nil),                   // 42: google.protobuf.StringValue
 }
 var file_generated_service_proto_depIdxs = []int32{
-	2, // 0: service.QueryBffInfoResponse.bff_info:type_name -> service.BffInfo
-	0, // 1: service.BffService.QueryBffInfo:input_type -> service.QueryBffInfoRequest
-	1, // 2: service.BffService.QueryBffInfo:output_type -> service.QueryBffInfoResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	20, // 0: service.QueryBffInfoResponse.bff_info:type_name -> service.BffInfo
+	42, // 1: service.QueryRestaurantsRequest.after:type_name -> google.protobuf.StringValue
+	21, // 2: service.QueryRestaurantsResponse.restaurants:type_name -> service.RestaurantConnection
+	22, // 3: service.QueryRestaurantResponse.restaurant:type_name -> service.Restaurant
+	23, // 4: service.QueryOrderResponse.order:type_name -> service.Order
+	42, // 5: service.QueryCustomerOrdersRequest.after:type_name -> google.protobuf.StringValue
+	24, // 6: service.QueryCustomerOrdersResponse.customer_orders:type_name -> service.OrderConnection
+	25, // 7: service.MutationPlaceOrderRequest.input:type_name -> service.PlaceOrderInput
+	26, // 8: service.MutationPlaceOrderResponse.place_order:type_name -> service.PlaceOrderPayload
+	27, // 9: service.MutationRequestOrderCancellationRequest.input:type_name -> service.RequestOrderCancellationInput
+	28, // 10: service.MutationRequestOrderCancellationResponse.request_order_cancellation:type_name -> service.RequestOrderCancellationPayload
+	33, // 11: service.RestaurantConnection.edges:type_name -> service.RestaurantEdge
+	30, // 12: service.RestaurantConnection.page_info:type_name -> service.PageInfo
+	31, // 13: service.Restaurant.menu:type_name -> service.Menu
+	0,  // 14: service.Order.status:type_name -> service.OrderStatus
+	1,  // 15: service.Order.end_reason:type_name -> service.OrderEndReason
+	22, // 16: service.Order.restaurant:type_name -> service.Restaurant
+	36, // 17: service.Order.items:type_name -> service.OrderItem
+	29, // 18: service.Order.total:type_name -> service.Money
+	34, // 19: service.Order.milestones:type_name -> service.OrderMilestone
+	37, // 20: service.Order.cancellation:type_name -> service.OrderCancellationAvailability
+	38, // 21: service.OrderConnection.edges:type_name -> service.OrderEdge
+	30, // 22: service.OrderConnection.page_info:type_name -> service.PageInfo
+	39, // 23: service.PlaceOrderInput.items:type_name -> service.OrderLineInput
+	23, // 24: service.PlaceOrderPayload.order:type_name -> service.Order
+	40, // 25: service.PlaceOrderPayload.problems:type_name -> service.PlaceOrderProblem
+	42, // 26: service.RequestOrderCancellationInput.reason:type_name -> google.protobuf.StringValue
+	4,  // 27: service.RequestOrderCancellationPayload.outcome:type_name -> service.OrderCancellationOutcome
+	41, // 28: service.RequestOrderCancellationPayload.problem:type_name -> service.OrderCancellationProblem
+	42, // 29: service.PageInfo.end_cursor:type_name -> google.protobuf.StringValue
+	32, // 30: service.Menu.items:type_name -> service.MenuItem
+	42, // 31: service.MenuItem.description:type_name -> google.protobuf.StringValue
+	29, // 32: service.MenuItem.price:type_name -> service.Money
+	22, // 33: service.RestaurantEdge.node:type_name -> service.Restaurant
+	2,  // 34: service.OrderMilestone.kind:type_name -> service.OrderMilestoneKind
+	35, // 35: service.OrderItem.menu_item:type_name -> service.OrderedMenuItem
+	29, // 36: service.OrderItem.unit_price:type_name -> service.Money
+	29, // 37: service.OrderItem.line_total:type_name -> service.Money
+	23, // 38: service.OrderEdge.node:type_name -> service.Order
+	3,  // 39: service.PlaceOrderProblem.code:type_name -> service.PlaceOrderProblemCode
+	5,  // 40: service.OrderCancellationProblem.code:type_name -> service.OrderCancellationProblemCode
+	16, // 41: service.BffService.MutationPlaceOrder:input_type -> service.MutationPlaceOrderRequest
+	18, // 42: service.BffService.MutationRequestOrderCancellation:input_type -> service.MutationRequestOrderCancellationRequest
+	6,  // 43: service.BffService.QueryBffInfo:input_type -> service.QueryBffInfoRequest
+	14, // 44: service.BffService.QueryCustomerOrders:input_type -> service.QueryCustomerOrdersRequest
+	12, // 45: service.BffService.QueryOrder:input_type -> service.QueryOrderRequest
+	10, // 46: service.BffService.QueryRestaurant:input_type -> service.QueryRestaurantRequest
+	8,  // 47: service.BffService.QueryRestaurants:input_type -> service.QueryRestaurantsRequest
+	17, // 48: service.BffService.MutationPlaceOrder:output_type -> service.MutationPlaceOrderResponse
+	19, // 49: service.BffService.MutationRequestOrderCancellation:output_type -> service.MutationRequestOrderCancellationResponse
+	7,  // 50: service.BffService.QueryBffInfo:output_type -> service.QueryBffInfoResponse
+	15, // 51: service.BffService.QueryCustomerOrders:output_type -> service.QueryCustomerOrdersResponse
+	13, // 52: service.BffService.QueryOrder:output_type -> service.QueryOrderResponse
+	11, // 53: service.BffService.QueryRestaurant:output_type -> service.QueryRestaurantResponse
+	9,  // 54: service.BffService.QueryRestaurants:output_type -> service.QueryRestaurantsResponse
+	48, // [48:55] is the sub-list for method output_type
+	41, // [41:48] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_generated_service_proto_init() }
@@ -251,7 +3043,403 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[2].Exporter = func(v any, i int) any {
+			switch v := v.(*QueryRestaurantsRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[3].Exporter = func(v any, i int) any {
+			switch v := v.(*QueryRestaurantsResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[4].Exporter = func(v any, i int) any {
+			switch v := v.(*QueryRestaurantRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[5].Exporter = func(v any, i int) any {
+			switch v := v.(*QueryRestaurantResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[6].Exporter = func(v any, i int) any {
+			switch v := v.(*QueryOrderRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[7].Exporter = func(v any, i int) any {
+			switch v := v.(*QueryOrderResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[8].Exporter = func(v any, i int) any {
+			switch v := v.(*QueryCustomerOrdersRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[9].Exporter = func(v any, i int) any {
+			switch v := v.(*QueryCustomerOrdersResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[10].Exporter = func(v any, i int) any {
+			switch v := v.(*MutationPlaceOrderRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[11].Exporter = func(v any, i int) any {
+			switch v := v.(*MutationPlaceOrderResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[12].Exporter = func(v any, i int) any {
+			switch v := v.(*MutationRequestOrderCancellationRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[13].Exporter = func(v any, i int) any {
+			switch v := v.(*MutationRequestOrderCancellationResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[14].Exporter = func(v any, i int) any {
 			switch v := v.(*BffInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[15].Exporter = func(v any, i int) any {
+			switch v := v.(*RestaurantConnection); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[16].Exporter = func(v any, i int) any {
+			switch v := v.(*Restaurant); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[17].Exporter = func(v any, i int) any {
+			switch v := v.(*Order); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[18].Exporter = func(v any, i int) any {
+			switch v := v.(*OrderConnection); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[19].Exporter = func(v any, i int) any {
+			switch v := v.(*PlaceOrderInput); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[20].Exporter = func(v any, i int) any {
+			switch v := v.(*PlaceOrderPayload); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[21].Exporter = func(v any, i int) any {
+			switch v := v.(*RequestOrderCancellationInput); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[22].Exporter = func(v any, i int) any {
+			switch v := v.(*RequestOrderCancellationPayload); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[23].Exporter = func(v any, i int) any {
+			switch v := v.(*Money); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[24].Exporter = func(v any, i int) any {
+			switch v := v.(*PageInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[25].Exporter = func(v any, i int) any {
+			switch v := v.(*Menu); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[26].Exporter = func(v any, i int) any {
+			switch v := v.(*MenuItem); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[27].Exporter = func(v any, i int) any {
+			switch v := v.(*RestaurantEdge); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[28].Exporter = func(v any, i int) any {
+			switch v := v.(*OrderMilestone); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[29].Exporter = func(v any, i int) any {
+			switch v := v.(*OrderedMenuItem); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[30].Exporter = func(v any, i int) any {
+			switch v := v.(*OrderItem); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[31].Exporter = func(v any, i int) any {
+			switch v := v.(*OrderCancellationAvailability); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[32].Exporter = func(v any, i int) any {
+			switch v := v.(*OrderEdge); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[33].Exporter = func(v any, i int) any {
+			switch v := v.(*OrderLineInput); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[34].Exporter = func(v any, i int) any {
+			switch v := v.(*PlaceOrderProblem); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[35].Exporter = func(v any, i int) any {
+			switch v := v.(*OrderCancellationProblem); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -268,13 +3456,14 @@ func file_generated_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_generated_service_proto_rawDesc,
-			NumEnums:      0,
-			NumMessages:   3,
+			NumEnums:      6,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_generated_service_proto_goTypes,
 		DependencyIndexes: file_generated_service_proto_depIdxs,
+		EnumInfos:         file_generated_service_proto_enumTypes,
 		MessageInfos:      file_generated_service_proto_msgTypes,
 	}.Build()
 	File_generated_service_proto = out.File

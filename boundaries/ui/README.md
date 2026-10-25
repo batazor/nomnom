@@ -6,7 +6,7 @@ Customer web-приложение BiteRoute находится в отдельн
 
 Preview полностью работает на typed fixtures и локальном presentation state. Он не выполняет GraphQL business operations, payment, authentication, geolocation или courier worker actions; показанные totals, адрес, order stage и courier являются демонстрационными данными, а backend contract остаётся source of truth.
 
-Preview намеренно не дробится механически на под-компоненты. Когда в BFF schema появятся соответствующие GraphQL operations, он заменяется production features по сценариям — `browse-restaurants`, `cart`/`place-order` и `view-order` — каждая со своими operations рядом с кодом, а `customer-journey-preview` удаляется.
+Preview намеренно не дробится механически на под-компоненты. Customer operations уже есть в BFF schema; preview заменяется production features по сценариям — `browse-restaurants`, `cart`/`place-order` и `view-order` — каждая со своими operations рядом с кодом, а `customer-journey-preview` удаляется. Первой начата `view-order` (см. «MSW-моки customer API»).
 
 ## Запуск
 
@@ -20,6 +20,35 @@ npm run dev
 ```
 
 Для локального mock transport в `.env.local` используется `VITE_ENABLE_MOCKS=true`. Единственный business endpoint приложения — `VITE_PUBLIC_GRAPHQL_URL`, адрес публичного GraphQL API BFF.
+
+## MSW-моки customer API
+
+Customer-схема BFF зафиксирована раньше resolvers (OpenSpec change [`add-customer-graphql-contract`](../../openspec/changes/add-customer-graphql-contract/)), поэтому UI развивается на MSW-моках той же схемы. Моки — только development и tests: в production bundle они не включаются, а данные fixtures демонстрационные.
+
+- Публичная схема подключается alias `@public-schema` из `vite.config.ts` — тот же файл, что читает codegen (`GRAPHQL_SCHEMA` или `../bff/plugins/bff/src/schema.graphql`). Handler (`src/shared/graphql/mocks/handlers.ts`) валидирует и исполняет каждую operation через `graphql-js` против этой схемы, поэтому мок не может ответить формой, которую не вернёт BFF.
+- In-memory backend — `createMockStore` (`mocks/store.ts`): у каждого экземпляра свои заказы, прогресс `order-live` и idempotency keys; clock подменяется в тестах.
+- Тест соответствия (`mocks/contract.test.ts`) исполняет каждый document из `src/features/**/*.graphql` и `mocks/operations/*.graphql` против схемы с ответами моков; `schemaMismatches` (`mocks/conformance.ts`) находит поля вне схемы, неизвестные enum values, неверные scalars и отсутствующие non-null поля.
+
+Сценарии заказа для `order(id)`:
+
+| id | Сценарий |
+| --- | --- |
+| `order-received`, `order-preparing`, `order-picked-up`, `order-delivered` | заказ в соответствующем статусе; у `order-received` открыто окно отмены |
+| `order-cancelled`, `order-restaurant-rejected`, `order-delivery-failed` | неуспешное завершение с `endReason` |
+| `order-live` | каждый запрос продвигает заказ на следующий шаг; окно отмены открыто 5 минут |
+| любой другой | `null` (отсутствующий или чужой заказ) |
+
+Mutations: `placeOrder` идемпотентен по `idempotencyKey` и возвращает problems `RESTAURANT_NOT_ACCEPTING_ORDERS` и `ORDER_ITEM_UNAVAILABLE`; `requestOrderCancellation` идемпотентен по `requestId` и возвращает `ALREADY_CANCELLED`, `ORDER_ALREADY_FINAL` или `CANCELLATION_WINDOW_EXPIRED`.
+
+## Экран заказа
+
+Feature `view-order` (`src/features/view-order/`) — экран заказа на route `/orders/:orderId`, первый production-feature на публичном контракте. Открыть его на моках можно по адресу вида `http://localhost:4173/orders/order-live`.
+
+- Operations `ViewOrder` и `RequestOrderCancellation` лежат в `order.graphql`; mapping `OrderStatus`, `OrderEndReason` и milestones на сообщения, icon и шаг прогресса — в `order-presentation.ts`.
+- Экран показывает статус, прогресс с отметкой «Курьер назначен», состав и итог (`Intl` форматирует десятичную строку `Money.amount` без float), адрес и историю. При `CANCELLED`/`FAILED` прогресс заменяется сообщением по `endReason` без внутренних кодов и обещаний о возврате денег.
+- `use-order-polling.ts`: запрос каждые 10 с, пока документ видим и статус не финальный; при ошибке интервал удваивается до 60 с, последние данные остаются на экране с кнопкой «Обновить».
+- `cancel-order.tsx`: действие отмены видно, пока есть `cancellation.availableUntil`; подтверждение в `fieldset` переводит фокус на «Не отменять»; `requestId` создаётся на попытку и переиспользуется при ручном повторе, автоматического retry нет.
+- Ответ `null` даёт «Заказ не найден», transport error и `Unimplemented` от BFF — generic recovery UI без технических деталей.
 
 Основные проверки:
 

@@ -3,7 +3,11 @@
   "messages": {
     "Query": {
       "fields": {
-        "bffInfo": 2
+        "bffInfo": 2,
+        "restaurants": 3,
+        "restaurant": 4,
+        "order": 5,
+        "customerOrders": 6
       },
       "reservedNumbers": [
         1
@@ -43,7 +47,303 @@
         "name": 1,
         "version": 2
       }
+    },
+    "QueryRestaurantsRequest": {
+      "fields": {
+        "first": 1,
+        "after": 2
+      }
+    },
+    "QueryRestaurants": {
+      "fields": {
+        "first": 1,
+        "after": 2
+      }
+    },
+    "QueryRestaurantsResponse": {
+      "fields": {
+        "restaurants": 1
+      }
+    },
+    "QueryRestaurantRequest": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "QueryRestaurant": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "QueryRestaurantResponse": {
+      "fields": {
+        "restaurant": 1
+      }
+    },
+    "QueryOrderRequest": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "QueryOrder": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "QueryOrderResponse": {
+      "fields": {
+        "order": 1
+      }
+    },
+    "QueryCustomerOrdersRequest": {
+      "fields": {
+        "first": 1,
+        "after": 2
+      }
+    },
+    "QueryCustomerOrders": {
+      "fields": {
+        "first": 1,
+        "after": 2
+      }
+    },
+    "QueryCustomerOrdersResponse": {
+      "fields": {
+        "customer_orders": 1
+      }
+    },
+    "Mutation": {
+      "fields": {
+        "placeOrder": 1,
+        "requestOrderCancellation": 2
+      }
+    },
+    "MutationPlaceOrderRequest": {
+      "fields": {
+        "input": 1
+      }
+    },
+    "MutationPlaceOrder": {
+      "fields": {
+        "input": 1
+      }
+    },
+    "MutationPlaceOrderResponse": {
+      "fields": {
+        "place_order": 1
+      }
+    },
+    "MutationRequestOrderCancellationRequest": {
+      "fields": {
+        "input": 1
+      }
+    },
+    "MutationRequestOrderCancellation": {
+      "fields": {
+        "input": 1
+      }
+    },
+    "MutationRequestOrderCancellationResponse": {
+      "fields": {
+        "request_order_cancellation": 1
+      }
+    },
+    "RestaurantConnection": {
+      "fields": {
+        "edges": 1,
+        "pageInfo": 2
+      }
+    },
+    "Restaurant": {
+      "fields": {
+        "id": 1,
+        "name": 2,
+        "address": 3,
+        "acceptingOrders": 4,
+        "menu": 5
+      }
+    },
+    "Order": {
+      "fields": {
+        "id": 1,
+        "status": 2,
+        "endReason": 3,
+        "restaurant": 4,
+        "items": 5,
+        "total": 6,
+        "deliveryAddress": 7,
+        "placedAt": 8,
+        "milestones": 9,
+        "cancellation": 10
+      }
+    },
+    "OrderConnection": {
+      "fields": {
+        "edges": 1,
+        "pageInfo": 2
+      }
+    },
+    "PlaceOrderInput": {
+      "fields": {
+        "restaurantId": 1,
+        "items": 2,
+        "deliveryAddress": 3,
+        "idempotencyKey": 4
+      }
+    },
+    "PlaceOrderPayload": {
+      "fields": {
+        "order": 1,
+        "problems": 2
+      }
+    },
+    "RequestOrderCancellationInput": {
+      "fields": {
+        "orderId": 1,
+        "requestId": 2,
+        "reason": 3
+      }
+    },
+    "RequestOrderCancellationPayload": {
+      "fields": {
+        "outcome": 1,
+        "problem": 2
+      }
+    },
+    "Money": {
+      "fields": {
+        "amount": 1,
+        "currency": 2
+      }
+    },
+    "PageInfo": {
+      "fields": {
+        "hasNextPage": 1,
+        "endCursor": 2
+      }
+    },
+    "Menu": {
+      "fields": {
+        "items": 1
+      }
+    },
+    "MenuItem": {
+      "fields": {
+        "id": 1,
+        "name": 2,
+        "description": 3,
+        "price": 4,
+        "available": 5
+      }
+    },
+    "RestaurantEdge": {
+      "fields": {
+        "cursor": 1,
+        "node": 2
+      }
+    },
+    "OrderMilestone": {
+      "fields": {
+        "kind": 1,
+        "occurredAt": 2
+      }
+    },
+    "OrderedMenuItem": {
+      "fields": {
+        "id": 1,
+        "name": 2
+      }
+    },
+    "OrderItem": {
+      "fields": {
+        "menuItem": 1,
+        "quantity": 2,
+        "unitPrice": 3,
+        "lineTotal": 4
+      }
+    },
+    "OrderCancellationAvailability": {
+      "fields": {
+        "availableUntil": 1
+      }
+    },
+    "OrderEdge": {
+      "fields": {
+        "cursor": 1,
+        "node": 2
+      }
+    },
+    "OrderLineInput": {
+      "fields": {
+        "menuItemId": 1,
+        "quantity": 2
+      }
+    },
+    "PlaceOrderProblem": {
+      "fields": {
+        "code": 1,
+        "menuItemIds": 2
+      }
+    },
+    "OrderCancellationProblem": {
+      "fields": {
+        "code": 1
+      }
     }
   },
-  "enums": {}
+  "enums": {
+    "OrderStatus": {
+      "fields": {
+        "RECEIVED": 1,
+        "CONFIRMED": 2,
+        "PREPARING": 3,
+        "READY_FOR_PICKUP": 4,
+        "PICKED_UP": 5,
+        "DELIVERED": 6,
+        "CANCELLED": 7,
+        "FAILED": 8
+      }
+    },
+    "OrderEndReason": {
+      "fields": {
+        "CUSTOMER_CANCELLED": 1,
+        "RESTAURANT_REJECTED": 2,
+        "DELIVERY_FAILED": 3,
+        "NOT_FULFILLED": 4
+      }
+    },
+    "OrderMilestoneKind": {
+      "fields": {
+        "PLACED": 1,
+        "CONFIRMED": 2,
+        "PREPARATION_STARTED": 3,
+        "READY_FOR_PICKUP": 4,
+        "COURIER_ASSIGNED": 5,
+        "PICKED_UP": 6,
+        "DELIVERED": 7,
+        "ENDED": 8
+      }
+    },
+    "PlaceOrderProblemCode": {
+      "fields": {
+        "ORDER_ITEM_UNAVAILABLE": 1,
+        "ORDER_TOTAL_BELOW_MINIMUM": 2,
+        "ORDER_TOTAL_ABOVE_MAXIMUM": 3,
+        "RESTAURANT_NOT_ACCEPTING_ORDERS": 4
+      }
+    },
+    "OrderCancellationOutcome": {
+      "fields": {
+        "REQUESTED": 1,
+        "ALREADY_CANCELLED": 2
+      }
+    },
+    "OrderCancellationProblemCode": {
+      "fields": {
+        "CANCELLATION_WINDOW_NOT_OPEN": 1,
+        "CANCELLATION_WINDOW_EXPIRED": 2,
+        "ORDER_ALREADY_FINAL": 3
+      }
+    }
+  }
 }

@@ -34,6 +34,10 @@ export function createFormatters(locale: SupportedLocale) {
       month: "long",
       year: "numeric",
     }),
+    time: new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
     number: new Intl.NumberFormat(locale),
     plural: new Intl.PluralRules(locale),
   };
