@@ -1,0 +1,122 @@
+# CI boundaries (ADR 30): описан, но запускается только вручную — лимиты GitHub
+# Actions не должны блокировать сборки проекта. Источник истины — локальный
+# `make check` / `npm run check`. Включение push/pull_request — новым ADR.
+name: ci
+
+on:
+  workflow_dispatch:
+    inputs:
+      boundary:
+        description: Boundary для проверки
+        type: choice
+        default: all
+        options: [all, orders, delivery, payments, restaurants, ui, bff]
+      integration:
+        description: Integration-тесты orders (testcontainers)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  orders:
+    if: inputs.boundary == 'all' || inputs.boundary == 'orders'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: boundaries/orders
+    steps:
+      - uses: actions/checkout@v5
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: boundaries/orders/go.mod
+          cache-dependency-path: boundaries/orders/go.sum
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: boundaries/orders
+          install-only: true
+      - run: make check
+
+  orders-integration:
+    if: (inputs.boundary == 'all' || inputs.boundary == 'orders') && inputs.integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: boundaries/orders
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: boundaries/orders/go.mod
+          cache-dependency-path: boundaries/orders/go.sum
+      - run: make test-postgres test-integration-kafka
+
+  delivery:
+    if: inputs.boundary == 'all' || inputs.boundary == 'delivery'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: boundaries/delivery
+    steps:
+      - uses: actions/checkout@v5
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: boundaries/delivery
+      - run: make check
+
+  payments:
+    if: inputs.boundary == 'all' || inputs.boundary == 'payments'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: boundaries/payments
+    steps:
+      - uses: actions/checkout@v5
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - uses: astral-sh/setup-uv@v6
+        with:
+          working-directory: boundaries/payments
+      - run: uv sync --frozen
+      - run: make check
+
+  node:
+    if: inputs.boundary == 'all' || inputs.boundary == 'restaurants' || inputs.boundary == 'ui' || inputs.boundary == 'bff'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        boundary: [restaurants, ui, bff]
+    defaults:
+      run:
+        working-directory: boundaries/${{ matrix.boundary }}
+    steps:
+      - uses: actions/checkout@v5
+        if: inputs.boundary == 'all' || inputs.boundary == matrix.boundary
+      - uses: bufbuild/buf-action@v1
+        if: inputs.boundary == 'all' || inputs.boundary == matrix.boundary
+        with:
+          setup_only: true
+      - uses: actions/setup-node@v5
+        if: inputs.boundary == 'all' || inputs.boundary == matrix.boundary
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: boundaries/${{ matrix.boundary }}/package-lock.json
+      - if: inputs.boundary == 'all' || inputs.boundary == matrix.boundary
+        run: npm ci && npm run check

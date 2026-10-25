@@ -86,6 +86,10 @@ make kind-test     # проверки gateway и NetworkPolicy
 make kind-down     # удаление кластера
 ```
 
+## CI
+
+Из-за лимитов GitHub Actions проверки выполняются локально: перед push — `make check` / `npm run check` затронутых boundaries, integration-цели — при изменении adapters, persistence, messaging или composition root. Workflow [`ci.yaml`](.github/workflows/ci.yaml) описывает те же проверки, но запускается только вручную (`workflow_dispatch`); автоматически работает лишь узкий `grafana-dashboards.yaml`. Решение — [ADR 30](docs/adr/0030-ci-is-described-but-runs-only-on-demand.md).
+
 ## Performance testing
 
 Load, stress, spike и soak выполняются на k6 через публичный GraphQL API (`k6 → Cosmo → internal gateway → services`) с порогами только из SDD/SLO, closed-loop нагрузкой, тестовыми identity с SpiceDB fixtures и cleanup по `test_run_id`; анализ — в Grafana stack. kind используется только для smoke, capacity — в production-like окружении. Стратегия — в [Testing Strategy](docs/testing.md#performance-testing) и [`tests/performance/README.md`](tests/performance/README.md), решение — в [ADR 26](docs/adr/0026-k6-for-performance-testing.md).
