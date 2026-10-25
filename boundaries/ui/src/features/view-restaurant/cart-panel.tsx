@@ -1,3 +1,4 @@
+import { AnimatePresence, m } from "motion/react";
 import { type ReactNode, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
@@ -37,91 +38,104 @@ export function CartPanel({
 
   return (
     <section aria-labelledby="cart-title" className="restaurant-cart" id="cart">
-      <h2 id="cart-title" ref={heading} tabIndex={-1}>
+      <h4 id="cart-title" ref={heading} tabIndex={-1}>
         {t("cart.title")}
-      </h2>
+      </h4>
 
       {entries.length === 0 ? (
         <p className="cart-empty">{t("cart.empty")}</p>
       ) : (
         <>
           <ul className="cart-lines">
-            {entries.map(({ line, item }) => {
-              const problem = itemProblems.get(item.id);
-              const noteId = `cart-note-${item.id}`;
-              const lineTotal = estimateSubtotal([
-                { price: item.price, quantity: line.quantity },
-              ]);
-              const note = problem
-                ? t(problem)
-                : item.available
-                  ? null
-                  : t("cart.unavailable");
-              return (
-                <li data-problem={Boolean(note)} key={item.id}>
-                  <div className="cart-line-head">
-                    <span className="cart-line-name">{item.name}</span>
-                    <span className="cart-line-total">
-                      {lineTotal ? money(lineTotal) : null}
-                    </span>
-                  </div>
-                  {note ? (
-                    <p className="cart-line-note" id={noteId}>
-                      {note}
-                    </p>
-                  ) : null}
-                  <div className="cart-line-controls">
-                    <fieldset
-                      aria-describedby={note ? noteId : undefined}
-                      className="cart-stepper"
-                    >
-                      <legend className="sr-only">{item.name}</legend>
+            {/* A removed line fades in place, then the lines below slide up
+                (layout). popLayout is avoided: it injects a <style> that the
+                CSP blocks. */}
+            <AnimatePresence initial={false}>
+              {entries.map(({ line, item }) => {
+                const problem = itemProblems.get(item.id);
+                const noteId = `cart-note-${item.id}`;
+                const lineTotal = estimateSubtotal([
+                  { price: item.price, quantity: line.quantity },
+                ]);
+                const note = problem
+                  ? t(problem)
+                  : item.available
+                    ? null
+                    : t("cart.unavailable");
+                return (
+                  <m.li
+                    animate={{ opacity: 1, y: 0 }}
+                    data-problem={Boolean(note)}
+                    exit={{ opacity: 0, x: -16 }}
+                    initial={{ opacity: 0, y: -8 }}
+                    key={item.id}
+                    layout
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                  >
+                    <div className="cart-line-head">
+                      <span className="cart-line-name">{item.name}</span>
+                      <span className="cart-line-total">
+                        {lineTotal ? money(lineTotal) : null}
+                      </span>
+                    </div>
+                    {note ? (
+                      <p className="cart-line-note" id={noteId}>
+                        {note}
+                      </p>
+                    ) : null}
+                    <div className="cart-line-controls">
+                      <fieldset
+                        aria-describedby={note ? noteId : undefined}
+                        className="cart-stepper"
+                      >
+                        <legend className="sr-only">{item.name}</legend>
+                        <Button
+                          aria-label={t("cart.decrease", { item: item.name })}
+                          isIconOnly
+                          // Below one the line leaves the cart, as with "Remove".
+                          onPress={() =>
+                            line.quantity <= 1
+                              ? remove(item.id)
+                              : onQuantity(item.id, line.quantity - 1)
+                          }
+                          size="sm"
+                          variant="outline"
+                        >
+                          <span aria-hidden="true">−</span>
+                        </Button>
+                        <output
+                          aria-label={t("cart.quantity", { item: item.name })}
+                          aria-live="polite"
+                          className="cart-quantity"
+                        >
+                          {line.quantity}
+                        </output>
+                        <Button
+                          aria-label={t("cart.increase", { item: item.name })}
+                          isDisabled={
+                            !item.available || line.quantity >= maxQuantity
+                          }
+                          isIconOnly
+                          onPress={() => onQuantity(item.id, line.quantity + 1)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <span aria-hidden="true">+</span>
+                        </Button>
+                      </fieldset>
                       <Button
-                        aria-label={t("cart.decrease", { item: item.name })}
-                        isIconOnly
-                        // Below one the line leaves the cart, as with "Remove".
-                        onPress={() =>
-                          line.quantity <= 1
-                            ? remove(item.id)
-                            : onQuantity(item.id, line.quantity - 1)
-                        }
+                        aria-label={t("cart.removeLabel", { item: item.name })}
+                        onPress={() => remove(item.id)}
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
                       >
-                        <span aria-hidden="true">−</span>
+                        {t("cart.remove")}
                       </Button>
-                      <output
-                        aria-label={t("cart.quantity", { item: item.name })}
-                        aria-live="polite"
-                        className="cart-quantity"
-                      >
-                        {line.quantity}
-                      </output>
-                      <Button
-                        aria-label={t("cart.increase", { item: item.name })}
-                        isDisabled={
-                          !item.available || line.quantity >= maxQuantity
-                        }
-                        isIconOnly
-                        onPress={() => onQuantity(item.id, line.quantity + 1)}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <span aria-hidden="true">+</span>
-                      </Button>
-                    </fieldset>
-                    <Button
-                      aria-label={t("cart.removeLabel", { item: item.name })}
-                      onPress={() => remove(item.id)}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {t("cart.remove")}
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
+                    </div>
+                  </m.li>
+                );
+              })}
+            </AnimatePresence>
           </ul>
 
           {subtotal ? (

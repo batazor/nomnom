@@ -1,11 +1,19 @@
 import type { Faro } from "@grafana/faro-react";
+import { LazyMotion, MotionConfig } from "motion/react";
 import { type ReactNode, useMemo } from "react";
-import { Provider as UrqlProvider } from "urql";
 
 import type { RuntimeConfig } from "../shared/config/runtime-config";
-import { createGraphqlClient } from "../shared/graphql/client";
+import { SignInProvider } from "../shared/auth/sign-in";
 import { I18nProvider } from "../shared/i18n/i18n";
+import {
+  AsRole,
+  RoleClientSettings,
+  RoleSessionProvider,
+} from "../shared/session/roles";
 import { reportGraphqlError } from "../shared/telemetry/faro";
+
+const loadMotionFeatures = () =>
+  import("./motion-features").then((module) => module.default);
 
 export function AppProviders({
   children,
@@ -16,23 +24,38 @@ export function AppProviders({
   config: RuntimeConfig;
   faro?: Faro;
 }) {
-  const client = useMemo(
-    () =>
-      createGraphqlClient({
-        url: config.publicGraphqlUrl,
-        reportError(report) {
-          if (import.meta.env.DEV) {
-            console.error("GraphQL request failed", report);
-          }
-          reportGraphqlError(faro, report);
-        },
-      }),
+  const settings = useMemo(
+    () => ({
+      url: config.publicGraphqlUrl,
+      reportError(report: Parameters<typeof reportGraphqlError>[1]) {
+        if (import.meta.env.DEV) {
+          console.error("GraphQL request failed", report);
+        }
+        reportGraphqlError(faro, report);
+      },
+    }),
     [config.publicGraphqlUrl, faro],
   );
 
   return (
-    <I18nProvider locale={config.locale}>
-      <UrqlProvider value={client}>{children}</UrqlProvider>
-    </I18nProvider>
+    // strict keeps components on the lightweight `m`; "user" turns transforms
+    // off under prefers-reduced-motion, like the CSS motion tokens.
+    <LazyMotion features={loadMotionFeatures} strict>
+      <MotionConfig reducedMotion="user">
+        <I18nProvider locale={config.locale}>
+          <SignInProvider config={config.oidc}>
+            <RoleSessionProvider
+              mocks={config.enableMocks}
+              tokensUrl={config.devTokensUrl}
+            >
+              <RoleClientSettings settings={settings}>
+                {/* Outside the board columns the app acts as the customer. */}
+                <AsRole as="customer">{children}</AsRole>
+              </RoleClientSettings>
+            </RoleSessionProvider>
+          </SignInProvider>
+        </I18nProvider>
+      </MotionConfig>
+    </LazyMotion>
   );
 }
