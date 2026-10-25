@@ -70,7 +70,7 @@ k6 → GraphQL (Cosmo Router / BFF) → internal gateway → bounded contexts
 ## Correlation и результаты
 
 - `test_run_id` передаётся в согласованном header; BFF переносит его в OTel baggage по allowlist, gateway сохраняет metadata.
-- `test_run_id` не является metric label сервисов. Прогон находится в Grafana по `test_run_id` в traces/logs и по временному интервалу и environment в Mimir.
+- `test_run_id` не является metric label сервисов. Прогон находится в Grafana по `test_run_id` в traces/logs и по временному интервалу и environment в метриках Grafana Cloud.
 - Kafka, Outbox/Inbox, PostgreSQL, MongoDB, Temporal и SpiceDB анализируются в Grafana stack, не из k6.
 - Stress и soak выполняются с Pyroscope: k6 показывает, когда наступает деградация, profiles — почему.
 - Артефакты прогона: k6 summary, конфигурация сценария, commit, environment, `test_run_id`.

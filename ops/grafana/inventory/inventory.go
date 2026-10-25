@@ -4,7 +4,7 @@
 // Панель становится живой только когда все её метрики имеют статус Present для
 // service.name, который она запрашивает; иначе генератор рисует TODO-панель со
 // ссылкой на инвентарь. Статус меняется здесь, когда инструментация доставлена в
-// Mimir существующим pipeline, а не когда она только запланирована.
+// Grafana Cloud существующим pipeline, а не когда она только запланирована.
 package inventory
 
 import (
@@ -16,7 +16,7 @@ type Status string
 
 const (
 	// Present — метрика экспортируется сервисом по OTLP, а имена и labels
-	// подтверждены приёмом через Alloy в Mimir (см. VerifiedPipeline).
+	// подтверждены приёмом через Alloy в Grafana Cloud (см. VerifiedPipeline).
 	Present Status = "есть"
 	// Expected — метрика принята в архитектуре, но не экспортируется или не доставляется.
 	Expected Status = "ожидается"
@@ -31,7 +31,7 @@ const (
 )
 
 // Service names (OTel service.name) deployable roles. Значения совпадают с
-// OTEL_SERVICE_NAME в Helm values; job в Mimir — "nomnom/<service.name>".
+// OTEL_SERVICE_NAME в Helm values; job в Prometheus — "nomnom/<service.name>".
 const (
 	Orders         = "orders"
 	OrdersWorker   = "orders-worker"
@@ -55,7 +55,7 @@ const (
 
 var InfraTargets = []string{SpiceDB, PostgreSQLServer, CertManager, KafkaConnect}
 
-// cdcScrape — источник имён и labels метрик CDC: scrape экспортеров на стенде, не Mimir.
+// cdcScrape — источник имён и labels метрик CDC: scrape экспортеров на стенде, не Grafana Cloud.
 const cdcScrape = "Имена и labels сняты scrape экспортера на стенде 2026-10-26 (Debezium 3.7.0.Final, JMX exporter 1.7.0, Alloy 1.21.2)."
 
 // Bounded contexts с ролями на технологиях, а не на имени.
@@ -73,7 +73,7 @@ type Section struct {
 }
 
 type Metric struct {
-	// Name — имя в Mimir после OTLP-трансляции (UnderscoreEscapingWithSuffixes):
+	// Name — имя в Prometheus после OTLP-трансляции (UnderscoreEscapingWithSuffixes):
 	// unit suffix и _total добавлены. Для histogram — базовое имя без _bucket.
 	Name    string
 	Section string
@@ -91,13 +91,13 @@ const RepoURL = "https://github.com/batazor/nomnom/blob/main/"
 const DocPath = "docs/observability/metric-inventory.md"
 
 // VerifiedPipeline — где подтверждены метрики со статусом Present.
-const VerifiedPipeline = "2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`): 2026-10-25 подтверждены rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series)."
+const VerifiedPipeline = "2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series)."
 
 // Exemplars включаются в запросах только когда это подтверждено end-to-end:
-// SDK histograms с exemplars, Alloy и Mimir (-ingester.max-global-exemplars-per-user).
+// SDK histograms с exemplars, Alloy и Grafana Cloud.
 const ExemplarsEnabled = false
 
-// verified — статусы, где часть сервисов подтверждена в Mimir (present), остальные ожидаются.
+// verified — статусы, где часть сервисов подтверждена в Grafana Cloud (present), остальные ожидаются.
 func verified(present []string, others ...string) map[string]Status {
 	m := expected(others...)
 	for _, s := range present {
@@ -115,7 +115,7 @@ func expected(services ...string) map[string]Status {
 }
 
 var Sections = []Section{
-	{"resource", "Resource и идентичность", "OTel resource в Mimir: `job=\"nomnom/<service.name>\"`, `instance=<service.instance.id>`, остальные resource attributes — в `target_info`. Promotion resource attributes не используется (docs/observability.md), поэтому environment и version фильтруются join с `target_info`."},
+	{"resource", "Resource и идентичность", "OTel resource в Prometheus: `job=\"nomnom/<service.name>\"`, `instance=<service.instance.id>`, остальные resource attributes — в `target_info`. Promotion resource attributes не используется (docs/observability.md), поэтому environment и version фильтруются join с `target_info`."},
 	{"rpc", "gRPC (server и client через internal gateway)", "Актуальные semconv RPC во всех контекстах: `rpc.server.call.duration`/`rpc.client.call.duration` в секундах, статус — имя кода в `rpc_response_status_code`, сервис и метод — в `rpc_method`. `orders` — `otelgrpc` (stats handler); `restaurants` — Connect server interceptor и grpc-js client interceptor; `payments` — собственные grpcio interceptors; `delivery` — tower layer сервера и клиент SpiceDB. Явные границы buckets в секундах."},
 	{"graphql", "GraphQL / HTTP (BFF, Cosmo Router)", "Встроенная telemetry Cosmo Router. Router экспортирует метрики по умолчанию, но OTLP exporter к Alloy в `config.yaml` не настроен и Alloy не развёрнут — метрики не доставляются."},
 	{"runtime", "Runtime", "Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). Node.js: `@opentelemetry/instrumentation-runtime-node` и `process.*`/`v8js.memory.heap.limit` своими callbacks. Python и Rust: `process.cpu.time`, `process.memory.usage`, `process.thread.count` своими callbacks (Python — ещё `cpython.gc.collections`; Rust читает procfs), потому что готовые instrumentations пишут устаревшие labels. Метрики tokio runtime не имеют semconv и не инвентаризированы."},
@@ -127,7 +127,7 @@ var Sections = []Section{
 	{"usecase", "Application use cases", "Декоратор application handlers в composition root (docs/observability.md#use-cases). Один histogram на все use cases; `outcome`: success | rejected | error — бизнес-отказ отделён от технического сбоя. `error_type` — закрытый набор slice, пуст при success. Без ID, subject и payload."},
 	{"uow", "Unit of Work", "Декоратор Unit of Work (ADR 20). Deadlock/serialization — классы retry, а не SQL-панели поверх DB instrumentation."},
 	{"fsm", "Domain Lifecycle (FSM)", "Декоратор применения FSM-перехода (ADR 21). Labels допустимы только с закрытым набором значений из FSM-таблицы."},
-	{"temporal", "Temporal", "Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — histograms в секундах с границами `telemetry.SecondsBuckets`; без монотонных counters SDK пишет UpDownCounter и в Mimir counters приходят без `_total`."},
+	{"temporal", "Temporal", "Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — histograms в секундах с границами `telemetry.SecondsBuckets`; без монотонных counters SDK пишет UpDownCounter и в Prometheus counters приходят без `_total`."},
 	{"kitchen", "Kitchen", "Gauges kitchen queue — projection/polling Kitchen Board, не выводятся из counters. Consumer lag ≠ Kitchen Queue Size."},
 	{"authz", "Authorization (SpiceDB)", "Декоратор порта авторизации (ADR 18). `denied` — бизнес-результат, `error`/`timeout` — технический сбой. Без subject/resource ID."},
 	{"provider", "Payment provider", "Клиентский адаптер платёжного провайдера; провайдер не выбран."},
@@ -140,7 +140,7 @@ var Sections = []Section{
 
 var Metrics = []Metric{
 	// resource
-	{Name: "target_info", Section: "resource", Type: Gauge, Source: "OTel resource → Mimir OTLP", Labels: []string{"job", "instance", "deployment_environment_name", "service_version"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}, BFF), Note: "Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations."},
+	{Name: "target_info", Section: "resource", Type: Gauge, Source: "OTel resource → OTLP ingestion", Labels: []string{"job", "instance", "deployment_environment_name", "service_version"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}, BFF), Note: "Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations."},
 
 	// rpc
 	{Name: "rpc_server_call_duration_seconds", Section: "rpc", Type: Histogram, Source: "`rpc.server.call.duration` (otelgrpc v0.72)", Labels: []string{"rpc_system_name", "rpc_method", "rpc_response_status_code"}, Status: verified([]string{Orders, Restaurants, Delivery, Payments}), Note: "`rpc_method` — `Service/Method`; `rpc_response_status_code` — имя кода (`OK`, `NOT_FOUND`). Инструментации других runtime закрепляются на тех же semconv-именах."},

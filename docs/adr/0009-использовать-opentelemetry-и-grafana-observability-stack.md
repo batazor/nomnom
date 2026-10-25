@@ -18,12 +18,12 @@ nomnom состоит из BFF, API и workers на Go, TypeScript/Node.js, Rust
 
 Использовать OpenTelemetry API, SDK, semantic conventions и W3C Trace Context для инструментирования приложений, создания traces и metrics и распространения контекста. Логи по умолчанию выводятся структурированным JSON в stdout. Continuous profiles создаются подходящим для runtime Pyroscope SDK.
 
-Использовать Grafana Alloy как единый логический инструмент приёма, сбора, обработки и отправки телеметрии. Количество экземпляров Alloy и способ развёртывания определяются отдельно. Отдельный Prometheus server не добавляется: Alloy выполняет scrape Prometheus-compatible endpoints, а хранение метрик обеспечивает Mimir.
+Использовать Grafana Alloy как единый логический инструмент приёма, сбора, обработки и отправки телеметрии. Количество экземпляров Alloy и способ развёртывания определяются отдельно. Отдельный Prometheus server не добавляется: Alloy выполняет scrape Prometheus-compatible endpoints, а метрики хранит Grafana Cloud Metrics.
 
 Использовать четыре специализированных хранилища:
 
 - Grafana Tempo для distributed traces;
-- Grafana Mimir для метрик и PromQL;
+- Grafana Cloud Metrics для метрик и PromQL;
 - Grafana Loki для структурированных логов;
 - Grafana Pyroscope для continuous profiles.
 
@@ -34,8 +34,8 @@ Grafana предоставляет data sources, dashboards, Explore и пере
 | Сигнал | Путь |
 | --- | --- |
 | Traces | OpenTelemetry SDK → OTLP → Alloy → OTLP → Tempo |
-| Метрики приложений | OpenTelemetry SDK → OTLP → Alloy → OTLP/HTTP → Mimir |
-| Метрики инфраструктуры | exporter или `/metrics` → Alloy scrape → remote write → Mimir |
+| Метрики приложений | OpenTelemetry SDK → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics |
+| Метрики инфраструктуры | exporter или `/metrics` → Alloy scrape → remote write → Grafana Cloud Metrics |
 | Logs | JSON stdout → Alloy → Loki |
 | Profiles | Pyroscope SDK → Alloy `pyroscope.receive_http` → `pyroscope.write` → Pyroscope |
 
@@ -58,7 +58,7 @@ OpenTelemetry и profiling-интеграции выбираются и пров
 - закреплённые версии SDK и конкретные библиотеки инструментирования;
 - число и topology экземпляров Alloy, processors, queues, retries, WAL, TLS и authentication;
 - sampling и retention по окружениям, storage sizing и multi-tenancy;
-- набор Loki labels, promoted Mimir resource attributes и histogram buckets;
+- набор Loki labels, promoted resource attributes метрик и histogram buckets;
 - dashboards, alerts, SLO и правила доступа;
 - BFF runtime и поддерживаемая им profiling-интеграция.
 
@@ -66,7 +66,7 @@ OpenTelemetry и profiling-интеграции выбираются и пров
 
 Появляется единый сквозной контекст и согласованный путь каждого сигнала. Grafana сможет связывать logs с traces, exemplars с traces и service/time range с profiles. Специализированные backend сохраняют подходящие модели хранения и запросов, а Alloy централизует сбор без отдельного Prometheus server.
 
-Стек требует эксплуатации Alloy, Tempo, Mimir, Loki, Pyroscope и Grafana, контроля совместимости протоколов, собственных метрик pipeline, ограничения очередей и осознанной cardinality. Отказ экспорта не должен останавливать бизнес-запросы, поэтому при заполнении ограниченных буферов возможна контролируемая потеря telemetry.
+Стек требует эксплуатации Alloy, Tempo, Loki, Pyroscope и Grafana, а метрики хранит Grafana Cloud, контроля совместимости протоколов, собственных метрик pipeline, ограничения очередей и осознанной cardinality. Отказ экспорта не должен останавливать бизнес-запросы, поэтому при заполнении ограниченных буферов возможна контролируемая потеря telemetry.
 
 Разная зрелость SDK и profilers по языкам ограничивает единообразие. Trace/profile correlation включается только там, где она документирована и проверена. Head sampling не гарантирует сохранение всех ошибочных traces; tail sampling, если понадобится, потребует отдельного решения и дополнительных ресурсов.
 

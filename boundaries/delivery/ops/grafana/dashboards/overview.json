@@ -3906,7 +3906,7 @@
           "options": [],
           "multi": false,
           "includeAll": false,
-          "label": "Metrics (Mimir)",
+          "label": "Metrics (Prometheus)",
           "hide": "dontHide",
           "skipUrlSync": false,
           "allowCustomValue": true

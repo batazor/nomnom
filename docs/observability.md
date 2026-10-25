@@ -11,20 +11,20 @@ Observability разделяется на четыре независимые о
 | Инструментирование | [OpenTelemetry](https://opentelemetry.io/docs/) | API, SDK, semantic conventions, создание traces и metrics и распространение контекста. OpenTelemetry не является хранилищем. |
 | Сбор | [Grafana Alloy](https://grafana.com/docs/alloy/latest/) | Приём OTLP, scrape Prometheus-compatible endpoints, чтение stdout, обработка, ограниченная нормализация и отправка всех сигналов. Alloy — единый логический инструмент сбора; количество экземпляров и топология развёртывания определяются отдельно. |
 | Хранение | [Grafana Tempo](https://grafana.com/docs/tempo/latest/) | Хранение и поиск distributed traces. |
-| Хранение | [Grafana Mimir](https://grafana.com/docs/mimir/latest/) | Долговременное хранение метрик и запросы через PromQL. |
+| Хранение | [Grafana Cloud Metrics](https://grafana.com/docs/grafana-cloud/send-data/otlp/) | Хранение метрик и запросы через PromQL. |
 | Хранение | [Grafana Loki](https://grafana.com/docs/loki/latest/) | Хранение и поиск структурированных логов с низкокардинальным индексом. |
 | Хранение | [Grafana Pyroscope](https://grafana.com/docs/pyroscope/latest/) | Хранение и анализ continuous profiles. |
 | Визуализация | [Grafana](https://grafana.com/docs/grafana/latest/datasources/) | Data sources, dashboards, Explore и переходы между сигналами. Grafana не становится путём доставки телеметрии. |
 
-Отдельный Prometheus server не входит в схему: Alloy выполняет scrape, а Mimir хранит метрики и обслуживает PromQL. Profiles используют собственный протокол приёма Pyroscope, а не предполагаемый общий OTLP-путь.
+Отдельный Prometheus server не входит в схему: Alloy выполняет scrape, а Grafana Cloud Metrics хранит метрики и обслуживает PromQL. Profiles используют собственный протокол приёма Pyroscope, а не предполагаемый общий OTLP-путь.
 
 ## Потоки данных
 
 | Сигнал | Основной путь |
 | --- | --- |
 | Traces | OpenTelemetry SDK → OTLP → Alloy → OTLP → Tempo |
-| Метрики приложений | OpenTelemetry SDK → OTLP → Alloy → OTLP/HTTP → Mimir |
-| Метрики инфраструктуры | Prometheus-compatible exporter или `/metrics` → Alloy scrape → remote write → Mimir |
+| Метрики приложений | OpenTelemetry SDK → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics |
+| Метрики инфраструктуры | Prometheus-compatible exporter или `/metrics` → Alloy scrape → remote write → Grafana Cloud Metrics |
 | Logs | Структурированный JSON в stdout → Alloy → Loki |
 | Profiles | Pyroscope SDK → Alloy `pyroscope.receive_http` → `pyroscope.write` → Pyroscope |
 
@@ -32,7 +32,7 @@ Observability разделяется на четыре независимые о
 
 Базовый путь логов — stdout. OTLP Logs можно оценить отдельно для конкретного runtime и SDK, если он даёт необходимую зрелость и эксплуатационное преимущество; его нельзя включать параллельно для тех же записей без явного разделения источников.
 
-Grafana обращается к Tempo, Mimir, Loki и Pyroscope как к отдельным data sources. Межсигнальные переходы настраиваются в data sources и dashboards, а не посредством копирования всех данных в одно хранилище.
+Grafana обращается к Tempo, Grafana Cloud Metrics, Loki и Pyroscope как к отдельным data sources. Межсигнальные переходы настраиваются в data sources и dashboards, а не посредством копирования всех данных в одно хранилище.
 
 ## Единая идентификация сервисов
 
@@ -50,7 +50,7 @@ Grafana обращается к Tempo, Mimir, Loki и Pyroscope как к отд
 
 ### Представление в хранилищах
 
-| Каноническое значение | Tempo | Mimir | Loki | Pyroscope |
+| Каноническое значение | Tempo | Метрики (Prometheus) | Loki | Pyroscope |
 | --- | --- | --- | --- | --- |
 | `service.namespace` | resource attribute | вместе с `service.name` участвует в `job`; исходное значение доступно через `target_info`, отдельный `service_namespace` — только при явном promotion | индексируемый label `service_namespace` | label `service_namespace` |
 | `service.name` | resource attribute и выбор сервиса | вместе с namespace участвует в `job`; исходное значение доступно через `target_info`, отдельный `service_name` — только при явном promotion | индексируемый label `service_name` | label `service_name` |
@@ -58,7 +58,7 @@ Grafana обращается к Tempo, Mimir, Loki и Pyroscope как к отд
 | `deployment.environment.name` | resource attribute | `target_info`; `deployment_environment_name` только при осознанном promotion | индексируемый label `deployment_environment_name` | label `deployment_environment_name` |
 | `service.instance.id` | resource attribute | стандартное Prometheus-представление `instance`; не добавляется как измерение бизнес-метрик | structured metadata/поле `service_instance_id` | label только если это нужно для диагностики экземпляра |
 
-При OTLP ingestion в Mimir metric attributes становятся Prometheus labels, а resource attributes по умолчанию в основном представлены через `job`, `instance` и `target_info`. Promotion дополнительных resource attributes в labels self-hosted Mimir является экспериментальной возможностью, поэтому архитектура не требует её включения. Если promotion будет выбран, точки преобразуются в подчёркивания и набор фиксируется явно и проверяется для закреплённой версии. Нельзя полагаться на разные неявные defaults SDK или backend.
+При OTLP ingestion метрик metric attributes становятся Prometheus labels, а resource attributes по умолчанию в основном представлены через `job`, `instance` и `target_info`. Архитектура не требует promotion дополнительных resource attributes в labels. Если promotion будет выбран, точки преобразуются в подчёркивания и набор фиксируется явно и проверяется для закреплённой версии. Нельзя полагаться на разные неявные defaults SDK или backend.
 
 ### Именование метрик
 
@@ -72,7 +72,7 @@ Grafana обращается к Tempo, Mimir, Loki и Pyroscope как к отд
 | Собственный attribute — с namespace `nomnom.`, чтобы не столкнуться с будущими semconv | `nomnom.outcome`, `nomnom.order.state`, `nomnom.usecase.name` |
 | Идентификаторы и суммы не становятся attributes | `order_id`, `amount` — в traces и logs |
 
-Имя в Mimir выводится из OTel-имени: точки → `_`, unit `s` → `_seconds`, annotation unit не добавляется, counter → `_total` (`nomnom.messaging.process.duration` → `nomnom_messaging_process_duration_seconds`, attribute `nomnom.usecase.name` → label `nomnom_usecase_name`). Mimir 3.x по умолчанию эти суффиксы для OTLP не добавляет, поэтому Mimir настраивается с `distributor.otel_metric_suffixes_enabled: true` (`-distributor.otel-metric-suffixes-enabled=true`); без него панели и alerts не найдут серий. Инвентарь dashboards (`ops/grafana/inventory`) хранит эти Mimir-имена, а тест `TestInventoryMatchesSemconvRegistry` сверяет его с registry: метрика, тип и набор labels совпадают в обе стороны. Новая метрика добавляется сначала в registry, затем в инвентарь и код. Histograms с unit `s` задают явные границы buckets в секундах: дефолтные границы OTel SDK рассчитаны на миллисекунды.
+Имя в Prometheus выводится из OTel-имени: точки → `_`, unit `s` → `_seconds`, annotation unit не добавляется, counter → `_total` (`nomnom.messaging.process.duration` → `nomnom_messaging_process_duration_seconds`, attribute `nomnom.usecase.name` → label `nomnom_usecase_name`). Grafana Cloud добавляет эти суффиксы при OTLP ingestion. Инвентарь dashboards (`ops/grafana/inventory`) хранит эти Prometheus-имена, а тест `TestInventoryMatchesSemconvRegistry` сверяет его с registry: метрика, тип и набор labels совпадают в обе стороны. Новая метрика добавляется сначала в registry, затем в инвентарь и код. Histograms с unit `s` задают явные границы buckets в секундах: дефолтные границы OTel SDK рассчитаны на миллисекунды.
 
 `order_id`, `user_id`, `workflow_id`, `trace_id`, request ID, message ID и другие индивидуальные идентификаторы не становятся labels метрик или индексируемыми labels Loki. Они допустимы как поля логов, structured metadata Loki, span attributes или exemplars, когда это соответствует политике данных. Даже технический `service.instance.id` не добавляется ко всем метрикам автоматически: для быстро меняющихся реплик это создаёт ненужные series.
 
@@ -126,7 +126,7 @@ Trace context связывает запуск workflow, Activities и внешн
 - использование, ожидание, ошибки и насыщение пулов PostgreSQL/MongoDB;
 - бизнес-результаты: создание заказа, принятие рестораном, результат авторизации/списания/возврата, назначение и завершение доставки.
 
-Для длительности используются гистограммы с границами, соответствующими сценарию. Они позволяют анализировать распределение и перцентили на стороне Mimir. Набор buckets, units и aggregation temporality фиксируется при реализации и проверяется нагрузочными данными.
+Для длительности используются гистограммы с границами, соответствующими сценарию. Они позволяют анализировать распределение и перцентили на стороне backend метрик. Набор buckets, units и aggregation temporality фиксируется при реализации и проверяется нагрузочными данными.
 
 Техническая попытка и бизнес-результат — разные события. Retry Activity, повторный RPC или повторная доставка Kafka-сообщения увеличивают счётчик попыток, но не счётчик созданных заказов. Бизнес-счётчик меняется в точке идемпотентно подтверждённого перехода состояния; имя результата и его допустимые низкокардинальные значения задаются явно.
 
@@ -220,7 +220,7 @@ Data sources и derived fields настраиваются так, чтобы п�
 
 - переход из записи Loki в Tempo по полю `trace_id`;
 - поиск связанных логов из trace по `trace_id`, service и временному интервалу;
-- переход из метрики Mimir к trace через exemplars, если SDK, pipeline и тип метрики сохраняют exemplar;
+- переход из метрики к trace через exemplars, если SDK, pipeline и тип метрики сохраняют exemplar;
 - переход от service/version/environment и временного интервала к Pyroscope;
 - переход от trace/span к profile только там, где SDK создаёт совместимую span correlation; в текущем наборе языков это Go и Python для CPU profiles.
 
@@ -256,7 +256,7 @@ Observability дополняет, но не меняет принятую Vertic
 - SDK-библиотеки и закреплённые версии для каждого runtime;
 - OTLP endpoint details, temporality и точное преобразование resource attributes;
 - sampling, retention, multi-tenancy, storage sizing и disaster recovery;
-- Loki labels/structured metadata limits и Mimir histogram strategy;
+- Loki labels/structured metadata limits и histogram strategy метрик;
 - alerts, SLO и доступ к данным;
 - BFF runtime и соответствующая profiling-интеграция.
 
@@ -265,7 +265,7 @@ Observability дополняет, но не меняет принятую Vertic
 - [OpenTelemetry concepts and signals](https://opentelemetry.io/docs/concepts/signals/), [resources](https://opentelemetry.io/docs/concepts/resources/) и [semantic conventions](https://opentelemetry.io/docs/specs/semconv/)
 - [W3C Trace Context](https://www.w3.org/TR/trace-context/) и [OpenTelemetry context propagation](https://opentelemetry.io/docs/concepts/context-propagation/)
 - [Grafana Alloy OpenTelemetry](https://grafana.com/docs/alloy/latest/collect/opentelemetry-data/), [Prometheus metrics](https://grafana.com/docs/alloy/latest/collect/prometheus-metrics/) и [Loki ingestion with Alloy](https://grafana.com/docs/loki/latest/send-data/alloy/)
-- [Tempo](https://grafana.com/docs/tempo/latest/), [Mimir OTLP resource mapping](https://grafana.com/docs/mimir/latest/configure/configure-otel-collector/#work-with-default-opentelemetry-labels), [Loki labels](https://grafana.com/docs/loki/latest/get-started/labels/) и [Pyroscope SDK path through Alloy](https://grafana.com/docs/pyroscope/latest/configure-client/grafana-alloy/receive_profiles/)
+- [Tempo](https://grafana.com/docs/tempo/latest/), [Loki labels](https://grafana.com/docs/loki/latest/get-started/labels/) и [Pyroscope SDK path through Alloy](https://grafana.com/docs/pyroscope/latest/configure-client/grafana-alloy/receive_profiles/)
 - [Pyroscope profile types](https://grafana.com/docs/pyroscope/latest/configure-client/profile-types/), [supported platforms](https://grafana.com/docs/pyroscope/latest/configure-client/supported-platforms/) и [Span Profiles](https://grafana.com/docs/pyroscope/latest/configure-client/trace-span-profiles/)
 - [Grafana trace correlations](https://grafana.com/docs/grafana/latest/datasources/tempo/configure-tempo-data-source/#trace-to-logs) и [exemplars](https://grafana.com/docs/grafana/latest/fundamentals/exemplars/)
 - [Temporal Go observability](https://github.com/temporalio/documentation/blob/main/docs/develop/go/platform/observability.mdx#tracing), [Watermill message context and metadata](https://watermill.io/docs/message/) и [`watermill-kafka` metadata/header mapping](https://github.com/ThreeDotsLabs/watermill-kafka/blob/master/pkg/kafka/marshaler.go)

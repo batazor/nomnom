@@ -11,7 +11,7 @@ make grafana-tools      # go install gcx
 
 | Каталог | Содержимое |
 | --- | --- |
-| `inventory/` | Инвентарь метрик: имя в Mimir, labels, источник, статус по service.name. Единственный источник для панелей и `docs/observability/metric-inventory.md`. |
+| `inventory/` | Инвентарь метрик: имя в Prometheus, labels, источник, статус по service.name. Единственный источник для панелей и `docs/observability/metric-inventory.md`. |
 | `overview/` | `ServiceOverview(options)` — общая структура rows; `services.go` — options и domain-панели каждого сервиса; `platform.go` — `PlatformOverview()` (SpiceDB, PostgreSQL, pods). |
 | `dashboards/` | Артефакт `Platform / Overview` (`platform.json`) и его README. |
 | `cmd/dashboards/` | CLI: запись артефактов, `-check`, `-preview DIR` (все метрики «есть»). |
@@ -29,7 +29,7 @@ make grafana-tools      # go install gcx
 
 ## Как панель становится живой
 
-1. Сервис экспортирует метрику, Alloy доставляет её в Mimir (проверено запросом).
+1. Сервис экспортирует метрику, Alloy доставляет её в Grafana Cloud (проверено запросом series).
 2. В `inventory/inventory.go` статус метрики для этого service.name меняется на `Present`.
 3. `make grafana-generate` — TODO-панель заменяется запросами, README и инвентарь обновляются.
 
@@ -41,7 +41,7 @@ make grafana-tools      # go install gcx
 - `-check` — артефакты совпадают с генератором.
 - `gcx dev lint run` — правила gcx, включая `target-valid-promql` для live-варианта.
 
-Проверено вручную 2026-10-25 на `grafana/grafana:13.2.4` в Docker: все dashboards приняты API `dashboard.grafana.app/v2` и сохранены без потерь (section variable `worker` сохраняется); live-варианты отрендерены, 258 запросов выполнены через Grafana против Prometheus (тот же PromQL API, что у Mimir) без ошибок; Explore-ссылка Loki открывается с подставленными variables и интервалом; `Repository` прошёл `dryRun`. Grafana, Mimir и Alloy в kind пока не развёрнуты, поэтому end-to-end с реальными данными не выполнялся.
+Проверено вручную 2026-10-25 на `grafana/grafana:13.2.4` в Docker: все dashboards приняты API `dashboard.grafana.app/v2` и сохранены без потерь (section variable `worker` сохраняется); live-варианты отрендерены, 258 запросов выполнены через Grafana против Prometheus без ошибок; Explore-ссылка Loki открывается с подставленными variables и интервалом; `Repository` прошёл `dryRun`. Grafana и Alloy в kind тогда не были развёрнуты, поэтому end-to-end с реальными данными не выполнялся.
 
 ## Отступления
 

@@ -64,10 +64,10 @@ helm uninstall orders
 
 DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`/`key` (env `POSTGRES__DSN`); без него
 процесс не стартует. Миграции встроены в образ: каждый процесс при старте применяет
-недостающие (golang-migrate под advisory lock) и только потом запускает остальное. Пул процесса задают `postgres.maxConns`,
+недостающие (golang-migrate под advisory lock, ожидание блокировок DDL ограничено `lock_timeout` 5 с, незавершённая миграция повторяется) и только потом запускает остальное. Пул процесса задают `postgres.maxConns`,
 `minConns`, `maxConnLifetime`, `maxConnLifetimeJitter`, `maxConnIdleTime`, `connectTimeout`,
 `healthCheckPeriod` (env `POSTGRES__*`); values каждой роли задают свой `maxConns` (API 10,
-worker и consumer 5, reconciler 2), миграции при старте — отдельный пул из 1 соединения. Пулер перед
+worker и consumer 5, reconciler 2), миграции при старте — 2 отдельных соединения (advisory lock и сама миграция). Пулер перед
 базой — только session mode, Σ(replicas × maxConns) ≤ `pool_size`
 ([README](../README.md#пулер-postgresql)).
 

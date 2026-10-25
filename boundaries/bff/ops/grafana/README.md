@@ -25,7 +25,7 @@ JSON — артефакт генератора: правки вносятся в
 
 ## Data sources
 
-Выбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Mimir), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).
+Выбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).
 
 ## Variables
 
@@ -100,5 +100,5 @@ Rule group `bff` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)), 
 - **Logs** — Explore Loki по `service_name`, `deployment_environment_name`, `service_version` и интервалу dashboard. Переход log → trace — derived field `trace_id` data source Loki.
 - **Traces** — Explore Tempo (TraceQL) по сервису и окружению: все, ошибки (`status=error`); у серий панелей ошибок и latency — data link «Traces этой серии»: spans с теми же attributes, что labels серии (`rpc.method`, `rpc.response.status_code`, `db.operation.name`, `nomnom.usecase.name`, `error.type`), у latency — не быстрее значения точки.
 - **Profiles** — Explore Pyroscope (CPU) по service/environment/интервалу. Span Profiles для этого runtime не поддерживаются: только корреляция service/version/time.
-- **Exemplars** — выключены: не подтверждено, что SDK histograms, Alloy и Mimir сохраняют exemplars (`inventory.ExemplarsEnabled`).
+- **Exemplars** — выключены: не подтверждено, что SDK histograms, Alloy и Grafana Cloud сохраняют exemplars (`inventory.ExemplarsEnabled`).
 - **Deployments** — annotation по смене `service_version` в `target_info`; появляется, когда `target_info` получает статус «есть».

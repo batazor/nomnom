@@ -108,7 +108,7 @@ func TestStartContinuesW3CTraceContextAndExportsTraces(t *testing.T) {
 	_ = m.Shutdown(shutdownCtx) // collector недоступен: важна только ограниченность shutdown
 }
 
-// Counters Temporal SDK монотонные: в Mimir — counter с _total, а не gauge.
+// Counters Temporal SDK монотонные: в Prometheus — counter с _total, а не gauge.
 func TestTemporalCountersAreMonotonic(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	m, err := telemetry.New(context.Background(), "orders-worker", func(sdkmetric.Producer) (sdkmetric.Reader, error) { return reader, nil })

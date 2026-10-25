@@ -65,7 +65,7 @@ RPS, VU, p95/p99 и error budget не придумываются. Thresholds в�
 
 ### Request latency и бизнес-процесс
 
-Request latency (`PlaceOrder → accepted`) отличается от business process latency (`created → delivered`). Второе измеряется business metrics, а не удержанием запроса; отдельный E2E performance сценарий может polling'ом дожидаться состояния. Kafka, Outbox/Inbox, PostgreSQL, MongoDB, Temporal и SpiceDB наблюдаются через Grafana/Mimir/Tempo/Loki ([ADR 9](0009-использовать-opentelemetry-и-grafana-observability-stack.md)), а не из k6.
+Request latency (`PlaceOrder → accepted`) отличается от business process latency (`created → delivered`). Второе измеряется business metrics, а не удержанием запроса; отдельный E2E performance сценарий может polling'ом дожидаться состояния. Kafka, Outbox/Inbox, PostgreSQL, MongoDB, Temporal и SpiceDB наблюдаются через Grafana Cloud (метрики), Tempo и Loki ([ADR 9](0009-использовать-opentelemetry-и-grafana-observability-stack.md)), а не из k6.
 
 ### Correlation и анализ
 

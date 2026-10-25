@@ -88,7 +88,7 @@ func README(o Options, d Dashboard, alerts AlertGroup) string {
 	b.WriteString("JSON — артефакт генератора: правки вносятся в `ops/grafana/overview/services.go` или в инвентарь, затем `make grafana-generate`. CI (`make grafana-check`) падает при расхождении.\n\n")
 
 	sloTable(&b, o)
-	b.WriteString("## Data sources\n\nВыбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Mimir), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).\n\n")
+	b.WriteString("## Data sources\n\nВыбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).\n\n")
 
 	b.WriteString("## Variables\n\n| Variable | Источник | Назначение |\n| --- | --- | --- |\n")
 	b.WriteString("| `environment` | `target_info` → `deployment_environment_name` | Фильтр окружения через join с `target_info`. |\n")
@@ -112,7 +112,7 @@ func README(o Options, d Dashboard, alerts AlertGroup) string {
 	} else {
 		b.WriteString(" Span Profiles для этого runtime не поддерживаются: только корреляция service/version/time.\n")
 	}
-	b.WriteString("- **Exemplars** — выключены: не подтверждено, что SDK histograms, Alloy и Mimir сохраняют exemplars (`inventory.ExemplarsEnabled`).\n")
+	b.WriteString("- **Exemplars** — выключены: не подтверждено, что SDK histograms, Alloy и Grafana Cloud сохраняют exemplars (`inventory.ExemplarsEnabled`).\n")
 	b.WriteString("- **Deployments** — annotation по смене `service_version` в `target_info`; появляется, когда `target_info` получает статус «есть».\n")
 	if o.Database != "" || o.Kafka != nil {
 		b.WriteString("- **Серверные метрики зависимостей** — ссылки на community dashboards в шапке; панели не дублируются.\n")

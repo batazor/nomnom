@@ -1,6 +1,6 @@
 # Grafana Cloud для тестов
 
-Grafana Cloud (free tier) заменяет в тестах ещё не развёрнутые Mimir и Grafana ([ADR 9](../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md)): kind отправляет метрики приложений через Alloy, а dashboards ([ADR 29](../../docs/adr/0029-grafana-dashboards-as-code.md)) проверяются на реальных данных.
+Grafana Cloud (free tier) хранит метрики и заменяет в тестах ещё не развёрнутую Grafana ([ADR 9](../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md)): kind отправляет метрики приложений через Alloy, а dashboards ([ADR 29](../../docs/adr/0029-grafana-dashboards-as-code.md)) проверяются на реальных данных.
 
 ## Настройка
 
@@ -59,9 +59,9 @@ Internal gateway (EnvoyProxy `internal-gateway`, [`gateway.yaml`](../kind/manife
 
 Инфраструктурные неймспейсы без NetworkPolicy, поэтому отдельных разрешений Alloy не нужно.
 
-## Отличия от self-managed Mimir
+## Promoted labels
 
-Grafana Cloud промотирует `service_name` и `service_namespace` в labels каждой метрики; self-managed Mimir по [docs/observability.md](../../docs/observability.md) этого не делает. Dashboards на эти labels не опираются (environment/version выбираются через `target_info`), поэтому работают в обоих вариантах.
+Grafana Cloud промотирует `service_name` и `service_namespace` в labels каждой метрики. Dashboards на эти labels не опираются: environment и version выбираются через `target_info` ([docs/observability.md](../../docs/observability.md)).
 
 ## Проверено
 

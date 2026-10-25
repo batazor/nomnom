@@ -279,7 +279,7 @@ k6 → GraphQL (Cosmo Router / BFF) → internal gateway → bounded contexts
 
 ### Temporal, Kafka и storage
 
-Request latency (`PlaceOrder → accepted`) и business process latency (`created → delivered`) — разные величины. Мутация завершается после принятия команды `orders` и не ждёт доставки: BFF не управляет workflow ([BFF ADR 3](../boundaries/bff/docs/adr/0003-use-wundergraph-cosmo-for-the-bff.md)); process latency измеряется business metrics, а отдельный E2E performance сценарий может polling'ом дожидаться состояния. Kafka (lag, publish latency, Outbox backlog, Inbox duplicates, failures), PostgreSQL (pool, latency, locks, deadlocks, tx duration, CPU/IO), MongoDB (latency, pool, contention, индексы, CPU/IO) и Temporal (task queue backlog, workflow age) наблюдаются в Grafana/Mimir согласно [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md), а не из k6.
+Request latency (`PlaceOrder → accepted`) и business process latency (`created → delivered`) — разные величины. Мутация завершается после принятия команды `orders` и не ждёт доставки: BFF не управляет workflow ([BFF ADR 3](../boundaries/bff/docs/adr/0003-use-wundergraph-cosmo-for-the-bff.md)); process latency измеряется business metrics, а отдельный E2E performance сценарий может polling'ом дожидаться состояния. Kafka (lag, publish latency, Outbox backlog, Inbox duplicates, failures), PostgreSQL (pool, latency, locks, deadlocks, tx duration, CPU/IO), MongoDB (latency, pool, contention, индексы, CPU/IO) и Temporal (task queue backlog, workflow age) наблюдаются в Grafana согласно [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md), а не из k6.
 
 ### Correlation и profiling
 

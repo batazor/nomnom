@@ -64,7 +64,7 @@ Mapper находится в `infrastructure` слайса (`payments` — `infr
 
 ### 10. Метрики
 
-OpenTelemetry instruments с именами и attributes из registry `ops/semconv`: `nomnom.outbox.pending.messages` и `nomnom.outbox.oldest_pending.age` (`messaging.destination.name`; только у активного экземпляра), `nomnom.outbox.publish.retries` (+ `nomnom.event.type`, `nomnom.error.class`), histograms `nomnom.outbox.publish.duration` (+ `nomnom.outcome`) и `nomnom.outbox.publish.lag` (`occurred_at` → подтверждение брокера). В Prometheus/Mimir — `nomnom_outbox_pending_messages`, `nomnom_outbox_oldest_pending_age_seconds`, `nomnom_outbox_publish_retries_total`, `nomnom_outbox_publish_duration_seconds`, `nomnom_outbox_publish_lag_seconds`. ADR 31 упоминает label `boundary`; реализация различает контекст по topic (`messaging.destination.name`) и `service.name` ресурса.
+OpenTelemetry instruments с именами и attributes из registry `ops/semconv`: `nomnom.outbox.pending.messages` и `nomnom.outbox.oldest_pending.age` (`messaging.destination.name`; только у активного экземпляра), `nomnom.outbox.publish.retries` (+ `nomnom.event.type`, `nomnom.error.class`), histograms `nomnom.outbox.publish.duration` (+ `nomnom.outcome`) и `nomnom.outbox.publish.lag` (`occurred_at` → подтверждение брокера). В Prometheus — `nomnom_outbox_pending_messages`, `nomnom_outbox_oldest_pending_age_seconds`, `nomnom_outbox_publish_retries_total`, `nomnom_outbox_publish_duration_seconds`, `nomnom_outbox_publish_lag_seconds`. ADR 31 упоминает label `boundary`; реализация различает контекст по topic (`messaging.destination.name`) и `service.name` ресурса.
 
 ### 11. Конфигурация и развёртывание
 

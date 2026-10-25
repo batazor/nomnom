@@ -67,7 +67,7 @@ BFF отвечает за клиентский API и агрегацию, gatewa
 
 ## Observability
 
-Целевой стек использует OpenTelemetry и Grafana Alloy для инструментирования и сбора, Tempo, Mimir, Loki и Pyroscope для специализированного хранения и Grafana для общего анализа. Потоки traces, metrics, logs и profiles, правила общего контекста и границы размещения в коде описаны в [документации observability](docs/observability.md), решение — в [ADR 9](docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md).
+Целевой стек использует OpenTelemetry и Grafana Alloy для инструментирования и сбора, Tempo, Grafana Cloud Metrics, Loki и Pyroscope для специализированного хранения и Grafana для общего анализа. Потоки traces, metrics, logs и profiles, правила общего контекста и границы размещения в коде описаны в [документации observability](docs/observability.md), решение — в [ADR 9](docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md).
 
 ## Cloud-native runtime
 

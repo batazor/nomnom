@@ -13,7 +13,7 @@ import (
 )
 
 // MetricsDatasource — placeholder datasource UID в артефактах alert rules: UID
-// окружения в репозитории не хранится, push-скрипт подставляет UID Prometheus/Mimir.
+// окружения в репозитории не хранится, push-скрипт подставляет UID Prometheus data source.
 const MetricsDatasource = "${metrics}"
 
 // AlertFolder — folder alert rules и dashboards в Grafana.

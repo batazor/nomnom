@@ -17,7 +17,7 @@ const ERROR_CLASS = "nomnom.error.class";
 
 /**
  * Метрики consumer по docs/observability/metric-inventory.md: OTel-имена registry
- * ops/semconv, в Mimir — те же, что у orders-consumer; без event и aggregate id.
+ * ops/semconv, в Prometheus — те же, что у orders-consumer; без event и aggregate id.
  */
 export class OtelConsumerMetrics implements ConsumerMetrics {
   readonly #duration;

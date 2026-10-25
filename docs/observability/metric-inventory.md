@@ -8,19 +8,17 @@
 
 | Статус | Значение |
 | --- | --- |
-| есть | Метрика экспортируется сервисом по OTLP, а имя и labels подтверждены приёмом через Alloy в Mimir. |
+| есть | Метрика экспортируется сервисом по OTLP, а имя и labels подтверждены приёмом через Alloy в Grafana Cloud. |
 | ожидается | Метрика принята архитектурой (semconv, ADR, решение по Watermill), но не экспортируется или не доставляется. |
 
-Имена приведены в виде Mimir после OTLP-трансляции (точки → подчёркивания, unit suffix, `_total` для
-монотонных counters). Mimir 3.2.3 по умолчанию suffixes **не добавляет**: нужен
-`-distributor.otel-metric-suffixes-enabled=true` (`distributor.otel_metric_suffixes_enabled`), иначе имена OTel-instruments
-придут без `_seconds`/`_total` и панели не найдут серий. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя; запросы используют `_bucket`/`_count`/`_sum`.
+Имена приведены в виде Prometheus после OTLP-трансляции (точки → подчёркивания, unit suffix, `_total` для
+монотонных counters); Grafana Cloud добавляет suffixes при OTLP ingestion. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя; запросы используют `_bucket`/`_count`/`_sum`.
 
 ## Состояние на дату генерации
 
 Метрик в инвентаре: 127; пар «метрика × сервис» со статусом «есть»: 140.
 
-Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`): 2026-10-25 подтверждены rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
+Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
 Метрики подключены в процессах `orders`: `orders` (gRPC server), `orders-worker` (Temporal, gRPC client
 к gateway) и `orders-consumer` (Watermill, OTel middleware), во всех трёх — Go runtime и process CPU через
@@ -30,11 +28,11 @@
 
 ## Resource и идентичность
 
-OTel resource в Mimir: `job="nomnom/<service.name>"`, `instance=<service.instance.id>`, остальные resource attributes — в `target_info`. Promotion resource attributes не используется (docs/observability.md), поэтому environment и version фильтруются join с `target_info`.
+OTel resource в Prometheus: `job="nomnom/<service.name>"`, `instance=<service.instance.id>`, остальные resource attributes — в `target_info`. Promotion resource attributes не используется (docs/observability.md), поэтому environment и version фильтруются join с `target_info`.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `target_info` | OTel resource → Mimir OTLP | gauge | `job`, `instance`, `deployment_environment_name`, `service_version` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations. |
+| `target_info` | OTel resource → OTLP ingestion | gauge | `job`, `instance`, `deployment_environment_name`, `service_version` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations. |
 
 <a id="rpc"></a>
 
@@ -193,7 +191,7 @@ Outbox публикует Debezium в Kafka Connect (ADR 37). Prometheus JMX exp
 
 ## Temporal
 
-Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — histograms в секундах с границами `telemetry.SecondsBuckets`; без монотонных counters SDK пишет UpDownCounter и в Mimir counters приходят без `_total`.
+Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — histograms в секундах с границами `telemetry.SecondsBuckets`; без монотонных counters SDK пишет UpDownCounter и в Prometheus counters приходят без `_total`.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |

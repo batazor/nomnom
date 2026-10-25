@@ -14,7 +14,7 @@ import (
 )
 
 // PoolName is db.client.connection.pool.name of the orders pool; the process
-// is told apart by service.name (job in Mimir).
+// is told apart by service.name (job in Prometheus).
 const PoolName = "orders"
 
 const poolInstrumentation = "nomnom/orders/postgres"

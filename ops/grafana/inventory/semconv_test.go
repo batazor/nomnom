@@ -11,7 +11,7 @@ import (
 )
 
 // Registry ops/semconv — источник OTel-имён, instruments, units и attributes,
-// которые проверяет Weaver (make semconv-check); инвентарь — их имена в Mimir.
+// которые проверяет Weaver (make semconv-check); инвентарь — их имена в Prometheus.
 const semconvModel = "../../semconv/model"
 
 type semconvGroup struct {

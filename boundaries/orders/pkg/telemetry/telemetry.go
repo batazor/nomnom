@@ -166,7 +166,7 @@ func New(ctx context.Context, serviceName string, newReader ReaderFactory) (*Met
 func (m *Metrics) Meter(name string) metric.Meter { return m.MeterProvider.Meter(name) }
 
 // TemporalMetricsHandler — metrics Temporal SDK в общий pipeline. Counters
-// монотонные: иначе SDK пишет UpDownCounter, Mimir получает gauge без _total, и
+// монотонные: иначе SDK пишет UpDownCounter, backend получает gauge без _total, и
 // rate() по нему некорректен.
 func (m *Metrics) TemporalMetricsHandler() client.MetricsHandler {
 	return temporalotel.NewMetricsHandler(temporalotel.MetricsHandlerOptions{

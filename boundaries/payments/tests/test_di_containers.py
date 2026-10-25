@@ -23,6 +23,8 @@ from payment_fakes import (
     payments_container,
 )
 from psycopg import sql
+from yoyo import read_migrations
+from yoyo.migrations import MigrationList
 
 from di.payments import PaymentsContainer, SpiceDBConfigurationError
 from di.resources import ProcessResource, TelemetryResource, postgres_database
@@ -237,6 +239,20 @@ class StartupMigrationTest(unittest.TestCase):
         waiting.join()
         self.assertEqual(results, [[migration.id for migration in migrations()]])
 
+    def test_migration_gives_up_on_a_locked_table(self) -> None:
+        dsn = self._empty_database()
+        settings = DatabaseSettings(DATABASE__URL=dsn)
+        migrate(settings)
+        with psycopg.connect(dsn) as traffic:
+            traffic.execute("SELECT * FROM payments")
+            started = time.monotonic()
+            with (
+                patch("infrastructure.postgres.migrate.migrations", lambda: _locking_migration()),
+                self.assertRaises(psycopg.errors.LockNotAvailable),
+            ):
+                migrate(settings)
+            self.assertLess(time.monotonic() - started, 30)
+
     def _empty_database(self) -> str:
         name = f"startup_{uuid.uuid4().hex}"
         with psycopg.connect(self.dsn, autocommit=True) as admin:
@@ -247,6 +263,16 @@ class StartupMigrationTest(unittest.TestCase):
     def _drop(self, name: str) -> None:
         with psycopg.connect(self.dsn, autocommit=True) as admin:
             admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
+
+
+def _locking_migration() -> MigrationList:
+    """The bundled migrations plus one that needs an exclusive lock on ``payments``."""
+    bundled = migrations()
+    step = read_migrations(_LOCKING_MIGRATION_DIR)
+    return MigrationList([*bundled, *step])
+
+
+_LOCKING_MIGRATION_DIR = str(Path(__file__).parent / "fixtures" / "locking_migration")
 
 
 class _Lifecycle:

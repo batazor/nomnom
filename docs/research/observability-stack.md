@@ -6,7 +6,7 @@
 
 ## Краткие выводы
 
-- Предложенный путь сигналов поддерживается актуальными компонентами: приложения могут отправлять traces и metrics в Alloy по OTLP; Alloy экспортирует traces в Tempo по OTLP, application metrics в Mimir по OTLP/HTTP, scraped metrics в Mimir через Prometheus remote write, stdout logs в Loki и profiles через `pyroscope.receive_http` → `pyroscope.write` в Pyroscope.
+- Предложенный путь сигналов поддерживается актуальными компонентами: приложения могут отправлять traces и metrics в Alloy по OTLP; Alloy экспортирует traces в Tempo по OTLP, application metrics в Grafana Cloud Metrics по OTLP/HTTP, scraped metrics туда же через Prometheus remote write, stdout logs в Loki и profiles через `pyroscope.receive_http` → `pyroscope.write` в Pyroscope.
 - Единая идентичность должна начинаться с OTel Resource: `service.namespace=nomnom`, стабильные `service.name`, `service.version`, `deployment.environment.name` и, при необходимости, `service.instance.id`. Представление этих полей в хранилищах различается и требует явного маппинга.
 - Для Kafka текущие OTel messaging conventions считают span links основным способом связи producer/consumer. Parent-child допустим для одиночного сообщения, но не является хорошим общим правилом для batch, fan-out, повторной доставки или обработки внутри уже активного контекста.
 - Watermill `Message.Context()` не переносится через брокер сам по себе. Переносимый carrier — `Message.Metadata`; стандартный marshaler `watermill-kafka` отображает metadata один к одному в Kafka record headers и обратно. Поэтому W3C `traceparent`/`tracestate` надо inject/extract через metadata либо использовать встроенное Sarama OTel-обёртывание, предварительно проверив его семантику spans.
@@ -52,8 +52,8 @@ Exemplars позволяют сохранить trace/span ID отдельног
 | Сигнал | Подтверждённый путь | Основание |
 | --- | --- | --- |
 | Traces | OTel SDK → OTLP → Alloy `otelcol.receiver.otlp` → `otelcol.exporter.otlp`/`otlphttp` → Tempo | Alloy принимает OTLP gRPC/HTTP и экспортирует OTLP; exporter имеет queue/retry для временных сбоев ([Tempo: Grafana Alloy](https://grafana.com/docs/tempo/latest/set-up-for-tracing/instrument-send/set-up-collector/grafana-alloy/)) |
-| Application metrics | OTel SDK → OTLP → Alloy → OTLP/HTTP → Mimir | Mimir нативно принимает OTLP/HTTP на `/otlp/v1/metrics`; OTLP рекомендован для OTel metrics ([Mimir OTLP configuration](https://grafana.com/docs/mimir/latest/configure/configure-otel-collector/), [Mimir HTTP API](https://grafana.com/docs/mimir/latest/references/http-api/)) |
-| Infrastructure metrics | Prometheus-compatible `/metrics`/exporter → Alloy `prometheus.scrape` → `prometheus.remote_write` → Mimir | Alloy documented pipeline scrape → remote write; remote write имеет bounded in-memory queues и WAL ([Alloy remote write](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.remote_write/), [Mimir getting started](https://grafana.com/docs/mimir/latest/get-started/)) |
+| Application metrics | OTel SDK → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics | Grafana Cloud принимает OTLP/HTTP через OTLP gateway; OTLP рекомендован для OTel metrics ([Grafana Cloud OTLP](https://grafana.com/docs/grafana-cloud/send-data/otlp/)) |
+| Infrastructure metrics | Prometheus-compatible `/metrics`/exporter → Alloy `prometheus.scrape` → `prometheus.remote_write` → Grafana Cloud Metrics | Alloy documented pipeline scrape → remote write; remote write имеет bounded in-memory queues и WAL ([Alloy remote write](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.remote_write/)) |
 | Logs | JSON stdout → platform-specific Alloy `loki.source.*` → `loki.process` → `loki.write` → Loki | Alloy имеет sources для file, Docker, journal, Kubernetes/pod logs и др.; конкретный source зависит от deployment ([Loki ingestion with Alloy](https://grafana.com/docs/loki/latest/send-data/alloy/)) |
 | Profiles | Pyroscope SDK → Alloy `pyroscope.receive_http` → `pyroscope.write` → Pyroscope | Receiver совместим с Pyroscope ingest/push API и предназначен для SDK profiles ([Receive profiles from SDKs](https://grafana.com/docs/pyroscope/latest/configure-client/grafana-alloy/receive_profiles/), [`pyroscope.receive_http`](https://grafana.com/docs/alloy/latest/reference/components/pyroscope/pyroscope.receive_http/), [`pyroscope.write`](https://grafana.com/docs/alloy/latest/reference/components/pyroscope/pyroscope.write/)) |
 
@@ -66,7 +66,7 @@ Alloy — collector/processor/router, а не долговременное хр�
 | Хранилище | Представление |
 | --- | --- |
 | Tempo | OTel resource attributes сохраняются как resource attributes и запрашиваются через TraceQL, например `resource.service.namespace`, `resource.service.name`; это не требует переименования в приложении ([TraceQL query construction](https://grafana.com/docs/tempo/latest/traceql/construct-traceql-queries/)) |
-| Mimir | Metric attributes становятся Prometheus labels. `service.namespace` + `service.name` отображаются в `job`, `service.instance.id` — в `instance`; прочие resource attributes сохраняются в `target_info` и могут быть явно promoted to labels. Promotion в self-hosted Mimir экспериментален, поэтому набор нужно зафиксировать при реализации ([Mimir OTel resource attributes](https://grafana.com/docs/mimir/latest/configure/configure-otel-collector/#work-with-default-opentelemetry-labels), [Grafana resource mapping](https://grafana.com/docs/grafana-cloud/monitor-applications/application-observability/instrument/resource-attributes/)) |
+| Метрики (Prometheus) | Metric attributes становятся Prometheus labels. `service.namespace` + `service.name` отображаются в `job`, `service.instance.id` — в `instance`; прочие resource attributes сохраняются в `target_info` и могут быть явно promoted to labels. Набор promoted labels фиксируется при реализации ([[Grafana resource mapping](https://grafana.com/docs/grafana-cloud/monitor-applications/application-observability/instrument/resource-attributes/)) |
 | Loki | Для OTLP ingestion выбранные resource attributes становятся index labels с заменой `.` на `_`, остальные — structured metadata. Для stdout pipeline такой же небольшой label set надо сформировать в Alloy. Loki прямо запрещает high-cardinality request/user/trace IDs как labels ([Loki labels](https://grafana.com/docs/loki/latest/get-started/labels/)) |
 | Pyroscope | SDK `application_name`/`appName` задаёт `service_name`; дополнительные стабильные измерения передаются tags/labels. В Pyroscope label names не допускают точку, поэтому OTel `service.namespace`, `service.version`, `deployment.environment.name` должны маппиться в согласованные `service_namespace`, `service_version`, `deployment_environment_name` ([Pyroscope client selection and tags](https://grafana.com/docs/pyroscope/latest/configure-client/), [Pyroscope API](https://grafana.com/docs/pyroscope/latest/reference-server-api/)) |
 
@@ -123,7 +123,7 @@ Span Profiles требуют одновременно Pyroscope SDK, OTel tracin
 
 ## Корреляция в Grafana
 
-Grafana имеет встроенные data sources для Prometheus/Mimir, Loki, Tempo и Pyroscope и настраиваемые links между signals ([Grafana data sources](https://grafana.com/docs/grafana/latest/datasources/)). Для `nomnom`:
+Grafana имеет встроенные data sources для Prometheus, Loki, Tempo и Pyroscope и настраиваемые links между signals ([Grafana data sources](https://grafana.com/docs/grafana/latest/datasources/)). Для `nomnom`:
 
 - log → trace: Loki derived field извлекает `trace_id`; `trace_id` остаётся полем/structured metadata, не index label ([Trace-to-logs configuration](https://grafana.com/docs/grafana/latest/datasources/tempo/configure-tempo-data-source/configure-trace-to-logs/));
 - trace → logs: Tempo data source формирует Loki query по time range и стабильным service/environment labels, при необходимости дополнительно фильтруя `trace_id`;
@@ -150,7 +150,7 @@ Telemetry должна быть best-effort относительно бизне�
 2. Точный набор SDK/instrumentation packages и зафиксированные версии semantic conventions для Go, Node.js, Rust и Python.
 3. Выбор между встроенным `watermill-kafka` OTel/Sarama tracing и собственным Watermill decorator/middleware, а также тест совместимости W3C headers с клиентами других языков.
 4. Конкретная Temporal OTel integration/version и migration policy для long-running histories; v2 в Go документации отмечен как pre-release.
-5. Promotion OTel resource attributes в Mimir, Loki label set и единый reversible mapping dotted OTel names → underscore labels в Loki/Pyroscope.
+5. Promotion OTel resource attributes в labels метрик, Loki label set и единый reversible mapping dotted OTel names → underscore labels в Loki/Pyroscope.
 6. Head/tail sampling, exemplar policy, retention, quotas, alert thresholds и SLO по окружениям.
 7. Дополнительные profile types помимо CPU и допустимый overhead в каждом runtime; точная span-profile correlation остаётся только для поддерживаемых языков.
 8. Конкретные stdout collectors для локального Docker и будущего Kubernetes; OTLP Logs рассматривается отдельно, чтобы не создать второй путь доставки.

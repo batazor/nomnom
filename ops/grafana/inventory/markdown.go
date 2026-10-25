@@ -19,13 +19,11 @@ func Markdown() string {
 
 | Статус | Значение |
 | --- | --- |
-| есть | Метрика экспортируется сервисом по OTLP, а имя и labels подтверждены приёмом через Alloy в Mimir. |
+| есть | Метрика экспортируется сервисом по OTLP, а имя и labels подтверждены приёмом через Alloy в Grafana Cloud. |
 | ожидается | Метрика принята архитектурой (semconv, ADR, решение по Watermill), но не экспортируется или не доставляется. |
 
-Имена приведены в виде Mimir после OTLP-трансляции (точки → подчёркивания, unit suffix, ` + "`_total`" + ` для
-монотонных counters). Mimir 3.2.3 по умолчанию suffixes **не добавляет**: нужен
-` + "`-distributor.otel-metric-suffixes-enabled=true`" + ` (` + "`distributor.otel_metric_suffixes_enabled`" + `), иначе имена OTel-instruments
-придут без ` + "`_seconds`/`_total`" + ` и панели не найдут серий. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя; запросы используют ` + "`_bucket`/`_count`/`_sum`" + `.
+Имена приведены в виде Prometheus после OTLP-трансляции (точки → подчёркивания, unit suffix, ` + "`_total`" + ` для
+монотонных counters); Grafana Cloud добавляет suffixes при OTLP ingestion. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя; запросы используют ` + "`_bucket`/`_count`/`_sum`" + `.
 
 ## Состояние на дату генерации
 

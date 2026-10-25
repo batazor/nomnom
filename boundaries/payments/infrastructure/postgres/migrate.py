@@ -24,6 +24,10 @@ _BACKEND = "postgresql+psycopg"
 _SOURCE = f"package:{__package__}:migrations"
 # Arbitrary constant shared by every payments migrator.
 _LOCK_KEY = 0x7061796D656E7473  # "payments"
+# Bound of every lock wait of a migration. Migrations run during a rolling update next
+# to live traffic: an ALTER TABLE queued behind a long transaction would stall every
+# query of the table behind it, so it fails fast and the pod retries on restart.
+_LOCK_TIMEOUT = "-c lock_timeout=5s"
 
 
 def migrations() -> MigrationList:
@@ -42,7 +46,11 @@ def migrate(settings: DatabaseSettings) -> list[str]:
     with psycopg.connect(**params, autocommit=True) as lock:
         lock.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
         try:
-            uri = DatabaseURI(_BACKEND, None, None, None, None, None, params)
+            # Only the yoyo connection: the advisory lock waits for another replica unbounded.
+            options = " ".join(o for o in (params.get("options"), _LOCK_TIMEOUT) if o)
+            uri = DatabaseURI(
+                _BACKEND, None, None, None, None, None, {**params, "options": options}
+            )
             backend = get_backend_class(_BACKEND)(uri, default_migration_table)
             try:
                 backend.init_database()

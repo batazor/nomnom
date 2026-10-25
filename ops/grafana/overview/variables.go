@@ -17,7 +17,7 @@ import (
 // Data sources выбираются variables по типу plugin: dashboard не содержит UID
 // конкретного окружения и работает с любым provisioning.
 var datasources = []struct{ name, label, plugin string }{
-	{"metrics", "Metrics (Mimir)", "prometheus"},
+	{"metrics", "Metrics (Prometheus)", "prometheus"},
 	{"logs", "Logs (Loki)", "loki"},
 	{"traces", "Traces (Tempo)", "tempo"},
 	{"profiles", "Profiles (Pyroscope)", "grafana-pyroscope-datasource"},

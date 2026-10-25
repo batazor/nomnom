@@ -70,7 +70,7 @@ PostgreSQL env (ADR 8): DSN из внешнего Secret и лимиты пул�
 переменные не задаются, и процесс orders не стартует (POSTGRES__DSN обязателен).
 За пулером в session mode каждое соединение пула держит server-соединение, поэтому
 maxConns задаётся values каждой роли. Миграции процесс применяет сам при старте
-отдельным пулом из 1 соединения (advisory lock golang-migrate и миграция на нём), вне maxConns.
+2 соединениями вне maxConns: advisory lock процесса и миграция с lock_timeout.
 Usage: {{ include "orders.postgresEnv" (dict "context" $) }}
 */}}
 {{- define "orders.postgresEnv" -}}

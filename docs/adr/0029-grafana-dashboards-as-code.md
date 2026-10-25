@@ -10,11 +10,11 @@ Accepted
 
 ## Context
 
-ADR 9 принял OpenTelemetry, Alloy, Tempo, Mimir, Loki, Pyroscope и Grafana, но отложил dashboards. Нужен способ, при котором каждый deployable service получает одинаково устроенный overview для incident, панели не расходятся с реально экспортируемыми метриками, а dashboard проходит ревью вместе с кодом сервиса.
+ADR 9 принял OpenTelemetry, Alloy, Tempo, Grafana Cloud Metrics, Loki, Pyroscope и Grafana, но отложил dashboards. Нужен способ, при котором каждый deployable service получает одинаково устроенный overview для incident, панели не расходятся с реально экспортируемыми метриками, а dashboard проходит ревью вместе с кодом сервиса.
 
 Ручной JSON в Grafana UI дрейфует: структура разных сервисов расходится, изменения не ревьюятся, datasource UID конкретного окружения попадают в файлы. Один системный dashboard на все сервисы смешивает владельцев и не масштабируется. Панели «на будущее» по неэкспортируемым метрикам выглядят как исправный сервис без данных.
 
-На дату решения в репозитории нет развёрнутой Grafana, Alloy и Mimir; ни один backend-сервис не подключает OpenTelemetry SDK. Последний стабильный Grafana — 13.2.4.
+На дату решения в репозитории нет развёрнутой Grafana и Alloy; ни один backend-сервис не подключает OpenTelemetry SDK. Последний стабильный Grafana — 13.2.4.
 
 ## Decision
 
@@ -22,9 +22,9 @@ ADR 9 принял OpenTelemetry, Alloy, Tempo, Mimir, Loki, Pyroscope и Grafan
 
 **Генерация.** Dashboards генерируются Grafana Foundation SDK (Go) в `ops/grafana`. Общая функция `overview.ServiceOverview(options)` задаёт состав и порядок rows (Service health, SLO ([ADR 40](0040-service-slo-and-burn-rate-alerts.md)), Runtime, Dependencies, Kafka, Use cases, Transactions, Domain Lifecycle, Domain metrics, Temporal, Kitchen, Authorization); options только включают rows по реальным зависимостям сервиса. Одинаковая структура гарантируется кодом и тестом, а не конвенцией. JSON — коммитимый артефакт; `make grafana-check` в CI регенерирует его и падает при расхождении.
 
-**Инвентарь.** Панели строятся только на метриках инвентаря (`ops/grafana/inventory`, документ [`docs/observability/metric-inventory.md`](../observability/metric-inventory.md) генерируется из него) со статусом «есть» — экспортируется и доставляется в Mimir. Для остальных генератор рисует TODO-панель с недостающими метриками, ссылкой на инвентарь и целевым PromQL. Генерация падает на метрике вне инвентаря, незаявленном label или high-cardinality label (`order_id`, `event_id` и т. п.). Смена статуса в инвентаре превращает TODO в живую панель без правки dashboard-кода.
+**Инвентарь.** Панели строятся только на метриках инвентаря (`ops/grafana/inventory`, документ [`docs/observability/metric-inventory.md`](../observability/metric-inventory.md) генерируется из него) со статусом «есть» — экспортируется и доставляется в Grafana Cloud. Для остальных генератор рисует TODO-панель с недостающими метриками, ссылкой на инвентарь и целевым PromQL. Генерация падает на метрике вне инвентаря, незаявленном label или high-cardinality label (`order_id`, `event_id` и т. п.). Смена статуса в инвентаре превращает TODO в живую панель без правки dashboard-кода.
 
-**Именование.** OTel-имена, instruments, units и attributes собственных метрик описаны в registry `ops/semconv` (формат semantic conventions, зависимость от semconv v1.44.0) и проверяются OpenTelemetry Weaver (`make semconv-check`): правила `naming_conventions`/`stability` из `opentelemetry-weaver-packages`, те же, что у репозитория semantic-conventions, плюс правила проекта `ops/semconv/policies/nomnom.rego` (namespace `nomnom.`, без type/unit в имени, `s` для длительностей, annotation unit у counters, без ID и сумм). Attributes из semconv переиспользуются (`error.type`, `messaging.destination.name`), собственные — с namespace `nomnom.`. Инвентарь хранит Mimir-имена; тест генератора сверяет его с registry, поэтому имя в dashboard и проверенное Weaver имя не расходятся. Порядок для новой метрики: registry → инвентарь → код. Детали — [docs/observability.md](../observability.md#именование-метрик).
+**Именование.** OTel-имена, instruments, units и attributes собственных метрик описаны в registry `ops/semconv` (формат semantic conventions, зависимость от semconv v1.44.0) и проверяются OpenTelemetry Weaver (`make semconv-check`): правила `naming_conventions`/`stability` из `opentelemetry-weaver-packages`, те же, что у репозитория semantic-conventions, плюс правила проекта `ops/semconv/policies/nomnom.rego` (namespace `nomnom.`, без type/unit в имени, `s` для длительностей, annotation unit у counters, без ID и сумм). Attributes из semconv переиспользуются (`error.type`, `messaging.destination.name`), собственные — с namespace `nomnom.`. Инвентарь хранит Prometheus-имена; тест генератора сверяет его с registry, поэтому имя в dashboard и проверенное Weaver имя не расходятся. Порядок для новой метрики: registry → инвентарь → код. Детали — [docs/observability.md](../observability.md#именование-метрик).
 
 **Схема.** Используется dashboard schema v2 (`dashboard.grafana.app/v2`): Grafana ≥ 13, rows/tabs layout и section-level variables (row Temporal фильтрует worker отдельно от API). Для self-managed Grafana миграция v1 → v2 необратима: сохранённый v2 dashboard не конвертируется обратно в v1 без потерь, поэтому откат Grafana ниже 13 после перехода не поддерживается.
 
@@ -44,4 +44,4 @@ ADR 9 принял OpenTelemetry, Alloy, Tempo, Mimir, Loki, Pyroscope и Grafan
 
 Нужны Go toolchain и gcx в CI; JSON-артефакты большие и меняются при каждом изменении генератора. Grafana ниже 13 не поддерживается. Git Sync требует доступа Grafana к GitHub и отдельного `Repository` на сервис. Ручные правки dashboard в UI невозможны: исследование ведётся копией или Explore.
 
-Инструментация сервисов, развёртывание Alloy/Mimir/Grafana и data source provisioning (derived field `trace_id`, trace-to-profile) остаются отдельными изменениями; после них статусы инвентаря переводятся в «есть».
+Инструментация сервисов, развёртывание Alloy и Grafana и data source provisioning (derived field `trace_id`, trace-to-profile) остаются отдельными изменениями; после них статусы инвентаря переводятся в «есть».

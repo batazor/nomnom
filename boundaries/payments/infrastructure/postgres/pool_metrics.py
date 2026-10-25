@@ -3,7 +3,7 @@
 Gauges come from ``ConnectionPool.get_stats()`` at collection time; wait and use time
 and acquire timeouts are measured around every borrowed connection, create time by the
 connection class the pool opens connections with. The process is
-told apart by ``service.name`` (``job`` in Mimir), the pool by
+told apart by ``service.name`` (``job`` in Prometheus), the pool by
 ``db.client.connection.pool.name``.
 """
 

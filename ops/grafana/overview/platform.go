@@ -59,7 +59,7 @@ func PlatformOverview() (Dashboard, error) {
 }
 
 func (g *generator) platformVariables() []dashboard.VariableKind {
-	v, err := dashboard.NewDatasourceVariableBuilder("metrics").Label("Metrics (Mimir)").PluginId("prometheus").
+	v, err := dashboard.NewDatasourceVariableBuilder("metrics").Label("Metrics (Prometheus)").PluginId("prometheus").
 		Refresh(dashboard.VariableRefreshOnDashboardLoad).Build()
 	g.record(err)
 	return []dashboard.VariableKind{
