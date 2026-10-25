@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 
+import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
 import {
   createSpiceDbClient,
-  SpiceDbAccessControl,
   type SpiceDbClient,
-} from "../infrastructure/spicedb/access-control.ts";
+} from "../infrastructure/spicedb/client.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import type { SpiceDbEnabledConfig } from "../pkg/config/config.ts";
 

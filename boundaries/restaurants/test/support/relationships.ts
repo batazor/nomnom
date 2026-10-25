@@ -1,6 +1,6 @@
 import { v1 } from "@authzed/authzed-node";
 
-import type { RelationshipsClient } from "../../infrastructure/spicedb/access-control.ts";
+import type { RelationshipsClient } from "../../infrastructure/spicedb/client.ts";
 
 const key = (relationship: v1.Relationship | undefined): string =>
   `${relationship?.resource?.objectType}:${relationship?.resource?.objectId}#${relationship?.relation}@${relationship?.subject?.object?.objectType}:${relationship?.subject?.object?.objectId}`;

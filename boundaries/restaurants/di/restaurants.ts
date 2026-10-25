@@ -18,11 +18,11 @@ import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurant
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
+import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
 import {
   createSpiceDbClient,
-  SpiceDbAccessControl,
   type SpiceDbClient,
-} from "../infrastructure/spicedb/access-control.ts";
+} from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import type { Clock } from "../pkg/application/clock.ts";
 import type { IdGenerator } from "../pkg/application/id-generator.ts";

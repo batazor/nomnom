@@ -15,11 +15,11 @@ import {
   AUTHORIZATION_REVISION_HEADER,
   createRestaurantsService,
 } from "../infrastructure/grpc/service.ts";
+import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
 import {
   createSpiceDbClient,
-  SpiceDbAccessControl,
   type SpiceDbClient,
-} from "../infrastructure/spicedb/access-control.ts";
+} from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import { FixedClock } from "../pkg/infrastructure/memory/clock.ts";
