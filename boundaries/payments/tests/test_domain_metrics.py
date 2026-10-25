@@ -180,6 +180,7 @@ class DomainMetricsTest(unittest.TestCase):
         captured = self.kit.given_payment(PaymentState.AUTHORIZED, "payment-1", "order-1")
         refunded = self.kit.given_payment(PaymentState.CAPTURED, "payment-2", "order-2")
         declined = self.kit.given_payment(PaymentState.AUTHORIZED, "payment-3", "order-3")
+        refund_declined = self.kit.given_payment(PaymentState.CAPTURED, "payment-4", "order-4")
         executor = self.executor()
 
         CapturePaymentHandler(executor).handle(CapturePaymentInput(ORCHESTRATOR, captured, "c-1"))
@@ -188,10 +189,20 @@ class DomainMetricsTest(unittest.TestCase):
             OperationKind.CAPTURE, ProviderOperationOutcome.declined("insufficient_funds")
         )
         CapturePaymentHandler(executor).handle(CapturePaymentInput(ORCHESTRATOR, declined, "c-2"))
+        self.kit.provider.respond(
+            OperationKind.REFUND, ProviderOperationOutcome.declined("refund_window_closed")
+        )
+        RefundPaymentHandler(executor).handle(
+            RefundPaymentInput(ORCHESTRATOR, refund_declined, "r-2")
+        )
 
+        # A provider decline is the business result declined, not a technical failure.
         self.assertEqual(
             self.counts(),
-            {CAPTURES: {"captured": 1, "failed": 1}, REFUNDS: {"refunded": 1}},
+            {
+                CAPTURES: {"captured": 1, "declined": 1},
+                REFUNDS: {"refunded": 1, "declined": 1},
+            },
         )
 
 

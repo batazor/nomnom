@@ -53,18 +53,17 @@ class _Counter(StrEnum):
 
 _DESCRIPTIONS = {
     _Counter.AUTHORIZATIONS: "Payment authorizations: authorized, declined, failed.",
-    _Counter.CAPTURES: "Payment captures: captured, failed.",
-    _Counter.REFUNDS: "Payment refunds: refunded, failed.",
+    _Counter.CAPTURES: "Payment captures: captured, declined, failed.",
+    _Counter.REFUNDS: "Payment refunds: refunded, declined, failed.",
 }
 
-# Provider decline of a Payment Operation, by kind. An Authorization decline is a
-# business result (``declined``); the registry has no ``declined`` for Capture and
-# Refund, so their decline is the operation failing (``failed``). Cancel Authorization
-# has no business counter.
+# Provider decline of a Payment Operation, by kind: a business result (``declined``),
+# not a technical failure (``failed``), for every financial operation. Cancel
+# Authorization has no business counter.
 _DECLINES = {
     OperationKind.AUTHORIZE: (_Counter.AUTHORIZATIONS, Outcome.DECLINED),
-    OperationKind.CAPTURE: (_Counter.CAPTURES, Outcome.FAILED),
-    OperationKind.REFUND: (_Counter.REFUNDS, Outcome.FAILED),
+    OperationKind.CAPTURE: (_Counter.CAPTURES, Outcome.DECLINED),
+    OperationKind.REFUND: (_Counter.REFUNDS, Outcome.DECLINED),
 }
 
 

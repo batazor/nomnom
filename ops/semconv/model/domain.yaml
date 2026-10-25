@@ -171,7 +171,7 @@ groups:
     type: metric
     metric_name: nomnom.payments.captures
     stability: development
-    brief: "Payment captures: captured, failed."
+    brief: "Payment captures: captured, declined (provider refusal, a business result), failed."
     instrument: counter
     unit: "{operation}"
     attributes:
@@ -181,7 +181,7 @@ groups:
     type: metric
     metric_name: nomnom.payments.refunds
     stability: development
-    brief: "Payment refunds: refunded, failed."
+    brief: "Payment refunds: refunded, declined (provider refusal, a business result), failed."
     instrument: counter
     unit: "{operation}"
     attributes:

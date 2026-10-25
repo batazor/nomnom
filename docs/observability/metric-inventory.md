@@ -262,9 +262,9 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_delivery_failed_total` | use case decorator | counter | `nomnom_reason` | `delivery`: ожидается | — |
 | `nomnom_delivery_assignment_latency_seconds` | use case decorator | histogram | — | `delivery`: ожидается | — |
 | `nomnom_delivery_duration_seconds` | use case decorator | histogram | — | `delivery`: ожидается | — |
-| `nomnom_payments_authorizations_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: authorized | declined | failed; attempts = сумма. |
-| `nomnom_payments_captures_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: captured | failed. |
-| `nomnom_payments_refunds_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: refunded | failed. |
+| `nomnom_payments_authorizations_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `nomnom_outcome`: authorized | declined | failed; attempts = сумма. `failed` пока без источника: сбой провайдера оставляет операцию pending без события. |
+| `nomnom_payments_captures_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `nomnom_outcome`: captured | declined | failed. `declined` — отказ провайдера (бизнес-результат), `failed` — технический сбой. |
+| `nomnom_payments_refunds_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `nomnom_outcome`: refunded | declined | failed. `declined` — отказ провайдера (бизнес-результат), `failed` — технический сбой. |
 
 <a id="pods"></a>
 
