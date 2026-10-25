@@ -103,6 +103,11 @@ livenessProbe:
 readinessProbe:
   enabled: false
 
+# ADR 15: адрес internal gateway (BFF__INTERNAL_GATEWAY_ADDR), через который BFF вызывает
+# orders и restaurants. Пустое значение — операции заказа покупателя недоступны.
+internalGateway:
+  address: ""
+
 # ADR 32: identity покупателя. Plugin проверяет access token identity provider по JWKS из
 # idpJwksConfigMap (ключ jwks.json) и подписывает user assertions ключом из Secret
 # assertionKeySecret (P-256 в PEM). tokenAudiences — контексты, для которых Pod получает

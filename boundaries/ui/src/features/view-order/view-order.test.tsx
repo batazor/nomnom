@@ -84,6 +84,42 @@ describe("view order", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("labels an item that is no longer in the menu", async () => {
+    const money = { amount: "690.00", currency: "RUB" };
+    mockServer.use(
+      publicGraphql.query("ViewOrder", () =>
+        HttpResponse.json({
+          data: {
+            order: {
+              id: "order-old",
+              status: "DELIVERED",
+              endReason: null,
+              restaurant: { id: "restaurant-1", name: "Кухня №8" },
+              items: [
+                {
+                  menuItem: { id: "menu-gone", name: "" },
+                  quantity: 1,
+                  unitPrice: money,
+                  lineTotal: money,
+                },
+              ],
+              total: money,
+              deliveryAddress: "ул. Лесная, 12",
+              placedAt: "2026-10-25T12:00:00Z",
+              milestones: [
+                { kind: "PLACED", occurredAt: "2026-10-25T12:00:00Z" },
+              ],
+              cancellation: null,
+            },
+          },
+        }),
+      ),
+    );
+    renderOrder("order-old");
+
+    expect(await screen.findByText("Позиция меню")).toBeVisible();
+  });
+
   it("says the order is not found when the API returns null", async () => {
     renderOrder("order-unknown");
     expect(

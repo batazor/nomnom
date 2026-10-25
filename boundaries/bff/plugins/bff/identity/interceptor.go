@@ -18,6 +18,12 @@ func WithUser(ctx context.Context, user User) context.Context {
 	return context.WithValue(ctx, userKey{}, user)
 }
 
+// WithoutUser drops the customer from the context, for calls of public APIs
+// that must not carry a user assertion.
+func WithoutUser(ctx context.Context) context.Context {
+	return context.WithValue(ctx, userKey{}, nil)
+}
+
 func UserFrom(ctx context.Context) (User, bool) {
 	user, ok := ctx.Value(userKey{}).(User)
 	return user, ok

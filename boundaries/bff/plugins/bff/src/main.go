@@ -21,8 +21,10 @@ func main() {
 		log.Fatalf("load identity: %v", err)
 	}
 
+	tracking := loadOrderTracking(customers)
+
 	plugin, err := routerplugin.NewRouterPlugin(func(server *grpc.Server) {
-		server.RegisterService(&service.BffService_ServiceDesc, &BffService{identity: customers})
+		server.RegisterService(&service.BffService_ServiceDesc, &BffService{identity: customers, tracking: tracking})
 	}, routerplugin.WithTracing())
 	if err != nil {
 		log.Fatalf("create router plugin: %v", err)
@@ -36,6 +38,8 @@ type BffService struct {
 	// identity is nil until BFF identity is configured; customer resolvers
 	// verify the access token and sign user assertions with it.
 	identity *identity.Identity
+	// tracking is nil until identity and the internal gateway are configured.
+	tracking *orderTracking
 }
 
 func (s *BffService) QueryBffInfo(context.Context, *service.QueryBffInfoRequest) (*service.QueryBffInfoResponse, error) {

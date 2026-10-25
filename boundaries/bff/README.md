@@ -30,12 +30,27 @@ BFF — отдельный сервис и единая прикладная т�
 | `bffInfo` | метаданные BFF | реализована |
 | `restaurants(first, after)` | рестораны с cursor-пагинацией | только схема |
 | `restaurant(id)` | ресторан с меню | только схема |
-| `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | только схема |
+| `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | реализована (`ordertracking`) |
 | `customerOrders(first, after)` | история заказов покупателя | только схема |
 | `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey` | только схема |
-| `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | только схема |
+| `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | реализована (`ordertracking`) |
 
 Операции «только схема» возвращают GraphQL error с gRPC `Unimplemented`: `BffService` встраивает `UnimplementedBffServiceServer`.
+
+### Слайс `ordertracking`
+
+Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order-tracking-resolvers/). `plugins/bff/ordertracking/applications` строит представление заказа без Protobuf и GraphQL-типов: `OrderStatus` по таблице выше, `endReason` по `reason_code`, milestones из `placed_at`, Fulfillment Facts и `cancelled_at` (`CONFIRMED` не публикуется: у `orders` нет момента подтверждения), названия позиций из `GetMenu` ресторана (позиции, которой уже нет в меню, — пустое имя), `lineTotal` десятичной арифметикой `math/big`, `cancellation.availableUntil` по окну отмены и часам BFF. `ordertracking/infrastructure` вызывает `orders` от имени покупателя (service token и user assertion, ADR 32) и публичные `GetRestaurant`/`GetMenu` без пользователя; клиенты генерируются из workspace (`make proto-generate`, `plugins/bff/infrastructure/grpc/buf.gen.yaml`).
+
+| Ответ контекста | GraphQL |
+| --- | --- |
+| нет или невалидный access token | error `UNAUTHENTICATED`, контексты не вызываются |
+| `GetOrder`: `NOT_FOUND`, `PERMISSION_DENIED` | `order = null` |
+| `RequestOrderCancellation`: `CANCELLATION_WINDOW_NOT_OPEN` / `_EXPIRED` | `problem` с тем же кодом |
+| `RequestOrderCancellation`: `ORDER_STATE_CONFLICT` | `problem = ORDER_ALREADY_FINAL` |
+| `RequestOrderCancellation`: `NOT_FOUND`, `PERMISSION_DENIED` | error `NOT_FOUND` |
+| остальные сбои | error `UNAVAILABLE` без внутренних деталей |
+
+Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE`/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway ждёт развёртывания BFF в kind.
 
 Правила контракта:
 

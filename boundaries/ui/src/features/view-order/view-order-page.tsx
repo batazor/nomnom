@@ -127,7 +127,7 @@ function OrderView({
             {order.items.map((item) => (
               <li key={item.menuItem.id}>
                 <span>
-                  {item.menuItem.name}{" "}
+                  {item.menuItem.name || t("order.unnamedItem")}{" "}
                   <span className="order-quantity">
                     {t("order.quantity", { count: item.quantity })}
                   </span>
