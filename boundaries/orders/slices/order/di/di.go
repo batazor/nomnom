@@ -66,7 +66,7 @@ type Authorizer interface {
 type CancellationPolicy = getorder.CancellationPolicy
 
 // NewCancellationPolicy строит production-политику из конфигурации; тестовые
-// memory.AlwaysOpen и memory.FixedWindow сюда не попадают (FR-462).
+// тестовая fake.AlwaysOpen сюда не попадает (FR-462).
 func NewCancellationPolicy(cfg config.CancellationConfig) (CancellationPolicy, error) {
 	policy, err := cancellationpolicy.NewFixed(cfg.Window)
 	if err != nil {

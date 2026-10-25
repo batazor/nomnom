@@ -27,19 +27,20 @@ import (
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type consumer struct {
 	pubSub     *gochannel.GoChannel
-	store      *memory.Store
-	workflow   *memory.Workflow
-	authorizer *memory.Authorizer
+	store      *postgrestest.Store
+	workflow   *fake.Workflow
+	authorizer *fake.Authorizer
 	poison     chan *message.Message
 }
 
@@ -47,12 +48,12 @@ type consumer struct {
 // policy as orders-consumer, without Kafka.
 func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 	t.Helper()
-	store := memory.NewStore()
+	store := postgrestest.Open(t)
 	for _, o := range orders {
 		require.NoError(t, store.Add(context.Background(), o))
 	}
-	workflow := memory.NewWorkflow()
-	authorizer := memory.NewAuthorizer()
+	workflow := fake.NewWorkflow()
+	authorizer := fake.NewAuthorizer()
 	handlers := ordermessaging.Handlers{
 		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),

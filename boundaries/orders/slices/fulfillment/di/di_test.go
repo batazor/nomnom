@@ -9,8 +9,8 @@ import (
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
-	"nomnom/orders/slices/order/infrastructure/memory"
 	"nomnom/orders/slices/order/infrastructure/observability"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 func TestNewNeighboursSelectsAdapters(t *testing.T) {
@@ -32,7 +32,7 @@ func TestNewNeighboursSelectsAdapters(t *testing.T) {
 }
 
 func TestNewActivitiesInstrumentsHandlers(t *testing.T) {
-	activities := NewActivities(memory.NewStore(), Neighbours{Payments: neighbours.Simulated{}}, observability.UseCases())
+	activities := NewActivities(postgrestest.Open(t), Neighbours{Payments: neighbours.Simulated{}}, observability.UseCases())
 
 	assert.Equal(t, neighbours.Simulated{}, activities.Payments)
 	assert.NotNil(t, activities.Complete)

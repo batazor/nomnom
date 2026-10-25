@@ -12,12 +12,12 @@ import (
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
-func setup(t *testing.T, state order.State) (completeorder.Handler, *memory.Store) {
+func setup(t *testing.T, state order.State) (completeorder.Handler, *postgrestest.Store) {
 	t.Helper()
-	store := memory.NewStore()
+	store := postgrestest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(state))))
 	return completeorder.NewHandler(store, store, store), store
 }
@@ -40,12 +40,9 @@ func TestCompleteOrderOnceWithOutboxRecord(t *testing.T) {
 	snapshot, _ := store.Snapshot("order-1")
 	assert.Equal(t, order.StateCompleted, snapshot.State)
 	assert.Equal(t, uint64(2), snapshot.Version)
-	assert.Equal(t, []memory.OutboxRecord{{
-		AggregateType:    "order",
-		AggregateID:      "order-1",
-		AggregateVersion: 2,
-		Event:            order.OrderCompleted{OrderID: "order-1", PlacedAt: ordertest.PlacedAt, CompletedAt: completedAt},
-	}}, store.OutboxRecords())
+	assert.Equal(t, postgrestest.ExpectedOutbox(t, "order-1", 2,
+		order.OrderCompleted{OrderID: "order-1", PlacedAt: ordertest.PlacedAt, CompletedAt: completedAt},
+	), store.OutboxRecords())
 }
 
 // AC-122: other states are a state conflict without changes.

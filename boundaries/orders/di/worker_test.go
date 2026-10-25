@@ -16,8 +16,8 @@ import (
 
 	"nomnom/orders/pkg/config"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
-	"nomnom/orders/slices/order/infrastructure/memory"
 	"nomnom/orders/slices/order/infrastructure/observability"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 type fakeRunner struct {
@@ -63,7 +63,7 @@ func newTestWorker(t *testing.T, cfg config.Config, fake *fakeRunner) (*Temporal
 	temporalClient := mocks.NewClient(t)
 	neighbours, _, err := fulfillmentdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
 	require.NoError(t, err)
-	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(memory.NewStore(), neighbours, observability.UseCases()))
+	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(postgrestest.Open(t), neighbours, observability.UseCases()))
 	w.dial = func(ctx context.Context, options client.Options) (client.Client, error) {
 		_, hasDeadline := ctx.Deadline()
 		assert.True(t, hasDeadline, "connection is bounded by connect timeout")

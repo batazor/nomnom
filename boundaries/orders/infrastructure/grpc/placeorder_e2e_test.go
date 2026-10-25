@@ -28,7 +28,8 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/catalog"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 const identityFixtures = "../../../../tests/identity/fixtures"
@@ -99,8 +100,8 @@ func bufconnClient(t *testing.T, register func(*grpc.Server), options ...grpc.Di
 type e2e struct {
 	client     ordersv1.OrdersServiceClient
 	vectors    userVectors
-	store      *memory.Store
-	authorizer *memory.Authorizer
+	store      *postgrestest.Store
+	authorizer *fake.Authorizer
 }
 
 func newE2E(t *testing.T, restaurants *fakeMenu) e2e {
@@ -129,7 +130,7 @@ func newE2E(t *testing.T, restaurants *fakeMenu) e2e {
 	ports.catalog = catalog.New(gatewayConn,
 		catalog.Limits{MinimumTotal: decimal.RequireFromString("0"), MaximumTotal: decimal.RequireFromString("100")}, time.Second)
 
-	store, authorizer := memory.NewStore(), memory.NewAuthorizer()
+	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
 	return e2e{
 		client:     newClientWithPorts(t, resolver, store, authorizer, ports),
 		vectors:    v,

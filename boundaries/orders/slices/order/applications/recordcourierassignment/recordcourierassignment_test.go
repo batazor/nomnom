@@ -14,7 +14,8 @@ import (
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
@@ -63,10 +64,10 @@ func TestHandleByOrderState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := memory.NewStore()
-			workflow := memory.NewWorkflow()
+			store := postgrestest.Open(t)
+			workflow := fake.NewWorkflow()
 			require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", tt.options...)))
-			handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, memory.NewAuthorizer())
+			handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, fake.NewAuthorizer())
 
 			result, err := handler.Handle(context.Background(), input("event-1"))
 
@@ -84,10 +85,10 @@ func TestHandleByOrderState(t *testing.T) {
 }
 
 func TestHandleRedeliveryIsDuplicate(t *testing.T) {
-	store := memory.NewStore()
-	workflow := memory.NewWorkflow()
+	store := postgrestest.Open(t)
+	workflow := fake.NewWorkflow()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, memory.NewAuthorizer())
+	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, fake.NewAuthorizer())
 
 	_, err := handler.Handle(context.Background(), input("event-1"))
 	require.NoError(t, err)
@@ -101,8 +102,8 @@ func TestHandleRedeliveryIsDuplicate(t *testing.T) {
 }
 
 func TestHandleRequiresOccurredAt(t *testing.T) {
-	store := memory.NewStore()
-	handler := recordcourierassignment.NewHandler(store, store, store, memory.NewWorkflow(), store, memory.NewAuthorizer())
+	store := postgrestest.Open(t)
+	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, fake.NewAuthorizer())
 
 	_, err := handler.Handle(context.Background(), recordcourierassignment.Input{EventID: "event-1", OrderID: "order-1"})
 
@@ -121,13 +122,13 @@ func assignmentOn(eventID, deliveryID, courierID string, version uint64, at time
 	return in
 }
 
-func linkedDelivery(t *testing.T, authorizer *memory.Authorizer) string {
+func linkedDelivery(t *testing.T, authorizer *fake.Authorizer) string {
 	t.Helper()
 	deliveryID, _ := authorizer.DeliveryOf("order-1")
 	return deliveryID
 }
 
-func revisionOf(t *testing.T, store *memory.Store) application.AuthorizationRevision {
+func revisionOf(t *testing.T, store *postgrestest.Store) application.AuthorizationRevision {
 	t.Helper()
 	revision, _, err := store.Revision(context.Background(), "order-1")
 	require.NoError(t, err)
@@ -137,9 +138,9 @@ func revisionOf(t *testing.T, store *memory.Store) application.AuthorizationRevi
 // AC-518: the assignment writes only order#delivery before commit and stores
 // the assignment; the courier sees the Order through delivery#courier.
 func TestHandleLinksDelivery(t *testing.T) {
-	store, authorizer := memory.NewStore(), memory.NewAuthorizer()
+	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordcourierassignment.NewHandler(store, store, store, memory.NewWorkflow(), store, authorizer)
+	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, authorizer)
 
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 
@@ -150,16 +151,16 @@ func TestHandleLinksDelivery(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: occurredAt, DeliveryVersion: 2}, stored)
-	assert.Equal(t, application.AuthorizationRevision("memory:order-1:delivery:1"), revisionOf(t, store))
+	assert.Equal(t, application.AuthorizationRevision("fake:order-1:delivery:1"), revisionOf(t, store))
 }
 
 // AC-519: a reassignment within the same Delivery updates the assignment
 // without a SpiceDB request and keeps the revision; another Delivery replaces
 // the link in one request.
 func TestHandleReassignment(t *testing.T) {
-	store, authorizer := memory.NewStore(), memory.NewAuthorizer()
+	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordcourierassignment.NewHandler(store, store, store, memory.NewWorkflow(), store, authorizer)
+	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, authorizer)
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 	require.NoError(t, err)
 
@@ -168,7 +169,7 @@ func TestHandleReassignment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.OutcomeAlreadyApplied, result.Outcome)
 	assert.Equal(t, 1, authorizer.DeliveryWrites(), "no SpiceDB request")
-	assert.Equal(t, application.AuthorizationRevision("memory:order-1:delivery:1"), revisionOf(t, store))
+	assert.Equal(t, application.AuthorizationRevision("fake:order-1:delivery:1"), revisionOf(t, store))
 	stored, _, err := store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-2", AssignedAt: occurredAt.Add(time.Minute), DeliveryVersion: 3}, stored)
@@ -178,16 +179,16 @@ func TestHandleReassignment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, authorizer.DeliveryWrites())
 	assert.Equal(t, "delivery-2", linkedDelivery(t, authorizer))
-	assert.Equal(t, application.AuthorizationRevision("memory:order-1:delivery:2"), revisionOf(t, store))
+	assert.Equal(t, application.AuthorizationRevision("fake:order-1:delivery:2"), revisionOf(t, store))
 }
 
 // AC-520, AC-669: an event of an older Delivery version than the stored
 // assignment changes nothing, even if its occurred_at (the start of the
 // delivery transaction) is later.
 func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
-	store, authorizer := memory.NewStore(), memory.NewAuthorizer()
+	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordcourierassignment.NewHandler(store, store, store, memory.NewWorkflow(), store, authorizer)
+	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, authorizer)
 
 	_, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", 3, occurredAt))
 	require.NoError(t, err)
@@ -204,10 +205,10 @@ func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
 // AC-521: a failed relationship write rolls the Inbox record back, so
 // redelivery repeats the event.
 func TestHandleRollsBackOnRelationshipFailure(t *testing.T) {
-	store, authorizer := memory.NewStore(), memory.NewAuthorizer()
+	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	authorizer.FailWrites(errors.New("spicedb unavailable"))
-	workflow := memory.NewWorkflow()
+	workflow := fake.NewWorkflow()
 	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, authorizer)
 
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))

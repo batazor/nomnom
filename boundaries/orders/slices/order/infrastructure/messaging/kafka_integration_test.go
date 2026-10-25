@@ -32,16 +32,17 @@ import (
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 // flakyWorkflow fails the first failures notifications of selected Orders, as a
 // temporarily unavailable Temporal does.
 type flakyWorkflow struct {
-	*memory.Workflow
+	*fake.Workflow
 	mu       sync.Mutex
 	failures map[order.ID]int
 }
@@ -84,7 +85,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		ordermessaging.RestaurantOrderEventsTopic, messaging.DeadLetterTopic(ordermessaging.RestaurantOrderEventsTopic),
 		ordermessaging.DeliveryEventsTopic, messaging.DeadLetterTopic(ordermessaging.DeliveryEventsTopic))
 
-	store := memory.NewStore()
+	store := postgrestest.Open(t)
 	for _, o := range []*order.Order{
 		ordertest.New(t, "order-accepted"),
 		ordertest.New(t, "order-retry"),
@@ -94,7 +95,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	} {
 		require.NoError(t, store.Add(ctx, o))
 	}
-	workflow := &flakyWorkflow{Workflow: memory.NewWorkflow(), failures: map[order.ID]int{"order-retry": 2}}
+	workflow := &flakyWorkflow{Workflow: fake.NewWorkflow(), failures: map[order.ID]int{"order-retry": 2}}
 
 	logger := watermill.NopLogger{}
 	subscriber, err := messaging.NewSubscriber(cfg, logger)
@@ -190,15 +191,15 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	}
 }
 
-func handlersOf(store *memory.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
+func handlersOf(store *postgrestest.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
 	return ordermessaging.Handlers{
 		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
 		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
 		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
-		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, memory.NewAuthorizer()),
-		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, memory.NewAuthorizer()),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, fake.NewAuthorizer()),
+		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, fake.NewAuthorizer()),
 		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
@@ -274,7 +275,7 @@ func consumePoison(t *testing.T, cfg config.KafkaConfig) <-chan *message.Message
 	return poison
 }
 
-func state(store *memory.Store, id order.ID) order.State {
+func state(store *postgrestest.Store, id order.ID) order.State {
 	snapshot, _ := store.Snapshot(id)
 	return snapshot.State
 }

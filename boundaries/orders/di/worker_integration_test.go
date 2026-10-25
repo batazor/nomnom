@@ -26,7 +26,7 @@ import (
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 )
@@ -102,7 +102,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	}
 	type fact func(ctx context.Context, eventID string) error
 	confirm := confirmorder.NewHandler(store, store, store, port)
-	assign := recordcourierassignment.NewHandler(store, store, store, port, store, memory.NewAuthorizer())
+	assign := recordcourierassignment.NewHandler(store, store, store, port, store, fake.NewAuthorizer())
 	ready := recordorderready.NewHandler(store, store, store, port)
 	pickup := recordpickup.NewHandler(store, store, store, port)
 	complete := recorddeliverycompletion.NewHandler(store, store, store, port)

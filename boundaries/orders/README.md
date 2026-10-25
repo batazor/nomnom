@@ -28,7 +28,7 @@ Workflow относится к прикладному процессу. Доме
 
 ## Use Cases
 
-Статус реализации: application handlers всех перечисленных Commands и Queries реализованы поверх in-memory адаптеров портов (см. [Статус реализации](#статус-реализации)); transport, persistence, Kafka и Temporal adapters создаются отдельными SDD changes; пустые программные scaffolds не используются.
+Статус реализации: application handlers всех перечисленных Commands и Queries реализованы поверх PostgreSQL store и адаптеров портов (см. [Статус реализации](#статус-реализации)); transport, persistence, Kafka и Temporal adapters создаются отдельными SDD changes; пустые программные scaffolds не используются.
 
 ### Commands
 
@@ -408,7 +408,7 @@ OpenSpec change `implement-orders-application-layer` добавил application-
 
 - handlers всех 12 Commands и 2 Queries в `slices/order/applications/<usecase>`; `OrderItemsOrderable` подключена в `order.Place`, `WithinCancellationWindow` — в `Order.CheckCancellation`;
 - shared порты `UnitOfWork`, `Inbox`, `Clock`, verified `Subject` и application errors в `pkg/application`; контракт `order.Repository` в `domains/order`; порт Order Fulfillment Workflow и общий Inbox-поток входящих фактов в [`slices/order/applications/fulfillment`](slices/order/applications/fulfillment/README.md); узкие порты authorization, catalog snapshot, cancellation policy, Outbox, idempotency и read models — рядом с use case;
-- in-memory адаптеры в `slices/order/infrastructure/memory` и fixtures `domains/order/ordertest` для unit-тестов.
+- тесты handlers работают против настоящего PostgreSQL ([`slices/order/infrastructure/postgres/postgrestest`](slices/order/infrastructure/postgres/postgrestest): testcontainers, отдельная база на тест из мигрированного template); внешние системы (SpiceDB, catalog, Temporal workflow, часы, генератор id) подменяются stand-ins из `slices/order/infrastructure/fake`; fixtures агрегата — `domains/order/ordertest`. In-memory адаптеров хранения нет.
 
 Контракт Temporal-адаптера за портом `fulfillment` зафиксирован в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md) и разделе [Order Fulfillment Workflow](#order-fulfillment-workflow). OpenSpec change `implement-order-fulfillment-temporal-adapter` реализовал его на `go.temporal.io/sdk` v1.50.0: workflow с deadlines из `Policy`, replan и эскалацией Assignment, Saga и Update `CancellationRequested`; Activities поверх `completeorder`, `failorcancelorder` и client-портов `Payments`, `Restaurants`, `Delivery`; реализацию порта `fulfillment` на Temporal client. Значения `DefaultPolicy` — placeholders до продуктовых решений. OpenSpec change `extract-order-fulfillment-slice` выделил процесс в слайс [`fulfillment`](slices/fulfillment/README.md): правила — в доменной модели `domains/fulfillment` с табличными unit-тестами, workflow — тонкий адаптер [`infrastructure/temporal`](slices/fulfillment/infrastructure/temporal/README.md) с прежними именами workflow, Signals, Update, Activities, task queue, Search Attribute и idempotency key шагов.
 
@@ -422,7 +422,7 @@ OpenSpec change `add-orders-postgresql` перевёл API, worker и consumer �
 ([`slices/order/infrastructure/postgres`](slices/order/infrastructure/postgres)): Unit of Work,
 repository с optimistic concurrency, Inbox, idempotency keys, read models, authorization revision
 и Transactional Outbox с процессом `cmd/orders-forwarder`; миграции — `cmd/orders-migrate`.
-In-memory store остаётся для unit-тестов.
+Тесты, которым нужно хранилище, используют этот же store через `postgrestest` (Docker обязателен для `make test`).
 
 OpenSpec change `add-order-command-rpcs-and-relationships` (FR-464…FR-470, AC-508…AC-524)
 опубликовал `PlaceOrder` и `RequestOrderCancellation` и добавил relationships заказа

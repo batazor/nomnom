@@ -13,19 +13,20 @@ import (
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type harness struct {
-	store    *memory.Store
-	workflow *memory.Workflow
+	store    *postgrestest.Store
+	workflow *fake.Workflow
 }
 
 func newHarness(t *testing.T, seeded ...*order.Order) harness {
 	t.Helper()
-	h := harness{store: memory.NewStore(), workflow: memory.NewWorkflow()}
+	h := harness{store: postgrestest.Open(t), workflow: fake.NewWorkflow()}
 	for _, o := range seeded {
 		require.NoError(t, h.store.Add(context.Background(), o))
 	}
@@ -145,7 +146,7 @@ func (r failingSave) Save(context.Context, *order.Order) error { return r.err }
 
 // concurrentWriter changes the same Order between load and save of the handler.
 type concurrentWriter struct {
-	*memory.Store
+	*postgrestest.Store
 }
 
 func (r concurrentWriter) Get(ctx context.Context, id order.ID) (*order.Order, error) {
@@ -168,17 +169,19 @@ func TestFailedTransactionRollsBackWithoutNotification(t *testing.T) {
 	saveFailure := errors.New("disk full")
 	tests := []struct {
 		name    string
-		orders  func(*memory.Store) order.Repository
+		orders  func(*postgrestest.Store) order.Repository
 		wantErr error
 	}{
 		{
-			name:    "save fails",
-			orders:  func(store *memory.Store) order.Repository { return failingSave{Repository: store, err: saveFailure} },
+			name: "save fails",
+			orders: func(store *postgrestest.Store) order.Repository {
+				return failingSave{Repository: store, err: saveFailure}
+			},
 			wantErr: saveFailure,
 		},
 		{
 			name:    "concurrent change",
-			orders:  func(store *memory.Store) order.Repository { return concurrentWriter{Store: store} },
+			orders:  func(store *postgrestest.Store) order.Repository { return concurrentWriter{Store: store} },
 			wantErr: application.ErrConcurrencyConflict,
 		},
 	}

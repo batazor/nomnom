@@ -12,7 +12,8 @@ import (
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var (
@@ -21,9 +22,9 @@ var (
 	support  = application.Subject{Kind: application.SubjectService, ID: "support-console"}
 )
 
-func setup(t *testing.T) (listcustomerorders.Handler, *memory.Authorizer) {
+func setup(t *testing.T) (listcustomerorders.Handler, *fake.Authorizer) {
 	t.Helper()
-	store := memory.NewStore()
+	store := postgrestest.Open(t)
 	ctx := context.Background()
 	for i := range 3 {
 		placedAt := ordertest.PlacedAt.Add(time.Duration(i) * time.Hour)
@@ -31,7 +32,7 @@ func setup(t *testing.T) (listcustomerorders.Handler, *memory.Authorizer) {
 		require.NoError(t, store.Add(ctx, ordertest.New(t, id, ordertest.WithPlacedAt(placedAt))))
 	}
 	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-x", ordertest.WithCustomer("customer-2"))))
-	authorizer := memory.NewAuthorizer()
+	authorizer := fake.NewAuthorizer()
 	return listcustomerorders.NewHandler(authorizer, store), authorizer
 }
 

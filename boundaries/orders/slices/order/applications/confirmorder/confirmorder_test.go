@@ -13,15 +13,16 @@ import (
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
-func setup(t *testing.T, state order.State) (confirmorder.Handler, *memory.Store, *memory.Workflow) {
+func setup(t *testing.T, state order.State) (confirmorder.Handler, *postgrestest.Store, *fake.Workflow) {
 	t.Helper()
-	store := memory.NewStore()
-	workflow := memory.NewWorkflow()
+	store := postgrestest.Open(t)
+	workflow := fake.NewWorkflow()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(state))))
 	return confirmorder.NewHandler(store, store, store, workflow), store, workflow
 }

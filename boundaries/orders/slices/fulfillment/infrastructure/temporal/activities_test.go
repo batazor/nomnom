@@ -18,7 +18,7 @@ import (
 	"nomnom/orders/slices/order/applications/failorcancelorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 type fakeNeighbours struct {
@@ -74,9 +74,9 @@ func (f *fakeNeighbours) Cancel(_ context.Context, r ports.DeliveryRequest) erro
 	return f.err
 }
 
-func activities(t *testing.T, state order.State) (*temporal.Activities, *fakeNeighbours, *memory.Store) {
+func activities(t *testing.T, state order.State) (*temporal.Activities, *fakeNeighbours, *postgrestest.Store) {
 	t.Helper()
-	store := memory.NewStore()
+	store := postgrestest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, orderID, ordertest.WithState(state))))
 	neighbours := &fakeNeighbours{decision: ports.PaymentDecision{Approved: true}}
 	return &temporal.Activities{
@@ -193,9 +193,9 @@ func TestCompleteOrderActivityIsIdempotent(t *testing.T) {
 	assert.Equal(t, order.StateCompleted, snapshot.State)
 	require.Len(t, store.OutboxRecords(), 1)
 	// AC-634: the event time is the completion moment decided by the workflow.
-	completed, ok := store.OutboxRecords()[0].Event.(order.OrderCompleted)
-	require.True(t, ok)
-	assert.Equal(t, completeStep.DecidedAt, completed.CompletedAt)
+	completedAt, err := time.Parse(time.RFC3339Nano, store.OutboxRecords()[0].OccurredAt)
+	require.NoError(t, err)
+	assert.True(t, completeStep.DecidedAt.Equal(completedAt))
 }
 
 // An Activity scheduled before StepInput carried DecidedAt completes the
@@ -209,9 +209,7 @@ func TestCompleteOrderActivityFallsBackToScheduledTime(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, store.OutboxRecords(), 1)
-	completed, ok := store.OutboxRecords()[0].Event.(order.OrderCompleted)
-	require.True(t, ok)
-	assert.False(t, completed.CompletedAt.IsZero())
+	assert.NotEmpty(t, store.OutboxRecords()[0].OccurredAt)
 }
 
 func TestFailOrCancelOrderActivityMapsOutcome(t *testing.T) {

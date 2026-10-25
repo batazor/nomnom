@@ -15,7 +15,8 @@ import (
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var (
@@ -27,12 +28,12 @@ var (
 const assignedVersion = 2
 
 // assignedRevision is the revision of the order#delivery write of newWorld.
-const assignedRevision = application.AuthorizationRevision("memory:order-1:delivery:1")
+const assignedRevision = application.AuthorizationRevision("fake:order-1:delivery:1")
 
 type world struct {
-	store      *memory.Store
-	authorizer *memory.Authorizer
-	workflow   *memory.Workflow
+	store      *postgrestest.Store
+	authorizer *fake.Authorizer
+	workflow   *fake.Workflow
 	assign     recordcourierassignment.Handler
 	release    recordcourierrelease.Handler
 }
@@ -51,7 +52,7 @@ func newWorld(t *testing.T) world {
 // newUnassignedWorld has order-1 without a stored Courier Assignment.
 func newUnassignedWorld(t *testing.T) world {
 	t.Helper()
-	w := world{store: memory.NewStore(), authorizer: memory.NewAuthorizer(), workflow: memory.NewWorkflow()}
+	w := world{store: postgrestest.Open(t), authorizer: fake.NewAuthorizer(), workflow: fake.NewWorkflow()}
 	require.NoError(t, w.store.Add(context.Background(), ordertest.New(t, "order-1")))
 	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.authorizer)
 	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.authorizer)
@@ -127,7 +128,7 @@ func TestCancellationUnlinksDelivery(t *testing.T) {
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
 	assert.Empty(t, w.linkedDelivery())
 	assert.Equal(t, order.CourierAssignment{AssignedAt: releasedAt, DeliveryVersion: 3}, w.stored(t))
-	assert.Equal(t, application.AuthorizationRevision("memory:order-1:delivery:2"), w.revision(t))
+	assert.Equal(t, application.AuthorizationRevision("fake:order-1:delivery:2"), w.revision(t))
 }
 
 // After an unassignment the cancellation of the same Delivery still unlinks it.

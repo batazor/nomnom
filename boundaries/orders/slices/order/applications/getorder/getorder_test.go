@@ -3,6 +3,7 @@ package getorder_test
 import (
 	"context"
 	"errors"
+	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"testing"
 	"time"
 
@@ -13,7 +14,8 @@ import (
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var (
@@ -24,15 +26,15 @@ var (
 
 const window = 5 * time.Minute
 
-func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *memory.Authorizer) {
+func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *fake.Authorizer) {
 	t.Helper()
-	return setupWithPolicy(t, memory.FixedWindow{Duration: window}, seeded...)
+	return setupWithPolicy(t, fixedWindow(t, window), seeded...)
 }
 
-func setupWithPolicy(t *testing.T, policy getorder.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *memory.Authorizer) {
+func setupWithPolicy(t *testing.T, policy getorder.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *fake.Authorizer) {
 	t.Helper()
-	store := memory.NewStore()
-	authorizer := memory.NewAuthorizer()
+	store := postgrestest.Open(t)
+	authorizer := fake.NewAuthorizer()
 	for _, o := range seeded {
 		require.NoError(t, store.Add(context.Background(), o))
 		_, err := authorizer.GrantOrderRelationships(context.Background(), o.ID(), o.CustomerID(), o.RestaurantID())
@@ -124,7 +126,7 @@ func TestGetOrderPublishesCancellationWindowWhileCancellable(t *testing.T) {
 func TestGetOrderOmitsCancellationWindowForFinalOrders(t *testing.T) {
 	for _, state := range []order.State{order.StateCancelled, order.StateCompleted} {
 		t.Run(string(state), func(t *testing.T) {
-			handler, _ := setupWithPolicy(t, memory.AlwaysOpen{}, ordertest.New(t, "order-1", ordertest.WithState(state)))
+			handler, _ := setupWithPolicy(t, fake.AlwaysOpen{}, ordertest.New(t, "order-1", ordertest.WithState(state)))
 
 			view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
 
@@ -149,4 +151,12 @@ func TestGetOrderHidesCancellationWindowWhenPolicyFails(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, order.ID("order-1"), view.OrderID)
 	assert.Nil(t, view.CancellationWindow)
+}
+
+// fixedWindow is the production cancellation policy with the given window.
+func fixedWindow(t *testing.T, window time.Duration) cancellationpolicy.Fixed {
+	t.Helper()
+	policy, err := cancellationpolicy.NewFixed(window)
+	require.NoError(t, err)
+	return policy
 }

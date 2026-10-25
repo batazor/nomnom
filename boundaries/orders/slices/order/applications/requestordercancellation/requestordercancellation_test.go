@@ -3,6 +3,7 @@ package requestordercancellation_test
 import (
 	"context"
 	"errors"
+	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"testing"
 	"time"
 
@@ -14,26 +15,27 @@ import (
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
 
 type env struct {
-	store      *memory.Store
-	authorizer *memory.Authorizer
-	workflow   *memory.Workflow
-	clock      *memory.Clock
+	store      *postgrestest.Store
+	authorizer *fake.Authorizer
+	workflow   *fake.Workflow
+	clock      *fake.Clock
 	handler    requestordercancellation.Handler
 }
 
 func newEnv(t *testing.T, state order.State, policy requestordercancellation.CancellationPolicy) env {
 	t.Helper()
 	e := env{
-		store:      memory.NewStore(),
-		authorizer: memory.NewAuthorizer(),
-		workflow:   memory.NewWorkflow(),
-		clock:      memory.NewClock(ordertest.PlacedAt.Add(5 * time.Minute)),
+		store:      postgrestest.Open(t),
+		authorizer: fake.NewAuthorizer(),
+		workflow:   fake.NewWorkflow(),
+		clock:      fake.NewClock(ordertest.PlacedAt.Add(5 * time.Minute)),
 	}
 	ctx := context.Background()
 	require.NoError(t, e.store.Add(ctx, ordertest.New(t, "order-1", ordertest.WithState(state))))
@@ -57,7 +59,7 @@ func input(subject application.Subject) requestordercancellation.Input {
 func TestRequestCancellationIsHandedToWorkflow(t *testing.T) {
 	for _, state := range []order.State{order.StatePlaced, order.StateConfirmed} {
 		t.Run(string(state), func(t *testing.T) {
-			e := newEnv(t, state, memory.AlwaysOpen{})
+			e := newEnv(t, state, fake.AlwaysOpen{})
 
 			result, err := e.handler.Handle(context.Background(), input(customer))
 
@@ -90,7 +92,7 @@ func TestRequestCancellationRequiresPermission(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := newEnv(t, order.StatePlaced, memory.AlwaysOpen{})
+			e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
 			e.authorizer.FailChecks(tt.failure)
 
 			_, err := e.handler.Handle(context.Background(), input(tt.subject))
@@ -101,7 +103,7 @@ func TestRequestCancellationRequiresPermission(t *testing.T) {
 	}
 
 	// A denied subject learns nothing about a missing Order either.
-	e := newEnv(t, order.StatePlaced, memory.AlwaysOpen{})
+	e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
 	missing := input(stranger)
 	missing.OrderID = "missing"
 	_, err := e.handler.Handle(context.Background(), missing)
@@ -120,7 +122,7 @@ func TestRequestCancellationRespectsDomainDecision(t *testing.T) {
 		{
 			name:   "completed order",
 			state:  order.StateCompleted,
-			policy: memory.AlwaysOpen{},
+			policy: fake.AlwaysOpen{},
 			check: func(t *testing.T, err error) {
 				var invalid order.InvalidTransition
 				require.ErrorAs(t, err, &invalid)
@@ -129,7 +131,7 @@ func TestRequestCancellationRespectsDomainDecision(t *testing.T) {
 		{
 			name:   "window expired",
 			state:  order.StateConfirmed,
-			policy: memory.FixedWindow{Duration: time.Minute},
+			policy: fixedWindow(t, time.Minute),
 			check: func(t *testing.T, err error) {
 				assert.Equal(t, order.CancellationNotAllowed{
 					Reasons: []order.PolicyReason{{Code: order.CancellationWindowExpired}},
@@ -139,7 +141,7 @@ func TestRequestCancellationRespectsDomainDecision(t *testing.T) {
 		{
 			name:    "already cancelled",
 			state:   order.StateCancelled,
-			policy:  memory.AlwaysOpen{},
+			policy:  fake.AlwaysOpen{},
 			outcome: requestordercancellation.OutcomeAlreadyCancelled,
 			check:   func(t *testing.T, err error) { require.NoError(t, err) },
 		},
@@ -158,7 +160,7 @@ func TestRequestCancellationRespectsDomainDecision(t *testing.T) {
 }
 
 func TestRequestCancellationReportsWorkflowRefusalAndInvalidInput(t *testing.T) {
-	e := newEnv(t, order.StatePlaced, memory.AlwaysOpen{})
+	e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
 	refusal := errors.New("already picked up")
 	e.workflow.FailCancellation(refusal)
 
@@ -170,4 +172,12 @@ func TestRequestCancellationReportsWorkflowRefusalAndInvalidInput(t *testing.T) 
 	_, err = e.handler.Handle(context.Background(), noRequestID)
 	require.ErrorIs(t, err, application.ErrInvalidInput)
 	assert.Len(t, e.authorizer.Checks(), 1, "invalid input is rejected before authorization")
+}
+
+// fixedWindow is the production cancellation policy with the given window.
+func fixedWindow(t *testing.T, window time.Duration) cancellationpolicy.Fixed {
+	t.Helper()
+	policy, err := cancellationpolicy.NewFixed(window)
+	require.NoError(t, err)
+	return policy
 }

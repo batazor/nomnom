@@ -12,13 +12,13 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 func TestHandleNotifiesWorkflow(t *testing.T) {
-	workflow := memory.NewWorkflow()
+	workflow := fake.NewWorkflow()
 	in := relaypreparationissue.Input{
 		EventID:         "event-1",
 		OrderID:         "order-1",
@@ -41,7 +41,7 @@ func TestHandleNotifiesWorkflow(t *testing.T) {
 }
 
 func TestClosedWorkflowIsNotAnError(t *testing.T) {
-	workflow := memory.NewWorkflow()
+	workflow := fake.NewWorkflow()
 	workflow.Close("order-1")
 	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", Kind: fulfillment.KindPreparationFailed, OccurredAt: occurredAt}
 
@@ -52,7 +52,7 @@ func TestClosedWorkflowIsNotAnError(t *testing.T) {
 }
 
 func TestNotifyFailureIsReturned(t *testing.T) {
-	workflow := memory.NewWorkflow()
+	workflow := fake.NewWorkflow()
 	workflow.FailNotify(errors.New("temporal unavailable"))
 	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", Kind: fulfillment.KindPreparationFailed, OccurredAt: occurredAt}
 
@@ -64,7 +64,7 @@ func TestNotifyFailureIsReturned(t *testing.T) {
 func TestRejectsInvalidInput(t *testing.T) {
 	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", Kind: fulfillment.KindPreparationDelayed, OccurredAt: occurredAt}
 
-	_, err := relaypreparationissue.NewHandler(memory.NewWorkflow()).Handle(context.Background(), in)
+	_, err := relaypreparationissue.NewHandler(fake.NewWorkflow()).Handle(context.Background(), in)
 
 	require.ErrorIs(t, err, application.ErrInvalidInput)
 }

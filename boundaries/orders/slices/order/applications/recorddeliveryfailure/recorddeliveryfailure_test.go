@@ -13,7 +13,8 @@ import (
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
@@ -62,8 +63,8 @@ func TestHandleByOrderState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := memory.NewStore()
-			workflow := memory.NewWorkflow()
+			store := postgrestest.Open(t)
+			workflow := fake.NewWorkflow()
 			require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", tt.options...)))
 			handler := recorddeliveryfailure.NewHandler(store, store, store, workflow)
 
@@ -83,8 +84,8 @@ func TestHandleByOrderState(t *testing.T) {
 }
 
 func TestHandleRedeliveryIsDuplicate(t *testing.T) {
-	store := memory.NewStore()
-	workflow := memory.NewWorkflow()
+	store := postgrestest.Open(t)
+	workflow := fake.NewWorkflow()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recorddeliveryfailure.NewHandler(store, store, store, workflow)
 
@@ -100,8 +101,8 @@ func TestHandleRedeliveryIsDuplicate(t *testing.T) {
 }
 
 func TestHandleRequiresOccurredAt(t *testing.T) {
-	store := memory.NewStore()
-	handler := recorddeliveryfailure.NewHandler(store, store, store, memory.NewWorkflow())
+	store := postgrestest.Open(t)
+	handler := recorddeliveryfailure.NewHandler(store, store, store, fake.NewWorkflow())
 
 	_, err := handler.Handle(context.Background(), recorddeliveryfailure.Input{EventID: "event-1", OrderID: "order-1"})
 

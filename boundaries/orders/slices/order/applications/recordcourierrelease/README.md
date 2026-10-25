@@ -44,7 +44,7 @@ Handler: [`recordcourierrelease.go`](recordcourierrelease.go), unit-тесты: 
 - **Outcomes:** `released`, `remembered_ahead`, `ignored_stale`, `duplicate`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
 - **Outbox:** не пишется.
 - **Требования:** FR-476, AC-534…AC-537 (в редакции change `scope-courier-access-to-assignment`: снятие курьера SpiceDB не трогает, FR-477 удалён); FR-564, AC-669, AC-670 в change `harden-courier-relationship-ordering`.
-- **`.feature`:** сценарии проверяются unit-тестами handler на in-memory адаптерах; Gherkin runner (`godog`) пока не подключён.
+- **`.feature`:** сценарии проверяются unit-тестами handler против PostgreSQL (testcontainers); Gherkin runner (`godog`) пока не подключён.
 
 ## Acceptance
 

@@ -14,8 +14,8 @@ import (
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
 	"nomnom/orders/slices/order/infrastructure/observability"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 // Повтор Activity Complete Order после commit не создаёт событий и не
@@ -26,7 +26,7 @@ func TestObservedStoreCountsRetriedCompletionOnce(t *testing.T) {
 	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	t.Cleanup(func() { otel.SetMeterProvider(previous) })
 
-	mem := memory.NewStore()
+	mem := postgrestest.Open(t)
 	require.NoError(t, mem.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed))))
 	store := observability.ObservedStore{UnitOfWork: mem, Outbox: mem, Metrics: observability.NewDomainMetrics(nil)}
 	handler := completeorder.NewHandler(store, mem, store)

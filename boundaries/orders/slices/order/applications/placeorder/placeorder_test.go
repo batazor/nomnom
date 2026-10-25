@@ -16,7 +16,8 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 var now = time.Date(2026, time.October, 25, 12, 30, 0, 0, time.UTC)
@@ -24,20 +25,20 @@ var now = time.Date(2026, time.October, 25, 12, 30, 0, 0, time.UTC)
 var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
 
 type env struct {
-	store      *memory.Store
-	catalog    *memory.Catalog
-	authorizer *memory.Authorizer
-	workflow   *memory.Workflow
+	store      *postgrestest.Store
+	catalog    *fake.Catalog
+	authorizer *fake.Authorizer
+	workflow   *fake.Workflow
 	handler    placeorder.Handler
 }
 
 func newEnv(t *testing.T) env {
 	t.Helper()
 	e := env{
-		store:      memory.NewStore(),
-		catalog:    memory.NewCatalog(),
-		authorizer: memory.NewAuthorizer(),
-		workflow:   memory.NewWorkflow(),
+		store:      postgrestest.Open(t),
+		catalog:    fake.NewCatalog(),
+		authorizer: fake.NewAuthorizer(),
+		workflow:   fake.NewWorkflow(),
 	}
 	e.catalog.Put("restaurant-1", placeorder.CatalogSnapshot{
 		Currency: "EUR",
@@ -57,8 +58,8 @@ func newEnv(t *testing.T) env {
 		Catalog:         e.catalog,
 		Relationships:   e.authorizer,
 		Revisions:       e.store,
-		IDs:             &memory.IDs{},
-		Clock:           memory.NewClock(now),
+		IDs:             &fake.IDs{},
+		Clock:           fake.NewClock(now),
 		Workflow:        e.workflow,
 	})
 	return e
@@ -91,19 +92,14 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 
 	records := e.store.OutboxRecords()
 	require.Len(t, records, 1)
-	assert.Equal(t, memory.OutboxRecord{
-		AggregateType:    "order",
-		AggregateID:      "order-1",
-		AggregateVersion: 1,
-		Event: order.OrderPlaced{
-			OrderID:      "order-1",
-			CustomerID:   "customer-1",
-			RestaurantID: "restaurant-1",
-			Total:        ordertest.Money(t, "29.00"),
-			PlacedAt:     now,
-			Items:        placed.Items,
-		},
-	}, records[0])
+	assert.Equal(t, postgrestest.ExpectedOutbox(t, "order-1", 1, order.OrderPlaced{
+		OrderID:      "order-1",
+		CustomerID:   "customer-1",
+		RestaurantID: "restaurant-1",
+		Total:        ordertest.Money(t, "29.00"),
+		PlacedAt:     now,
+		Items:        placed.Items,
+	})[0], records[0])
 	assert.Equal(t, []fulfillment.StartRequest{{OrderID: "order-1"}}, e.workflow.Starts())
 
 	// The creation relationship lets the Customer read the new Order.
@@ -280,7 +276,7 @@ func assertNothingPlaced(t *testing.T, e env) {
 // racingKeys hides a key committed by a concurrent request from the first
 // hidden lookups (one by default).
 type racingKeys struct {
-	*memory.Store
+	*postgrestest.Store
 	hidden  int
 	lookups int
 }
@@ -302,8 +298,8 @@ func (e env) handlerWithKeys(keys placeorder.IdempotencyKeys) placeorder.Handler
 		Catalog:         e.catalog,
 		Relationships:   e.authorizer,
 		Revisions:       e.store,
-		IDs:             &memory.IDs{},
-		Clock:           memory.NewClock(now),
+		IDs:             &fake.IDs{},
+		Clock:           fake.NewClock(now),
 		Workflow:        e.workflow,
 	})
 }
@@ -320,11 +316,11 @@ func TestPlaceOrderReplaysOrderCommittedDuringKeyConflict(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true, FulfillmentStarted: true}, result)
-	assertNothingPlaced(t, env{store: e.store, workflow: memory.NewWorkflow()})
+	assertNothingPlaced(t, env{store: e.store, workflow: fake.NewWorkflow()})
 }
 
 // takenKeys reports the key as taken without a committed Order behind it.
-type takenKeys struct{ *memory.Store }
+type takenKeys struct{ *postgrestest.Store }
 
 func (takenKeys) FindOrder(context.Context, order.CustomerID, string) (order.ID, bool, error) {
 	return "", false, nil
@@ -354,7 +350,7 @@ func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true, FulfillmentStarted: true}, result)
-	assertNothingPlaced(t, env{store: e.store, workflow: memory.NewWorkflow()})
+	assertNothingPlaced(t, env{store: e.store, workflow: fake.NewWorkflow()})
 }
 
 // FR-440: the revision of the creation-time relationship is stored with the Order.
@@ -367,5 +363,5 @@ func TestPlaceOrderStoresAuthorizationRevision(t *testing.T) {
 	revision, found, err := e.store.Revision(context.Background(), string(result.OrderID))
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, application.AuthorizationRevision("memory:"+string(result.OrderID)), revision)
+	assert.Equal(t, application.AuthorizationRevision("fake:"+string(result.OrderID)), revision)
 }

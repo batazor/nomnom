@@ -14,12 +14,12 @@ import (
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 // AC-452: in the unavailable mode every Activity fails with a retryable error.
 func TestUnavailableActivitiesStayRetryable(t *testing.T) {
-	store := memory.NewStore()
+	store := postgrestest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed))))
 	a := &temporal.Activities{
 		Orders:      store,
