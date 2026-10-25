@@ -18,7 +18,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 84; пар «метрика × сервис» со статусом «есть»: 9.
+Метрик в инвентаре: 85; пар «метрика × сервис» со статусом «есть»: 9.
 
 Подтверждение статуса «есть»: 2026-10-25: orders-consumer → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker). В kind Alloy и Mimir пока не развёрнуты.
 
@@ -145,6 +145,16 @@ SQL-метрики Forwarder-роли (опрос таблицы Outbox), не p
 | `nomnom_outbox_pending_messages` | SQL-метрика Forwarder | gauge | `stream` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
 | `nomnom_outbox_oldest_pending_age_seconds` | SQL-метрика Forwarder | gauge | `stream` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
 | `nomnom_outbox_publish_retries_total` | Forwarder | counter | `stream`, `error_class` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
+
+<a id="usecase"></a>
+
+## Application use cases
+
+Декоратор application handlers в composition root (docs/observability.md#use-cases). Один histogram на все use cases; `outcome`: success | rejected | error — бизнес-отказ отделён от технического сбоя. `error_type` — закрытый набор slice, пуст при success. Без ID, subject и payload.
+
+| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
+| --- | --- | --- | --- | --- | --- |
+| `nomnom_usecase_duration_seconds` | Use case decorator (`pkg/telemetry`) | histogram | `usecase`, `kind`, `outcome`, `error_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | `kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`. |
 
 <a id="uow"></a>
 

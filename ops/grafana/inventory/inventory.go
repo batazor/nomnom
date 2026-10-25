@@ -110,6 +110,7 @@ var Sections = []Section{
 	{"messaging-otel", "Kafka: semconv messaging (не-Go контексты)", "Kafka-клиенты TypeScript, Rust и Python не выбраны; при выборе используется OTel messaging semconv."},
 	{"messaging", "Kafka: собственный OTel middleware и consumer lag", "Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Labels только `handler_name`, `event_type`, `stream`, `error_class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill."},
 	{"outbox", "Outbox", "SQL-метрики Forwarder-роли (опрос таблицы Outbox), не publish-декоратор."},
+	{"usecase", "Application use cases", "Декоратор application handlers в composition root (docs/observability.md#use-cases). Один histogram на все use cases; `outcome`: success | rejected | error — бизнес-отказ отделён от технического сбоя. `error_type` — закрытый набор slice, пуст при success. Без ID, subject и payload."},
 	{"uow", "Unit of Work", "Декоратор Unit of Work (ADR 20). Deadlock/serialization — классы retry, а не SQL-панели поверх DB instrumentation."},
 	{"fsm", "Domain Lifecycle (FSM)", "Декоратор применения FSM-перехода (ADR 21). Labels допустимы только с закрытым набором значений из FSM-таблицы."},
 	{"temporal", "Temporal", "Temporal Go SDK `MetricsHandler` (contrib/opentelemetry) в `orders-worker` и клиенте `orders`. Суффикс единицы timers зависит от handler и проверяется при подключении."},
@@ -176,6 +177,9 @@ var Metrics = []Metric{
 	{Name: "nomnom_outbox_pending_messages", Section: "outbox", Type: Gauge, Source: "SQL-метрика Forwarder", Labels: []string{"stream"}, Status: expected(contextServices...)},
 	{Name: "nomnom_outbox_oldest_pending_age_seconds", Section: "outbox", Type: Gauge, Source: "SQL-метрика Forwarder", Labels: []string{"stream"}, Status: expected(contextServices...)},
 	{Name: "nomnom_outbox_publish_retries_total", Section: "outbox", Type: Counter, Source: "Forwarder", Labels: []string{"stream", "error_class"}, Status: expected(contextServices...)},
+
+	// usecase
+	{Name: "nomnom_usecase_duration_seconds", Section: "usecase", Type: Histogram, Source: "Use case decorator (`pkg/telemetry`)", Labels: []string{"usecase", "kind", "outcome", "error_type"}, Status: expected(Orders, OrdersWorker, OrdersConsumer), Note: "`kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`."},
 
 	// uow
 	{Name: "nomnom_uow_transactions_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"outcome"}, Status: expected(contextServices...), Note: "`outcome`: committed | rolled_back | commit_failed."},

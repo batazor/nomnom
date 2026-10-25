@@ -126,6 +126,21 @@ Trace context связывает запуск workflow, Activities и внешн
 
 Poison messages направляются Watermill `PoisonQueue` middleware в DLQ-топик `<stream>.dlq` (Requeuing After Error). Целевой порядок middleware: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler; business errors не ретраятся. В `orders-consumer` цепочка реализована в `pkg/messaging/consumer.go` (Recoverer → OTel middleware → встроенные метрики Watermill → deserialization guard → Retry → dead letter → handler, [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md)); `pkg/telemetry` поднимает MeterProvider, OTLP exporter и Prometheus bridge, а `KafkaConsumer` выполняет финальный export после drain. Без `OTEL_EXPORTER_OTLP_ENDPOINT` метрики не экспортируются. Grafana dashboard [9777](https://grafana.com/grafana/dashboards/9777) — референс панелей row `Kafka` в overview `orders`, а не отдельный dashboard.
 
+### Use cases
+
+Application use cases наблюдаются декоратором handler в composition root, а не кодом use case. В `orders` это `telemetry.Instrument` из `pkg/telemetry`, а имена use cases и классификация ошибок — `slices/<slice>/infrastructure/observability`. Adapters (gRPC, Watermill, Temporal Activities) зависят от порта `application.Handler[In, Out]`, поэтому декоратор подключается без изменения use case. Другие runtime реализуют тот же contract своими средствами.
+
+| Сигнал | Contract |
+| --- | --- |
+| Metric | Один histogram `nomnom.usecase.duration` (s) на все use cases → `nomnom_usecase_duration_seconds`; частота вызовов — его `_count`. |
+| Labels | `usecase` — стабильный snake_case (`place_order`); `kind` — `command` \| `query`; `outcome` — `success` \| `rejected` \| `error`; `error_type` — закрытый набор slice, только при неуспехе. |
+| Span | `usecase <name>` с теми же attributes. Status `Error` — только при `outcome=error`, описание — `error_type`. |
+| Запрещено | Отдельная метрика на каждый use case, ID, subject, payload и текст ошибки в labels/attributes/span events: текст ошибки может содержать вход. |
+
+`rejected` — ожидаемый отказ по правилам use case: невалидный вход, запрет доступа, отсутствующий ресурс, недопустимый переход FSM, доменное правило. `error` — технический сбой: инфраструктура, конфликт версий для retry, отмена и неклассифицированная ошибка. Отмена контекста классифицируется до slice и всегда даёт `error` (`canceled` / `deadline_exceeded`). Неизвестная ошибка — `error/internal`, поэтому новый доменный отказ без классификации виден как сбой и требует дополнить classifier. Отказ authorization backend сейчас неотличим от `permission_denied`, потому что `application.FailClosed` намеренно сводит его к запрету.
+
+Декоратор измеряет попытку вызова, а не бизнес-результат: повтор через idempotency key (`Replayed`) или Inbox duplicate — тоже `success`. Бизнес-счётчики (раздел «Domain metrics» инвентаря) меняются в точке подтверждённого перехода, не здесь.
+
 ## Dashboards
 
 Каждый deployable service владеет одним overview-dashboard `<Service> / Overview` рядом со своими ops-файлами; решение — [ADR 29](adr/0029-grafana-dashboards-as-code.md).

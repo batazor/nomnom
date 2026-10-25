@@ -26,6 +26,7 @@ import (
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 	orderdi "nomnom/orders/slices/order/di"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
+	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
 
@@ -69,18 +70,20 @@ func NewKafkaConsumer(cfg config.Config, store orderdi.Store) *KafkaConsumer {
 	}
 }
 
-// ConsumerHandlers собирает application handlers, которые читают Kafka.
+// ConsumerHandlers собирает application handlers, которые читают Kafka, под
+// декоратором телеметрии use cases.
 func ConsumerHandlers(store orderdi.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
+	uc := observability.UseCases()
 	return ordermessaging.Handlers{
-		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
-		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
-		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
-		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
-		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
-		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow),
-		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
-		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
-		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
+		ConfirmOrder:             telemetry.Instrument(uc, observability.ConfirmOrder, confirmorder.NewHandler(store, store, store, workflow).Handle),
+		RejectOrder:              telemetry.Instrument(uc, observability.RejectOrder, rejectorder.NewHandler(store, store, store, workflow).Handle),
+		RecordPreparationStarted: telemetry.Instrument(uc, observability.RecordPreparationStarted, recordpreparationstarted.NewHandler(store, store, store, workflow).Handle),
+		RecordOrderReady:         telemetry.Instrument(uc, observability.RecordOrderReady, recordorderready.NewHandler(store, store, store, workflow).Handle),
+		RelayPreparationIssue:    telemetry.Instrument(uc, observability.RelayPreparationIssue, relaypreparationissue.NewHandler(workflow).Handle),
+		RecordCourierAssignment:  telemetry.Instrument(uc, observability.RecordCourierAssignment, recordcourierassignment.NewHandler(store, store, store, workflow).Handle),
+		RecordPickup:             telemetry.Instrument(uc, observability.RecordPickup, recordpickup.NewHandler(store, store, store, workflow).Handle),
+		RecordDeliveryCompletion: telemetry.Instrument(uc, observability.RecordDeliveryCompletion, recorddeliverycompletion.NewHandler(store, store, store, workflow).Handle),
+		RecordDeliveryFailure:    telemetry.Instrument(uc, observability.RecordDeliveryFailure, recorddeliveryfailure.NewHandler(store, store, store, workflow).Handle),
 	}
 }
 

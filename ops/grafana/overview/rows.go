@@ -206,6 +206,19 @@ func (g *generator) kafka(sc Scope) []Panel {
 	}
 }
 
+// useCases — row декоратора application handlers: rejected — бизнес-отказ по
+// правилам use case, error — технический сбой; это разные сигналы.
+func useCases(sc Scope) []Panel {
+	uc := "nomnom_usecase_duration_seconds"
+	return []Panel{
+		{Title: "Calls by outcome", Unit: "ops", Queries: []Query{{Sum("outcome", sc.Rate(uc+"_count")), "{{outcome}}"}},
+			Description: "success, rejected (отказ по правилам use case) и error (технический сбой)."},
+		{Title: "Rejections by use case", Unit: "ops", Queries: []Query{{Sum("usecase, error_type", sc.Rate(uc+"_count", `outcome="rejected"`)), "{{usecase}} {{error_type}}"}}},
+		{Title: "Errors by use case", Unit: "ops", Queries: []Query{{Sum("usecase, error_type", sc.Rate(uc+"_count", `outcome="error"`)), "{{usecase}} {{error_type}}"}}},
+		{Title: "Duration p95 by use case", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "usecase", uc), "{{usecase}}"}}},
+	}
+}
+
 func transactions(sc Scope) []Panel {
 	return []Panel{
 		{Title: "Transactions by outcome", Unit: "ops", Queries: []Query{{Sum("outcome", sc.Rate("nomnom_uow_transactions_total")), "{{outcome}}"}},

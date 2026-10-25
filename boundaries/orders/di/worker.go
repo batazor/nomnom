@@ -11,11 +11,13 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/infrastructure/neighbours"
 	"nomnom/orders/slices/order/infrastructure/neighbours/grpcclient"
+	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
 
@@ -129,11 +131,12 @@ func (w *TemporalWorker) Shutdown(ctx context.Context) error {
 // NewActivities собирает Activities fulfillment поверх store слайса и адаптеров
 // соседних контекстов, выбранных конфигурацией; cleanup закрывает соединение
 // с internal gateway.
-func NewActivities(store *memory.Store, cfg config.Config) (*fulfillorder.Activities, func(), error) {
+func NewActivities(store orderdi.Store, cfg config.Config) (*fulfillorder.Activities, func(), error) {
+	uc := observability.UseCases()
 	activities := &fulfillorder.Activities{
 		Orders:   store,
-		Complete: completeorder.NewHandler(store, store, store),
-		Finalize: failorcancelorder.NewHandler(store, store, store),
+		Complete: telemetry.Instrument(uc, observability.CompleteOrder, completeorder.NewHandler(store, store, store).Handle),
+		Finalize: telemetry.Instrument(uc, observability.FailOrCancelOrder, failorcancelorder.NewHandler(store, store, store).Handle),
 	}
 	switch cfg.Fulfillment.Neighbours {
 	case config.NeighboursGRPC:

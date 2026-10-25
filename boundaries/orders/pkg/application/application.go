@@ -32,6 +32,12 @@ func FailClosed(err error) error {
 	return fmt.Errorf("%w: authorization check failed: %w", ErrPermissionDenied, err)
 }
 
+// Handler is the inbound port of one use case. Adapters depend on it instead of
+// the concrete handler, so the composition root can decorate use cases.
+type Handler[In, Out any] interface {
+	Handle(ctx context.Context, in In) (Out, error)
+}
+
 // UnitOfWork is the local transaction boundary of a use case. A nested Do joins
 // the active transaction; only the outermost scope commits or rolls back.
 type UnitOfWork interface {
@@ -90,3 +96,7 @@ type AccessCheck struct {
 	Permission Permission
 	Resource   Resource
 }
+
+// AuthorizationRevision is the opaque revision (SpiceDB ZedToken) of a
+// relationship write; checks of the resource read at least as fresh as it.
+type AuthorizationRevision string

@@ -37,15 +37,15 @@ const (
 
 // Handlers are the application handlers the order slice consumes events with.
 type Handlers struct {
-	ConfirmOrder             confirmorder.Handler
-	RejectOrder              rejectorder.Handler
-	RecordPreparationStarted recordpreparationstarted.Handler
-	RecordOrderReady         recordorderready.Handler
-	RelayPreparationIssue    relaypreparationissue.Handler
-	RecordCourierAssignment  recordcourierassignment.Handler
-	RecordPickup             recordpickup.Handler
-	RecordDeliveryCompletion recorddeliverycompletion.Handler
-	RecordDeliveryFailure    recorddeliveryfailure.Handler
+	ConfirmOrder             application.Handler[confirmorder.Input, confirmorder.Result]
+	RejectOrder              application.Handler[rejectorder.Input, rejectorder.Result]
+	RecordPreparationStarted application.Handler[recordpreparationstarted.Input, recordpreparationstarted.Result]
+	RecordOrderReady         application.Handler[recordorderready.Input, recordorderready.Result]
+	RelayPreparationIssue    application.Handler[relaypreparationissue.Input, relaypreparationissue.Result]
+	RecordCourierAssignment  application.Handler[recordcourierassignment.Input, recordcourierassignment.Result]
+	RecordPickup             application.Handler[recordpickup.Input, recordpickup.Result]
+	RecordDeliveryCompletion application.Handler[recorddeliverycompletion.Input, recorddeliverycompletion.Result]
+	RecordDeliveryFailure    application.Handler[recorddeliveryfailure.Input, recorddeliveryfailure.Result]
 }
 
 // Streams returns one handler group per consumed stream.

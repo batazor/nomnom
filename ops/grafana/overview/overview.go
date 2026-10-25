@@ -50,12 +50,14 @@ type Options struct {
 	Database        Database
 	PaymentProvider bool
 	Kafka           *Kafka
-	UnitOfWork      bool
-	Lifecycle       bool
-	Temporal        *Temporal
-	Kitchen         bool
-	Authorization   bool
-	Domain          func(Scope) []Panel
+	// UseCases — декоратор application handlers (раздел usecase инвентаря).
+	UseCases      bool
+	UnitOfWork    bool
+	Lifecycle     bool
+	Temporal      *Temporal
+	Kitchen       bool
+	Authorization bool
+	Domain        func(Scope) []Panel
 }
 
 type Kafka struct {
@@ -143,6 +145,9 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 	}
 	if opts.Kafka != nil {
 		rows = append(rows, row{title: "Kafka", scope: main, collapsed: true, panels: g.kafka(main)})
+	}
+	if opts.UseCases {
+		rows = append(rows, row{title: "Use cases", scope: main, collapsed: true, panels: useCases(main)})
 	}
 	if opts.UnitOfWork {
 		rows = append(rows, row{title: "Transactions", scope: main, collapsed: true, panels: transactions(main)})

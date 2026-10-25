@@ -81,6 +81,15 @@ JSON — артефакт генератора: правки вносятся в
 | Outbox oldest pending age | TODO | [`nomnom_outbox_oldest_pending_age_seconds`](../../../../docs/observability/metric-inventory.md#outbox) |
 | Outbox publish retries | TODO | [`nomnom_outbox_publish_retries_total`](../../../../docs/observability/metric-inventory.md#outbox) |
 
+### Use cases
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Calls by outcome | TODO | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
+| Rejections by use case | TODO | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
+| Errors by use case | TODO | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
+| Duration p95 by use case | TODO | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
+
 ### Transactions
 
 | Панель | Статус | Недостающие метрики |
@@ -128,7 +137,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 9 из 50. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 9 из 54. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Переходы
 
