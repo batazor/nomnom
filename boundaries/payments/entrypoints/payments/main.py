@@ -3,9 +3,10 @@ import sys
 
 from infrastructure.grpc.service import create_default_worker
 from infrastructure.postgres import create_database
+from infrastructure.provider import create_webhook_worker
 from pkg import telemetry
 from pkg.config import Settings, load_settings
-from pkg.lifecycle import Lifecycle, LifecycleConfig
+from pkg.lifecycle import Lifecycle, LifecycleConfig, WorkerGroup
 
 
 def run() -> None:
@@ -31,13 +32,16 @@ def serve(settings: Settings) -> None:
             settings.provider,
             database=database,
         )
+        webhooks = create_webhook_worker(
+            ("0.0.0.0", settings.provider.webhook_port), settings.provider, database
+        )
         Lifecycle(
             LifecycleConfig(
                 management_port=settings.management.port,
                 readiness_delay=settings.shutdown.readiness_delay.total_seconds(),
                 drain_timeout=settings.shutdown.drain_timeout.total_seconds(),
             ),
-        ).run(worker)
+        ).run(WorkerGroup(worker, webhooks))
     finally:
         database.close()
 

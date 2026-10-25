@@ -67,6 +67,9 @@ spec:
             - name: metrics
               containerPort: {{ .Values.management.port }}
               protocol: TCP
+            - name: webhooks
+              containerPort: {{ .Values.providerWebhooks.port }}
+              protocol: TCP
           {{- if or .Values.env .Values.envFrom }}
           envFrom:
             {{- if .Values.env }}
@@ -80,6 +83,8 @@ spec:
           env:
             - name: MANAGEMENT__PORT
               value: {{ .Values.management.port | quote }}
+            - name: PROVIDER__WEBHOOK_PORT
+              value: {{ .Values.providerWebhooks.port | quote }}
             - name: SHUTDOWN__READINESS_DELAY
               value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
             - name: SHUTDOWN__DRAIN_TIMEOUT

@@ -7,7 +7,6 @@ from collections.abc import Iterator
 from concurrent import futures
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 
@@ -34,6 +33,7 @@ from pkg.application import (
     ConcurrencyConflict,
     PermissionDenied,
 )
+from pkg.application.clock import SystemClock
 from pkg.config import IdentitySettings, ProviderSettings, SpiceDBSettings
 from pkg.lifecycle import DrainTimeoutError, LifecycleError
 from slices.payment.applications.authorize_payment import (
@@ -302,11 +302,6 @@ class GrpcWorker:
         if not stopped.wait(remaining):
             self._server.stop(0)
             raise DrainTimeoutError("payments gRPC requests exceeded drain timeout")
-
-
-class SystemClock:
-    def now(self) -> datetime:
-        return datetime.now(timezone.utc)
 
 
 class UuidIdentifiers:

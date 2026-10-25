@@ -40,6 +40,8 @@ PROVIDER_WEBHOOK_SECRET_ENV = "PROVIDER__WEBHOOK_SECRET"
 PROVIDER_WEBHOOK_TOLERANCE_ENV = "PROVIDER__WEBHOOK_TOLERANCE"
 DEFAULT_PROVIDER_WEBHOOK_TOLERANCE = timedelta(minutes=5)
 PROVIDER_KINDS = ("unconfigured", "fake")
+PROVIDER_WEBHOOK_PORT_ENV = "PROVIDER__WEBHOOK_PORT"
+DEFAULT_PROVIDER_WEBHOOK_PORT = 8085
 
 # Формат длительности общий для всех языков проекта: целое число и единица ms, s или m.
 _DURATION_PATTERN = re.compile(r"^(\d+)(ms|s|m)$")
@@ -264,6 +266,13 @@ class ProviderSettings(BaseSettings):
     webhook_secret: str = Field(
         default="", validation_alias=PROVIDER_WEBHOOK_SECRET_ENV, repr=False
     )
+    # HTTP-порт приёма webhooks провайдера, отдельный от gRPC и management.
+    webhook_port: int = Field(
+        default=DEFAULT_PROVIDER_WEBHOOK_PORT,
+        ge=1,
+        le=65535,
+        validation_alias=PROVIDER_WEBHOOK_PORT_ENV,
+    )
     # Допустимое расхождение времени подписи webhook и часов payments.
     webhook_tolerance: timedelta = Field(
         default=DEFAULT_PROVIDER_WEBHOOK_TOLERANCE,
@@ -343,5 +352,9 @@ def load_settings() -> Settings:
     if settings.management.port == settings.server.port:
         raise ValueError(
             f"management port must differ from server port {settings.server.port}",
+        )
+    if settings.provider.webhook_port in (settings.server.port, settings.management.port):
+        raise ValueError(
+            f"{PROVIDER_WEBHOOK_PORT_ENV} must differ from server and management ports",
         )
     return settings

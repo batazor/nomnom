@@ -110,6 +110,11 @@ extraEnv: []
 management:
   port: 9084
 
+# HTTP-приём webhooks платёжного провайдера (POST /webhooks/provider), передаётся через
+# PROVIDER__WEBHOOK_PORT. Внешняя публикация порта (ingress) пока не настроена.
+providerWebhooks:
+  port: 8085
+
 # Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY,
 # SHUTDOWN__DRAIN_TIMEOUT и SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT. readinessDelaySeconds должен превышать время, за которое
 # readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс распространение
