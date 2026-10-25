@@ -20,7 +20,9 @@ use crate::infrastructure::memory::{
     MemoryStore, RecordingRelationships, SequentialIdGenerator, StaticAuthorization,
     StaticCourierLocator,
 };
-use crate::infrastructure::spicedb::{SpiceDbAuthorization, SpiceDbClient, SpiceDbConfigError};
+use crate::infrastructure::spicedb::{
+    RepositoryRevisions, RevisionReader, SpiceDbAuthorization, SpiceDbClient, SpiceDbConfigError,
+};
 use crate::pkg::application::{Clock, IdGenerator, TransactionScope};
 use crate::pkg::config::{SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
@@ -333,6 +335,7 @@ pub fn build() -> ServiceModule {
 #[must_use]
 pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) -> ServiceModule {
     assemble(
+        Arc::new(MemoryStore::new()),
         StaticCourierLocator::new(Vec::new()),
         authorization,
         Box::new(RecordingRelationships::new()),
@@ -346,24 +349,39 @@ pub struct Process {
     pub store: Arc<MemoryStore>,
 }
 
-/// Собирает граф процесса с выбранными адаптерами авторизации и записи
-/// relationships.
+/// Собирает граф процесса над `store` с выбранными адаптерами авторизации и
+/// записи relationships. Хранилище создаётся снаружи: его же читают
+/// reconciler и [`RevisionReader`] авторизации.
 #[must_use]
 pub fn build_process(
+    store: Arc<MemoryStore>,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn ProcessRelationships>,
 ) -> Process {
     assemble(
+        store,
         StaticCourierLocator::new(Vec::new()),
         authorization,
         relationships,
     )
 }
 
+/// SpiceDB-авторизация процесса: checks `courier:<id>` и `delivery:<id>`
+/// видят собственные записи relationships по revision из `store` (FR-447).
+#[must_use]
+pub fn spicedb_authorization(
+    client: SpiceDbClient,
+    store: Arc<MemoryStore>,
+) -> SpiceDbAuthorization {
+    SpiceDbAuthorization::new(Box::new(client))
+        .with_revisions(Arc::new(RepositoryRevisions(store)) as Arc<dyn RevisionReader>)
+}
+
 /// Граф процесса с заданными кандидатами locator — для транспортных тестов.
 #[cfg(test)]
 pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule {
     assemble(
+        Arc::new(MemoryStore::new()),
         locator,
         Box::new(local_authorization()),
         Box::new(RecordingRelationships::new()),
@@ -372,11 +390,11 @@ pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule
 }
 
 fn assemble(
+    store: Arc<MemoryStore>,
     locator: StaticCourierLocator,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn ProcessRelationships>,
 ) -> Process {
-    let store = Arc::new(MemoryStore::new());
     let infrastructure = Arc::new(
         InfrastructureModule::builder()
             .with_component_parameters::<LocalStore>(LocalStoreParameters {

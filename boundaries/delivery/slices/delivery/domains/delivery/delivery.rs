@@ -4,6 +4,7 @@ use super::{
     DeliveryValidationError, DomainEvent, OrderId, State, TransitionError, TransitionResult,
     Trigger,
 };
+use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::domains::courier::CourierId;
 
 /// Actor reporting a Delivery Failure.
@@ -24,6 +25,8 @@ pub struct Delivery {
     dropoff_address: Address,
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
+    /// Technical field: revision of the last `delivery:<id>#courier` write.
+    authorization_revision: Option<AuthorizationRevision>,
     events: Vec<DomainEvent>,
 }
 
@@ -43,6 +46,7 @@ impl Delivery {
             dropoff_address,
             state: State::Waiting,
             failure_reason: None,
+            authorization_revision: None,
             events: Vec::new(),
         }
     }
@@ -79,8 +83,27 @@ impl Delivery {
             dropoff_address,
             state,
             failure_reason,
+            authorization_revision: None,
             events: Vec::new(),
         })
+    }
+
+    /// Snapshot field `authorization_revision`, absent in old snapshots.
+    #[must_use]
+    pub fn with_authorization_revision(mut self, revision: Option<AuthorizationRevision>) -> Self {
+        self.authorization_revision = revision;
+        self
+    }
+
+    /// Stores the revision of a relationship write (`TOUCH` or `DELETE`) made
+    /// for this delivery.
+    pub fn record_authorization_revision(&mut self, revision: AuthorizationRevision) {
+        self.authorization_revision = Some(revision);
+    }
+
+    #[must_use]
+    pub fn authorization_revision(&self) -> Option<&AuthorizationRevision> {
+        self.authorization_revision.as_ref()
     }
 
     /// Checks without changing state that the current state permits a Courier

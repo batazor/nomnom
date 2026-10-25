@@ -57,9 +57,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
             })?;
             let mut courier = load_courier(self.couriers, &released_courier_id)?;
             courier.release()?;
-            // Revoke access before commit.
-            self.relationships
+            // Revoke access before commit; the revision of the DELETE makes
+            // the revocation visible to the next check (FR-447, AC-483).
+            let revision = self
+                .relationships
                 .unassign_courier(&delivery_id, &released_courier_id)?;
+            delivery.record_authorization_revision(revision);
 
             self.deliveries.save(&delivery)?;
             self.couriers.save(&courier)?;
@@ -130,6 +133,11 @@ mod tests {
             )]
         );
         assert_eq!(world.relationships.writes(), vec![unassigned()]);
+        // FR-447, AC-483: the revision of the DELETE is stored with the delivery.
+        assert_eq!(
+            delivery.authorization_revision(),
+            Some(&RecordingRelationships::revision(1))
+        );
     }
 
     fn unassigned() -> RelationshipWrite {

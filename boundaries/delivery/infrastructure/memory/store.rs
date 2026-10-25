@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::pkg::application::{UnitOfWork, UnitOfWorkError};
-use crate::pkg::persistence::RepositoryError;
+use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
@@ -30,6 +30,7 @@ struct DeliveryRecord {
     dropoff_address: Address,
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
+    authorization_revision: Option<AuthorizationRevision>,
 }
 
 impl DeliveryRecord {
@@ -42,6 +43,7 @@ impl DeliveryRecord {
             dropoff_address: delivery.dropoff_address().clone(),
             state: delivery.state(),
             failure_reason: delivery.failure_reason().cloned(),
+            authorization_revision: delivery.authorization_revision().cloned(),
         }
     }
 
@@ -55,6 +57,7 @@ impl DeliveryRecord {
             self.state,
             self.failure_reason.clone(),
         )
+        .map(|delivery| delivery.with_authorization_revision(self.authorization_revision.clone()))
         .map_err(|error| RepositoryError::Unavailable(format!("corrupt delivery record: {error}")))
     }
 }
@@ -190,6 +193,48 @@ impl MemoryStore {
                 .take(limit)
                 .collect()
         })
+    }
+
+    /// Stores the revision of a relationship restored by reconciliation on a
+    /// registered courier. `false` — the courier is not registered.
+    pub fn record_courier_revision(
+        &self,
+        courier_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<bool, RepositoryError> {
+        let _transaction = self
+            .transaction
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let mut state = self.available()?;
+        let Some(courier) = state.couriers.get_mut(courier_id) else {
+            return Ok(false);
+        };
+        courier.record_authorization_revision(revision);
+        Ok(true)
+    }
+
+    /// Stores the revision of a restored `delivery#courier` relationship when
+    /// the delivery is still assigned to `courier_id`.
+    pub fn record_assignment_revision(
+        &self,
+        delivery_id: &str,
+        courier_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<bool, RepositoryError> {
+        let _transaction = self
+            .transaction
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let mut state = self.available()?;
+        let Some(record) = state.deliveries.get_mut(delivery_id) else {
+            return Ok(false);
+        };
+        if record.courier_id.as_ref().map(CourierId::as_str) != Some(courier_id) {
+            return Ok(false);
+        }
+        record.authorization_revision = Some(revision);
+        Ok(true)
     }
 
     /// `(delivery_id, courier_id)` for those of `ids` with an assigned courier.

@@ -1,6 +1,8 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+use crate::pkg::persistence::AuthorizationRevision;
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct CourierId(String);
 
@@ -58,6 +60,8 @@ impl Error for CourierError {}
 pub struct Courier {
     id: CourierId,
     status: CourierStatus,
+    /// Technical field: revision of the last `courier:<id>#self` write.
+    authorization_revision: Option<AuthorizationRevision>,
 }
 
 impl Courier {
@@ -66,12 +70,36 @@ impl Courier {
         Self {
             id,
             status: CourierStatus::Available,
+            authorization_revision: None,
         }
     }
 
+    /// Restores a courier from a snapshot; old snapshots carry no
+    /// authorization revision (see [`Self::with_authorization_revision`]).
     #[must_use]
     pub fn restore(id: CourierId, status: CourierStatus) -> Self {
-        Self { id, status }
+        Self {
+            id,
+            status,
+            authorization_revision: None,
+        }
+    }
+
+    /// Snapshot field `authorization_revision`, absent in old snapshots.
+    #[must_use]
+    pub fn with_authorization_revision(mut self, revision: Option<AuthorizationRevision>) -> Self {
+        self.authorization_revision = revision;
+        self
+    }
+
+    /// Stores the revision of a relationship write made for this courier.
+    pub fn record_authorization_revision(&mut self, revision: AuthorizationRevision) {
+        self.authorization_revision = Some(revision);
+    }
+
+    #[must_use]
+    pub fn authorization_revision(&self) -> Option<&AuthorizationRevision> {
+        self.authorization_revision.as_ref()
     }
 
     /// Checks that the courier may receive a new Delivery Offer or Assignment

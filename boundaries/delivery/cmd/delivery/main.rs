@@ -6,10 +6,9 @@ use std::time::{Duration, Instant};
 
 use delivery::di;
 use delivery::infrastructure::grpc::{GrpcWorker, subject_resolver};
+use delivery::infrastructure::memory::MemoryStore;
 use delivery::infrastructure::reconcile::{Reconciler, Schedule};
-use delivery::infrastructure::spicedb::{
-    RelationshipGraph, SpiceDbAuthorization, SpiceDbRelationships,
-};
+use delivery::infrastructure::spicedb::{RelationshipGraph, SpiceDbRelationships};
 use delivery::pkg::config;
 use delivery::pkg::lifecycle::{Lifecycle, Settings};
 
@@ -36,8 +35,12 @@ async fn run() -> Result<(), Box<dyn Error>> {
     // SpiceDB обязателен: проверки прав, запись relationships и reconciliation.
     let spicedb = di::spicedb(&config.spicedb)?;
     let graph: Arc<dyn RelationshipGraph> = Arc::new(spicedb.clone());
+    // Revisions записей relationships хранятся с Courier и Delivery; checks
+    // читают их из того же хранилища (FR-447).
+    let store = Arc::new(MemoryStore::new());
     let process = di::build_process(
-        Box::new(SpiceDbAuthorization::new(Box::new(spicedb))),
+        Arc::clone(&store),
+        Box::new(di::spicedb_authorization(spicedb, store)),
         Box::new(SpiceDbRelationships::new(Arc::clone(&graph))),
     );
     let reconcilers = vec![

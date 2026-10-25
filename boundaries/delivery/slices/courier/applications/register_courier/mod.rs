@@ -50,8 +50,10 @@ impl Handler<'_> {
             ));
         }
         // A repeated registration was rejected above and writes nothing.
-        self.relationships.register_courier(&courier_id)?;
-        let courier = Courier::new(courier_id);
+        let revision = self.relationships.register_courier(&courier_id)?;
+        let mut courier = Courier::new(courier_id);
+        // FR-447: checks of the courier are at least as fresh as this write.
+        courier.record_authorization_revision(revision);
         match self.couriers.add(&courier) {
             Ok(()) => Ok(Output {
                 courier_id: courier.id().clone(),
@@ -72,6 +74,7 @@ mod tests {
         MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
     use crate::pkg::application::RelationshipWriteError;
+    use crate::pkg::persistence::AuthorizationRevision;
     use crate::slices::courier::applications::error::InvalidCourierRequest;
 
     fn operator() -> Subject {
@@ -102,10 +105,9 @@ mod tests {
 
         assert_eq!(output.courier_id, CourierId::new("courier-1"));
         assert_eq!(output.status, CourierStatus::Available);
-        assert_eq!(
-            store.get(&CourierId::new("courier-1")),
-            Ok(Some(Courier::new(CourierId::new("courier-1"))))
-        );
+        let mut expected = Courier::new(CourierId::new("courier-1"));
+        expected.record_authorization_revision(RecordingRelationships::revision(1));
+        assert_eq!(store.get(&CourierId::new("courier-1")), Ok(Some(expected)));
         assert_eq!(
             authorization.courier_checks(),
             vec![(
@@ -129,10 +131,13 @@ mod tests {
     }
 
     impl CourierRelationshipWriter for ObservingWriter<'_> {
-        fn register_courier(&self, courier_id: &CourierId) -> Result<(), RelationshipWriteError> {
+        fn register_courier(
+            &self,
+            courier_id: &CourierId,
+        ) -> Result<AuthorizationRevision, RelationshipWriteError> {
             let persisted = self.store.get(courier_id).expect("read courier").is_some();
             self.persisted_at_write.set(Some(persisted));
-            Ok(())
+            Ok(AuthorizationRevision::new("observed"))
         }
     }
 

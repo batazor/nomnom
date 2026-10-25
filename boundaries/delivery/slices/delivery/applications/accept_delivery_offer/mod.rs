@@ -101,9 +101,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
         offer.accept(courier_id, conditions)?;
         delivery.assign(courier_id.clone())?;
         courier.mark_busy()?;
-        // The Courier Assignment is valid; grant access before commit.
-        self.relationships
+        // The Courier Assignment is valid; grant access before commit and
+        // check the delivery at least as fresh as this write (FR-447).
+        let revision = self
+            .relationships
             .assign_courier(delivery.id(), courier_id)?;
+        delivery.record_authorization_revision(revision);
 
         for mut other in self.offers.list_for_delivery(delivery.id())? {
             if other.id() != offer.id() && other.state() == OfferState::Pending {
@@ -221,6 +224,19 @@ mod tests {
         assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
         assert_eq!(world.store.commits(), 1);
         assert_eq!(world.relationships.writes(), vec![assigned("courier-1")]);
+        // FR-447: the revision of the TOUCH is stored with the delivery.
+        let revision = RecordingRelationships::revision(1);
+        assert_eq!(delivery.authorization_revision(), Some(&revision));
+
+        // A repeat writes nothing and keeps the stored revision.
+        handler(&world)
+            .execute(&subject("courier-1"), input("offer-1", "courier-1"))
+            .expect("repeat succeeds");
+        assert_eq!(world.relationships.writes().len(), 1);
+        assert_eq!(
+            world.delivery("delivery-1").authorization_revision(),
+            Some(&revision)
+        );
     }
 
     fn assigned(courier: &str) -> RelationshipWrite {

@@ -18,7 +18,7 @@ use tonic::metadata::{Ascii, MetadataValue};
 use tonic::service::Interceptor;
 use tonic::transport::{ClientTlsConfig, Endpoint};
 
-use super::mapping::PermissionCheck;
+use super::mapping::{CheckConsistency, PermissionCheck};
 use super::relationships::{
     Relationship, RelationshipGraph, RelationshipOperation, RelationshipPage,
 };
@@ -29,9 +29,10 @@ use super::v1::relationship_update::Operation;
 use super::v1::{
     CheckPermissionRequest, CheckPermissionResponse, Consistency, Cursor, ObjectReference,
     ReadRelationshipsRequest, RelationshipFilter, RelationshipUpdate, SubjectReference,
-    WriteRelationshipsRequest,
+    WriteRelationshipsRequest, WriteRelationshipsResponse, ZedToken,
 };
 use crate::pkg::config::SpiceDbConfig;
+use crate::pkg::persistence::AuthorizationRevision;
 
 /// Запас ожидания ответа сверх deadline запроса: deadline соблюдает поток
 /// клиента, этот запас лишь страхует от его остановки.
@@ -74,7 +75,7 @@ type Reply<T> = std_mpsc::SyncSender<Result<T, String>>;
 /// Запрос к потоку клиента и канал ответа.
 enum Job {
     Check(CheckPermissionRequest, Reply<bool>),
-    Write(WriteRelationshipsRequest, Reply<()>),
+    Write(WriteRelationshipsRequest, Reply<AuthorizationRevision>),
     Read(ReadRelationshipsRequest, Reply<RelationshipPage>),
 }
 
@@ -170,7 +171,7 @@ async fn serve(mut client: Client, job: Job, timeout: Duration) {
         Job::Write(request, reply) => {
             let outcome = tokio::time::timeout(timeout, client.write_relationships(request)).await;
             let _ = reply.send(match outcome {
-                Ok(Ok(_)) => Ok(()),
+                Ok(Ok(response)) => written_at(response.get_ref()),
                 Ok(Err(status)) => Err(failed("write relationships", &status)),
                 Err(_) => Err(format!(
                     "spicedb write relationships timed out after {timeout:?}"
@@ -187,6 +188,18 @@ async fn serve(mut client: Client, job: Job, timeout: Duration) {
             });
         }
     }
+}
+
+/// Revision of a write: `written_at` ZedToken; a response without it is an
+/// error, because the use case could not store a revision to check against.
+fn written_at(response: &WriteRelationshipsResponse) -> Result<AuthorizationRevision, String> {
+    response
+        .written_at
+        .as_ref()
+        .map(|token| token.token.as_str())
+        .filter(|token| !token.is_empty())
+        .map(AuthorizationRevision::new)
+        .ok_or_else(|| "spicedb write relationships returned no written_at".to_owned())
 }
 
 fn failed(operation: &str, status: &tonic::Status) -> String {
@@ -251,7 +264,7 @@ impl RelationshipGraph for SpiceDbClient {
         &self,
         operation: RelationshipOperation,
         relationship: &Relationship,
-    ) -> Result<(), String> {
+    ) -> Result<AuthorizationRevision, String> {
         self.call(
             |reply| Job::Write(write_request(operation, relationship), reply),
             "write relationships",
@@ -353,9 +366,15 @@ fn allowed(response: &CheckPermissionResponse) -> bool {
 }
 
 fn request(check: &PermissionCheck) -> CheckPermissionRequest {
+    let requirement = match &check.consistency {
+        CheckConsistency::MinimizeLatency => Requirement::MinimizeLatency(true),
+        CheckConsistency::AtLeastAsFresh(revision) => Requirement::AtLeastAsFresh(ZedToken {
+            token: revision.as_str().to_owned(),
+        }),
+    };
     CheckPermissionRequest {
         consistency: Some(Consistency {
-            requirement: Some(Requirement::MinimizeLatency(true)),
+            requirement: Some(requirement),
         }),
         resource: Some(ObjectReference {
             object_type: check.resource_type.to_owned(),
@@ -442,6 +461,7 @@ mod tests {
             permission: "coordinate_delivery",
             subject_type: "service",
             subject_id: "orders-worker".to_owned(),
+            consistency: CheckConsistency::MinimizeLatency,
         });
 
         assert_eq!(
@@ -464,6 +484,43 @@ mod tests {
             (subject.object_type.as_str(), subject.object_id.as_str()),
             ("service", "orders-worker")
         );
+    }
+
+    #[test]
+    fn request_passes_stored_revision_as_at_least_as_fresh() {
+        let request = request(&PermissionCheck {
+            resource_type: "delivery",
+            resource_id: "delivery-1".to_owned(),
+            permission: "act_as_courier",
+            subject_type: "user",
+            subject_id: "courier-1".to_owned(),
+            consistency: CheckConsistency::AtLeastAsFresh(AuthorizationRevision::new("zed-1")),
+        });
+
+        assert_eq!(
+            request.consistency,
+            Some(Consistency {
+                requirement: Some(Requirement::AtLeastAsFresh(ZedToken {
+                    token: "zed-1".to_owned()
+                }))
+            })
+        );
+    }
+
+    #[test]
+    fn write_revision_is_written_at_token() {
+        let response = |token: Option<&str>| WriteRelationshipsResponse {
+            written_at: token.map(|token| ZedToken {
+                token: token.to_owned(),
+            }),
+        };
+
+        assert_eq!(
+            written_at(&response(Some("zed-1"))),
+            Ok(AuthorizationRevision::new("zed-1"))
+        );
+        assert!(written_at(&response(None)).is_err());
+        assert!(written_at(&response(Some(""))).is_err());
     }
 
     #[test]
@@ -507,6 +564,7 @@ mod tests {
             permission: "coordinate_delivery",
             subject_type: "service",
             subject_id: "orders-worker".to_owned(),
+            consistency: CheckConsistency::MinimizeLatency,
         });
 
         assert!(outcome.is_err(), "{outcome:?}");
@@ -526,6 +584,7 @@ mod tests {
             permission: "coordinate_delivery",
             subject_type: "service",
             subject_id: "orders-worker".to_owned(),
+            consistency: CheckConsistency::MinimizeLatency,
         });
 
         assert!(outcome.is_err(), "{outcome:?}");

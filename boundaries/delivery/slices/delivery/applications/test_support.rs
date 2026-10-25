@@ -5,6 +5,7 @@ use crate::infrastructure::memory::{
     StaticAuthorization, StaticCourierLocator,
 };
 use crate::pkg::application::{RelationshipWriteError, Subject};
+use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::domains::courier::{
     Courier, CourierId, CourierRepository, CourierStatus,
 };
@@ -172,23 +173,23 @@ impl DeliveryRelationshipWriter for ObservingRelationships<'_> {
         &self,
         delivery_id: &DeliveryId,
         courier_id: &CourierId,
-    ) -> Result<(), RelationshipWriteError> {
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.observe(
             RelationshipWrite::AssignCourier(delivery_id.clone(), courier_id.clone()),
             delivery_id,
         );
-        Ok(())
+        Ok(AuthorizationRevision::new("observed"))
     }
 
     fn unassign_courier(
         &self,
         delivery_id: &DeliveryId,
         courier_id: &CourierId,
-    ) -> Result<(), RelationshipWriteError> {
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.observe(
             RelationshipWrite::UnassignCourier(delivery_id.clone(), courier_id.clone()),
             delivery_id,
         );
-        Ok(())
+        Ok(AuthorizationRevision::new("observed"))
     }
 }

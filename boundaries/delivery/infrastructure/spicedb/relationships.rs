@@ -12,6 +12,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use crate::pkg::application::RelationshipWriteError;
+use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
@@ -92,11 +93,12 @@ pub struct RelationshipPage {
 /// Synchronous access to the authorization graph; `Err` — the graph did not
 /// answer (error, timeout or outage).
 pub trait RelationshipGraph: Send + Sync {
+    /// Applies one update and returns its revision (`written_at` ZedToken).
     fn write(
         &self,
         operation: RelationshipOperation,
         relationship: &Relationship,
-    ) -> Result<(), String>;
+    ) -> Result<AuthorizationRevision, String>;
 
     /// Fully consistent page of `resource_type:*#relation@*` after `cursor`.
     fn read_page(
@@ -131,7 +133,7 @@ impl SpiceDbRelationships {
         &self,
         operation: RelationshipOperation,
         relationship: &Relationship,
-    ) -> Result<(), RelationshipWriteError> {
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.graph.write(operation, relationship).map_err(|reason| {
             RelationshipWriteError(format!("{operation:?} {relationship}: {reason}"))
         })
@@ -139,7 +141,10 @@ impl SpiceDbRelationships {
 }
 
 impl CourierRelationshipWriter for SpiceDbRelationships {
-    fn register_courier(&self, courier_id: &CourierId) -> Result<(), RelationshipWriteError> {
+    fn register_courier(
+        &self,
+        courier_id: &CourierId,
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.write(
             RelationshipOperation::Touch,
             &courier_self(courier_id.as_str()),
@@ -152,7 +157,7 @@ impl DeliveryRelationshipWriter for SpiceDbRelationships {
         &self,
         delivery_id: &DeliveryId,
         courier_id: &CourierId,
-    ) -> Result<(), RelationshipWriteError> {
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.write(
             RelationshipOperation::Touch,
             &delivery_courier(delivery_id.as_str(), courier_id.as_str()),
@@ -163,7 +168,7 @@ impl DeliveryRelationshipWriter for SpiceDbRelationships {
         &self,
         delivery_id: &DeliveryId,
         courier_id: &CourierId,
-    ) -> Result<(), RelationshipWriteError> {
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.write(
             RelationshipOperation::Delete,
             &delivery_courier(delivery_id.as_str(), courier_id.as_str()),
@@ -226,7 +231,7 @@ pub(crate) mod tests {
             &self,
             operation: RelationshipOperation,
             relationship: &Relationship,
-        ) -> Result<(), String> {
+        ) -> Result<AuthorizationRevision, String> {
             self.failure()?;
             let mut relationships = self
                 .relationships
@@ -236,11 +241,9 @@ pub(crate) mod tests {
                 RelationshipOperation::Touch => relationships.insert(relationship.clone()),
                 RelationshipOperation::Delete => relationships.remove(relationship),
             };
-            self.writes
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push((operation, relationship.to_string()));
-            Ok(())
+            let mut writes = self.writes.lock().unwrap_or_else(PoisonError::into_inner);
+            writes.push((operation, relationship.to_string()));
+            Ok(AuthorizationRevision::new(format!("zed-{}", writes.len())))
         }
 
         fn read_page(
@@ -278,10 +281,11 @@ pub(crate) mod tests {
     fn register_courier_touches_courier_self() {
         let graph = Arc::new(FakeGraph::default());
 
-        adapter(&graph)
+        let revision = adapter(&graph)
             .register_courier(&CourierId::new("courier-1"))
             .expect("written");
 
+        assert_eq!(revision, AuthorizationRevision::new("zed-1"));
         assert_eq!(
             graph.writes(),
             vec![(
@@ -298,12 +302,14 @@ pub(crate) mod tests {
         let delivery = DeliveryId::new("delivery-1");
         let courier = CourierId::new("courier-1");
 
-        writer.assign_courier(&delivery, &courier).expect("touch");
+        let touched = writer.assign_courier(&delivery, &courier).expect("touch");
         assert!(graph.contains(&delivery_courier("delivery-1", "courier-1")));
-        writer
+        let deleted = writer
             .unassign_courier(&delivery, &courier)
             .expect("delete");
 
+        assert_eq!(touched, AuthorizationRevision::new("zed-1"));
+        assert_eq!(deleted, AuthorizationRevision::new("zed-2"));
         assert!(!graph.contains(&delivery_courier("delivery-1", "courier-1")));
         assert_eq!(
             graph.writes(),

@@ -5,11 +5,22 @@
 use std::fmt::{Display, Formatter};
 
 use crate::pkg::application::Subject;
+use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::applications::authorization::{CourierPermission, CourierResource};
 use crate::slices::delivery::applications::authorization::{DeliveryPermission, DeliveryResource};
 
 /// Синглтон platform, на котором выданы fulfillment capabilities.
 const PLATFORM: (&str, &str) = ("platform", "nomnom");
+
+/// Consistency одного `CheckPermission` (FR-447, FR-448).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum CheckConsistency {
+    /// Ресурс без сохранённой revision и `platform:nomnom`.
+    #[default]
+    MinimizeLatency,
+    /// Ресурс с сохранённой revision собственной записи relationship.
+    AtLeastAsFresh(AuthorizationRevision),
+}
 
 /// Один `CheckPermission`: `resource_type:resource_id#permission@subject_type:subject_id`.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -19,6 +30,7 @@ pub struct PermissionCheck {
     pub permission: &'static str,
     pub subject_type: &'static str,
     pub subject_id: String,
+    pub consistency: CheckConsistency,
 }
 
 impl Display for PermissionCheck {
@@ -52,6 +64,7 @@ impl PermissionCheck {
             permission,
             subject_type,
             subject_id: subject_id.clone(),
+            consistency: CheckConsistency::MinimizeLatency,
         }
     }
 

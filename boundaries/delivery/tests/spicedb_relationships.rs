@@ -5,8 +5,12 @@
 //!
 //! `SPICEDB_ENDPOINT=localhost:50051 cargo test --test spicedb_relationships`
 //!
-//! Проверки прав идут через `CheckPermission` с `minimize_latency`, поэтому
-//! результат ожидается с повтором в пределах окна квантования SpiceDB.
+//! Проверки прав идут через SpiceDB-адаптер с revisions из хранилища
+//! (FR-447, AC-483): ресурс с сохранённой revision проверяется
+//! `at_least_as_fresh`, поэтому собственная запись видна сразу, без повторов и
+//! без принудительной full consistency. Повтор в пределах окна квантования
+//! остаётся только для relationships без revision (orphan, записанные мимо
+//! use case), которые проверяются с `minimize_latency` (FR-448).
 
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -16,11 +20,12 @@ use delivery::infrastructure::memory::{
 };
 use delivery::infrastructure::reconcile::Reconciler;
 use delivery::infrastructure::spicedb::{
-    Relationship, RelationshipGraph, RelationshipOperation, RelationshipPage, SpiceDbAuthorization,
-    SpiceDbClient, SpiceDbRelationships, courier_self, delivery_courier,
+    Relationship, RelationshipGraph, RelationshipOperation, RelationshipPage, RepositoryRevisions,
+    SpiceDbAuthorization, SpiceDbClient, SpiceDbRelationships, courier_self, delivery_courier,
 };
 use delivery::pkg::application::{AuthorizationError, Subject};
 use delivery::pkg::config::SpiceDbConfig;
+use delivery::pkg::persistence::AuthorizationRevision;
 use delivery::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };
@@ -74,7 +79,22 @@ fn user(id: &str) -> Subject {
     Subject::User(id.to_owned())
 }
 
-/// Ждёт, пока check вернёт `expected`.
+/// Адаптер с revisions из `store`: checks ресурсов с revision —
+/// `at_least_as_fresh`, остальные — `minimize_latency`.
+fn adapter(client: &SpiceDbClient, store: &Arc<MemoryStore>) -> SpiceDbAuthorization {
+    SpiceDbAuthorization::new(Box::new(client.clone()))
+        .with_revisions(Arc::new(RepositoryRevisions(Arc::clone(store))))
+}
+
+/// Один check, без повторов: решение должно быть верным сразу.
+fn immediately(expected: bool, outcome: Result<(), AuthorizationError>) {
+    match (&outcome, expected) {
+        (Ok(()), true) | (Err(AuthorizationError::Denied), false) => {}
+        _ => panic!("expected allowed = {expected} immediately, got {outcome:?}"),
+    }
+}
+
+/// Ждёт, пока check вернёт `expected`: только для relationships без revision.
 fn eventually(expected: bool, check: impl Fn() -> Result<(), AuthorizationError>) {
     let started = Instant::now();
     loop {
@@ -90,33 +110,53 @@ fn eventually(expected: bool, check: impl Fn() -> Result<(), AuthorizationError>
     }
 }
 
-fn courier_acts(client: &SpiceDbClient, courier: &str, allowed: bool) {
-    let authorization = SpiceDbAuthorization::new(Box::new(client.clone()));
-    eventually(allowed, || {
-        CourierAuthorization::check(
-            &authorization,
-            &user(courier),
-            CourierPermission::SetCourierAvailability,
-            &CourierResource::Courier(CourierId::new(courier)),
-        )
-    });
+fn courier_act(
+    authorization: &SpiceDbAuthorization,
+    courier: &str,
+) -> Result<(), AuthorizationError> {
+    CourierAuthorization::check(
+        authorization,
+        &user(courier),
+        CourierPermission::SetCourierAvailability,
+        &CourierResource::Courier(CourierId::new(courier)),
+    )
 }
 
-fn acts_as_courier(client: &SpiceDbClient, delivery: &str, courier: &str, allowed: bool) {
-    let authorization = SpiceDbAuthorization::new(Box::new(client.clone()));
-    eventually(allowed, || {
-        DeliveryAuthorization::check(
-            &authorization,
-            &user(courier),
-            DeliveryPermission::ConfirmPickup,
-            &DeliveryResource::Delivery(DeliveryId::new(delivery)),
-        )
-    });
+fn act_as_courier(
+    authorization: &SpiceDbAuthorization,
+    delivery: &str,
+    courier: &str,
+) -> Result<(), AuthorizationError> {
+    DeliveryAuthorization::check(
+        authorization,
+        &user(courier),
+        DeliveryPermission::ConfirmPickup,
+        &DeliveryResource::Delivery(DeliveryId::new(delivery)),
+    )
+}
+
+/// The delivery carries a stored revision, so the check is decided at once.
+fn acts_as_courier(world: &Assigned, client: &SpiceDbClient, allowed: bool) {
+    let revision =
+        DeliveryRepository::get(&*world.store, &DeliveryId::new(world.delivery.as_str()))
+            .expect("read delivery")
+            .expect("delivery")
+            .authorization_revision()
+            .cloned();
+    assert!(revision.is_some(), "delivery has no authorization revision");
+    immediately(
+        allowed,
+        act_as_courier(
+            &adapter(client, &world.store),
+            &world.delivery,
+            &world.courier,
+        ),
+    );
 }
 
 /// Хранилище с курьером и доставкой, принятой им через Accept Delivery Offer.
 struct Assigned {
-    store: MemoryStore,
+    store: Arc<MemoryStore>,
     writer: SpiceDbRelationships,
     delivery: String,
     order: String,
@@ -124,16 +164,16 @@ struct Assigned {
 }
 
 fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
-    let store = MemoryStore::new();
+    let store = Arc::new(MemoryStore::new());
     let writer = SpiceDbRelationships::new(Arc::new(client.clone()));
     let courier = unique(&format!("{tag}-courier"));
     let delivery = unique(&format!("{tag}-delivery"));
     let order = unique(&format!("{tag}-order"));
     let offer = unique("offer");
-    CourierRepository::add(&store, &Courier::new(CourierId::new(courier.as_str())))
+    CourierRepository::add(&*store, &Courier::new(CourierId::new(courier.as_str())))
         .expect("seed courier");
     DeliveryRepository::add(
-        &store,
+        &*store,
         &Delivery::new(
             DeliveryId::new(delivery.as_str()),
             OrderId::new(order.as_str()),
@@ -143,7 +183,7 @@ fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
     )
     .expect("seed delivery");
     DeliveryOfferRepository::add(
-        &store,
+        &*store,
         &DeliveryOffer::new(
             DeliveryOfferId::new(offer.as_str()),
             DeliveryId::new(delivery.as_str()),
@@ -163,11 +203,11 @@ fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
     let authorization = StaticAuthorization::allow_all();
     accept_delivery_offer::Handler {
         authorization: &authorization,
-        unit_of_work: &store,
-        offers: &store,
-        deliveries: &store,
-        couriers: &store,
-        outbox: &store,
+        unit_of_work: &*store,
+        offers: &*store,
+        deliveries: &*store,
+        couriers: &*store,
+        outbox: &*store,
         locator: &locator,
         clock: &ManualClock::new(NOW),
         policy: AssignmentPolicy {
@@ -194,16 +234,17 @@ fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
     }
 }
 
+/// FR-447: the courier acts for itself right after registration.
 #[test]
 fn registered_courier_acts_for_itself() {
     let Some(client) = live() else { return };
-    let store = MemoryStore::new();
+    let store = Arc::new(MemoryStore::new());
     let writer = SpiceDbRelationships::new(Arc::new(client.clone()));
     let courier = unique("courier");
 
     register_courier::Handler {
         authorization: &StaticAuthorization::allow_all(),
-        couriers: &store,
+        couriers: &*store,
         relationships: &writer,
     }
     .execute(
@@ -214,31 +255,39 @@ fn registered_courier_acts_for_itself() {
     )
     .expect("courier registered");
 
-    courier_acts(&client, &courier, true);
+    let revision: Option<AuthorizationRevision> =
+        CourierRepository::get(&*store, &CourierId::new(courier.as_str()))
+            .expect("read courier")
+            .expect("courier")
+            .authorization_revision()
+            .cloned();
+    assert!(revision.is_some(), "courier has no authorization revision");
+    immediately(true, courier_act(&adapter(&client, &store), &courier));
 }
 
+/// FR-447: the courier acts on the delivery right after Accept Delivery Offer.
 #[test]
 fn accepted_offer_grants_act_as_courier() {
     let Some(client) = live() else { return };
 
     let world = assigned(&client, "t");
 
-    acts_as_courier(&client, &world.delivery, &world.courier, true);
+    acts_as_courier(&world, &client, true);
 }
 
-/// AC-477
+/// AC-477, AC-483: denied right after Reassign Courier.
 #[test]
 fn reassigned_courier_loses_act_as_courier() {
     let Some(client) = live() else { return };
     let world = assigned(&client, "t");
-    acts_as_courier(&client, &world.delivery, &world.courier, true);
+    acts_as_courier(&world, &client, true);
 
     reassign_courier::Handler {
         authorization: &StaticAuthorization::allow_all(),
-        unit_of_work: &world.store,
-        deliveries: &world.store,
-        couriers: &world.store,
-        outbox: &world.store,
+        unit_of_work: &*world.store,
+        deliveries: &*world.store,
+        couriers: &*world.store,
+        outbox: &*world.store,
         relationships: &world.writer,
     }
     .execute(
@@ -249,21 +298,22 @@ fn reassigned_courier_loses_act_as_courier() {
     )
     .expect("reassigned");
 
-    acts_as_courier(&client, &world.delivery, &world.courier, false);
+    acts_as_courier(&world, &client, false);
 }
 
+/// FR-447: denied right after Cancel Delivery.
 #[test]
 fn cancelled_delivery_courier_loses_act_as_courier() {
     let Some(client) = live() else { return };
     let world = assigned(&client, "t");
-    acts_as_courier(&client, &world.delivery, &world.courier, true);
+    acts_as_courier(&world, &client, true);
 
     cancel_delivery::Handler {
         authorization: &StaticAuthorization::allow_all(),
-        unit_of_work: &world.store,
-        deliveries: &world.store,
-        couriers: &world.store,
-        outbox: &world.store,
+        unit_of_work: &*world.store,
+        deliveries: &*world.store,
+        couriers: &*world.store,
+        outbox: &*world.store,
         relationships: &world.writer,
     }
     .execute(
@@ -275,7 +325,7 @@ fn cancelled_delivery_courier_loses_act_as_courier() {
     )
     .expect("cancelled");
 
-    acts_as_courier(&client, &world.delivery, &world.courier, false);
+    acts_as_courier(&world, &client, false);
 }
 
 /// Graph limited to relationships created by this test: the shared SpiceDB
@@ -290,7 +340,7 @@ impl RelationshipGraph for ScopedGraph {
         &self,
         operation: RelationshipOperation,
         relationship: &Relationship,
-    ) -> Result<(), String> {
+    ) -> Result<AuthorizationRevision, String> {
         assert!(
             relationship.resource_id.contains(&self.marker),
             "write outside the test scope: {relationship}"
@@ -338,7 +388,7 @@ fn reconciler_restores_lost_and_deletes_orphan_after_grace() {
         inner: client.clone(),
         marker: marker.clone(),
     });
-    let store = Arc::new(world.store);
+    let store = Arc::clone(&world.store);
     let lost = delivery_courier(&world.delivery, &world.courier);
     let orphan_delivery = unique(&format!("{marker}-orphan"));
     let orphan = delivery_courier(&orphan_delivery, &world.courier);
@@ -366,25 +416,33 @@ fn reconciler_restores_lost_and_deletes_orphan_after_grace() {
         500,
         now.clone(),
     );
-    let mut couriers = Reconciler::couriers(Arc::clone(&graph), store, grace, 500, now);
+    let mut couriers =
+        Reconciler::couriers(Arc::clone(&graph), Arc::clone(&store), grace, 500, now);
+    // Orphans carry no revision: they are checked with `minimize_latency`.
+    let unrevisioned = adapter(&client, &store);
 
     let first = deliveries.reconcile(&|| false).expect("first pass");
     couriers.reconcile(&|| false).expect("first courier pass");
     assert!(first.missing_repaired >= 1, "{first:?}");
     assert!(first.orphans_pending >= 1, "{first:?}");
-    acts_as_courier(&client, &world.delivery, &world.courier, true);
+    // The restoring TOUCH stored its revision: the check sees it at once.
+    acts_as_courier(&world, &client, true);
 
     // Second pass before the grace: the orphan stays.
     *clock.lock().expect("clock") += grace - Duration::from_secs(1);
     deliveries.reconcile(&|| false).expect("second pass");
-    acts_as_courier(&client, &orphan_delivery, &world.courier, true);
+    eventually(true, || {
+        act_as_courier(&unrevisioned, &orphan_delivery, &world.courier)
+    });
 
     *clock.lock().expect("clock") += Duration::from_secs(1);
     let third = deliveries.reconcile(&|| false).expect("third pass");
     let courier_pass = couriers.reconcile(&|| false).expect("courier pass");
     assert!(third.orphans_deleted >= 1, "{third:?}");
     assert!(courier_pass.orphans_deleted >= 1, "{courier_pass:?}");
-    acts_as_courier(&client, &orphan_delivery, &world.courier, false);
-    courier_acts(&client, &ghost, false);
-    acts_as_courier(&client, &world.delivery, &world.courier, true);
+    eventually(false, || {
+        act_as_courier(&unrevisioned, &orphan_delivery, &world.courier)
+    });
+    eventually(false, || courier_act(&unrevisioned, &ghost));
+    acts_as_courier(&world, &client, true);
 }

@@ -1,6 +1,7 @@
 use std::sync::{Mutex, PoisonError};
 
 use crate::pkg::application::RelationshipWriteError;
+use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
@@ -19,7 +20,8 @@ pub enum RelationshipWrite {
 
 /// Test and local relationship writer: records every successful write and can
 /// simulate an authorization graph outage. It writes nowhere, so it is not a
-/// production implementation.
+/// production implementation. The revision of the n-th successful write is
+/// `rev-<n>` ([`RecordingRelationships::revision`]).
 #[derive(Debug, Default)]
 pub struct RecordingRelationships {
     writes: Mutex<Vec<RelationshipWrite>>,
@@ -53,7 +55,16 @@ impl RecordingRelationships {
             .clone()
     }
 
-    fn record(&self, write: RelationshipWrite) -> Result<(), RelationshipWriteError> {
+    /// Revision returned for the `number`-th (1-based) successful write.
+    #[must_use]
+    pub fn revision(number: usize) -> AuthorizationRevision {
+        AuthorizationRevision::new(format!("rev-{number}"))
+    }
+
+    fn record(
+        &self,
+        write: RelationshipWrite,
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         if let Some(reason) = self
             .failure
             .lock()
@@ -62,16 +73,17 @@ impl RecordingRelationships {
         {
             return Err(RelationshipWriteError(reason));
         }
-        self.writes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(write);
-        Ok(())
+        let mut writes = self.writes.lock().unwrap_or_else(PoisonError::into_inner);
+        writes.push(write);
+        Ok(Self::revision(writes.len()))
     }
 }
 
 impl CourierRelationshipWriter for RecordingRelationships {
-    fn register_courier(&self, courier_id: &CourierId) -> Result<(), RelationshipWriteError> {
+    fn register_courier(
+        &self,
+        courier_id: &CourierId,
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.record(RelationshipWrite::RegisterCourier(courier_id.clone()))
     }
 }
@@ -81,7 +93,7 @@ impl DeliveryRelationshipWriter for RecordingRelationships {
         &self,
         delivery_id: &DeliveryId,
         courier_id: &CourierId,
-    ) -> Result<(), RelationshipWriteError> {
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.record(RelationshipWrite::AssignCourier(
             delivery_id.clone(),
             courier_id.clone(),
@@ -92,7 +104,7 @@ impl DeliveryRelationshipWriter for RecordingRelationships {
         &self,
         delivery_id: &DeliveryId,
         courier_id: &CourierId,
-    ) -> Result<(), RelationshipWriteError> {
+    ) -> Result<AuthorizationRevision, RelationshipWriteError> {
         self.record(RelationshipWrite::UnassignCourier(
             delivery_id.clone(),
             courier_id.clone(),

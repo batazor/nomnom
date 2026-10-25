@@ -110,7 +110,7 @@ Fail closed: если пусты issuer, audience или путь к JWKS, пр�
 
 ## Авторизация (SpiceDB)
 
-Use cases проверяют права через порты `CourierAuthorization` и `DeliveryAuthorization` (`slices/*/applications/authorization.rs`). При заданном `SPICEDB__ENDPOINT` оба порта закрывает `SpiceDbAuthorization` (`infrastructure/spicedb`, [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md), FR-435): каждый check — `PermissionsService.CheckPermission` с consistency `minimize_latency` по [схеме](../../authorization/schema.zed) и нормативной таблице [design.md](../../openspec/changes/add-spicedb-authorization/design.md):
+Use cases проверяют права через порты `CourierAuthorization` и `DeliveryAuthorization` (`slices/*/applications/authorization.rs`). При заданном `SPICEDB__ENDPOINT` оба порта закрывает `SpiceDbAuthorization` (`infrastructure/spicedb`, [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md), FR-435): каждый check — `PermissionsService.CheckPermission` (consistency `minimize_latency`, для ресурса с сохранённой revision — `at_least_as_fresh`, см. «Authorization revisions») по [схеме](../../authorization/schema.zed) и нормативной таблице [design.md](../../openspec/changes/add-spicedb-authorization/design.md):
 
 | Порт / permission | SpiceDB check |
 | --- | --- |
@@ -161,7 +161,11 @@ Reconciliation (`infrastructure/reconcile.rs`, порт алгоритма `orde
 | `RECONCILER__GRACE` | `reconciler.grace` | Минимальный интервал между двумя orphan-проходами до удаления, по умолчанию `10m` |
 | `RECONCILER__PAGE_SIZE` | `reconciler.page_size` | Размер страницы, по умолчанию `500`; `1..1000` |
 
-Stubs `authzed.api.v1` теперь включают `CheckPermission`, `WriteRelationships` и `ReadRelationships` (`make generate-spicedb`). Integration-тесты `tests/spicedb_relationships.rs` (только при `SPICEDB_ENDPOINT`): регистрация → `courier#act`, принятие offer → `delivery#act_as_courier`, Reassign и Cancel → доступ пропадает, reconciler восстанавливает потерянную связь и удаляет сироту только после grace. Проверки идут через `minimize_latency`, поэтому тесты ждут результат в пределах окна квантования SpiceDB:
+### Authorization revisions (ZedToken)
+
+По change [`add-authorization-revisions`](../../openspec/changes/add-authorization-revisions/) (FR-447, FR-448, AC-483, AC-484) writers возвращают ZedToken записи (`written_at`), а use cases сохраняют его в техническом поле `authorization_revision` ресурса в той же операции save: `Courier` — Register Courier (`TOUCH`), `Delivery` — Accept (`TOUCH`), Reassign/Replan и Cancel (`DELETE`). Repeat без записи revision не меняет; старые snapshots загружаются без неё. `SpiceDbAuthorization` читает revision через порт `RevisionReader` (`RepositoryRevisions` поверх репозиториев) и проверяет `courier:<id>`/`delivery:<id>` с `at_least_as_fresh`, поэтому собственная запись видна сразу (назначенный курьер сразу `act_as_courier`, снятый — сразу отказ); без revision и для `platform:nomnom` — `minimize_latency`. Ошибка чтения revision — authorization unavailable (fail closed). Reconciler, восстанавливая missing связь `TOUCH`, сохраняет её revision в курьера/доставку; удаление orphan revision не меняет.
+
+Stubs `authzed.api.v1` теперь включают `CheckPermission`, `WriteRelationships` и `ReadRelationships` (`make generate-spicedb`). Integration-тесты `tests/spicedb_relationships.rs` (только при `SPICEDB_ENDPOINT`): регистрация → `courier#act`, принятие offer → `delivery#act_as_courier`, Reassign и Cancel → доступ пропадает, reconciler восстанавливает потерянную связь и удаляет сироту только после grace. Проверки идут через адаптер с revisions из хранилища и решаются сразу, без повторов; ждут окна квантования только сироты без revision (`minimize_latency`):
 
 ```bash
 make test-spicedb   # SPICEDB_ENDPOINT=localhost:50051, оба integration-набора
@@ -256,7 +260,7 @@ Consumers интеграционных событий `delivery` использ�
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
 - in-memory адаптеры всех портов в `infrastructure/memory` (транзакционный store с rollback и инъекцией сбоя commit, статическая authorization, управляемые clock и id generator, статический locator) — только для тестов и локальной сборки.
 
-Не реализованы: постоянное хранилище и optimistic concurrency, Outbox relay и Kafka, writers relationships `courier`/`delivery` (пользовательские checks отклоняются до них), user identity через BFF (ADR 27 оставляет её открытой), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
+Не реализованы: постоянное хранилище и optimistic concurrency, Outbox relay и Kafka, user identity через BFF (ADR 27 оставляет её открытой), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
 
 Допущения по открытым продуктовым вопросам (момент начала поиска курьера, retryability причин неудачи, параметры позиции и политики назначения) зафиксированы в [design.md](../../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам) change.
 

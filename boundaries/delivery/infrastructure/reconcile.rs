@@ -6,7 +6,9 @@
 //!   differs (orphan or stale) is deleted only when it was orphan on two passes
 //!   at least `grace` apart, because writers run before commit;
 //! - business → graph: every missing relationship is restored by `TOUCH`
-//!   immediately; ids SpiceDB cannot store are skipped and counted.
+//!   immediately and its revision is stored with the courier or delivery
+//!   (FR-447); ids SpiceDB cannot store are skipped and counted. Deleting an
+//!   orphan changes no revision: the resource is gone or the link is stale.
 //!
 //! The business state of `delivery` lives in process memory, so the
 //! reconciler is a background loop of the main process ([`run`]).
@@ -22,6 +24,7 @@ use crate::infrastructure::spicedb::{
     COURIER, COURIER_SELF, DELIVERY, DELIVERY_COURIER, Relationship, RelationshipGraph,
     RelationshipOperation, USER,
 };
+use crate::pkg::persistence::AuthorizationRevision;
 
 /// Business side of one relation: `resource_id → subject_id`.
 pub trait RelationSource: Send + Sync {
@@ -30,6 +33,15 @@ pub trait RelationSource: Send + Sync {
 
     /// `(resource_id, subject_id)` after `after`, ordered by resource id.
     fn page(&self, after: &str, limit: usize) -> Result<Vec<(String, String)>, String>;
+
+    /// Stores the revision of a restored relationship with the resource, if
+    /// business state still assigns `subject_id` to it.
+    fn record_revision(
+        &self,
+        resource_id: &str,
+        subject_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<(), String>;
 }
 
 /// `courier#self`: every registered courier acts for itself.
@@ -51,6 +63,18 @@ impl RelationSource for RegisteredCouriers {
             .map_err(|error| error.to_string())?;
         Ok(page.into_iter().map(|id| (id.clone(), id)).collect())
     }
+
+    fn record_revision(
+        &self,
+        resource_id: &str,
+        _subject_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<(), String> {
+        self.0
+            .record_courier_revision(resource_id, revision)
+            .map(drop)
+            .map_err(|error| error.to_string())
+    }
 }
 
 /// `delivery#courier`: deliveries with `courier_id` set.
@@ -69,6 +93,18 @@ impl RelationSource for AssignedDeliveries {
     fn page(&self, after: &str, limit: usize) -> Result<Vec<(String, String)>, String> {
         self.0
             .assignment_page(after, limit)
+            .map_err(|error| error.to_string())
+    }
+
+    fn record_revision(
+        &self,
+        resource_id: &str,
+        subject_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<(), String> {
+        self.0
+            .record_assignment_revision(resource_id, subject_id, revision)
+            .map(drop)
             .map_err(|error| error.to_string())
     }
 }
@@ -266,9 +302,13 @@ impl Reconciler {
                     USER,
                     subject_id,
                 );
-                self.graph
+                let revision = self
+                    .graph
                     .write(RelationshipOperation::Touch, &relationship)
                     .map_err(|reason| format!("restore {relationship}: {reason}"))?;
+                self.source
+                    .record_revision(resource_id, subject_id, revision)
+                    .map_err(|reason| format!("store revision of {relationship}: {reason}"))?;
                 stats.missing_repaired += 1;
             }
             match page.last() {
@@ -378,6 +418,15 @@ mod tests {
                 .filter(|(resource, _)| resource.as_str() > after)
                 .take(limit)
                 .collect())
+        }
+
+        fn record_revision(
+            &self,
+            _resource_id: &str,
+            _subject_id: &str,
+            _revision: AuthorizationRevision,
+        ) -> Result<(), String> {
+            Ok(())
         }
     }
 
@@ -593,7 +642,7 @@ mod tests {
         let graph = Arc::new(FakeGraph::with([courier_self("courier-ghost")]));
         let mut reconciler = Reconciler::couriers(
             Arc::clone(&graph) as Arc<dyn RelationshipGraph>,
-            store,
+            Arc::clone(&store),
             Duration::ZERO,
             500,
             Arc::new(Instant::now),
@@ -606,6 +655,64 @@ mod tests {
         assert_eq!(second.orphans_deleted, 1);
         assert!(graph.contains(&courier_self("courier-1")));
         assert!(!graph.contains(&courier_self("courier-ghost")));
+        // FR-447: the revision of the restoring TOUCH is stored with the courier.
+        let restored = CourierRepository::get(&*store, &CourierId::new("courier-1"))
+            .expect("read")
+            .expect("courier");
+        assert!(restored.authorization_revision().is_some());
+    }
+
+    /// FR-447: a restored `delivery#courier` stores its TOUCH revision on the
+    /// delivery; an orphan deletion changes no revision.
+    #[test]
+    fn delivery_reconciler_stores_revision_of_restored_assignment() {
+        use crate::slices::courier::domains::courier::CourierId;
+        use crate::slices::delivery::domains::delivery::{
+            Address, Delivery, DeliveryId, DeliveryRepository, OrderId,
+        };
+        let store = Arc::new(MemoryStore::new());
+        let mut delivery = Delivery::new(
+            DeliveryId::new("delivery-1"),
+            OrderId::new("order-1"),
+            Address::new("Restaurant street 1").expect("pickup"),
+            Address::new("Customer street 2").expect("dropoff"),
+        );
+        delivery
+            .assign(CourierId::new("courier-1"))
+            .expect("assign");
+        delivery.record_authorization_revision(AuthorizationRevision::new("old"));
+        DeliveryRepository::add(&*store, &delivery).expect("add");
+        let graph = Arc::new(FakeGraph::with([delivery_courier(
+            "delivery-9",
+            "courier-1",
+        )]));
+        let mut reconciler = Reconciler::deliveries(
+            Arc::clone(&graph) as Arc<dyn RelationshipGraph>,
+            Arc::clone(&store),
+            Duration::ZERO,
+            500,
+            Arc::new(Instant::now),
+        );
+
+        let first = reconciler.reconcile(&|| false).expect("pass");
+
+        assert_eq!(first.missing_repaired, 1);
+        let restored = DeliveryRepository::get(&*store, &DeliveryId::new("delivery-1"))
+            .expect("read")
+            .expect("delivery");
+        assert_eq!(
+            restored.authorization_revision(),
+            Some(&AuthorizationRevision::new("zed-1"))
+        );
+        reconciler.reconcile(&|| false).expect("orphan pass");
+        assert!(!graph.contains(&delivery_courier("delivery-9", "courier-1")));
+        let after_delete = DeliveryRepository::get(&*store, &DeliveryId::new("delivery-1"))
+            .expect("read")
+            .expect("delivery");
+        assert_eq!(
+            after_delete.authorization_revision(),
+            Some(&AuthorizationRevision::new("zed-1"))
+        );
     }
 
     #[tokio::test]

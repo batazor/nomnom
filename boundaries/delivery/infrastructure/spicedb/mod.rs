@@ -5,10 +5,16 @@
 //!
 //! [`SpiceDbRelationships`] закрывает порты записи relationships слайсов
 //! (FR-444), а [`RelationshipGraph`] читает граф для reconciliation (FR-445).
+//!
+//! Checks на `courier:<id>` и `delivery:<id>` идут с `at_least_as_fresh` по
+//! revision, сохранённой с ресурсом ([`RevisionReader`], FR-447); без revision
+//! и для `platform:nomnom` — `minimize_latency` (FR-448). Ошибка чтения
+//! revision — authorization unavailable (fail closed).
 
 mod client;
 mod mapping;
 mod relationships;
+mod revisions;
 
 /// Сгенерированные stubs `authzed.api.v1` (`buf.gen.yaml`) не выходят за
 /// границу infrastructure.
@@ -18,15 +24,18 @@ pub mod v1 {
 }
 
 pub use client::{PermissionChecker, SpiceDbClient, SpiceDbConfigError};
-pub use mapping::{PermissionCheck, courier_check, delivery_check};
+pub use mapping::{CheckConsistency, PermissionCheck, courier_check, delivery_check};
 pub use relationships::{
     COURIER, COURIER_SELF, DELIVERY, DELIVERY_COURIER, Relationship, RelationshipGraph,
     RelationshipOperation, RelationshipPage, SpiceDbRelationships, USER, courier_self,
     delivery_courier,
 };
+pub use revisions::{RepositoryRevisions, RevisionReader};
 
 #[cfg(test)]
 pub(crate) use relationships::tests::FakeGraph;
+
+use std::sync::Arc;
 
 use crate::pkg::application::{AuthorizationError, Subject};
 use crate::pkg::config::SpiceDbConfig;
@@ -40,6 +49,7 @@ use crate::slices::delivery::applications::authorization::{
 /// Авторизация обоих слайсов через `CheckPermission`.
 pub struct SpiceDbAuthorization {
     checker: Box<dyn PermissionChecker>,
+    revisions: Option<Arc<dyn RevisionReader>>,
 }
 
 impl std::fmt::Debug for SpiceDbAuthorization {
@@ -52,9 +62,20 @@ impl std::fmt::Debug for SpiceDbAuthorization {
 
 impl SpiceDbAuthorization {
     /// Адаптер поверх произвольного checker — для тестов маппинга и отказов.
+    /// Без [`RevisionReader`] все checks идут с `minimize_latency`.
     #[must_use]
     pub fn new(checker: Box<dyn PermissionChecker>) -> Self {
-        Self { checker }
+        Self {
+            checker,
+            revisions: None,
+        }
+    }
+
+    /// Checks ресурсов с сохранённой revision — `at_least_as_fresh`.
+    #[must_use]
+    pub fn with_revisions(mut self, revisions: Arc<dyn RevisionReader>) -> Self {
+        self.revisions = Some(revisions);
+        self
     }
 
     /// `None`, если endpoint не задан; ошибка — невалидная конфигурация.
@@ -66,14 +87,40 @@ impl SpiceDbAuthorization {
     }
 
     fn decide(&self, check: Option<PermissionCheck>) -> Result<(), AuthorizationError> {
-        let Some(check) = check else {
+        let Some(mut check) = check else {
             return Err(AuthorizationError::Denied);
         };
+        check.consistency = self.consistency(&check)?;
         match self.checker.check(&check) {
             Ok(true) => Ok(()),
             Ok(false) => Err(AuthorizationError::Denied),
             Err(reason) => Err(AuthorizationError::Unavailable(reason)),
         }
+    }
+}
+
+impl SpiceDbAuthorization {
+    /// `at_least_as_fresh` для `courier`/`delivery` с сохранённой revision,
+    /// иначе `minimize_latency`.
+    fn consistency(&self, check: &PermissionCheck) -> Result<CheckConsistency, AuthorizationError> {
+        let Some(revisions) = &self.revisions else {
+            return Ok(CheckConsistency::MinimizeLatency);
+        };
+        if !matches!(check.resource_type, COURIER | DELIVERY) {
+            return Ok(CheckConsistency::MinimizeLatency);
+        }
+        let revision = revisions
+            .revision(check.resource_type, &check.resource_id)
+            .map_err(|reason| {
+                AuthorizationError::Unavailable(format!(
+                    "read authorization revision of {}:{}: {reason}",
+                    check.resource_type, check.resource_id
+                ))
+            })?;
+        Ok(revision.map_or(
+            CheckConsistency::MinimizeLatency,
+            CheckConsistency::AtLeastAsFresh,
+        ))
     }
 }
 
@@ -101,16 +148,18 @@ impl DeliveryAuthorization for SpiceDbAuthorization {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex, PoisonError};
+    use std::sync::{Mutex, PoisonError};
 
     use super::*;
+    use crate::pkg::persistence::AuthorizationRevision;
     use crate::slices::courier::domains::courier::CourierId;
-    use crate::slices::delivery::domains::delivery::OrderId;
+    use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId};
 
     /// Fake SpiceDB: фиксированный ответ и журнал запросов.
     struct FakeChecker {
         outcome: Result<bool, String>,
         seen: Arc<Mutex<Vec<String>>>,
+        consistencies: Arc<Mutex<Vec<CheckConsistency>>>,
     }
 
     impl PermissionChecker for FakeChecker {
@@ -119,8 +168,106 @@ mod tests {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .push(check.to_string());
+            self.consistencies
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(check.consistency.clone());
             self.outcome.clone()
         }
+    }
+
+    /// Revisions: `courier-1` и `delivery-1` с revision, `broken` — ошибка
+    /// хранилища, `platform:nomnom` тоже «имеет» revision, чтобы проверить,
+    /// что адаптер её не читает.
+    struct FakeRevisions;
+
+    impl RevisionReader for FakeRevisions {
+        fn revision(
+            &self,
+            resource_type: &str,
+            resource_id: &str,
+        ) -> Result<Option<AuthorizationRevision>, String> {
+            match (resource_type, resource_id) {
+                (_, "broken") => Err("store offline".to_owned()),
+                ("courier", "courier-1") => Ok(Some(AuthorizationRevision::new("zed-c"))),
+                ("delivery", "delivery-1") => Ok(Some(AuthorizationRevision::new("zed-d"))),
+                ("platform", _) => Ok(Some(AuthorizationRevision::new("zed-p"))),
+                _ => Ok(None),
+            }
+        }
+    }
+
+    fn revisioned() -> (SpiceDbAuthorization, Arc<Mutex<Vec<CheckConsistency>>>) {
+        let consistencies = Arc::new(Mutex::new(Vec::new()));
+        let checker = FakeChecker {
+            outcome: Ok(true),
+            seen: Arc::new(Mutex::new(Vec::new())),
+            consistencies: consistencies.clone(),
+        };
+        (
+            SpiceDbAuthorization::new(Box::new(checker)).with_revisions(Arc::new(FakeRevisions)),
+            consistencies,
+        )
+    }
+
+    fn act_as_courier(
+        authorization: &SpiceDbAuthorization,
+        delivery: &str,
+    ) -> Result<(), AuthorizationError> {
+        DeliveryAuthorization::check(
+            authorization,
+            &Subject::User("courier-1".to_owned()),
+            DeliveryPermission::ConfirmPickup,
+            &DeliveryResource::Delivery(DeliveryId::new(delivery)),
+        )
+    }
+
+    /// FR-447, AC-484: stored revision — `at_least_as_fresh`, без неё и для
+    /// `platform:nomnom` — `minimize_latency`.
+    #[test]
+    fn consistency_follows_stored_revision() {
+        let (authorization, consistencies) = revisioned();
+
+        assert_eq!(act_as_courier(&authorization, "delivery-1"), Ok(()));
+        assert_eq!(act_as_courier(&authorization, "delivery-2"), Ok(()));
+        assert_eq!(
+            CourierAuthorization::check(
+                &authorization,
+                &Subject::User("courier-1".to_owned()),
+                CourierPermission::SetCourierAvailability,
+                &CourierResource::Courier(CourierId::new("courier-1")),
+            ),
+            Ok(())
+        );
+        assert_eq!(create_delivery(&authorization), Ok(()));
+
+        assert_eq!(
+            *consistencies.lock().unwrap_or_else(PoisonError::into_inner),
+            vec![
+                CheckConsistency::AtLeastAsFresh(AuthorizationRevision::new("zed-d")),
+                CheckConsistency::MinimizeLatency,
+                CheckConsistency::AtLeastAsFresh(AuthorizationRevision::new("zed-c")),
+                CheckConsistency::MinimizeLatency,
+            ]
+        );
+    }
+
+    /// FR-448: revision не прочитана — authorization unavailable без
+    /// обращения к SpiceDB.
+    #[test]
+    fn revision_read_failure_fails_closed_as_unavailable() {
+        let (authorization, consistencies) = revisioned();
+
+        assert!(matches!(
+            act_as_courier(&authorization, "broken"),
+            Err(AuthorizationError::Unavailable(_))
+        ));
+        assert!(
+            consistencies
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_empty()
+        );
     }
 
     fn adapter(outcome: Result<bool, String>) -> (SpiceDbAuthorization, Arc<Mutex<Vec<String>>>) {
@@ -128,6 +275,7 @@ mod tests {
         let checker = FakeChecker {
             outcome,
             seen: seen.clone(),
+            consistencies: Arc::new(Mutex::new(Vec::new())),
         };
         (SpiceDbAuthorization::new(Box::new(checker)), seen)
     }

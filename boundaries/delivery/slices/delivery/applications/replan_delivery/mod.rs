@@ -131,7 +131,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, RelationshipWrite, StaticAuthorization};
+    use crate::infrastructure::memory::{
+        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+    };
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::test_support::{World, candidate, service};
     use crate::slices::delivery::domains::delivery::{
@@ -215,6 +217,11 @@ mod tests {
                 DeliveryId::new("delivery-1"),
                 CourierId::new("courier-1")
             )]
+        );
+        // FR-447: Replan stores the revision of the reassignment DELETE.
+        assert_eq!(
+            delivery.authorization_revision(),
+            Some(&RecordingRelationships::revision(1))
         );
     }
 
