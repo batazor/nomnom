@@ -23,11 +23,9 @@ type ViewedRestaurant = NonNullable<ViewRestaurantQuery["restaurant"]>;
 export function RestaurantOrdering({
   restaurantId,
   onPlaced,
-  ticket,
 }: {
   restaurantId: string;
   onPlaced: (orderId: string) => void;
-  ticket?: (submit: () => void) => ReactNode;
 }) {
   const { t } = useI18n();
   const [{ data, error, fetching }, reexecute] = useQuery({
@@ -57,23 +55,15 @@ export function RestaurantOrdering({
       />
     );
   }
-  return (
-    <RestaurantView
-      onPlaced={onPlaced}
-      restaurant={data.restaurant}
-      ticket={ticket}
-    />
-  );
+  return <RestaurantView onPlaced={onPlaced} restaurant={data.restaurant} />;
 }
 
 function RestaurantView({
   restaurant,
   onPlaced,
-  ticket,
 }: {
   restaurant: ViewedRestaurant;
   onPlaced: (orderId: string) => void;
-  ticket?: (submit: () => void) => ReactNode;
 }) {
   const { t } = useI18n();
   const cart = useCart(restaurant.id);
@@ -179,7 +169,6 @@ function RestaurantView({
                   onPlaced(orderId);
                 }}
                 restaurantId={restaurant.id}
-                ticket={ticket}
               />
             ) : null}
           </CartPanel>

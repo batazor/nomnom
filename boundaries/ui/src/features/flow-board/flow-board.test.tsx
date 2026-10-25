@@ -160,7 +160,7 @@ describe("flow board", () => {
     expect(within(courier).getByText("На линии")).toBeVisible();
   }, 15_000);
 
-  it("carries the order by dragging: cart to kitchen, kitchen to courier", async () => {
+  it("carries an accepted order to the courier by dragging", async () => {
     const user = userEvent.setup();
     renderBoard();
     await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
@@ -173,12 +173,7 @@ describe("flow board", () => {
       screen.getByRole("textbox", { name: "Адрес доставки" }),
       "ул. Морская, 4",
     );
-
-    // The cart ticket dropped on the kitchen places the order.
-    const ticket = screen.getByText("Перетащите заказ на кухню");
-    fireEvent.dragStart(ticket, { dataTransfer: dataTransfer() });
-    expect(column("Кухня")).toHaveAttribute("data-drop", "ready");
-    fireEvent.drop(column("Кухня"), { dataTransfer: dataTransfer() });
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
     await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
 
     const accept = await waitFor(selectedKitchenCard);

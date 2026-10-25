@@ -8,12 +8,9 @@ import {
   useState,
 } from "react";
 
-// What can be carried across the board: the customer's cart as a ticket to
-// the kitchen, or a kitchen order to the courier. Buttons in every column do
-// the same steps without a pointer.
-export type BoardCargo =
-  | { kind: "ticket"; submit: () => void }
-  | { kind: "order"; orderId: string };
+// What can be carried across the board: a kitchen order to the courier. The
+// courier's buttons do the same step without a pointer.
+export type BoardCargo = { kind: "order"; orderId: string };
 
 const mimeType = "application/x-nomnom-board";
 

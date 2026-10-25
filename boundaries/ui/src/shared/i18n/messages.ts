@@ -262,7 +262,6 @@ export const messages = {
     "board.courier.problem.OFFER_NOT_AVAILABLE": "Предложение уже недоступно.",
     "board.courier.problem.DELIVERY_STAGE_CONFLICT":
       "Заказ ещё не готов к этому шагу.",
-    "board.dnd.ticket": "Перетащите заказ на кухню",
     "board.dnd.courierBusy": "Курьер уже везёт другой заказ.",
     "board.dnd.noOffer": "Для этого заказа пока нет предложения курьеру.",
   },
@@ -537,7 +536,6 @@ export const messages = {
       "The offer is no longer available.",
     "board.courier.problem.DELIVERY_STAGE_CONFLICT":
       "The order is not ready for this step yet.",
-    "board.dnd.ticket": "Drag the order to the kitchen",
     "board.dnd.courierBusy": "The courier is already on another delivery.",
     "board.dnd.noOffer": "There is no courier offer for this order yet.",
   },
