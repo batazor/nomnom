@@ -30,7 +30,7 @@ use crate::slices::delivery::di::{
 };
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryFailureCode, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    DeliveryOfferRepository, DeliveryRepository, OrderId,
+    DeliveryOfferRepository, DeliveryPosition, DeliveryRepository, OrderId,
 };
 use crate::slices::delivery::infrastructure::failure_log::FailureLog;
 use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
@@ -277,6 +277,14 @@ impl DeliveryRepository for ObservedStore {
 
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
         DeliveryRepository::save(&*self.inner, delivery)
+    }
+
+    fn list_waiting_without_pending_offer(
+        &self,
+        after: Option<&DeliveryPosition>,
+        limit: usize,
+    ) -> Result<Vec<Delivery>, RepositoryError> {
+        self.inner.list_waiting_without_pending_offer(after, limit)
     }
 }
 

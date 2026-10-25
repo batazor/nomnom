@@ -29,8 +29,8 @@ use delivery::slices::delivery::applications::list_available_delivery_offers::Pe
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use delivery::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
-    DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DomainEvent, FailureReporter,
-    OfferState, OrderId, State,
+    DeliveryOfferId, DeliveryOfferRepository, DeliveryPosition, DeliveryRepository, DomainEvent,
+    FailureReporter, OfferState, OrderId, State,
 };
 
 const DSN_ENV: &str = "DATABASE_URL";
@@ -638,4 +638,80 @@ fn failure_reason_code_and_detail_round_trip_and_legacy_text_reads_as_other() {
     let legacy_reason = legacy.failure_reason().expect("reason");
     assert_eq!(legacy_reason.code(), DeliveryFailureCode::Other);
     assert_eq!(legacy_reason.detail(), Some("customer absent"));
+}
+
+#[test]
+fn waiting_deliveries_without_pending_offer_page_in_creation_order() {
+    let Some(store) = store() else { return };
+    // A creation time far in the past, unique per run, keeps the rows of
+    // other tests of a shared database before or after ours.
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let base = -1_000_000_000 - i64::try_from(nanos % 1_000_000_000).expect("fits") * 4;
+    let prefix = unique("waiting");
+    let waiting = |suffix: &str, created_at: i64| {
+        let delivery =
+            new_delivery(&format!("{prefix}-{suffix}")).with_created_at(Some(created_at));
+        DeliveryRepository::add(&store, &delivery).expect("delivery");
+        delivery
+    };
+    let first = waiting("1", base + 1);
+    let offered = waiting("2", base + 2);
+    let third = waiting("3", base + 2);
+    let assigned_one = assigned(&waiting("4", base + 3), &unique("courier"));
+    DeliveryRepository::save(&store, &assigned_one).expect("assign");
+    let mut pending = DeliveryOffer::new(
+        DeliveryOfferId::new(unique("offer")),
+        offered.id().clone(),
+        CourierId::new(unique("courier")),
+        base,
+        base + 60,
+    )
+    .expect("offer");
+    DeliveryOfferRepository::add(&store, &pending).expect("pending offer");
+    let start = DeliveryPosition {
+        created_at_epoch_seconds: base,
+        delivery_id: DeliveryId::new(""),
+    };
+    let ours = |deliveries: Vec<Delivery>| -> Vec<DeliveryId> {
+        deliveries
+            .into_iter()
+            .map(|delivery| delivery.id().clone())
+            .filter(|id| id.as_str().starts_with(&prefix))
+            .collect()
+    };
+
+    let page = store
+        .list_waiting_without_pending_offer(Some(&start), 2)
+        .expect("first page");
+    assert_eq!(
+        ours(page.clone()),
+        vec![first.id().clone(), third.id().clone()]
+    );
+    let next = DeliveryPosition::of(page.last().expect("full page"));
+    let rest = store
+        .list_waiting_without_pending_offer(Some(&next), 1000)
+        .expect("next page");
+    assert!(ours(rest).is_empty(), "assigned and offered are not listed");
+
+    pending
+        .reject(&pending.courier_id().clone(), base)
+        .expect("reject");
+    DeliveryOfferRepository::save(&store, &pending).expect("rejected");
+    assert_eq!(
+        ours(
+            store
+                .list_waiting_without_pending_offer(Some(&start), 3)
+                .expect("after rejection")
+        ),
+        vec![first.id().clone(), offered.id().clone(), third.id().clone()]
+    );
+    assert!(
+        !store
+            .list_waiting_without_pending_offer(None, 1)
+            .expect("no cursor")
+            .is_empty()
+    );
 }

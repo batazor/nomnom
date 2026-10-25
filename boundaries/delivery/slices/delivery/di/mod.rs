@@ -24,8 +24,8 @@ use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    expire_delivery_offers, find_courier, offer_delivery, reassign_courier, reject_delivery_offer,
-    replan_delivery, report_delivery_failure,
+    dispatch_deliveries, expire_delivery_offers, find_courier, offer_delivery, reassign_courier,
+    reject_delivery_offer, replan_delivery, report_delivery_failure,
 };
 use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, DeliveryRepository};
 
@@ -174,6 +174,12 @@ pub trait DeliveryUseCases: Interface {
         &self,
         input: expire_delivery_offers::Input,
     ) -> Result<expire_delivery_offers::Output, DeliveryApplicationError>;
+
+    /// Background job of the process: no caller subject.
+    fn dispatch_deliveries(
+        &self,
+        input: dispatch_deliveries::Input,
+    ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError>;
 }
 
 #[derive(Component)]
@@ -412,6 +418,24 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             offers: self.ports.store(),
             outbox: self.ports.store(),
             clock: self.ports.clock(),
+        }
+        .execute(input)
+    }
+
+    fn dispatch_deliveries(
+        &self,
+        input: dispatch_deliveries::Input,
+    ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError> {
+        dispatch_deliveries::Handler {
+            unit_of_work: &self.unit_of_work(),
+            deliveries: self.ports.store(),
+            couriers: self.ports.store(),
+            offers: self.ports.store(),
+            outbox: self.ports.store(),
+            locator: self.ports.locator(),
+            ids: self.ports.ids(),
+            clock: self.ports.clock(),
+            policy: self.settings.assignment_policy(),
         }
         .execute(input)
     }

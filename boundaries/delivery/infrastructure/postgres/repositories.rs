@@ -8,7 +8,7 @@ use crate::slices::courier::applications::update_courier_location::{
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository, Location};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    DeliveryOfferRepository, DeliveryRepository, OrderId,
+    DeliveryOfferRepository, DeliveryPosition, DeliveryRepository, OfferState, OrderId, State,
 };
 
 use super::rows::{
@@ -188,6 +188,35 @@ impl DeliveryRepository for PostgresStore {
             "SELECT 1 FROM deliveries WHERE id = $1",
             delivery.id().as_str(),
         )
+    }
+
+    fn list_waiting_without_pending_offer(
+        &self,
+        after: Option<&DeliveryPosition>,
+        limit: usize,
+    ) -> Result<Vec<Delivery>, RepositoryError> {
+        // Without a cursor every row is after (i64::MIN, ''): ids are "C"
+        // collated, so the empty string sorts first.
+        let (created_at, id) = after.map_or((i64::MIN, ""), DeliveryPosition::key);
+        let statement = format!(
+            "SELECT {DELIVERY_COLUMNS} FROM deliveries
+             WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)
+               AND NOT EXISTS (SELECT 1 FROM delivery_offers o
+                               WHERE o.delivery_id = deliveries.id AND o.state = $4)
+             ORDER BY COALESCE(created_at, 0), id LIMIT $5"
+        );
+        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
+            statement
+        ))
+        .bind(delivery_state(State::Waiting))
+        .bind(created_at)
+        .bind(id)
+        .bind(offer_state(OfferState::Pending))
+        .bind(super::limit(limit))
+        .fetch_all(connection))?
+        .iter()
+        .map(delivery_from_row)
+        .collect()
     }
 }
 
