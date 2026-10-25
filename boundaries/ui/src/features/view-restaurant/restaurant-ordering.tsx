@@ -8,8 +8,9 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import { Button, useToast } from "../../shared/ui";
-import { type ItemProblems, PlaceOrder } from "../place-order";
+import { checkoutFormId, type ItemProblems, PlaceOrder } from "../place-order";
 import { useCart } from "./cart";
+import { CartBar } from "./cart-bar";
 import { type CartEntry, CartPanel } from "./cart-panel";
 import { Menu, type MenuEntry } from "./menu";
 import { estimateSubtotal } from "./money";
@@ -138,13 +139,26 @@ function RestaurantView({
 
       {menu ? (
         <div className="restaurant-layout">
-          <Menu
-            acceptingOrders={restaurant.acceptingOrders}
-            items={menu.items}
-            onAdd={add}
-            quantities={quantities}
-            restaurantId={restaurant.id}
-          />
+          <div className="restaurant-menu-column">
+            <Menu
+              acceptingOrders={restaurant.acceptingOrders}
+              items={menu.items}
+              onAdd={add}
+              quantities={quantities}
+              restaurantId={restaurant.id}
+            />
+            {restaurant.acceptingOrders && subtotal ? (
+              <CartBar
+                cartId="cart"
+                count={entries.reduce(
+                  (sum, { line }) => sum + line.quantity,
+                  0,
+                )}
+                formId={checkoutFormId}
+                subtotal={subtotal}
+              />
+            ) : null}
+          </div>
           <CartPanel
             entries={entries}
             itemProblems={itemProblems}

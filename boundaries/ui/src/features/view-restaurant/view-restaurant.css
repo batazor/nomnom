@@ -291,7 +291,7 @@
 @media (prefers-reduced-motion: no-preference) {
   .menu-item-copy,
   .menu-item-action,
-  .restaurant-layout > :not(.restaurant-menu) {
+  .restaurant-layout > :not(.restaurant-menu-column) {
     animation: restaurant-appear var(--motion-standard) var(--motion-easing)
       120ms both;
   }
@@ -302,4 +302,52 @@
     opacity: 0;
     transform: translateY(0.25rem);
   }
+}
+
+.restaurant-menu-column {
+  min-width: 0;
+}
+
+/* The short cart sticks to the bottom of the window while the menu scrolls. */
+.cart-bar {
+  position: sticky;
+  z-index: 2;
+  bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
+  box-shadow: var(--shadow-floating);
+  backdrop-filter: blur(8px);
+}
+
+.cart-bar-summary {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cart-bar-title {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+.cart-bar-total {
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

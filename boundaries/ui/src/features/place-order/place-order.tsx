@@ -106,14 +106,13 @@ export function PlaceOrder({
 
   return (
     <form
-      aria-labelledby="checkout-title"
+      aria-label={t("checkout.title")}
       ref={form}
       className="checkout"
+      id={checkoutFormId}
       noValidate
       onSubmit={submit}
     >
-      <h5 id="checkout-title">{t("checkout.title")}</h5>
-
       {state.kind === "problems" &&
       (state.orderProblems.length > 0 || itemProblemsInCart) ? (
         <div className="checkout-problems" role="alert">
@@ -160,3 +159,6 @@ export function PlaceOrder({
     </form>
   );
 }
+
+// The checkout form, so the cart bar's button can send it from afar.
+export const checkoutFormId = "checkout";

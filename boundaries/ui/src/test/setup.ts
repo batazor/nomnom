@@ -11,6 +11,19 @@ if (typeof HTMLCanvasElement !== "undefined") {
   });
 }
 
+// jsdom has no IntersectionObserver: nothing ever scrolls out of view, so
+// the cart bar stays hidden behind the full cart.
+if (typeof window !== "undefined") {
+  window.IntersectionObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  } as unknown as typeof IntersectionObserver;
+}
+
 // Animations jump to their end: content that fades in after a card grows is
 // there at once, and tests see the settled screen.
 MotionGlobalConfig.skipAnimations = true;

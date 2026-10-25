@@ -193,6 +193,14 @@
   scroll-snap-type: x proximity;
 }
 
+/* Wide enough for the columns: no sideways scroll, and without a scroll
+   container the cart sticks to the window. */
+@container style(--viewport: xl) {
+  .board-columns {
+    overflow-x: visible;
+  }
+}
+
 @container style(--viewport: md) or style(--viewport: lg) {
   .board-columns {
     grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
