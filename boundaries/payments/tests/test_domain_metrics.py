@@ -2,7 +2,7 @@
 
 import unittest
 from collections.abc import Sequence
-from typing import cast
+from typing import cast, override
 
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
@@ -40,6 +40,7 @@ AUTHORIZED = PaymentAuthorized(PaymentId("payment-0"), OrderId("order-1"), Money
 
 
 class DomainMetricsTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.reader = InMemoryMetricReader()
         provider = MeterProvider(metric_readers=[self.reader])
@@ -138,7 +139,12 @@ class DomainMetricsTest(unittest.TestCase):
             PaymentOperationDeclined(
                 OperationId("op-1"), payment, OperationKind.CANCEL_AUTHORIZATION, "x"
             ),
-            PaymentOperationDeclined(OperationId("op-2"), payment, cast(OperationKind, "x"), "x"),
+            PaymentOperationDeclined(
+                OperationId("op-2"),
+                payment,
+                cast(OperationKind, "x"),  # ty: ignore[disjoint-cast] - deliberately unknown kind
+                "x",
+            ),
             cast(PaymentFailed, object()),
         ]
 

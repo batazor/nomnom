@@ -6,7 +6,7 @@ Inside an active Unit of Work every method participates in that transaction.
 """
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, override
 
 from .ids import OperationId, OrderId, PaymentId
 from .operation import PaymentOperation
@@ -19,6 +19,7 @@ class DuplicatePaymentError(Exception):
 
     order_id: OrderId
 
+    @override
     def __str__(self) -> str:
         return f"payment for order {self.order_id} already exists"
 
@@ -29,6 +30,7 @@ class DuplicateIdempotencyKeyError(Exception):
 
     idempotency_key: str
 
+    @override
     def __str__(self) -> str:
         return "payment operation with this idempotency key already exists"
 
@@ -39,6 +41,7 @@ class OperationAlreadyPendingError(Exception):
 
     payment_id: PaymentId
 
+    @override
     def __str__(self) -> str:
         return f"payment {self.payment_id} already has a pending operation"
 

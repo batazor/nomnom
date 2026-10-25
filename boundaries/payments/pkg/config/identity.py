@@ -60,7 +60,7 @@ def parse_user_delegates(value: str) -> frozenset[str]:
     """
     delegates: set[str] = set()
     if not value.strip():
-        return frozenset()
+        return frozenset[str]()
     for raw in value.split(","):
         entry = raw.strip()
         if _USER_DELEGATE_ENTRY.match(entry) is None:

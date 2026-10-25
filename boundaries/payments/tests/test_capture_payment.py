@@ -1,4 +1,5 @@
 import unittest
+from typing import override
 
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
@@ -19,6 +20,7 @@ KEY = "order-1:capture"
 
 
 class CapturePaymentTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.handler = CapturePaymentHandler(self.kit.executor())

@@ -11,7 +11,7 @@ import time
 import unittest
 import uuid
 from datetime import timedelta
-from typing import Any
+from typing import Any, override
 
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
 
@@ -67,16 +67,19 @@ class _Ids:
 class _DatabaseCase(unittest.TestCase):
     database: PostgresDatabase
 
+    @override
     @classmethod
     def setUpClass(cls) -> None:
         migrate(DSN)
         cls.database = create_database(DatabaseSettings(DATABASE__URL=DSN, DATABASE__MAX_CONNS=4))
         cls.database.check()
 
+    @override
     @classmethod
     def tearDownClass(cls) -> None:
         cls.database.close()
 
+    @override
     def setUp(self) -> None:
         with self.database.connection() as conn:
             conn.execute("TRUNCATE payments, payment_operations, outbox, inbox")
@@ -166,7 +169,7 @@ class KafkaRelayIntegrationTest(_DatabaseCase):
         try:
             while found is None and time.monotonic() < deadline:
                 message = consumer.poll(1.0)
-                if message is None or message.error():
+                if message is None or message.error() is not None:
                     continue
                 if _headers(message).get("event_id") == event_id:
                     found = message

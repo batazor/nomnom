@@ -5,13 +5,13 @@ import time
 import unittest
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, override
 from unittest.mock import patch
 
 import grpc
 import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
-from jwt.algorithms import ECAlgorithm
+from jwt.algorithms import ECAlgorithm  # ty: ignore[possibly-missing-import] - defined when cryptography is installed
 from payment_fakes import PaymentsTestKit, close_container, payments_container
 from pydantic import ValidationError
 
@@ -102,6 +102,7 @@ def _vector_resolver(clock: float | None = None) -> ServiceTokenSubjectResolver:
 class ServiceTokenVectorsTest(unittest.TestCase):
     """AC-459, AC-460, AC-461: shared vectors of ``tests/identity``."""
 
+    @override
     def setUp(self) -> None:
         self.resolver = _vector_resolver()
 
@@ -202,6 +203,7 @@ def _claims(**overrides: object) -> dict[str, object]:
 
 
 class EcdsaTokenTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.private_key = ec.generate_private_key(ec.SECP256R1())
         jwk = json.loads(ECAlgorithm.to_jwk(self.private_key.public_key()))
@@ -365,6 +367,7 @@ def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:
 class ServiceIdentityGrpcTest(unittest.TestCase):
     """AC-459 end to end: the token travels as gRPC metadata and reaches the use case."""
 
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.worker = GrpcWorker(("127.0.0.1", 0), _handlers(self.kit), _vector_resolver())
@@ -372,6 +375,7 @@ class ServiceIdentityGrpcTest(unittest.TestCase):
         self.channel = grpc.insecure_channel(f"127.0.0.1:{self.worker.port}")
         self.client = service_pb2_grpc.PaymentsServiceStub(self.channel)
 
+    @override
     def tearDown(self) -> None:
         self.channel.close()
         self.worker.shutdown(time.monotonic() + 1)

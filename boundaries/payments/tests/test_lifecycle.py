@@ -5,6 +5,7 @@ import time
 import unittest
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler
+from typing import cast, override
 from unittest.mock import ANY
 
 from pkg.lifecycle import (
@@ -106,7 +107,7 @@ def get(port: int, path: str) -> tuple[int, dict[str, str], dict[str, object]]:
     try:
         connection.request("GET", path)
         response = connection.getresponse()
-        body = json.loads(response.read())
+        body = cast(dict[str, object], json.loads(response.read()))
         headers = {name.lower(): value for name, value in response.getheaders()}
         return response.status, headers, body
     finally:
@@ -215,6 +216,7 @@ class LifecycleTest(unittest.TestCase):
         release = threading.Event()
 
         class SlowStartWorker(FakeWorker):
+            @override
             def start(self) -> None:
                 release.wait(TIMEOUT)
                 super().start()
@@ -251,11 +253,13 @@ class SlowHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    @override
     def log_message(self, format: str, *args: object) -> None:
         return
 
 
 class HttpWorkerTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         SlowHandler.received = threading.Event()
         self.worker = HttpWorker(("127.0.0.1", 0), SlowHandler)
@@ -315,6 +319,7 @@ class KeepAliveHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"ok")
 
+    @override
     def log_message(self, format: str, *args: object) -> None:
         return
 

@@ -5,13 +5,13 @@ import time
 import unittest
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, override
 from unittest.mock import patch
 
 import grpc
 import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
-from jwt.algorithms import ECAlgorithm
+from jwt.algorithms import ECAlgorithm  # ty: ignore[possibly-missing-import] - defined when cryptography is installed
 from payment_fakes import PaymentsTestKit
 from pydantic import ValidationError
 from test_service_identity import (
@@ -106,6 +106,7 @@ class _ResolverCase(unittest.TestCase):
 class UserAssertionVectorsTest(_ResolverCase):
     """FR-471, FR-472, AC-525–AC-528: shared vectors of ``tests/identity``."""
 
+    @override
     def setUp(self) -> None:
         self.resolver = _resolver()
 
@@ -210,6 +211,7 @@ class UserAssertionClockTest(unittest.TestCase):
 class SignedAssertionTest(_ResolverCase):
     """Rules the static vectors do not pin: padded sub, blank jti, P-256 only."""
 
+    @override
     def setUp(self) -> None:
         self.private_key = ec.generate_private_key(ec.SECP256R1())
         jwk = json.loads(ECAlgorithm.to_jwk(self.private_key.public_key()))
@@ -341,6 +343,7 @@ class UserIdentityConfigTest(_ResolverCase):
 class UserIdentityGrpcTest(unittest.TestCase):
     """AC-525 end to end: the use case sees ``user:<sub>`` from the metadata of BFF."""
 
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.worker = GrpcWorker(("127.0.0.1", 0), _handlers(self.kit), _resolver())
@@ -348,6 +351,7 @@ class UserIdentityGrpcTest(unittest.TestCase):
         self.channel = grpc.insecure_channel(f"127.0.0.1:{self.worker.port}")
         self.client = service_pb2_grpc.PaymentsServiceStub(self.channel)
 
+    @override
     def tearDown(self) -> None:
         self.channel.close()
         self.worker.shutdown(time.monotonic() + 1)

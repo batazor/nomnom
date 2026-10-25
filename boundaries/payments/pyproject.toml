@@ -47,14 +47,51 @@ convention = "google"
 [tool.ty.environment]
 python-version = "3.14"
 
+# Every ty rule is an error, including the ones that are off or warnings by default.
+[tool.ty.rules]
+all = "error"
+
 [tool.ty.src]
 include = ["di", "entrypoints", "pkg", "slices", "tests"]
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.15",
     "ruff>=0.17.2",
     "ty>=0.0.91",
 ]
 watch = [
     "watchfiles>=1.3.0",
+]
+
+# Architecture boundaries (ADR 5, ADR 6): `uv run lint-imports`.
+[tool.importlinter]
+root_packages = ["di", "entrypoints", "infrastructure", "pkg", "slices"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Process layers: entrypoints → di → infrastructure → slices → pkg"
+type = "layers"
+layers = ["entrypoints", "di", "infrastructure", "slices", "pkg"]
+
+[[tool.importlinter.contracts]]
+name = "Slice layers: applications → domains"
+type = "layers"
+containers = ["slices.payment"]
+layers = ["applications", "domains"]
+
+[[tool.importlinter.contracts]]
+name = "Domain and application code stay free of frameworks and drivers"
+type = "forbidden"
+source_modules = ["slices", "pkg.application"]
+forbidden_modules = [
+    "dependency_injector",
+    "grpc",
+    "psycopg",
+    "psycopg_pool",
+    "confluent_kafka",
+    "authzed",
+    "jwt",
+    "pydantic_settings",
+    "opentelemetry",
 ]

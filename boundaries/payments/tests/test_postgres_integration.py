@@ -11,6 +11,7 @@ import os
 import unittest
 import uuid
 from datetime import timedelta
+from typing import Any, override
 
 import psycopg
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
@@ -93,16 +94,19 @@ class _Ids:
 class PostgresIntegrationTest(unittest.TestCase):
     database: PostgresDatabase
 
+    @override
     @classmethod
     def setUpClass(cls) -> None:
         migrate(DSN)
         cls.database = create_database(DatabaseSettings(DATABASE__URL=DSN, DATABASE__MAX_CONNS=4))
         cls.database.check()
 
+    @override
     @classmethod
     def tearDownClass(cls) -> None:
         cls.database.close()
 
+    @override
     def setUp(self) -> None:
         with self.database.connection() as conn:
             conn.execute("TRUNCATE payments, payment_operations, outbox, inbox")
@@ -131,7 +135,7 @@ class PostgresIntegrationTest(unittest.TestCase):
             NOW + timedelta(minutes=minutes),
         )
 
-    def _outbox_rows(self) -> list[tuple]:
+    def _outbox_rows(self) -> list[tuple[Any, ...]]:
         with self.database.connection() as conn:
             return conn.execute(
                 "SELECT event_id, aggregate_type, aggregate_id, aggregate_version, event_type, "

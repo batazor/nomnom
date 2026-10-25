@@ -1,4 +1,5 @@
 import unittest
+from typing import override
 
 from payment_fakes import PaymentsTestKit
 
@@ -20,6 +21,7 @@ from slices.payment.domains.payment import (
 
 
 class InMemoryAdaptersTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
 

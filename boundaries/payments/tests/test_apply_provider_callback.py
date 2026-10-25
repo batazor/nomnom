@@ -1,4 +1,5 @@
 import unittest
+from typing import override
 
 from payment_fakes import PaymentsTestKit
 
@@ -24,6 +25,7 @@ CAPTURED = ProviderOperationOutcome.succeeded("capture-ref")
 
 
 class ApplyProviderCallbackTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.payment_id = self.kit.given_payment(PaymentState.AUTHORIZED)

@@ -38,11 +38,11 @@ from pkg.config import (
 from pkg.lifecycle import Lifecycle, LifecycleConfig
 
 
-class TelemetryResource(providers.Resource):
+class TelemetryResource[T](providers.Resource[T]):
     """Telemetry providers: initialized before and flushed after every other resource."""
 
 
-class ProcessResource(providers.Resource):
+class ProcessResource[T](providers.Resource[T]):
     """Process-wide client or pool, owned for the lifetime of the workers."""
 
 

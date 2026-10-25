@@ -1,4 +1,5 @@
 import unittest
+from typing import override
 
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
@@ -37,6 +38,7 @@ KEY = "order-1:authorize"
 
 
 class AuthorizePaymentTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.payment_id = self.kit.given_payment()

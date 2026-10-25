@@ -1,6 +1,7 @@
 import dataclasses
 import unittest
 from datetime import timedelta
+from typing import override
 
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
@@ -21,6 +22,7 @@ from slices.payment.domains.payment import OperationKind, OperationState
 
 
 class ListPaymentOperationsTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.payment_id = self.kit.given_payment()

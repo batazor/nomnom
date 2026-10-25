@@ -1,6 +1,6 @@
 import time
 import unittest
-from typing import cast
+from typing import cast, override
 
 import grpc
 from dependency_injector import providers
@@ -29,6 +29,7 @@ ORDERS_WORKER = Subject(SubjectKind.SERVICE, "orders-worker")
 
 
 class StaticSubjectResolver(SubjectResolver):
+    @override
     def resolve(self, context: grpc.ServicerContext) -> Subject:
         return ORDERS_WORKER
 
@@ -46,10 +47,11 @@ def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:
 
 
 def _code(error: grpc.RpcError) -> grpc.StatusCode:
-    return cast(grpc.Call, error).code()
+    return cast(grpc.StatusCode, cast(grpc.Call, error).code())
 
 
 class PaymentsGrpcServiceTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.worker = GrpcWorker(("127.0.0.1", 0), _handlers(self.kit), StaticSubjectResolver())
@@ -57,6 +59,7 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
         self.channel = grpc.insecure_channel(f"127.0.0.1:{self.worker.port}")
         self.client = service_pb2_grpc.PaymentsServiceStub(self.channel)
 
+    @override
     def tearDown(self) -> None:
         self.channel.close()
         self.worker.shutdown(time.monotonic() + 1)
@@ -67,7 +70,7 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
                 order_id=order_id, amount=payments_pb2.Money(amount=amount, currency="EUR")
             )
         )
-        return response.payment_id
+        return str(response.payment_id)
 
     def _authorize(
         self, payment_id: str, key: str = "order-1:authorize"

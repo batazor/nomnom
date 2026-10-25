@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, StrEnum
-from typing import NamedTuple
+from typing import NamedTuple, override
 
 
 class PaymentState(StrEnum):
@@ -42,6 +42,7 @@ class InvalidTransitionError(Exception):
     from_state: PaymentState
     trigger: PaymentTrigger
 
+    @override
     def __str__(self) -> str:
         return f"invalid payment transition from {self.from_state.value} with {self.trigger.value}"
 
@@ -52,6 +53,7 @@ class GuardFailedError(Exception):
 
     reason: str
 
+    @override
     def __str__(self) -> str:
         return f"payment transition guard failed: {self.reason}"
 
@@ -65,6 +67,7 @@ class AlreadyInStateError(Exception):
 
     state: PaymentState
 
+    @override
     def __str__(self) -> str:
         return f"payment is already in state {self.state.value}"
 

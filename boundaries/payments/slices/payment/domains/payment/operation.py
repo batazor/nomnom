@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import override
 
 from .events import PaymentDomainEvent, PaymentOperationDeclined
 from .fsm import PaymentTrigger
@@ -33,6 +34,7 @@ class InvalidOperationTransitionError(Exception):
     from_state: OperationState
     trigger: OperationTrigger
 
+    @override
     def __str__(self) -> str:
         return (
             f"invalid payment operation transition from {self.from_state.value} "
@@ -46,6 +48,7 @@ class OperationAlreadyCompletedError(Exception):
 
     state: OperationState
 
+    @override
     def __str__(self) -> str:
         return f"payment operation is already {self.state.value}"
 
@@ -57,6 +60,7 @@ class OperationMismatchError(Exception):
     operation_id: OperationId
     payment_id: PaymentId
 
+    @override
     def __str__(self) -> str:
         return f"payment operation {self.operation_id} does not belong to {self.payment_id}"
 
@@ -149,7 +153,7 @@ class PaymentOperation:
         """
         if state is not OperationState.PENDING and completed_at is None:
             raise ValueError("completed payment operation requires completion time")
-        if state is OperationState.DECLINED and not decline_reason:
+        if state is OperationState.DECLINED and (decline_reason is None or decline_reason == ""):
             raise ValueError("declined payment operation requires a reason")
         operation = cls(operation_id, payment_id, kind, idempotency_key, amount, requested_at)
         operation._state = state
@@ -167,7 +171,11 @@ class PaymentOperation:
             InvalidOperationTransitionError: The operation was already declined.
         """
         self._state = _transition(self._state, OperationTrigger.SUCCEED)
-        self._provider_reference = provider_reference.strip() if provider_reference else None
+        self._provider_reference = (
+            provider_reference.strip()
+            if provider_reference is not None and provider_reference != ""
+            else None
+        )
         self._completed_at = completed_at
 
     def decline(self, reason: str, completed_at: datetime) -> None:

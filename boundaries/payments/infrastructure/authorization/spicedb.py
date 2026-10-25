@@ -5,7 +5,7 @@ other contexts: ``openspec/changes/add-spicedb-authorization/design.md``.
 """
 
 import logging
-from typing import Any, Protocol
+from typing import Protocol, cast
 
 from authzed.api.v1 import (
     CheckPermissionRequest,
@@ -134,8 +134,11 @@ class DenyAllPermissions:
         return False
 
 
-def create_spicedb_client(settings: SpiceDBSettings) -> Any:
+def create_spicedb_client(settings: SpiceDBSettings) -> PermissionsClient:
     """Create the official authzed client; channels connect lazily on the first check."""
     if settings.insecure:
-        return InsecureClient(settings.endpoint, settings.preshared_key)
-    return SyncClient(settings.endpoint, bearer_token_credentials(settings.preshared_key))
+        return cast(PermissionsClient, InsecureClient(settings.endpoint, settings.preshared_key))
+    return cast(
+        PermissionsClient,
+        SyncClient(settings.endpoint, bearer_token_credentials(settings.preshared_key)),
+    )

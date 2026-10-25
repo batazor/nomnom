@@ -1,8 +1,8 @@
 UV ?= uv
 
-.PHONY: check run run-relay generate proto-check test lint typecheck format format-check lint-fix
+.PHONY: check run run-relay generate proto-check test lint imports typecheck format format-check lint-fix
 
-check: proto-check test lint typecheck format-check
+check: proto-check test lint imports typecheck format-check
 
 generate:
 	$(MAKE) -C ../.. buf-generate
@@ -21,6 +21,10 @@ test:
 
 lint:
 	$(UV) run ruff check .
+
+# Architecture boundaries: [tool.importlinter] in pyproject.toml.
+imports:
+	$(UV) run lint-imports
 
 typecheck:
 	$(UV) run ty check

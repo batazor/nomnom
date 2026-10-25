@@ -2,6 +2,7 @@
 
 import unittest
 from datetime import UTC, datetime, timedelta, timezone
+from typing import Any
 
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -36,7 +37,9 @@ def _record(seq: int, occurred_at: datetime = NOW - timedelta(seconds=2)) -> Out
 
 
 class FakeStore:
-    def __init__(self, records: list[OutboxRecord], published_at: dict | None = None) -> None:
+    def __init__(
+        self, records: list[OutboxRecord], published_at: dict[int, datetime] | None = None
+    ) -> None:
         self.records = {r.seq: r for r in records}
         self.published: dict[int, datetime] = dict(published_at or {})
         self.failures: dict[int, list[str]] = {}
@@ -96,9 +99,9 @@ def _metrics() -> tuple[RelayMetrics, InMemoryMetricReader]:
     return RelayMetrics(provider.get_meter("test"), now=lambda: NOW), reader
 
 
-def _points(reader: InMemoryMetricReader) -> dict[str, list]:
+def _points(reader: InMemoryMetricReader) -> dict[str, list[Any]]:
     data = reader.get_metrics_data()
-    result: dict[str, list] = {}
+    result: dict[str, list[Any]] = {}
     if data is None:
         return result
     for rm in data.resource_metrics:

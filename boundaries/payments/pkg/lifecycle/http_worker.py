@@ -6,6 +6,7 @@ import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import override
 
 from pkg.lifecycle._bind import FastBindMixin
 from pkg.lifecycle.errors import DrainTimeoutError, LifecycleError
@@ -33,6 +34,7 @@ class _TrackingHTTPServer(FastBindMixin, HTTPServer):
         self._lock = threading.Lock()
         self._connections: dict[threading.Thread, socket.socket] = {}
 
+    @override
     def process_request(self, request, client_address) -> None:  # type: ignore[override]
         thread = threading.Thread(
             target=self._process_request_thread,
@@ -55,6 +57,7 @@ class _TrackingHTTPServer(FastBindMixin, HTTPServer):
             with self._lock:
                 self._connections.pop(threading.current_thread(), None)
 
+    @override
     def handle_error(self, request, client_address) -> None:  # type: ignore[override]
         logger.warning("http request from %s failed", client_address, exc_info=True)  # noqa: LOG014 - called from an except block by socketserver
 

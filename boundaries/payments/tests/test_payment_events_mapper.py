@@ -2,7 +2,7 @@
 
 import unittest
 import uuid
-from typing import Any
+from typing import Any, override
 
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.messaging.events import events_pb2
@@ -29,6 +29,7 @@ AMOUNT = Money.parse("25.50", "EUR")
 
 
 class PaymentEventsMapperTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.mapper = PaymentEventsMapper()
 

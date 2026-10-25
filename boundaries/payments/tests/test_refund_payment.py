@@ -1,4 +1,5 @@
 import unittest
+from typing import override
 
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
@@ -20,6 +21,7 @@ KEY = "order-1:refund"
 
 
 class RefundPaymentTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.handler = RefundPaymentHandler(self.kit.executor())

@@ -2,6 +2,7 @@
 
 import socketserver
 from http.server import HTTPServer
+from typing import override
 
 
 class FastBindMixin(HTTPServer):
@@ -11,6 +12,7 @@ class FastBindMixin(HTTPServer):
     for 0.0.0.0 takes seconds and delays startup. The server name is never used.
     """
 
+    @override
     def server_bind(self) -> None:
         """Bind the socket and record the raw address as the server name."""
         socketserver.TCPServer.server_bind(self)

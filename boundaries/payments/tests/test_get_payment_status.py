@@ -1,6 +1,7 @@
 import dataclasses
 import unittest
 from decimal import Decimal
+from typing import override
 
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
@@ -15,6 +16,7 @@ from slices.payment.domains.payment import OrderId, PaymentState
 
 
 class GetPaymentStatusTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.handler = GetPaymentStatusHandler(self.kit.payments, self.kit.permissions)

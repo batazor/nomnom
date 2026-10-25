@@ -1,4 +1,5 @@
 import unittest
+from typing import override
 
 from payment_fakes import (
     ORCHESTRATOR,
@@ -24,6 +25,7 @@ from slices.payment.domains.payment import (
 
 
 class CreatePaymentTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.handler = CreatePaymentHandler(self.kit.payments, self.kit.permissions, self.kit.ids)
@@ -122,6 +124,7 @@ class RacingPaymentRepository(InMemoryPaymentRepository):
         super().__init__(store)
         self._winner: Payment | None = winner
 
+    @override
     def get_by_order(self, order_id: OrderId) -> Payment | None:
         found = super().get_by_order(order_id)
         if self._winner is not None:

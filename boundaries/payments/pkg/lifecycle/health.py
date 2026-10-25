@@ -3,7 +3,7 @@
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import cast
+from typing import cast, override
 
 from pkg.lifecycle._bind import FastBindMixin
 
@@ -87,6 +87,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    @override
     def log_message(self, format: str, *args: object) -> None:
         # Probes не логируются.
         return
@@ -130,6 +131,7 @@ class ManagementServer(FastBindMixin, ThreadingHTTPServer):
             self._thread.join()
         self.server_close()
 
+    @override
     def handle_error(self, request: object, client_address: object) -> None:
         """Ignore failed probe connections; they are not process errors."""
         # Оборванное probe-соединение не является ошибкой процесса.

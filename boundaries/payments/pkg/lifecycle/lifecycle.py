@@ -6,7 +6,7 @@ import threading
 import time
 from dataclasses import dataclass
 from types import FrameType
-from typing import Any, Protocol
+from typing import Any, Protocol, override
 
 from pkg.lifecycle.errors import LifecycleError
 from pkg.lifecycle.health import Health, ManagementServer
@@ -68,6 +68,7 @@ class _RunThread(threading.Thread):
         self._exited = exited
         self.error: BaseException | None = None
 
+    @override
     def run(self) -> None:
         try:
             self._worker.run()

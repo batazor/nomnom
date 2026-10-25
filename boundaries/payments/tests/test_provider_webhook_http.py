@@ -4,6 +4,7 @@ import threading
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
+from typing import override
 
 from payment_fakes import PaymentsTestKit
 
@@ -24,6 +25,7 @@ SECRET = "whsec_test"
 
 
 class ProviderWebhookHttpTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         payment_id = self.kit.given_payment(PaymentState.AUTHORIZED)
@@ -39,6 +41,7 @@ class ProviderWebhookHttpTest(unittest.TestCase):
         self.thread = threading.Thread(target=self.worker.run, daemon=True)
         self.thread.start()
 
+    @override
     def tearDown(self) -> None:
         self.worker.shutdown(time.monotonic() + 2)
         self.thread.join(2)

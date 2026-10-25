@@ -1,4 +1,5 @@
 import unittest
+from typing import override
 
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
@@ -22,6 +23,7 @@ KEY = "order-1:cancel-authorization"
 
 
 class CancelAuthorizationTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit()
         self.handler = CancelAuthorizationHandler(self.kit.executor())
