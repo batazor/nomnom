@@ -17,7 +17,8 @@ env:
 identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-bff/bff=bff
+  # orders — API orders (каталог Place Order: GetRestaurant, GetMenu).
+  serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-orders/orders=orders,nomnom-bff/bff=bff
   # ADR 32: user assertions BFF (ConfigMap bff-jwks создаёт scripts/bff-identity.sh);
   # передавать user subject может только service bff.
   userJwksConfigMap: bff-jwks
