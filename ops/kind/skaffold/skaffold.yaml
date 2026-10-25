@@ -34,7 +34,8 @@ deploy:
         createNamespace: true
         wait: true
       # После Envoy Gateway: поддержка Gateway API включается, только если CRD уже есть.
-      # Выпускает сертификаты public gateway от локального CA (manifests/certs/issuers.yaml).
+      # Выпускает сертификаты public gateway от локального CA и ключ user assertions BFF
+      # (chart ../bootstrap, templates/certs.yaml и templates/identity.yaml).
       - name: cert-manager
         remoteChart: oci://quay.io/jetstack/charts/cert-manager
         version: v1.21.3
@@ -109,13 +110,12 @@ build:
       docker:
         dockerfile: ops/kind/e2e/probe/Dockerfile
 manifests:
-  # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) применяет только before-hook:
-  # rawYaml добавляет pod template label skaffold.dev/run-id, и каждый deploy перезапускал бы
-  # их с пустыми данными уже после миграций приложений.
+  # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) ставит chart ../bootstrap из
+  # before-hook: rawYaml и releases Skaffold получают pod template label skaffold.dev/run-id, и
+  # каждый deploy перезапускал бы их с пустыми данными уже после миграций приложений.
   rawYaml:
     - ../manifests/base/namespaces.yaml
     - ../manifests/gateway/gateway.yaml
-    - ../manifests/certs/issuers.yaml
     - ../manifests/gateway/public-gateway.yaml
     - ../manifests/fixtures/net-probe.yaml
     - ../manifests/observability/trace-capture.yaml
@@ -158,31 +158,25 @@ deploy:
     hooks:
       before:
         # Skaffold применяет rawYaml после helm, поэтому всё, что charts читают при старте,
-        # создаётся здесь: namespaces, JWKS (ADR 27), ключ и JWKS BFF, JWKS тестового identity
-        # provider (ADR 32), bootstrap и preshared key SpiceDB
-        # (ADR 18), Secrets и PostgreSQL orders, payments и delivery, MongoDB restaurants (ADR 8, ADR 31).
+        # создаётся здесь (ADR 34): namespaces и chart ../bootstrap — локальный CA и ключ BFF
+        # (cert-manager), SpiceDB с bootstrap и preshared key (ADR 18), PostgreSQL orders,
+        # payments, delivery и MongoDB restaurants со случайными паролями, сохраняемыми между
+        # deploy (ADR 8, ADR 31), JWKS кластера, BFF и тестового identity provider (ADR 27,
+        # ADR 32). --wait ждёт readiness хранилищ, затем hook Jobs инициализируют replica set
+        # MongoDB и публикуют JWKS. --take-ownership принимает ресурсы, созданные до chart.
         - host:
             command:
               - sh
               - -c
               - |
                 set -eu
-                k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
-                k apply -f ../manifests/base/namespaces.yaml
-                ../scripts/identity-jwks.sh "$SKAFFOLD_KUBE_CONTEXT"
-                ../scripts/bff-identity.sh "$SKAFFOLD_KUBE_CONTEXT"
-                ../scripts/authz.sh "$SKAFFOLD_KUBE_CONTEXT"
-                ../scripts/postgres.sh "$SKAFFOLD_KUBE_CONTEXT"
-                ../scripts/mongodb.sh "$SKAFFOLD_KUBE_CONTEXT" secrets
-                k apply -f ../manifests/authz/spicedb.yaml -f ../manifests/data/postgres-orders.yaml \
-                  -f ../manifests/data/postgres-payments.yaml -f ../manifests/data/postgres-delivery.yaml \
-                  -f ../manifests/data/mongodb-restaurants.yaml
-                k -n nomnom-authz wait deployment/spicedb --for=condition=Available --timeout=300s
-                for db in orders payments delivery; do
-                  k -n nomnom-data wait "deployment/postgres-${db}" --for=condition=Available --timeout=300s
-                done
-                k -n nomnom-data wait deployment/mongodb-restaurants --for=condition=Available --timeout=300s
-                ../scripts/mongodb.sh "$SKAFFOLD_KUBE_CONTEXT" init
+                kubectl --context "$SKAFFOLD_KUBE_CONTEXT" apply -f ../manifests/base/namespaces.yaml
+                helm upgrade --install bootstrap ../bootstrap --kube-context "$SKAFFOLD_KUBE_CONTEXT" \
+                  --namespace nomnom-data --take-ownership --server-side=true --force-conflicts \
+                  --wait --timeout 10m \
+                  --set-file authz.schema=../../../authorization/schema.zed \
+                  --set-file authz.bootstrap=../../../authorization/bootstrap.yaml \
+                  --set-file identity.idpJwks=../../../tests/identity/fixtures/idp-jwks.json
         # Kafka и Temporal dev server для orders-consumer (ADR 28) нужны до установки charts:
         # consumer подключается к ним при startup.
         - host:
@@ -289,8 +283,8 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
           image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
       # BFF (ADR 32): контексты только через internal gateway; access tokens тестового identity
-      # provider, ключ assertions — scripts/bff-identity.sh. Последний release: индексы в
-      # patches профилей не меняются.
+      # provider, ключ assertions — Secret bff-assertion-key от cert-manager (chart ../bootstrap).
+      # Последний release: индексы в patches профилей не меняются.
       - name: bff
         chartPath: ../../../boundaries/bff/ops/helm
         namespace: nomnom-bff
@@ -305,11 +299,13 @@ profiles:
   # своя telemetry); при изменении порядка releases поправить patches.
   - name: grafana-cloud
     patches:
+      # Alloy и Secret grafana-cloud-otlp из ops/grafana-cloud/.env.grafana-cloud (kustomize
+      # secretGenerator, ADR 34); Secret alloy-postgres создаёт chart ../bootstrap.
       - op: add
-        path: /deploy/helm/hooks/before/-
+        path: /manifests/kustomize
         value:
-          host:
-            command: ["sh", "-c", "../scripts/grafana-cloud.sh \"$SKAFFOLD_KUBE_CONTEXT\""]
+          paths: [../manifests/observability]
+          buildArgs: [--load-restrictor, LoadRestrictionsNone]
       - op: add
         path: /deploy/helm/releases/0/valuesFiles/-
         value: ../values/grafana-cloud.yaml

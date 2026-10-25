@@ -1,0 +1,26 @@
+# Alloy → Grafana Cloud (ADR 9) для Skaffold profile grafana-cloud: только alloy.yaml,
+# trace-capture.yaml применяется rawYaml всегда. Secret grafana-cloud-otlp генерируется из
+# ops/grafana-cloud/.env.grafana-cloud (вне каталога kustomization, поэтому Skaffold передаёт
+# --load-restrictor LoadRestrictionsNone). Суффикс-хеш имени Secret перезапускает Alloy при
+# изменении файла. Без файла рендер падает сразу; пустые значения отвергает init container.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - alloy.yaml
+secretGenerator:
+  - name: grafana-cloud-otlp
+    namespace: nomnom-observability
+    envs:
+      - ../../../grafana-cloud/.env.grafana-cloud
+patches:
+  # В файле есть и ключи для других инструментов (stack URL, token service account Editor для
+  # gcx и Grafana MCP): в кластер попадают только переменные OTLP.
+  - patch: |-
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: grafana-cloud-otlp
+        namespace: nomnom-observability
+      data:
+        GRAFANA_CLOUD_STACK_URL: null
+        GRAFANA_CLOUD_SA_TOKEN: null

@@ -20,7 +20,7 @@ env:
   TEMPORAL__NAMESPACE: default
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
-# создаёт scripts/identity-jwks.sh) и allowlist вызывающих workloads.
+# публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
 identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
@@ -31,20 +31,20 @@ identity:
   # projected token audience nomnom.restaurants (IDENTITY__TOKEN_DIR).
   tokenAudiences:
     - nomnom.restaurants
-  # ADR 32: user assertions BFF (ConfigMap bff-jwks создаёт scripts/bff-identity.sh);
+  # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);
   # передавать user subject может только service bff.
   userJwksConfigMap: bff-jwks
   userIssuer: nomnom-bff
   userDelegates: bff
 
-# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт scripts/authz.sh.
+# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:
   endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
   insecure: true
   presharedKeySecret:
     name: spicedb-preshared-key
 
-# ADR 8: PostgreSQL orders тестового окружения; Secret orders-postgres создаёт scripts/postgres.sh.
+# ADR 8: PostgreSQL orders тестового окружения; Secret orders-postgres создаёт chart ops/kind/bootstrap.
 postgres:
   dsnSecret:
     name: orders-postgres

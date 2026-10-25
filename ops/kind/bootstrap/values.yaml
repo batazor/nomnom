@@ -1,0 +1,38 @@
+# Values chart kind-bootstrap (ADR 34). Устанавливается before-hook helm-деплоера Skaffold
+# (ops/kind/skaffold/skaffold.yaml) до charts приложений. Файлы вне chart передаются
+# --set-file: authz.schema, authz.bootstrap, identity.idpJwks.
+
+images:
+  spicedb: authzed/spicedb:v1.57.0@sha256:a170d372c9f6b921bb6849064df6ca3566dd5b174882c1a2c4300c2ae1d60efd
+  postgres: postgres:18.6-alpine3.24@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+  mongodb: mongo:8.3.13@sha256:0e900a3364da37b76d642b73b0bba56bd4c6c509ab470cf700436fd866bee3ff
+  # Job публикации JWKS: только stdlib Python, Kubernetes API вызывается напрямую.
+  python: python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
+
+# Неймспейсы bounded contexts: получают preshared key SpiceDB и JWKS (cluster-jwks, bff-jwks).
+contexts:
+  - orders
+  - restaurants
+  - delivery
+  - payments
+
+# ADR 18: schema.zed и bootstrap.yaml из authorization/ (--set-file).
+authz:
+  schema: ""
+  bootstrap: ""
+
+# ADR 8: владельцы PostgreSQL. Пароль — Secret postgres-<owner> (nomnom-data), DSN — Secret
+# <owner>-postgres (nomnom-<owner>, ключ dsn), DSN экспортеров Alloy — Secret alloy-postgres.
+postgres:
+  owners:
+    - orders
+    - payments
+    - delivery
+
+identity:
+  # ADR 27: issuer projected ServiceAccount tokens, ожидаемый values контекстов.
+  issuer: https://kubernetes.default.svc.cluster.local
+  # ADR 32: kid ключа user assertions; совпадает с identity.assertionKeyId в values/bff.yaml.
+  bffKeyId: nomnom-bff-kind
+  # JWKS тестового identity provider из tests/identity/fixtures/idp-jwks.json (--set-file).
+  idpJwks: ""

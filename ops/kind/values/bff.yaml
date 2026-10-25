@@ -17,14 +17,15 @@ internalGateway:
 
 # ADR 32. ТОЛЬКО для kind: identity provider — тестовый (tests/identity/fixtures, ConfigMap
 # idp-jwks), его ключ подписи лежит в репозитории. Ключ подписи user assertions (Secret
-# bff-assertion-key) создаётся один раз на кластер. Оба создаёт scripts/bff-identity.sh.
+# bff-assertion-key) выпускает cert-manager один раз на кластер: ECDSA P-256 в PKCS#8, ключ
+# tls.key, rotationPolicy Never. Оба создаёт chart ops/kind/bootstrap (ADR 34).
 identity:
   idpIssuer: https://idp.nomnom.test
   idpAudience: nomnom-bff
   idpJwksConfigMap: idp-jwks
   assertionKeySecret:
     name: bff-assertion-key
-    key: key.pem
+    key: tls.key
   assertionKeyId: nomnom-bff-kind
   tokenAudiences:
     - nomnom.orders

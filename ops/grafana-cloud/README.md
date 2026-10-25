@@ -19,7 +19,7 @@ make grafana-cloud-push            # overview dashboards → folder nomnom в st
 
 `push-dashboards.sh` собирает временный gcx config (token gcx кладёт в системный keychain) и загружает копии артефактов с annotation `grafana.app/folder: nomnom`: Editor в Grafana 13 создаёт dashboards в корне, но не может их читать и обновлять, а на созданный им folder получает права администратора. Закоммиченные артефакты не меняются.
 
-Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) запускает `before`-hook [`scripts/grafana-cloud.sh`](../kind/scripts/grafana-cloud.sh): Secret `grafana-cloud-otlp` из `.env.grafana-cloud` и [`manifests/observability/alloy.yaml`](../kind/manifests/observability/alloy.yaml). Без endpoint, instance ID или token hook падает. Releases `orders` и `orders-consumer` получают [`values/grafana-cloud.yaml`](../kind/values/grafana-cloud.yaml). Без `GRAFANA_CLOUD=1` kind не меняется, `kind-e2e` в облако ничего не отправляет.
+Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) добавляет к манифестам kustomization [`manifests/observability`](../kind/manifests/observability/kustomization.yaml): [`alloy.yaml`](../kind/manifests/observability/alloy.yaml) и Secret `grafana-cloud-otlp`, который `secretGenerator` собирает из `.env.grafana-cloud` (в кластер попадают только `GRAFANA_CLOUD_OTLP_*`; суффикс-хеш имени перезапускает Alloy при изменении файла). Без файла рендер Skaffold падает; с пустым endpoint, instance ID или token init container `require-grafana-cloud` не даёт Alloy стартовать, и status check завершается ошибкой ([ADR 34](../../docs/adr/0034-declarative-kind-bootstrap.md)). Releases `orders` и `orders-consumer` получают [`values/grafana-cloud.yaml`](../kind/values/grafana-cloud.yaml). Без `GRAFANA_CLOUD=1` kind не меняется, `kind-e2e` в облако ничего не отправляет.
 
 ## Лимиты free tier
 
@@ -51,7 +51,7 @@ Traces процессов приходят в тот же `otelcol.receiver.otlp
 | Источник | Как | `job` |
 | --- | --- | --- |
 | SpiceDB | scrape `:9090` pod в `nomnom-authz` | `infra/spicedb` |
-| PostgreSQL | `prometheus.exporter.postgres` на владельца (`orders`, `payments`, `delivery`), DSN из Secret `alloy-postgres` (собирает `grafana-cloud.sh` из паролей `postgres.sh`) | `infra/postgresql` |
+| PostgreSQL | `prometheus.exporter.postgres` на владельца (`orders`, `payments`, `delivery`), DSN из Secret `alloy-postgres` (chart [`ops/kind/bootstrap`](../kind/bootstrap) из тех же паролей, что базы) | `infra/postgresql` |
 | Pods | cAdvisor kubelet через API server proxy (ClusterRole `nomnom-alloy`: `nodes/proxy`) и kube-state-metrics v2.20.0 в `nomnom-observability` | `infra/kubernetes` |
 
 Инфраструктурные неймспейсы без NetworkPolicy, поэтому отдельных разрешений Alloy не нужно.

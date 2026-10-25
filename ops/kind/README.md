@@ -7,8 +7,9 @@ internal gateway, NetworkPolicy, kubelet probes и установки Helm chart
 
 ## Требования
 
-Docker, `kind` и `skaffold` версий из [`versions.env`](versions.env), `kubectl`, Helm 3.8+ (OCI charts), `jq`;
-для проверок — Go (Chainsaw запускается через `go run`), `python3` и `openssl` (тестовые JWT).
+Docker, `kind` и `skaffold` версий из [`versions.env`](versions.env), `kubectl`, Helm 4
+(server-side apply и `--take-ownership` в bootstrap), `jq`; для проверок — Go (Chainsaw
+запускается через `go run`), `python3` и `openssl` (тестовые JWT).
 
 ## Команды
 
@@ -16,12 +17,13 @@ Docker, `kind` и `skaffold` версий из [`versions.env`](versions.env), `
 
 ```bash
 make kind-e2e       # весь цикл для CI: кластер → skaffold run → проверки → удаление
-make kind-up        # single-node кластер, предзагрузка образов платформы, Cilium + Hubble, Envoy Gateway
+make kind-up        # make kind-cluster (single-node кластер из cluster.yaml) и платформа: Cilium + Hubble, Envoy Gateway, cert-manager
 make kind-deploy    # skaffold run: сборка образов, загрузка в kind, gateway, charts приложений, readiness
 make kind-dev       # skaffold dev: пересборка и передеплой при изменении исходников
 make kind-test      # тесты Chainsaw; NetworkPolicy применяются внутри (фаза A без них, фаза B с ними)
 make kind-policies  # применить NetworkPolicy (kubectl apply -k manifests/netpol); kind-policies-delete — удалить
 make kind-diagnostics
+make kind-local-ca  # корень локального CA в ops/kind/.artifacts/nomnom-local-ca.crt (выводит путь)
 make kind-down
 ```
 
@@ -29,18 +31,18 @@ make kind-down
 | --- | --- | --- |
 | `KIND_CLUSTER_NAME` | `nomnom-test` | имя кластера; контекст всегда `kind-${KIND_CLUSTER_NAME}` |
 | `BFF_HOST_PORT` | `18080` | host-порт для NodePort `30080` будущего публичного API BFF (сейчас BFF не публикуется) |
+| `WEBHOOKS_HOST_PORT` | `18085` | host-порт для NodePort `30085` public gateway |
 | `KIND_KEEP` | `0` | `1` — не удалять кластер после `make kind-e2e` |
-| `PRELOAD_PLATFORM_IMAGES` | `1` | загружать образы платформы из Docker-кеша хоста вместо pull на узле |
 
 Все команды явно используют контекст `kind-${KIND_CLUSTER_NAME}`. Отчёт проверок (JUnit) и
 диагностика сохраняются в `ops/kind/.artifacts/`.
 
 ## Как устроено
 
-- `scripts/cluster.sh` создаёт кластер kind из [`cluster.yaml`](cluster.yaml) (один узел,
-  default CNI отключён, `extraPortMappings` для BFF) и загружает в узел образы платформы.
-  Список образов берётся из `skaffold render --module platform`, образы скачиваются один раз в
-  Docker хоста, поэтому повторные прогоны не ходят за ними в сеть.
+- `make kind-cluster` проверяет версии kind и Skaffold по `versions.env` и создаёт кластер
+  `kind create cluster --config=-` из [`cluster.yaml`](cluster.yaml) (один узел, default CNI
+  отключён, `extraPortMappings` для BFF и public gateway; host-порты подставляет Make).
+  Существующий кластер с тем же именем переиспользуется. Образы узел скачивает сам.
 - [`skaffold/skaffold.yaml`](skaffold/skaffold.yaml), модуль `platform`: Helm-релизы Cilium
   (Hubble включён) и Envoy Gateway (с Gateway API CRD); hook сверяет версию CRD с `versions.env`.
 - Модуль `apps` (требует `platform`): сборка образов bounded contexts их multi-stage Dockerfile
@@ -67,12 +69,11 @@ make kind-down
   в `orders.v1.order-events.dlq`. Egress к Kafka и MongoDB уже разрешён
   `manifests/netpol/app-infrastructure.yaml` для всех pod `nomnom-restaurants`.
 - Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
-  [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) применяет `before`-hook helm-деплоера
-  до charts: SpiceDB в `nomnom-authz`, PostgreSQL `orders`, `payments`, `delivery` и MongoDB
-  `restaurants` в `nomnom-data` (`emptyDir`). Пароли и DSN создают `scripts/postgres.sh` и
-  `scripts/mongodb.sh`; Secret DSN кладётся в неймспейс приложения (для `delivery` —
-  `delivery-postgres`, ключ `dsn`), а init container `delivery-migrate` применяет миграции до
-  старта процесса.
+  [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) и identity ставит chart
+  [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, PostgreSQL `orders`,
+  `payments`, `delivery` и MongoDB `restaurants` в `nomnom-data` (`emptyDir`). Secret DSN
+  кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`), а init
+  container `delivery-migrate` применяет миграции до старта процесса.
 - [`manifests/observability/trace-capture.yaml`](manifests/observability/trace-capture.yaml) —
   приёмник traces проверок `e2e/calls` в `nomnom-observability`: OpenTelemetry Collector с OTLP gRPC
   `:4317` и debug exporter в stdout. Traces не хранятся и не заменяют Alloy
@@ -88,19 +89,13 @@ make kind-down
   ServiceAccount `bff`, контексты только через internal gateway, projected tokens `nomnom.orders` и
   `nomnom.restaurants`. Наружу BFF не опубликован; проверка `e2e/bff` на время прогона открывает
   ingress к нему из `nomnom-outsider` (`manifests/fixtures/allow-bff-from-outsider.yaml`).
-  `scripts/bff-identity.sh` в `before`-hook рядом с `identity-jwks.sh`:
-  - создаёт ключ подписи user assertions один раз на кластер — Secret `bff-assertion-key`
-    (`nomnom-bff`, kid `nomnom-bff-kind`); ключ хранится только в Secret;
-  - при каждом запуске переиздаёт из него ConfigMap `bff-jwks` в namespaces четырёх контекстов
-    (их values: `identity.userJwksConfigMap: bff-jwks`, `userIssuer: nomnom-bff`, `userDelegates: bff`;
-    `nomnom-bff/bff` — в allowlist `orders` и `restaurants`);
-  - публикует ConfigMap `idp-jwks` тестового identity provider из `tests/identity/fixtures`.
-    **Только для kind**: реального provider нет, проверка подписывает access tokens ключом
-    `tests/identity/fixtures/idp-signing-key.pem` (`scripts/mint-jwt.py`).
-
-  На кластере, где ServiceAccount `bff` создала прежняя фикстура, скрипт передаёт его release `bff`.
-  Фикстура `grpc-caller` теперь работает под своим ServiceAccount `nomnom-bff/grpc-caller`: он
-  допущен allowlist `orders`, но не делегат.
+  Ключ подписи user assertions, `bff-jwks` и `idp-jwks` создаёт chart [`bootstrap`](#bootstrap).
+  Values контекстов: `identity.userJwksConfigMap: bff-jwks`, `userIssuer: nomnom-bff`,
+  `userDelegates: bff`; `nomnom-bff/bff` — в allowlist `orders` и `restaurants`. **Только для
+  kind**: реального identity provider нет, проверка подписывает access tokens ключом
+  `tests/identity/fixtures/idp-signing-key.pem` (`scripts/mint-jwt.py`). Фикстура `grpc-caller`
+  работает под своим ServiceAccount `nomnom-bff/grpc-caller`: он допущен allowlist `orders`,
+  но не делегат.
 - NetworkPolicy — kustomization [`manifests/netpol`](manifests/netpol/kustomization.yaml):
   базовые политики `app-baseline/` без namespace, overlays `namespaces/<неймспейс>` для каждого
   неймспейса приложения, политики инфраструктуры и gateways.
@@ -112,11 +107,48 @@ make kind-down
 
 | Что | Где |
 | --- | --- |
-| kind, node image (digest), Skaffold, ожидаемая версия Gateway API CRD, образ Envoy Proxy, образ проверок | [`versions.env`](versions.env) |
+| kind, node image (digest), Skaffold, ожидаемая версия Gateway API CRD, Chainsaw | [`versions.env`](versions.env) |
+| образы SpiceDB, PostgreSQL, MongoDB и Job JWKS (digest) | [`bootstrap/values.yaml`](bootstrap/values.yaml) |
 | charts Cilium и Envoy Gateway | [`skaffold/skaffold.yaml`](skaffold/skaffold.yaml): Skaffold не подставляет environment в `remoteChart`/`version` |
 
 Политика — последние стабильные релизы. Kubernetes 1.37 новее диапазонов, протестированных
 Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость подтверждается `make kind-e2e`.
+
+## Bootstrap
+
+Всё, что charts приложений читают при старте, описывает chart [`bootstrap`](bootstrap)
+(`kind-bootstrap`, release `bootstrap` в `nomnom-data`) — решение
+[ADR 34](../../docs/adr/0034-declarative-kind-bootstrap.md). Skaffold применяет `rawYaml` и свои
+releases с pod template label `skaffold.dev/run-id`, а хранилища держат данные в памяти и
+`emptyDir`, поэтому chart ставит не Skaffold, а одна команда `helm upgrade --install --wait`
+в `before`-hook helm-деплоера после `kubectl apply` неймспейсов. Файлы вне chart передаются
+`--set-file`.
+
+| Ресурс | Как создаётся | Потребители |
+| --- | --- | --- |
+| ClusterIssuer `nomnom-selfsigned-bootstrap`, `nomnom-local-ca`, Certificate `cert-manager/nomnom-local-ca` | cert-manager | сертификат public gateway |
+| Secret `nomnom-bff/bff-assertion-key` (`tls.key`, `tls.crt`) | Certificate cert-manager: ECDSA P-256, PKCS#8, `rotationPolicy: Never`, kid `nomnom-bff-kind` | BFF (`identity.assertionKeySecret.key: tls.key`), проверка 7 |
+| ConfigMap `cluster-jwks`, `bff-jwks` (`jwks.json`) в неймспейсах контекстов | Job `identity-jwks` (hook): `/openid/v1/jwks` с проверкой issuer и публичный ключ BFF из `tls.crt`, server-side apply | `identity.jwksConfigMap`, `identity.userJwksConfigMap` контекстов |
+| ConfigMap `nomnom-bff/idp-jwks` | `--set-file` из `tests/identity/fixtures/idp-jwks.json`; **только для kind** — проверка подписывает access tokens ключом `tests/identity/fixtures/idp-signing-key.pem` (`scripts/mint-jwt.py`) | BFF |
+| ConfigMap `spicedb-bootstrap`, Deployment и Service `spicedb` (`nomnom-authz`) | `--set-file` из `authorization/`; checksum в pod template перезапускает SpiceDB только при изменении schema/bootstrap | — |
+| Secret `spicedb-preshared-key` (`preshared-key`) в `nomnom-authz` и неймспейсах контекстов | `lookup` или `randAlphaNum 64` | SpiceDB, контексты |
+| Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-observability/alloy-postgres` | `lookup` или `randAlphaNum 48`; DSN из того же значения | PostgreSQL, приложения, Alloy |
+| Secret `nomnom-data/mongodb-restaurants` (`root-password`, `password`, `keyfile`), `nomnom-restaurants/restaurants-mongodb` (`uri`) | `lookup` или `randAlphaNum` | MongoDB, restaurants |
+| Deployments и Services PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants` | шаблоны chart, `emptyDir` | — |
+| replica set `rs0` и пользователь `restaurants` MongoDB | Job `mongodb-restaurants-init` (hook): `mongosh`, идемпотентно | restaurants |
+
+`lookup` читает существующий Secret, поэтому повторный deploy и `skaffold dev` учётные данные не
+меняют; `helm template` без кластера рендерит новые случайные значения. Hook Jobs выполняются
+после `--wait` (хранилища и сертификаты готовы) при каждом upgrade.
+
+Рендер без кластера:
+
+```bash
+helm template bootstrap ops/kind/bootstrap -n nomnom-data \
+  --set-file authz.schema=authorization/schema.zed \
+  --set-file authz.bootstrap=authorization/bootstrap.yaml \
+  --set-file identity.idpJwks=tests/identity/fixtures/idp-jwks.json
+```
 
 ## Неймспейсы
 
@@ -127,7 +159,7 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура: ingress-проверки и внешний клиент BFF |
-| `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению |
+| `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | `trace-capture` всегда; Alloy — только с `GRAFANA_CLOUD=1` |
 | `nomnom-infra` | single-node Kafka (KRaft, `apache/kafka`) и Temporal dev server для `orders-consumer` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir` |
@@ -173,12 +205,12 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 на порт `webhooks` payments и принимает только HTTPS на `webhooks.nomnom.localhost`.
 
 Сертификат выпускает cert-manager (platform-модуль) по аннотации Gateway от локального CA
-(`manifests/certs/issuers.yaml`: самоподписанный bootstrap → корень `nomnom-local-ca`) и
-продлевает сам. Корень для клиентов сохраняет `scripts/local-ca.sh`.
+(`bootstrap/templates/certs.yaml`: самоподписанный bootstrap → корень `nomnom-local-ca`) и
+продлевает сам. Корень для клиентов сохраняет `make kind-local-ca`.
 
 ```bash
 kubectl -n envoy-gateway-system port-forward svc/public-gateway 18085:8443
-curl --cacert "$(ops/kind/scripts/local-ca.sh)" --resolve webhooks.nomnom.localhost:18085:127.0.0.1 \
+curl --cacert "$(make -s kind-local-ca)" --resolve webhooks.nomnom.localhost:18085:127.0.0.1 \
   https://webhooks.nomnom.localhost:18085/webhooks/provider -X POST --data '{}'
 ```
 

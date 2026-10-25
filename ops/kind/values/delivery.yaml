@@ -13,18 +13,18 @@ env:
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
-# создаёт scripts/identity-jwks.sh) и allowlist вызывающих workloads.
+# публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
 identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
   serviceAccounts: nomnom-orders/orders-worker=orders-worker
-  # ADR 32: user assertions BFF (ConfigMap bff-jwks создаёт scripts/bff-identity.sh);
+  # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);
   # передавать user subject может только service bff.
   userJwksConfigMap: bff-jwks
   userIssuer: nomnom-bff
   userDelegates: bff
 
-# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт scripts/authz.sh.
+# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:
   endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
   insecure: true
