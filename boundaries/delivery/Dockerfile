@@ -16,9 +16,15 @@ COPY di ./di
 COPY infrastructure ./infrastructure
 COPY pkg ./pkg
 COPY slices ./slices
+# target — общий cache mount всех сборок на хосте, в том числе других деревьев исходников.
+# Cargo сравнивает mtime исходников с fingerprint, а COPY сохраняет mtime контекста: более
+# старый файл другого содержимого выглядел бы собранным, и в образ попал бы чужой бинарь.
+# touch заставляет пересобрать сам crate (зависимости остаются в кеше), locked — не даёт
+# параллельной сборке писать в тот же target.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/src/target \
+    --mount=type=cache,target=/src/target,sharing=locked \
+    find lib.rs cmd di infrastructure pkg slices -name '*.rs' -exec touch {} + && \
     CARGO_PROFILE_RELEASE_DEBUG=1 cargo build --release --locked && \
     cp target/release/delivery /out-delivery && \
     cp target/release/delivery-relay /out-delivery-relay && \
