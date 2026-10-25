@@ -58,6 +58,9 @@ impl<P: Publisher> Publisher for Arc<P> {
 
 /// Outbox operations of one cycle.
 pub trait OutboxStore: Send + Sync + 'static {
+    /// `true` while the session of the exclusivity lock is alive; checked
+    /// before every record (FR-537).
+    fn holds_lock(&self) -> impl Future<Output = bool> + Send;
     /// Up to `limit` unpublished rows in `seq` order.
     fn fetch(&self, limit: u32) -> impl Future<Output = Result<Vec<OutboxEntry>, String>> + Send;
     fn mark_published(&self, seq: i64) -> impl Future<Output = Result<(), String>> + Send;
@@ -75,6 +78,8 @@ pub struct BatchOutcome {
     pub published: usize,
     /// `seq` of the row that stopped the batch.
     pub failed: Option<i64>,
+    /// The lock session was lost before a record: the batch stopped there.
+    pub lock_lost: bool,
 }
 
 fn now_epoch() -> f64 {
@@ -86,6 +91,9 @@ fn now_epoch() -> f64 {
 /// Publishes one batch in `seq` order. Each acknowledged row is marked
 /// published at once; the first failure records `attempts`/`last_error` and
 /// stops the batch, so later rows wait for the next cycle (head-of-line).
+/// The lock session is checked before every record: once it is lost, a
+/// standby may already publish, so the batch stops before the next record
+/// (FR-537).
 pub async fn relay_batch<S: OutboxStore, P: Publisher>(
     store: &S,
     publisher: &P,
@@ -98,6 +106,14 @@ pub async fn relay_batch<S: OutboxStore, P: Publisher>(
         ..BatchOutcome::default()
     };
     for entry in &entries {
+        if !store.holds_lock().await {
+            eprintln!(
+                "outbox relay lost the lock before seq={}: batch stopped",
+                entry.seq
+            );
+            outcome.lock_lost = true;
+            break;
+        }
         let started = Instant::now();
         match publisher.publish(entry).await {
             Ok(()) => {
@@ -160,7 +176,8 @@ impl<P: Publisher> RelayWorker<P> {
     }
 
     /// Batches while they come back full and clean, then the backlog gauges.
-    async fn cycle(&self, stop: &watch::Receiver<bool>) {
+    /// Returns `false` when the lock was lost during the cycle.
+    async fn cycle(&self, stop: &watch::Receiver<bool>) -> bool {
         loop {
             match relay_batch(
                 self.outbox.as_ref(),
@@ -170,6 +187,7 @@ impl<P: Publisher> RelayWorker<P> {
             )
             .await
             {
+                Ok(outcome) if outcome.lock_lost => return false,
                 Ok(outcome)
                     if outcome.failed.is_none()
                         && outcome.fetched == self.config.batch_size as usize
@@ -192,6 +210,7 @@ impl<P: Publisher> RelayWorker<P> {
             }
             Err(error) => eprintln!("outbox backlog: {error}"),
         }
+        true
     }
 
     async fn serve(&self, mut stop: watch::Receiver<bool>) {
@@ -218,8 +237,11 @@ impl<P: Publisher> RelayWorker<P> {
                 }
             }
             if holding {
-                self.cycle(&stop).await;
-                if Instant::now() >= next_cleanup {
+                if !self.cycle(&stop).await {
+                    // Standby until the lock is acquired again; no cleanup.
+                    println!("outbox relay is standby: lock lost");
+                    holding = false;
+                } else if Instant::now() >= next_cleanup {
                     match self.outbox.cleanup(self.config.retention).await {
                         Ok(0) => {}
                         Ok(deleted) => println!("outbox retention deleted {deleted} rows"),

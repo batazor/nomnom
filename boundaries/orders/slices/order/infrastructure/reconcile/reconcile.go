@@ -2,7 +2,9 @@
 // (order#customer, order#restaurant, order#courier, order#delivery) consistent
 // with the Orders in PostgreSQL (docs/security.md, relationship lifecycle): it
 // deletes orphan and stale relationships after a grace period and restores
-// missing ones. SpiceDB stays a derived graph; PostgreSQL is the source of truth.
+// missing ones at once, but only after re-reading the subject under a row lock
+// (Orders.RestoreRelation). SpiceDB stays a derived graph; PostgreSQL is the
+// source of truth.
 package reconcile
 
 import (
@@ -17,7 +19,6 @@ import (
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 
 	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 )
 
@@ -41,7 +42,11 @@ var Relations = []Relation{
 type Orders interface {
 	SubjectsOf(ctx context.Context, relation postgres.Relation, ids []string) (map[string]string, error)
 	RelationPage(ctx context.Context, relation postgres.Relation, afterID string, limit int) ([]postgres.RelationSubject, error)
-	RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error
+	// RestoreRelation runs restore and stores its revision only if the Order,
+	// re-read under a row lock that serializes with the courier writers, still
+	// names subject; false — it no longer does and nothing was written.
+	RestoreRelation(ctx context.Context, relation postgres.Relation, orderID, subject string,
+		restore func(context.Context) (application.AuthorizationRevision, error)) (bool, error)
 }
 
 // Stats are the drift counters of one pass over all relations.
@@ -50,6 +55,10 @@ type Stats struct {
 	OrphansPending  int
 	OrphansDeleted  int
 	MissingRepaired int
+	// MissingSuperseded counts missing relationships whose subject changed
+	// between the page read and the locked re-read (a writer was in flight);
+	// they are not restored.
+	MissingSuperseded int
 	// Unrepairable counts Orders whose ids SpiceDB cannot store; their writers
 	// could not have written a relationship either.
 	Unrepairable int
@@ -163,12 +172,19 @@ func (r *Reconciler) reconcile(ctx context.Context, relation Relation, stats *St
 				stats.Unrepairable++
 				continue
 			}
-			revision, err := r.touch(ctx, relation, row.OrderID, row.SubjectID)
+			// The page may predate the commit of a writer that already
+			// replaced this subject in SpiceDB (TOUCH new + DELETE old before
+			// commit): restoring from it would resurrect the old subject.
+			restored, err := r.orders.RestoreRelation(ctx, relation.Name, row.OrderID, row.SubjectID,
+				func(ctx context.Context) (application.AuthorizationRevision, error) {
+					return r.touch(ctx, relation, row.OrderID, row.SubjectID)
+				})
 			if err != nil {
 				return err
 			}
-			if err := r.orders.RememberRevision(ctx, order.ID(row.OrderID), revision); err != nil {
-				return err
+			if !restored {
+				stats.MissingSuperseded++
+				continue
 			}
 			stats.MissingRepaired++
 		}

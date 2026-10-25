@@ -12,19 +12,27 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use shaku::{Component, Interface, module};
 
 use crate::infrastructure::memory::{RecordingRelationships, StaticAuthorization};
-use crate::pkg::application::{Clock, IdGenerator};
+use crate::pkg::application::{Clock, IdGenerator, TransactionScope, UnitOfWorkError};
+use crate::pkg::persistence::RepositoryError;
+use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
 use crate::slices::courier::di::{CourierDependencies, CourierPorts};
-use crate::slices::courier::domains::courier::CourierRepository;
+use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
+use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::di::{
     DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
 };
+use crate::slices::delivery::domains::delivery::{
+    Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
+    DeliveryRepository, OrderId,
+};
+use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
 
 /// Локальные значения политики назначения до появления продуктовых настроек.
 const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
@@ -204,7 +212,7 @@ impl CourierPorts for LocalCourierPorts {
 #[derive(Component)]
 #[shaku(interface = DeliveryPorts)]
 pub struct LocalDeliveryPorts {
-    store: Arc<dyn TransactionalStore>,
+    store: ObservedStore,
     read_models: Arc<dyn DeliveryReadModels>,
     #[shaku(inject)]
     authorization: Arc<dyn SharedAuthorization>,
@@ -214,6 +222,95 @@ pub struct LocalDeliveryPorts {
     relationships: Arc<dyn SharedRelationships>,
     locator: Box<dyn ProcessLocator>,
     ids: Box<dyn ProcessIds>,
+}
+
+/// Closed set of `nomnom.reason` of `nomnom.delivery.failed`. The reason of a
+/// Delivery Failure is free text without a catalog, so every value is recorded
+/// as `other` until `delivery` defines failure reason codes.
+const DELIVERY_FAILURE_REASONS: &[&str] = &[];
+
+/// [`TransactionalStore`] of the slice whose Unit of Work and Outbox go
+/// through [`ObservedOutbox`]: business metrics are recorded after the
+/// outermost commit. Repositories and courier assignment delegate as is.
+pub struct ObservedStore {
+    inner: Arc<dyn TransactionalStore>,
+    observed: ObservedOutbox,
+}
+
+impl ObservedStore {
+    #[must_use]
+    pub fn new(inner: Arc<dyn TransactionalStore>, observed: ObservedOutbox) -> Self {
+        Self { inner, observed }
+    }
+}
+
+impl TransactionScope for ObservedStore {
+    fn run_scoped(&self, work: &mut dyn FnMut() -> bool) -> Result<(), UnitOfWorkError> {
+        self.observed.run_scoped(&*self.inner, work)
+    }
+}
+
+impl DeliveryOutbox for ObservedStore {
+    fn add(&self, message: OutboxMessage) -> Result<(), RepositoryError> {
+        self.observed.add(&*self.inner, message)
+    }
+}
+
+impl DeliveryRepository for ObservedStore {
+    fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
+        DeliveryRepository::get(&*self.inner, id)
+    }
+
+    fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
+        self.inner.find_by_order(order_id)
+    }
+
+    fn add(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::add(&*self.inner, delivery)
+    }
+
+    fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::save(&*self.inner, delivery)
+    }
+}
+
+impl DeliveryOfferRepository for ObservedStore {
+    fn get(&self, id: &DeliveryOfferId) -> Result<Option<DeliveryOffer>, RepositoryError> {
+        DeliveryOfferRepository::get(&*self.inner, id)
+    }
+
+    fn list_for_delivery(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
+        self.inner.list_for_delivery(delivery_id)
+    }
+
+    fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
+        DeliveryOfferRepository::add(&*self.inner, offer)
+    }
+
+    fn save(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
+        DeliveryOfferRepository::save(&*self.inner, offer)
+    }
+}
+
+impl CourierAssignment for ObservedStore {
+    fn ensure_registered(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+        self.inner.ensure_registered(courier_id)
+    }
+
+    fn ensure_available(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+        self.inner.ensure_available(courier_id)
+    }
+
+    fn occupy(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+        self.inner.occupy(courier_id)
+    }
+
+    fn release(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+        self.inner.release(courier_id)
+    }
 }
 
 impl DeliveryPorts for LocalDeliveryPorts {
@@ -226,7 +323,7 @@ impl DeliveryPorts for LocalDeliveryPorts {
     }
 
     fn store(&self) -> &dyn TransactionalStore {
-        &*self.store
+        &self.store
     }
 
     fn read_models(&self) -> &dyn DeliveryReadModels {
@@ -299,7 +396,10 @@ pub(super) fn infrastructure(
                 store: stores.couriers,
             })
             .with_component_parameters::<LocalDeliveryPorts>(LocalDeliveryPortsParameters {
-                store: stores.transactional,
+                store: ObservedStore::new(
+                    stores.transactional,
+                    ObservedOutbox::new(DomainMetrics::global(DELIVERY_FAILURE_REASONS)),
+                ),
                 read_models: stores.read_models,
                 locator,
                 ids,

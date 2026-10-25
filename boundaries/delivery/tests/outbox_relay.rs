@@ -104,6 +104,7 @@ async fn relay_publishes_outbox_rows_with_envelope_headers() {
             delivery_id: DeliveryId::new(&delivery_id),
             order_id: OrderId::new(&order_id),
             courier_id: CourierId::new(&courier_id),
+            created_at_epoch_seconds: None,
         },
         // Same transaction, same aggregate version: `event_type` keeps the
         // ids apart (ADR 31).

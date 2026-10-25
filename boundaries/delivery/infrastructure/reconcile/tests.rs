@@ -92,13 +92,22 @@ impl Harness {
 }
 
 #[test]
-fn missing_relationship_is_restored_immediately() {
+fn missing_relationship_is_restored_after_two_passes_grace_apart() {
     let mut h = harness(
         FakeGraph::default(),
         FakeSource::with(&[("delivery-1", "courier-1")]),
         500,
     );
 
+    assert_eq!(h.pass().missing_pending, 1);
+    h.advance(GRACE - Duration::from_secs(1));
+    assert_eq!(h.pass().missing_pending, 1);
+    assert!(
+        h.graph.writes().is_empty(),
+        "inside grace nothing is restored"
+    );
+
+    h.advance(Duration::from_secs(1));
     let stats = h.pass();
 
     assert_eq!(stats.missing_repaired, 1);
@@ -113,6 +122,68 @@ fn missing_relationship_is_restored_immediately() {
             ..Stats::default()
         }
     );
+}
+
+/// FR-563, AC-668: Reassign Courier deleted `delivery#courier` of courier-1 before
+/// its commit; the pass reads the graph after the DELETE and business state
+/// before the commit. The relationship is not restored, and once the
+/// unassignment committed the candidate is forgotten.
+#[test]
+fn relationship_deleted_by_an_uncommitted_writer_is_not_resurrected() {
+    let released = delivery_courier("delivery-1", "courier-1");
+    let mut h = harness(
+        FakeGraph::default(),
+        FakeSource::with(&[("delivery-1", "courier-1")]),
+        500,
+    );
+
+    assert_eq!(h.pass().missing_pending, 1);
+    assert!(!h.graph.contains(&released));
+    // The unassignment commits: business state no longer names courier-1.
+    h.source.0.lock().expect("rows").clear();
+    h.advance(GRACE);
+    assert_eq!(
+        h.pass(),
+        Stats::default(),
+        "the candidate is forgotten without a write"
+    );
+    assert!(h.graph.writes().is_empty());
+
+    // Assigned again later: the grace starts over.
+    h.source
+        .0
+        .lock()
+        .expect("rows")
+        .push(("delivery-1".to_owned(), "courier-1".to_owned()));
+    h.advance(GRACE);
+    assert_eq!(h.pass().missing_pending, 1);
+    assert!(!h.graph.contains(&released));
+}
+
+#[test]
+fn missing_candidate_is_forgotten_when_the_graph_catches_up() {
+    let relationship = delivery_courier("delivery-1", "courier-1");
+    let mut h = harness(
+        FakeGraph::default(),
+        FakeSource::with(&[("delivery-1", "courier-1")]),
+        500,
+    );
+
+    assert_eq!(h.pass().missing_pending, 1);
+    // The writer's TOUCH lands (Accept Delivery Offer in flight).
+    h.graph
+        .write(RelationshipOperation::Touch, &relationship)
+        .expect("touch");
+    let writes = h.graph.writes().len();
+    h.advance(GRACE);
+    assert_eq!(
+        h.pass(),
+        Stats {
+            checked: 1,
+            ..Stats::default()
+        }
+    );
+    assert_eq!(h.graph.writes().len(), writes);
 }
 
 #[test]
@@ -146,9 +217,10 @@ fn stale_subject_is_deleted_and_current_restored() {
     );
 
     let first = h.pass();
-    assert_eq!((first.orphans_pending, first.missing_repaired), (1, 1));
+    assert_eq!((first.orphans_pending, first.missing_pending), (1, 1));
     h.advance(GRACE);
-    assert_eq!(h.pass().orphans_deleted, 1);
+    let second = h.pass();
+    assert_eq!((second.orphans_deleted, second.missing_repaired), (1, 1));
 
     assert!(!h.graph.contains(&stale));
     assert!(
@@ -219,7 +291,7 @@ fn pages_cover_graph_and_business() {
 
     assert_eq!(stats.checked, 5);
     assert_eq!(stats.orphans_pending, 2);
-    assert_eq!(stats.missing_repaired, 2);
+    assert_eq!(stats.missing_pending, 2);
 }
 
 #[test]
@@ -272,8 +344,8 @@ fn courier_reconciler_reads_registered_couriers() {
     let first = reconciler.reconcile(&|| false).expect("pass");
     let second = reconciler.reconcile(&|| false).expect("pass");
 
-    assert_eq!((first.missing_repaired, first.orphans_pending), (1, 1));
-    assert_eq!(second.orphans_deleted, 1);
+    assert_eq!((first.missing_pending, first.orphans_pending), (1, 1));
+    assert_eq!((second.missing_repaired, second.orphans_deleted), (1, 1));
     assert!(graph.contains(&courier_self("courier-1")));
     assert!(!graph.contains(&courier_self("courier-ghost")));
     // FR-447: the revision of the restoring TOUCH is stored with the courier.
@@ -315,15 +387,23 @@ fn delivery_reconciler_stores_revision_of_restored_assignment() {
         Arc::new(Instant::now),
     );
 
+    assert_eq!(
+        reconciler
+            .reconcile(&|| false)
+            .expect("pass")
+            .missing_pending,
+        1
+    );
     let first = reconciler.reconcile(&|| false).expect("pass");
 
+    // zed-1 is the DELETE of the orphan, zed-2 the restoring TOUCH.
     assert_eq!(first.missing_repaired, 1);
     let restored = DeliveryRepository::get(&*store, &DeliveryId::new("delivery-1"))
         .expect("read")
         .expect("delivery");
     assert_eq!(
         restored.authorization_revision(),
-        Some(&AuthorizationRevision::new("zed-1"))
+        Some(&AuthorizationRevision::new("zed-2"))
     );
     reconciler.reconcile(&|| false).expect("orphan pass");
     assert!(!graph.contains(&delivery_courier("delivery-9", "courier-1")));
@@ -332,7 +412,7 @@ fn delivery_reconciler_stores_revision_of_restored_assignment() {
         .expect("delivery");
     assert_eq!(
         after_delete.authorization_revision(),
-        Some(&AuthorizationRevision::new("zed-1"))
+        Some(&AuthorizationRevision::new("zed-2"))
     );
 }
 

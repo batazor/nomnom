@@ -62,3 +62,17 @@ Environment и version не фильтруются: у Prometheus-метрик �
 
 Живых панелей: 21 из 21. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
+## Alerts
+
+Rule group `platform` в folder `nomnom` ([`../alerts/platform.json`](../alerts/platform.json)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения, не SLO.
+
+| Alert | Severity | Статус | Недостающие метрики |
+| --- | --- | --- | --- |
+| SpiceDB: errors | critical | активно | — |
+| SpiceDB: p95 latency | warning | активно | — |
+| PostgreSQL: down | critical | активно | — |
+| PostgreSQL: deadlocks | warning | активно | — |
+| Pods: crash looping | critical | активно | — |
+| Pods: restarting | warning | активно | — |
+| Pods: not ready | warning | активно | — |
+

@@ -4,7 +4,7 @@ mod transitions;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use super::DeliveryId;
+use super::{DeliveryId, DomainEvent};
 use crate::slices::courier::domains::courier::CourierId;
 
 pub use acceptance::*;
@@ -98,6 +98,7 @@ pub struct DeliveryOffer {
     state: OfferState,
     /// Technical field: optimistic concurrency version of the stored snapshot.
     version: u64,
+    events: Vec<DomainEvent>,
 }
 
 impl DeliveryOffer {
@@ -137,6 +138,7 @@ impl DeliveryOffer {
             expires_at_epoch_seconds,
             state,
             version: 0,
+            events: Vec::new(),
         })
     }
 
@@ -178,7 +180,13 @@ impl DeliveryOffer {
                 reasons: policy.reasons,
             });
         }
-        self.apply(OfferTrigger::Accept)
+        let result = self.apply(OfferTrigger::Accept)?;
+        self.events.push(DomainEvent::DeliveryOfferAccepted {
+            delivery_id: self.delivery_id.clone(),
+            offer_id: self.id.clone(),
+            courier_id: self.courier_id.clone(),
+        });
+        Ok(result)
     }
 
     pub fn reject(
@@ -192,7 +200,16 @@ impl DeliveryOffer {
             return Err(DeliveryOfferError::Expired);
         }
         self.state = result.to;
+        self.events.push(DomainEvent::DeliveryOfferRejected {
+            delivery_id: self.delivery_id.clone(),
+            offer_id: self.id.clone(),
+            courier_id: self.courier_id.clone(),
+        });
         Ok(result)
+    }
+
+    pub fn pull_events(&mut self) -> Vec<DomainEvent> {
+        std::mem::take(&mut self.events)
     }
 
     /// Closes a pending offer after its delivery was assigned through another

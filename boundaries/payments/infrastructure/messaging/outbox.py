@@ -1,5 +1,6 @@
 """Outbox record, its Event Envelope headers and the relay's ports (ADR 31)."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol
@@ -68,11 +69,33 @@ class PublishError(Exception):
         self.retriable = retriable
 
 
+class FatalPublishError(PublishError):
+    """The producer is unusable (librdkafka fatal error): no later publish can succeed.
+
+    The relay stops its worker so the process exits non-zero and is restarted.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, retriable=False)
+
+
+class PublishInterruptedError(Exception):
+    """Waiting for the delivery report was abandoned on shutdown; the record stays unpublished."""
+
+
 class OutboxStore(Protocol):
     """Storage port of the relay: the single-active-replica lock and the Outbox queries."""
 
     def try_lock(self) -> bool:
         """Hold or acquire the relay lock; ``False`` means this replica is standby."""
+        ...
+
+    def holds_lock(self) -> bool:
+        """Check that the lock session taken by ``try_lock`` is still alive.
+
+        ``False`` means the lock is lost (another replica may hold it now) or was never
+        taken; a lost session is dropped, the next ``try_lock`` retries.
+        """
         ...
 
     def unlock(self) -> None:
@@ -103,8 +126,14 @@ class OutboxStore(Protocol):
 class Publisher(Protocol):
     """Broker port of the relay."""
 
-    def publish(self, record: OutboxRecord) -> None:
-        """Return after the broker confirmed the record; raise ``PublishError`` otherwise."""
+    def publish(self, record: OutboxRecord, should_stop: Callable[[], bool]) -> None:
+        """Return after the broker confirmed the record.
+
+        Raises:
+            PublishError: the broker did not confirm the record; ``FatalPublishError``
+                when the producer can no longer publish anything.
+            PublishInterruptedError: ``should_stop`` turned true before the report.
+        """
         ...
 
     def close(self, timeout: float) -> None:

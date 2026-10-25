@@ -21,6 +21,9 @@ type Input struct {
 	EventID    string
 	OrderID    order.ID
 	OccurredAt time.Time
+	// DeliveryVersion is the aggregate_version of the Delivery in the event
+	// envelope; it orders the courier events of the Order.
+	DeliveryVersion uint64
 	// DeliveryID and CourierID name the assignment; an event without them
 	// records the fact without relationships.
 	DeliveryID string
@@ -35,12 +38,25 @@ type Result struct {
 // Assignment is the Courier Assignment of an Order as reported by delivery.
 // CourierID is a user id: the courier is checked as user:<id>. After Record
 // Courier Release CourierID (and, for a cancelled Delivery, DeliveryID) is
-// empty and AssignedAt is the time of the release: the stored assignment
-// orders every later courier event of the Order.
+// empty and AssignedAt and DeliveryVersion are those of the release: the
+// stored assignment orders every later courier event of the Order.
 type Assignment struct {
 	DeliveryID string
 	CourierID  string
 	AssignedAt time.Time
+	// DeliveryVersion is the Delivery aggregate_version of the event that
+	// recorded the assignment or the release. An Order has one Delivery and
+	// every Delivery transaction increments its version, so the version
+	// orders courier events; occurred_at (the start of the delivery
+	// transaction) does not. Zero — recorded before versions were stored.
+	DeliveryVersion uint64
+}
+
+// Supersedes reports whether the stored assignment is newer than a courier
+// event of the Delivery at version, which then changes nothing. An event of
+// the same version is a repeat and is applied again idempotently.
+func (a Assignment) Supersedes(version uint64) bool {
+	return a.DeliveryVersion > version
 }
 
 // Assignments stores the current Assignment of an Order in the active
@@ -98,20 +114,20 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 }
 
 // assign runs before the Inbox commit: a failed relationship write rolls the
-// event back and redelivery repeats it. An event older than the stored
-// Assignment is out of order and changes nothing.
+// event back and redelivery repeats it. An event of an older Delivery version
+// than the stored Assignment (or release) is out of order and changes nothing.
 func (h Handler) assign(ctx context.Context, in Input) error {
 	if in.DeliveryID == "" || in.CourierID == "" {
 		return nil
 	}
-	next := Assignment{DeliveryID: in.DeliveryID, CourierID: in.CourierID, AssignedAt: in.OccurredAt}
+	next := Assignment{DeliveryID: in.DeliveryID, CourierID: in.CourierID, AssignedAt: in.OccurredAt, DeliveryVersion: in.DeliveryVersion}
 	stored, found, err := h.assignments.CourierAssignment(ctx, in.OrderID)
 	if err != nil {
 		return fmt.Errorf("read courier assignment: %w", err)
 	}
 	var previous *Assignment
 	if found {
-		if stored.AssignedAt.After(next.AssignedAt) {
+		if stored.Supersedes(next.DeliveryVersion) {
 			return nil
 		}
 		previous = &stored

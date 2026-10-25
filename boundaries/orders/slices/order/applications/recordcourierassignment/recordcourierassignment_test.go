@@ -109,8 +109,10 @@ func TestHandleRequiresOccurredAt(t *testing.T) {
 	require.ErrorIs(t, err, application.ErrInvalidInput)
 }
 
-func assignment(eventID, courierID string, at time.Time) recordcourierassignment.Input {
-	return recordcourierassignment.Input{EventID: eventID, OrderID: "order-1", OccurredAt: at, DeliveryID: "delivery-1", CourierID: courierID}
+func assignment(eventID, courierID string, version uint64, at time.Time) recordcourierassignment.Input {
+	return recordcourierassignment.Input{
+		EventID: eventID, OrderID: "order-1", OccurredAt: at, DeliveryVersion: version, DeliveryID: "delivery-1", CourierID: courierID,
+	}
 }
 
 func courierCanView(t *testing.T, authorizer *memory.Authorizer, courierID string) bool {
@@ -130,15 +132,15 @@ func TestHandleWritesAndReplacesCourierRelationships(t *testing.T) {
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recordcourierassignment.NewHandler(store, store, store, memory.NewWorkflow(), store, authorizer)
 
-	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", occurredAt))
+	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 	require.NoError(t, err)
 	assert.True(t, courierCanView(t, authorizer, "courier-1"))
 	stored, found, err := store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: occurredAt}, stored)
+	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: occurredAt, DeliveryVersion: 2}, stored)
 
-	result, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", occurredAt.Add(time.Minute)))
+	result, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", 3, occurredAt.Add(time.Minute)))
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.OutcomeAlreadyApplied, result.Outcome)
 	assert.False(t, courierCanView(t, authorizer, "courier-1"))
@@ -148,15 +150,17 @@ func TestHandleWritesAndReplacesCourierRelationships(t *testing.T) {
 	assert.Equal(t, application.AuthorizationRevision("memory:order-1:courier:2"), revision)
 }
 
-// AC-520: an event older than the stored assignment changes nothing.
+// AC-520, AC-669: an event of an older Delivery version than the stored
+// assignment changes nothing, even if its occurred_at (the start of the
+// delivery transaction) is later.
 func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
 	store, authorizer := memory.NewStore(), memory.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recordcourierassignment.NewHandler(store, store, store, memory.NewWorkflow(), store, authorizer)
 
-	_, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", occurredAt.Add(time.Minute)))
+	_, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", 3, occurredAt))
 	require.NoError(t, err)
-	_, err = handler.Handle(context.Background(), assignment("event-1", "courier-1", occurredAt))
+	_, err = handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt.Add(time.Minute)))
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, authorizer.CourierWrites())
@@ -173,7 +177,7 @@ func TestHandleRollsBackOnRelationshipFailure(t *testing.T) {
 	workflow := memory.NewWorkflow()
 	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, authorizer)
 
-	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", occurredAt))
+	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 	require.Error(t, err)
 	assert.Equal(t, 0, store.InboxSize())
 	snapshot, _ := store.Snapshot("order-1")
@@ -181,7 +185,7 @@ func TestHandleRollsBackOnRelationshipFailure(t *testing.T) {
 	assert.Empty(t, workflow.Notifications())
 
 	authorizer.FailWrites(nil)
-	result, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", occurredAt))
+	result, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.OutcomeApplied, result.Outcome)
 	assert.True(t, courierCanView(t, authorizer, "courier-1"))

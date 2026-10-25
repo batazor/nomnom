@@ -37,5 +37,8 @@ tonic = { version = "0.14.6", features = ["tls-ring", "tls-webpki-roots"] }
 tonic-prost = "0.14.4"
 uuid = { version = "1.29.0", default-features = false, features = ["std", "v5", "v7"] }
 
+[dev-dependencies]
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics", "testing"] }
+
 [lints.clippy]
 all = "deny"

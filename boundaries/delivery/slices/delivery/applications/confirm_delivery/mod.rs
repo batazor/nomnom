@@ -125,6 +125,7 @@ mod tests {
                 delivery_id: DeliveryId::new("delivery-1"),
                 order_id: OrderId::new("order-of-delivery-1"),
                 courier_id: CourierId::new("courier-1"),
+                created_at_epoch_seconds: None,
             })]
         );
     }

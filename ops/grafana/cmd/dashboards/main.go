@@ -43,7 +43,12 @@ func main() {
 		path := filepath.Join(dir, "dashboards", "overview.json")
 		files[path] = encode(d)
 		previews[path] = opts.Context + ".json"
-		files[filepath.Join(dir, "README.md")] = []byte(overview.README(opts, d))
+		alerts, err := overview.ServiceAlerts(opts)
+		if err != nil {
+			fail(err)
+		}
+		files[filepath.Join(dir, "alerts", "rules.json")] = encodeAlerts(alerts)
+		files[filepath.Join(dir, "README.md")] = []byte(overview.README(opts, d, alerts))
 	}
 	platform, err := overview.PlatformOverview()
 	if err != nil {
@@ -51,7 +56,12 @@ func main() {
 	}
 	files[overview.PlatformPath] = encode(platform)
 	previews[overview.PlatformPath] = "platform.json"
-	files[filepath.Join(filepath.Dir(overview.PlatformPath), "README.md")] = []byte(overview.PlatformREADME(platform))
+	platformAlerts, err := overview.PlatformAlerts()
+	if err != nil {
+		fail(err)
+	}
+	files[overview.PlatformAlertsPath] = encodeAlerts(platformAlerts)
+	files[filepath.Join(filepath.Dir(overview.PlatformPath), "README.md")] = []byte(overview.PlatformREADME(platform, platformAlerts))
 	files[inventory.DocPath] = []byte(inventory.Markdown())
 
 	switch {
@@ -78,12 +88,22 @@ func main() {
 	}
 }
 
-func encode(d overview.Dashboard) []byte {
+func encodeAlerts(a overview.AlertGroup) []byte {
+	group, err := a.RuleGroup()
+	if err != nil {
+		fail(err)
+	}
+	return encodeJSON(group)
+}
+
+func encode(d overview.Dashboard) []byte { return encodeJSON(d.Manifest) }
+
+func encodeJSON(v any) []byte {
 	var raw bytes.Buffer
 	enc := json.NewEncoder(&raw)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(d.Manifest); err != nil {
+	if err := enc.Encode(v); err != nil {
 		fail(err)
 	}
 	return raw.Bytes()

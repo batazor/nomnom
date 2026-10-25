@@ -10,6 +10,7 @@ import {
   type RelayMetrics,
   type RelayRecord,
   type RelayStore,
+  relayMessageTimeoutMs,
 } from "../pkg/infrastructure/outbox/relay.ts";
 
 type StoredRecord = RelayRecord & {
@@ -310,4 +311,99 @@ test("error classes are a closed set", () => {
   assert.equal(errorClass(new Error("Request timed out")), "timeout");
   assert.equal(errorClass("oops"), "unknown");
   assert.equal(errorClass(new TypeError("x")), "unknown");
+});
+
+/** Publisher whose every publish takes `delayMs`, then runs `onSent`. */
+class SlowPublisher extends FakePublisher {
+  readonly delayMs: number;
+  readonly onSent: (message: IntegrationMessage) => void;
+
+  constructor(
+    delayMs: number,
+    onSent: (message: IntegrationMessage) => void = () => {},
+  ) {
+    super();
+    this.delayMs = delayMs;
+    this.onSent = onSent;
+  }
+
+  override async publish(message: IntegrationMessage) {
+    await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    await super.publish(message);
+    this.onSent(message);
+  }
+}
+
+const slowRelay = (
+  store: MemoryRelayStore,
+  publisher: FakePublisher,
+  leaseTtlMs: number,
+) =>
+  new OutboxRelay({
+    store,
+    publisher,
+    owner: "relay-a",
+    batchSize: 10,
+    leaseTtlMs,
+    retentionMs: 7 * 86_400_000,
+    // Real clock: the lease expiry and the renewal deadline move together.
+    clock: { now: () => new Date() },
+  });
+
+test("a slow batch renews the lease before the next record", async () => {
+  const store = new MemoryRelayStore();
+  store.records = [record(1), record(2), record(3)];
+  let acquisitions = 0;
+  const acquire = store.acquireLease.bind(store);
+  store.acquireLease = async (...args) => {
+    acquisitions += 1;
+    return acquire(...args);
+  };
+  const publisher = new SlowPublisher(40);
+
+  const result = await slowRelay(store, publisher, 90).cycle();
+
+  assert.deepEqual(result, { leased: true, published: 3, deleted: 0 });
+  assert.ok(acquisitions >= 3, `renewed during the batch (${acquisitions})`);
+  assert.ok(store.lease !== undefined && store.lease.expiresAt > new Date());
+});
+
+test("a lease lost during a slow batch stops it before the next record", async () => {
+  const store = new MemoryRelayStore();
+  store.records = [record(1), record(2), record(3)];
+  // While record 1 is in flight the lease expires and relay-b takes it.
+  const publisher = new SlowPublisher(40, () => {
+    store.lease = {
+      owner: "relay-b",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+  });
+  const { calls, metrics } = recordingMetrics();
+  const relay = new OutboxRelay({
+    store,
+    publisher,
+    owner: "relay-a",
+    batchSize: 10,
+    leaseTtlMs: 90,
+    retentionMs: 7 * 86_400_000,
+    clock: { now: () => new Date() },
+    metrics,
+  });
+
+  const result = await relay.cycle();
+
+  assert.deepEqual(result, { leased: false, published: 1, deleted: 0 });
+  assert.deepEqual(
+    publisher.sent.map((message) => message.headers.event_id),
+    ["event-1"],
+    "the stale owner publishes nothing after losing the lease",
+  );
+  assert.equal(store.records.find((r) => r.id === "id-2")?.publishedAt, null);
+  assert.deepEqual(calls.backlog.at(-1), [], "standby reports no backlog");
+});
+
+test("the relay message timeout stays below the lease TTL and the drain", () => {
+  assert.equal(relayMessageTimeoutMs(15_000, 20_000), 5000);
+  assert.equal(relayMessageTimeoutMs(30_000, 9000), 3000);
+  assert.equal(relayMessageTimeoutMs(1500, 20_000), 1000, "floor of 1 s");
 });

@@ -2,7 +2,7 @@
 -- bounded contexts (order_id) are identifiers without foreign keys.
 CREATE TABLE payments (
     id                 TEXT PRIMARY KEY,
-    -- One Payment per Order: violation maps to DuplicatePayment.
+    -- One Payment per Order: violation maps to DuplicatePaymentError.
     order_id           TEXT    NOT NULL CONSTRAINT payments_order_id_key UNIQUE,
     amount             NUMERIC NOT NULL CHECK (amount > 0),
     currency           TEXT    NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE payment_operations (
     id                 TEXT PRIMARY KEY,
     payment_id         TEXT        NOT NULL REFERENCES payments (id),
     kind               TEXT        NOT NULL,
-    -- Violation maps to DuplicateIdempotencyKey.
+    -- Violation maps to DuplicateIdempotencyKeyError.
     idempotency_key    TEXT        NOT NULL
         CONSTRAINT payment_operations_idempotency_key_key UNIQUE,
     amount             NUMERIC     NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE payment_operations (
 );
 
 -- At most one operation without a final result per Payment: violation maps to
--- OperationAlreadyPending.
+-- OperationAlreadyPendingError.
 CREATE UNIQUE INDEX payment_operations_one_pending
     ON payment_operations (payment_id) WHERE state = 'pending';
 

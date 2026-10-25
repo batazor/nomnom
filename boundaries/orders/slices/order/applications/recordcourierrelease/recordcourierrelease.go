@@ -24,9 +24,12 @@ const (
 	// OutcomeReleased: the stored assignment matched and its relationships
 	// were deleted.
 	OutcomeReleased fulfillment.Outcome = "released"
-	// OutcomeIgnoredStale: no stored assignment matches the event (another
-	// delivery or courier, or a newer assignment); nothing changes except the
-	// Inbox record.
+	// OutcomeRememberedAhead: no assignment is stored yet (the older
+	// CourierAssignedToDelivery has not been handled); the release is
+	// remembered with its Delivery version, so that assignment is skipped.
+	OutcomeRememberedAhead fulfillment.Outcome = "remembered_ahead"
+	// OutcomeIgnoredStale: the stored assignment belongs to another Delivery
+	// or has a newer Delivery version; nothing changes except the Inbox record.
 	OutcomeIgnoredStale fulfillment.Outcome = "ignored_stale"
 )
 
@@ -35,7 +38,10 @@ type Input struct {
 	EventID    string
 	OrderID    order.ID
 	OccurredAt time.Time
-	DeliveryID string
+	// DeliveryVersion is the aggregate_version of the Delivery in the event
+	// envelope; it orders the courier events of the Order.
+	DeliveryVersion uint64
+	DeliveryID      string
 	// CourierID is the unassigned courier; it is empty for a cancellation,
 	// which releases whichever courier the Delivery has.
 	CourierID string
@@ -112,32 +118,37 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	return Result{Outcome: outcome}, nil
 }
 
-// release applies the event only to the stored assignment it names: the same
-// delivery, the same courier for an unassignment, and not older than the
-// stored assignment. The release is remembered with its time, so an older
-// assignment redelivered afterwards is skipped by Record Courier Assignment.
+// release applies an event of the stored Delivery that is not older (by
+// Delivery version) than the stored assignment. After it the Delivery has no
+// courier, so whichever courier is stored is released, even if the event names
+// another one: the assignment of that one is older and is skipped when it
+// arrives. Without a stored assignment nothing is deleted. In every applied
+// case the release is remembered with its version, so an older assignment
+// handled afterwards is skipped by Record Courier Assignment.
 func (h Handler) release(ctx context.Context, in Input) (fulfillment.Outcome, error) {
 	stored, found, err := h.assignments.CourierAssignment(ctx, in.OrderID)
 	if err != nil {
 		return "", fmt.Errorf("read courier assignment: %w", err)
 	}
-	switch {
-	case !found,
-		stored.DeliveryID != in.DeliveryID,
-		stored.AssignedAt.After(in.OccurredAt),
-		!in.DeliveryCancelled && stored.CourierID != in.CourierID:
+	if found && ((stored.DeliveryID != "" && stored.DeliveryID != in.DeliveryID) || stored.Supersedes(in.DeliveryVersion)) {
 		return OutcomeIgnoredStale, nil
 	}
-	revision, err := h.relationships.ReleaseCourier(ctx, in.OrderID, stored, in.DeliveryCancelled)
-	if err != nil {
-		return "", fmt.Errorf("delete courier relationships: %w", err)
+	outcome := OutcomeReleased
+	var revision application.AuthorizationRevision
+	if !found {
+		outcome = OutcomeRememberedAhead
+	} else if stored.CourierID != "" || (in.DeliveryCancelled && stored.DeliveryID != "") {
+		revision, err = h.relationships.ReleaseCourier(ctx, in.OrderID, stored, in.DeliveryCancelled)
+		if err != nil {
+			return "", fmt.Errorf("delete courier relationships: %w", err)
+		}
 	}
-	next := recordcourierassignment.Assignment{DeliveryID: stored.DeliveryID, AssignedAt: in.OccurredAt}
+	next := recordcourierassignment.Assignment{DeliveryID: in.DeliveryID, AssignedAt: in.OccurredAt, DeliveryVersion: in.DeliveryVersion}
 	if in.DeliveryCancelled {
 		next.DeliveryID = ""
 	}
 	if err := h.assignments.RememberCourierAssignment(ctx, in.OrderID, next, revision); err != nil {
 		return "", fmt.Errorf("remember courier release: %w", err)
 	}
-	return OutcomeReleased, nil
+	return outcome, nil
 }

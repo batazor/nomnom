@@ -3,13 +3,16 @@
 Skipped unless ``DATABASE_URL`` (see test_postgres_integration) and, for the Kafka part,
 ``KAFKA_BROKERS`` are set, e.g. ``KAFKA_BROKERS=localhost:59092`` against
 ``docker run --rm -p 59092:9092 apache/kafka:4.1.0`` (single-node KRaft, topic
-auto-creation on). Tables are truncated before every test.
+auto-creation on). Tables are truncated before every test. The shutdown tests of
+``KafkaPublisher`` need no broker: they point at an address nobody listens on.
 """
 
 import os
+import threading
 import time
 import unittest
 import uuid
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any, override
 
@@ -17,11 +20,14 @@ from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermission
 
 from infrastructure.messaging import (
     KafkaPublisher,
+    OutboxRecord,
     OutboxRelay,
     PaymentEventsMapper,
     PostgresOutboxStore,
+    RelayWorker,
 )
 from infrastructure.messaging.events import events_pb2
+from infrastructure.messaging.outbox import PublishInterruptedError
 from infrastructure.postgres import (
     PAYMENT_EVENTS_TOPIC,
     PostgresDatabase,
@@ -42,6 +48,8 @@ from slices.payment.domains.payment import Money, OperationId, OrderId, Payment,
 
 DSN = os.environ.get("DATABASE_URL", "").strip()
 BROKERS = os.environ.get("KAFKA_BROKERS", "").strip()
+# Nothing listens here: a broker outage as librdkafka sees it.
+UNREACHABLE_BROKERS = "127.0.0.1:1"
 
 
 def _headers(message: Any) -> dict[str, str]:
@@ -99,6 +107,112 @@ class RelayLockIntegrationTest(_DatabaseCase):
         finally:
             first.unlock()
             second.unlock()
+
+    def _terminate_lock_session(self) -> None:
+        with self.database.connection() as conn:
+            rows = conn.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_locks "
+                "WHERE locktype = 'advisory' AND granted AND pid <> pg_backend_pid()"
+            ).fetchall()
+        self.assertEqual(len(rows), 1)
+
+    def _insert_outbox(self, count: int) -> None:
+        with self.database.connection() as conn:
+            for version in range(1, count + 1):
+                conn.execute(
+                    "INSERT INTO outbox (event_id, event_type, aggregate_type, aggregate_id, "
+                    "aggregate_version, topic, payload) VALUES (%s, 't', 'Payment', 'p', %s, "
+                    "'topic', %s)",
+                    (uuid.uuid4(), version, b"p"),
+                )
+
+    def test_terminated_lock_session_is_detected_and_lock_moves(self) -> None:
+        first = PostgresOutboxStore(self.database, DSN)
+        second = PostgresOutboxStore(self.database, DSN)
+        try:
+            self.assertTrue(first.try_lock())
+            self.assertTrue(first.holds_lock())
+            self._terminate_lock_session()
+            self.assertFalse(first.holds_lock())
+            self.assertTrue(second.try_lock())
+            self.assertFalse(first.try_lock())
+        finally:
+            first.unlock()
+            second.unlock()
+
+    def test_relay_stops_batch_when_lock_session_dies(self) -> None:
+        self._insert_outbox(3)
+        store = PostgresOutboxStore(self.database, DSN)
+        sent: list[int] = []
+        terminate = self._terminate_lock_session
+
+        class _Publisher:
+            def publish(self, record: OutboxRecord, should_stop: Callable[[], bool]) -> None:
+                sent.append(record.seq)
+                # The lock session dies while the first record is in flight.
+                if len(sent) == 1:
+                    terminate()
+
+            def close(self, timeout: float) -> None:
+                pass
+
+        relay = OutboxRelay(store, _Publisher(), batch_size=10, retention=timedelta(days=7))
+        try:
+            result = relay.run_once()
+        finally:
+            store.unlock()
+        self.assertEqual((result.published, result.lock_lost), (1, True))
+        self.assertEqual(len(sent), 1)
+        with self.database.connection() as conn:
+            row = conn.execute(
+                "SELECT count(*) FILTER (WHERE published_at IS NOT NULL), "
+                "count(*) FILTER (WHERE published_at IS NULL AND attempts = 0) FROM outbox"
+            ).fetchone()
+        self.assertEqual(row, (1, 2))
+
+    def test_shutdown_during_broker_outage_finishes_before_deadline(self) -> None:
+        self._insert_outbox(1)
+        store = PostgresOutboxStore(self.database, DSN)
+        publisher = KafkaPublisher(UNREACHABLE_BROKERS, "payments-relay-test")
+        relay = OutboxRelay(store, publisher, batch_size=10, retention=timedelta(days=7))
+        worker = RelayWorker(relay, store, publisher, batch_size=10, poll_interval=0.05)
+        worker.start()
+        thread = threading.Thread(target=worker.run, daemon=True)
+        thread.start()
+        # Let the record get stuck waiting for its delivery report.
+        time.sleep(1.0)
+        started = time.monotonic()
+        worker.shutdown(started + 3.0)
+        self.assertLess(time.monotonic() - started, 3.5)
+        thread.join(1)
+        self.assertFalse(thread.is_alive())
+        with self.database.connection() as conn:
+            row = conn.execute("SELECT published_at, attempts FROM outbox").fetchone()
+        self.assertEqual(row, (None, 0))
+        # The lock was released: another replica can take over right away.
+        other = PostgresOutboxStore(self.database, DSN)
+        try:
+            self.assertTrue(other.try_lock())
+        finally:
+            other.unlock()
+
+
+class KafkaPublisherShutdownTest(unittest.TestCase):
+    """Real librdkafka against an unreachable broker; no external services needed."""
+
+    def _record(self) -> OutboxRecord:
+        return OutboxRecord(1, str(uuid.uuid4()), "t", "Payment", "p", 1, NOW, "topic", b"p")
+
+    def test_should_stop_interrupts_delivery_wait_and_close_purges(self) -> None:
+        publisher = KafkaPublisher(UNREACHABLE_BROKERS, "payments-relay-test")
+        stop_at = time.monotonic() + 0.5
+        started = time.monotonic()
+        with self.assertRaises(PublishInterruptedError):
+            publisher.publish(self._record(), lambda: time.monotonic() >= stop_at)
+        self.assertLess(time.monotonic() - started, 1.5)
+        started = time.monotonic()
+        publisher.close(0.5)
+        self.assertLess(time.monotonic() - started, 1.5)
 
 
 @unittest.skipUnless(DSN and BROKERS, "DATABASE_URL or KAFKA_BROKERS is not set")

@@ -73,6 +73,24 @@ impl PgOutbox {
         Ok(acquired)
     }
 
+    /// `true` while the session holding the lock is alive (FR-537). Never
+    /// acquires: a relay that did not hold the lock keeps not holding it. A
+    /// broken lock connection is dropped, so the next cycle re-acquires.
+    pub async fn lock_alive(&self) -> bool {
+        let mut held = self.lock.lock().await;
+        let Some(connection) = held.as_mut() else {
+            return false;
+        };
+        match connection.ping().await {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("outbox lock connection lost: {error}");
+                *held = None;
+                false
+            }
+        }
+    }
+
     pub async fn release_lock(&self) {
         if let Some(mut connection) = self.lock.lock().await.take() {
             let _ = sqlx::query("SELECT pg_advisory_unlock($1)")
@@ -121,6 +139,10 @@ impl PgOutbox {
 }
 
 impl OutboxStore for PgOutbox {
+    async fn holds_lock(&self) -> bool {
+        self.lock_alive().await
+    }
+
     async fn fetch(&self, limit: u32) -> Result<Vec<OutboxEntry>, String> {
         let rows = sqlx::query(
             "SELECT seq, event_id::text AS event_id, event_type, aggregate_type, aggregate_id,

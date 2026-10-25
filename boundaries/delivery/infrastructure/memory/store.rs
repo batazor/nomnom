@@ -25,6 +25,7 @@ struct DeliveryRecord {
     dropoff_address: Address,
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
+    created_at_epoch_seconds: Option<i64>,
     authorization_revision: Option<AuthorizationRevision>,
     version: u64,
 }
@@ -39,6 +40,7 @@ impl DeliveryRecord {
             dropoff_address: delivery.dropoff_address().clone(),
             state: delivery.state(),
             failure_reason: delivery.failure_reason().cloned(),
+            created_at_epoch_seconds: delivery.created_at_epoch_seconds(),
             authorization_revision: delivery.authorization_revision().cloned(),
             version: delivery.version(),
         }
@@ -56,6 +58,7 @@ impl DeliveryRecord {
         )
         .map(|delivery| {
             delivery
+                .with_created_at(self.created_at_epoch_seconds)
                 .with_authorization_revision(self.authorization_revision.clone())
                 .with_version(self.version)
         })

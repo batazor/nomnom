@@ -130,8 +130,11 @@ deploy:
                 k wait gatewayclass/nomnom-public --for=condition=Accepted --timeout=300s
                 k -n nomnom-gateway wait gateway/internal --for=condition=Accepted --timeout=300s
                 k -n nomnom-gateway wait gateway/internal --for=condition=Programmed --timeout=300s
-                k -n nomnom-gateway wait grpcroute/orders-v1 --timeout=300s \
+                # ResolvedRefs=False — нет ReferenceGrant или Service backend'а: gateway ответил бы 500.
+                k -n nomnom-gateway wait grpcroute --all --timeout=300s \
                   --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True
+                k -n nomnom-gateway wait grpcroute --all --timeout=300s \
+                  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True
                 k -n nomnom-gateway wait backendtrafficpolicy --all --timeout=300s \
                   --for=jsonpath='{.status.ancestors[0].conditions[?(@.type=="Accepted")].status}'=True
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \

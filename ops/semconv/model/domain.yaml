@@ -79,7 +79,7 @@ groups:
     type: metric
     metric_name: nomnom.restaurants.orders.rejected
     stability: development
-    brief: "Order requests rejected by restaurants."
+    brief: "Order requests rejected by restaurants; nomnom.reason: too_busy, item_unavailable, restaurant_closed, other."
     instrument: counter
     unit: "{order}"
     attributes:
@@ -113,7 +113,7 @@ groups:
     type: metric
     metric_name: nomnom.delivery.offers
     stability: development
-    brief: "Delivery offers: accepted, rejected, expired."
+    brief: "Delivery offers: accepted, rejected, expired (expired is not emitted until delivery has an Expire transition)."
     instrument: counter
     unit: "{offer}"
     attributes:

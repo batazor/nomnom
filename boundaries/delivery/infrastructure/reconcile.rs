@@ -5,10 +5,16 @@
 //!   relationship whose resource is unknown to business state or whose subject
 //!   differs (orphan or stale) is deleted only when it was orphan on two passes
 //!   at least `grace` apart, because writers run before commit;
-//! - business → graph: every missing relationship is restored by `TOUCH`
-//!   immediately and its revision is stored with the courier or delivery
-//!   (FR-447); ids SpiceDB cannot store are skipped and counted. Deleting an
-//!   orphan changes no revision: the resource is gone or the link is stale.
+//! - business → graph: a missing relationship is restored by `TOUCH` only
+//!   when it was missing, with the same subject in business state, on two
+//!   passes at least `grace` apart, and its revision is stored with the
+//!   courier or delivery (FR-447); ids SpiceDB cannot store are skipped and
+//!   counted. Writers also `DELETE` before commit (Reassign Courier, Cancel
+//!   Delivery) without holding a row lock, so a pass may read the graph after
+//!   the `DELETE` and business state before the commit: restoring on the first
+//!   sighting would give the released courier access back until the orphan
+//!   grace. Deleting an orphan changes no revision: the resource is gone or
+//!   the link is stale.
 //!
 //! The reconciler is a background loop of the main process ([`run`]); it
 //! reads business state through [`ReconciliationStore`] (PostgreSQL in the
@@ -35,6 +41,8 @@ pub struct Stats {
     pub checked: usize,
     pub orphans_pending: usize,
     pub orphans_deleted: usize,
+    /// Missing relationships seen for the first time or inside grace.
+    pub missing_pending: usize,
     pub missing_repaired: usize,
     /// Business rows whose ids SpiceDB cannot store; their writers could not
     /// have written a relationship either.
@@ -53,8 +61,8 @@ pub fn valid_object_id(id: &str) -> bool {
 /// Source of monotonic time; tests inject a manual clock.
 pub type Now = Arc<dyn Fn() -> Instant + Send + Sync>;
 
-/// Reconciler of one relation. Orphan candidates are remembered between
-/// passes in memory.
+/// Reconciler of one relation. Orphan and missing candidates are remembered
+/// between passes in memory.
 pub struct Reconciler {
     graph: Arc<dyn RelationshipGraph>,
     source: Box<dyn RelationSource>,
@@ -64,6 +72,7 @@ pub struct Reconciler {
     page_size: u32,
     now: Now,
     candidates: HashMap<Relationship, Instant>,
+    missing: HashMap<Relationship, Instant>,
 }
 
 impl Reconciler {
@@ -85,6 +94,7 @@ impl Reconciler {
             page_size: page_size.max(1),
             now,
             candidates: HashMap::new(),
+            missing: HashMap::new(),
         }
     }
 
@@ -197,8 +207,9 @@ impl Reconciler {
         self.candidates
             .retain(|relationship, _| orphans.contains(relationship));
 
+        let mut missing: HashSet<Relationship> = HashSet::new();
         let mut after = String::new();
-        loop {
+        let result = loop {
             if stopping() {
                 return Err("reconciliation stopped".to_owned());
             }
@@ -222,6 +233,17 @@ impl Reconciler {
                     USER,
                     subject_id,
                 );
+                missing.insert(relationship.clone());
+                let now = (self.now)();
+                let Some(first) = self.missing.get(&relationship).copied() else {
+                    self.missing.insert(relationship, now);
+                    stats.missing_pending += 1;
+                    continue;
+                };
+                if now.saturating_duration_since(first) < self.grace {
+                    stats.missing_pending += 1;
+                    continue;
+                }
                 let revision = self
                     .graph
                     .write(RelationshipOperation::Touch, &relationship)
@@ -229,13 +251,19 @@ impl Reconciler {
                 self.source
                     .record_revision(resource_id, subject_id, revision)
                     .map_err(|reason| format!("store revision of {relationship}: {reason}"))?;
+                self.missing.remove(&relationship);
                 stats.missing_repaired += 1;
             }
             match page.last() {
                 Some((last, _)) if page.len() >= limit => after.clone_from(last),
-                _ => return Ok(stats),
+                _ => break Ok(stats),
             }
-        }
+        };
+        // A candidate that is present again or no longer assigned (its writer
+        // committed or rolled back) is forgotten.
+        self.missing
+            .retain(|relationship, _| missing.contains(relationship));
+        result
     }
 }
 
@@ -268,11 +296,12 @@ pub async fn run(
             for reconciler in &mut reconcilers {
                 match reconciler.reconcile(&stopping) {
                     Ok(stats) => println!(
-                        "reconcile {}: checked={} orphans_pending={} orphans_deleted={} missing_repaired={} unrepairable={}",
+                        "reconcile {}: checked={} orphans_pending={} orphans_deleted={} missing_pending={} missing_repaired={} unrepairable={}",
                         reconciler.name(),
                         stats.checked,
                         stats.orphans_pending,
                         stats.orphans_deleted,
+                        stats.missing_pending,
                         stats.missing_repaired,
                         stats.unrepairable
                     ),

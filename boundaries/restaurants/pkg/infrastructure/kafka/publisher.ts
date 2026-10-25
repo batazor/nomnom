@@ -27,6 +27,12 @@ export class KafkaPublisher implements MessagePublisher {
        * допускает его политика: dead letters `<stream>.dlq` consumer'а.
        */
       allowAutoTopicCreation?: boolean;
+      /**
+       * `message.timeout.ms`: upper bound of one `publish` including retries.
+       * The relay keeps it well below its lease TTL so a publish never
+       * outlives the lease (librdkafka default is 300 s).
+       */
+      messageTimeoutMs?: number;
     } = {},
   ): Promise<KafkaPublisher> {
     const client = new kafka.KafkaJS.Kafka({
@@ -37,6 +43,9 @@ export class KafkaPublisher implements MessagePublisher {
       },
     });
     const producer = client.producer({
+      ...(options.messageTimeoutMs === undefined
+        ? {}
+        : { "message.timeout.ms": options.messageTimeoutMs }),
       kafkaJS: {
         idempotent: true,
         acks: -1,

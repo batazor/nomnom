@@ -136,21 +136,29 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 
 Адрес gateway для приложений: `INTERNAL_GATEWAY_ADDR=internal-gateway.envoy-gateway-system.svc.cluster.local:8080`.
 
-Реестр маршрутов — `GRPCRoute` в `nomnom-gateway`. Сейчас в нём два route сервиса
-`nomnom.orders.v1.OrdersService` — `orders-v1-reads` (`GetOrder`, `ListCustomerOrders`, с retries)
-и `orders-v1` (остальные методы, без retries) — и `restaurants-v1-reads`
-(`nomnom.restaurants.v1.RestaurantsService`: `GetRestaurant`, `GetMenu`, с retries; catalog Place Order); вызов незарегистрированного сервиса получает 404
-(gRPC `UNIMPLEMENTED`). Новый бизнес-RPC публикуется так:
+Реестр маршрутов — `GRPCRoute` в `nomnom-gateway`, по route на класс методов сервиса
+([ADR 15](../../docs/adr/0015-использовать-internal-gateway-для-синхронных-вызовов-бизнес-api.md)):
 
-1. `GRPCRoute` в `nomnom-gateway` с `method.type: Exact`, полным именем сервиса и методом;
-   файл добавляется в `manifests.rawYaml` модуля `apps`. Методы с автоматическими retries —
-   в отдельном route с собственной `BackendTrafficPolicy` (политика route заменяет политику
-   Gateway, поэтому `timeout.http.requestTimeout: 300s` повторяется).
+| Route | Методы | Политика |
+| --- | --- | --- |
+| `orders-v1-reads` | `GetOrder`, `ListCustomerOrders` | `reads` |
+| `orders-v1` | остальные методы `OrdersService` (совпадение по сервису) | `commands` |
+| `restaurants-v1-reads` | `GetRestaurant`, `GetMenu`, `ListRestaurants` | `reads` |
+| `restaurants-v1-commands` | `ReceiveOrderRequest`, `CancelRestaurantOrder` | `commands` |
+| `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
+| `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
+
+`reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и
+`reset-before-request`; `commands` — только на `connect-failure`, `refused-stream` и
+`reset-before-request`. Вызов незарегистрированного сервиса или метода получает 404 (gRPC
+`UNIMPLEMENTED`), например команды кухни, у которых ещё нет вызывающих. Новый бизнес-RPC публикуется так:
+
+1. Метод (`method.type: Exact`, полное имя сервиса и метод) — в route своего класса и
+   `targetRefs` политики `reads` или `commands`; новый route добавляется в `targetRefs` нужной
+   политики. Skaffold ждёт у всех route `Accepted` и `ResolvedRefs`.
 2. `ReferenceGrant` в неймспейсе backend'а для `GRPCRoute` из `nomnom-gateway`.
 3. Порт pod с именем `grpc` и label `nomnom.dev/business-api: "true"` в values окружения.
 
-Retries включены только для `orders-v1-reads` и `restaurants-v1-reads`: не более 2 повторов на `unavailable`,
-`connect-failure`, `refused-stream` и `reset-before-request`, без per-try timeout.
 
 ## Public gateway и TLS
 

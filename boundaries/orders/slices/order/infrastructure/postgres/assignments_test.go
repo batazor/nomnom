@@ -32,13 +32,13 @@ func TestCourierAssignment(t *testing.T) {
 	assert.Empty(t, subjects, "an Order without courier has no courier subject")
 
 	at := time.Date(2026, 10, 25, 13, 0, 0, 0, time.UTC)
-	for _, courier := range []string{"courier-1", "courier-2"} {
+	for version, courier := range []string{"courier-1", "courier-2"} {
 		err := store.Do(ctx, func(ctx context.Context) error {
 			if _, _, err := store.CourierAssignment(ctx, id); err != nil {
 				return err
 			}
 			return store.RememberCourierAssignment(ctx, id, recordcourierassignment.Assignment{
-				DeliveryID: "delivery-1", CourierID: courier, AssignedAt: at,
+				DeliveryID: "delivery-1", CourierID: courier, AssignedAt: at, DeliveryVersion: uint64(version) + 2,
 			}, application.AuthorizationRevision("zed-"+courier))
 		})
 		require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestCourierAssignment(t *testing.T) {
 	stored, found, err := store.CourierAssignment(ctx, id)
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-2", AssignedAt: at}, stored)
+	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-2", AssignedAt: at, DeliveryVersion: 3}, stored)
 	revision, _, err := store.Revision(ctx, string(id))
 	require.NoError(t, err)
 	assert.Equal(t, application.AuthorizationRevision("zed-courier-2"), revision)
@@ -89,12 +89,12 @@ func TestCourierRelease(t *testing.T) {
 		return s, ok
 	}
 
-	remember(recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: at}, "zed-assigned")
-	remember(recordcourierassignment.Assignment{DeliveryID: "delivery-1", AssignedAt: at.Add(time.Minute)}, "zed-unassigned")
+	remember(recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: at, DeliveryVersion: 2}, "zed-assigned")
+	remember(recordcourierassignment.Assignment{DeliveryID: "delivery-1", AssignedAt: at.Add(time.Minute), DeliveryVersion: 3}, "zed-unassigned")
 	stored, found, err := store.CourierAssignment(ctx, id)
 	require.NoError(t, err)
 	require.True(t, found, "a released assignment still orders later events")
-	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", AssignedAt: at.Add(time.Minute)}, stored)
+	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", AssignedAt: at.Add(time.Minute), DeliveryVersion: 3}, stored)
 	_, ok := subject(postgres.RelationCourier)
 	assert.False(t, ok, "the released courier is absent")
 	delivery, ok := subject(postgres.RelationDelivery)
@@ -104,11 +104,44 @@ func TestCourierRelease(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, application.AuthorizationRevision("zed-unassigned"), revision)
 
-	remember(recordcourierassignment.Assignment{AssignedAt: at.Add(2 * time.Minute)}, "zed-cancelled")
+	remember(recordcourierassignment.Assignment{AssignedAt: at.Add(2 * time.Minute), DeliveryVersion: 4}, "zed-cancelled")
 	stored, found, err = store.CourierAssignment(ctx, id)
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, recordcourierassignment.Assignment{AssignedAt: at.Add(2 * time.Minute)}, stored)
+	assert.Equal(t, recordcourierassignment.Assignment{AssignedAt: at.Add(2 * time.Minute), DeliveryVersion: 4}, stored)
 	_, ok = subject(postgres.RelationDelivery)
 	assert.False(t, ok, "the cancelled delivery is absent")
+}
+
+// AC-667: RestoreRelation runs the restore and stores its revision only while
+// the committed Order still names the subject.
+func TestRestoreRelation(t *testing.T) {
+	store := open(t)
+	ctx := context.Background()
+	id := uniqueID("restore")
+	require.NoError(t, store.Add(ctx, ordertest.New(t, id)))
+	restores := 0
+	restore := func(context.Context) (application.AuthorizationRevision, error) {
+		restores++
+		return application.AuthorizationRevision("zed-restored"), nil
+	}
+
+	restored, err := store.RestoreRelation(ctx, postgres.RelationCustomer, string(id), "customer-other", restore)
+	require.NoError(t, err)
+	assert.False(t, restored, "another subject is not restored")
+	restored, err = store.RestoreRelation(ctx, postgres.RelationCourier, string(id), "courier-1", restore)
+	require.NoError(t, err)
+	assert.False(t, restored, "an Order without courier restores none")
+	restored, err = store.RestoreRelation(ctx, postgres.RelationCustomer, "order-unknown", "customer-1", restore)
+	require.NoError(t, err)
+	assert.False(t, restored, "an absent Order restores nothing")
+	assert.Zero(t, restores)
+
+	restored, err = store.RestoreRelation(ctx, postgres.RelationCustomer, string(id), "customer-1", restore)
+	require.NoError(t, err)
+	assert.True(t, restored)
+	assert.Equal(t, 1, restores)
+	revision, _, err := store.Revision(ctx, string(id))
+	require.NoError(t, err)
+	assert.Equal(t, application.AuthorizationRevision("zed-restored"), revision)
 }

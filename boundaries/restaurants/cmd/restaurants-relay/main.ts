@@ -11,6 +11,7 @@ import { createRelayContainer, type RelayCradle } from "../../di/relay.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import { KafkaPublisher } from "../../pkg/infrastructure/kafka/publisher.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
+import { relayMessageTimeoutMs } from "../../pkg/infrastructure/outbox/relay.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 
@@ -34,7 +35,15 @@ const mongo = await connectMongoDb(config.mongodb);
 let publisher: KafkaPublisher | undefined;
 let container: AwilixContainer<RelayCradle> | undefined;
 try {
-  publisher = await KafkaPublisher.connect(config.kafka);
+  publisher = await KafkaPublisher.connect(config.kafka, {
+    // Streams are created on first publish, as by the payments and delivery
+    // relays: a fresh cluster has no restaurants.v1.* topics until then.
+    allowAutoTopicCreation: true,
+    messageTimeoutMs: relayMessageTimeoutMs(
+      config.outbox.leaseTtlMs,
+      config.shutdown.drainTimeoutMs,
+    ),
+  });
   container = createRelayContainer({
     outbox: config.outbox,
     db: mongo.db,

@@ -1,0 +1,343 @@
+{
+  "folderUid": "nomnom",
+  "interval": 60,
+  "rules": [
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Больше 5% запросов к SpiceDB не OK: клиенты fail-closed, пользователи получают отказ в доступе."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum(rate(grpc_server_handled_total{job=\"infra/spicedb\", grpc_service=~\"authzed\\\\.api\\\\.v1\\\\..+\", grpc_code!=\"OK\"}[5m])) / sum(rate(grpc_server_handled_total{job=\"infra/spicedb\", grpc_service=~\"authzed\\\\.api\\\\.v1\\\\..+\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0.05",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "SpiceDB: errors",
+      "uid": "nomnom-spicedb-errors"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "p95 запросов к SpiceDB дольше 250 ms: проверки доступа тормозят все use cases."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(grpc_server_handling_seconds_bucket{job=\"infra/spicedb\", grpc_service=~\"authzed\\\\.api\\\\.v1\\\\..+\"}[5m])))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0.25",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "SpiceDB: p95 latency",
+      "uid": "nomnom-spicedb-latency"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Экспортер не подключается к базе владельца: база недоступна или нет прав."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "max by (owner) (pg_up{job=\"infra/postgresql\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003c 1",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "5m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "PostgreSQL: down",
+      "uid": "nomnom-postgres-down"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "В базе владельца случились deadlocks."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (owner) (increase(pg_stat_database_deadlocks{job=\"infra/postgresql\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "0s",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "PostgreSQL: deadlocks",
+      "uid": "nomnom-postgres-deadlocks"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Контейнер в CrashLoopBackOff или ImagePullBackOff."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (namespace, pod) (kube_pod_container_status_waiting_reason{job=\"infra/kubernetes\", reason=~\"CrashLoopBackOff|ImagePullBackOff|ErrImagePull\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "5m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "Pods: crash looping",
+      "uid": "nomnom-pod-crashloop"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Контейнер перезапускался больше 2 раз за окно оценки."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{job=\"infra/kubernetes\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 2",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "0s",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "Pods: restarting",
+      "uid": "nomnom-pod-restarts"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Pod не проходит readinessProbe и выведен из Service."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "max by (namespace, pod) (kube_pod_status_ready{job=\"infra/kubernetes\", condition=\"true\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003c 1",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "Pods: not ready",
+      "uid": "nomnom-pod-not-ready"
+    }
+  ],
+  "title": "platform"
+}

@@ -1,7 +1,7 @@
 //! Domain Event → Integration Event of `nomnom/delivery/v1/events.proto`
 //! (ADR 25, ADR 31). Published types are an explicit allowlist: every Domain
-//! Event of the Delivery aggregate has a contract message; a new variant fails
-//! to compile until it is mapped or explicitly excluded.
+//! Event of the Delivery aggregate has a contract message or is explicitly
+//! excluded; a new variant fails to compile until it is mapped or excluded.
 
 use prost::Message;
 
@@ -26,10 +26,16 @@ pub struct DeliveryIntegrationEvents;
 impl OutboxMapper for DeliveryIntegrationEvents {
     fn map(&self, message: &OutboxMessage) -> Option<OutboxRecord> {
         let (event_type, payload) = match &message.event {
+            // Facts without a contract message: they feed business metrics
+            // only and are not published.
+            DomainEvent::DeliveryCreated { .. }
+            | DomainEvent::DeliveryOfferAccepted { .. }
+            | DomainEvent::DeliveryOfferRejected { .. } => return None,
             DomainEvent::CourierAssignedToDelivery {
                 delivery_id,
                 order_id,
                 courier_id,
+                ..
             } => (
                 COURIER_ASSIGNED_TO_DELIVERY,
                 v1::CourierAssignedToDelivery {

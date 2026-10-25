@@ -62,21 +62,23 @@ func toPreparationFailed(e messaging.Envelope, event *restaurantsv1.PreparationF
 
 func toRecordCourierAssignment(e messaging.Envelope, event *deliveryv1.CourierAssignedToDelivery) recordcourierassignment.Input {
 	return recordcourierassignment.Input{
-		EventID:    e.EventID,
-		OrderID:    order.ID(event.GetOrderId()),
-		OccurredAt: e.OccurredAt,
-		DeliveryID: event.GetDeliveryId(),
-		CourierID:  event.GetCourierId(),
+		EventID:         e.EventID,
+		OrderID:         order.ID(event.GetOrderId()),
+		OccurredAt:      e.OccurredAt,
+		DeliveryVersion: e.AggregateVersion,
+		DeliveryID:      event.GetDeliveryId(),
+		CourierID:       event.GetCourierId(),
 	}
 }
 
 func toCourierUnassignment(e messaging.Envelope, event *deliveryv1.CourierUnassignedFromDelivery) recordcourierrelease.Input {
 	return recordcourierrelease.Input{
-		EventID:    e.EventID,
-		OrderID:    order.ID(event.GetOrderId()),
-		OccurredAt: e.OccurredAt,
-		DeliveryID: event.GetDeliveryId(),
-		CourierID:  event.GetCourierId(),
+		EventID:         e.EventID,
+		OrderID:         order.ID(event.GetOrderId()),
+		OccurredAt:      e.OccurredAt,
+		DeliveryVersion: e.AggregateVersion,
+		DeliveryID:      event.GetDeliveryId(),
+		CourierID:       event.GetCourierId(),
 	}
 }
 
@@ -87,6 +89,7 @@ func toDeliveryCancellation(e messaging.Envelope, event *deliveryv1.DeliveryCanc
 		EventID:           e.EventID,
 		OrderID:           order.ID(event.GetOrderId()),
 		OccurredAt:        e.OccurredAt,
+		DeliveryVersion:   e.AggregateVersion,
 		DeliveryID:        event.GetDeliveryId(),
 		DeliveryCancelled: true,
 	}
