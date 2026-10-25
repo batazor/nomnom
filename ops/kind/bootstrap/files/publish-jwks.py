@@ -28,7 +28,8 @@ def request(method, path, body=None):
     api = f"https://{f'[{host}]' if ':' in host else host}:{os.environ['KUBERNETES_SERVICE_PORT']}"
     tls = ssl.create_default_context(cafile=f"{SERVICE_ACCOUNT}/ca.crt")
     with open(f"{SERVICE_ACCOUNT}/token") as token:
-        headers = {"Authorization": f"Bearer {token.read().strip()}", "Accept": "application/json"}
+        # /openid/v1/jwks отвечает application/jwk-set+json: только application/json даёт 406.
+        headers = {"Authorization": f"Bearer {token.read().strip()}", "Accept": "application/json, application/jwk-set+json"}
     data = None
     if body is not None:
         headers["Content-Type"] = "application/apply-patch+yaml"
