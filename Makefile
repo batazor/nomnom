@@ -13,7 +13,9 @@ KIND_SCRIPTS := ops/kind/scripts
 SKAFFOLD := cd ops/kind/skaffold && skaffold
 SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
 # GRAFANA_CLOUD=1: kind-deploy/kind-dev с profile grafana-cloud (ops/grafana-cloud/README.md).
-SKAFFOLD_APP_FLAGS := --module apps $(SKAFFOLD_FLAGS) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
+# KIND_STAND=core: без fixtures проверок и trace-capture (profile core); по умолчанию kind-dev — core,
+# kind-deploy — full (нужен make kind-test). core стоит перед grafana-cloud: тот перекрывает traces.
+skaffold_app_flags = --module apps $(SKAFFOLD_FLAGS) $(if $(filter core,$(or $(KIND_STAND),$(1))),-p core) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
 
 .PHONY: buf-check buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop
 buf-check: ## проверить формат, lint и компилируемость всех Protobuf-модулей
@@ -31,7 +33,7 @@ kind-cluster: ## создать single-node кластер kind из ops/kind/cl
 	@kind get clusters | grep -Fxq '$(KIND_CLUSTER_NAME)' || \
 	  sed -e 's|__BFF_HOST_PORT__|$(BFF_HOST_PORT)|' -e 's|__WEBHOOKS_HOST_PORT__|$(WEBHOOKS_HOST_PORT)|' ops/kind/cluster.yaml | \
 	  kind create cluster --name '$(KIND_CLUSTER_NAME)' --image '$(KIND_NODE_IMAGE)' --config=-
-kind-up: kind-cluster ## создать кластер и установить платформу: Cilium + Hubble, Envoy Gateway, cert-manager
+kind-up: kind-cluster ## создать кластер и установить платформу: Cilium (Hubble observer), Envoy Gateway, cert-manager
 	@$(SKAFFOLD) run --module platform $(SKAFFOLD_FLAGS)
 kind-local-ca: ## сохранить корень локального CA в ops/kind/.artifacts/nomnom-local-ca.crt и вывести путь
 	@mkdir -p ops/kind/.artifacts
@@ -39,9 +41,9 @@ kind-local-ca: ## сохранить корень локального CA в ops
 	  -o jsonpath='{.data.ca\.crt}' | base64 -d >ops/kind/.artifacts/nomnom-local-ca.crt
 	@echo ops/kind/.artifacts/nomnom-local-ca.crt
 kind-deploy: ## Skaffold: собрать образы, загрузить в kind, развернуть gateway и приложения, дождаться readiness
-	@$(SKAFFOLD) run $(SKAFFOLD_APP_FLAGS) --status-check=true
+	@$(SKAFFOLD) run $(call skaffold_app_flags,full) --status-check=true
 kind-dev: ## Skaffold dev loop: пересборка и передеплой приложений при изменении исходников
-	@$(SKAFFOLD) dev $(SKAFFOLD_APP_FLAGS)
+	@$(SKAFFOLD) dev $(call skaffold_app_flags,core)
 kind-test: ## проверки окружения: тесты Chainsaw (ops/kind/e2e); NetworkPolicy A/B применяются внутри
 	@mkdir -p ops/kind/.artifacts
 	@cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$(CHAINSAW_VERSION) test \

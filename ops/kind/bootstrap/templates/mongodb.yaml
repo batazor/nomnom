@@ -82,7 +82,8 @@ spec:
       containers:
         - name: mongodb
           image: {{ .Values.images.mongodb }}
-          args: ["--replSet", "rs0", "--bind_ip_all", "--keyFile", "/keyfile/keyfile"]
+          # WiredTiger cache по умолчанию — половина памяти ноды; для демо-данных хватает 256 МиБ.
+          args: ["--replSet", "rs0", "--bind_ip_all", "--keyFile", "/keyfile/keyfile", "--wiredTigerCacheSizeGB", "0.25"]
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
               value: root
@@ -97,6 +98,11 @@ spec:
           readinessProbe:
             exec:
               command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 640Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

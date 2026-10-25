@@ -17,9 +17,9 @@ Docker, `kind` и `skaffold` версий из [`versions.env`](versions.env), `
 
 ```bash
 make kind-e2e       # весь цикл для CI: кластер → skaffold run → проверки → удаление
-make kind-up        # make kind-cluster (single-node кластер из cluster.yaml) и платформа: Cilium + Hubble, Envoy Gateway, cert-manager
+make kind-up        # make kind-cluster (single-node кластер из cluster.yaml) и платформа: Cilium (Hubble observer), Envoy Gateway, cert-manager
 make kind-deploy    # skaffold run: сборка образов, загрузка в kind, gateway, charts приложений, readiness
-make kind-dev       # skaffold dev: пересборка и передеплой при изменении исходников
+make kind-dev       # skaffold dev (профиль core): пересборка и передеплой при изменении исходников
 make kind-test      # тесты Chainsaw; NetworkPolicy применяются внутри (фаза A без них, фаза B с ними)
 make kind-policies  # применить NetworkPolicy (kubectl apply -k manifests/netpol); kind-policies-delete — удалить
 make kind-diagnostics
@@ -32,6 +32,7 @@ make kind-down
 | `KIND_CLUSTER_NAME` | `nomnom-test` | имя кластера; контекст всегда `kind-${KIND_CLUSTER_NAME}` |
 | `BFF_HOST_PORT` | `18080` | host-порт для NodePort `30080` будущего публичного API BFF (сейчас BFF не публикуется) |
 | `WEBHOOKS_HOST_PORT` | `18085` | host-порт для NodePort `30085` public gateway |
+| `KIND_STAND` | `full` для kind-deploy, `core` для kind-dev | `core` — без fixtures проверок (net-probe, grpc-caller) и trace-capture, traces orders выключены; `make kind-test` требует `full` |
 | `KIND_KEEP` | `0` | `1` — не удалять кластер после `make kind-e2e` |
 
 Все команды явно используют контекст `kind-${KIND_CLUSTER_NAME}`. Отчёт проверок (JUnit) и
@@ -44,7 +45,7 @@ make kind-down
   отключён, `extraPortMappings` для BFF и public gateway; host-порты подставляет Make).
   Существующий кластер с тем же именем переиспользуется. Образы узел скачивает сам.
 - [`skaffold/skaffold.yaml`](skaffold/skaffold.yaml), модуль `platform`: Helm-релизы Cilium
-  (Hubble с relay и метриками drops/flows на `:9965`) и Envoy Gateway (с Gateway API CRD); hook
+  (Hubble только как observer в агенте: без relay и метрик) и Envoy Gateway (с Gateway API CRD); hook
   сверяет версию CRD с `versions.env`. Releases с `upgradeOnChange: true`: без него Skaffold не
   обновляет установленный remote chart, и правка values не доходит до существующего кластера.
 - Модуль `apps` (требует `platform`): сборка образов bounded contexts их multi-stage Dockerfile
@@ -189,7 +190,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | `trace-capture` всегда; Alloy — только с `GRAFANA_CLOUD=1` |
-| `nomnom-infra` | single-node Kafka (KRaft, `apache/kafka`) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir` |
+| `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir` |
 
 ## Internal gateway
 
@@ -343,6 +344,7 @@ curl -s localhost:3011/tokens
 `catch` тестов в выводе.
 
 Вызовы идут из pod fixtures ([`manifests/fixtures/net-probe.yaml`](manifests/fixtures/net-probe.yaml),
+[`manifests/fixtures/e2e-driver.yaml`](manifests/fixtures/e2e-driver.yaml),
 образ `e2e/probe`) в нужном неймспейсе и под его NetworkPolicy: `net-probe` в неймспейсах
 приложений и в `nomnom-outsider`, `grpc-caller` в `nomnom-bff` с projected token. Клиенты —
 `grpcurl` с descriptor sets всех контрактов и `google/rpc`, `nc`, `nslookup`, `curl` (GraphQL).

@@ -1,4 +1,4 @@
-# Политики fixtures проверок поверх app-baseline. e2e-driver (manifests/fixtures/net-probe.yaml)
+# Политики fixtures проверок поверх app-baseline. e2e-driver (manifests/fixtures/e2e-driver.yaml)
 # получает от базовых политик nomnom-bff только DNS, internal gateway и telemetry; здесь
 # добавляется единственный путь сверх них — GraphQL Service bff, как у клиента BFF.
 apiVersion: networking.k8s.io/v1

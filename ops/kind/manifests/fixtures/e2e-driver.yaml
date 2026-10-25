@@ -1,0 +1,64 @@
+# Клиент кухни, курьера и оператора в e2e пути заказа (e2e/order-lifecycle): их клиентов и
+# операций в BFF ещё нет. ServiceAccount nomnom-bff/e2e-driver допущен allowlist и
+# userDelegates restaurants и delivery только в kind (values/restaurants.yaml,
+# values/delivery.yaml); user assertion выпускает тест ключом BFF (ADR 32). Покупатель идёт
+# из этого же pod настоящим путём — GraphQL Service bff (manifests/netpol/fixtures.yaml).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: e2e-driver
+  namespace: nomnom-bff
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e2e-driver
+  namespace: nomnom-bff
+  labels:
+    app.kubernetes.io/name: e2e-driver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: e2e-driver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: e2e-driver
+    spec:
+      terminationGracePeriodSeconds: 1
+      serviceAccountName: e2e-driver
+      automountServiceAccountToken: false
+      containers:
+        - name: e2e-driver
+          # Образ проверок kind E2E (e2e/probe): grpcurl, curl и descriptor sets контрактов.
+          image: nomnom/e2e-probe
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: 8Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: identity
+              mountPath: /var/run/secrets/nomnom/identity
+              readOnly: true
+      volumes:
+        - name: identity
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: nomnom.restaurants
+                  path: nomnom.restaurants
+                  expirationSeconds: 3600
+              - serviceAccountToken:
+                  audience: nomnom.delivery
+                  path: nomnom.delivery
+                  expirationSeconds: 3600

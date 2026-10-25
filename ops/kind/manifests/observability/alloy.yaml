@@ -4,7 +4,7 @@
 # ops/grafana-cloud/.env.grafana-cloud, Secret alloy-postgres создаёт chart ops/kind/bootstrap.
 # Namespace nomnom-observability — manifests/base/namespaces.yaml.
 # Free tier ограничен активными series, поэтому уходят только метрики service.namespace=nomnom
-# и allowlist инфраструктуры (SpiceDB, PostgreSQL, internal gateway, Hubble, pods nomnom-*),
+# и allowlist инфраструктуры (SpiceDB, PostgreSQL, internal gateway, pods nomnom-*),
 # traces процессов nomnom и internal gateway и stdout-логи прикладных неймспейсов; без
 # profiles и собственных метрик Alloy.
 apiVersion: v1
@@ -405,49 +405,6 @@ data:
       rule {
         source_labels = ["envoy_cluster_name"]
         regex         = "grpcroute/.+"
-        action        = "keep"
-      }
-      forward_to = [otelcol.receiver.prometheus.infra.receiver]
-    }
-
-    // Hubble (Cilium): L3/L4 flows и drops между неймспейсами — попытки обойти internal
-    // gateway (ADR 16) видны как drop с reason POLICY_DENIED. Context метрик — namespace,
-    // не pod: series не растут с перезапусками. Endpoint агента — порт 9965 на узле.
-    discovery.kubernetes "hubble" {
-      role = "pod"
-      namespaces {
-        names = ["kube-system"]
-      }
-      selectors {
-        role  = "pod"
-        label = "k8s-app=cilium"
-      }
-    }
-
-    discovery.relabel "hubble" {
-      targets = discovery.kubernetes.hubble.targets
-      rule {
-        source_labels = ["__meta_kubernetes_pod_ip"]
-        target_label  = "__address__"
-        replacement   = "$1:9965"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_node_name"]
-        target_label  = "node"
-      }
-    }
-
-    prometheus.scrape "hubble" {
-      targets         = discovery.relabel.hubble.output
-      job_name        = "infra/hubble"
-      scrape_interval = "60s"
-      forward_to      = [prometheus.relabel.hubble.receiver]
-    }
-
-    prometheus.relabel "hubble" {
-      rule {
-        source_labels = ["__name__"]
-        regex         = "hubble_drop_total|hubble_flows_processed_total"
         action        = "keep"
       }
       forward_to = [otelcol.receiver.prometheus.infra.receiver]

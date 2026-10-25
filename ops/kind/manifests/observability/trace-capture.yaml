@@ -48,6 +48,11 @@ spec:
           ports:
             - name: otlp-grpc
               containerPort: 4317
+          resources:
+            requests:
+              memory: 48Mi
+            limits:
+              memory: 192Mi
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true

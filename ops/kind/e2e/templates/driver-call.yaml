@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
 # Вызов gRPC-метода через internal gateway от имени пользователя (ADR 32): fixture e2e-driver
-# (manifests/fixtures/net-probe.yaml) предъявляет свой projected token audience контекста и
+# (manifests/fixtures/e2e-driver.yaml) предъявляет свой projected token audience контекста и
 # user assertion, который тест выпускает на хосте kind-ключом BFF (scripts/mint-jwt.py) —
 # так играются оператор, владелец, кухня и курьер, у которых ещё нет клиентов.
 #

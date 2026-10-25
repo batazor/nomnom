@@ -3,7 +3,7 @@
 # Версии charts закреплены здесь: Skaffold не подставляет environment в remoteChart/version.
 # Остальные версии (kind, node image, Skaffold, Gateway API CRD, образы) — в ../versions.env.
 #
-#   platform — CNI (Cilium + Hubble), controller gateways (Envoy Gateway + Gateway API CRD) и
+#   platform — CNI (Cilium, Hubble observer без relay), controller gateways (Envoy Gateway + Gateway API CRD) и
 #              cert-manager;
 #   apps     — образы bounded contexts, их Helm charts, internal gateway и pod проверок.
 apiVersion: skaffold/v4beta14
@@ -27,14 +27,12 @@ deploy:
           image.pullPolicy: IfNotPresent
           ipam.mode: kubernetes
           operator.replicas: 1
+          # Только observer в агенте: kubectl exec ds/cilium -- hubble observe (e2e/netpol,
+          # scripts/diagnostics.sh). Relay, UI и метрики выключены ради памяти и CPU ноутбука:
+          # кластер одноузловой, все flows видит единственный агент.
           hubble.enabled: true
-          # Relay — hubble observe по всему кластеру (cilium hubble port-forward), UI не нужен.
-          hubble.relay.enabled: true
+          hubble.relay.enabled: false
           hubble.ui.enabled: false
-          # Метрики Hubble на :9965 агента; scrape — Alloy (manifests/observability).
-          # Context namespace, не pod: число series не растёт с перезапусками pods.
-          hubble.metrics.enabled[0]: drop:sourceContext=namespace;destinationContext=namespace
-          hubble.metrics.enabled[1]: flow:sourceContext=namespace;destinationContext=namespace
       - name: envoy-gateway
         remoteChart: oci://docker.io/envoyproxy/gateway-helm
         version: v1.9.2
@@ -85,8 +83,9 @@ build:
   local:
     push: false
     useBuildkit: true
-    # По умолчанию 1: образы четырёх контекстов собирались бы последовательно.
-    concurrency: 0
+    # Не больше трёх сборок одновременно: без ограничения семь образов (Rust, Go, Node, Python)
+    # собираются разом и забирают весь CPU ноутбука.
+    concurrency: 3
   # Локальная сборка без push: Skaffold тегирует образ его image ID, поэтому кластер
   # запускает именно собранную версию; в kind образы загружаются без registry.
   tagPolicy:
@@ -130,6 +129,7 @@ manifests:
     - ../manifests/base/namespaces.yaml
     - ../manifests/gateway/public-gateway.yaml
     - ../manifests/fixtures/net-probe.yaml
+    - ../manifests/fixtures/e2e-driver.yaml
     - ../manifests/observability/trace-capture.yaml
     - ../manifests/demo/token-issuer.yaml
   # Internal gateway: profile grafana-cloud заменяет путь на ../manifests/observability,
@@ -354,6 +354,26 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_bff}}"
           image.tag: "{{.IMAGE_TAG_nomnom_bff}}"
 profiles:
+  # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
+  # (net-probe, grpc-caller) и приёмника trace-capture — make kind-test на нём не проходит.
+  # e2e-driver остаётся: через него hook наполняет демо-данные (scripts/seed-demo.py).
+  # Идёт перед grafana-cloud: тот возвращает traces orders в Alloy.
+  # Индексы releases: 0 — orders, 9 — orders-worker.
+  - name: core
+    patches:
+      - op: replace
+        path: /manifests/rawYaml
+        value:
+          - ../manifests/base/namespaces.yaml
+          - ../manifests/gateway/public-gateway.yaml
+          - ../manifests/fixtures/e2e-driver.yaml
+          - ../manifests/demo/token-issuer.yaml
+      - op: add
+        path: /deploy/helm/releases/0/valuesFiles/-
+        value: ../values/core.yaml
+      - op: add
+        path: /deploy/helm/releases/9/valuesFiles/-
+        value: ../values/core.yaml
   # make kind-deploy GRAFANA_CLOUD=1: метрики, traces и логи сервисов → Alloy → Grafana Cloud.
   # Индексы releases 0–10 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
   # своя telemetry); при изменении порядка releases поправить patches.

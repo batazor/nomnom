@@ -18,7 +18,7 @@ identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
   # orders — API orders (каталог Place Order: GetRestaurant, GetMenu). e2e-driver — fixture
-  # e2e пути заказа (manifests/fixtures/net-probe.yaml): играет оператора, владельца и кухню,
+  # e2e пути заказа (manifests/fixtures/e2e-driver.yaml): играет оператора, владельца и кухню,
   # клиентов которых ещё нет. Только в kind: chart-default его не содержит (AC-741).
   serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-orders/orders=orders,nomnom-bff/bff=bff,nomnom-bff/e2e-driver=e2e-driver
   # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);

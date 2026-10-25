@@ -81,6 +81,11 @@ spec:
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "{{ $owner }}", "-d", "{{ $owner }}"]
+          resources:
+            requests:
+              memory: 48Mi
+            limits:
+              memory: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -243,7 +243,7 @@ spec:
           port: 8082
 ---
 # Команды кухни от имени сотрудника ресторана (restaurant#operate_kitchen): их вызывает BFF
-# (kitchen-экран) и в kind — fixture e2e-driver (manifests/fixtures/net-probe.yaml).
+# (kitchen-экран) и в kind — fixture e2e-driver (manifests/fixtures/e2e-driver.yaml).
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:

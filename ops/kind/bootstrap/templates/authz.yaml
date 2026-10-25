@@ -89,6 +89,11 @@ spec:
           readinessProbe:
             grpc:
               port: 50051
+          resources:
+            requests:
+              memory: 48Mi
+            limits:
+              memory: 192Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

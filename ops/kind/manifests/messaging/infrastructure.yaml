@@ -1,4 +1,4 @@
-# Messaging и orchestration тестового окружения: single-node Kafka (KRaft) для integration
+# Messaging и orchestration тестового окружения: single-node Kafka API (Redpanda) для integration
 # events (ADR 4, ADR 28) и Temporal dev server для orders-consumer (ADR orders 2).
 # Данные хранятся в emptyDir и теряются при рестарте pod. Egress к ним из прикладных
 # неймспейсов разрешает manifests/netpol/app-infrastructure.yaml (tier infra, порты 9092, 7233).
@@ -9,6 +9,11 @@ metadata:
   labels:
     nomnom.dev/tier: infra
 ---
+# Kafka API тестового окружения — Redpanda в режиме dev-container: один процесс без JVM и
+# ZooKeeper/KRaft-контроллера, ~150 МиБ вместо ~800 МиБ у Apache Kafka. Клиенты контекстов
+# (sarama, librdkafka, confluent-kafka-javascript) работают с ним по протоколу Kafka без
+# изменений, включая idempotent producer. Имя kafka (Deployment, Service, label) — логическое
+# имя брокера: на него ссылаются values контекстов, NetworkPolicy и e2e.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,42 +34,33 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: kafka
-          image: docker.io/apache/kafka:4.4.0
-          env:
-            - name: KAFKA_NODE_ID
-              value: "1"
-            - name: KAFKA_PROCESS_ROLES
-              value: broker,controller
-            - name: KAFKA_LISTENERS
-              value: PLAINTEXT://:9092,CONTROLLER://:9093
-            - name: KAFKA_ADVERTISED_LISTENERS
-              value: PLAINTEXT://kafka.nomnom-infra.svc.cluster.local:9092
-            - name: KAFKA_CONTROLLER_LISTENER_NAMES
-              value: CONTROLLER
-            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-              value: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: 1@localhost:9093
-            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
-              value: "1"
-            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
-              value: "1"
-            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
-              value: "1"
-            # Stream topics и poison topic создаются при первом обращении: partitions
-            # по ключу aggregate_id, как в integration specification.
-            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
-              value: "true"
-            - name: KAFKA_NUM_PARTITIONS
-              value: "3"
-            - name: KAFKA_LOG_DIRS
-              value: /var/lib/kafka/data
+          image: docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce
+          # dev-container: без fsync, auto create topics, допуск малой памяти; один shard
+          # (--smp 1) и --overprovisioned — без pinning ядер и busy-polling на общей ноде.
+          # Stream topics и poison topic создаются при первом обращении: partitions по ключу
+          # aggregate_id, как в integration specification.
+          args:
+            - redpanda
+            - start
+            - --mode=dev-container
+            - --smp=1
+            - --memory=256M
+            - --reserve-memory=0M
+            - --overprovisioned
+            - --default-log-level=warn
+            - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+            - --advertise-kafka-addr=PLAINTEXT://kafka.nomnom-infra.svc.cluster.local:9092
+            - --set
+            - redpanda.auto_create_topics_enabled=true
+            - --set
+            - redpanda.default_topic_partitions=3
           ports:
             - name: kafka
               containerPort: 9092
@@ -72,13 +68,18 @@ spec:
             tcpSocket:
               port: kafka
             periodSeconds: 5
+          resources:
+            requests:
+              memory: 192Mi
+            limits:
+              memory: 448Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
           volumeMounts:
             - name: data
-              mountPath: /var/lib/kafka/data
+              mountPath: /var/lib/redpanda/data
       volumes:
         - name: data
           emptyDir: {}
@@ -128,6 +129,11 @@ spec:
             tcpSocket:
               port: grpc
             periodSeconds: 5
+          resources:
+            requests:
+              memory: 96Mi
+            limits:
+              memory: 384Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
