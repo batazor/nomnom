@@ -13,7 +13,12 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 
-FROM python:3.15.0-slim-bookworm AS runtime
+FROM build AS build-dev
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --group watch --no-install-project
+
+FROM python:3.15.0-slim-bookworm AS base
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -26,13 +31,31 @@ RUN apt-get update && \
     groupadd --system --gid 10001 app && \
     useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent app
 
+EXPOSE 8084 9084
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Только для make kind-dev (Skaffold profile dev): watchfiles перезапускает процесс после
+# file sync исходников без пересборки образа.
+FROM base AS dev
+
+RUN chown app:app /app
+COPY --from=build-dev --chown=app:app /app/.venv /app/.venv
+COPY --chown=app:app entrypoints ./entrypoints
+COPY --chown=app:app infrastructure ./infrastructure
+COPY --chown=app:app pkg ./pkg
+COPY --chown=app:app slices ./slices
+
+USER app:app
+CMD ["watchfiles", "--filter", "python", "python -m entrypoints.payments.main", \
+     "entrypoints", "infrastructure", "pkg", "slices"]
+
+FROM base AS runtime
+
 COPY --from=build --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app entrypoints ./entrypoints
 COPY --chown=app:app infrastructure ./infrastructure
 COPY --chown=app:app pkg ./pkg
 COPY --chown=app:app slices ./slices
 
-EXPOSE 8084 9084
 USER app:app
-ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python", "-m", "entrypoints.payments.main"]

@@ -19,3 +19,12 @@ coverage/
 *.log
 *.key
 *.pem
+# Не входят в образ: их правка не должна менять inputDigest и пересобирать orders.
+ops/
+docs/
+*.md
+Makefile
+config.example.yaml
+.golangci.yml
+.adr-dir
+**/*_test.go

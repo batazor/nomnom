@@ -16,6 +16,25 @@ COPY pkg ./pkg
 COPY slices ./slices
 RUN npm run build
 
+# Только для make kind-dev (Skaffold profile dev): исходники .ts запускаются напрямую,
+# node --watch перезапускает процесс после file sync без пересборки образа.
+FROM deps AS dev
+
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y tini && \
+    rm -rf /var/lib/apt/lists/* && \
+    chown node:node /app
+
+COPY --chown=node:node cmd ./cmd
+COPY --chown=node:node infrastructure ./infrastructure
+COPY --chown=node:node pkg ./pkg
+COPY --chown=node:node slices ./slices
+
+EXPOSE 8082 9082
+USER node
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "--watch", "cmd/restaurants/main.ts"]
+
 FROM node:24.11.0-bookworm-slim AS production-deps
 
 WORKDIR /app

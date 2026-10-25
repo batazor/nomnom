@@ -54,12 +54,14 @@ apiVersion: skaffold/v4beta14
 kind: Config
 metadata:
   name: apps
-requires:
-  - configs: [platform]
+# Без requires: platform ставит make kind-up, а make kind-deploy/kind-dev запускают только
+# --module apps, чтобы итерация dev loop не передеплоивала Cilium и Envoy Gateway.
 build:
   local:
     push: false
     useBuildkit: true
+    # По умолчанию 1: образы четырёх контекстов собирались бы последовательно.
+    concurrency: 0
   # Локальная сборка без push: Skaffold тегирует образ его image ID, поэтому кластер
   # запускает именно собранную версию; в kind образы загружаются без registry.
   tagPolicy:
@@ -114,6 +116,8 @@ deploy:
   # Bounded contexts ставятся собственными charts (ADR 12) с values тестового окружения.
   # BFF chart не устанавливается: образ BFF ещё не определён (ADR 10).
   helm:
+    # Releases независимы и ставятся параллельно; порядок задаёт dependsOn.
+    concurrency: 0
     hooks:
       before:
         # Skaffold применяет rawYaml после helm, поэтому всё, что charts читают при старте,
@@ -182,6 +186,7 @@ deploy:
         chartPath: ../../../boundaries/orders/ops/helm
         namespace: nomnom-orders
         createNamespace: true
+        dependsOn: [orders]
         valuesFiles:
           - ../../../boundaries/orders/ops/helm/values-consumer.yaml
           - ../values/orders-consumer.yaml
@@ -204,3 +209,43 @@ profiles:
       - op: add
         path: /deploy/helm/releases/4/valuesFiles/-
         value: ../values/grafana-cloud.yaml
+  # make kind-dev: restaurants и payments собираются из stage dev и получают file sync —
+  # правка исходников копируется в контейнер, процесс перезапускает node --watch / watchfiles.
+  # Go и Rust компилируются (а orders на distroless без tar), поэтому идут через пересборку.
+  # Индексы artifacts: 1 — restaurants, 3 — payments; при изменении порядка поправить patches.
+  - name: dev
+    activation:
+      - command: dev
+    patches:
+      - op: replace
+        path: /build/artifacts/1/docker/target
+        value: dev
+      - op: add
+        path: /build/artifacts/1/sync
+        value:
+          manual:
+            - src: "cmd/**/*.ts"
+              dest: .
+            - src: "infrastructure/**/*.ts"
+              dest: .
+            - src: "infrastructure/**/*.js"
+              dest: .
+            - src: "pkg/**/*.ts"
+              dest: .
+            - src: "slices/**/*.ts"
+              dest: .
+      - op: replace
+        path: /build/artifacts/3/docker/target
+        value: dev
+      - op: add
+        path: /build/artifacts/3/sync
+        value:
+          manual:
+            - src: "entrypoints/**/*.py"
+              dest: .
+            - src: "infrastructure/**/*.py"
+              dest: .
+            - src: "pkg/**/*.py"
+              dest: .
+            - src: "slices/**/*.py"
+              dest: .

@@ -18,6 +18,11 @@ for namespace in nomnom-authz nomnom-orders nomnom-restaurants nomnom-delivery n
   k -n "${namespace}" create secret generic spicedb-preshared-key --from-literal=preshared-key="${key}" \
     --dry-run=client -o yaml | k apply -f - >/dev/null
 done
-# Новый bootstrap применяется только при старте memory datastore.
-k -n nomnom-authz rollout restart deployment/spicedb >/dev/null 2>&1 || true
+# Новый bootstrap применяется только при старте memory datastore. Checksum в pod template
+# перезапускает SpiceDB лишь при изменении schema/bootstrap: безусловный restart на каждой
+# итерации skaffold dev стирал бы relationships, записанные приложениями.
+checksum="$(cat "${root}/authorization/schema.zed" "${root}/authorization/bootstrap.yaml" | shasum -a 256 | cut -c1-16)"
+k -n nomnom-authz patch deployment/spicedb --type merge \
+  -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"nomnom.dev/bootstrap-checksum\":\"${checksum}\"}}}}}" \
+  >/dev/null 2>&1 || true
 echo "spicedb bootstrap and preshared key published"

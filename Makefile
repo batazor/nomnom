@@ -10,7 +10,7 @@ KIND_SCRIPTS := ops/kind/scripts
 SKAFFOLD := cd ops/kind/skaffold && skaffold
 SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
 # GRAFANA_CLOUD=1: kind-deploy/kind-dev с profile grafana-cloud (ops/grafana-cloud/README.md).
-SKAFFOLD_APP_FLAGS := $(SKAFFOLD_FLAGS) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
+SKAFFOLD_APP_FLAGS := --module apps $(SKAFFOLD_FLAGS) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
 
 .PHONY: buf-check buf-generate kind-up kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop
 buf-check: ## проверить формат, lint и компилируемость всех Protobuf-модулей
