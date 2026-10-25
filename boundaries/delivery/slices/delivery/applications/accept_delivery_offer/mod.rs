@@ -7,7 +7,8 @@
 //! acceptance writes nothing.
 
 use crate::pkg::application::{Clock, Subject, UnitOfWork};
-use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository,
     OfferAcceptanceConditions, OfferState,
@@ -19,7 +20,7 @@ use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
 use super::policy::AssignmentPolicy;
 use super::relationships::DeliveryRelationshipWriter;
-use super::{courier_id, load_courier, load_delivery, load_offer, offer_id};
+use super::{courier_id, load_delivery, load_offer, offer_id};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
@@ -41,7 +42,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub unit_of_work: &'a U,
     pub offers: &'a dyn DeliveryOfferRepository,
     pub deliveries: &'a dyn DeliveryRepository,
-    pub couriers: &'a dyn CourierRepository,
+    pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
     pub locator: &'a dyn CourierLocator,
     pub clock: &'a dyn Clock,
@@ -96,11 +97,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
             return Ok(output(&offer, true));
         }
         let mut delivery = load_delivery(self.deliveries, offer.delivery_id())?;
-        let mut courier = load_courier(self.couriers, courier_id)?;
 
         offer.accept(courier_id, conditions)?;
         delivery.assign(courier_id.clone())?;
-        courier.mark_busy()?;
+        // The courier becomes busy through the `courier` slice port in this
+        // Unit of Work (FR-310, FR-485).
+        self.couriers.occupy(courier_id)?;
         // The Courier Assignment is valid; grant access before commit and
         // check the delivery at least as fresh as this write (FR-447).
         let revision = self
@@ -116,7 +118,6 @@ impl<U: UnitOfWork> Handler<'_, U> {
         }
         self.offers.save(&offer)?;
         self.deliveries.save(&delivery)?;
-        self.couriers.save(&courier)?;
         publish(self.outbox, delivery.pull_events())?;
         Ok(output(&offer, false))
     }
@@ -137,10 +138,13 @@ fn output(offer: &DeliveryOffer, already_accepted: bool) -> Output {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use super::*;
     use crate::infrastructure::memory::StaticAuthorization;
-    use crate::infrastructure::memory::{RecordingRelationships, RelationshipWrite};
+    use crate::infrastructure::memory::{MemoryStore, RecordingRelationships, RelationshipWrite};
     use crate::pkg::application::UnitOfWorkError;
+    use crate::slices::courier::applications::assignment::CourierAssignmentError;
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::authorization::DeliveryResource;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
@@ -152,7 +156,7 @@ mod tests {
         State, TransitionError,
     };
 
-    fn handler(world: &World) -> Handler<'_, crate::infrastructure::memory::MemoryStore> {
+    fn handler(world: &World) -> Handler<'_, MemoryStore> {
         Handler {
             authorization: &world.authorization,
             unit_of_work: &world.store,
@@ -409,6 +413,102 @@ mod tests {
         assert_eq!(world.offer_state("offer-2"), OfferState::Pending);
         assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
         assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
+        assert!(world.store.outbox_messages().is_empty());
+    }
+
+    /// Courier busyness port that records every call and delegates to the
+    /// store, proving the use case changes the courier only through the port.
+    struct RecordingAssignment<'a> {
+        store: &'a MemoryStore,
+        calls: RefCell<Vec<(&'static str, CourierId)>>,
+    }
+
+    impl<'a> RecordingAssignment<'a> {
+        fn new(store: &'a MemoryStore) -> Self {
+            Self {
+                store,
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+
+        fn record(&self, call: &'static str, courier_id: &CourierId) {
+            self.calls.borrow_mut().push((call, courier_id.clone()));
+        }
+    }
+
+    impl CourierAssignment for RecordingAssignment<'_> {
+        fn ensure_registered(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+            self.record("ensure_registered", courier_id);
+            self.store.ensure_registered(courier_id)
+        }
+
+        fn ensure_available(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+            self.record("ensure_available", courier_id);
+            self.store.ensure_available(courier_id)
+        }
+
+        fn occupy(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+            self.record("occupy", courier_id);
+            self.store.occupy(courier_id)
+        }
+
+        fn release(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+            self.record("release", courier_id);
+            self.store.release(courier_id)
+        }
+    }
+
+    /// AC-549
+    #[test]
+    fn acceptance_occupies_courier_through_port_in_one_transaction() {
+        let world = world_with_two_offers();
+        let couriers = RecordingAssignment::new(&world.store);
+        let handler = Handler {
+            couriers: &couriers,
+            ..handler(&world)
+        };
+
+        handler
+            .execute(&subject("courier-1"), input("offer-1", "courier-1"))
+            .expect("offer accepted");
+
+        assert_eq!(
+            *couriers.calls.borrow(),
+            vec![("occupy", CourierId::new("courier-1"))]
+        );
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
+        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+        assert_eq!(world.offer_state("offer-1"), OfferState::Accepted);
+        assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
+        assert_eq!(world.store.commits(), 1);
+    }
+
+    /// AC-550
+    #[test]
+    fn failed_commit_leaves_courier_occupied_through_port_available() {
+        let world = world_with_two_offers();
+        let couriers = RecordingAssignment::new(&world.store);
+        let handler = Handler {
+            couriers: &couriers,
+            ..handler(&world)
+        };
+        world
+            .store
+            .fail_next_commit(UnitOfWorkError::CommitFailed("connection lost".to_owned()));
+
+        assert_eq!(
+            handler.execute(&subject("courier-1"), input("offer-1", "courier-1")),
+            Err(DeliveryApplicationError::Transaction(
+                UnitOfWorkError::CommitFailed("connection lost".to_owned())
+            ))
+        );
+        assert_eq!(
+            *couriers.calls.borrow(),
+            vec![("occupy", CourierId::new("courier-1"))]
+        );
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
+        assert_eq!(world.offer_state("offer-1"), OfferState::Pending);
+        assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
         assert!(world.store.outbox_messages().is_empty());
     }
 

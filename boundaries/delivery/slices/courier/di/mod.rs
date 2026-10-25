@@ -9,9 +9,6 @@ use shaku::{Component, HasComponent, Interface, module};
 use crate::pkg::application::{Clock, Subject};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::error::CourierApplicationError;
-use crate::slices::courier::applications::get_courier_current_delivery::{
-    self, CourierCurrentDeliveryReadModel,
-};
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::{self, CourierLocationStore};
 use crate::slices::courier::applications::{register_courier, set_courier_availability};
@@ -23,7 +20,6 @@ pub trait CourierPorts: Interface {
     fn authorization(&self) -> &dyn CourierAuthorization;
     fn couriers(&self) -> &dyn CourierRepository;
     fn locations(&self) -> &dyn CourierLocationStore;
-    fn current_deliveries(&self) -> &dyn CourierCurrentDeliveryReadModel;
     fn clock(&self) -> &dyn Clock;
     fn relationships(&self) -> &dyn CourierRelationshipWriter;
 }
@@ -49,12 +45,6 @@ pub trait CourierUseCases: Interface {
         subject: &Subject,
         input: update_courier_location::Input,
     ) -> Result<update_courier_location::Output, CourierApplicationError>;
-
-    fn get_courier_current_delivery(
-        &self,
-        subject: &Subject,
-        input: get_courier_current_delivery::Input,
-    ) -> Result<get_courier_current_delivery::Output, CourierApplicationError>;
 }
 
 #[derive(Component)]
@@ -100,19 +90,6 @@ impl CourierUseCases for CourierUseCasesImpl {
             couriers: self.ports.couriers(),
             locations: self.ports.locations(),
             clock: self.ports.clock(),
-        }
-        .execute(subject, input)
-    }
-
-    fn get_courier_current_delivery(
-        &self,
-        subject: &Subject,
-        input: get_courier_current_delivery::Input,
-    ) -> Result<get_courier_current_delivery::Output, CourierApplicationError> {
-        get_courier_current_delivery::Handler {
-            authorization: self.ports.authorization(),
-            couriers: self.ports.couriers(),
-            current_deliveries: self.ports.current_deliveries(),
         }
         .execute(subject, input)
     }

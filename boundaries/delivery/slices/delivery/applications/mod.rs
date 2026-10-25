@@ -7,6 +7,7 @@ pub mod courier_locator;
 pub mod create_delivery;
 pub mod error;
 pub mod find_courier;
+pub mod get_courier_current_delivery;
 pub mod list_available_delivery_offers;
 pub mod offer_delivery;
 pub mod outbox;
@@ -21,7 +22,7 @@ pub mod report_delivery_failure;
 mod test_support;
 
 use crate::pkg::application::required_identifier;
-use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository};
+use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository, OrderId,
@@ -69,15 +70,6 @@ fn load_delivery_by_order(
     deliveries
         .find_by_order(order_id)?
         .ok_or_else(|| DeliveryApplicationError::DeliveryForOrderNotFound(order_id.clone()))
-}
-
-fn load_courier(
-    couriers: &dyn CourierRepository,
-    id: &CourierId,
-) -> Result<Courier, DeliveryApplicationError> {
-    couriers
-        .get(id)?
-        .ok_or_else(|| DeliveryApplicationError::CourierNotFound(id.clone()))
 }
 
 fn load_offer(

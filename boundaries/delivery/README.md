@@ -52,6 +52,12 @@ Rust.
 
 Слайсы `delivery` следуют [общей DDD-структуре и правилам зависимостей](../README.md#организация-кода-внутри-контекста): `slices/courier` владеет агрегатом и eligibility курьера, `slices/delivery` — доставкой и предложениями доставки. Use cases размещаются в `slices/<slice>/applications/<usecase>/`, shared packages — в `pkg/`. Traits репозиториев агрегатов определяются рядом с моделью в `domains/<domain>/`, а порты внешних интеграций и чтения — рядом с потребляющими сценариями в `applications/`.
 
+Зависимость между слайсами идёт только в направлении `delivery → courier` (FR-486): `slices/courier` не импортирует `slices::delivery`, это проверяет `tests/slice_boundaries.rs`. Поэтому query Get Courier Current Delivery, который читает модель `Delivery`, принадлежит слайсу `delivery` (`slices/delivery/applications/get_courier_current_delivery`); право курьера по-прежнему проверяет `CourierAuthorization` слайса `courier`.
+
+Занятость курьера use cases слайса `delivery` проверяют и меняют только через прикладной порт `CourierAssignment` слайса `courier` (`slices/courier/applications/assignment.rs`: `ensure_registered`, `ensure_available`, `occupy`, `release`), а не через агрегат `Courier` и `CourierRepository` (FR-485). Реализация порта загружает `Courier` через `CourierRepository`, вызывает доменный метод и сохраняет агрегат в текущей Unit of Work.
+
+Accept Delivery Offer, Reassign Courier, Confirm Delivery, Report Delivery Failure и Cancel Delivery изменяют offer, `Delivery` и `Courier` одной локальной транзакцией. Это записанное исключение из правила «один aggregate на транзакцию» ([Unit of Work](../../docs/unit-of-work.md#исключение-offer-delivery-и-courier-в-одной-транзакции)): инвариант «у курьера не больше одной активной доставки» и FR-310 требуют атомарности, а конкуренция за `Courier` ограничена optimistic concurrency по `version`.
+
 ## gRPC-адаптер
 
 `delivery` владеет API `nomnom.delivery.v1` и публикует его как `buf.build/nomnom/delivery`. Исходные messages находятся в `infrastructure/grpc/nomnom/delivery/v1/delivery.proto`, service и RPC — в соседнем `service.proto`; корень Buf-модуля — `infrastructure/grpc`.
@@ -238,7 +244,7 @@ docker stop delivery-pg
 - занятый курьер не может стать `unavailable`, `unavailable` курьер не получает offer и назначение;
 - offer принимает или отклоняет только его адресат и только до `expiresAt` включительно; принятие одного offer закрывает остальные pending offers доставки как `withdrawn`.
 
-Application handler загружает `Courier`, `Delivery` и `DeliveryOffer` и сохраняет их вместе с записью Outbox в одной границе транзакции. Проверки допустимости назначения и переходов состояния выполняются их доменным поведением.
+Application handler загружает `Delivery` и `DeliveryOffer`, меняет занятость `Courier` через порт `CourierAssignment` и сохраняет всё вместе с записью Outbox в одной границе транзакции. Проверки допустимости назначения и переходов состояния выполняются их доменным поведением.
 
 ### Value objects
 
@@ -360,7 +366,7 @@ docker stop delivery-pg delivery-kafka
 
 - доменная модель: `Courier` (включая `unavailable`), `Location`, табличные FSM `Delivery` (6 states × 6 triggers, включая `Cancelled`/`Cancel`) и `DeliveryOffer` (4 × 3) с тестами полноты, domain events `CourierAssignedToDelivery`, `CourierUnassignedFromDelivery`, `DeliveryPickedUp`, `DeliveryCompleted`, `DeliveryFailed`, `DeliveryCancelled`; policies `CourierEligibleForDelivery` и `DeliveryOfferAcceptable`; контракты репозиториев рядом с моделями;
 - application handlers всех 16 use cases в `slices/<slice>/applications/<usecase>/mod.rs` с unit-тестами;
-- порты: `UnitOfWork`, `Clock`, `IdGenerator`, `Subject`/`AuthorizationError` (`pkg/application`), `RepositoryError` (`pkg/persistence`), `CourierAuthorization` и `DeliveryAuthorization`, `DeliveryOutbox`, `CourierLocator`, `CourierLocationStore`, read models `CourierCurrentDeliveryReadModel` и `PendingDeliveryOffersReadModel`, параметры `AssignmentPolicy`;
+- порты: `UnitOfWork`, `Clock`, `IdGenerator`, `Subject`/`AuthorizationError` (`pkg/application`), `RepositoryError` (`pkg/persistence`), `CourierAuthorization` и `DeliveryAuthorization`, порт занятости курьера `CourierAssignment`, `DeliveryOutbox`, `CourierLocator`, `CourierLocationStore`, read models `CourierCurrentDeliveryReadModel` и `PendingDeliveryOffersReadModel`, параметры `AssignmentPolicy`;
 - `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27) и user identity по assertion BFF (ADR 32);
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
 - `PostgresStore` (`infrastructure/postgres`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox ADR 31, миграции `delivery-migrate`;

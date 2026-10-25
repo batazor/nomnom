@@ -1,14 +1,19 @@
 //! Get Courier Current Delivery: a courier reads its active Delivery —
-//! assigned or picked up — or the explicit absence of one.
+//! assigned or picked up — or the explicit absence of one. The query reads the
+//! `Delivery` model, so it belongs to the `delivery` slice; the courier's right
+//! is checked by the `courier` slice authorization port as before.
 
 use crate::pkg::application::Subject;
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::applications::authorization::{
+    CourierAuthorization, CourierPermission, CourierResource,
+};
+use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{Address, DeliveryId, OrderId, State};
 
-use super::authorization::{CourierAuthorization, CourierPermission, CourierResource};
 use super::courier_id;
-use super::error::CourierApplicationError;
+use super::error::DeliveryApplicationError;
 
 /// Courier-facing representation of the active Delivery.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -42,7 +47,7 @@ pub struct Output {
 
 pub struct Handler<'a> {
     pub authorization: &'a dyn CourierAuthorization,
-    pub couriers: &'a dyn CourierRepository,
+    pub couriers: &'a dyn CourierAssignment,
     pub current_deliveries: &'a dyn CourierCurrentDeliveryReadModel,
 }
 
@@ -51,7 +56,7 @@ impl Handler<'_> {
         &self,
         subject: &Subject,
         input: Input,
-    ) -> Result<Output, CourierApplicationError> {
+    ) -> Result<Output, DeliveryApplicationError> {
         let courier_id = courier_id(&input.courier_id)?;
         self.authorization.check(
             subject,
@@ -59,9 +64,7 @@ impl Handler<'_> {
             &CourierResource::Courier(courier_id.clone()),
         )?;
 
-        if self.couriers.get(&courier_id)?.is_none() {
-            return Err(CourierApplicationError::CourierNotFound(courier_id));
-        }
+        self.couriers.ensure_registered(&courier_id)?;
         let current_delivery = self.current_deliveries.active_delivery_for(&courier_id)?;
         Ok(Output {
             courier_id,
@@ -74,7 +77,7 @@ impl Handler<'_> {
 mod tests {
     use super::*;
     use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
-    use crate::slices::courier::domains::courier::{Courier, CourierStatus};
+    use crate::slices::courier::domains::courier::{Courier, CourierRepository, CourierStatus};
     use crate::slices::delivery::domains::delivery::{Delivery, DeliveryRepository};
 
     fn subject() -> Subject {
@@ -174,7 +177,7 @@ mod tests {
         };
         assert_eq!(
             handler.execute(&Subject::User("courier-2".to_owned()), input()),
-            Err(CourierApplicationError::PermissionDenied)
+            Err(DeliveryApplicationError::PermissionDenied)
         );
     }
 
@@ -189,7 +192,7 @@ mod tests {
         };
         assert_eq!(
             handler.execute(&subject(), input()),
-            Err(CourierApplicationError::CourierNotFound(CourierId::new(
+            Err(DeliveryApplicationError::CourierNotFound(CourierId::new(
                 "courier-1"
             )))
         );

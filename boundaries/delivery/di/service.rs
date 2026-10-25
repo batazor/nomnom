@@ -84,8 +84,8 @@ pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule
 mod tests {
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::pkg::application::Subject;
-    use crate::slices::courier::applications::{get_courier_current_delivery, register_courier};
-    use crate::slices::delivery::applications::create_delivery;
+    use crate::slices::courier::applications::register_courier;
+    use crate::slices::delivery::applications::{create_delivery, get_courier_current_delivery};
 
     use super::*;
 
@@ -107,14 +107,14 @@ mod tests {
                 },
             )
             .expect("courier registered");
-        let current = couriers
+        let current = deliveries
             .get_courier_current_delivery(
                 &operator(),
                 get_courier_current_delivery::Input {
                     courier_id: "courier-1".to_owned(),
                 },
             )
-            .expect("courier visible to the courier slice");
+            .expect("courier registered by one slice is visible to the other");
         assert_eq!(current.current_delivery, None);
 
         let created = deliveries

@@ -4,13 +4,13 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::pkg::application::{UnitOfWork, UnitOfWorkError};
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
-use crate::slices::courier::applications::get_courier_current_delivery::{
-    CourierCurrentDeliveryReadModel, CurrentDeliveryView,
-};
 use crate::slices::courier::applications::update_courier_location::{
     CourierLocationStore, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository};
+use crate::slices::delivery::applications::get_courier_current_delivery::{
+    CourierCurrentDeliveryReadModel, CurrentDeliveryView,
+};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };

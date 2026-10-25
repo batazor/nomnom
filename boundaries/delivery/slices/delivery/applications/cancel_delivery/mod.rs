@@ -8,7 +8,8 @@
 //! graph before commit; a failed delete rolls the cancellation back.
 
 use crate::pkg::application::{Subject, UnitOfWork};
-use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     DeliveryCancellationReason, DeliveryId, DeliveryRepository, OrderId, State, TransitionError,
 };
@@ -17,7 +18,7 @@ use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryRe
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
 use super::relationships::DeliveryRelationshipWriter;
-use super::{load_courier, load_delivery_by_order, order_id};
+use super::{load_delivery_by_order, order_id};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
@@ -68,7 +69,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub unit_of_work: &'a U,
     pub deliveries: &'a dyn DeliveryRepository,
-    pub couriers: &'a dyn CourierRepository,
+    pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
     pub relationships: &'a dyn DeliveryRelationshipWriter,
 }
@@ -101,15 +102,13 @@ impl<U: UnitOfWork> Handler<'_, U> {
         let outcome = match delivery.cancel(reason) {
             Ok(released_courier_id) => {
                 if let Some(courier_id) = &released_courier_id {
-                    let mut courier = load_courier(self.couriers, courier_id)?;
-                    courier.release()?;
+                    self.couriers.release(courier_id)?;
                     // Revoke access before commit; the revision of the DELETE
                     // makes the revocation visible to the next check (FR-447).
                     let revision = self
                         .relationships
                         .unassign_courier(&delivery_id, courier_id)?;
                     delivery.record_authorization_revision(revision);
-                    self.couriers.save(&courier)?;
                 }
                 self.deliveries.save(&delivery)?;
                 publish(self.outbox, delivery.pull_events())?;

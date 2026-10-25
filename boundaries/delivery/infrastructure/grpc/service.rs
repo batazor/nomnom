@@ -10,10 +10,10 @@ use tonic::{Request, Response, Status};
 use crate::di::ServiceModule;
 use crate::pkg::application::Subject;
 use crate::pkg::lifecycle::{Worker, wait_for_stop};
-use crate::slices::courier::applications::error::CourierApplicationError;
-use crate::slices::courier::applications::get_courier_current_delivery;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
-use crate::slices::delivery::applications::{cancel_delivery, create_delivery, replan_delivery};
+use crate::slices::delivery::applications::{
+    cancel_delivery, create_delivery, get_courier_current_delivery, replan_delivery,
+};
 use crate::slices::delivery::di::DeliveryUseCases;
 use crate::slices::delivery::domains::delivery::State;
 
@@ -55,13 +55,13 @@ impl DeliveryService for DeliveryGrpcService {
     ) -> Result<Response<GetCourierCurrentDeliveryResponse>, Status> {
         let subject = self.subjects.resolve(request.metadata())?;
         let courier_id = request.into_inner().courier_id;
-        let use_cases = self.module.couriers();
-        let output = use_cases
+        let output = self
+            .deliveries()
             .get_courier_current_delivery(
                 &subject,
                 get_courier_current_delivery::Input { courier_id },
             )
-            .map_err(transport_error)?;
+            .map_err(delivery_transport_error)?;
 
         let delivery = output.current_delivery.map(|view| Delivery {
             delivery_id: view.delivery_id.as_str().to_owned(),
@@ -164,23 +164,6 @@ fn delivery_state(state: State) -> DeliveryState {
     }
 }
 
-fn transport_error(error: CourierApplicationError) -> Status {
-    match error {
-        CourierApplicationError::PermissionDenied => Status::permission_denied(error.to_string()),
-        CourierApplicationError::InvalidRequest(_) => Status::invalid_argument(error.to_string()),
-        CourierApplicationError::CourierNotFound(_) => Status::not_found(error.to_string()),
-        CourierApplicationError::CourierAlreadyRegistered(_) => {
-            Status::already_exists(error.to_string())
-        }
-        CourierApplicationError::PreconditionFailed(_) => {
-            Status::failed_precondition(error.to_string())
-        }
-        CourierApplicationError::ConcurrentModification => Status::aborted(error.to_string()),
-        CourierApplicationError::DependencyUnavailable(_) => Status::unavailable(error.to_string()),
-        CourierApplicationError::Internal(_) => Status::internal("internal error"),
-    }
-}
-
 fn delivery_transport_error(error: DeliveryApplicationError) -> Status {
     match error {
         DeliveryApplicationError::PermissionDenied => Status::permission_denied(error.to_string()),
@@ -258,10 +241,6 @@ mod tests {
     fn concurrent_modification_maps_to_aborted() {
         assert_eq!(
             delivery_transport_error(DeliveryApplicationError::ConcurrentModification).code(),
-            tonic::Code::Aborted
-        );
-        assert_eq!(
-            transport_error(CourierApplicationError::ConcurrentModification).code(),
             tonic::Code::Aborted
         );
     }

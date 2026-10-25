@@ -3,7 +3,7 @@
 //! the Delivery Completion fact is written to the Outbox in one Unit of Work.
 
 use crate::pkg::application::{Subject, UnitOfWork};
-use crate::slices::courier::domains::courier::CourierRepository;
+use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };
@@ -11,7 +11,7 @@ use crate::slices::delivery::domains::delivery::{
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
-use super::{courier_id, delivery_id, load_courier, load_delivery};
+use super::{courier_id, delivery_id, load_delivery};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
@@ -31,7 +31,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub unit_of_work: &'a U,
     pub deliveries: &'a dyn DeliveryRepository,
-    pub couriers: &'a dyn CourierRepository,
+    pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
 }
 
@@ -64,11 +64,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 }
                 Err(error) => return Err(error.into()),
             }
-            let mut courier = load_courier(self.couriers, &courier_id)?;
-            courier.release()?;
+            self.couriers.release(&courier_id)?;
 
             self.deliveries.save(&delivery)?;
-            self.couriers.save(&courier)?;
             publish(self.outbox, delivery.pull_events())?;
             Ok(Output {
                 delivery_id: delivery_id.clone(),

@@ -5,9 +5,10 @@
 use std::collections::HashSet;
 
 use crate::pkg::application::Subject;
+use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
 use crate::slices::courier::domains::courier::{
     CourierEligibilityContext, CourierEligibilityReason, CourierError, CourierId,
-    CourierRepository, courier_eligible_for_delivery,
+    courier_eligible_for_delivery,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferRepository, DeliveryRepository,
@@ -59,7 +60,7 @@ pub struct Output {
 pub struct Handler<'a> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub deliveries: &'a dyn DeliveryRepository,
-    pub couriers: &'a dyn CourierRepository,
+    pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
     pub locator: &'a dyn CourierLocator,
     pub policy: AssignmentPolicy,
@@ -126,11 +127,15 @@ impl Handler<'_> {
         if offered.contains(&candidate.courier_id) {
             return Ok(Some(CandidateRejectionReason::AlreadyOffered));
         }
-        let Some(courier) = self.couriers.get(&candidate.courier_id)? else {
-            return Ok(Some(CandidateRejectionReason::CourierNotRegistered));
-        };
-        if let Err(error) = courier.ensure_available() {
-            return Ok(Some(CandidateRejectionReason::NotAvailable(error)));
+        match self.couriers.ensure_available(&candidate.courier_id) {
+            Ok(()) => {}
+            Err(CourierAssignmentError::CourierNotFound(_)) => {
+                return Ok(Some(CandidateRejectionReason::CourierNotRegistered));
+            }
+            Err(CourierAssignmentError::Precondition(error)) => {
+                return Ok(Some(CandidateRejectionReason::NotAvailable(error)));
+            }
+            Err(error @ CourierAssignmentError::Repository(_)) => return Err(error.into()),
         }
         let eligibility = courier_eligible_for_delivery(CourierEligibilityContext {
             within_delivery_zone: candidate.within_delivery_zone,

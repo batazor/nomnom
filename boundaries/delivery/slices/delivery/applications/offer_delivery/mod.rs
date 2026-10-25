@@ -2,7 +2,8 @@
 //! available courier for a limited time. No Courier Assignment is created.
 
 use crate::pkg::application::{Clock, IdGenerator, Subject};
-use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository,
 };
@@ -10,7 +11,7 @@ use crate::slices::delivery::domains::delivery::{
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::policy::AssignmentPolicy;
-use super::{courier_id, delivery_id, load_courier, load_delivery};
+use super::{courier_id, delivery_id, load_delivery};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
@@ -31,7 +32,7 @@ pub struct Output {
 pub struct Handler<'a> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub deliveries: &'a dyn DeliveryRepository,
-    pub couriers: &'a dyn CourierRepository,
+    pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
     pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
@@ -54,7 +55,7 @@ impl Handler<'_> {
 
         let delivery = load_delivery(self.deliveries, &delivery_id)?;
         delivery.ensure_assignable()?;
-        load_courier(self.couriers, &courier_id)?.ensure_available()?;
+        self.couriers.ensure_available(&courier_id)?;
 
         let now = self.clock.now_epoch_seconds();
         let offers = self.offers.list_for_delivery(&delivery_id)?;

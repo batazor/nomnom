@@ -33,7 +33,7 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-316, FR-318.
-- **Порты:** `DeliveryAuthorization` (`ConfirmDelivery` над `Courier(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierRepository`, `DeliveryOutbox`.
+- **Порты:** `DeliveryAuthorization` (`ConfirmDelivery` над `Courier(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
 - **Транзакция:** UoW: `Delivery` + освобождение `Courier` + Outbox (`DeliveryCompleted`); повтор назначенным курьером — no-op.
 
 ## Acceptance

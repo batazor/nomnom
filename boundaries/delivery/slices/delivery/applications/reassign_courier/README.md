@@ -33,7 +33,7 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-312.
-- **Порты:** `DeliveryAuthorization` (`ReassignCourier` над `Delivery(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierRepository`, `DeliveryOutbox`.
+- **Порты:** `DeliveryAuthorization` (`ReassignCourier` над `Delivery(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
 - **Транзакция:** UoW: `Delivery` (`assigned → waiting`) + освобождение `Courier` + Outbox (`CourierUnassignedFromDelivery`).
 - **Допущение:** Переназначение после Pickup запрещено; поиск замены запускает вызывающий процесс.
 

@@ -16,14 +16,15 @@ use crate::infrastructure::memory::{
 };
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::application::{Clock, IdGenerator, TransactionScope};
+use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
-use crate::slices::courier::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
 use crate::slices::courier::di::{CourierDependencies, CourierPorts};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
+use crate::slices::delivery::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use crate::slices::delivery::applications::list_available_delivery_offers::PendingDeliveryOffersReadModel;
 use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
@@ -45,6 +46,7 @@ const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
 /// записи обоих слайсов и Outbox.
 pub trait ProcessStore:
     CourierRepository
+    + CourierAssignment
     + CourierLocationStore
     + CourierCurrentDeliveryReadModel
     + DeliveryRepository
@@ -60,6 +62,7 @@ pub trait ProcessStore:
 
 impl<T> ProcessStore for T where
     T: CourierRepository
+        + CourierAssignment
         + CourierLocationStore
         + CourierCurrentDeliveryReadModel
         + DeliveryRepository
@@ -214,10 +217,6 @@ impl CourierPorts for LocalCourierPorts {
         self.store.store()
     }
 
-    fn current_deliveries(&self) -> &dyn CourierCurrentDeliveryReadModel {
-        self.store.store()
-    }
-
     fn clock(&self) -> &dyn Clock {
         &*self.clock
     }
@@ -249,6 +248,10 @@ impl DeliveryPorts for LocalDeliveryPorts {
         self.authorization.delivery()
     }
 
+    fn courier_authorization(&self) -> &dyn CourierAuthorization {
+        self.authorization.courier()
+    }
+
     fn transactions(&self) -> &dyn TransactionScope {
         self.store.store()
     }
@@ -265,7 +268,11 @@ impl DeliveryPorts for LocalDeliveryPorts {
         self.store.store()
     }
 
-    fn couriers(&self) -> &dyn CourierRepository {
+    fn current_deliveries(&self) -> &dyn CourierCurrentDeliveryReadModel {
+        self.store.store()
+    }
+
+    fn courier_assignment(&self) -> &dyn CourierAssignment {
         self.store.store()
     }
 

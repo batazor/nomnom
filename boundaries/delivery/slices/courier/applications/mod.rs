@@ -1,6 +1,6 @@
+pub mod assignment;
 pub mod authorization;
 pub mod error;
-pub mod get_courier_current_delivery;
 pub mod register_courier;
 pub mod relationships;
 pub mod set_courier_availability;

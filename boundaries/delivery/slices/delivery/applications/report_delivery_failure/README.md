@@ -33,7 +33,7 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-317.
-- **Порты:** `DeliveryAuthorization` (`ReportDeliveryFailure` над `Courier(id)` для курьера или `Delivery(id)` для диспетчера), `UnitOfWork`, `DeliveryRepository`, `CourierRepository`, `DeliveryOutbox`.
+- **Порты:** `DeliveryAuthorization` (`ReportDeliveryFailure` над `Courier(id)` для курьера или `Delivery(id)` для диспетчера), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
 - **Транзакция:** UoW: `Delivery` (`failed` с причиной) + освобождение `Courier` + Outbox (`DeliveryFailed`).
 - **Допущение:** Причина не классифицируется как retryable — решение остаётся за `orders`; неудача фиксируется только для `assigned`/`pickedUp`, курьер освобождается.
 
