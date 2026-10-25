@@ -1,3 +1,7 @@
+use super::super::mapping::CheckConsistency;
+use super::super::v1::check_permission_response::Permissionship;
+use super::super::v1::consistency::Requirement;
+use super::super::v1::{CheckPermissionResponse, Consistency, ZedToken};
 use super::*;
 
 fn config(endpoint: &str, insecure: bool) -> SpiceDbConfig {

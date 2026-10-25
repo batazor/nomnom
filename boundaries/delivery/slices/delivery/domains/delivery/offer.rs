@@ -1,52 +1,17 @@
+mod acceptance;
+mod transitions;
+
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use super::DeliveryId;
 use crate::slices::courier::domains::courier::CourierId;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DeliveryOfferReason {
-    Expired,
-    TooFarFromPickup,
-    ActiveAssignmentLimitReached,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DeliveryOfferResult {
-    pub reasons: Vec<DeliveryOfferReason>,
-}
-
-impl DeliveryOfferResult {
-    #[must_use]
-    pub fn satisfied(&self) -> bool {
-        self.reasons.is_empty()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DeliveryOfferContext {
-    pub now_epoch_seconds: i64,
-    pub expires_at_epoch_seconds: i64,
-    pub distance_to_pickup_meters: u32,
-    pub maximum_distance_meters: u32,
-    pub active_assignments: u32,
-    pub maximum_active_assignments: u32,
-}
-
-#[must_use]
-pub fn delivery_offer_acceptable(context: DeliveryOfferContext) -> DeliveryOfferResult {
-    let mut reasons = Vec::new();
-    if context.now_epoch_seconds > context.expires_at_epoch_seconds {
-        reasons.push(DeliveryOfferReason::Expired);
-    }
-    if context.distance_to_pickup_meters > context.maximum_distance_meters {
-        reasons.push(DeliveryOfferReason::TooFarFromPickup);
-    }
-    if context.active_assignments >= context.maximum_active_assignments {
-        reasons.push(DeliveryOfferReason::ActiveAssignmentLimitReached);
-    }
-    DeliveryOfferResult { reasons }
-}
+pub use acceptance::*;
+use transitions::offer_transition;
+#[cfg(test)]
+use transitions::{ALL_OFFER_STATES, ALL_OFFER_TRIGGERS, OFFER_TRANSITION_TABLE};
+pub use transitions::{OfferState, OfferTransitionResult, OfferTrigger};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct DeliveryOfferId(String);
@@ -61,46 +26,6 @@ impl DeliveryOfferId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-/// Business state of a Delivery Offer. Expiry is a function of time and
-/// `expires_at`, not a stored state.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum OfferState {
-    Pending,
-    Accepted,
-    Rejected,
-    /// Closed because the delivery was assigned through another offer.
-    Withdrawn,
-}
-
-#[cfg(test)]
-const ALL_OFFER_STATES: [OfferState; 4] = [
-    OfferState::Pending,
-    OfferState::Accepted,
-    OfferState::Rejected,
-    OfferState::Withdrawn,
-];
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum OfferTrigger {
-    Accept,
-    Reject,
-    Withdraw,
-}
-
-#[cfg(test)]
-const ALL_OFFER_TRIGGERS: [OfferTrigger; 3] = [
-    OfferTrigger::Accept,
-    OfferTrigger::Reject,
-    OfferTrigger::Withdraw,
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct OfferTransitionResult {
-    pub from: OfferState,
-    pub trigger: OfferTrigger,
-    pub to: OfferState,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -149,112 +74,6 @@ impl Display for DeliveryOfferError {
 }
 
 impl Error for DeliveryOfferError {}
-
-#[derive(Clone, Copy)]
-enum OfferOutcome {
-    Allowed(OfferState),
-    Invalid,
-    AlreadyApplied,
-}
-
-#[derive(Clone, Copy)]
-struct OfferTransitionDefinition {
-    from: OfferState,
-    trigger: OfferTrigger,
-    outcome: OfferOutcome,
-}
-
-const OFFER_TRANSITION_TABLE: [OfferTransitionDefinition; 12] = [
-    offer_definition(
-        OfferState::Pending,
-        OfferTrigger::Accept,
-        OfferOutcome::Allowed(OfferState::Accepted),
-    ),
-    offer_definition(
-        OfferState::Pending,
-        OfferTrigger::Reject,
-        OfferOutcome::Allowed(OfferState::Rejected),
-    ),
-    offer_definition(
-        OfferState::Pending,
-        OfferTrigger::Withdraw,
-        OfferOutcome::Allowed(OfferState::Withdrawn),
-    ),
-    offer_definition(
-        OfferState::Accepted,
-        OfferTrigger::Accept,
-        OfferOutcome::AlreadyApplied,
-    ),
-    offer_definition(
-        OfferState::Accepted,
-        OfferTrigger::Reject,
-        OfferOutcome::Invalid,
-    ),
-    offer_definition(
-        OfferState::Accepted,
-        OfferTrigger::Withdraw,
-        OfferOutcome::Invalid,
-    ),
-    offer_definition(
-        OfferState::Rejected,
-        OfferTrigger::Accept,
-        OfferOutcome::Invalid,
-    ),
-    offer_definition(
-        OfferState::Rejected,
-        OfferTrigger::Reject,
-        OfferOutcome::AlreadyApplied,
-    ),
-    offer_definition(
-        OfferState::Rejected,
-        OfferTrigger::Withdraw,
-        OfferOutcome::Invalid,
-    ),
-    offer_definition(
-        OfferState::Withdrawn,
-        OfferTrigger::Accept,
-        OfferOutcome::Invalid,
-    ),
-    offer_definition(
-        OfferState::Withdrawn,
-        OfferTrigger::Reject,
-        OfferOutcome::Invalid,
-    ),
-    offer_definition(
-        OfferState::Withdrawn,
-        OfferTrigger::Withdraw,
-        OfferOutcome::AlreadyApplied,
-    ),
-];
-
-const fn offer_definition(
-    from: OfferState,
-    trigger: OfferTrigger,
-    outcome: OfferOutcome,
-) -> OfferTransitionDefinition {
-    OfferTransitionDefinition {
-        from,
-        trigger,
-        outcome,
-    }
-}
-
-fn offer_transition(
-    from: OfferState,
-    trigger: OfferTrigger,
-) -> Result<OfferTransitionResult, DeliveryOfferError> {
-    let Some(rule) = OFFER_TRANSITION_TABLE
-        .iter()
-        .find(|rule| rule.from == from && rule.trigger == trigger)
-    else {
-        return Err(DeliveryOfferError::InvalidTransition { from, trigger });
-    };
-    match rule.outcome {
-        OfferOutcome::Invalid => Err(DeliveryOfferError::InvalidTransition { from, trigger }),
-        OfferOutcome::AlreadyApplied => Err(DeliveryOfferError::AlreadyInState { state: from }),
-        OfferOutcome::Allowed(to) => Ok(OfferTransitionResult { from, trigger, to }),
-    }
-}
 
 /// Values outside the offer that `DeliveryOfferAcceptable` needs at the moment
 /// of acceptance. The application supplies `now` and the courier snapshot.

@@ -7,6 +7,9 @@
 //! и ждёт ответ, не вызывая `block_on` в чужом runtime. На multi-thread runtime
 //! ожидание выполняется через `block_in_place`, чтобы не занимать async worker.
 
+mod config;
+mod proto;
+
 use std::fmt;
 use std::sync::mpsc as std_mpsc;
 use std::time::Duration;
@@ -16,23 +19,22 @@ use tokio::sync::mpsc;
 use tonic::Request;
 use tonic::metadata::{Ascii, MetadataValue};
 use tonic::service::Interceptor;
-use tonic::transport::{ClientTlsConfig, Endpoint};
 
-use super::mapping::{CheckConsistency, PermissionCheck};
+use super::mapping::PermissionCheck;
 use super::relationships::{
     Relationship, RelationshipGraph, RelationshipOperation, RelationshipPage,
 };
-use super::v1::check_permission_response::Permissionship;
-use super::v1::consistency::Requirement;
 use super::v1::permissions_service_client::PermissionsServiceClient;
-use super::v1::relationship_update::Operation;
 use super::v1::{
-    CheckPermissionRequest, CheckPermissionResponse, Consistency, Cursor, ObjectReference,
-    ReadRelationshipsRequest, RelationshipFilter, RelationshipUpdate, SubjectReference,
-    WriteRelationshipsRequest, WriteRelationshipsResponse, ZedToken,
+    CheckPermissionRequest, ReadRelationshipsRequest, WriteRelationshipsRequest,
+    WriteRelationshipsResponse,
 };
 use crate::pkg::config::SpiceDbConfig;
 use crate::pkg::persistence::AuthorizationRevision;
+
+pub use config::SpiceDbConfigError;
+use config::{config_error, endpoint};
+use proto::{allowed, from_proto, read_request, request, write_request};
 
 /// Запас ожидания ответа сверх deadline запроса: deadline соблюдает поток
 /// клиента, этот запас лишь страхует от его остановки.
@@ -42,32 +44,6 @@ const REPLY_GRACE: Duration = Duration::from_millis(500);
 pub trait PermissionChecker: Send + Sync {
     /// `Ok(true)` только для `PERMISSIONSHIP_HAS_PERMISSION`.
     fn check(&self, check: &PermissionCheck) -> Result<bool, String>;
-}
-
-/// Ошибка startup: невалидная конфигурация SpiceDB.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpiceDbConfigError(String);
-
-impl fmt::Display for SpiceDbConfigError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "spicedb: {}", self.0)
-    }
-}
-
-impl std::error::Error for SpiceDbConfigError {}
-
-impl SpiceDbConfigError {
-    /// Пустой endpoint: процесс, проверяющий права, не стартует без SpiceDB.
-    #[must_use]
-    pub fn missing_endpoint(env: &str) -> Self {
-        config_error(format!(
-            "{env} is required: delivery checks permissions in SpiceDB"
-        ))
-    }
-}
-
-fn config_error(message: impl Into<String>) -> SpiceDbConfigError {
-    SpiceDbConfigError(message.into())
 }
 
 type Reply<T> = std_mpsc::SyncSender<Result<T, String>>;
@@ -283,142 +259,6 @@ impl RelationshipGraph for SpiceDbClient {
             "read relationships",
         )
     }
-}
-
-fn write_request(
-    operation: RelationshipOperation,
-    relationship: &Relationship,
-) -> WriteRelationshipsRequest {
-    let operation = match operation {
-        RelationshipOperation::Touch => Operation::Touch,
-        RelationshipOperation::Delete => Operation::Delete,
-    };
-    WriteRelationshipsRequest {
-        updates: vec![RelationshipUpdate {
-            operation: operation as i32,
-            relationship: Some(to_proto(relationship)),
-        }],
-        optional_preconditions: Vec::new(),
-        optional_transaction_metadata: None,
-    }
-}
-
-/// Reconciliation сравнивает граф с хранилищем, поэтому читает
-/// `fully_consistent`, а не кэш `minimize_latency`.
-fn read_request(
-    resource_type: &str,
-    relation: &str,
-    cursor: Option<&str>,
-    limit: u32,
-) -> ReadRelationshipsRequest {
-    ReadRelationshipsRequest {
-        consistency: Some(Consistency {
-            requirement: Some(Requirement::FullyConsistent(true)),
-        }),
-        relationship_filter: Some(RelationshipFilter {
-            resource_type: resource_type.to_owned(),
-            optional_relation: relation.to_owned(),
-            ..RelationshipFilter::default()
-        }),
-        optional_limit: limit,
-        optional_cursor: cursor.map(|token| Cursor {
-            token: token.to_owned(),
-        }),
-    }
-}
-
-fn to_proto(relationship: &Relationship) -> super::v1::Relationship {
-    super::v1::Relationship {
-        resource: Some(ObjectReference {
-            object_type: relationship.resource_type.clone(),
-            object_id: relationship.resource_id.clone(),
-        }),
-        relation: relationship.relation.clone(),
-        subject: Some(SubjectReference {
-            object: Some(ObjectReference {
-                object_type: relationship.subject_type.clone(),
-                object_id: relationship.subject_id.clone(),
-            }),
-            optional_relation: String::new(),
-        }),
-        optional_caveat: None,
-        optional_expires_at: None,
-    }
-}
-
-/// `None` для relationship без resource или subject.
-fn from_proto(relationship: &super::v1::Relationship) -> Option<Relationship> {
-    let resource = relationship.resource.as_ref()?;
-    let subject = relationship.subject.as_ref()?.object.as_ref()?;
-    Some(Relationship {
-        resource_type: resource.object_type.clone(),
-        resource_id: resource.object_id.clone(),
-        relation: relationship.relation.clone(),
-        subject_type: subject.object_type.clone(),
-        subject_id: subject.object_id.clone(),
-    })
-}
-
-/// Только `HAS_PERMISSION` разрешает; `NO_PERMISSION`, conditional и
-/// неизвестные значения — отказ.
-fn allowed(response: &CheckPermissionResponse) -> bool {
-    response.permissionship == Permissionship::HasPermission as i32
-}
-
-fn request(check: &PermissionCheck) -> CheckPermissionRequest {
-    let requirement = match &check.consistency {
-        CheckConsistency::MinimizeLatency => Requirement::MinimizeLatency(true),
-        CheckConsistency::AtLeastAsFresh(revision) => Requirement::AtLeastAsFresh(ZedToken {
-            token: revision.as_str().to_owned(),
-        }),
-    };
-    CheckPermissionRequest {
-        consistency: Some(Consistency {
-            requirement: Some(requirement),
-        }),
-        resource: Some(ObjectReference {
-            object_type: check.resource_type.to_owned(),
-            object_id: check.resource_id.clone(),
-        }),
-        permission: check.permission.to_owned(),
-        subject: Some(SubjectReference {
-            object: Some(ObjectReference {
-                object_type: check.subject_type.to_owned(),
-                object_id: check.subject_id.clone(),
-            }),
-            optional_relation: String::new(),
-        }),
-        context: None,
-        with_tracing: false,
-    }
-}
-
-/// `host:port` дополняется схемой по `insecure`; явная схема должна ему
-/// соответствовать, чтобы ключ не ушёл plaintext по ошибке.
-fn endpoint(config: &SpiceDbConfig) -> Result<Endpoint, SpiceDbConfigError> {
-    let raw = config.endpoint.trim();
-    let url = match raw.split_once("://") {
-        None if config.insecure => format!("http://{raw}"),
-        None => format!("https://{raw}"),
-        Some(("http", _)) if config.insecure => raw.to_owned(),
-        Some(("https", _)) if !config.insecure => raw.to_owned(),
-        Some((scheme, _)) => {
-            return Err(config_error(format!(
-                "endpoint scheme {scheme}:// does not match insecure = {}",
-                config.insecure
-            )));
-        }
-    };
-    let endpoint = Endpoint::from_shared(url)
-        .map_err(|error| config_error(format!("invalid endpoint {raw}: {error}")))?
-        .connect_timeout(config.timeout)
-        .timeout(config.timeout);
-    if config.insecure {
-        return Ok(endpoint);
-    }
-    endpoint
-        .tls_config(ClientTlsConfig::new().with_webpki_roots())
-        .map_err(|error| config_error(format!("tls: {error}")))
 }
 
 #[cfg(test)]

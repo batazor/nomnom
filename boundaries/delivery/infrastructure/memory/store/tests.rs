@@ -1,5 +1,6 @@
 use super::*;
-use crate::slices::courier::domains::courier::CourierStatus;
+use crate::slices::courier::domains::courier::{CourierRepository, CourierStatus};
+use crate::slices::delivery::domains::delivery::DeliveryRepository;
 
 #[derive(Debug, PartialEq)]
 enum TestError {
