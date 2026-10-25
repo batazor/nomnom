@@ -98,9 +98,9 @@ func TestInstrumentRecordsOutcomeOfEveryCall(t *testing.T) {
 
 	got := map[string]string{}
 	for _, attrs := range p.durations(t) {
-		assert.Equal(t, "place_order", value(attrs, "usecase"))
-		assert.Equal(t, "command", value(attrs, "kind"))
-		got[value(attrs, "outcome")+"/"+value(attrs, "error_type")] = ""
+		assert.Equal(t, "place_order", value(attrs, "nomnom.usecase.name"))
+		assert.Equal(t, "command", value(attrs, "nomnom.usecase.kind"))
+		got[value(attrs, "nomnom.outcome")+"/"+value(attrs, "error.type")] = ""
 	}
 	assert.Equal(t, map[string]string{
 		"success/":           "",

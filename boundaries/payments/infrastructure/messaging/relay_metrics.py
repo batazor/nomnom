@@ -8,6 +8,13 @@ from opentelemetry import metrics
 
 from .outbox import OutboxRecord, TopicBacklog
 
+# Attributes из registry ops/semconv (make semconv-check): semconv для топика,
+# nomnom.* для остального.
+_DESTINATION = "messaging.destination.name"
+_EVENT_TYPE = "nomnom.event.type"
+_ERROR_CLASS = "nomnom.error.class"
+_OUTCOME = "nomnom.outcome"
+
 
 class RelayMetrics:
     """OTel instruments of the relay (docs/observability/metric-inventory.md#outbox).
@@ -63,21 +70,24 @@ class RelayMetrics:
             return list(self._backlog)
 
     def published(self, record: OutboxRecord, duration: float, confirmed_at: datetime) -> None:
-        attributes = {"stream": record.topic, "event_type": record.event_type}
-        self._duration.record(duration, attributes)
+        attributes = {_DESTINATION: record.topic, _EVENT_TYPE: record.event_type}
+        self._duration.record(duration, {**attributes, _OUTCOME: "success"})
         self._lag.record(max(0.0, (confirmed_at - record.occurred_at).total_seconds()), attributes)
 
     def failed(self, record: OutboxRecord, error_class: str) -> None:
-        self._retries.add(1, {"stream": record.topic, "error_class": error_class})
+        self._retries.add(
+            1,
+            {_DESTINATION: record.topic, _EVENT_TYPE: record.event_type, _ERROR_CLASS: error_class},
+        )
 
     def _observe_pending(self, _options: metrics.CallbackOptions) -> list[metrics.Observation]:
-        return [metrics.Observation(b.pending, {"stream": b.topic}) for b in self.backlog()]
+        return [metrics.Observation(b.pending, {_DESTINATION: b.topic}) for b in self.backlog()]
 
     def _observe_oldest_age(self, _options: metrics.CallbackOptions) -> list[metrics.Observation]:
         now = self._now()
         return [
             metrics.Observation(
-                max(0.0, (now - b.oldest_occurred_at).total_seconds()), {"stream": b.topic}
+                max(0.0, (now - b.oldest_occurred_at).total_seconds()), {_DESTINATION: b.topic}
             )
             for b in self.backlog()
             if b.oldest_occurred_at is not None

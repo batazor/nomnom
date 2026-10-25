@@ -1,0 +1,76 @@
+# Метрики раздела messaging инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.messaging.process.duration
+    type: metric
+    metric_name: nomnom.messaging.process.duration
+    stability: development
+    brief: "Duration of processing one inbound Integration Event, retries included."
+    instrument: histogram
+    unit: "s"
+    attributes:
+      - ref: nomnom.messaging.handler
+        requirement_level: required
+      - ref: nomnom.event.type
+        requirement_level: required
+      - ref: messaging.destination.name
+        requirement_level: required
+      - ref: nomnom.error.class
+        requirement_level: required
+  - id: metric.nomnom.messaging.retry.attempts
+    type: metric
+    metric_name: nomnom.messaging.retry.attempts
+    stability: development
+    brief: "In-process retries of transient failures."
+    instrument: counter
+    unit: "{attempt}"
+    attributes:
+      - ref: nomnom.messaging.handler
+        requirement_level: required
+      - ref: nomnom.event.type
+        requirement_level: required
+      - ref: messaging.destination.name
+        requirement_level: required
+  - id: metric.nomnom.messaging.poison.messages
+    type: metric
+    metric_name: nomnom.messaging.poison.messages
+    stability: development
+    brief: "Messages sent to `<stream>.dlq`."
+    instrument: counter
+    unit: "{message}"
+    attributes:
+      - ref: nomnom.messaging.handler
+        requirement_level: required
+      - ref: nomnom.event.type
+        requirement_level: required
+      - ref: messaging.destination.name
+        requirement_level: required
+      - ref: nomnom.error.class
+        requirement_level: required
+  - id: metric.nomnom.messaging.message.age
+    type: metric
+    metric_name: nomnom.messaging.message.age
+    stability: development
+    brief: "now − occurred_at when the consumer receives the event."
+    instrument: histogram
+    unit: "s"
+    attributes:
+      - ref: nomnom.messaging.handler
+        requirement_level: required
+      - ref: nomnom.event.type
+        requirement_level: required
+      - ref: messaging.destination.name
+        requirement_level: required
+  - id: metric.nomnom.inbox.duplicates
+    type: metric
+    metric_name: nomnom.inbox.duplicates
+    stability: development
+    brief: "Redeliveries completed as Inbox duplicates."
+    instrument: counter
+    unit: "{message}"
+    attributes:
+      - ref: nomnom.messaging.handler
+        requirement_level: required
+      - ref: nomnom.event.type
+        requirement_level: required
+      - ref: messaging.destination.name
+        requirement_level: required

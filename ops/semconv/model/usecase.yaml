@@ -1,0 +1,19 @@
+# Метрики раздела usecase инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.usecase.duration
+    type: metric
+    metric_name: nomnom.usecase.duration
+    stability: development
+    brief: "Duration of one application use case call."
+    instrument: histogram
+    unit: "s"
+    attributes:
+      - ref: nomnom.usecase.name
+        requirement_level: required
+      - ref: nomnom.usecase.kind
+        requirement_level: required
+      - ref: nomnom.outcome
+        requirement_level: required
+      - ref: error.type
+        requirement_level: 
+          conditionally_required: "only when outcome is rejected or error"

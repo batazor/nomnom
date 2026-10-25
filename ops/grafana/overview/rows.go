@@ -52,13 +52,13 @@ func (g *generator) health(sc Scope) []Panel {
 			ratio = append(ratio, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)) + " / " + Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count")), "Kafka"})
 		} else {
 			rate = append(rate, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka processing"})
-			errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class!~"|business"`)), "Kafka technical failure"})
-			ratio = append(ratio, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class!=""`)) + " / " + Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka"})
+			errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`)), "Kafka technical failure"})
+			ratio = append(ratio, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!=""`)) + " / " + Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka"})
 		}
 	}
 	if o.Kafka != nil {
 		errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_poison_messages_total")), "Kafka dead letter"},
-			Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class="business"`)), "Kafka business rejection"})
+			Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class="business"`)), "Kafka business rejection"})
 	}
 	if o.Temporal != nil {
 		rate = append(rate, Query{Sum("", sc.Rate("temporal_activity_execution_latency_seconds_count")), "Temporal activities"})
@@ -169,10 +169,10 @@ func (g *generator) dependencies(sc Scope) []Panel {
 	if o.PaymentProvider {
 		provider := "nomnom_payments_provider_request_duration_seconds"
 		panels = append(panels,
-			Panel{Title: "Payment provider: requests", Unit: "ops", Queries: []Query{{Sum("operation, outcome", sc.Rate(provider+"_count")), "{{operation}} {{outcome}}"}},
+			Panel{Title: "Payment provider: requests", Unit: "ops", Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Rate(provider+"_count")), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}},
 				Description: "`declined` — бизнес-результат провайдера, не технический сбой."},
-			Panel{Title: "Payment provider: errors and timeouts", Unit: "ops", Traces: true, Queries: []Query{{Sum("operation, outcome", sc.Rate(provider+"_count", `outcome=~"error|timeout"`)), "{{operation}} {{outcome}}"}}},
-			Panel{Title: "Payment provider: p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "operation", provider), "{{operation}}"}}},
+			Panel{Title: "Payment provider: errors and timeouts", Unit: "ops", Traces: true, Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Rate(provider+"_count", `nomnom_outcome=~"error|timeout"`)), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}}},
+			Panel{Title: "Payment provider: p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "nomnom_payment_operation", provider), "{{nomnom_payment_operation}}"}}},
 		)
 	}
 	return panels
@@ -187,13 +187,13 @@ func (g *generator) kafka(sc Scope) []Panel {
 		consumed = []Query{{Sum("handler_name, acked", sc.Rate("watermill_consumer_subscriber_messages_received_total")), "{{handler_name}} acked={{acked}}"}}
 		produced = []Query{{Sum("publisher_name, success", sc.Rate("watermill_outbox_forwarder_publish_time_seconds_count")), "{{publisher_name}} success={{success}}"}}
 		failures = []Query{{Sum("handler_name", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "{{handler_name}}"}}
-		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class=~"|business"`)), "processed"}
+		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
 	} else {
 		consumed = []Query{{Sum("messaging_destination_name", sc.Rate("messaging_client_consumed_messages_total")), "{{messaging_destination_name}}"}}
 		produced = []Query{{Sum("messaging_destination_name", sc.Rate("messaging_client_sent_messages_total")), "{{messaging_destination_name}}"}}
-		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class=~"|business"`)), "processed"}
+		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
 	}
-	failures = append(failures, Query{Sum("error_class", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class!~"|business"`)), "{{error_class}}"})
+	failures = append(failures, Query{Sum("nomnom_error_class", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`)), "{{nomnom_error_class}}"})
 	return []Panel{
 		{Title: "Consumed", Unit: "ops", Queries: consumed},
 		{Title: "Produced (Outbox Forwarder)", Unit: "ops", Queries: produced},
@@ -202,17 +202,17 @@ func (g *generator) kafka(sc Scope) []Panel {
 		{Title: "Consumer lag", Unit: "short", Queries: []Query{{lag, "{{topic}}"}},
 			Description: "Lag consumer group `" + k.ConsumerGroup + "` из Alloy Kafka exporter; не путать с очередями предметной области."},
 		{Title: "Retries and poison (DLQ)", Unit: "ops", Queries: []Query{
-			{Sum("event_type", sc.Rate("nomnom_messaging_retry_attempts_total")), "retry {{event_type}}"},
-			{Sum("stream, error_class", sc.Rate("nomnom_messaging_poison_messages_total")), "{{stream}}.dlq {{error_class}}"},
+			{Sum("nomnom_event_type", sc.Rate("nomnom_messaging_retry_attempts_total")), "retry {{nomnom_event_type}}"},
+			{Sum("messaging_destination_name, nomnom_error_class", sc.Rate("nomnom_messaging_poison_messages_total")), "{{messaging_destination_name}}.dlq {{nomnom_error_class}}"},
 		}},
-		{Title: "Processing duration p95 by event_type", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "event_type", "nomnom_messaging_process_duration_seconds"), "{{event_type}}"}}},
-		{Title: "Message age at processing p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "event_type", "nomnom_messaging_message_age_seconds"), "{{event_type}}"}},
+		{Title: "Processing duration p95 by event_type", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "nomnom_event_type", "nomnom_messaging_process_duration_seconds"), "{{nomnom_event_type}}"}}},
+		{Title: "Message age at processing p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "nomnom_event_type", "nomnom_messaging_message_age_seconds"), "{{nomnom_event_type}}"}},
 			Description: "`now − occurred_at` в момент обработки."},
 		{Title: "Inbox: processed / duplicates", Unit: "ops", Queries: []Query{processed, {Sum("", sc.Rate("nomnom_inbox_duplicates_total")), "duplicates"}},
 			Description: "Duplicate = конфликт уникальности `(consumer, event_id)` в Inbox; failures — панель Processing failures."},
-		{Title: "Outbox pending", Unit: "short", Queries: []Query{{Sum("stream", sc.Gauge("nomnom_outbox_pending_messages")), "{{stream}}"}}},
-		{Title: "Outbox oldest pending age", Unit: "s", Queries: []Query{{Max("stream", sc.Gauge("nomnom_outbox_oldest_pending_age_seconds")), "{{stream}}"}}},
-		{Title: "Outbox publish retries", Unit: "ops", Queries: []Query{{Sum("stream, error_class", sc.Rate("nomnom_outbox_publish_retries_total")), "{{stream}} {{error_class}}"}}},
+		{Title: "Outbox pending", Unit: "short", Queries: []Query{{Sum("messaging_destination_name", sc.Gauge("nomnom_outbox_pending_messages")), "{{messaging_destination_name}}"}}},
+		{Title: "Outbox oldest pending age", Unit: "s", Queries: []Query{{Max("messaging_destination_name", sc.Gauge("nomnom_outbox_oldest_pending_age_seconds")), "{{messaging_destination_name}}"}}},
+		{Title: "Outbox publish retries", Unit: "ops", Queries: []Query{{Sum("messaging_destination_name, nomnom_error_class", sc.Rate("nomnom_outbox_publish_retries_total")), "{{messaging_destination_name}} {{nomnom_error_class}}"}}},
 	}
 }
 
@@ -221,20 +221,20 @@ func (g *generator) kafka(sc Scope) []Panel {
 func useCases(sc Scope) []Panel {
 	uc := "nomnom_usecase_duration_seconds"
 	return []Panel{
-		{Title: "Calls by outcome", Unit: "ops", Queries: []Query{{Sum("outcome", sc.Rate(uc+"_count")), "{{outcome}}"}},
+		{Title: "Calls by outcome", Unit: "ops", Queries: []Query{{Sum("nomnom_outcome", sc.Rate(uc+"_count")), "{{nomnom_outcome}}"}},
 			Description: "success, rejected (отказ по правилам use case) и error (технический сбой)."},
-		{Title: "Rejections by use case", Unit: "ops", Queries: []Query{{Sum("usecase, error_type", sc.Rate(uc+"_count", `outcome="rejected"`)), "{{usecase}} {{error_type}}"}}},
-		{Title: "Errors by use case", Unit: "ops", Queries: []Query{{Sum("usecase, error_type", sc.Rate(uc+"_count", `outcome="error"`)), "{{usecase}} {{error_type}}"}}},
-		{Title: "Duration p95 by use case", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "usecase", uc), "{{usecase}}"}}},
+		{Title: "Rejections by use case", Unit: "ops", Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="rejected"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
+		{Title: "Errors by use case", Unit: "ops", Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="error"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
+		{Title: "Duration p95 by use case", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "nomnom_usecase_name", uc), "{{nomnom_usecase_name}}"}}},
 	}
 }
 
 func transactions(sc Scope) []Panel {
 	return []Panel{
-		{Title: "Transactions by outcome", Unit: "ops", Queries: []Query{{Sum("outcome", sc.Rate("nomnom_uow_transactions_total")), "{{outcome}}"}},
+		{Title: "Transactions by outcome", Unit: "ops", Queries: []Query{{Sum("nomnom_outcome", sc.Rate("nomnom_uow_transactions_total")), "{{nomnom_outcome}}"}},
 			Description: "committed, rolled_back и commit_failed Unit of Work."},
 		{Title: "Transaction duration", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_uow_duration_seconds")},
-		{Title: "Retries by conflict", Unit: "ops", Queries: []Query{{Sum("reason", sc.Rate("nomnom_uow_retries_total")), "{{reason}}"}},
+		{Title: "Retries by conflict", Unit: "ops", Queries: []Query{{Sum("nomnom_reason", sc.Rate("nomnom_uow_retries_total")), "{{nomnom_reason}}"}},
 			Description: "serialization, deadlock, write_conflict — классы retry Unit of Work."},
 	}
 }
@@ -242,9 +242,9 @@ func transactions(sc Scope) []Panel {
 func lifecycle(sc Scope) []Panel {
 	fsm := "nomnom_fsm_transitions_total"
 	return []Panel{
-		{Title: "Transitions", Unit: "ops", Queries: []Query{{Sum("aggregate_type, to_state", sc.Rate(fsm, `result="applied"`)), "{{aggregate_type}} → {{to_state}}"}}},
-		{Title: "Invalid transitions", Unit: "ops", Queries: []Query{{Sum("aggregate_type, from_state, trigger", sc.Rate(fsm, `result="rejected"`)), "{{aggregate_type}} {{from_state}} × {{trigger}}"}}},
-		{Title: "Terminal transitions", Unit: "ops", Queries: []Query{{Sum("aggregate_type, to_state", sc.Rate(fsm, `result="applied"`, `terminal="true"`)), "{{aggregate_type}} {{to_state}}"}}},
+		{Title: "Transitions", Unit: "ops", Queries: []Query{{Sum("nomnom_fsm_aggregate_type, nomnom_fsm_to_state", sc.Rate(fsm, `nomnom_fsm_result="applied"`)), "{{nomnom_fsm_aggregate_type}} → {{nomnom_fsm_to_state}}"}}},
+		{Title: "Invalid transitions", Unit: "ops", Queries: []Query{{Sum("nomnom_fsm_aggregate_type, nomnom_fsm_from_state, nomnom_fsm_trigger", sc.Rate(fsm, `nomnom_fsm_result="rejected"`)), "{{nomnom_fsm_aggregate_type}} {{nomnom_fsm_from_state}} × {{nomnom_fsm_trigger}}"}}},
+		{Title: "Terminal transitions", Unit: "ops", Queries: []Query{{Sum("nomnom_fsm_aggregate_type, nomnom_fsm_to_state", sc.Rate(fsm, `nomnom_fsm_result="applied"`, `nomnom_fsm_terminal="true"`)), "{{nomnom_fsm_aggregate_type}} {{nomnom_fsm_to_state}}"}}},
 	}
 }
 
@@ -269,7 +269,7 @@ func temporal(worker, main Scope) []Panel {
 			{Sum("worker_type", worker.Gauge("temporal_worker_task_slots_used")), "used {{worker_type}}"},
 			{Sum("worker_type", worker.Gauge("temporal_worker_task_slots_available")), "available {{worker_type}}"},
 		}},
-		{Title: "Compensations", Unit: "ops", Queries: []Query{{Sum("step, outcome", worker.Rate("nomnom_orders_compensations_total")), "{{step}} {{outcome}}"}}},
+		{Title: "Compensations", Unit: "ops", Queries: []Query{{Sum("nomnom_compensation_step, nomnom_outcome", worker.Rate("nomnom_orders_compensations_total")), "{{nomnom_compensation_step}} {{nomnom_outcome}}"}}},
 	}
 }
 
@@ -283,7 +283,7 @@ func kitchen(sc Scope) []Panel {
 			{Sum("", sc.Gauge("nomnom_kitchen_ready_for_pickup")), "ready for pickup"},
 		}},
 		{Title: "Preparation duration", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_kitchen_preparation_duration_seconds")},
-		{Title: "Delays", Unit: "ops", Queries: []Query{{Sum("reason", sc.Rate("nomnom_kitchen_delays_total")), "{{reason}}"}}},
+		{Title: "Delays", Unit: "ops", Queries: []Query{{Sum("nomnom_reason", sc.Rate("nomnom_kitchen_delays_total")), "{{nomnom_reason}}"}}},
 	}
 }
 
@@ -320,10 +320,10 @@ func pods(sc Scope) []Panel {
 func authorization(sc Scope) []Panel {
 	checks := "nomnom_authz_checks_total"
 	return []Panel{
-		{Title: "Checks by result", Unit: "ops", Queries: []Query{{Sum("result", sc.Rate(checks)), "{{result}}"}}},
-		{Title: "Denied by permission", Unit: "ops", Queries: []Query{{Sum("resource_type, permission", sc.Rate(checks, `result="denied"`)), "{{resource_type}}#{{permission}}"}},
+		{Title: "Checks by result", Unit: "ops", Queries: []Query{{Sum("nomnom_authz_result", sc.Rate(checks)), "{{nomnom_authz_result}}"}}},
+		{Title: "Denied by permission", Unit: "ops", Queries: []Query{{Sum("nomnom_authz_resource_type, nomnom_authz_permission", sc.Rate(checks, `nomnom_authz_result="denied"`)), "{{nomnom_authz_resource_type}}#{{nomnom_authz_permission}}"}},
 			Description: "DENIED — решение политики, не сбой SpiceDB."},
-		{Title: "Errors and timeouts", Unit: "ops", Traces: true, Queries: []Query{{Sum("result", sc.Rate(checks, `result=~"error|timeout"`)), "{{result}}"}},
+		{Title: "Errors and timeouts", Unit: "ops", Traces: true, Queries: []Query{{Sum("nomnom_authz_result", sc.Rate(checks, `nomnom_authz_result=~"error|timeout"`)), "{{nomnom_authz_result}}"}},
 			Description: "Технические сбои проверки; fail-closed превращает их в отказ клиенту."},
 		{Title: "Check latency", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_authz_check_duration_seconds")},
 	}

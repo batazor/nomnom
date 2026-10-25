@@ -1,0 +1,102 @@
+# Атрибуты метрик nomnom. Проверка: make semconv-check (OpenTelemetry Weaver).
+groups:
+  - id: registry.nomnom
+    type: attribute_group
+    display_name: nomnom attributes
+    brief: Low-cardinality attributes of nomnom metrics.
+    attributes:
+      - id: nomnom.authz.permission
+        type: string
+        stability: development
+        brief: "SpiceDB permission checked."
+        examples: ["view"]
+      - id: nomnom.authz.resource_type
+        type: string
+        stability: development
+        brief: "SpiceDB resource type checked."
+        examples: ["order"]
+      - id: nomnom.authz.result
+        type: string
+        stability: development
+        brief: "Authorization result."
+        examples: ["allowed", "denied"]
+      - id: nomnom.compensation.step
+        type: string
+        stability: development
+        brief: "Compensation step of the Order Fulfillment Workflow."
+        examples: ["cancel_authorization"]
+      - id: nomnom.error.class
+        type: string
+        stability: development
+        brief: "Closed error class."
+        examples: ["transient", "permanent"]
+      - id: nomnom.event.type
+        type: string
+        stability: development
+        brief: "Integration Event type."
+        examples: ["nomnom.restaurants.v1.OrderAccepted"]
+      - id: nomnom.fsm.aggregate_type
+        type: string
+        stability: development
+        brief: "Aggregate type of the FSM."
+        examples: ["order"]
+      - id: nomnom.fsm.from_state
+        type: string
+        stability: development
+        brief: "FSM state before the transition."
+        examples: ["placed"]
+      - id: nomnom.fsm.result
+        type: string
+        stability: development
+        brief: "FSM transition result."
+        examples: ["applied", "rejected"]
+      - id: nomnom.fsm.terminal
+        type: boolean
+        stability: development
+        brief: "Whether the transition ends in a terminal state."
+        examples: [true]
+      - id: nomnom.fsm.to_state
+        type: string
+        stability: development
+        brief: "FSM state after the transition."
+        examples: ["confirmed"]
+      - id: nomnom.fsm.trigger
+        type: string
+        stability: development
+        brief: "FSM trigger."
+        examples: ["confirm"]
+      - id: nomnom.messaging.handler
+        type: string
+        stability: development
+        brief: "Watermill handler (consumer role) that processed the message."
+        examples: ["orders.restaurant_events"]
+      - id: nomnom.order.state
+        type: string
+        stability: development
+        brief: "Order FSM state."
+        examples: ["placed"]
+      - id: nomnom.outcome
+        type: string
+        stability: development
+        brief: "Closed result set of the operation; values are listed by each metric."
+        examples: ["success", "rejected"]
+      - id: nomnom.payment.operation
+        type: string
+        stability: development
+        brief: "Payment provider operation."
+        examples: ["authorize", "capture"]
+      - id: nomnom.reason
+        type: string
+        stability: development
+        brief: "Closed reason code; unknown values are recorded as `other`."
+        examples: ["payment_declined"]
+      - id: nomnom.usecase.kind
+        type: string
+        stability: development
+        brief: "Use case kind."
+        examples: ["command", "query"]
+      - id: nomnom.usecase.name
+        type: string
+        stability: development
+        brief: "Stable snake_case use case name."
+        examples: ["place_order"]

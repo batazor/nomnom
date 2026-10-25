@@ -70,17 +70,17 @@ func TestConsumerMetricsFollowDashboardInventory(t *testing.T) {
 	} {
 		require.NotEmpty(t, got[name], name)
 		for _, attrs := range got[name] {
-			stream, _ := attrs.Value("stream")
+			stream, _ := attrs.Value("messaging.destination.name")
 			assert.Equal(t, topic, stream.AsString(), name)
-			assert.True(t, attrs.HasValue("handler_name"), name)
-			assert.True(t, attrs.HasValue("event_type"), name)
+			assert.True(t, attrs.HasValue("nomnom.messaging.handler"), name)
+			assert.True(t, attrs.HasValue("nomnom.event.type"), name)
 			assert.False(t, attrs.HasValue("event_id"), name)
 			assert.False(t, attrs.HasValue("aggregate_id"), name)
 		}
 	}
 	classes := map[string]bool{}
 	for _, attrs := range got["nomnom.messaging.process.duration"] {
-		class, ok := attrs.Value("error_class")
+		class, ok := attrs.Value("nomnom.error.class")
 		classes[class.AsString()] = ok
 	}
 	assert.Equal(t, map[string]bool{"": false, "permanent": true}, classes,

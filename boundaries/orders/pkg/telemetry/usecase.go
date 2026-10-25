@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"nomnom/orders/pkg/application"
@@ -109,8 +110,8 @@ type instrumented[In, Out any] struct {
 
 func (h instrumented[In, Out]) Handle(ctx context.Context, in In) (Out, error) {
 	attrs := []attribute.KeyValue{
-		attribute.String("usecase", h.uc.Name),
-		attribute.String("kind", string(h.uc.Kind)),
+		attribute.String("nomnom.usecase.name", h.uc.Name),
+		attribute.String("nomnom.usecase.kind", string(h.uc.Kind)),
 	}
 	ctx, span := h.u.tracer.Start(ctx, "usecase "+h.uc.Name, trace.WithAttributes(attrs...))
 	defer span.End()
@@ -123,9 +124,9 @@ func (h instrumented[In, Out]) Handle(ctx context.Context, in In) (Out, error) {
 	if err != nil {
 		failure = h.u.failure(err)
 	}
-	attrs = append(attrs, attribute.String("outcome", string(failure.Outcome)))
+	attrs = append(attrs, attribute.String("nomnom.outcome", string(failure.Outcome)))
 	if failure.ErrorType != "" {
-		attrs = append(attrs, attribute.String("error_type", failure.ErrorType))
+		attrs = append(attrs, semconv.ErrorTypeKey.String(failure.ErrorType))
 	}
 	span.SetAttributes(attrs[2:]...)
 	if failure.Outcome == OutcomeError {

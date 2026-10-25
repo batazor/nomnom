@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -102,9 +103,9 @@ func observe(ctx context.Context, class Class) {
 
 func baseAttributes(msg *message.Message) []attribute.KeyValue {
 	return []attribute.KeyValue{
-		attribute.String("handler_name", message.HandlerNameFromCtx(msg.Context())),
-		attribute.String("event_type", msg.Metadata.Get(EventTypeMetadata)),
-		attribute.String("stream", message.SubscribeTopicFromCtx(msg.Context())),
+		attribute.String("nomnom.messaging.handler", message.HandlerNameFromCtx(msg.Context())),
+		attribute.String("nomnom.event.type", msg.Metadata.Get(EventTypeMetadata)),
+		semconv.MessagingDestinationNameKey.String(message.SubscribeTopicFromCtx(msg.Context())),
 	}
 }
 
@@ -137,7 +138,7 @@ func (t *telemetry) middleware(next message.HandlerFunc) message.HandlerFunc {
 		}
 		recorded := attrs
 		if o.errorClass != "" {
-			recorded = append(recorded, attribute.String("error_class", string(o.errorClass)))
+			recorded = append(recorded, attribute.String("nomnom.error.class", string(o.errorClass)))
 		}
 		t.duration.Record(ctx, time.Since(started).Seconds(), metric.WithAttributes(recorded...))
 		if o.duplicate {
@@ -164,5 +165,5 @@ func (t *telemetry) countAttempts(next message.HandlerFunc) message.HandlerFunc 
 func (t *telemetry) poisoned(msg *message.Message, class Class) {
 	observe(msg.Context(), class)
 	t.poison.Add(msg.Context(), 1, metric.WithAttributes(append(baseAttributes(msg),
-		attribute.String("error_class", string(class)))...))
+		attribute.String("nomnom.error.class", string(class)))...))
 }

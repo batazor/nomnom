@@ -1,0 +1,62 @@
+# Метрики раздела outbox инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.outbox.pending.messages
+    type: metric
+    metric_name: nomnom.outbox.pending.messages
+    stability: development
+    brief: "Outbox records not yet published."
+    instrument: gauge
+    unit: "{message}"
+    attributes:
+      - ref: messaging.destination.name
+        requirement_level: required
+  - id: metric.nomnom.outbox.oldest_pending.age
+    type: metric
+    metric_name: nomnom.outbox.oldest_pending.age
+    stability: development
+    brief: "Age of the oldest unpublished Outbox record."
+    instrument: gauge
+    unit: "s"
+    attributes:
+      - ref: messaging.destination.name
+        requirement_level: required
+  - id: metric.nomnom.outbox.publish.retries
+    type: metric
+    metric_name: nomnom.outbox.publish.retries
+    stability: development
+    brief: "Retries of Outbox publication."
+    instrument: counter
+    unit: "{retry}"
+    attributes:
+      - ref: messaging.destination.name
+        requirement_level: required
+      - ref: nomnom.event.type
+        requirement_level: required
+      - ref: nomnom.error.class
+        requirement_level: required
+  - id: metric.nomnom.outbox.publish.duration
+    type: metric
+    metric_name: nomnom.outbox.publish.duration
+    stability: development
+    brief: "Kafka publish of one Outbox record until broker ack."
+    instrument: histogram
+    unit: "s"
+    attributes:
+      - ref: messaging.destination.name
+        requirement_level: required
+      - ref: nomnom.event.type
+        requirement_level: required
+      - ref: nomnom.outcome
+        requirement_level: required
+  - id: metric.nomnom.outbox.publish.lag
+    type: metric
+    metric_name: nomnom.outbox.publish.lag
+    stability: development
+    brief: "Delay from occurred_at to the broker ack."
+    instrument: histogram
+    unit: "s"
+    attributes:
+      - ref: messaging.destination.name
+        requirement_level: required
+      - ref: nomnom.event.type
+        requirement_level: required

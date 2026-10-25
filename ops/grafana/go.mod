@@ -5,6 +5,7 @@ go 1.27.3
 require (
 	github.com/grafana/grafana-foundation-sdk/go v0.0.21
 	github.com/prometheus/prometheus v0.315.1
+	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (

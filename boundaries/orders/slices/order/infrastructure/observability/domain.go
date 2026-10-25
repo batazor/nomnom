@@ -136,7 +136,7 @@ func (m *DomainMetrics) record(ctx context.Context, events []order.DomainEvent) 
 				m.fulfillment.Record(ctx, m.now().Sub(e.PlacedAt).Seconds())
 			}
 		case order.OrderCancelled:
-			reason := metric.WithAttributes(attribute.String("reason", m.reasonLabel(e.Reason.Code())))
+			reason := metric.WithAttributes(attribute.String("nomnom.reason", m.reasonLabel(e.Reason.Code())))
 			if e.Reason.Outcome() == order.OutcomeFailure {
 				m.failed.Add(ctx, 1, reason)
 			} else {
@@ -169,7 +169,7 @@ func CancellationRequests(m *DomainMetrics, handle func(context.Context, request
 			}
 			outcome = CancellationRejected
 		}
-		m.cancellationRequests.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+		m.cancellationRequests.Add(ctx, 1, metric.WithAttributes(attribute.String("nomnom.outcome", outcome)))
 		return result, err
 	}
 }
@@ -197,7 +197,7 @@ func ObserveOrdersInState(counts func(context.Context) (map[order.State]int64, e
 			return err
 		}
 		for state, n := range byState {
-			o.ObserveInt64(gauge, n, metric.WithAttributes(attribute.String("state", string(state))))
+			o.ObserveInt64(gauge, n, metric.WithAttributes(attribute.String("nomnom.order.state", string(state))))
 		}
 		return nil
 	}, gauge)

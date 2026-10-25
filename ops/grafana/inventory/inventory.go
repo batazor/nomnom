@@ -117,7 +117,7 @@ var Sections = []Section{
 	{"db", "Database client (PostgreSQL, MongoDB)", "Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL — Platform / Overview (раздел [PostgreSQL](#postgresql)), MongoDB — пока нет; в overview сервисов не дублируются."},
 	{"watermill", "Kafka: встроенные метрики Watermill", "`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`). Экспорт через OTel Prometheus bridge (`orders/pkg/telemetry`) в общий OTLP pipeline; имена Prometheus сохраняются без изменений. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся."},
 	{"messaging-otel", "Kafka: semconv messaging (не-Go контексты)", "Kafka-клиенты TypeScript, Rust и Python не выбраны; при выборе используется OTel messaging semconv."},
-	{"messaging", "Kafka: собственный OTel middleware и consumer lag", "Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Labels только `handler_name`, `event_type`, `stream`, `error_class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill."},
+	{"messaging", "Kafka: собственный OTel middleware и consumer lag", "Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Attributes только `nomnom.messaging.handler`, `nomnom.event.type`, `messaging.destination.name`, `nomnom.error.class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill."},
 	{"outbox", "Outbox", "SQL-метрики Forwarder-роли (опрос таблицы Outbox), не publish-декоратор."},
 	{"usecase", "Application use cases", "Декоратор application handlers в composition root (docs/observability.md#use-cases). Один histogram на все use cases; `outcome`: success | rejected | error — бизнес-отказ отделён от технического сбоя. `error_type` — закрытый набор slice, пуст при success. Без ID, subject и payload."},
 	{"uow", "Unit of Work", "Декоратор Unit of Work (ADR 20). Deadlock/serialization — классы retry, а не SQL-панели поверх DB instrumentation."},
@@ -178,28 +178,30 @@ var Metrics = []Metric{
 	{Name: "messaging_client_operation_duration_seconds", Section: "messaging-otel", Type: Histogram, Source: "`messaging.client.operation.duration`", Labels: []string{"messaging_system", "messaging_operation_name", "messaging_destination_name", "error_type"}, Status: expected(otelConsumers...)},
 
 	// messaging (custom middleware + lag)
-	{Name: "nomnom_messaging_process_duration_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware `nomnom.messaging.process.duration`", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "`error_class` только при неуспехе: permanent | deserialization | business | transient; успешный retry — без класса. `handler_name` — handler group."},
-	{Name: "nomnom_messaging_retry_attempts_total", Section: "messaging", Type: Counter, Source: "OTel middleware `nomnom.messaging.retry.attempts`", Labels: []string{"handler_name", "event_type", "stream"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Ретраится только класс transient, поэтому `error_class` не пишется."},
-	{Name: "nomnom_messaging_poison_messages_total", Section: "messaging", Type: Counter, Source: "OTel middleware вокруг PoisonQueue", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Сообщения, отправленные в `<stream>.dlq`; `error_class`: permanent | deserialization."},
-	{Name: "nomnom_messaging_message_age_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware", Labels: []string{"handler_name", "event_type", "stream"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "`now − occurred_at` в момент обработки."},
-	{Name: "nomnom_inbox_duplicates_total", Section: "messaging", Type: Counter, Source: "OTel middleware / Inbox adapter", Labels: []string{"handler_name", "event_type", "stream"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Outcome duplicate Inbox (`(consumer, event_id)` уже обработан)."},
+	{Name: "nomnom_messaging_process_duration_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware `nomnom.messaging.process.duration`", Labels: []string{"nomnom_messaging_handler", "nomnom_event_type", "messaging_destination_name", "nomnom_error_class"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "`error_class` только при неуспехе: permanent | deserialization | business | transient; успешный retry — без класса. `handler_name` — handler group."},
+	{Name: "nomnom_messaging_retry_attempts_total", Section: "messaging", Type: Counter, Source: "OTel middleware `nomnom.messaging.retry.attempts`", Labels: []string{"nomnom_messaging_handler", "nomnom_event_type", "messaging_destination_name"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Ретраится только класс transient, поэтому `error_class` не пишется."},
+	{Name: "nomnom_messaging_poison_messages_total", Section: "messaging", Type: Counter, Source: "OTel middleware вокруг PoisonQueue", Labels: []string{"nomnom_messaging_handler", "nomnom_event_type", "messaging_destination_name", "nomnom_error_class"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Сообщения, отправленные в `<stream>.dlq`; `error_class`: permanent | deserialization."},
+	{Name: "nomnom_messaging_message_age_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware", Labels: []string{"nomnom_messaging_handler", "nomnom_event_type", "messaging_destination_name"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "`now − occurred_at` в момент обработки."},
+	{Name: "nomnom_inbox_duplicates_total", Section: "messaging", Type: Counter, Source: "OTel middleware / Inbox adapter", Labels: []string{"nomnom_messaging_handler", "nomnom_event_type", "messaging_destination_name"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Outcome duplicate Inbox (`(consumer, event_id)` уже обработан)."},
 	{Name: "kafka_consumergroup_lag", Section: "messaging", Type: Gauge, Source: "Alloy `prometheus.exporter.kafka`", Labels: []string{"consumergroup", "topic", "partition"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join."},
 
 	// outbox
-	{Name: "nomnom_outbox_pending_messages", Section: "outbox", Type: Gauge, Source: "SQL-метрика Forwarder", Labels: []string{"stream"}, Status: expected(contextServices...)},
-	{Name: "nomnom_outbox_oldest_pending_age_seconds", Section: "outbox", Type: Gauge, Source: "SQL-метрика Forwarder", Labels: []string{"stream"}, Status: expected(contextServices...)},
-	{Name: "nomnom_outbox_publish_retries_total", Section: "outbox", Type: Counter, Source: "Forwarder", Labels: []string{"stream", "error_class"}, Status: expected(contextServices...)},
+	{Name: "nomnom_outbox_pending_messages", Section: "outbox", Type: Gauge, Source: "SQL-метрика Forwarder", Labels: []string{"messaging_destination_name"}, Status: expected(contextServices...)},
+	{Name: "nomnom_outbox_oldest_pending_age_seconds", Section: "outbox", Type: Gauge, Source: "SQL-метрика Forwarder", Labels: []string{"messaging_destination_name"}, Status: expected(contextServices...)},
+	{Name: "nomnom_outbox_publish_retries_total", Section: "outbox", Type: Counter, Source: "Forwarder / relay", Labels: []string{"messaging_destination_name", "nomnom_event_type", "nomnom_error_class"}, Status: expected(contextServices...)},
+	{Name: "nomnom_outbox_publish_duration_seconds", Section: "outbox", Type: Histogram, Source: "Forwarder / relay", Labels: []string{"messaging_destination_name", "nomnom_event_type", "nomnom_outcome"}, Status: expected(contextServices...), Note: "Publish одной записи до ack брокера; `nomnom_outcome`: success | error."},
+	{Name: "nomnom_outbox_publish_lag_seconds", Section: "outbox", Type: Histogram, Source: "Forwarder / relay", Labels: []string{"messaging_destination_name", "nomnom_event_type"}, Status: expected(contextServices...), Note: "occurred_at → ack брокера: задержка доставки события соседям."},
 
 	// usecase
-	{Name: "nomnom_usecase_duration_seconds", Section: "usecase", Type: Histogram, Source: "Use case decorator (`pkg/telemetry`)", Labels: []string{"usecase", "kind", "outcome", "error_type"}, Status: expected(Orders, OrdersWorker, OrdersConsumer), Note: "`kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`."},
+	{Name: "nomnom_usecase_duration_seconds", Section: "usecase", Type: Histogram, Source: "Use case decorator (`pkg/telemetry`)", Labels: []string{"nomnom_usecase_name", "nomnom_usecase_kind", "nomnom_outcome", "error_type"}, Status: expected(Orders, OrdersWorker, OrdersConsumer), Note: "`kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`."},
 
 	// uow
-	{Name: "nomnom_uow_transactions_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"outcome"}, Status: expected(contextServices...), Note: "`outcome`: committed | rolled_back | commit_failed."},
-	{Name: "nomnom_uow_duration_seconds", Section: "uow", Type: Histogram, Source: "Unit of Work decorator", Labels: []string{"outcome"}, Status: expected(contextServices...)},
-	{Name: "nomnom_uow_retries_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"reason"}, Status: expected(contextServices...), Note: "`reason`: serialization | deadlock | write_conflict | other."},
+	{Name: "nomnom_uow_transactions_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"nomnom_outcome"}, Status: expected(contextServices...), Note: "`outcome`: committed | rolled_back | commit_failed."},
+	{Name: "nomnom_uow_duration_seconds", Section: "uow", Type: Histogram, Source: "Unit of Work decorator", Labels: []string{"nomnom_outcome"}, Status: expected(contextServices...)},
+	{Name: "nomnom_uow_retries_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"nomnom_reason"}, Status: expected(contextServices...), Note: "`reason`: serialization | deadlock | write_conflict | other."},
 
 	// fsm
-	{Name: "nomnom_fsm_transitions_total", Section: "fsm", Type: Counter, Source: "FSM transition decorator", Labels: []string{"aggregate_type", "from_state", "to_state", "trigger", "result", "terminal"}, Status: expected(contextServices...), Note: "`result`: applied | rejected (invalid transition); `terminal`: true | false."},
+	{Name: "nomnom_fsm_transitions_total", Section: "fsm", Type: Counter, Source: "FSM transition decorator", Labels: []string{"nomnom_fsm_aggregate_type", "nomnom_fsm_from_state", "nomnom_fsm_to_state", "nomnom_fsm_trigger", "nomnom_fsm_result", "nomnom_fsm_terminal"}, Status: expected(contextServices...), Note: "`result`: applied | rejected (invalid transition); `terminal`: true | false."},
 
 	// temporal
 	{Name: "temporal_request_total", Section: "temporal", Type: Counter, Source: "Temporal SDK client", Labels: []string{"operation", "namespace"}, Status: verified([]string{OrdersWorker, OrdersConsumer}), Note: "`operation=\"StartWorkflowExecution\"` — запуск workflow (клиент `orders-consumer`)."},
@@ -211,7 +213,7 @@ var Metrics = []Metric{
 	{Name: "temporal_worker_task_slots_used", Section: "temporal", Type: Gauge, Source: "Temporal SDK worker", Labels: []string{"worker_type", "task_queue"}, Status: verified([]string{OrdersWorker})},
 	{Name: "temporal_worker_task_slots_available", Section: "temporal", Type: Gauge, Source: "Temporal SDK worker", Labels: []string{"worker_type", "task_queue"}, Status: verified([]string{OrdersWorker})},
 	{Name: "nomnom_orders_fulfillment_oldest_running_age_seconds", Section: "temporal", Type: Gauge, Source: "Polling Temporal Visibility", Status: expected(OrdersWorker), Note: "Возраст старейшего выполняющегося Order Fulfillment Workflow; SDK его не даёт."},
-	{Name: "nomnom_orders_compensations_total", Section: "temporal", Type: Counter, Source: "Compensation Activity decorator", Labels: []string{"step", "outcome"}, Status: expected(OrdersWorker), Note: "`outcome`: attempted | failed."},
+	{Name: "nomnom_orders_compensations_total", Section: "temporal", Type: Counter, Source: "Compensation Activity decorator", Labels: []string{"nomnom_compensation_step", "nomnom_outcome"}, Status: expected(OrdersWorker), Note: "`outcome`: attempted | failed."},
 
 	// kitchen
 	{Name: "nomnom_kitchen_queue_size", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
@@ -219,41 +221,41 @@ var Metrics = []Metric{
 	{Name: "nomnom_kitchen_preparations_active", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
 	{Name: "nomnom_kitchen_ready_for_pickup", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
 	{Name: "nomnom_kitchen_preparation_duration_seconds", Section: "kitchen", Type: Histogram, Source: "Kitchen use case decorator", Status: expected(Restaurants)},
-	{Name: "nomnom_kitchen_delays_total", Section: "kitchen", Type: Counter, Source: "Kitchen use case decorator", Labels: []string{"reason"}, Status: expected(Restaurants)},
+	{Name: "nomnom_kitchen_delays_total", Section: "kitchen", Type: Counter, Source: "Kitchen use case decorator", Labels: []string{"nomnom_reason"}, Status: expected(Restaurants)},
 
 	// authz
-	{Name: "nomnom_authz_checks_total", Section: "authz", Type: Counter, Source: "Authorization port decorator", Labels: []string{"permission", "resource_type", "result"}, Status: expected(contextServices...), Note: "`result`: allowed | denied | error | timeout."},
-	{Name: "nomnom_authz_check_duration_seconds", Section: "authz", Type: Histogram, Source: "Authorization port decorator", Labels: []string{"permission", "resource_type", "result"}, Status: expected(contextServices...)},
+	{Name: "nomnom_authz_checks_total", Section: "authz", Type: Counter, Source: "Authorization port decorator", Labels: []string{"nomnom_authz_permission", "nomnom_authz_resource_type", "nomnom_authz_result"}, Status: expected(contextServices...), Note: "`result`: allowed | denied | error | timeout."},
+	{Name: "nomnom_authz_check_duration_seconds", Section: "authz", Type: Histogram, Source: "Authorization port decorator", Labels: []string{"nomnom_authz_permission", "nomnom_authz_resource_type", "nomnom_authz_result"}, Status: expected(contextServices...)},
 
 	// provider
-	{Name: "nomnom_payments_provider_request_duration_seconds", Section: "provider", Type: Histogram, Source: "Provider gateway adapter", Labels: []string{"operation", "outcome"}, Status: expected(Payments), Note: "`operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат."},
+	{Name: "nomnom_payments_provider_request_duration_seconds", Section: "provider", Type: Histogram, Source: "Provider gateway adapter", Labels: []string{"nomnom_payment_operation", "nomnom_outcome"}, Status: expected(Payments), Note: "`operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат."},
 
 	// domain: orders
 	{Name: "nomnom_orders_placed_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Orders)},
 	{Name: "nomnom_orders_completed_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(OrdersWorker, OrdersConsumer)},
-	{Name: "nomnom_orders_cancelled_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(Orders, OrdersWorker)},
-	{Name: "nomnom_orders_failed_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(OrdersWorker)},
-	{Name: "nomnom_orders_cancellation_requests_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Orders)},
+	{Name: "nomnom_orders_cancelled_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_reason"}, Status: expected(Orders, OrdersWorker)},
+	{Name: "nomnom_orders_failed_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_reason"}, Status: expected(OrdersWorker)},
+	{Name: "nomnom_orders_cancellation_requests_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Orders)},
 	{Name: "nomnom_orders_fulfillment_duration_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(OrdersWorker)},
-	{Name: "nomnom_orders_in_state", Section: "domain", Type: Gauge, Source: "projection/polling", Labels: []string{"state"}, Status: expected(Orders), Note: "Требует отдельной projection; PromQL по counters не эмулируется."},
+	{Name: "nomnom_orders_in_state", Section: "domain", Type: Gauge, Source: "projection/polling", Labels: []string{"nomnom_order_state"}, Status: expected(Orders), Note: "Требует отдельной projection; PromQL по counters не эмулируется."},
 	// domain: restaurants
 	{Name: "nomnom_restaurants_orders_received_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Restaurants)},
 	{Name: "nomnom_restaurants_orders_accepted_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Restaurants)},
-	{Name: "nomnom_restaurants_orders_rejected_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(Restaurants)},
+	{Name: "nomnom_restaurants_orders_rejected_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_reason"}, Status: expected(Restaurants)},
 	// domain: delivery
 	{Name: "nomnom_delivery_created_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Delivery)},
 	{Name: "nomnom_delivery_assignments_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Delivery)},
-	{Name: "nomnom_delivery_reassignments_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(Delivery)},
-	{Name: "nomnom_delivery_offers_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Delivery), Note: "`outcome`: accepted | rejected | expired."},
+	{Name: "nomnom_delivery_reassignments_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_reason"}, Status: expected(Delivery)},
+	{Name: "nomnom_delivery_offers_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Delivery), Note: "`outcome`: accepted | rejected | expired."},
 	{Name: "nomnom_delivery_pickups_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Delivery)},
 	{Name: "nomnom_delivery_completed_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Delivery)},
-	{Name: "nomnom_delivery_failed_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"reason"}, Status: expected(Delivery)},
+	{Name: "nomnom_delivery_failed_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_reason"}, Status: expected(Delivery)},
 	{Name: "nomnom_delivery_assignment_latency_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(Delivery)},
 	{Name: "nomnom_delivery_duration_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(Delivery)},
 	// domain: payments
-	{Name: "nomnom_payments_authorizations_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: authorized | declined | failed; attempts = сумма."},
-	{Name: "nomnom_payments_captures_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: captured | failed."},
-	{Name: "nomnom_payments_refunds_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: refunded | failed."},
+	{Name: "nomnom_payments_authorizations_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: authorized | declined | failed; attempts = сумма."},
+	{Name: "nomnom_payments_captures_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: captured | failed."},
+	{Name: "nomnom_payments_refunds_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: refunded | failed."},
 
 	// pods (Alloy: cAdvisor kubelet + kube-state-metrics, job infra/kubernetes)
 	{Name: "container_cpu_usage_seconds_total", Section: "pods", Type: Counter, Source: "cAdvisor kubelet", Labels: []string{"namespace", "pod", "container"}, Status: podStatus(), Note: "Только контейнеры: pod-level cgroup и pause отбрасываются в Alloy."},

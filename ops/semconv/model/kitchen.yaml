@@ -1,0 +1,47 @@
+# Метрики раздела kitchen инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.kitchen.queue.size
+    type: metric
+    metric_name: nomnom.kitchen.queue.size
+    stability: development
+    brief: "Orders waiting in the kitchen queue."
+    instrument: gauge
+    unit: "{order}"
+  - id: metric.nomnom.kitchen.queue.oldest_age
+    type: metric
+    metric_name: nomnom.kitchen.queue.oldest_age
+    stability: development
+    brief: "Age of the oldest order in the kitchen queue."
+    instrument: gauge
+    unit: "s"
+  - id: metric.nomnom.kitchen.preparations.active
+    type: metric
+    metric_name: nomnom.kitchen.preparations.active
+    stability: development
+    brief: "Orders being prepared."
+    instrument: gauge
+    unit: "{order}"
+  - id: metric.nomnom.kitchen.ready_for_pickup
+    type: metric
+    metric_name: nomnom.kitchen.ready_for_pickup
+    stability: development
+    brief: "Orders ready for pickup."
+    instrument: gauge
+    unit: "{order}"
+  - id: metric.nomnom.kitchen.preparation.duration
+    type: metric
+    metric_name: nomnom.kitchen.preparation.duration
+    stability: development
+    brief: "Preparation duration."
+    instrument: histogram
+    unit: "s"
+  - id: metric.nomnom.kitchen.delays
+    type: metric
+    metric_name: nomnom.kitchen.delays
+    stability: development
+    brief: "Preparation delays by reason."
+    instrument: counter
+    unit: "{delay}"
+    attributes:
+      - ref: nomnom.reason
+        requirement_level: required

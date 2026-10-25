@@ -1,0 +1,189 @@
+# Метрики раздела domain инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.orders.placed
+    type: metric
+    metric_name: nomnom.orders.placed
+    stability: development
+    brief: "Orders placed (OrderPlaced committed)."
+    instrument: counter
+    unit: "{order}"
+  - id: metric.nomnom.orders.completed
+    type: metric
+    metric_name: nomnom.orders.completed
+    stability: development
+    brief: "Orders completed (OrderCompleted committed)."
+    instrument: counter
+    unit: "{order}"
+  - id: metric.nomnom.orders.cancelled
+    type: metric
+    metric_name: nomnom.orders.cancelled
+    stability: development
+    brief: "Orders cancelled (OrderCancelled with outcome cancellation)."
+    instrument: counter
+    unit: "{order}"
+    attributes:
+      - ref: nomnom.reason
+        requirement_level: required
+  - id: metric.nomnom.orders.failed
+    type: metric
+    metric_name: nomnom.orders.failed
+    stability: development
+    brief: "Orders failed (OrderCancelled with outcome failure)."
+    instrument: counter
+    unit: "{order}"
+    attributes:
+      - ref: nomnom.reason
+        requirement_level: required
+  - id: metric.nomnom.orders.cancellation_requests
+    type: metric
+    metric_name: nomnom.orders.cancellation_requests
+    stability: development
+    brief: "Request Order Cancellation answers: requested, already_cancelled, rejected."
+    instrument: counter
+    unit: "{request}"
+    attributes:
+      - ref: nomnom.outcome
+        requirement_level: required
+  - id: metric.nomnom.orders.fulfillment.duration
+    type: metric
+    metric_name: nomnom.orders.fulfillment.duration
+    stability: development
+    brief: "placed_at to OrderCompleted commit."
+    instrument: histogram
+    unit: "s"
+  - id: metric.nomnom.orders.in_state
+    type: metric
+    metric_name: nomnom.orders.in_state
+    stability: development
+    brief: "Orders currently in each state."
+    instrument: gauge
+    unit: "{order}"
+    attributes:
+      - ref: nomnom.order.state
+        requirement_level: required
+  - id: metric.nomnom.restaurants.orders.received
+    type: metric
+    metric_name: nomnom.restaurants.orders.received
+    stability: development
+    brief: "Order requests received by restaurants."
+    instrument: counter
+    unit: "{order}"
+  - id: metric.nomnom.restaurants.orders.accepted
+    type: metric
+    metric_name: nomnom.restaurants.orders.accepted
+    stability: development
+    brief: "Order requests accepted by restaurants."
+    instrument: counter
+    unit: "{order}"
+  - id: metric.nomnom.restaurants.orders.rejected
+    type: metric
+    metric_name: nomnom.restaurants.orders.rejected
+    stability: development
+    brief: "Order requests rejected by restaurants."
+    instrument: counter
+    unit: "{order}"
+    attributes:
+      - ref: nomnom.reason
+        requirement_level: required
+  - id: metric.nomnom.delivery.created
+    type: metric
+    metric_name: nomnom.delivery.created
+    stability: development
+    brief: "Deliveries created."
+    instrument: counter
+    unit: "{delivery}"
+  - id: metric.nomnom.delivery.assignments
+    type: metric
+    metric_name: nomnom.delivery.assignments
+    stability: development
+    brief: "Courier assignments."
+    instrument: counter
+    unit: "{assignment}"
+  - id: metric.nomnom.delivery.reassignments
+    type: metric
+    metric_name: nomnom.delivery.reassignments
+    stability: development
+    brief: "Courier reassignments."
+    instrument: counter
+    unit: "{assignment}"
+    attributes:
+      - ref: nomnom.reason
+        requirement_level: required
+  - id: metric.nomnom.delivery.offers
+    type: metric
+    metric_name: nomnom.delivery.offers
+    stability: development
+    brief: "Delivery offers: accepted, rejected, expired."
+    instrument: counter
+    unit: "{offer}"
+    attributes:
+      - ref: nomnom.outcome
+        requirement_level: required
+  - id: metric.nomnom.delivery.pickups
+    type: metric
+    metric_name: nomnom.delivery.pickups
+    stability: development
+    brief: "Pickups."
+    instrument: counter
+    unit: "{delivery}"
+  - id: metric.nomnom.delivery.completed
+    type: metric
+    metric_name: nomnom.delivery.completed
+    stability: development
+    brief: "Deliveries completed."
+    instrument: counter
+    unit: "{delivery}"
+  - id: metric.nomnom.delivery.failed
+    type: metric
+    metric_name: nomnom.delivery.failed
+    stability: development
+    brief: "Deliveries failed."
+    instrument: counter
+    unit: "{delivery}"
+    attributes:
+      - ref: nomnom.reason
+        requirement_level: required
+  - id: metric.nomnom.delivery.assignment.latency
+    type: metric
+    metric_name: nomnom.delivery.assignment.latency
+    stability: development
+    brief: "Delivery creation to courier assignment."
+    instrument: histogram
+    unit: "s"
+  - id: metric.nomnom.delivery.duration
+    type: metric
+    metric_name: nomnom.delivery.duration
+    stability: development
+    brief: "Delivery creation to completion."
+    instrument: histogram
+    unit: "s"
+  - id: metric.nomnom.payments.authorizations
+    type: metric
+    metric_name: nomnom.payments.authorizations
+    stability: development
+    brief: "Payment authorizations: authorized, declined, failed."
+    instrument: counter
+    unit: "{operation}"
+    attributes:
+      - ref: nomnom.outcome
+        requirement_level: required
+  - id: metric.nomnom.payments.captures
+    type: metric
+    metric_name: nomnom.payments.captures
+    stability: development
+    brief: "Payment captures: captured, failed."
+    instrument: counter
+    unit: "{operation}"
+    attributes:
+      - ref: nomnom.outcome
+        requirement_level: required
+  - id: metric.nomnom.payments.refunds
+    type: metric
+    metric_name: nomnom.payments.refunds
+    stability: development
+    brief: "Payment refunds: refunded, failed."
+    instrument: counter
+    unit: "{operation}"
+    attributes:
+      - ref: nomnom.outcome
+        requirement_level: required

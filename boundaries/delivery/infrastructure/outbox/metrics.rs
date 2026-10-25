@@ -2,8 +2,10 @@
 //! Names after OTLP → Mimir translation:
 //! `nomnom_outbox_pending_messages`, `nomnom_outbox_oldest_pending_age_seconds`,
 //! `nomnom_outbox_publish_retries_total`, plus the publish duration and the
-//! `occurred_at` → acknowledgement lag histograms of ADR 31. Labels: `stream`
-//! (topic), `event_type`, `error_class`; never `event_id` or `aggregate_id`.
+//! `occurred_at` → acknowledgement lag histograms of ADR 31. Names and attributes
+//! follow the registry ops/semconv (make semconv-check): `messaging.destination.name`
+//! (topic), `nomnom.event.type`, `nomnom.error.class`, `nomnom.outcome`; never
+//! `event_id` or `aggregate_id`.
 
 use std::time::Duration;
 
@@ -11,6 +13,11 @@ use opentelemetry::KeyValue;
 use opentelemetry::metrics::{Counter, Gauge, Histogram, Meter};
 
 use crate::pkg::telemetry::SECONDS_BUCKETS;
+
+const DESTINATION: &str = "messaging.destination.name";
+const EVENT_TYPE: &str = "nomnom.event.type";
+const ERROR_CLASS: &str = "nomnom.error.class";
+const OUTCOME: &str = "nomnom.outcome";
 
 /// Instrumentation scope of the relay.
 pub const METER_NAME: &str = "nomnom.delivery.outbox";
@@ -35,17 +42,17 @@ impl RelayMetrics {
     pub fn new(meter: &Meter) -> Self {
         Self {
             pending: meter
-                .u64_gauge("nomnom.outbox.pending_messages")
+                .u64_gauge("nomnom.outbox.pending.messages")
                 .with_unit("{message}")
                 .with_description("Unpublished Outbox rows.")
                 .build(),
             oldest_pending_age: meter
-                .f64_gauge("nomnom.outbox.oldest_pending_age")
+                .f64_gauge("nomnom.outbox.oldest_pending.age")
                 .with_unit("s")
                 .with_description("Age of the oldest unpublished Outbox row.")
                 .build(),
             retries: meter
-                .u64_counter("nomnom.outbox.publish_retries")
+                .u64_counter("nomnom.outbox.publish.retries")
                 .with_unit("{retry}")
                 .with_description("Failed publications; the row is retried next cycle.")
                 .build(),
@@ -65,7 +72,7 @@ impl RelayMetrics {
     }
 
     pub fn backlog(&self, stream: &str, pending: u64, oldest_age_seconds: f64) {
-        let attributes = [KeyValue::new("stream", stream.to_owned())];
+        let attributes = [KeyValue::new(DESTINATION, stream.to_owned())];
         self.pending.record(pending, &attributes);
         self.oldest_pending_age
             .record(oldest_age_seconds.max(0.0), &attributes);
@@ -73,9 +80,9 @@ impl RelayMetrics {
 
     pub fn published(&self, stream: &str, event_type: &str, took: Duration, lag_seconds: f64) {
         let attributes = [
-            KeyValue::new("stream", stream.to_owned()),
-            KeyValue::new("event_type", event_type.to_owned()),
-            KeyValue::new("outcome", "success"),
+            KeyValue::new(DESTINATION, stream.to_owned()),
+            KeyValue::new(EVENT_TYPE, event_type.to_owned()),
+            KeyValue::new(OUTCOME, "success"),
         ];
         self.duration.record(took.as_secs_f64(), &attributes);
         self.lag.record(lag_seconds.max(0.0), &attributes[..2]);
@@ -85,17 +92,17 @@ impl RelayMetrics {
         self.retries.add(
             1,
             &[
-                KeyValue::new("stream", stream.to_owned()),
-                KeyValue::new("event_type", event_type.to_owned()),
-                KeyValue::new("error_class", error_class.to_owned()),
+                KeyValue::new(DESTINATION, stream.to_owned()),
+                KeyValue::new(EVENT_TYPE, event_type.to_owned()),
+                KeyValue::new(ERROR_CLASS, error_class.to_owned()),
             ],
         );
         self.duration.record(
             took.as_secs_f64(),
             &[
-                KeyValue::new("stream", stream.to_owned()),
-                KeyValue::new("event_type", event_type.to_owned()),
-                KeyValue::new("outcome", "error"),
+                KeyValue::new(DESTINATION, stream.to_owned()),
+                KeyValue::new(EVENT_TYPE, event_type.to_owned()),
+                KeyValue::new(OUTCOME, "error"),
             ],
         );
     }

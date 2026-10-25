@@ -1,0 +1,32 @@
+# Метрики раздела uow инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.uow.transactions
+    type: metric
+    metric_name: nomnom.uow.transactions
+    stability: development
+    brief: "Unit of Work transactions by outcome."
+    instrument: counter
+    unit: "{transaction}"
+    attributes:
+      - ref: nomnom.outcome
+        requirement_level: required
+  - id: metric.nomnom.uow.duration
+    type: metric
+    metric_name: nomnom.uow.duration
+    stability: development
+    brief: "Duration of one Unit of Work transaction."
+    instrument: histogram
+    unit: "s"
+    attributes:
+      - ref: nomnom.outcome
+        requirement_level: required
+  - id: metric.nomnom.uow.retries
+    type: metric
+    metric_name: nomnom.uow.retries
+    stability: development
+    brief: "Unit of Work retries by conflict class."
+    instrument: counter
+    unit: "{retry}"
+    attributes:
+      - ref: nomnom.reason
+        requirement_level: required

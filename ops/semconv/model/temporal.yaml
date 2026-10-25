@@ -1,0 +1,21 @@
+# Метрики раздела temporal инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.orders.compensations
+    type: metric
+    metric_name: nomnom.orders.compensations
+    stability: development
+    brief: "Compensation Activities of the Order Fulfillment Workflow."
+    instrument: counter
+    unit: "{compensation}"
+    attributes:
+      - ref: nomnom.compensation.step
+        requirement_level: required
+      - ref: nomnom.outcome
+        requirement_level: required
+  - id: metric.nomnom.orders.fulfillment.oldest_running.age
+    type: metric
+    metric_name: nomnom.orders.fulfillment.oldest_running.age
+    stability: development
+    brief: "Age of the oldest running Order Fulfillment Workflow."
+    instrument: gauge
+    unit: "s"

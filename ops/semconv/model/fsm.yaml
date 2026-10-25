@@ -1,0 +1,22 @@
+# Метрики раздела fsm инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.fsm.transitions
+    type: metric
+    metric_name: nomnom.fsm.transitions
+    stability: development
+    brief: "Applied FSM transitions."
+    instrument: counter
+    unit: "{transition}"
+    attributes:
+      - ref: nomnom.fsm.aggregate_type
+        requirement_level: required
+      - ref: nomnom.fsm.from_state
+        requirement_level: required
+      - ref: nomnom.fsm.to_state
+        requirement_level: required
+      - ref: nomnom.fsm.trigger
+        requirement_level: required
+      - ref: nomnom.fsm.result
+        requirement_level: required
+      - ref: nomnom.fsm.terminal
+        requirement_level: required

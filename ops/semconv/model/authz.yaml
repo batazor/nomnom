@@ -1,0 +1,30 @@
+# Метрики раздела authz инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.authz.checks
+    type: metric
+    metric_name: nomnom.authz.checks
+    stability: development
+    brief: "Authorization checks by result."
+    instrument: counter
+    unit: "{check}"
+    attributes:
+      - ref: nomnom.authz.permission
+        requirement_level: required
+      - ref: nomnom.authz.resource_type
+        requirement_level: required
+      - ref: nomnom.authz.result
+        requirement_level: required
+  - id: metric.nomnom.authz.check.duration
+    type: metric
+    metric_name: nomnom.authz.check.duration
+    stability: development
+    brief: "Duration of one authorization check."
+    instrument: histogram
+    unit: "s"
+    attributes:
+      - ref: nomnom.authz.permission
+        requirement_level: required
+      - ref: nomnom.authz.resource_type
+        requirement_level: required
+      - ref: nomnom.authz.result
+        requirement_level: required

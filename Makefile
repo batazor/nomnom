@@ -74,13 +74,31 @@ grafana-generate: ## сгенерировать overview dashboards, их README
 grafana-check: ## CI: тесты генератора, регенерация без диффа, gcx lint закоммиченного и live-варианта
 	@cd ops/grafana && go test ./... && go run ./cmd/dashboards -root ../.. -check
 	@preview=$$(mktemp -d) && (cd ops/grafana && go run ./cmd/dashboards -preview $$preview) && \
-		$(GCX) dev lint run boundaries/*/ops/grafana/dashboards/overview.json $$preview/*.json
+		$(GCX) dev lint run boundaries/*/ops/grafana/dashboards/overview.json ops/grafana/dashboards/platform.json $$preview/*.json
 grafana-serve: ## gcx dev serve: локальный preview dashboards (нужен gcx context с Grafana для запросов)
 	@$(GCX) dev serve boundaries/*/ops/grafana/dashboards
 grafana-cloud-push: ## загрузить overview dashboards в stack Grafana Cloud (ops/grafana-cloud/README.md)
 	@GCX=$(GCX) ops/grafana-cloud/push-dashboards.sh
 grafana-tools: ## установить gcx $(GCX_VERSION) в GOBIN
 	go install github.com/grafana/gcx/cmd/gcx@$(GCX_VERSION)
+
+## Semantic conventions метрик (docs/observability.md#именование-метрик): registry ops/semconv, OpenTelemetry Weaver
+WEAVER_VERSION ?= v0.28.0
+WEAVER ?= weaver
+# Правила naming_conventions и stability — те же, что у open-telemetry/semantic-conventions;
+# пакет не выпускает тегов, поэтому закреплён commit.
+WEAVER_PACKAGES ?= https://github.com/open-telemetry/opentelemetry-weaver-packages.git@b524723bedec1cc8d9ef83c924a231348a669ebe
+.PHONY: semconv-check semconv-tools
+semconv-check: ## проверить имена, units и attributes метрик registry ops/semconv (Weaver + policies)
+	@$(WEAVER) registry check --v2 -r ops/semconv -p ops/semconv/policies \
+		--policy="$(WEAVER_PACKAGES)[policies/check/naming_conventions]" \
+		--policy="$(WEAVER_PACKAGES)[policies/check/stability]"
+semconv-tools: ## установить weaver $(WEAVER_VERSION) в GOBIN (brew weaver — другой инструмент)
+	@arch=$$(uname -m | sed 's/arm64/aarch64/'); os=$$(uname -s | sed 's/Darwin/apple-darwin/; s/Linux/unknown-linux-gnu/'); \
+		url=https://github.com/open-telemetry/weaver/releases/download/$(WEAVER_VERSION)/weaver-$$arch-$$os.tar.xz; \
+		dir=$$(mktemp -d) && curl -sSLf "$$url" -o "$$dir/w.tar.xz" && curl -sSLf "$$url.sha256" -o "$$dir/w.sha256" && \
+		(cd "$$dir" && [ "$$(shasum -a 256 w.tar.xz | cut -d' ' -f1)" = "$$(cut -d' ' -f1 w.sha256)" ]) && \
+		tar -xf "$$dir/w.tar.xz" -C "$$dir" && install -m 0755 "$$dir"/weaver-*/weaver "$$(go env GOPATH)/bin/weaver"
 
 .PHONY: help
 help: ## показать цели

@@ -1,0 +1,14 @@
+# Метрики раздела provider инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.payments.provider.request.duration
+    type: metric
+    metric_name: nomnom.payments.provider.request.duration
+    stability: development
+    brief: "Duration of one payment provider request."
+    instrument: histogram
+    unit: "s"
+    attributes:
+      - ref: nomnom.payment.operation
+        requirement_level: required
+      - ref: nomnom.outcome
+        requirement_level: required

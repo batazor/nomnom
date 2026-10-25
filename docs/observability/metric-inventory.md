@@ -18,7 +18,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 110; пар «метрика × сервис» со статусом «есть»: 91.
+Метрик в инвентаре: 112; пар «метрика × сервис» со статусом «есть»: 91.
 
 Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`).
 
@@ -123,15 +123,15 @@ Kafka-клиенты TypeScript, Rust и Python не выбраны; при вы
 
 ## Kafka: собственный OTel middleware и consumer lag
 
-Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Labels только `handler_name`, `event_type`, `stream`, `error_class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill.
+Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Attributes только `nomnom.messaging.handler`, `nomnom.event.type`, `messaging.destination.name`, `nomnom.error.class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_messaging_process_duration_seconds` | OTel middleware `nomnom.messaging.process.duration` | histogram | `handler_name`, `event_type`, `stream`, `error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `error_class` только при неуспехе: permanent | deserialization | business | transient; успешный retry — без класса. `handler_name` — handler group. |
-| `nomnom_messaging_retry_attempts_total` | OTel middleware `nomnom.messaging.retry.attempts` | counter | `handler_name`, `event_type`, `stream` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Ретраится только класс transient, поэтому `error_class` не пишется. |
-| `nomnom_messaging_poison_messages_total` | OTel middleware вокруг PoisonQueue | counter | `handler_name`, `event_type`, `stream`, `error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Сообщения, отправленные в `<stream>.dlq`; `error_class`: permanent | deserialization. |
-| `nomnom_messaging_message_age_seconds` | OTel middleware | histogram | `handler_name`, `event_type`, `stream` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `now − occurred_at` в момент обработки. |
-| `nomnom_inbox_duplicates_total` | OTel middleware / Inbox adapter | counter | `handler_name`, `event_type`, `stream` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Outcome duplicate Inbox (`(consumer, event_id)` уже обработан). |
+| `nomnom_messaging_process_duration_seconds` | OTel middleware `nomnom.messaging.process.duration` | histogram | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name`, `nomnom_error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `error_class` только при неуспехе: permanent | deserialization | business | transient; успешный retry — без класса. `handler_name` — handler group. |
+| `nomnom_messaging_retry_attempts_total` | OTel middleware `nomnom.messaging.retry.attempts` | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Ретраится только класс transient, поэтому `error_class` не пишется. |
+| `nomnom_messaging_poison_messages_total` | OTel middleware вокруг PoisonQueue | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name`, `nomnom_error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Сообщения, отправленные в `<stream>.dlq`; `error_class`: permanent | deserialization. |
+| `nomnom_messaging_message_age_seconds` | OTel middleware | histogram | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `now − occurred_at` в момент обработки. |
+| `nomnom_inbox_duplicates_total` | OTel middleware / Inbox adapter | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Outcome duplicate Inbox (`(consumer, event_id)` уже обработан). |
 | `kafka_consumergroup_lag` | Alloy `prometheus.exporter.kafka` | gauge | `consumergroup`, `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join. |
 
 <a id="outbox"></a>
@@ -142,9 +142,11 @@ SQL-метрики Forwarder-роли (опрос таблицы Outbox), не p
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_outbox_pending_messages` | SQL-метрика Forwarder | gauge | `stream` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
-| `nomnom_outbox_oldest_pending_age_seconds` | SQL-метрика Forwarder | gauge | `stream` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
-| `nomnom_outbox_publish_retries_total` | Forwarder | counter | `stream`, `error_class` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
+| `nomnom_outbox_pending_messages` | SQL-метрика Forwarder | gauge | `messaging_destination_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
+| `nomnom_outbox_oldest_pending_age_seconds` | SQL-метрика Forwarder | gauge | `messaging_destination_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
+| `nomnom_outbox_publish_retries_total` | Forwarder / relay | counter | `messaging_destination_name`, `nomnom_event_type`, `nomnom_error_class` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
+| `nomnom_outbox_publish_duration_seconds` | Forwarder / relay | histogram | `messaging_destination_name`, `nomnom_event_type`, `nomnom_outcome` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Publish одной записи до ack брокера; `nomnom_outcome`: success | error. |
+| `nomnom_outbox_publish_lag_seconds` | Forwarder / relay | histogram | `messaging_destination_name`, `nomnom_event_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | occurred_at → ack брокера: задержка доставки события соседям. |
 
 <a id="usecase"></a>
 
@@ -154,7 +156,7 @@ SQL-метрики Forwarder-роли (опрос таблицы Outbox), не p
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_usecase_duration_seconds` | Use case decorator (`pkg/telemetry`) | histogram | `usecase`, `kind`, `outcome`, `error_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | `kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`. |
+| `nomnom_usecase_duration_seconds` | Use case decorator (`pkg/telemetry`) | histogram | `nomnom_usecase_name`, `nomnom_usecase_kind`, `nomnom_outcome`, `error_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | `kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`. |
 
 <a id="uow"></a>
 
@@ -164,9 +166,9 @@ SQL-метрики Forwarder-роли (опрос таблицы Outbox), не p
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_uow_transactions_total` | Unit of Work decorator | counter | `outcome` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `outcome`: committed | rolled_back | commit_failed. |
-| `nomnom_uow_duration_seconds` | Unit of Work decorator | histogram | `outcome` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
-| `nomnom_uow_retries_total` | Unit of Work decorator | counter | `reason` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `reason`: serialization | deadlock | write_conflict | other. |
+| `nomnom_uow_transactions_total` | Unit of Work decorator | counter | `nomnom_outcome` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `outcome`: committed | rolled_back | commit_failed. |
+| `nomnom_uow_duration_seconds` | Unit of Work decorator | histogram | `nomnom_outcome` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
+| `nomnom_uow_retries_total` | Unit of Work decorator | counter | `nomnom_reason` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `reason`: serialization | deadlock | write_conflict | other. |
 
 <a id="fsm"></a>
 
@@ -176,7 +178,7 @@ SQL-метрики Forwarder-роли (опрос таблицы Outbox), не p
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_fsm_transitions_total` | FSM transition decorator | counter | `aggregate_type`, `from_state`, `to_state`, `trigger`, `result`, `terminal` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `result`: applied | rejected (invalid transition); `terminal`: true | false. |
+| `nomnom_fsm_transitions_total` | FSM transition decorator | counter | `nomnom_fsm_aggregate_type`, `nomnom_fsm_from_state`, `nomnom_fsm_to_state`, `nomnom_fsm_trigger`, `nomnom_fsm_result`, `nomnom_fsm_terminal` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `result`: applied | rejected (invalid transition); `terminal`: true | false. |
 
 <a id="temporal"></a>
 
@@ -195,7 +197,7 @@ Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`)
 | `temporal_worker_task_slots_used` | Temporal SDK worker | gauge | `worker_type`, `task_queue` | `orders-worker`: есть | — |
 | `temporal_worker_task_slots_available` | Temporal SDK worker | gauge | `worker_type`, `task_queue` | `orders-worker`: есть | — |
 | `nomnom_orders_fulfillment_oldest_running_age_seconds` | Polling Temporal Visibility | gauge | — | `orders-worker`: ожидается | Возраст старейшего выполняющегося Order Fulfillment Workflow; SDK его не даёт. |
-| `nomnom_orders_compensations_total` | Compensation Activity decorator | counter | `step`, `outcome` | `orders-worker`: ожидается | `outcome`: attempted | failed. |
+| `nomnom_orders_compensations_total` | Compensation Activity decorator | counter | `nomnom_compensation_step`, `nomnom_outcome` | `orders-worker`: ожидается | `outcome`: attempted | failed. |
 
 <a id="kitchen"></a>
 
@@ -210,7 +212,7 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_kitchen_preparations_active` | Kitchen Board projection | gauge | — | `restaurants`: ожидается | — |
 | `nomnom_kitchen_ready_for_pickup` | Kitchen Board projection | gauge | — | `restaurants`: ожидается | — |
 | `nomnom_kitchen_preparation_duration_seconds` | Kitchen use case decorator | histogram | — | `restaurants`: ожидается | — |
-| `nomnom_kitchen_delays_total` | Kitchen use case decorator | counter | `reason` | `restaurants`: ожидается | — |
+| `nomnom_kitchen_delays_total` | Kitchen use case decorator | counter | `nomnom_reason` | `restaurants`: ожидается | — |
 
 <a id="authz"></a>
 
@@ -220,8 +222,8 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_authz_checks_total` | Authorization port decorator | counter | `permission`, `resource_type`, `result` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `result`: allowed | denied | error | timeout. |
-| `nomnom_authz_check_duration_seconds` | Authorization port decorator | histogram | `permission`, `resource_type`, `result` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
+| `nomnom_authz_checks_total` | Authorization port decorator | counter | `nomnom_authz_permission`, `nomnom_authz_resource_type`, `nomnom_authz_result` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `result`: allowed | denied | error | timeout. |
+| `nomnom_authz_check_duration_seconds` | Authorization port decorator | histogram | `nomnom_authz_permission`, `nomnom_authz_resource_type`, `nomnom_authz_result` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
 
 <a id="provider"></a>
 
@@ -231,7 +233,7 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_payments_provider_request_duration_seconds` | Provider gateway adapter | histogram | `operation`, `outcome` | `payments`: ожидается | `operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат. |
+| `nomnom_payments_provider_request_duration_seconds` | Provider gateway adapter | histogram | `nomnom_payment_operation`, `nomnom_outcome` | `payments`: ожидается | `operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат. |
 
 <a id="domain"></a>
 
@@ -243,26 +245,26 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | --- | --- | --- | --- | --- | --- |
 | `nomnom_orders_placed_total` | use case decorator | counter | — | `orders`: ожидается | — |
 | `nomnom_orders_completed_total` | use case decorator | counter | — | `orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
-| `nomnom_orders_cancelled_total` | use case decorator | counter | `reason` | `orders`: ожидается<br>`orders-worker`: ожидается | — |
-| `nomnom_orders_failed_total` | use case decorator | counter | `reason` | `orders-worker`: ожидается | — |
-| `nomnom_orders_cancellation_requests_total` | use case decorator | counter | `outcome` | `orders`: ожидается | — |
+| `nomnom_orders_cancelled_total` | use case decorator | counter | `nomnom_reason` | `orders`: ожидается<br>`orders-worker`: ожидается | — |
+| `nomnom_orders_failed_total` | use case decorator | counter | `nomnom_reason` | `orders-worker`: ожидается | — |
+| `nomnom_orders_cancellation_requests_total` | use case decorator | counter | `nomnom_outcome` | `orders`: ожидается | — |
 | `nomnom_orders_fulfillment_duration_seconds` | use case decorator | histogram | — | `orders-worker`: ожидается | — |
-| `nomnom_orders_in_state` | projection/polling | gauge | `state` | `orders`: ожидается | Требует отдельной projection; PromQL по counters не эмулируется. |
+| `nomnom_orders_in_state` | projection/polling | gauge | `nomnom_order_state` | `orders`: ожидается | Требует отдельной projection; PromQL по counters не эмулируется. |
 | `nomnom_restaurants_orders_received_total` | use case decorator | counter | — | `restaurants`: ожидается | — |
 | `nomnom_restaurants_orders_accepted_total` | use case decorator | counter | — | `restaurants`: ожидается | — |
-| `nomnom_restaurants_orders_rejected_total` | use case decorator | counter | `reason` | `restaurants`: ожидается | — |
+| `nomnom_restaurants_orders_rejected_total` | use case decorator | counter | `nomnom_reason` | `restaurants`: ожидается | — |
 | `nomnom_delivery_created_total` | use case decorator | counter | — | `delivery`: ожидается | — |
 | `nomnom_delivery_assignments_total` | use case decorator | counter | — | `delivery`: ожидается | — |
-| `nomnom_delivery_reassignments_total` | use case decorator | counter | `reason` | `delivery`: ожидается | — |
-| `nomnom_delivery_offers_total` | use case decorator | counter | `outcome` | `delivery`: ожидается | `outcome`: accepted | rejected | expired. |
+| `nomnom_delivery_reassignments_total` | use case decorator | counter | `nomnom_reason` | `delivery`: ожидается | — |
+| `nomnom_delivery_offers_total` | use case decorator | counter | `nomnom_outcome` | `delivery`: ожидается | `outcome`: accepted | rejected | expired. |
 | `nomnom_delivery_pickups_total` | use case decorator | counter | — | `delivery`: ожидается | — |
 | `nomnom_delivery_completed_total` | use case decorator | counter | — | `delivery`: ожидается | — |
-| `nomnom_delivery_failed_total` | use case decorator | counter | `reason` | `delivery`: ожидается | — |
+| `nomnom_delivery_failed_total` | use case decorator | counter | `nomnom_reason` | `delivery`: ожидается | — |
 | `nomnom_delivery_assignment_latency_seconds` | use case decorator | histogram | — | `delivery`: ожидается | — |
 | `nomnom_delivery_duration_seconds` | use case decorator | histogram | — | `delivery`: ожидается | — |
-| `nomnom_payments_authorizations_total` | use case decorator | counter | `outcome` | `payments`: ожидается | `outcome`: authorized | declined | failed; attempts = сумма. |
-| `nomnom_payments_captures_total` | use case decorator | counter | `outcome` | `payments`: ожидается | `outcome`: captured | failed. |
-| `nomnom_payments_refunds_total` | use case decorator | counter | `outcome` | `payments`: ожидается | `outcome`: refunded | failed. |
+| `nomnom_payments_authorizations_total` | use case decorator | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: authorized | declined | failed; attempts = сумма. |
+| `nomnom_payments_captures_total` | use case decorator | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: captured | failed. |
+| `nomnom_payments_refunds_total` | use case decorator | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: refunded | failed. |
 
 <a id="pods"></a>
 

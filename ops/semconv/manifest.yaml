@@ -1,0 +1,10 @@
+# Semantic conventions nomnom (OpenTelemetry Weaver): имена, instruments, units и
+# attributes собственных метрик. Проверка: make semconv-check (docs/observability.md#именование-метрик).
+file_format: definition_manifest/2.0
+name: nomnom
+description: Custom metrics of nomnom bounded contexts.
+schema_url: https://github.com/batazor/nomnom/ops/semconv/v0.1.0
+dependencies:
+  - name: otel
+    schema_url: https://opentelemetry.io/schemas/1.44.0
+    registry_path: https://github.com/open-telemetry/semantic-conventions/archive/refs/tags/v1.44.0.zip[model]

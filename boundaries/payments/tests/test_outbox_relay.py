@@ -191,13 +191,20 @@ class RelayCycleTest(unittest.TestCase):
         points = _points(self.reader)
         retries = points["nomnom.outbox.publish.retries"]
         self.assertEqual(retries[0].value, 2)
-        self.assertEqual(dict(retries[0].attributes), {"stream": TOPIC, "error_class": "transient"})
+        self.assertEqual(
+            dict(retries[0].attributes),
+            {
+                "messaging.destination.name": TOPIC,
+                "nomnom.event.type": "nomnom.payments.v1.PaymentAuthorized",
+                "nomnom.error.class": "transient",
+            },
+        )
 
     def test_non_retriable_failure_is_permanent_class(self) -> None:
         store = FakeStore([_record(1)])
         self._relay(store, FakePublisher(fail_seqs={1}, retriable=False)).run_once()
         retries = _points(self.reader)["nomnom.outbox.publish.retries"]
-        self.assertEqual(retries[0].attributes["error_class"], "permanent")
+        self.assertEqual(retries[0].attributes["nomnom.error.class"], "permanent")
 
     def test_standby_without_lock_reads_nothing(self) -> None:
         store = FakeStore([_record(1)])
@@ -239,9 +246,14 @@ class RelayCycleTest(unittest.TestCase):
         self.assertEqual((lag.count, lag.sum), (1, 2.0))
         self.assertEqual(
             dict(lag.attributes),
-            {"stream": TOPIC, "event_type": "nomnom.payments.v1.PaymentAuthorized"},
+            {
+                "messaging.destination.name": TOPIC,
+                "nomnom.event.type": "nomnom.payments.v1.PaymentAuthorized",
+            },
         )
-        self.assertEqual(points["nomnom.outbox.publish.duration"][0].count, 1)
+        duration = points["nomnom.outbox.publish.duration"][0]
+        self.assertEqual(duration.count, 1)
+        self.assertEqual(duration.attributes["nomnom.outcome"], "success")
 
 
 class RelayWorkerTest(unittest.TestCase):

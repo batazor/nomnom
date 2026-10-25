@@ -59,9 +59,9 @@ func ordersDomain(sc Scope) []Panel {
 			counter(sc, "nomnom_orders_cancelled_total", "cancelled"),
 			counter(sc, "nomnom_orders_failed_total", "failed"),
 		}},
-		{Title: "Cancellation requests", Unit: "ops", Queries: []Query{{Sum("outcome", sc.Rate("nomnom_orders_cancellation_requests_total")), "{{outcome}}"}}},
+		{Title: "Cancellation requests", Unit: "ops", Queries: []Query{{Sum("nomnom_outcome", sc.Rate("nomnom_orders_cancellation_requests_total")), "{{nomnom_outcome}}"}}},
 		{Title: "Fulfillment duration", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_orders_fulfillment_duration_seconds")},
-		{Title: "Orders currently in state", Unit: "short", Queries: []Query{{Sum("state", sc.Gauge("nomnom_orders_in_state")), "{{state}}"}},
+		{Title: "Orders currently in state", Unit: "short", Queries: []Query{{Max("nomnom_order_state", sc.Gauge("nomnom_orders_in_state")), "{{nomnom_order_state}}"}},
 			Description: "Требует projection/polling; из counters не выводится."},
 	}
 }
@@ -73,7 +73,7 @@ func restaurantsDomain(sc Scope) []Panel {
 			counter(sc, "nomnom_restaurants_orders_accepted_total", "accepted"),
 			counter(sc, "nomnom_restaurants_orders_rejected_total", "rejected"),
 		}, Description: "Queued / preparing / ready и preparation duration — row Kitchen."},
-		{Title: "Rejections by reason", Unit: "ops", Queries: []Query{{Sum("reason", sc.Rate("nomnom_restaurants_orders_rejected_total")), "{{reason}}"}}},
+		{Title: "Rejections by reason", Unit: "ops", Queries: []Query{{Sum("nomnom_reason", sc.Rate("nomnom_restaurants_orders_rejected_total")), "{{nomnom_reason}}"}}},
 	}
 }
 
@@ -87,10 +87,10 @@ func deliveryDomain(sc Scope) []Panel {
 			counter(sc, "nomnom_delivery_completed_total", "completed"),
 			counter(sc, "nomnom_delivery_failed_total", "failed"),
 		}},
-		{Title: "Delivery offers", Unit: "ops", Queries: []Query{{Sum("outcome", sc.Rate("nomnom_delivery_offers_total")), "{{outcome}}"}}},
+		{Title: "Delivery offers", Unit: "ops", Queries: []Query{{Sum("nomnom_outcome", sc.Rate("nomnom_delivery_offers_total")), "{{nomnom_outcome}}"}}},
 		{Title: "Failures and reassignments by reason", Unit: "ops", Queries: []Query{
-			{Sum("reason", sc.Rate("nomnom_delivery_failed_total")), "failed {{reason}}"},
-			{Sum("reason", sc.Rate("nomnom_delivery_reassignments_total")), "reassigned {{reason}}"},
+			{Sum("nomnom_reason", sc.Rate("nomnom_delivery_failed_total")), "failed {{nomnom_reason}}"},
+			{Sum("nomnom_reason", sc.Rate("nomnom_delivery_reassignments_total")), "reassigned {{nomnom_reason}}"},
 		}},
 		{Title: "Assignment latency", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_delivery_assignment_latency_seconds")},
 		{Title: "Delivery duration", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_delivery_duration_seconds")},
@@ -99,16 +99,16 @@ func deliveryDomain(sc Scope) []Panel {
 
 func paymentsDomain(sc Scope) []Panel {
 	return []Panel{
-		{Title: "Authorizations", Unit: "ops", Queries: []Query{{Sum("outcome", sc.Rate("nomnom_payments_authorizations_total")), "{{outcome}}"}},
+		{Title: "Authorizations", Unit: "ops", Queries: []Query{{Sum("nomnom_outcome", sc.Rate("nomnom_payments_authorizations_total")), "{{nomnom_outcome}}"}},
 			Description: "Attempts = сумма outcomes. `declined` (PaymentDeclined) — бизнес-результат, не техническая ошибка."},
 		{Title: "Captures and refunds", Unit: "ops", Queries: []Query{
-			{Sum("outcome", sc.Rate("nomnom_payments_captures_total")), "capture {{outcome}}"},
-			{Sum("outcome", sc.Rate("nomnom_payments_refunds_total")), "refund {{outcome}}"},
+			{Sum("nomnom_outcome", sc.Rate("nomnom_payments_captures_total")), "capture {{nomnom_outcome}}"},
+			{Sum("nomnom_outcome", sc.Rate("nomnom_payments_refunds_total")), "refund {{nomnom_outcome}}"},
 		}},
 		{Title: "Failed payment operations", Unit: "ops", Traces: true, Queries: []Query{
-			counter(sc, "nomnom_payments_authorizations_total", "authorization", `outcome="failed"`),
-			counter(sc, "nomnom_payments_captures_total", "capture", `outcome="failed"`),
-			counter(sc, "nomnom_payments_refunds_total", "refund", `outcome="failed"`),
+			counter(sc, "nomnom_payments_authorizations_total", "authorization", `nomnom_outcome="failed"`),
+			counter(sc, "nomnom_payments_captures_total", "capture", `nomnom_outcome="failed"`),
+			counter(sc, "nomnom_payments_refunds_total", "refund", `nomnom_outcome="failed"`),
 		}, Description: "Технические сбои операций; declined сюда не входит. Provider latency — row Dependencies."},
 	}
 }

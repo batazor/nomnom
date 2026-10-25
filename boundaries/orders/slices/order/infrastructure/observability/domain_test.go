@@ -127,8 +127,8 @@ func TestCancellationsSplitByOutcomeWithClosedReasons(t *testing.T) {
 	)
 
 	got := collect(t, reader)
-	assert.Equal(t, map[string]int64{"customer_requested": 1}, sums(t, got["nomnom.orders.cancelled"], "reason"))
-	assert.Equal(t, map[string]int64{"payment_declined": 1, "other": 1}, sums(t, got["nomnom.orders.failed"], "reason"))
+	assert.Equal(t, map[string]int64{"customer_requested": 1}, sums(t, got["nomnom.orders.cancelled"], "nomnom.reason"))
+	assert.Equal(t, map[string]int64{"payment_declined": 1, "other": 1}, sums(t, got["nomnom.orders.failed"], "nomnom.reason"))
 }
 
 func TestCancellationRequestsCountAnswersAndRejectionsNotFailures(t *testing.T) {
@@ -147,7 +147,7 @@ func TestCancellationRequestsCountAnswersAndRejectionsNotFailures(t *testing.T) 
 	answer(requestordercancellation.Result{}, errors.New("connection reset"))
 
 	assert.Equal(t, map[string]int64{"requested": 1, "already_cancelled": 1, "rejected": 1},
-		sums(t, collect(t, reader)["nomnom.orders.cancellation_requests"], "outcome"))
+		sums(t, collect(t, reader)["nomnom.orders.cancellation_requests"], "nomnom.outcome"))
 }
 
 func TestOrdersInStateObservesStoreCounts(t *testing.T) {
@@ -160,7 +160,7 @@ func TestOrdersInStateObservesStoreCounts(t *testing.T) {
 	require.True(t, ok)
 	got := map[string]int64{}
 	for _, dp := range gauge.DataPoints {
-		state, _ := dp.Attributes.Value("state")
+		state, _ := dp.Attributes.Value("nomnom.order.state")
 		got[state.AsString()] = dp.Value
 	}
 	assert.Equal(t, map[string]int64{string(order.StatePlaced): 2, string(order.StateCompleted): 5}, got)
