@@ -1,19 +1,17 @@
 """Integration with a real PostgreSQL: migrations, repositories, Unit of Work, Outbox, Inbox.
 
-Skipped unless ``DATABASE_URL`` is set, e.g.
-``DATABASE_URL=postgresql://payments:payments@localhost:55432/payments`` against
-``docker run --rm -p 55432:5432 -e POSTGRES_USER=payments -e POSTGRES_PASSWORD=payments
-postgres:18.6-alpine3.24``. Tables are truncated before every test.
+PostgreSQL runs in testcontainers (``tests/conftest.py``). Tables are truncated before
+every test.
 """
 
 import contextlib
-import os
 import unittest
 import uuid
 from datetime import timedelta
 from typing import Any, override
 
 import psycopg
+import pytest
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
 
 from infrastructure.postgres import (
@@ -21,17 +19,17 @@ from infrastructure.postgres import (
     NoPublishedContracts,
     OutboxMessage,
     PostgresDatabase,
+    PostgresPaymentOperationHistory,
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
     PostgresPaymentRepository,
+    PostgresPendingOperationQuery,
     PostgresProviderMessageInbox,
     PostgresUnitOfWork,
-    create_database,
     migrate,
     outbox_event_id,
 )
 from pkg.application import AggregateRef, ConcurrencyConflictError
-from pkg.config import DatabaseSettings
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
@@ -71,7 +69,6 @@ class _AuthorizedOnly:
         )
 
 
-DSN = os.environ.get("DATABASE_URL", "").strip()
 AMOUNT = Money.parse("25.00", "EUR")
 
 
@@ -93,21 +90,10 @@ class _Ids:
         return OperationId(f"operation-{self.count}")
 
 
-@unittest.skipUnless(DSN, "DATABASE_URL is not set")
+@pytest.mark.usefixtures("postgres")
 class PostgresIntegrationTest(unittest.TestCase):
     database: PostgresDatabase
-
-    @override
-    @classmethod
-    def setUpClass(cls) -> None:
-        migrate(DSN)
-        cls.database = create_database(DatabaseSettings(DATABASE__URL=DSN, DATABASE__MAX_CONNS=4))
-        cls.database.check()
-
-    @override
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls.database.close()
+    dsn: str
 
     @override
     def setUp(self) -> None:
@@ -116,6 +102,8 @@ class PostgresIntegrationTest(unittest.TestCase):
         self.uow = PostgresUnitOfWork(self.database)
         self.payments = PostgresPaymentRepository(self.database)
         self.operations = PostgresPaymentOperationRepository(self.database)
+        self.pending = PostgresPendingOperationQuery(self.database)
+        self.history = PostgresPaymentOperationHistory(self.database)
         self.outbox = PostgresPaymentOutbox(self.database, _AuthorizedOnly())
         self.inbox = PostgresProviderMessageInbox(self.database)
 
@@ -146,7 +134,7 @@ class PostgresIntegrationTest(unittest.TestCase):
             ).fetchall()
 
     def test_migrations_are_idempotent(self) -> None:
-        self.assertEqual(migrate(DSN), [])
+        self.assertEqual(migrate(self.dsn), [])
 
     def test_payment_round_trip_keeps_exact_money(self) -> None:
         payment = self._payment()
@@ -191,16 +179,20 @@ class PostgresIntegrationTest(unittest.TestCase):
         self._payment()
         first = self._operation("operation-1", "key-1", minutes=1)
         self.operations.add(first)
-        loaded = self.operations.find_pending(PaymentId("payment-1"))
+        pending_id = self.pending.pending_operation_id(PaymentId("payment-1"))
+        self.assertEqual(pending_id, OperationId("operation-1"))
+        loaded = self.operations.get(OperationId("operation-1"))
         assert loaded is not None
         loaded.decline("insufficient funds", NOW + timedelta(minutes=2))
         self.assertEqual(self.operations.save(loaded), 2)
         with self.assertRaises(ConcurrencyConflictError):
             self.operations.save(loaded)
+        self.assertIsNone(self.pending.pending_operation_id(PaymentId("payment-1")))
         self.operations.add(self._operation("operation-0", "key-0", minutes=0))
 
-        history = self.operations.list_for_payment(PaymentId("payment-1"))
-        self.assertEqual([op.id for op in history], ["operation-0", "operation-1"])
+        history = self.history.list_for_payment(PaymentId("payment-1"))
+        self.assertEqual([op.operation_id for op in history], ["operation-0", "operation-1"])
+        self.assertEqual(history[1].decline_reason, "insufficient funds")
         declined = self.operations.get_by_idempotency_key("key-1")
         assert declined is not None
         self.assertEqual(declined.state, OperationState.DECLINED)
@@ -298,6 +290,7 @@ class PostgresIntegrationTest(unittest.TestCase):
             uow=self.uow,
             payments=self.payments,
             operations=self.operations,
+            pending=self.pending,
             provider=provider,
             permissions=FakePermissions(),
             clock=_Clock(),

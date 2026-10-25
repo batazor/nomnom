@@ -1,8 +1,10 @@
 import unittest
 from typing import override
 
+import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from pkg.application import AggregateRef, AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -37,10 +39,13 @@ from slices.payment.domains.payment import (
 KEY = "order-1:authorize"
 
 
+@pytest.mark.usefixtures("postgres")
 class AuthorizePaymentTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.payment_id = self.kit.given_payment()
         self.handler = AuthorizePaymentHandler(self.kit.executor())
 
@@ -60,7 +65,7 @@ class AuthorizePaymentTest(unittest.TestCase):
         self.assertEqual(request.amount, Money.parse("25.00", "EUR"))
         self.assertEqual(request.operation_id, result.operation_id)
         self.assertEqual(
-            self.kit.store.outbox[0].aggregate, AggregateRef("Payment", self.payment_id, 2)
+            self.kit.outbox_aggregates()[0], AggregateRef("Payment", self.payment_id, 2)
         )
         self.assertEqual(
             self.kit.published(),
@@ -105,7 +110,7 @@ class AuthorizePaymentTest(unittest.TestCase):
         self.assertEqual(second.status, OperationStatus.SUCCEEDED)
         self.assertEqual(len(self.kit.provider.requests), 1)
         self.assertEqual(len(self.kit.published()), 1)
-        self.assertEqual(self.kit.store.payments[self.payment_id].version, 2)
+        self.assertEqual(self.kit.payment(self.payment_id).version, 2)
 
     def test_ac_408_repeat_after_unknown_result_completes_same_operation(self) -> None:
         self.kit.provider.lost_responses = 1
@@ -115,7 +120,7 @@ class AuthorizePaymentTest(unittest.TestCase):
         result = self.handler.handle(self.authorize())
 
         self.assertEqual(result.status, OperationStatus.SUCCEEDED)
-        self.assertEqual(len(self.kit.store.operations), 1)
+        self.assertEqual(len(self.kit.stored_operations()), 1)
         self.assertEqual([r.idempotency_key for r in self.kit.provider.requests], [KEY, KEY])
         self.assertEqual(self.kit.provider.effect_count(OperationKind.AUTHORIZE), 1)
         self.assertEqual(len(self.kit.published()), 1)
@@ -148,7 +153,7 @@ class AuthorizePaymentTest(unittest.TestCase):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.payment_state(self.payment_id), PaymentState.PENDING)
-        (operation,) = self.kit.store.operations.values()
+        (operation,) = self.kit.stored_operations()
         self.assertEqual(operation.state, OperationState.PENDING)
         self.assertEqual(self.kit.published(), [])
 
@@ -169,7 +174,7 @@ class AuthorizePaymentTest(unittest.TestCase):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.provider.requests, [])
-        self.assertEqual(self.kit.store.operations, {})
+        self.assertEqual(self.kit.stored_operations(), [])
         self.assertEqual(self.kit.payment_state(self.payment_id), PaymentState.PENDING)
 
     def test_ac_427_unavailable_authorization_fails_closed(self) -> None:
@@ -179,7 +184,7 @@ class AuthorizePaymentTest(unittest.TestCase):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.provider.requests, [])
-        self.assertEqual(self.kit.store.operations, {})
+        self.assertEqual(self.kit.stored_operations(), [])
 
     def test_ac_432_outbox_failure_rolls_back_and_retry_completes(self) -> None:
         self.kit.outbox.fail_next = True
@@ -188,7 +193,7 @@ class AuthorizePaymentTest(unittest.TestCase):
             self.handler.handle(self.authorize())
 
         self.assertEqual(self.kit.payment_state(self.payment_id), PaymentState.PENDING)
-        (operation,) = self.kit.store.operations.values()
+        (operation,) = self.kit.stored_operations()
         self.assertEqual(operation.state, OperationState.PENDING)
         self.assertEqual(self.kit.published(), [])
 
@@ -212,7 +217,7 @@ class AuthorizePaymentTest(unittest.TestCase):
 
         self.assertEqual(result.operation_id, OperationId("op-x"))
         self.assertEqual(result.status, OperationStatus.SUCCEEDED)
-        self.assertEqual(len(self.kit.store.operations), 1)
+        self.assertEqual(len(self.kit.stored_operations()), 1)
         self.assertEqual(self.kit.provider.effect_count(OperationKind.AUTHORIZE), 1)
 
     def test_concurrent_operation_with_other_key_is_in_progress(self) -> None:

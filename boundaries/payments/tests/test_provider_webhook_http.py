@@ -6,8 +6,10 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from typing import override
 
+import pytest
 from payment_fakes import PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from infrastructure.provider import (
     MAX_BODY_BYTES,
     SIGNATURE_HEADER,
@@ -24,10 +26,13 @@ NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 SECRET = "whsec_test"
 
 
+@pytest.mark.usefixtures("postgres")
 class ProviderWebhookHttpTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         payment_id = self.kit.given_payment(PaymentState.AUTHORIZED)
         self.operation_id = self.kit.given_operation(
             payment_id, OperationKind.CAPTURE, "order-1:capture"

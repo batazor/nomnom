@@ -1,13 +1,13 @@
 import unittest
 from typing import override
 
+import pytest
 from payment_fakes import (
     ORCHESTRATOR,
-    InMemoryPaymentRepository,
-    InMemoryPaymentStore,
     PaymentsTestKit,
 )
 
+from infrastructure.postgres import PostgresDatabase, PostgresPaymentRepository
 from pkg.application import AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.create_payment import (
     CreatePaymentHandler,
@@ -24,10 +24,13 @@ from slices.payment.domains.payment import (
 )
 
 
+@pytest.mark.usefixtures("postgres")
 class CreatePaymentTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.handler = CreatePaymentHandler(self.kit.payments, self.kit.permissions, self.kit.ids)
 
     def create(
@@ -40,7 +43,7 @@ class CreatePaymentTest(unittest.TestCase):
 
         self.assertTrue(result.created)
         self.assertEqual(result.state, PaymentState.PENDING)
-        stored = self.kit.store.payments[result.payment_id]
+        stored = self.kit.payment(result.payment_id)
         self.assertEqual(stored.order_id, OrderId("order-1"))
         self.assertEqual(stored.amount, Money.parse("25.00", "EUR"))
         self.assertEqual(
@@ -57,7 +60,7 @@ class CreatePaymentTest(unittest.TestCase):
 
         self.assertFalse(second.created)
         self.assertEqual(second.payment_id, first.payment_id)
-        self.assertEqual(len(self.kit.store.payments), 1)
+        self.assertEqual(len(self.kit.payment_ids()), 1)
 
     def test_ac_402_conflicting_terms_are_rejected(self) -> None:
         first = self.handler.handle(self.create())
@@ -68,8 +71,8 @@ class CreatePaymentTest(unittest.TestCase):
                 self.assertRaises(PaymentAlreadyExistsError),
             ):
                 self.handler.handle(self.create(amount=amount, currency=currency))
-        self.assertEqual(list(self.kit.store.payments), [first.payment_id])
-        self.assertEqual(self.kit.store.payments[first.payment_id].version, 1)
+        self.assertEqual(self.kit.payment_ids(), [first.payment_id])
+        self.assertEqual(self.kit.payment(first.payment_id).version, 1)
 
     def test_ac_403_invalid_amount_or_request_is_rejected(self) -> None:
         cases = [
@@ -87,7 +90,7 @@ class CreatePaymentTest(unittest.TestCase):
                 self.handler.handle(self.create(amount=amount, currency=currency))
         with self.assertRaises(InvalidPaymentRequestError):
             self.handler.handle(self.create(order_id=" "))
-        self.assertEqual(self.kit.store.payments, {})
+        self.assertEqual(self.kit.payment_ids(), [])
 
     def test_ac_426_denied_permission_creates_nothing(self) -> None:
         self.kit.permissions.denied.add(PaymentPermission.CREATE)
@@ -95,7 +98,7 @@ class CreatePaymentTest(unittest.TestCase):
         with self.assertRaises(PermissionDeniedError):
             self.handler.handle(self.create())
 
-        self.assertEqual(self.kit.store.payments, {})
+        self.assertEqual(self.kit.payment_ids(), [])
 
     def test_ac_427_unavailable_authorization_fails_closed(self) -> None:
         self.kit.permissions.unavailable = True
@@ -103,25 +106,25 @@ class CreatePaymentTest(unittest.TestCase):
         with self.assertRaises(AuthorizationUnavailableError):
             self.handler.handle(self.create())
 
-        self.assertEqual(self.kit.store.payments, {})
+        self.assertEqual(self.kit.payment_ids(), [])
 
     def test_concurrent_create_returns_payment_of_the_winner(self) -> None:
         winner = Payment(PaymentId("payment-winner"), OrderId("order-1"), Money.parse("25", "EUR"))
-        payments = RacingPaymentRepository(self.kit.store, winner)
+        payments = RacingPaymentRepository(self.database, winner)
         handler = CreatePaymentHandler(payments, self.kit.permissions, self.kit.ids)
 
         result = handler.handle(self.create())
 
         self.assertFalse(result.created)
         self.assertEqual(result.payment_id, PaymentId("payment-winner"))
-        self.assertEqual(list(self.kit.store.payments), [PaymentId("payment-winner")])
+        self.assertEqual(self.kit.payment_ids(), [PaymentId("payment-winner")])
 
 
-class RacingPaymentRepository(InMemoryPaymentRepository):
+class RacingPaymentRepository(PostgresPaymentRepository):
     """Another request stores its Payment between the lookup and the insert."""
 
-    def __init__(self, store: InMemoryPaymentStore, winner: Payment) -> None:
-        super().__init__(store)
+    def __init__(self, database: PostgresDatabase, winner: Payment) -> None:
+        super().__init__(database)
         self._winner: Payment | None = winner
 
     @override

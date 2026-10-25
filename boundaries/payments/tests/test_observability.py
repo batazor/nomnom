@@ -16,6 +16,7 @@ from decimal import Decimal
 from typing import Any, override
 
 import grpc
+import pytest
 from opentelemetry import baggage, propagate, trace
 from opentelemetry.context import attach, detach
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -37,6 +38,7 @@ from infrastructure.messaging.outbox import OutboxRecord, kafka_headers
 from infrastructure.messaging.tracing import publish_span
 from infrastructure.observability import ObservedProvider, classify_payment_error
 from infrastructure.observability import usecases as names
+from infrastructure.postgres import PostgresDatabase
 from infrastructure.postgres.outbox import outbox_metadata
 from infrastructure.provider import (
     WEBHOOK_PATH,
@@ -155,14 +157,17 @@ def _handlers(kit: PaymentsTestKit, use_cases: UseCases) -> PaymentsHandlers:
     )
 
 
+@pytest.mark.usefixtures("postgres")
 class GrpcPropagationTest(unittest.TestCase):
     """Caller context crosses the gRPC hop; spans and RPC metrics follow semconv RPC."""
+
+    database: PostgresDatabase
 
     @override
     def setUp(self) -> None:
         self.signals = Signals()
         self.enterContext(global_propagator())
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         use_cases = UseCases(
             classify_payment_error,
             self.signals.tracer_provider,
@@ -594,11 +599,14 @@ class RuntimeAndResourceTest(unittest.TestCase):
         self.assertEqual(sorted(s.name for s in signals.finished()), ["SELECT", "usecase x"])
 
 
+@pytest.mark.usefixtures("postgres")
 class WebhookSpanTest(unittest.TestCase):
+    database: PostgresDatabase
+
     def test_webhook_gets_a_server_span_with_the_route(self) -> None:
         signals = Signals()
         self.addCleanup(signals.close)
-        kit = PaymentsTestKit()
+        kit = PaymentsTestKit(self.database)
         kit.given_payment(PaymentState.AUTHORIZED)
         handler = create_webhook_handler(
             WebhookVerifier("whsec", timedelta(minutes=5)),

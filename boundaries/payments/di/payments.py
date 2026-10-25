@@ -41,6 +41,7 @@ from infrastructure.postgres import (
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
     PostgresPaymentRepository,
+    PostgresPendingOperationQuery,
     PostgresProviderMessageInbox,
     PostgresUnitOfWork,
 )
@@ -165,6 +166,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
     )
     payments = providers.Singleton(PostgresPaymentRepository, database)
     operations = providers.Singleton(PostgresPaymentOperationRepository, database)
+    pending = providers.Singleton(PostgresPendingOperationQuery, database)
     outbox = providers.Singleton(
         ObservedOutbox,
         providers.Singleton(PostgresPaymentOutbox, database, outbox_mapper),
@@ -180,6 +182,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
         uow=uow,
         payments=payments,
         operations=operations,
+        pending=pending,
         provider=provider,
         permissions=permissions,
         clock=clock,

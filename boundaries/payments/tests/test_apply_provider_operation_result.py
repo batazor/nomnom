@@ -1,8 +1,10 @@
 import unittest
 from typing import override
 
+import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from slices.payment.applications.apply_provider_operation_result import (
     ApplyProviderOperationResultHandler,
     ApplyProviderOperationResultInput,
@@ -26,10 +28,13 @@ from slices.payment.domains.payment import (
 )
 
 
+@pytest.mark.usefixtures("postgres")
 class ApplyProviderOperationResultTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.payment_id = self.kit.given_payment()
         self.handler = ApplyProviderOperationResultHandler(self.kit.uow, self.kit.applier())
 

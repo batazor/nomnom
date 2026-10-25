@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-Общесистемный [ADR 8](../../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md) допускает PostgreSQL и MongoDB, оставляя выбор контексту. Application-слой `payments` опирается на порты `UnitOfWork`, `PaymentRepository`, `PaymentOperationRepository`, `PaymentOutbox` и `ProviderMessageInbox`: одна локальная транзакция должна атомарно менять `Payment`, `Payment Operation`, записи Outbox ([ADR 13](../../../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md)) и Inbox ([ADR 11](../../../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md)). Контракты требуют уникальности `order_id` и idempotency key, не более одной незавершённой операции на `Payment` и optimistic concurrency по `version`. Финансовые суммы хранятся точно.
+Общесистемный [ADR 8](../../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md) допускает PostgreSQL и MongoDB, оставляя выбор контексту. Application-слой `payments` опирается на порты `UnitOfWork`, `PaymentRepository`, `PaymentOperationRepository` (только `get`, поиск по idempotency key, `add`, `save`), query-портах `PendingOperationQuery` и `PaymentOperationHistory`, `PaymentOutbox` и `ProviderMessageInbox`: одна локальная транзакция должна атомарно менять `Payment`, `Payment Operation`, записи Outbox ([ADR 13](../../../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md)) и Inbox ([ADR 11](../../../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md)). Контракты требуют уникальности `order_id` и idempotency key, не более одной незавершённой операции на `Payment` и optimistic concurrency по `version`. Финансовые суммы хранятся точно.
 
 ## Decision
 

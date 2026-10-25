@@ -1,8 +1,10 @@
 import unittest
 from typing import override
 
+import pytest
 from payment_fakes import PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from slices.payment.applications.apply_provider_callback import (
     ApplyProviderCallbackHandler,
     ApplyProviderCallbackInput,
@@ -24,10 +26,13 @@ from slices.payment.domains.payment import (
 CAPTURED = ProviderOperationOutcome.succeeded("capture-ref")
 
 
+@pytest.mark.usefixtures("postgres")
 class ApplyProviderCallbackTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.payment_id = self.kit.given_payment(PaymentState.AUTHORIZED)
         self.operation_id = self.kit.given_operation(
             self.payment_id, OperationKind.CAPTURE, "order-1:capture"
@@ -56,12 +61,12 @@ class ApplyProviderCallbackTest(unittest.TestCase):
 
     def test_ac_421_repeated_message_is_a_no_op(self) -> None:
         self.handler.handle(self.callback())
-        versions = self.kit.store.payments[self.payment_id].version
+        versions = self.kit.payment(self.payment_id).version
 
         duplicate = self.handler.handle(self.callback())
 
         self.assertEqual(duplicate.status, ProviderResultStatus.DUPLICATE_MESSAGE)
-        self.assertEqual(self.kit.store.payments[self.payment_id].version, versions)
+        self.assertEqual(self.kit.payment(self.payment_id).version, versions)
         self.assertEqual(len(self.kit.published()), 1)
 
     def test_new_message_with_same_result_is_already_applied(self) -> None:
@@ -76,7 +81,7 @@ class ApplyProviderCallbackTest(unittest.TestCase):
         with self.assertRaises(PaymentOperationNotFoundError):
             self.handler.handle(self.callback(operation_id="unknown"))
 
-        self.assertEqual(self.kit.store.provider_messages, set())
+        self.assertEqual(self.kit.provider_messages(), set())
         self.assertEqual(self.kit.published(), [])
 
     def test_conflicting_result_rolls_back_message_registration(self) -> None:
@@ -89,7 +94,7 @@ class ApplyProviderCallbackTest(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(self.kit.store.provider_messages, {"message-1"})
+        self.assertEqual(self.kit.provider_messages(), {"message-1"})
         self.assertEqual(self.kit.payment_state(self.payment_id), PaymentState.CAPTURED)
 
     def test_non_final_or_malformed_callback_is_invalid(self) -> None:
@@ -101,7 +106,7 @@ class ApplyProviderCallbackTest(unittest.TestCase):
         for command in cases:
             with self.subTest(command=command), self.assertRaises(InvalidPaymentRequestError):
                 self.handler.handle(command)
-        self.assertEqual(self.kit.store.provider_messages, set())
+        self.assertEqual(self.kit.provider_messages(), set())
 
 
 if __name__ == "__main__":

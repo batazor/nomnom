@@ -11,6 +11,7 @@ from contextlib import redirect_stdout
 from typing import Any, override
 from unittest.mock import patch
 
+import pytest
 from dependency_injector import errors, providers
 from payment_fakes import (
     NOW,
@@ -30,7 +31,7 @@ from infrastructure.authorization import SpiceDBPermissionChecker
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
 from infrastructure.messaging import OutboxRelay, PaymentEventsMapper, RelayWorker
 from infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
-from infrastructure.postgres import PostgresPaymentOutbox
+from infrastructure.postgres import PostgresDatabase, PostgresPaymentOutbox
 from infrastructure.provider import (
     SIGNATURE_HEADER,
     WEBHOOK_PATH,
@@ -60,7 +61,10 @@ def _shutdown_workers(container: PaymentsContainer) -> None:
     container.grpc_worker().shutdown(time.monotonic() + 1)
 
 
+@pytest.mark.usefixtures("postgres")
 class PaymentsContainerTest(unittest.TestCase):
+    database: PostgresDatabase
+
     def container(self, **environment: str) -> PaymentsContainer:
         container = payments_container({**SPICEDB_ENV, **environment})
         self.addCleanup(close_container, container)
@@ -94,7 +98,7 @@ class PaymentsContainerTest(unittest.TestCase):
             container.workers()
 
     def test_override_substitutes_fakes_in_use_cases(self) -> None:
-        kit = PaymentsTestKit()
+        kit = PaymentsTestKit(self.database)
         container = self.container()
         for name, fake in {
             "uow": kit.uow,
@@ -113,11 +117,11 @@ class PaymentsContainerTest(unittest.TestCase):
         )
 
         self.assertTrue(result.created)
-        self.assertEqual(kit.store.payments[result.payment_id].state, PaymentState.PENDING)
+        self.assertEqual(kit.payment(result.payment_id).state, PaymentState.PENDING)
         self.assertEqual(len(kit.permissions.checks), 1)
 
     def test_webhook_worker_applies_callbacks_through_overridden_storage(self) -> None:
-        kit = PaymentsTestKit()
+        kit = PaymentsTestKit(self.database)
         payment_id = kit.given_payment(PaymentState.AUTHORIZED)
         operation_id = kit.given_operation(payment_id, OperationKind.CAPTURE, "order-1:capture")
         container = self.container(PROVIDER__WEBHOOK_SECRET=SECRET)
@@ -191,13 +195,15 @@ class MigrateContainerTest(unittest.TestCase):
         with self.assertRaises(errors.Error):
             MigrateContainer().migrations()
 
-    @unittest.skipUnless(os.environ.get("DATABASE_URL", "").strip(), "DATABASE_URL is not set")
+
+@pytest.mark.usefixtures("postgres")
+class MigrateContainerDatabaseTest(unittest.TestCase):
+    dsn: str
+
     def test_applies_migrations(self) -> None:
         container = MigrateContainer()
-        container.config.from_dict(
-            {"database": DatabaseSettings(DATABASE__URL=os.environ["DATABASE_URL"].strip())}
-        )
-        self.assertIsInstance(container.migrations(), list)
+        container.config.from_dict({"database": DatabaseSettings(DATABASE__URL=self.dsn)})
+        self.assertEqual(container.migrations(), [])
 
 
 class _RecordingPublisher:

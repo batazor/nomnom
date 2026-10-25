@@ -3,8 +3,10 @@ import unittest
 from decimal import Decimal
 from typing import override
 
+import pytest
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from pkg.application import PermissionDeniedError
 from slices.payment.applications.errors import PaymentNotFoundError
 from slices.payment.applications.get_payment_status import (
@@ -15,15 +17,18 @@ from slices.payment.applications.ports import PaymentPermission
 from slices.payment.domains.payment import OrderId, PaymentState
 
 
+@pytest.mark.usefixtures("postgres")
 class GetPaymentStatusTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.handler = GetPaymentStatusHandler(self.kit.payments, self.kit.permissions)
 
     def test_ac_428_returns_state_without_provider_data(self) -> None:
         payment_id = self.kit.given_payment(PaymentState.AUTHORIZED)
-        before = self.kit.store.snapshot()
+        before = self.kit.snapshot()
 
         result = self.handler.handle(GetPaymentStatusInput(ORCHESTRATOR, payment_id))
 
@@ -34,7 +39,7 @@ class GetPaymentStatusTest(unittest.TestCase):
         fields = {field.name for field in dataclasses.fields(result)}
         self.assertNotIn("provider_reference", fields)
         self.assertNotIn("auth-ref", repr(result))
-        self.assertEqual(self.kit.store, before)
+        self.assertEqual(self.kit.snapshot(), before)
 
     def test_ac_429_unknown_payment_is_not_found(self) -> None:
         with self.assertRaises(PaymentNotFoundError):

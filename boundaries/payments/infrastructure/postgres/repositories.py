@@ -134,20 +134,6 @@ class PostgresPaymentOperationRepository:
         """Return the Payment Operation registered under the key, or ``None``."""
         return self._first("idempotency_key = %s", idempotency_key)
 
-    def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None:
-        """Return the pending Payment Operation of the Payment; there is at most one."""
-        return self._first("payment_id = %s AND state = 'pending'", payment_id)
-
-    def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperation]:
-        """Return every Payment Operation of the Payment in request order."""
-        with self._db.connection() as conn:
-            rows = conn.execute(
-                f"SELECT {_OPERATION_COLUMNS} FROM payment_operations "  # noqa: S608 - only fixed column/condition constants are interpolated
-                "WHERE payment_id = %s ORDER BY requested_at, id",
-                (payment_id,),
-            ).fetchall()
-        return [_operation(row) for row in rows]
-
     def add(self, operation: PaymentOperation) -> None:
         """Insert a new pending Payment Operation at version 1.
 

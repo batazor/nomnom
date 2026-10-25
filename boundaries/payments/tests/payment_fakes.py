@@ -1,27 +1,37 @@
-"""In-memory and fake adapters of the payments application ports for unit tests.
+"""Test kit of the payments application: real PostgreSQL storage plus non-storage fakes.
 
-They implement the contracts expected from the future storage and provider adapters:
-snapshot/rollback Unit of Work, optimistic concurrency by ``version``, unique
-``order_id`` and idempotency key, at most one pending operation per Payment and
-provider deduplication by idempotency key.
+Storage is always the real PostgreSQL adapters (``tests/conftest.py`` provides the
+database). Fakes stand in only for the provider, permissions, clock and identifiers;
+thin wrappers over the real adapters inject faults (failing Outbox write, stale reads).
 """
 
 import os
+import pickle
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-from typing import TypeVar
+from typing import Any, TypeVar, override
 from unittest.mock import patch
 
 from dependency_injector import providers
 
 from di.payments import PaymentsContainer
 from di.resources import sections
-from infrastructure.postgres import PostgresDatabase, create_database
+from infrastructure.postgres import (
+    PAYMENT_EVENTS_TOPIC,
+    OutboxMessage,
+    PostgresDatabase,
+    PostgresPaymentOperationHistory,
+    PostgresPaymentOperationRepository,
+    PostgresPaymentOutbox,
+    PostgresPaymentRepository,
+    PostgresPendingOperationQuery,
+    PostgresProviderMessageInbox,
+    PostgresUnitOfWork,
+    create_database,
+)
 from pkg.application import (
     AggregateRef,
     AuthorizationUnavailableError,
-    ConcurrencyConflictError,
     Subject,
     SubjectKind,
 )
@@ -38,14 +48,10 @@ from slices.payment.applications.ports import (
     ProviderUnavailableError,
 )
 from slices.payment.domains.payment import (
-    DuplicateIdempotencyKeyError,
-    DuplicatePaymentError,
     Money,
-    OperationAlreadyPendingError,
     OperationId,
     OperationKind,
     OperationState,
-    OrderId,
     Payment,
     PaymentDomainEvent,
     PaymentId,
@@ -60,239 +66,88 @@ OPERATOR = Subject(SubjectKind.USER, "operator-1")
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 
 
-@dataclass(frozen=True)
-class PaymentRecord:
-    id: PaymentId
-    order_id: OrderId
-    amount: Money
-    state: PaymentState
-    provider_reference: str | None
-    version: int
+class PickledEventsMapper:
+    """Outbox mapper of the test kit: every Domain Event is stored, pickled as its payload.
+
+    ``event_type`` is the event ``repr`` so that distinct events of one aggregate version
+    get distinct event ids.
+    """
+
+    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage:
+        return OutboxMessage(repr(event), PAYMENT_EVENTS_TOPIC, pickle.dumps(event))
 
 
-@dataclass(frozen=True)
-class OperationRecord:
-    id: OperationId
-    payment_id: PaymentId
-    kind: OperationKind
-    idempotency_key: str
-    amount: Money
-    requested_at: datetime
-    state: OperationState
-    provider_reference: str | None
-    decline_reason: str | None
-    completed_at: datetime | None
-    version: int
+class FailingOutbox:
+    """Real Outbox whose next write can be made to fail."""
 
-
-@dataclass(frozen=True)
-class OutboxRecord:
-    aggregate: AggregateRef
-    event: PaymentDomainEvent
-
-
-@dataclass
-class InMemoryPaymentStore:
-    payments: dict[PaymentId, PaymentRecord] = field(default_factory=dict)
-    operations: dict[OperationId, OperationRecord] = field(default_factory=dict)
-    outbox: list[OutboxRecord] = field(default_factory=list)
-    provider_messages: set[str] = field(default_factory=set)
-
-    def snapshot(self) -> InMemoryPaymentStore:
-        return InMemoryPaymentStore(
-            dict(self.payments),
-            dict(self.operations),
-            list(self.outbox),
-            set(self.provider_messages),
-        )
-
-    def restore(self, snapshot: InMemoryPaymentStore) -> None:
-        self.payments = dict(snapshot.payments)
-        self.operations = dict(snapshot.operations)
-        self.outbox = list(snapshot.outbox)
-        self.provider_messages = set(snapshot.provider_messages)
-
-
-class InMemoryUnitOfWork:
-    def __init__(self, store: InMemoryPaymentStore) -> None:
-        self._store = store
-        self._active = False
-        self.commits = 0
-        self.rollbacks = 0
-
-    def run(self, work: Callable[[], T]) -> T:
-        if self._active:
-            return work()
-        snapshot = self._store.snapshot()
-        self._active = True
-        try:
-            result = work()
-        except BaseException:
-            self._store.restore(snapshot)
-            self.rollbacks += 1
-            raise
-        finally:
-            self._active = False
-        self.commits += 1
-        return result
-
-
-class InMemoryPaymentRepository:
-    def __init__(self, store: InMemoryPaymentStore) -> None:
-        self._store = store
-
-    def get(self, payment_id: PaymentId) -> Payment | None:
-        record = self._store.payments.get(payment_id)
-        return None if record is None else self._to_domain(record)
-
-    def get_by_order(self, order_id: OrderId) -> Payment | None:
-        for record in self._store.payments.values():
-            if record.order_id == order_id:
-                return self._to_domain(record)
-        return None
-
-    def add(self, payment: Payment) -> int:
-        if any(r.order_id == payment.order_id for r in self._store.payments.values()):
-            raise DuplicatePaymentError(payment.order_id)
-        self._store.payments[payment.id] = self._to_record(payment, version=1)
-        return 1
-
-    def save(self, payment: Payment) -> int:
-        current = self._store.payments.get(payment.id)
-        if current is None or current.version != payment.version:
-            raise ConcurrencyConflictError("Payment", payment.id)
-        version = payment.version + 1
-        self._store.payments[payment.id] = self._to_record(payment, version)
-        return version
-
-    @staticmethod
-    def _to_record(payment: Payment, version: int) -> PaymentRecord:
-        return PaymentRecord(
-            payment.id,
-            payment.order_id,
-            payment.amount,
-            payment.state,
-            payment.provider_reference,
-            version,
-        )
-
-    @staticmethod
-    def _to_domain(record: PaymentRecord) -> Payment:
-        return Payment.restore(
-            record.id,
-            record.order_id,
-            record.amount,
-            record.state,
-            record.provider_reference,
-            record.version,
-        )
-
-
-class InMemoryPaymentOperationRepository:
-    def __init__(self, store: InMemoryPaymentStore) -> None:
-        self._store = store
-        # Simulates a concurrent transaction committed after this one read the data:
-        # lookups miss existing operations until the next ``add``.
-        self.stale_lookups = False
-
-    def get(self, operation_id: OperationId) -> PaymentOperation | None:
-        record = self._store.operations.get(operation_id)
-        return None if record is None else self._to_domain(record)
-
-    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
-        if self.stale_lookups:
-            return None
-        for record in self._store.operations.values():
-            if record.idempotency_key == idempotency_key:
-                return self._to_domain(record)
-        return None
-
-    def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None:
-        if self.stale_lookups:
-            return None
-        for record in self._store.operations.values():
-            if record.payment_id == payment_id and record.state is OperationState.PENDING:
-                return self._to_domain(record)
-        return None
-
-    def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperation]:
-        records = [r for r in self._store.operations.values() if r.payment_id == payment_id]
-        return [self._to_domain(r) for r in sorted(records, key=lambda r: r.requested_at)]
-
-    def add(self, operation: PaymentOperation) -> None:
-        self.stale_lookups = False
-        if self.get_by_idempotency_key(operation.idempotency_key) is not None:
-            raise DuplicateIdempotencyKeyError(operation.idempotency_key)
-        if self.find_pending(operation.payment_id) is not None:
-            raise OperationAlreadyPendingError(operation.payment_id)
-        self._store.operations[operation.id] = self._to_record(operation, version=1)
-
-    def save(self, operation: PaymentOperation) -> int:
-        current = self._store.operations.get(operation.id)
-        if current is None or current.version != operation.version:
-            raise ConcurrencyConflictError("PaymentOperation", operation.id)
-        version = operation.version + 1
-        self._store.operations[operation.id] = self._to_record(operation, version)
-        return version
-
-    def insert(self, record: OperationRecord) -> None:
-        """Test helper: store an operation directly, bypassing uniqueness checks."""
-        self._store.operations[record.id] = record
-
-    @staticmethod
-    def _to_record(operation: PaymentOperation, version: int) -> OperationRecord:
-        return OperationRecord(
-            operation.id,
-            operation.payment_id,
-            operation.kind,
-            operation.idempotency_key,
-            operation.amount,
-            operation.requested_at,
-            operation.state,
-            operation.provider_reference,
-            operation.decline_reason,
-            operation.completed_at,
-            version,
-        )
-
-    @staticmethod
-    def _to_domain(record: OperationRecord) -> PaymentOperation:
-        return PaymentOperation.restore(
-            record.id,
-            record.payment_id,
-            record.kind,
-            record.idempotency_key,
-            record.amount,
-            record.requested_at,
-            record.state,
-            record.provider_reference,
-            record.decline_reason,
-            record.completed_at,
-            record.version,
-        )
-
-
-class InMemoryPaymentOutbox:
-    def __init__(self, store: InMemoryPaymentStore) -> None:
-        self._store = store
+    def __init__(self, outbox: PostgresPaymentOutbox) -> None:
+        self._outbox = outbox
         self.fail_next = False
 
     def add(self, aggregate: AggregateRef, events: Sequence[PaymentDomainEvent]) -> None:
         if self.fail_next:
             self.fail_next = False
             raise RuntimeError("outbox write failed")
-        self._store.outbox.extend(OutboxRecord(aggregate, event) for event in events)
+        self._outbox.add(aggregate, events)
 
 
-class InMemoryProviderMessageInbox:
-    def __init__(self, store: InMemoryPaymentStore) -> None:
-        self._store = store
+class CountingUnitOfWork:
+    """Real Unit of Work that counts outer commits and rollbacks."""
 
-    def register(self, provider_message_id: str) -> bool:
-        if provider_message_id in self._store.provider_messages:
-            return False
-        self._store.provider_messages.add(provider_message_id)
-        return True
+    def __init__(self, uow: PostgresUnitOfWork) -> None:
+        self._uow = uow
+        self._depth = 0
+        self.commits = 0
+        self.rollbacks = 0
+
+    def run(self, work: Callable[[], T]) -> T:
+        self._depth += 1
+        try:
+            result = self._uow.run(work)
+        except BaseException:
+            if self._depth == 1:
+                self.rollbacks += 1
+            raise
+        finally:
+            self._depth -= 1
+        if self._depth == 0:
+            self.commits += 1
+        return result
+
+
+class StaleOperationRepository(PostgresPaymentOperationRepository):
+    """Simulates a concurrent transaction committed after this one read the data.
+
+    While ``stale_lookups`` is set, idempotency key lookups miss existing operations
+    until the next ``add``.
+    """
+
+    def __init__(self, database: PostgresDatabase) -> None:
+        super().__init__(database)
+        self.stale_lookups = False
+
+    @override
+    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
+        return None if self.stale_lookups else super().get_by_idempotency_key(idempotency_key)
+
+    @override
+    def add(self, operation: PaymentOperation) -> None:
+        self.stale_lookups = False
+        super().add(operation)
+
+
+class StalePendingOperationQuery(PostgresPendingOperationQuery):
+    """Pending lookup that misses while the operation repository reads stale data."""
+
+    def __init__(self, database: PostgresDatabase, operations: StaleOperationRepository) -> None:
+        super().__init__(database)
+        self._operations = operations
+
+    @override
+    def pending_operation_id(self, payment_id: PaymentId) -> OperationId | None:
+        if self._operations.stale_lookups:
+            return None
+        return super().pending_operation_id(payment_id)
 
 
 class FakePaymentProvider:
@@ -371,15 +226,19 @@ class SequentialIdentifiers:
 
 
 class PaymentsTestKit:
-    """Wires every fake around one in-memory store."""
+    """Real PostgreSQL adapters over a truncated database plus the non-storage fakes."""
 
-    def __init__(self) -> None:
-        self.store = InMemoryPaymentStore()
-        self.uow = InMemoryUnitOfWork(self.store)
-        self.payments = InMemoryPaymentRepository(self.store)
-        self.operations = InMemoryPaymentOperationRepository(self.store)
-        self.outbox = InMemoryPaymentOutbox(self.store)
-        self.inbox = InMemoryProviderMessageInbox(self.store)
+    def __init__(self, database: PostgresDatabase) -> None:
+        self.database = database
+        with database.connection() as conn:
+            conn.execute("TRUNCATE payments, payment_operations, outbox, inbox")
+        self.uow = CountingUnitOfWork(PostgresUnitOfWork(database))
+        self.payments = PostgresPaymentRepository(database)
+        self.operations = StaleOperationRepository(database)
+        self.pending = StalePendingOperationQuery(database, self.operations)
+        self.history = PostgresPaymentOperationHistory(database)
+        self.outbox = FailingOutbox(PostgresPaymentOutbox(database, PickledEventsMapper()))
+        self.inbox = PostgresProviderMessageInbox(database)
         self.provider = FakePaymentProvider()
         self.permissions = FakePermissions()
         self.clock = FixedClock()
@@ -390,6 +249,7 @@ class PaymentsTestKit:
             uow=self.uow,
             payments=self.payments,
             operations=self.operations,
+            pending=self.pending,
             provider=self.provider,
             permissions=self.permissions,
             clock=self.clock,
@@ -408,16 +268,14 @@ class PaymentsTestKit:
         amount: str = "25.00",
     ) -> PaymentId:
         reference = "auth-ref" if state in _STATES_WITH_REFERENCE else None
-        record = PaymentRecord(
-            PaymentId(payment_id),
-            OrderId(order_id),
-            Money.parse(amount, "EUR"),
-            state,
-            reference,
-            version=1,
-        )
-        self.store.payments[record.id] = record
-        return record.id
+        money = Money.parse(amount, "EUR")
+        with self.database.connection() as conn:
+            conn.execute(
+                "INSERT INTO payments (id, order_id, amount, currency, state, "
+                "provider_reference, version) VALUES (%s, %s, %s, %s, %s, %s, 1)",
+                (payment_id, order_id, money.amount, money.currency, state.value, reference),
+            )
+        return PaymentId(payment_id)
 
     def given_operation(
         self,
@@ -428,35 +286,82 @@ class PaymentsTestKit:
         operation_id: str = "operation-0",
         decline_reason: str | None = None,
     ) -> OperationId:
-        payment = self.store.payments[payment_id]
+        payment = self.payment(payment_id)
+        now = self.clock.now()
         completed = state is not OperationState.PENDING
-        record = OperationRecord(
-            OperationId(operation_id),
-            payment_id,
-            kind,
-            idempotency_key,
-            payment.amount,
-            self.clock.now(),
-            state,
-            "op-ref" if state is OperationState.SUCCEEDED else None,
-            decline_reason,
-            self.clock.now() if completed else None,
-            version=1,
-        )
-        self.operations.insert(record)
-        return record.id
+        with self.database.connection() as conn:
+            conn.execute(
+                "INSERT INTO payment_operations (id, payment_id, kind, idempotency_key, amount, "
+                "currency, requested_at, state, provider_reference, decline_reason, "
+                "completed_at, version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1)",
+                (
+                    operation_id,
+                    payment_id,
+                    kind.value,
+                    idempotency_key,
+                    payment.amount.amount,
+                    payment.amount.currency,
+                    now,
+                    state.value,
+                    "op-ref" if state is OperationState.SUCCEEDED else None,
+                    decline_reason,
+                    now if completed else None,
+                ),
+            )
+        return OperationId(operation_id)
+
+    def payment(self, payment_id: PaymentId) -> Payment:
+        payment = self.payments.get(payment_id)
+        assert payment is not None, payment_id
+        return payment
 
     def payment_state(self, payment_id: PaymentId) -> PaymentState:
-        return self.store.payments[payment_id].state
+        return self.payment(payment_id).state
 
-    def operation(self, operation_id: OperationId) -> OperationRecord:
-        return self.store.operations[operation_id]
+    def payment_ids(self) -> list[PaymentId]:
+        with self.database.connection() as conn:
+            rows = conn.execute("SELECT id FROM payments ORDER BY id").fetchall()
+        return [PaymentId(row[0]) for row in rows]
+
+    def operation(self, operation_id: OperationId) -> PaymentOperation:
+        operation = self.operations.get(operation_id)
+        assert operation is not None, operation_id
+        return operation
+
+    def stored_operations(self) -> list[PaymentOperation]:
+        with self.database.connection() as conn:
+            rows = conn.execute("SELECT id FROM payment_operations ORDER BY id").fetchall()
+        return [self.operation(OperationId(row[0])) for row in rows]
+
+    def provider_messages(self) -> set[str]:
+        with self.database.connection() as conn:
+            rows = conn.execute("SELECT event_id FROM inbox").fetchall()
+        return {row[0] for row in rows}
+
+    def outbox_aggregates(self) -> list[AggregateRef]:
+        with self.database.connection() as conn:
+            rows = conn.execute(
+                "SELECT aggregate_type, aggregate_id, aggregate_version FROM outbox ORDER BY seq"
+            ).fetchall()
+        return [AggregateRef(t, i, int(v)) for t, i, v in rows]
 
     def published(self) -> list[PaymentDomainEvent]:
-        return [record.event for record in self.store.outbox]
+        with self.database.connection() as conn:
+            rows = conn.execute("SELECT payload FROM outbox ORDER BY seq").fetchall()
+        return [pickle.loads(row[0]) for row in rows]  # noqa: S301 - payloads written by this kit
+
+    def snapshot(self) -> dict[str, list[tuple[Any, ...]]]:
+        """Every row of every payments table, for asserting that a query changed nothing."""
+        tables = ("payments", "payment_operations", "outbox", "inbox")
+        with self.database.connection() as conn:
+            return {
+                table: conn.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall()  # noqa: S608 - fixed table names
+                for table in tables
+            }
 
     def with_payment_version(self, payment_id: PaymentId, version: int) -> None:
-        self.store.payments[payment_id] = replace(self.store.payments[payment_id], version=version)
+        with self.database.connection() as conn:
+            conn.execute("UPDATE payments SET version = %s WHERE id = %s", (version, payment_id))
 
 
 _STATES_WITH_REFERENCE = {PaymentState.AUTHORIZED, PaymentState.CAPTURED, PaymentState.REFUNDED}

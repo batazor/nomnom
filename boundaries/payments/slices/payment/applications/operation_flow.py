@@ -44,6 +44,7 @@ from .ports import (
     PaymentPermissionChecker,
     PaymentProviderGateway,
     PaymentResource,
+    PendingOperationQuery,
     ProviderOperationRequest,
     ProviderOperationStatus,
 )
@@ -87,6 +88,7 @@ class PaymentOperationExecutor:
         uow: UnitOfWork,
         payments: PaymentRepository,
         operations: PaymentOperationRepository,
+        pending: PendingOperationQuery,
         provider: PaymentProviderGateway,
         permissions: PaymentPermissionChecker,
         clock: Clock,
@@ -96,6 +98,7 @@ class PaymentOperationExecutor:
         self._uow = uow
         self._payments = payments
         self._operations = operations
+        self._pending = pending
         self._provider = provider
         self._permissions = permissions
         self._clock = clock
@@ -168,7 +171,7 @@ class PaymentOperationExecutor:
                 payment.ensure_can(rules_of(kind).trigger)
             except (InvalidTransitionError, AlreadyInStateError) as error:
                 raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
-            if self._operations.find_pending(payment_id) is not None:
+            if self._pending.pending_operation_id(payment_id) is not None:
                 raise OperationInProgressError(payment_id)
             operation = PaymentOperation(
                 operation_id, payment_id, kind, key, payment.amount, requested_at

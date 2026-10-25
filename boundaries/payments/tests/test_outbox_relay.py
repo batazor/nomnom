@@ -6,12 +6,14 @@ import time
 import unittest
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
-from typing import Any, ClassVar
+from typing import Any, ClassVar, override
 from unittest import mock
 
 import psycopg
+import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from psycopg.types.json import Jsonb
 
 from infrastructure.messaging import OutboxRecord, OutboxRelay, PostgresOutboxStore, kafka_headers
 from infrastructure.messaging.postgres_store import ADVISORY_LOCK_KEY, advisory_lock_key_parts
@@ -24,6 +26,7 @@ from infrastructure.messaging.relay import (
     TopicBacklog,
     format_rfc3339_nano,
 )
+from infrastructure.postgres import PostgresDatabase
 from pkg.config import KafkaSettings, OutboxSettings
 
 NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
@@ -46,55 +49,108 @@ def _record(seq: int, occurred_at: datetime = NOW - timedelta(seconds=2)) -> Out
     )
 
 
-class FakeStore:
-    def __init__(
-        self, records: list[OutboxRecord], published_at: dict[int, datetime] | None = None
-    ) -> None:
-        self.records = {r.seq: r for r in records}
-        self.published: dict[int, datetime] = dict(published_at or {})
-        self.failures: dict[int, list[str]] = {}
-        self.locked = True
+class RelayStore(PostgresOutboxStore):
+    """Real Postgres outbox store that records relay calls and can lose its lock session.
+
+    ``lose_lock_after``: after this many successful ``holds_lock`` checks the lock
+    session is terminated on the server, so the real check finds the lock lost.
+    """
+
+    def __init__(self, database: PostgresDatabase, dsn: str) -> None:
+        super().__init__(database, dsn)
+        self._database = database
         self.cutoffs: list[datetime] = []
         self.unlocked = False
         self.lock_checks = 0
-        # Lock session dies after this many successful holds_lock checks.
         self.lose_lock_after: int | None = None
 
-    def try_lock(self) -> bool:
-        return self.locked
-
+    @override
     def holds_lock(self) -> bool:
         if self.lose_lock_after is not None and self.lock_checks >= self.lose_lock_after:
-            self.locked = False
+            self._terminate_lock_session()
         self.lock_checks += 1
-        return self.locked
+        return super().holds_lock()
 
+    @override
     def unlock(self) -> None:
         self.unlocked = True
+        super().unlock()
 
-    def fetch_pending(self, limit: int) -> list[OutboxRecord]:
-        pending = [r for s, r in sorted(self.records.items()) if s not in self.published]
-        return pending[:limit]
-
-    def mark_published(self, seq: int) -> None:
-        self.published[seq] = NOW
-
-    def record_failure(self, seq: int, error: str) -> None:
-        self.failures.setdefault(seq, []).append(error)
-
+    @override
     def delete_published_before(self, cutoff: datetime) -> int:
         self.cutoffs.append(cutoff)
-        old = [s for s, at in self.published.items() if at < cutoff]
-        for seq in old:
-            del self.published[seq]
-            del self.records[seq]
-        return len(old)
+        return super().delete_published_before(cutoff)
 
-    def backlog(self) -> list[TopicBacklog]:
-        pending = self.fetch_pending(10_000)
-        if not pending:
-            return []
-        return [TopicBacklog(TOPIC, len(pending), min(r.occurred_at for r in pending))]
+    def _terminate_lock_session(self) -> None:
+        conn = self._lock_conn
+        if conn is None:
+            return
+        with self._database.connection() as admin:
+            admin.execute("SELECT pg_terminate_backend(%s)", (conn.info.backend_pid,))
+
+    def published(self) -> set[int]:
+        with self._database.connection() as conn:
+            rows = conn.execute("SELECT seq FROM outbox WHERE published_at IS NOT NULL")
+            return {int(row[0]) for row in rows.fetchall()}
+
+    def failures(self) -> dict[int, tuple[int, str]]:
+        """``seq`` → ``(attempts, last_error)`` of records with a recorded failure."""
+        with self._database.connection() as conn:
+            rows = conn.execute(
+                "SELECT seq, attempts, last_error FROM outbox WHERE attempts > 0"
+            ).fetchall()
+        return {int(seq): (int(attempts), error) for seq, attempts, error in rows}
+
+    def seqs(self) -> set[int]:
+        with self._database.connection() as conn:
+            return {int(row[0]) for row in conn.execute("SELECT seq FROM outbox").fetchall()}
+
+
+@pytest.mark.usefixtures("postgres")
+class _OutboxCase(unittest.TestCase):
+    """Relay tests over the real outbox table of the session PostgreSQL."""
+
+    database: PostgresDatabase
+    dsn: str
+
+    @override
+    def setUp(self) -> None:
+        with self.database.connection() as conn:
+            conn.execute("TRUNCATE outbox")
+
+    def _store(
+        self, records: list[OutboxRecord], published_at: dict[int, datetime] | None = None
+    ) -> RelayStore:
+        published = published_at or {}
+        with self.database.connection() as conn:
+            for r in records:
+                conn.execute(
+                    "INSERT INTO outbox (seq, event_id, event_type, aggregate_type, "
+                    "aggregate_id, aggregate_version, occurred_at, topic, payload, metadata, "
+                    "published_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        r.seq,
+                        r.event_id,
+                        r.event_type,
+                        r.aggregate_type,
+                        r.aggregate_id,
+                        r.aggregate_version,
+                        r.occurred_at,
+                        r.topic,
+                        r.payload,
+                        Jsonb(r.metadata),
+                        published.get(r.seq),
+                    ),
+                )
+        store = RelayStore(self.database, self.dsn)
+        self.addCleanup(store.unlock)
+        return store
+
+    def _hold_lock_elsewhere(self) -> None:
+        """Another replica is the active relay: it holds the real advisory lock."""
+        other = PostgresOutboxStore(self.database, self.dsn)
+        self.assertTrue(other.try_lock())
+        self.addCleanup(other.unlock)
 
 
 class FakePublisher:
@@ -181,8 +237,8 @@ class HeadersTest(unittest.TestCase):
         )
 
 
-class RelayCycleTest(unittest.TestCase):
-    def _relay(self, store: FakeStore, publisher: FakePublisher, **kwargs) -> OutboxRelay:
+class RelayCycleTest(_OutboxCase):
+    def _relay(self, store: RelayStore, publisher: FakePublisher, **kwargs) -> OutboxRelay:
         metrics, self.reader = _metrics()
         return OutboxRelay(
             store,
@@ -195,33 +251,33 @@ class RelayCycleTest(unittest.TestCase):
         )
 
     def test_publishes_batch_in_seq_order_and_marks_published(self) -> None:
-        store = FakeStore([_record(3), _record(1), _record(2)])
+        store = self._store([_record(3), _record(1), _record(2)])
         publisher = FakePublisher()
         result = self._relay(store, publisher).run_once()
         self.assertEqual(publisher.sent, [1, 2, 3])
-        self.assertEqual(set(store.published), {1, 2, 3})
+        self.assertEqual(store.published(), {1, 2, 3})
         self.assertEqual((result.published, result.failed), (3, False))
 
     def test_batch_size_limits_one_cycle(self) -> None:
-        store = FakeStore([_record(1), _record(2), _record(3)])
+        store = self._store([_record(1), _record(2), _record(3)])
         publisher = FakePublisher()
         self._relay(store, publisher, batch_size=2).run_once()
         self.assertEqual(publisher.sent, [1, 2])
 
     def test_first_failure_stops_batch_head_of_line(self) -> None:
-        store = FakeStore([_record(1), _record(2), _record(3)])
+        store = self._store([_record(1), _record(2), _record(3)])
         publisher = FakePublisher(fail_seqs={2})
         relay = self._relay(store, publisher)
         result = relay.run_once()
         self.assertEqual(publisher.sent, [1])
-        self.assertEqual(set(store.published), {1})
-        self.assertEqual(store.failures, {2: ["broker down"]})
+        self.assertEqual(store.published(), {1})
+        self.assertEqual(store.failures(), {2: (1, "broker down")})
         self.assertTrue(result.failed)
 
         # Next cycle starts from the failed record again.
         relay.run_once()
         self.assertEqual(publisher.sent, [1])
-        self.assertEqual(store.failures, {2: ["broker down", "broker down"]})
+        self.assertEqual(store.failures(), {2: (2, "broker down")})
 
         publisher.fail_seqs.clear()
         relay.run_once()
@@ -240,14 +296,14 @@ class RelayCycleTest(unittest.TestCase):
         )
 
     def test_non_retriable_failure_is_permanent_class(self) -> None:
-        store = FakeStore([_record(1)])
+        store = self._store([_record(1)])
         self._relay(store, FakePublisher(fail_seqs={1}, retriable=False)).run_once()
         retries = _points(self.reader)["nomnom.outbox.publish.retries"]
         self.assertEqual(retries[0].attributes["nomnom.error.class"], "permanent")
 
     def test_standby_without_lock_reads_nothing(self) -> None:
-        store = FakeStore([_record(1)])
-        store.locked = False
+        store = self._store([_record(1)])
+        self._hold_lock_elsewhere()
         publisher = FakePublisher()
         result = self._relay(store, publisher).run_once()
         self.assertFalse(result.active)
@@ -257,25 +313,25 @@ class RelayCycleTest(unittest.TestCase):
     def test_retention_deletes_only_old_published_records(self) -> None:
         old = NOW - timedelta(days=8)
         recent = NOW - timedelta(days=1)
-        store = FakeStore([_record(1), _record(2), _record(3)], published_at={1: old, 2: recent})
+        store = self._store([_record(1), _record(2), _record(3)], published_at={1: old, 2: recent})
         publisher = FakePublisher(fail_seqs={3})
         result = self._relay(store, publisher).run_once()
         self.assertEqual(store.cutoffs, [NOW - timedelta(days=7)])
         self.assertEqual(result.deleted, 1)
-        self.assertNotIn(1, store.records)
+        self.assertNotIn(1, store.seqs())
         # Recent published and unpublished (failed) records stay.
-        self.assertIn(2, store.records)
-        self.assertIn(3, store.records)
+        self.assertIn(2, store.seqs())
+        self.assertIn(3, store.seqs())
 
     def test_retention_runs_at_most_once_per_interval(self) -> None:
-        store = FakeStore([])
+        store = self._store([])
         relay = self._relay(store, FakePublisher())
         relay.run_once()
         relay.run_once()
         self.assertEqual(len(store.cutoffs), 1)
 
     def test_metrics_backlog_duration_and_lag(self) -> None:
-        store = FakeStore([_record(1), _record(2, NOW - timedelta(seconds=30))])
+        store = self._store([_record(1), _record(2, NOW - timedelta(seconds=30))])
         relay = self._relay(store, FakePublisher(fail_seqs={2}))
         relay.run_once()
         points = _points(self.reader)
@@ -295,19 +351,19 @@ class RelayCycleTest(unittest.TestCase):
         self.assertEqual(duration.attributes["nomnom.outcome"], "success")
 
     def test_lock_checked_before_every_publish(self) -> None:
-        store = FakeStore([_record(1), _record(2), _record(3)])
+        store = self._store([_record(1), _record(2), _record(3)])
         self._relay(store, FakePublisher()).run_once()
         self.assertEqual(store.lock_checks, 3)
 
     def test_lock_lost_mid_batch_stops_publishing(self) -> None:
-        store = FakeStore([_record(1), _record(2), _record(3)])
+        store = self._store([_record(1), _record(2), _record(3)])
         store.lose_lock_after = 2
         publisher = FakePublisher()
         result = self._relay(store, publisher).run_once()
         # The standby may already publish 3: this replica must not publish it too.
         self.assertEqual(publisher.sent, [1, 2])
-        self.assertEqual(set(store.published), {1, 2})
-        self.assertEqual(store.failures, {})
+        self.assertEqual(store.published(), {1, 2})
+        self.assertEqual(store.failures(), {})
         self.assertEqual((result.published, result.failed, result.lock_lost), (2, False, True))
         # No retention cleanup and no backlog read without the lock: zeros only.
         self.assertEqual(store.cutoffs, [])
@@ -315,27 +371,27 @@ class RelayCycleTest(unittest.TestCase):
         self.assertEqual([(dict(p.attributes), p.value) for p in pending], [(_TOPIC_ATTR, 0)])
 
     def test_fatal_publish_error_is_recorded_and_raised(self) -> None:
-        store = FakeStore([_record(1), _record(2), _record(3)])
+        store = self._store([_record(1), _record(2), _record(3)])
         publisher = FakePublisher(fatal_seqs={2})
         with self.assertRaises(FatalPublishError):
             self._relay(store, publisher).run_once()
         self.assertEqual(publisher.sent, [1])
-        self.assertEqual(set(store.published), {1})
-        self.assertEqual(list(store.failures), [2])
+        self.assertEqual(store.published(), {1})
+        self.assertEqual(list(store.failures()), [2])
         retries = _points(self.reader)["nomnom.outbox.publish.retries"]
         self.assertEqual(retries[0].attributes["nomnom.error.class"], "permanent")
 
     def test_interrupted_publish_leaves_record_unpublished_without_failure(self) -> None:
-        store = FakeStore([_record(1), _record(2)])
+        store = self._store([_record(1), _record(2)])
         publisher = FakePublisher(block_seqs={1})
         result = self._relay(store, publisher).run_once(lambda: publisher.blocked.is_set())
         self.assertEqual(publisher.sent, [])
-        self.assertEqual(store.published, {})
-        self.assertEqual(store.failures, {})
+        self.assertEqual(store.published(), set())
+        self.assertEqual(store.failures(), {})
         self.assertEqual((result.published, result.failed), (0, False))
 
 
-class BacklogGaugesTest(unittest.TestCase):
+class BacklogGaugesTest(_OutboxCase):
     def _observed(self, reader: InMemoryMetricReader) -> dict[str, dict[str, float]]:
         return {
             name: {p.attributes["messaging.destination.name"]: p.value for p in points}
@@ -373,7 +429,7 @@ class BacklogGaugesTest(unittest.TestCase):
 
     def test_relay_cycle_after_drain_reports_zero(self) -> None:
         metrics, reader = _metrics()
-        store = FakeStore([_record(1)])
+        store = self._store([_record(1)])
         relay = OutboxRelay(
             store, FakePublisher(), batch_size=10, retention=timedelta(days=7), metrics_=metrics
         )
@@ -462,10 +518,10 @@ class LockOwnershipCheckTest(unittest.TestCase):
         conn.close.assert_called_once()
 
 
-class RelayWorkerTest(unittest.TestCase):
+class RelayWorkerTest(_OutboxCase):
     def test_shutdown_stops_loop_and_releases_lock(self) -> None:
 
-        store = FakeStore([_record(1)])
+        store = self._store([_record(1)])
         publisher = FakePublisher()
         metrics, _ = _metrics()
         relay = OutboxRelay(
@@ -503,7 +559,7 @@ class RelayWorkerTest(unittest.TestCase):
         publisher = FakePublisher()
         metrics, _ = _metrics()
         relay = OutboxRelay(
-            FakeStore([]), publisher, batch_size=10, retention=timedelta(days=7), metrics_=metrics
+            self._store([]), publisher, batch_size=10, retention=timedelta(days=7), metrics_=metrics
         )
         worker = RelayWorker(relay, lease, publisher, batch_size=10, poll_interval=0.01)
         thread = threading.Thread(target=worker.run)
@@ -515,7 +571,7 @@ class RelayWorkerTest(unittest.TestCase):
         self.assertTrue(lease.unlocked)
 
     def _worker(
-        self, store: FakeStore, publisher: FakePublisher
+        self, store: RelayStore, publisher: FakePublisher
     ) -> tuple[RelayWorker, threading.Thread, list[BaseException]]:
         metrics, _ = _metrics()
         relay = OutboxRelay(
@@ -536,7 +592,7 @@ class RelayWorkerTest(unittest.TestCase):
         return worker, thread, errors
 
     def test_fatal_publish_error_stops_worker_with_error(self) -> None:
-        store = FakeStore([_record(1)])
+        store = self._store([_record(1)])
         worker, thread, errors = self._worker(store, FakePublisher(fatal_seqs={1}))
         thread.join(2)
         self.assertFalse(thread.is_alive(), "worker kept running after a fatal error")
@@ -548,7 +604,7 @@ class RelayWorkerTest(unittest.TestCase):
     def test_fatal_error_ends_lifecycle_with_error(self) -> None:
         from pkg.lifecycle import Lifecycle, LifecycleConfig, LifecycleError
 
-        store = FakeStore([_record(1)])
+        store = self._store([_record(1)])
         publisher = FakePublisher(fatal_seqs={1})
         metrics, _ = _metrics()
         relay = OutboxRelay(
@@ -560,7 +616,7 @@ class RelayWorkerTest(unittest.TestCase):
             lifecycle.run(worker, threading.Event())
 
     def test_shutdown_interrupts_blocked_publish_within_deadline(self) -> None:
-        store = FakeStore([_record(1), _record(2)])
+        store = self._store([_record(1), _record(2)])
         publisher = FakePublisher(block_seqs={1})
         worker, thread, errors = self._worker(store, publisher)
         self.assertTrue(publisher.blocked.wait(2))
@@ -571,7 +627,7 @@ class RelayWorkerTest(unittest.TestCase):
         thread.join(1)
         self.assertFalse(thread.is_alive())
         self.assertEqual(errors, [])
-        self.assertEqual((publisher.sent, store.published, store.failures), ([], {}, {}))
+        self.assertEqual((publisher.sent, store.published(), store.failures()), ([], set(), {}))
         self.assertTrue(store.unlocked)
 
 

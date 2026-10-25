@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import grpc
 import jwt
+import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 from jwt.algorithms import ECAlgorithm  # ty: ignore[possibly-missing-import] - defined when cryptography is installed
 from payment_fakes import PaymentsTestKit, close_container, payments_container
@@ -31,6 +32,7 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
+from infrastructure.postgres import PostgresDatabase
 from pkg.application import Subject, SubjectKind
 from pkg.config import IdentitySettings, load_settings
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
@@ -367,12 +369,15 @@ def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:
     )
 
 
+@pytest.mark.usefixtures("postgres")
 class ServiceIdentityGrpcTest(unittest.TestCase):
     """AC-459 end to end: the token travels as gRPC metadata and reaches the use case."""
 
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.worker = GrpcWorker(("127.0.0.1", 0), _handlers(self.kit), _vector_resolver())
         self.worker.start()
         self.channel = grpc.insecure_channel(f"127.0.0.1:{self.worker.port}")

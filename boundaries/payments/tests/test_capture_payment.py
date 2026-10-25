@@ -1,8 +1,10 @@
 import unittest
 from typing import override
 
+import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
 from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
@@ -19,10 +21,13 @@ from slices.payment.domains.payment import (
 KEY = "order-1:capture"
 
 
+@pytest.mark.usefixtures("postgres")
 class CapturePaymentTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.handler = CapturePaymentHandler(self.kit.executor())
 
     def capture(self, payment_id: str) -> CapturePaymentInput:
@@ -83,7 +88,7 @@ class CapturePaymentTest(unittest.TestCase):
 
         self.assertEqual(raised.exception.state, PaymentState.PENDING)
         self.assertEqual(self.kit.provider.requests, [])
-        self.assertEqual(self.kit.store.operations, {})
+        self.assertEqual(self.kit.stored_operations(), [])
 
     def test_new_key_for_already_captured_payment_is_rejected(self) -> None:
         payment_id = self.kit.given_payment(PaymentState.CAPTURED)

@@ -17,7 +17,7 @@ run-relay:
 	$(UV) run python -m entrypoints.payments_relay.main
 
 test:
-	$(UV) run python -m unittest discover -s tests
+	$(UV) run pytest
 
 lint:
 	$(UV) run ruff check .

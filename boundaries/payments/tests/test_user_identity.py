@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import grpc
 import jwt
+import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 from jwt.algorithms import ECAlgorithm  # ty: ignore[possibly-missing-import] - defined when cryptography is installed
 from payment_fakes import PaymentsTestKit
@@ -39,6 +40,7 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
+from infrastructure.postgres import PostgresDatabase
 from pkg.application import Subject, SubjectKind
 from pkg.config import IdentitySettings, load_settings
 from slices.payment.domains.payment import PaymentState
@@ -343,12 +345,15 @@ class UserIdentityConfigTest(_ResolverCase):
         self.assertEqual(list(load_user_jwks(BFF_JWKS_FILE)), ["nomnom-bff-test-key"])
 
 
+@pytest.mark.usefixtures("postgres")
 class UserIdentityGrpcTest(unittest.TestCase):
     """AC-525 end to end: the use case sees ``user:<sub>`` from the metadata of BFF."""
 
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.worker = GrpcWorker(("127.0.0.1", 0), _handlers(self.kit), _resolver())
         self.worker.start()
         self.channel = grpc.insecure_channel(f"127.0.0.1:{self.worker.port}")

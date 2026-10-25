@@ -1,8 +1,10 @@
 import unittest
 from typing import override
 
+import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from slices.payment.applications.cancel_authorization import (
     CancelAuthorizationHandler,
     CancelAuthorizationInput,
@@ -22,10 +24,13 @@ from slices.payment.domains.payment import (
 KEY = "order-1:cancel-authorization"
 
 
+@pytest.mark.usefixtures("postgres")
 class CancelAuthorizationTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.handler = CancelAuthorizationHandler(self.kit.executor())
 
     def cancel(self, payment_id: str) -> CancelAuthorizationInput:
@@ -38,7 +43,7 @@ class CancelAuthorizationTest(unittest.TestCase):
 
         self.assertEqual(result.status, OperationStatus.SUCCEEDED)
         self.assertEqual(result.payment_state, PaymentState.PENDING)
-        self.assertIsNone(self.kit.store.payments[payment_id].provider_reference)
+        self.assertIsNone(self.kit.payment(payment_id).provider_reference)
         self.assertEqual(self.kit.provider.requests[0].authorization_reference, "auth-ref")
         self.assertEqual(
             self.kit.published(),

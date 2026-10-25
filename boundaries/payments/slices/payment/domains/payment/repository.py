@@ -67,7 +67,11 @@ class PaymentRepository(Protocol):
 
 
 class PaymentOperationRepository(Protocol):
-    """Storage of Payment Operations; idempotency keys are unique across Payments."""
+    """Storage of Payment Operations; idempotency keys are unique across Payments.
+
+    Lookups are by identity or by the unique idempotency key only. The pending-operation
+    check of commands and the operation history are application query ports.
+    """
 
     def get(self, operation_id: OperationId) -> PaymentOperation | None:
         """Return the operation, or ``None`` when it does not exist."""
@@ -75,14 +79,6 @@ class PaymentOperationRepository(Protocol):
 
     def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
         """Return the operation recorded for the idempotency key, or ``None``."""
-        ...
-
-    def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None:
-        """Return the operation of the Payment that has no final result yet, if any."""
-        ...
-
-    def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperation]:
-        """Return operations of the Payment ordered by ``requested_at``."""
         ...
 
     def add(self, operation: PaymentOperation) -> None:

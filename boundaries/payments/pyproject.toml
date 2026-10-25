@@ -59,7 +59,9 @@ include = ["di", "entrypoints", "pkg", "slices", "tests"]
 [dependency-groups]
 dev = [
     "import-linter>=2.15",
+    "pytest>=9.1.1",
     "ruff>=0.17.2",
+    "testcontainers[postgres]>=4.15.0",
     "ty>=0.0.91",
 ]
 watch = [
@@ -97,3 +99,7 @@ forbidden_modules = [
     "pydantic_settings",
     "opentelemetry",
 ]
+
+[tool.pytest]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]

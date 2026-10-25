@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import Protocol
 
 from pkg.application import Subject
 from slices.payment.domains.payment import (
@@ -10,8 +11,6 @@ from slices.payment.domains.payment import (
     OperationKind,
     OperationState,
     PaymentId,
-    PaymentOperation,
-    PaymentOperationRepository,
     PaymentRepository,
 )
 
@@ -43,6 +42,14 @@ class PaymentOperationView:
     decline_reason: str | None
 
 
+class PaymentOperationHistory(Protocol):
+    """Read model of the Payment Operations of a Payment."""
+
+    def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperationView]:
+        """Return the operation views of the Payment ordered by ``requested_at``."""
+        ...
+
+
 @dataclass(frozen=True)
 class ListPaymentOperationsResult:
     """Operations of the Payment in request order."""
@@ -57,11 +64,11 @@ class ListPaymentOperationsHandler:
     def __init__(
         self,
         payments: PaymentRepository,
-        operations: PaymentOperationRepository,
+        history: PaymentOperationHistory,
         permissions: PaymentPermissionChecker,
     ) -> None:
         self._payments = payments
-        self._operations = operations
+        self._history = history
         self._permissions = permissions
 
     def handle(self, query: ListPaymentOperationsInput) -> ListPaymentOperationsResult:
@@ -83,19 +90,6 @@ class ListPaymentOperationsHandler:
         )
         if self._payments.get(payment_id) is None:
             raise PaymentNotFoundError(payment_id)
-        operations = self._operations.list_for_payment(payment_id)
-        return ListPaymentOperationsResult(payment_id, tuple(_view(op) for op in operations))
-
-
-def _view(operation: PaymentOperation) -> PaymentOperationView:
-    return PaymentOperationView(
-        operation_id=operation.id,
-        kind=operation.kind,
-        state=operation.state,
-        amount=operation.amount.amount,
-        currency=operation.amount.currency,
-        idempotency_key=operation.idempotency_key,
-        requested_at=operation.requested_at,
-        completed_at=operation.completed_at,
-        decline_reason=operation.decline_reason,
-    )
+        return ListPaymentOperationsResult(
+            payment_id, tuple(self._history.list_for_payment(payment_id))
+        )

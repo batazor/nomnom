@@ -20,7 +20,7 @@ Python.
 
 ## Use Cases
 
-Статус реализации: application handlers всех перечисленных сценариев реализованы change [`implement-payments-application-layer`](../../openspec/changes/implement-payments-application-layer/) поверх портов и проверены unit-тестами с in-memory adapters; хранилище — PostgreSQL (`infrastructure/postgres`, [локальный ADR 1](docs/adr/0001-use-postgresql-for-payments-storage.md)), provider adapters ещё не реализованы (см. [Статус реализации](#статус-реализации)).
+Статус реализации: application handlers всех перечисленных сценариев реализованы change [`implement-payments-application-layer`](../../openspec/changes/implement-payments-application-layer/) поверх портов и проверены тестами поверх реального PostgreSQL (testcontainers); хранилище — PostgreSQL (`infrastructure/postgres`, [локальный ADR 1](docs/adr/0001-use-postgresql-for-payments-storage.md)), provider adapters ещё не реализованы (см. [Статус реализации](#статус-реализации)).
 
 ### Commands
 
@@ -223,7 +223,7 @@ Unit of Work охватывает только локальные изменен
 - Kafka headers совпадают с `orders/pkg/messaging/envelope.go`: `event_id`, `event_type`, `occurred_at` (RFC 3339 nano, UTC), `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent` (если был span), плюс `_watermill_message_uuid` = `event_id` для Watermill consumers.
 - Конфигурация relay: `DATABASE__URL` и `KAFKA__BROKERS` (через запятую) обязательны — пустое значение завершает процесс на старте; `KAFKA__CLIENT_ID` (`payments-relay`), `OUTBOX__POLL_INTERVAL` (`1s`), `OUTBOX__BATCH_SIZE` (`100`), `OUTBOX__RETENTION` (7 дней; общий формат длительности — `10080m`). Основной процесс к Kafka не подключается.
 - Метрики (OTel, `pkg/telemetry`, label `stream` = topic): `nomnom_outbox_pending_messages`, `nomnom_outbox_oldest_pending_age_seconds` (только активный экземпляр), `nomnom_outbox_publish_retries_total` (`error_class`: transient | permanent), `nomnom_outbox_publish_duration_seconds` и `nomnom_outbox_publish_lag_seconds` (`occurred_at` → подтверждение брокера; плюс `event_type`).
-- `tests/test_kafka_relay_integration.py` при заданных `DATABASE_URL` и `KAFKA_BROKERS` проводит Authorize через Outbox и relay в реальную Kafka и читает headers обратно:
+- `tests/test_kafka_relay_integration.py` (PostgreSQL — testcontainers) при заданном `KAFKA_BROKERS` проводит Authorize через Outbox и relay в реальную Kafka и читает headers обратно:
 
 ```bash
 docker run -d --rm --name payments-kafka -p 59092:9092 \
@@ -235,8 +235,7 @@ docker run -d --rm --name payments-kafka -p 59092:9092 \
   -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
   -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
   -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 apache/kafka:4.1.0
-DATABASE_URL=postgresql://payments:payments@localhost:55432/payments \
-  KAFKA_BROKERS=localhost:59092 make test
+KAFKA_BROKERS=localhost:59092 make test
 docker stop payments-kafka
 ```
 
@@ -272,7 +271,7 @@ Histograms в секундах получают явные границы `SECON
 - Финансовые операции следуют схеме `UoW { pending operation } → provider call → UoW { result + Payment + Outbox }`. Повтор с тем же idempotency key возвращает сохранённый результат без provider call либо завершает незавершённую операцию повтором provider call с тем же ключом. У `Payment` не более одной незавершённой операции.
 - Provider callbacks дедуплицируются по `provider_message_id` в той же Unit of Work, что и изменение состояния; асинхронный результат применяется не более одного раза.
 - Порты: `UnitOfWork`, `Clock`, `Subject`, `AggregateRef` и общие application errors — в `pkg/application`; authorization (`PaymentPermissionChecker`), provider gateway, Outbox, provider message inbox и источники идентификаторов (`PaymentIdSource`, `PaymentOperationIdSource`; реализация `UuidIdentifiers` — `infrastructure/ids.py`) — в `slices/payment/applications/ports.py`. `PaymentOperationExecutor` получает `ProviderResultApplier` извне; контейнер `di/payments.py` создаёт один applier для синхронных результатов и provider callbacks. Handlers и порты синхронные.
-- In-memory/fake adapters находятся только в `tests/payment_fakes.py` и повторяют контракт хранилища: rollback, optimistic concurrency, уникальность `order_id` и idempotency key.
+- Тестовые fakes (провайдер, permissions, часы, идентификаторы) находятся в `tests/payment_fakes.py`; хранилище в тестах — реальные PostgreSQL-адаптеры.
 
 Реализован runtime contract процесса по [Cloud Native Runtime](../../docs/cloud-native-runtime.md) и [ADR 17](../../docs/adr/0017-cloud-native-application-runtime.md) в `pkg/lifecycle`:
 
@@ -289,14 +288,8 @@ Histograms в секундах получают явные границы `SECON
 - Outbox по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md): `seq`, `event_id` (UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`), `event_type` (полное имя Protobuf-сообщения), `topic`, `payload` (Protobuf, `BYTEA`), `metadata` (`traceparent`), `published_at`, `attempts`, `last_error`. Какие Domain Events публикуются, решает внедряемый `OutboxEventMapper` (`infrastructure/postgres/outbox.py`); событие без контракта (mapper вернул `None`) в Outbox не пишется. `NoPublishedContracts` — mapper без опубликованных контрактов для тестовых сборок; контейнер `di/payments.py` передаёт `PaymentEventsMapper` — см. [Публикация Integration Events](#публикация-integration-events).
 - Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePaymentError`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKeyError`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPendingError`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflictError`.
 - `DATABASE__URL` обязателен: пустое значение завершает процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). Лимиты пула — `DATABASE__MAX_CONNS` (`10`), `DATABASE__MIN_CONNS` (`0`, допустимо 0–1), `DATABASE__MAX_CONN_LIFETIME` (`30m`, psycopg_pool закрывает соединение на 0–5% раньше — jitter), `DATABASE__MAX_CONN_IDLE_TIME` (`5m`), `DATABASE__CONNECT_TIMEOUT` (`5s`, `connect_timeout` libpq в целых секундах), `DATABASE__ACQUIRE_TIMEOUT` (`5s`, ожидание соединения пула, затем `PoolTimeout`); недопустимое значение — ошибка startup. См. [Пулер PostgreSQL](#пулер-postgresql).
-- Integration-тесты `tests/test_postgres_integration.py` запускаются при заданном `DATABASE_URL`:
-
-```bash
-docker run -d --rm --name payments-pg -p 55432:5432 \
-  -e POSTGRES_USER=payments -e POSTGRES_PASSWORD=payments postgres:18.6-alpine3.24
-DATABASE_URL=postgresql://payments:payments@localhost:55432/payments make test
-docker stop payments-pg
-```
+- Репозитории содержат только `get`, поиск по уникальному натуральному ключу (`get_by_order`, `get_by_idempotency_key`), `add` и `save`. Проверка незавершённой операции в командах — application query-порт `PendingOperationQuery`, история операций — read-model порт `PaymentOperationHistory`; оба реализованы в `infrastructure/postgres/queries.py`. Инвариант «не более одной pending-операции» остаётся на уровне БД.
+- Тесты (`make test`, pytest) используют только реальный PostgreSQL: `tests/conftest.py` поднимает один контейнер `postgres:18.6-alpine3.24` через testcontainers на сессию и применяет миграции; классы подключают его через `@pytest.mark.usefixtures("postgres")`, данные изолируются `TRUNCATE` перед каждым тестом. In-memory адаптеров хранилища нет; `tests/payment_fakes.py` содержит только fakes провайдера, permissions, часов и идентификаторов. Нужен Docker.
 
 ### Пулер PostgreSQL
 

@@ -3,8 +3,10 @@ import unittest
 from datetime import timedelta
 from typing import override
 
+import pytest
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from pkg.application import PermissionDeniedError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -21,13 +23,16 @@ from slices.payment.applications.ports import PaymentPermission, ProviderOperati
 from slices.payment.domains.payment import OperationKind, OperationState
 
 
+@pytest.mark.usefixtures("postgres")
 class ListPaymentOperationsTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.payment_id = self.kit.given_payment()
         self.handler = ListPaymentOperationsHandler(
-            self.kit.payments, self.kit.operations, self.kit.permissions
+            self.kit.payments, self.kit.history, self.kit.permissions
         )
 
     def test_ac_430_returns_history_in_start_order_without_provider_data(self) -> None:
@@ -42,7 +47,7 @@ class ListPaymentOperationsTest(unittest.TestCase):
         CapturePaymentHandler(executor).handle(
             CapturePaymentInput(ORCHESTRATOR, self.payment_id, "order-1:capture")
         )
-        before = self.kit.store.snapshot()
+        before = self.kit.snapshot()
 
         result = self.handler.handle(ListPaymentOperationsInput(OPERATOR, self.payment_id))
 
@@ -58,7 +63,7 @@ class ListPaymentOperationsTest(unittest.TestCase):
         self.assertEqual(second.completed_at, self.kit.clock.now())
         fields = {field.name for field in dataclasses.fields(PaymentOperationView)}
         self.assertNotIn("provider_reference", fields)
-        self.assertEqual(self.kit.store, before)
+        self.assertEqual(self.kit.snapshot(), before)
 
     def test_ac_431_subject_without_permission_is_rejected(self) -> None:
         self.kit.permissions.denied.add(PaymentPermission.VIEW_OPERATIONS)

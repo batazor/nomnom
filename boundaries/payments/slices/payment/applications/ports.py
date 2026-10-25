@@ -24,6 +24,7 @@ __all__ = [
     "PaymentPermissionChecker",
     "PaymentProviderGateway",
     "PaymentResource",
+    "PendingOperationQuery",
     "ProviderMessageInbox",
     "ProviderOperationOutcome",
     "ProviderOperationRequest",
@@ -121,6 +122,18 @@ class PaymentOutbox(Protocol):
 
     def add(self, aggregate: AggregateRef, events: Sequence[PaymentDomainEvent]) -> None:
         """Record published facts in the active Unit of Work."""
+        ...
+
+
+class PendingOperationQuery(Protocol):
+    """Query of the operation of a Payment that has no final result yet.
+
+    Commands use it to reject a new operation early; the storage still enforces at most
+    one pending operation per Payment on ``PaymentOperationRepository.add``.
+    """
+
+    def pending_operation_id(self, payment_id: PaymentId) -> OperationId | None:
+        """Return the id of the pending operation of the Payment, or ``None``."""
         ...
 
 

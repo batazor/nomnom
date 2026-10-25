@@ -1,4 +1,4 @@
-"""PostgreSQL storage of payments: Unit of Work, repositories, Outbox, Inbox, migrations."""
+"""PostgreSQL storage of payments: Unit of Work, repositories, queries, Outbox, Inbox, migrations."""
 
 from .database import PostgresDatabase, PostgresUnitOfWork, create_database
 from .migrate import migrate
@@ -10,6 +10,7 @@ from .outbox import (
     OutboxMessage,
     outbox_event_id,
 )
+from .queries import PostgresPaymentOperationHistory, PostgresPendingOperationQuery
 from .repositories import (
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
@@ -24,9 +25,11 @@ __all__ = [
     "OutboxEventMapper",
     "OutboxMessage",
     "PostgresDatabase",
+    "PostgresPaymentOperationHistory",
     "PostgresPaymentOperationRepository",
     "PostgresPaymentOutbox",
     "PostgresPaymentRepository",
+    "PostgresPendingOperationQuery",
     "PostgresProviderMessageInbox",
     "PostgresUnitOfWork",
     "create_database",

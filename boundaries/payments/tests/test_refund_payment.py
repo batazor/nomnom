@@ -1,8 +1,10 @@
 import unittest
 from typing import override
 
+import pytest
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
+from infrastructure.postgres import PostgresDatabase
 from pkg.application import PermissionDeniedError
 from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
@@ -20,10 +22,13 @@ from slices.payment.domains.payment import (
 KEY = "order-1:refund"
 
 
+@pytest.mark.usefixtures("postgres")
 class RefundPaymentTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.handler = RefundPaymentHandler(self.kit.executor())
 
     def test_ac_416_successful_refund_of_full_amount(self) -> None:
@@ -43,7 +48,9 @@ class RefundPaymentTest(unittest.TestCase):
     def test_ac_417_refund_before_capture_is_rejected(self) -> None:
         for state in (PaymentState.PENDING, PaymentState.AUTHORIZED, PaymentState.FAILED):
             with self.subTest(state=state):
-                payment_id = self.kit.given_payment(state, payment_id=f"payment-{state.value}")
+                payment_id = self.kit.given_payment(
+                    state, payment_id=f"payment-{state.value}", order_id=f"order-{state.value}"
+                )
 
                 with self.assertRaises(PaymentStateConflictError):
                     self.handler.handle(RefundPaymentInput(ORCHESTRATOR, payment_id, KEY))

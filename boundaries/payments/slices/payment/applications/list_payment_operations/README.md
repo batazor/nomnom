@@ -15,7 +15,7 @@
 
 ## Реализация
 
-Handler `ListPaymentOperationsHandler` в [`handler.py`](handler.py), требования FR-411, FR-413 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Возвращает операции в порядке `requested_at` без provider data; отдельная read model не вводится.
+Handler `ListPaymentOperationsHandler` в [`handler.py`](handler.py), требования FR-411, FR-413 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Возвращает операции в порядке `requested_at` без provider data через read-model порт `PaymentOperationHistory` (адаптер `infrastructure/postgres/queries.py`); репозиторий операций не содержит query-методов.
 
 ## Acceptance
 

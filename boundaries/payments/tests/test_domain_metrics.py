@@ -4,11 +4,13 @@ import unittest
 from collections.abc import Sequence
 from typing import cast, override
 
+import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
+from infrastructure.postgres import PostgresDatabase
 from pkg.application import AggregateRef
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -42,13 +44,16 @@ AGGREGATE = AggregateRef("Payment", "payment-0", 2)
 AUTHORIZED = PaymentAuthorized(PaymentId("payment-0"), OrderId("order-1"), Money.parse("1", "EUR"))
 
 
+@pytest.mark.usefixtures("postgres")
 class DomainMetricsTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
         self.reader = InMemoryMetricReader()
         provider = MeterProvider(metric_readers=[self.reader])
         self.metrics = DomainMetrics(provider.get_meter("test"))
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.uow = ObservedUnitOfWork(self.kit.uow, self.metrics)
         self.outbox = ObservedOutbox(self.kit.outbox, self.metrics)
 
@@ -74,6 +79,7 @@ class DomainMetricsTest(unittest.TestCase):
             uow=self.uow,
             payments=self.kit.payments,
             operations=self.kit.operations,
+            pending=self.kit.pending,
             provider=self.kit.provider,
             permissions=self.kit.permissions,
             clock=self.kit.clock,

@@ -1,7 +1,7 @@
 """Outbox → payments-relay → real Kafka (ADR 31).
 
-Skipped unless ``DATABASE_URL`` (see test_postgres_integration) and, for the Kafka part,
-``KAFKA_BROKERS`` are set, e.g. ``KAFKA_BROKERS=localhost:59092`` against
+PostgreSQL runs in testcontainers (``tests/conftest.py``). The Kafka part is skipped
+unless ``KAFKA_BROKERS`` is set, e.g. ``KAFKA_BROKERS=localhost:59092`` against
 ``docker run --rm -p 59092:9092 apache/kafka:4.1.0`` (single-node KRaft, topic
 auto-creation on). Tables are truncated before every test. The shutdown tests of
 ``KafkaPublisher`` need no broker: they point at an address nobody listens on.
@@ -18,6 +18,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any, override
 
+import pytest
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
@@ -38,11 +39,9 @@ from infrastructure.postgres import (
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
     PostgresPaymentRepository,
+    PostgresPendingOperationQuery,
     PostgresUnitOfWork,
-    create_database,
-    migrate,
 )
-from pkg.config import DatabaseSettings
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
@@ -53,7 +52,6 @@ from slices.payment.applications.operation_flow import (
 )
 from slices.payment.domains.payment import Money, OperationId, OrderId, Payment, PaymentId
 
-DSN = os.environ.get("DATABASE_URL", "").strip()
 BROKERS = os.environ.get("KAFKA_BROKERS", "").strip()
 # Nothing listens here: a broker outage as librdkafka sees it.
 UNREACHABLE_BROKERS = "127.0.0.1:1"
@@ -118,20 +116,10 @@ class _Ids:
         return OperationId(f"operation-{uuid.uuid4()}")
 
 
+@pytest.mark.usefixtures("postgres")
 class _DatabaseCase(unittest.TestCase):
     database: PostgresDatabase
-
-    @override
-    @classmethod
-    def setUpClass(cls) -> None:
-        migrate(DSN)
-        cls.database = create_database(DatabaseSettings(DATABASE__URL=DSN, DATABASE__MAX_CONNS=4))
-        cls.database.check()
-
-    @override
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls.database.close()
+    dsn: str
 
     @override
     def setUp(self) -> None:
@@ -139,11 +127,10 @@ class _DatabaseCase(unittest.TestCase):
             conn.execute("TRUNCATE payments, payment_operations, outbox, inbox")
 
 
-@unittest.skipUnless(DSN, "DATABASE_URL is not set")
 class RelayLockIntegrationTest(_DatabaseCase):
     def test_single_active_instance(self) -> None:
-        first = PostgresOutboxStore(self.database, DSN)
-        second = PostgresOutboxStore(self.database, DSN)
+        first = PostgresOutboxStore(self.database, self.dsn)
+        second = PostgresOutboxStore(self.database, self.dsn)
         try:
             self.assertTrue(first.try_lock())
             self.assertTrue(first.try_lock())
@@ -173,8 +160,8 @@ class RelayLockIntegrationTest(_DatabaseCase):
                 )
 
     def test_terminated_lock_session_is_detected_and_lock_moves(self) -> None:
-        first = PostgresOutboxStore(self.database, DSN)
-        second = PostgresOutboxStore(self.database, DSN)
+        first = PostgresOutboxStore(self.database, self.dsn)
+        second = PostgresOutboxStore(self.database, self.dsn)
         try:
             self.assertTrue(first.try_lock())
             self.assertTrue(first.holds_lock())
@@ -189,7 +176,7 @@ class RelayLockIntegrationTest(_DatabaseCase):
             second.unlock()
 
     def test_lock_released_on_its_own_session_is_lost(self) -> None:
-        store = PostgresOutboxStore(self.database, DSN)
+        store = PostgresOutboxStore(self.database, self.dsn)
         try:
             self.assertTrue(store.try_lock())
             self.assertTrue(store.holds_lock())
@@ -208,7 +195,7 @@ class RelayLockIntegrationTest(_DatabaseCase):
             store.unlock()
 
     def test_half_open_lock_session_is_lost_within_deadline(self) -> None:
-        proxy = _BlackholeProxy(DSN)
+        proxy = _BlackholeProxy(self.dsn)
         self.addCleanup(proxy.close)
         store = PostgresOutboxStore(self.database, proxy.dsn, lock_query_timeout=0.5)
         try:
@@ -224,7 +211,7 @@ class RelayLockIntegrationTest(_DatabaseCase):
             # Closing the upstream side ends the server session and frees the lock.
             proxy.close()
         deadline = time.monotonic() + 10
-        second = PostgresOutboxStore(self.database, DSN)
+        second = PostgresOutboxStore(self.database, self.dsn)
         try:
             while not second.try_lock():
                 self.assertLess(time.monotonic(), deadline, "lock never released")
@@ -234,7 +221,7 @@ class RelayLockIntegrationTest(_DatabaseCase):
 
     def test_relay_stops_batch_when_lock_session_dies(self) -> None:
         self._insert_outbox(3)
-        store = PostgresOutboxStore(self.database, DSN)
+        store = PostgresOutboxStore(self.database, self.dsn)
         sent: list[int] = []
         terminate = self._terminate_lock_session
 
@@ -264,7 +251,7 @@ class RelayLockIntegrationTest(_DatabaseCase):
 
     def test_shutdown_during_broker_outage_finishes_before_deadline(self) -> None:
         self._insert_outbox(1)
-        store = PostgresOutboxStore(self.database, DSN)
+        store = PostgresOutboxStore(self.database, self.dsn)
         publisher = KafkaPublisher(UNREACHABLE_BROKERS, "payments-relay-test")
         relay = OutboxRelay(store, publisher, batch_size=10, retention=timedelta(days=7))
         worker = RelayWorker(relay, store, publisher, batch_size=10, poll_interval=0.05)
@@ -282,7 +269,7 @@ class RelayLockIntegrationTest(_DatabaseCase):
             row = conn.execute("SELECT published_at, attempts FROM outbox").fetchone()
         self.assertEqual(row, (None, 0))
         # The lock was released: another replica can take over right away.
-        other = PostgresOutboxStore(self.database, DSN)
+        other = PostgresOutboxStore(self.database, self.dsn)
         try:
             self.assertTrue(other.try_lock())
         finally:
@@ -307,7 +294,7 @@ class KafkaPublisherShutdownTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 1.5)
 
 
-@unittest.skipUnless(DSN and BROKERS, "DATABASE_URL or KAFKA_BROKERS is not set")
+@unittest.skipUnless(BROKERS, "KAFKA_BROKERS is not set")
 class KafkaRelayIntegrationTest(_DatabaseCase):
     def _authorize(self) -> Payment:
         payments = PostgresPaymentRepository(self.database)
@@ -320,6 +307,7 @@ class KafkaRelayIntegrationTest(_DatabaseCase):
             uow=PostgresUnitOfWork(self.database),
             payments=payments,
             operations=operations,
+            pending=PostgresPendingOperationQuery(self.database),
             provider=FakePaymentProvider(),
             permissions=FakePermissions(),
             clock=_Clock(),
@@ -345,7 +333,7 @@ class KafkaRelayIntegrationTest(_DatabaseCase):
         assert row is not None
         event_id = str(row[0])
 
-        store = PostgresOutboxStore(self.database, DSN)
+        store = PostgresOutboxStore(self.database, self.dsn)
         publisher = KafkaPublisher(BROKERS, "payments-relay-test", delivery_timeout=20.0)
         relay = OutboxRelay(store, publisher, batch_size=10, retention=timedelta(days=7))
         try:

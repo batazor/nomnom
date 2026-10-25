@@ -3,6 +3,7 @@ import unittest
 from typing import cast, override
 
 import grpc
+import pytest
 from dependency_injector import providers
 from payment_fakes import PaymentsTestKit, close_container, payments_container
 
@@ -15,6 +16,7 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
+from infrastructure.postgres import PostgresDatabase
 from pkg.application import Subject, SubjectKind
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler
@@ -50,10 +52,13 @@ def _code(error: grpc.RpcError) -> grpc.StatusCode:
     return cast(grpc.StatusCode, cast(grpc.Call, error).code())
 
 
+@pytest.mark.usefixtures("postgres")
 class PaymentsGrpcServiceTest(unittest.TestCase):
+    database: PostgresDatabase
+
     @override
     def setUp(self) -> None:
-        self.kit = PaymentsTestKit()
+        self.kit = PaymentsTestKit(self.database)
         self.worker = GrpcWorker(("127.0.0.1", 0), _handlers(self.kit), StaticSubjectResolver())
         self.worker.start()
         self.channel = grpc.insecure_channel(f"127.0.0.1:{self.worker.port}")
