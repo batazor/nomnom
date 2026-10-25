@@ -29,7 +29,8 @@ func Services() []Options {
 			Context: "delivery", Title: "Delivery", Language: Rust,
 			Services: []string{inventory.Delivery},
 			GRPC:     true, Database: PostgreSQL, DatabasePool: true,
-			Kafka:      &Kafka{ConsumerGroup: "delivery", Consumers: []string{inventory.Delivery}, Connector: "delivery-outbox"},
+			// Kafka не читает: Outbox публикует Debezium (ADR 37).
+			Kafka:      &Kafka{Connector: "delivery-outbox"},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: deliveryDomain, DomainAlerts: deliveryAlerts,
 			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},
@@ -38,7 +39,8 @@ func Services() []Options {
 			Context: "payments", Title: "Payments", Language: Python,
 			Services: []string{inventory.Payments},
 			GRPC:     true, Database: PostgreSQL, DatabasePool: true, PaymentProvider: true,
-			Kafka:      &Kafka{ConsumerGroup: "payments", Consumers: []string{inventory.Payments}, Connector: "payments-outbox"},
+			// Kafka не читает: Outbox публикует Debezium (ADR 37).
+			Kafka:      &Kafka{Connector: "payments-outbox"},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: paymentsDomain,
 			SLO:    &SLO{Availability: 0.999, Latency: &LatencySLO{Bucket: "0.25", Target: 0.95}},

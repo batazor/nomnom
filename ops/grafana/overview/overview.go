@@ -71,12 +71,16 @@ type Options struct {
 
 type Kafka struct {
 	// Watermill — встроенные метрики Watermill как базовый слой (Go).
-	Watermill     bool
+	Watermill bool
+	// ConsumerGroup и Consumers пусты, когда контекст только публикует Outbox через CDC.
 	ConsumerGroup string
 	Consumers     []string
 	// Connector — коннектор Debezium, который публикует Outbox контекста (ADR 37).
 	Connector string
 }
+
+// consumes — контекст читает Kafka сам, а не только публикует Outbox.
+func (k *Kafka) consumes() bool { return k != nil && len(k.Consumers) > 0 }
 
 type Temporal struct {
 	// Worker — service.name worker; section variable row Temporal.

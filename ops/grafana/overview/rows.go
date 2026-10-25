@@ -70,7 +70,7 @@ func (g *generator) health(sc Scope) []Panel {
 		latency = append(latency, graphql...)
 		latencyTraces = append(latencyTraces, traces("kind=server && "+slower("ms"), len(graphql))...)
 	}
-	if o.Kafka != nil {
+	if o.Kafka.consumes() {
 		if o.Kafka.Watermill {
 			rate = append(rate, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count")), "Kafka processing"})
 			errs = append(errs, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "Kafka nack (retries exhausted)"})
@@ -83,7 +83,7 @@ func (g *generator) health(sc Scope) []Panel {
 			ratio = append(ratio, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!=""`)) + " / " + Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka"})
 		}
 	}
-	if o.Kafka != nil {
+	if o.Kafka.consumes() {
 		errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_poison_messages_total")), "Kafka dead letter"},
 			Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class="business"`)), "Kafka business rejection"})
 		// Dead letter и business rejection не помечают span ошибкой: ссылки нет.
@@ -235,10 +235,20 @@ func (g *generator) kafka(sc Scope) []Panel {
 		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
 	}
 	failures = append(failures, Query{Sum("nomnom_error_class", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`)), "{{nomnom_error_class}}"})
-	return []Panel{
+	produce := Panel{Title: "Produced (Outbox, Debezium)", Unit: "ops", Queries: produced,
+		Description: "События Outbox, которые коннектор `" + k.Connector + "` прочитал из журнала базы и отправил в Kafka (ADR 37)."}
+	outbox := []Panel{
+		{Title: "Outbox CDC lag", Unit: "s", Queries: cdcLag,
+			Description: "Отставание коннектора `" + k.Connector + "` от журнала базы: время от commit записи Outbox до её чтения."},
+		{Title: "Outbox connector tasks", Unit: "short", Queries: cdcTasks,
+			Description: "Состояние задачи коннектора `" + k.Connector + "`: `failed` — Outbox не доставляется."},
+	}
+	if !k.consumes() {
+		return append([]Panel{produce}, outbox...)
+	}
+	return append([]Panel{
 		{Title: "Consumed", Unit: "ops", Queries: consumed},
-		{Title: "Produced (Outbox, Debezium)", Unit: "ops", Queries: produced,
-			Description: "События Outbox, которые коннектор `" + k.Connector + "` прочитал из журнала базы и отправил в Kafka (ADR 37)."},
+		produce,
 		{Title: "Processing failures", Unit: "ops", Queries: failures, Traces: traces(consumerErrorSpan, len(failures)),
 			Description: "Технические сбои обработки по `error_class` (permanent, deserialization, transient); business rejections подтверждаются (ack) и показаны в Service health отдельно."},
 		{Title: "Consumer lag", Unit: "short", Queries: []Query{{lag, "{{topic}}"}},
@@ -252,11 +262,7 @@ func (g *generator) kafka(sc Scope) []Panel {
 			Description: "`now − occurred_at` в момент обработки."},
 		{Title: "Inbox: processed / duplicates", Unit: "ops", Queries: []Query{processed, {Sum("", sc.Rate("nomnom_inbox_duplicates_total")), "duplicates"}},
 			Description: "Duplicate = конфликт уникальности `(consumer, event_id)` в Inbox; failures — панель Processing failures."},
-		{Title: "Outbox CDC lag", Unit: "s", Queries: cdcLag,
-			Description: "Отставание коннектора `" + k.Connector + "` от журнала базы: время от commit записи Outbox до её чтения."},
-		{Title: "Outbox connector tasks", Unit: "short", Queries: cdcTasks,
-			Description: "Состояние задачи коннектора `" + k.Connector + "`: `failed` — Outbox не доставляется."},
-	}
+	}, outbox...)
 }
 
 // useCases — row декоратора application handlers: rejected — бизнес-отказ по

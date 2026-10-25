@@ -29,7 +29,7 @@ func ServiceAlerts(o Options) (AlertGroup, error) {
 			Summary: "Больше 5% вызовов use cases — технические сбои (outcome=error, не бизнес-отказы).",
 			Value:   ratio("nomnom_usecase_duration_seconds_count", `nomnom_outcome="error"`)})
 	}
-	if o.Kafka != nil {
+	if o.Kafka.consumes() {
 		alerts = append(alerts, Alert{Slug: slug("kafka-poison"), Title: o.Title + ": messages sent to DLQ", Severity: Warning, For: "0s", Op: ">", Threshold: 0, DashboardID: dash,
 			Summary: "Integration Events ушли в <stream>.dlq: их обработка не повторяется сама.",
 			Value:   Sum("job, messaging_destination_name", sc.Increase("nomnom_messaging_poison_messages_total"))})
