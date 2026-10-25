@@ -71,6 +71,7 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: mongodb
+              app.kubernetes.io/instance: restaurants
       ports:
         - protocol: TCP
           port: 27017

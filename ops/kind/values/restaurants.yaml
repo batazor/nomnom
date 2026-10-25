@@ -25,3 +25,8 @@ spicedb:
   insecure: true
   presharedKeySecret:
     name: spicedb-preshared-key
+
+# ADR 8, ADR 31: MongoDB restaurants тестового окружения; Secret restaurants-mongodb создаёт scripts/mongodb.sh.
+mongodb:
+  uriSecret:
+    name: restaurants-mongodb

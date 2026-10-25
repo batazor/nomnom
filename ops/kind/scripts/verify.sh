@@ -81,6 +81,22 @@ tcp() {
     2>/dev/null || true
 }
 
+# Вызов ListCustomerOrders от nomnom-bff/grpc-caller с projected token (ADR 27) и
+# customer_id=c1; дополнительные curl-аргументы — $1. Результат:
+# "<curl exit code> <HTTP status> <grpc-status> <grpc-message>".
+grpc_orders_authenticated() {
+  local result rc=0
+  result="$(k -n nomnom-bff exec deploy/grpc-caller -- sh -c \
+    "printf '\\000\\000\\000\\000\\004\\012\\002c1' | curl -sS -o /dev/null \
+      -w '%{http_code} %header{grpc-status} %header{grpc-message}' \
+      --connect-timeout 3 --max-time 5 --http2-prior-knowledge -X POST \
+      -H 'content-type: application/grpc' -H 'te: trailers' \
+      -H \"authorization: Bearer \$(cat /var/run/secrets/nomnom/identity/nomnom.orders)\" ${1:-} \
+      --data-binary @- '${GATEWAY}/nomnom.orders.v1.OrdersService/ListCustomerOrders'" 2>/dev/null)" || rc=$?
+  # shellcheck disable=SC2086 # нормализация пробелов: при timeout grpc-status пуст
+  printf '%s %s\n' "${rc}" "$(echo ${result:-000})"
+}
+
 resolves() {
   k -n "$1" exec deploy/net-probe -- nslookup "$2" >/dev/null 2>&1 && echo yes || echo no
 }
@@ -148,9 +164,16 @@ section "3. Неизвестный маршрут"
 expect "3.1 неизвестный gRPC-сервис через gateway: grpc-status 12 (UNIMPLEMENTED)" "0 200 12" \
   "$(grpc_unknown nomnom-restaurants)"
 
-section "4–5. Trace context, deadlines, retries"
-blocked "4 traceparent caller → backend: нет telemetry capture и authenticated caller"
-blocked "5 deadlines и cancellation через gateway: нет long-running authenticated RPC"
+section "4–5. Metadata, status, trace context, deadlines, retries"
+# Без token backend отвечает UNAUTHENTICATED (1.1); с token — ответ SpiceDB: authorization
+# metadata дошла до backend, grpc-status и grpc-message backend'а дошли до вызывающего.
+expect "4.1 authorization metadata через gateway: PERMISSION_DENIED от SpiceDB" \
+  "0 200 7 permission denied: service:bff view_orders on customer:c1" "$(grpc_orders_authenticated)"
+blocked "4.2 traceparent caller → backend: orders не экспортирует traces (только metrics, ADR 9)"
+# Текст context deadline exceeded формирует gRPC server orders, а не Envoy (upstream request
+# timeout): deadline вызывающего дошёл до backend, а не сработал route timeout gateway.
+expect "5.1 deadline вызывающего (grpc-timeout 1u) соблюдается backend'ом" \
+  "0 200 4 context deadline exceeded" "$(grpc_orders_authenticated "-H 'grpc-timeout: 1u'")"
 blocked "5a retries: в реестре нет методов, для которых они включены"
 
 section "6. Инфраструктурные подключения под политиками"

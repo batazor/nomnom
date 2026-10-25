@@ -90,6 +90,7 @@ manifests:
     - ../manifests/data/postgres-orders.yaml
     - ../manifests/data/postgres-payments.yaml
     - ../manifests/data/postgres-delivery.yaml
+    - ../manifests/data/mongodb-restaurants.yaml
     - ../manifests/gateway/gateway.yaml
     - ../manifests/fixtures/net-probe.yaml
 deploy:
@@ -124,7 +125,7 @@ deploy:
       before:
         # Skaffold применяет rawYaml после helm, поэтому всё, что charts читают при старте,
         # создаётся здесь: namespaces, JWKS (ADR 27), bootstrap и preshared key SpiceDB
-        # (ADR 18), Secrets и PostgreSQL orders, payments и delivery (ADR 8). Повторный rawYaml идемпотентен.
+        # (ADR 18), Secrets и PostgreSQL orders, payments и delivery, MongoDB restaurants (ADR 8, ADR 31). Повторный rawYaml идемпотентен.
         - host:
             command:
               - sh
@@ -136,12 +137,16 @@ deploy:
                 ../scripts/identity-jwks.sh "$SKAFFOLD_KUBE_CONTEXT"
                 ../scripts/authz.sh "$SKAFFOLD_KUBE_CONTEXT"
                 ../scripts/postgres.sh "$SKAFFOLD_KUBE_CONTEXT"
+                ../scripts/mongodb.sh "$SKAFFOLD_KUBE_CONTEXT" secrets
                 k apply -f ../manifests/authz/spicedb.yaml -f ../manifests/data/postgres-orders.yaml \
-                  -f ../manifests/data/postgres-payments.yaml -f ../manifests/data/postgres-delivery.yaml
+                  -f ../manifests/data/postgres-payments.yaml -f ../manifests/data/postgres-delivery.yaml \
+                  -f ../manifests/data/mongodb-restaurants.yaml
                 k -n nomnom-authz wait deployment/spicedb --for=condition=Available --timeout=300s
                 for db in orders payments delivery; do
                   k -n nomnom-data wait "deployment/postgres-${db}" --for=condition=Available --timeout=300s
                 done
+                k -n nomnom-data wait deployment/mongodb-restaurants --for=condition=Available --timeout=300s
+                ../scripts/mongodb.sh "$SKAFFOLD_KUBE_CONTEXT" init
         # Kafka и Temporal dev server для orders-consumer (ADR 28) нужны до установки charts:
         # consumer подключается к ним при startup.
         - host:

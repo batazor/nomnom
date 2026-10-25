@@ -170,3 +170,56 @@ spec:
             runAsUser: 100
             capabilities:
               drop: ["ALL"]
+---
+# Вызывающий с service identity вместо BFF, пока нет образа BFF (ADR 27): ServiceAccount
+# nomnom-bff/bff из allowlist orders и projected token с audience nomnom.orders.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bff
+  namespace: nomnom-bff
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpc-caller
+  namespace: nomnom-bff
+  labels:
+    app.kubernetes.io/name: grpc-caller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grpc-caller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grpc-caller
+    spec:
+      terminationGracePeriodSeconds: 1
+      serviceAccountName: bff
+      automountServiceAccountToken: false
+      containers:
+        - name: grpc-caller
+          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: identity
+              mountPath: /var/run/secrets/nomnom/identity
+              readOnly: true
+      volumes:
+        - name: identity
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: nomnom.orders
+                  path: nomnom.orders
+                  expirationSeconds: 3600
