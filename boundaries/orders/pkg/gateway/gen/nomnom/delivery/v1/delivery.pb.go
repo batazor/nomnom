@@ -82,6 +82,108 @@ func (DeliveryState) EnumDescriptor() ([]byte, []int) {
 	return file_nomnom_delivery_v1_delivery_proto_rawDescGZIP(), []int{0}
 }
 
+type CourierStatus int32
+
+const (
+	CourierStatus_COURIER_STATUS_UNSPECIFIED CourierStatus = 0
+	CourierStatus_COURIER_STATUS_AVAILABLE   CourierStatus = 1
+	CourierStatus_COURIER_STATUS_BUSY        CourierStatus = 2
+	CourierStatus_COURIER_STATUS_UNAVAILABLE CourierStatus = 3
+)
+
+// Enum value maps for CourierStatus.
+var (
+	CourierStatus_name = map[int32]string{
+		0: "COURIER_STATUS_UNSPECIFIED",
+		1: "COURIER_STATUS_AVAILABLE",
+		2: "COURIER_STATUS_BUSY",
+		3: "COURIER_STATUS_UNAVAILABLE",
+	}
+	CourierStatus_value = map[string]int32{
+		"COURIER_STATUS_UNSPECIFIED": 0,
+		"COURIER_STATUS_AVAILABLE":   1,
+		"COURIER_STATUS_BUSY":        2,
+		"COURIER_STATUS_UNAVAILABLE": 3,
+	}
+)
+
+func (x CourierStatus) Enum() *CourierStatus {
+	p := new(CourierStatus)
+	*p = x
+	return p
+}
+
+func (x CourierStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CourierStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_nomnom_delivery_v1_delivery_proto_enumTypes[1].Descriptor()
+}
+
+func (CourierStatus) Type() protoreflect.EnumType {
+	return &file_nomnom_delivery_v1_delivery_proto_enumTypes[1]
+}
+
+func (x CourierStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CourierStatus.Descriptor instead.
+func (CourierStatus) EnumDescriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_delivery_proto_rawDescGZIP(), []int{1}
+}
+
+// Availability a courier asks for; busy is set by an assignment only.
+type CourierAvailability int32
+
+const (
+	CourierAvailability_COURIER_AVAILABILITY_UNSPECIFIED CourierAvailability = 0
+	CourierAvailability_COURIER_AVAILABILITY_AVAILABLE   CourierAvailability = 1
+	CourierAvailability_COURIER_AVAILABILITY_UNAVAILABLE CourierAvailability = 2
+)
+
+// Enum value maps for CourierAvailability.
+var (
+	CourierAvailability_name = map[int32]string{
+		0: "COURIER_AVAILABILITY_UNSPECIFIED",
+		1: "COURIER_AVAILABILITY_AVAILABLE",
+		2: "COURIER_AVAILABILITY_UNAVAILABLE",
+	}
+	CourierAvailability_value = map[string]int32{
+		"COURIER_AVAILABILITY_UNSPECIFIED": 0,
+		"COURIER_AVAILABILITY_AVAILABLE":   1,
+		"COURIER_AVAILABILITY_UNAVAILABLE": 2,
+	}
+)
+
+func (x CourierAvailability) Enum() *CourierAvailability {
+	p := new(CourierAvailability)
+	*p = x
+	return p
+}
+
+func (x CourierAvailability) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CourierAvailability) Descriptor() protoreflect.EnumDescriptor {
+	return file_nomnom_delivery_v1_delivery_proto_enumTypes[2].Descriptor()
+}
+
+func (CourierAvailability) Type() protoreflect.EnumType {
+	return &file_nomnom_delivery_v1_delivery_proto_enumTypes[2]
+}
+
+func (x CourierAvailability) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CourierAvailability.Descriptor instead.
+func (CourierAvailability) EnumDescriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_delivery_proto_rawDescGZIP(), []int{2}
+}
+
 type Delivery struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DeliveryId    string                 `protobuf:"bytes,1,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
@@ -150,6 +252,83 @@ func (x *Delivery) GetState() DeliveryState {
 	return DeliveryState_DELIVERY_STATE_UNSPECIFIED
 }
 
+// Pending, not yet expired Delivery Offer addressed to a courier.
+type DeliveryOffer struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	OfferId               string                 `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
+	DeliveryId            string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	PickupAddress         string                 `protobuf:"bytes,3,opt,name=pickup_address,json=pickupAddress,proto3" json:"pickup_address,omitempty"`
+	DropoffAddress        string                 `protobuf:"bytes,4,opt,name=dropoff_address,json=dropoffAddress,proto3" json:"dropoff_address,omitempty"`
+	ExpiresAtEpochSeconds int64                  `protobuf:"varint,5,opt,name=expires_at_epoch_seconds,json=expiresAtEpochSeconds,proto3" json:"expires_at_epoch_seconds,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *DeliveryOffer) Reset() {
+	*x = DeliveryOffer{}
+	mi := &file_nomnom_delivery_v1_delivery_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliveryOffer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliveryOffer) ProtoMessage() {}
+
+func (x *DeliveryOffer) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_delivery_v1_delivery_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliveryOffer.ProtoReflect.Descriptor instead.
+func (*DeliveryOffer) Descriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_delivery_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *DeliveryOffer) GetOfferId() string {
+	if x != nil {
+		return x.OfferId
+	}
+	return ""
+}
+
+func (x *DeliveryOffer) GetDeliveryId() string {
+	if x != nil {
+		return x.DeliveryId
+	}
+	return ""
+}
+
+func (x *DeliveryOffer) GetPickupAddress() string {
+	if x != nil {
+		return x.PickupAddress
+	}
+	return ""
+}
+
+func (x *DeliveryOffer) GetDropoffAddress() string {
+	if x != nil {
+		return x.DropoffAddress
+	}
+	return ""
+}
+
+func (x *DeliveryOffer) GetExpiresAtEpochSeconds() int64 {
+	if x != nil {
+		return x.ExpiresAtEpochSeconds
+	}
+	return 0
+}
+
 var File_nomnom_delivery_v1_delivery_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_delivery_proto_rawDesc = "" +
@@ -161,7 +340,14 @@ const file_nomnom_delivery_v1_delivery_proto_rawDesc = "" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x12\x1d\n" +
 	"\n" +
 	"courier_id\x18\x03 \x01(\tR\tcourierId\x127\n" +
-	"\x05state\x18\x04 \x01(\x0e2!.nomnom.delivery.v1.DeliveryStateR\x05state*\xe7\x01\n" +
+	"\x05state\x18\x04 \x01(\x0e2!.nomnom.delivery.v1.DeliveryStateR\x05state\"\xd4\x01\n" +
+	"\rDeliveryOffer\x12\x19\n" +
+	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12\x1f\n" +
+	"\vdelivery_id\x18\x02 \x01(\tR\n" +
+	"deliveryId\x12%\n" +
+	"\x0epickup_address\x18\x03 \x01(\tR\rpickupAddress\x12'\n" +
+	"\x0fdropoff_address\x18\x04 \x01(\tR\x0edropoffAddress\x127\n" +
+	"\x18expires_at_epoch_seconds\x18\x05 \x01(\x03R\x15expiresAtEpochSeconds*\xe7\x01\n" +
 	"\rDeliveryState\x12\x1e\n" +
 	"\x1aDELIVERY_STATE_UNSPECIFIED\x10\x00\x12$\n" +
 	" DELIVERY_STATE_SEARCHING_COURIER\x10\x01\x12\x1b\n" +
@@ -169,7 +355,16 @@ const file_nomnom_delivery_v1_delivery_proto_rawDesc = "" +
 	"\x18DELIVERY_STATE_PICKED_UP\x10\x03\x12\x1c\n" +
 	"\x18DELIVERY_STATE_COMPLETED\x10\x04\x12\x19\n" +
 	"\x15DELIVERY_STATE_FAILED\x10\x05\x12\x1c\n" +
-	"\x18DELIVERY_STATE_CANCELLED\x10\x06B\xce\x01\n" +
+	"\x18DELIVERY_STATE_CANCELLED\x10\x06*\x86\x01\n" +
+	"\rCourierStatus\x12\x1e\n" +
+	"\x1aCOURIER_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18COURIER_STATUS_AVAILABLE\x10\x01\x12\x17\n" +
+	"\x13COURIER_STATUS_BUSY\x10\x02\x12\x1e\n" +
+	"\x1aCOURIER_STATUS_UNAVAILABLE\x10\x03*\x85\x01\n" +
+	"\x13CourierAvailability\x12$\n" +
+	" COURIER_AVAILABILITY_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eCOURIER_AVAILABILITY_AVAILABLE\x10\x01\x12$\n" +
+	" COURIER_AVAILABILITY_UNAVAILABLE\x10\x02B\xce\x01\n" +
 	"\x16com.nomnom.delivery.v1B\rDeliveryProtoP\x01Z;nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1;deliveryv1\xa2\x02\x03NDX\xaa\x02\x12Nomnom.Delivery.V1\xca\x02\x12Nomnom\\Delivery\\V1\xe2\x02\x1eNomnom\\Delivery\\V1\\GPBMetadata\xea\x02\x14Nomnom::Delivery::V1b\x06proto3"
 
 var (
@@ -184,11 +379,14 @@ func file_nomnom_delivery_v1_delivery_proto_rawDescGZIP() []byte {
 	return file_nomnom_delivery_v1_delivery_proto_rawDescData
 }
 
-var file_nomnom_delivery_v1_delivery_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_nomnom_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_nomnom_delivery_v1_delivery_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_nomnom_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_nomnom_delivery_v1_delivery_proto_goTypes = []any{
-	(DeliveryState)(0), // 0: nomnom.delivery.v1.DeliveryState
-	(*Delivery)(nil),   // 1: nomnom.delivery.v1.Delivery
+	(DeliveryState)(0),       // 0: nomnom.delivery.v1.DeliveryState
+	(CourierStatus)(0),       // 1: nomnom.delivery.v1.CourierStatus
+	(CourierAvailability)(0), // 2: nomnom.delivery.v1.CourierAvailability
+	(*Delivery)(nil),         // 3: nomnom.delivery.v1.Delivery
+	(*DeliveryOffer)(nil),    // 4: nomnom.delivery.v1.DeliveryOffer
 }
 var file_nomnom_delivery_v1_delivery_proto_depIdxs = []int32{
 	0, // 0: nomnom.delivery.v1.Delivery.state:type_name -> nomnom.delivery.v1.DeliveryState
@@ -209,8 +407,8 @@ func file_nomnom_delivery_v1_delivery_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_delivery_v1_delivery_proto_rawDesc), len(file_nomnom_delivery_v1_delivery_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   1,
+			NumEnums:      3,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -19,10 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DeliveryService_GetCourierCurrentDelivery_FullMethodName = "/nomnom.delivery.v1.DeliveryService/GetCourierCurrentDelivery"
-	DeliveryService_CreateDelivery_FullMethodName            = "/nomnom.delivery.v1.DeliveryService/CreateDelivery"
-	DeliveryService_ReplanDelivery_FullMethodName            = "/nomnom.delivery.v1.DeliveryService/ReplanDelivery"
-	DeliveryService_CancelDelivery_FullMethodName            = "/nomnom.delivery.v1.DeliveryService/CancelDelivery"
+	DeliveryService_GetCourierCurrentDelivery_FullMethodName   = "/nomnom.delivery.v1.DeliveryService/GetCourierCurrentDelivery"
+	DeliveryService_CreateDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CreateDelivery"
+	DeliveryService_ReplanDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/ReplanDelivery"
+	DeliveryService_CancelDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CancelDelivery"
+	DeliveryService_RegisterCourier_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/RegisterCourier"
+	DeliveryService_UpdateCourierLocation_FullMethodName       = "/nomnom.delivery.v1.DeliveryService/UpdateCourierLocation"
+	DeliveryService_SetCourierAvailability_FullMethodName      = "/nomnom.delivery.v1.DeliveryService/SetCourierAvailability"
+	DeliveryService_ListAvailableDeliveryOffers_FullMethodName = "/nomnom.delivery.v1.DeliveryService/ListAvailableDeliveryOffers"
+	DeliveryService_AcceptDeliveryOffer_FullMethodName         = "/nomnom.delivery.v1.DeliveryService/AcceptDeliveryOffer"
+	DeliveryService_RejectDeliveryOffer_FullMethodName         = "/nomnom.delivery.v1.DeliveryService/RejectDeliveryOffer"
+	DeliveryService_ConfirmPickup_FullMethodName               = "/nomnom.delivery.v1.DeliveryService/ConfirmPickup"
+	DeliveryService_ConfirmDelivery_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/ConfirmDelivery"
+	DeliveryService_ReportDeliveryFailure_FullMethodName       = "/nomnom.delivery.v1.DeliveryService/ReportDeliveryFailure"
 )
 
 // DeliveryServiceClient is the client API for DeliveryService service.
@@ -34,6 +43,19 @@ type DeliveryServiceClient interface {
 	CreateDelivery(ctx context.Context, in *CreateDeliveryRequest, opts ...grpc.CallOption) (*CreateDeliveryResponse, error)
 	ReplanDelivery(ctx context.Context, in *ReplanDeliveryRequest, opts ...grpc.CallOption) (*ReplanDeliveryResponse, error)
 	CancelDelivery(ctx context.Context, in *CancelDeliveryRequest, opts ...grpc.CallOption) (*CancelDeliveryResponse, error)
+	// Courier administration by a platform operator (platform register_courier).
+	RegisterCourier(ctx context.Context, in *RegisterCourierRequest, opts ...grpc.CallOption) (*RegisterCourierResponse, error)
+	// Courier RPCs: the subject needs courier#act on courier_id; the domain
+	// rejects actions on a delivery or offer of another courier.
+	UpdateCourierLocation(ctx context.Context, in *UpdateCourierLocationRequest, opts ...grpc.CallOption) (*UpdateCourierLocationResponse, error)
+	SetCourierAvailability(ctx context.Context, in *SetCourierAvailabilityRequest, opts ...grpc.CallOption) (*SetCourierAvailabilityResponse, error)
+	ListAvailableDeliveryOffers(ctx context.Context, in *ListAvailableDeliveryOffersRequest, opts ...grpc.CallOption) (*ListAvailableDeliveryOffersResponse, error)
+	AcceptDeliveryOffer(ctx context.Context, in *AcceptDeliveryOfferRequest, opts ...grpc.CallOption) (*AcceptDeliveryOfferResponse, error)
+	RejectDeliveryOffer(ctx context.Context, in *RejectDeliveryOfferRequest, opts ...grpc.CallOption) (*RejectDeliveryOfferResponse, error)
+	ConfirmPickup(ctx context.Context, in *ConfirmPickupRequest, opts ...grpc.CallOption) (*ConfirmPickupResponse, error)
+	ConfirmDelivery(ctx context.Context, in *ConfirmDeliveryRequest, opts ...grpc.CallOption) (*ConfirmDeliveryResponse, error)
+	// The assigned courier (courier#act) or a dispatcher (platform dispatch_delivery).
+	ReportDeliveryFailure(ctx context.Context, in *ReportDeliveryFailureRequest, opts ...grpc.CallOption) (*ReportDeliveryFailureResponse, error)
 }
 
 type deliveryServiceClient struct {
@@ -84,6 +106,96 @@ func (c *deliveryServiceClient) CancelDelivery(ctx context.Context, in *CancelDe
 	return out, nil
 }
 
+func (c *deliveryServiceClient) RegisterCourier(ctx context.Context, in *RegisterCourierRequest, opts ...grpc.CallOption) (*RegisterCourierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterCourierResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_RegisterCourier_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) UpdateCourierLocation(ctx context.Context, in *UpdateCourierLocationRequest, opts ...grpc.CallOption) (*UpdateCourierLocationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateCourierLocationResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_UpdateCourierLocation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) SetCourierAvailability(ctx context.Context, in *SetCourierAvailabilityRequest, opts ...grpc.CallOption) (*SetCourierAvailabilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetCourierAvailabilityResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_SetCourierAvailability_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) ListAvailableDeliveryOffers(ctx context.Context, in *ListAvailableDeliveryOffersRequest, opts ...grpc.CallOption) (*ListAvailableDeliveryOffersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAvailableDeliveryOffersResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_ListAvailableDeliveryOffers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) AcceptDeliveryOffer(ctx context.Context, in *AcceptDeliveryOfferRequest, opts ...grpc.CallOption) (*AcceptDeliveryOfferResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcceptDeliveryOfferResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_AcceptDeliveryOffer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) RejectDeliveryOffer(ctx context.Context, in *RejectDeliveryOfferRequest, opts ...grpc.CallOption) (*RejectDeliveryOfferResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RejectDeliveryOfferResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_RejectDeliveryOffer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) ConfirmPickup(ctx context.Context, in *ConfirmPickupRequest, opts ...grpc.CallOption) (*ConfirmPickupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmPickupResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_ConfirmPickup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) ConfirmDelivery(ctx context.Context, in *ConfirmDeliveryRequest, opts ...grpc.CallOption) (*ConfirmDeliveryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmDeliveryResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_ConfirmDelivery_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) ReportDeliveryFailure(ctx context.Context, in *ReportDeliveryFailureRequest, opts ...grpc.CallOption) (*ReportDeliveryFailureResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportDeliveryFailureResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_ReportDeliveryFailure_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DeliveryServiceServer is the server API for DeliveryService service.
 // All implementations must embed UnimplementedDeliveryServiceServer
 // for forward compatibility.
@@ -93,6 +205,19 @@ type DeliveryServiceServer interface {
 	CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error)
 	ReplanDelivery(context.Context, *ReplanDeliveryRequest) (*ReplanDeliveryResponse, error)
 	CancelDelivery(context.Context, *CancelDeliveryRequest) (*CancelDeliveryResponse, error)
+	// Courier administration by a platform operator (platform register_courier).
+	RegisterCourier(context.Context, *RegisterCourierRequest) (*RegisterCourierResponse, error)
+	// Courier RPCs: the subject needs courier#act on courier_id; the domain
+	// rejects actions on a delivery or offer of another courier.
+	UpdateCourierLocation(context.Context, *UpdateCourierLocationRequest) (*UpdateCourierLocationResponse, error)
+	SetCourierAvailability(context.Context, *SetCourierAvailabilityRequest) (*SetCourierAvailabilityResponse, error)
+	ListAvailableDeliveryOffers(context.Context, *ListAvailableDeliveryOffersRequest) (*ListAvailableDeliveryOffersResponse, error)
+	AcceptDeliveryOffer(context.Context, *AcceptDeliveryOfferRequest) (*AcceptDeliveryOfferResponse, error)
+	RejectDeliveryOffer(context.Context, *RejectDeliveryOfferRequest) (*RejectDeliveryOfferResponse, error)
+	ConfirmPickup(context.Context, *ConfirmPickupRequest) (*ConfirmPickupResponse, error)
+	ConfirmDelivery(context.Context, *ConfirmDeliveryRequest) (*ConfirmDeliveryResponse, error)
+	// The assigned courier (courier#act) or a dispatcher (platform dispatch_delivery).
+	ReportDeliveryFailure(context.Context, *ReportDeliveryFailureRequest) (*ReportDeliveryFailureResponse, error)
 	mustEmbedUnimplementedDeliveryServiceServer()
 }
 
@@ -114,6 +239,33 @@ func (UnimplementedDeliveryServiceServer) ReplanDelivery(context.Context, *Repla
 }
 func (UnimplementedDeliveryServiceServer) CancelDelivery(context.Context, *CancelDeliveryRequest) (*CancelDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelDelivery not implemented")
+}
+func (UnimplementedDeliveryServiceServer) RegisterCourier(context.Context, *RegisterCourierRequest) (*RegisterCourierResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterCourier not implemented")
+}
+func (UnimplementedDeliveryServiceServer) UpdateCourierLocation(context.Context, *UpdateCourierLocationRequest) (*UpdateCourierLocationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCourierLocation not implemented")
+}
+func (UnimplementedDeliveryServiceServer) SetCourierAvailability(context.Context, *SetCourierAvailabilityRequest) (*SetCourierAvailabilityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetCourierAvailability not implemented")
+}
+func (UnimplementedDeliveryServiceServer) ListAvailableDeliveryOffers(context.Context, *ListAvailableDeliveryOffersRequest) (*ListAvailableDeliveryOffersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAvailableDeliveryOffers not implemented")
+}
+func (UnimplementedDeliveryServiceServer) AcceptDeliveryOffer(context.Context, *AcceptDeliveryOfferRequest) (*AcceptDeliveryOfferResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AcceptDeliveryOffer not implemented")
+}
+func (UnimplementedDeliveryServiceServer) RejectDeliveryOffer(context.Context, *RejectDeliveryOfferRequest) (*RejectDeliveryOfferResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RejectDeliveryOffer not implemented")
+}
+func (UnimplementedDeliveryServiceServer) ConfirmPickup(context.Context, *ConfirmPickupRequest) (*ConfirmPickupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmPickup not implemented")
+}
+func (UnimplementedDeliveryServiceServer) ConfirmDelivery(context.Context, *ConfirmDeliveryRequest) (*ConfirmDeliveryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmDelivery not implemented")
+}
+func (UnimplementedDeliveryServiceServer) ReportDeliveryFailure(context.Context, *ReportDeliveryFailureRequest) (*ReportDeliveryFailureResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportDeliveryFailure not implemented")
 }
 func (UnimplementedDeliveryServiceServer) mustEmbedUnimplementedDeliveryServiceServer() {}
 func (UnimplementedDeliveryServiceServer) testEmbeddedByValue()                         {}
@@ -208,6 +360,168 @@ func _DeliveryService_CancelDelivery_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DeliveryService_RegisterCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterCourierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).RegisterCourier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_RegisterCourier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).RegisterCourier(ctx, req.(*RegisterCourierRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_UpdateCourierLocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCourierLocationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).UpdateCourierLocation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_UpdateCourierLocation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).UpdateCourierLocation(ctx, req.(*UpdateCourierLocationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_SetCourierAvailability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetCourierAvailabilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).SetCourierAvailability(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_SetCourierAvailability_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).SetCourierAvailability(ctx, req.(*SetCourierAvailabilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_ListAvailableDeliveryOffers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAvailableDeliveryOffersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).ListAvailableDeliveryOffers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_ListAvailableDeliveryOffers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).ListAvailableDeliveryOffers(ctx, req.(*ListAvailableDeliveryOffersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_AcceptDeliveryOffer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcceptDeliveryOfferRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).AcceptDeliveryOffer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_AcceptDeliveryOffer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).AcceptDeliveryOffer(ctx, req.(*AcceptDeliveryOfferRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_RejectDeliveryOffer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RejectDeliveryOfferRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).RejectDeliveryOffer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_RejectDeliveryOffer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).RejectDeliveryOffer(ctx, req.(*RejectDeliveryOfferRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_ConfirmPickup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmPickupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).ConfirmPickup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_ConfirmPickup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).ConfirmPickup(ctx, req.(*ConfirmPickupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_ConfirmDelivery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmDeliveryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).ConfirmDelivery(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_ConfirmDelivery_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).ConfirmDelivery(ctx, req.(*ConfirmDeliveryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_ReportDeliveryFailure_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportDeliveryFailureRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).ReportDeliveryFailure(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_ReportDeliveryFailure_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).ReportDeliveryFailure(ctx, req.(*ReportDeliveryFailureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DeliveryService_ServiceDesc is the grpc.ServiceDesc for DeliveryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -230,6 +544,42 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelDelivery",
 			Handler:    _DeliveryService_CancelDelivery_Handler,
+		},
+		{
+			MethodName: "RegisterCourier",
+			Handler:    _DeliveryService_RegisterCourier_Handler,
+		},
+		{
+			MethodName: "UpdateCourierLocation",
+			Handler:    _DeliveryService_UpdateCourierLocation_Handler,
+		},
+		{
+			MethodName: "SetCourierAvailability",
+			Handler:    _DeliveryService_SetCourierAvailability_Handler,
+		},
+		{
+			MethodName: "ListAvailableDeliveryOffers",
+			Handler:    _DeliveryService_ListAvailableDeliveryOffers_Handler,
+		},
+		{
+			MethodName: "AcceptDeliveryOffer",
+			Handler:    _DeliveryService_AcceptDeliveryOffer_Handler,
+		},
+		{
+			MethodName: "RejectDeliveryOffer",
+			Handler:    _DeliveryService_RejectDeliveryOffer_Handler,
+		},
+		{
+			MethodName: "ConfirmPickup",
+			Handler:    _DeliveryService_ConfirmPickup_Handler,
+		},
+		{
+			MethodName: "ConfirmDelivery",
+			Handler:    _DeliveryService_ConfirmDelivery_Handler,
+		},
+		{
+			MethodName: "ReportDeliveryFailure",
+			Handler:    _DeliveryService_ReportDeliveryFailure_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
