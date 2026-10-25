@@ -1,0 +1,51 @@
+# Общесистемные цели. Команды application boundaries находятся в их собственных Makefile/package.json.
+.DEFAULT_GOAL := help
+
+## Тестовое окружение kind (KIND_CLUSTER_NAME, по умолчанию nomnom-test)
+include ops/kind/versions.env
+export GATEWAY_API_VERSION
+export KIND_CLUSTER_NAME ?= nomnom-test
+KIND_SCRIPTS := ops/kind/scripts
+# Skaffold запускается из каталога конфигурации: его пути относительны рабочему каталогу.
+SKAFFOLD := cd ops/kind/skaffold && skaffold
+SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
+
+.PHONY: buf-check buf-generate kind-up kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e
+buf-check: ## проверить формат, lint и компилируемость всех Protobuf-модулей
+	@buf format --diff --exit-code
+	@buf lint
+	@buf build
+buf-generate: ## сгенерировать stubs владельцев для всех Protobuf-модулей
+	@cd boundaries/orders/infrastructure/grpc && buf generate --template buf.gen.yaml
+	@cd boundaries/restaurants/infrastructure/grpc && buf generate --template buf.gen.yaml
+	@cd boundaries/delivery/infrastructure/grpc && buf generate --template buf.gen.yaml
+	@cd boundaries/payments/infrastructure/grpc && buf generate --template buf.gen.yaml
+kind-up: ## создать кластер, предзагрузить образы платформы, установить Cilium и Envoy Gateway
+	@$(KIND_SCRIPTS)/cluster.sh create
+	@$(SKAFFOLD) run --module platform $(SKAFFOLD_FLAGS)
+kind-deploy: ## Skaffold: собрать образы, загрузить в kind, развернуть gateway и приложения, дождаться readiness
+	@$(SKAFFOLD) run $(SKAFFOLD_FLAGS) --status-check=true
+kind-dev: ## Skaffold dev loop: пересборка и передеплой приложений при изменении исходников
+	@$(SKAFFOLD) dev $(SKAFFOLD_FLAGS)
+kind-test: ## проверки gateway и NetworkPolicy (фаза A без политик, фаза B с ними)
+	@$(KIND_SCRIPTS)/verify.sh
+kind-policies: ## применить NetworkPolicy
+	@$(KIND_SCRIPTS)/policies.sh apply
+kind-policies-delete: ## удалить NetworkPolicy
+	@$(KIND_SCRIPTS)/policies.sh delete
+kind-diagnostics: ## сохранить logs, events, Gateway API и Cilium/Hubble в ops/kind/.artifacts
+	@$(KIND_SCRIPTS)/diagnostics.sh
+kind-down: ## удалить тестовый кластер
+	@$(KIND_SCRIPTS)/cluster.sh delete
+kind-e2e: ## полный неинтерактивный прогон для CI; KIND_KEEP=1 сохраняет кластер
+	@$(KIND_SCRIPTS)/e2e.sh
+
+## Black-box проверка runtime contract (docs/cloud-native-runtime.md); RUNTIME_SERVICES сужает набор
+RUNTIME_SERVICES ?=
+.PHONY: runtime-contract
+runtime-contract: ## собрать backend-приложения и проверить health, SIGTERM/SIGINT, drain и exit code
+	@python3 ops/runtime-contract/contract_test.py $(RUNTIME_SERVICES)
+
+.PHONY: help
+help: ## показать цели
+	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(firstword $(MAKEFILE_LIST)) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'

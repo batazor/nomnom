@@ -1,0 +1,16 @@
+node_modules/
+dist/
+target/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+!.env.*.example
+config.local.yaml
+config.local.yml
+config.local.toml
+
+# Зависимости Helm charts скачиваются helm dependency build по Chart.lock.
+boundaries/*/ops/helm/charts/

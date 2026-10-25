@@ -1,0 +1,18 @@
+version: v2
+modules:
+  - path: boundaries/orders/infrastructure/grpc
+    name: buf.build/nomnom/orders
+  - path: boundaries/restaurants/infrastructure/grpc
+    name: buf.build/nomnom/restaurants
+  - path: boundaries/delivery/infrastructure/grpc
+    name: buf.build/nomnom/delivery
+  - path: boundaries/payments/infrastructure/grpc
+    name: buf.build/nomnom/payments
+deps:
+  - buf.build/protocolbuffers/wellknowntypes
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
