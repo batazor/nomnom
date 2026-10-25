@@ -1,3 +1,5 @@
+import { m } from "motion/react";
+
 import type { StatusIconName } from "./order-presentation";
 
 const paths: Record<StatusIconName, string> = {
@@ -24,7 +26,18 @@ export function StatusIcon({ name }: { name: StatusIconName }) {
       strokeWidth="1.75"
       viewBox="0 0 24 24"
     >
-      <path d={paths[name]} />
+      {/* Keyed by name: a new status remounts the path, which draws itself
+          stroke by stroke from the start of the line. */}
+      <m.path
+        animate={{ pathLength: 1, opacity: 1 }}
+        d={paths[name]}
+        initial={{ pathLength: 0, opacity: 0 }}
+        key={name}
+        transition={{
+          pathLength: { duration: 0.6, ease: "easeInOut" },
+          opacity: { duration: 0.15 },
+        }}
+      />
     </svg>
   );
 }
