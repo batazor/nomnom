@@ -4,8 +4,9 @@
 # ops/grafana-cloud/.env.grafana-cloud, Secret alloy-postgres создаёт chart ops/kind/bootstrap.
 # Namespace nomnom-observability — manifests/base/namespaces.yaml.
 # Free tier ограничен активными series, поэтому уходят только метрики service.namespace=nomnom
-# и allowlist инфраструктуры (SpiceDB, PostgreSQL, pods nomnom-*), traces процессов nomnom и
-# stdout-логи прикладных неймспейсов; без profiles и собственных метрик Alloy.
+# и allowlist инфраструктуры (SpiceDB, PostgreSQL, internal gateway, Hubble, pods nomnom-*),
+# traces процессов nomnom и internal gateway и stdout-логи прикладных неймспейсов; без
+# profiles и собственных метрик Alloy.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -95,8 +96,8 @@ data:
     }
 
     // Traces и logs: короткий batch, чтобы trace и его логи появлялись в Grafana быстро.
-    // Traces дублируются в trace-capture: проверки kind (e2e/calls) читают spans из него
-    // при любом profile, а не только когда приложения шлют traces напрямую.
+    // Traces дублируются в trace-capture: проверки kind (e2e/calls) читают spans из его лога
+    // при любом profile, а не только когда приложения шлют traces напрямую в trace-capture.
     otelcol.processor.batch "signals" {
       timeout = "5s"
       output {
@@ -342,6 +343,101 @@ data:
       forward_to = [otelcol.receiver.prometheus.infra.receiver]
     }
 
+    // Internal gateway (ADR 15): stats Envoy на порту 19001 (NetworkPolicy internal-gateway-ingress
+    // пускает только Alloy). Только clusters GRPCRoute и метрики, на которых строятся алерты:
+    // retries (скрывают отказ backend'а), pending overflow, timeouts, connect failures и
+    // latency. upstream_rq_xx — HTTP-класс финального ответа после retries; gRPC-ошибки
+    // приходят с HTTP 200, поэтому статус вызова смотрится по метрикам сервисов.
+    discovery.kubernetes "internal_gateway" {
+      role = "pod"
+      namespaces {
+        names = ["envoy-gateway-system"]
+      }
+      selectors {
+        role  = "pod"
+        label = "gateway.envoyproxy.io/owning-gateway-name=internal"
+      }
+    }
+
+    discovery.relabel "internal_gateway" {
+      targets = discovery.kubernetes.internal_gateway.targets
+      rule {
+        source_labels = ["__meta_kubernetes_pod_ip"]
+        target_label  = "__address__"
+        replacement   = "$1:19001"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+    }
+
+    prometheus.scrape "internal_gateway" {
+      targets         = discovery.relabel.internal_gateway.output
+      job_name        = "infra/internal-gateway"
+      metrics_path    = "/stats/prometheus"
+      scrape_interval = "60s"
+      forward_to      = [prometheus.relabel.internal_gateway.receiver]
+    }
+
+    prometheus.relabel "internal_gateway" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "envoy_cluster_upstream_rq_(total|xx|retry|retry_success|retry_overflow|retry_limit_exceeded|pending_overflow|timeout)|envoy_cluster_upstream_cx_(connect_fail|active)|envoy_cluster_external_upstream_rq_time_(bucket|sum|count)"
+        action        = "keep"
+      }
+      // Без xds_cluster, prometheus_stats и прочих служебных clusters Envoy.
+      rule {
+        source_labels = ["envoy_cluster_name"]
+        regex         = "grpcroute/.+"
+        action        = "keep"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
+    // Hubble (Cilium): L3/L4 flows и drops между неймспейсами — попытки обойти internal
+    // gateway (ADR 16) видны как drop с reason POLICY_DENIED. Context метрик — namespace,
+    // не pod: series не растут с перезапусками. Endpoint агента — порт 9965 на узле.
+    discovery.kubernetes "hubble" {
+      role = "pod"
+      namespaces {
+        names = ["kube-system"]
+      }
+      selectors {
+        role  = "pod"
+        label = "k8s-app=cilium"
+      }
+    }
+
+    discovery.relabel "hubble" {
+      targets = discovery.kubernetes.hubble.targets
+      rule {
+        source_labels = ["__meta_kubernetes_pod_ip"]
+        target_label  = "__address__"
+        replacement   = "$1:9965"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_node_name"]
+        target_label  = "node"
+      }
+    }
+
+    prometheus.scrape "hubble" {
+      targets         = discovery.relabel.hubble.output
+      job_name        = "infra/hubble"
+      scrape_interval = "60s"
+      forward_to      = [prometheus.relabel.hubble.receiver]
+    }
+
+    prometheus.relabel "hubble" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "hubble_drop_total|hubble_flows_processed_total"
+        action        = "keep"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
     // Pods nomnom-*: CPU, память и сеть из cAdvisor kubelet (через API server proxy),
     // restarts и readiness из kube-state-metrics.
     discovery.kubernetes "nodes" {
@@ -429,7 +525,7 @@ data:
       }
     }
 ---
-# Discovery pods SpiceDB и nodes, cAdvisor kubelet через API server proxy.
+# Discovery pods SpiceDB, internal gateway, Cilium и nodes, cAdvisor kubelet через API server proxy.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

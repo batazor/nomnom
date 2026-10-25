@@ -44,7 +44,9 @@ make kind-down
   отключён, `extraPortMappings` для BFF и public gateway; host-порты подставляет Make).
   Существующий кластер с тем же именем переиспользуется. Образы узел скачивает сам.
 - [`skaffold/skaffold.yaml`](skaffold/skaffold.yaml), модуль `platform`: Helm-релизы Cilium
-  (Hubble включён) и Envoy Gateway (с Gateway API CRD); hook сверяет версию CRD с `versions.env`.
+  (Hubble с relay и метриками drops/flows на `:9965`) и Envoy Gateway (с Gateway API CRD); hook
+  сверяет версию CRD с `versions.env`. Releases с `upgradeOnChange: true`: без него Skaffold не
+  обновляет установленный remote chart, и правка values не доходит до существующего кластера.
 - Модуль `apps` (требует `platform`): сборка образов bounded contexts их multi-stage Dockerfile
   с тегом `inputDigest` (хеш входов сборки), загрузка в kind без registry, charts приложений
   ([ADR 12](../../docs/adr/0012-helm-charts-per-deployable-application.md)) с values из
@@ -88,7 +90,9 @@ make kind-down
   `:4317` и debug exporter в stdout. Traces не хранятся и не заменяют Alloy
   ([ADR 9](../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md));
   `orders` отправляет в него traces через `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` из
-  [`values/orders.yaml`](values/orders.yaml), metrics по-прежнему уходят только в Alloy.
+  [`values/orders.yaml`](values/orders.yaml), metrics по-прежнему уходят только в Alloy. Сюда же
+  internal gateway отправляет свои spans (`ingress` и `egress` на каждую попытку,
+  [`manifests/gateway`](manifests/gateway/gateway.yaml)); profile `grafana-cloud` переключает их на Alloy.
 - Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в
   `nomnom-observability` и OTLP метрик `orders`/`orders-consumer` в Grafana Cloud free tier;
   настройка и лимиты — [`ops/grafana-cloud`](../grafana-cloud/README.md).
@@ -297,7 +301,7 @@ fetch `customer-ui`, под ним `query <Operation>` сервиса `bff`. Д�
 | `gateway-rejects-unregistered` | незарегистрированный сервис: `UNIMPLEMENTED` от Envoy (3) |
 | `netpol-without-policies` | без NetworkPolicy `orders → restaurants` и `outsider → restaurants` напрямую доходят до backend'а (`NOT_FOUND`), gateway доступен (A1–A3) |
 | `netpol-blocks-direct-calls` | с NetworkPolicy при выполненных условиях (restaurants Available, имя резолвится, gateway доступен и Orders RPC через него проходит) прямые `orders ↔ restaurants` получают silent drop; `nomnom-outsider` не достаёт ни backend, ни gateway; Hubble фиксирует `DROPPED` (2.1–2.9) |
-| `gateway-call-metadata` | authorization metadata доходит до backend'а (`PERMISSION_DENIED` от SpiceDB, reason `OPERATION_NOT_ALLOWED`); случайный `traceparent` вызывающего продолжен server span `orders` в логе `trace-capture` (4.1–4.2) |
+| `gateway-call-metadata` | authorization metadata доходит до backend'а (`PERMISSION_DENIED` от SpiceDB, reason `OPERATION_NOT_ALLOWED`); случайный `traceparent` вызывающего продолжен span `ingress` gateway, а server span `orders` — потомок gateway, а не вызывающего, в логе `trace-capture` (4.1–4.2) |
 | `gateway-retries-and-deadlines` | при недоступном SpiceDB (`fixtures/deny-orders-spicedb.yaml`) `ListCustomerOrders` — `UNAVAILABLE`, повторён ровно 2 раза, `RequestOrderCancellation` — ни разу; deadline 1 s вызывающего соблюдается backend'ом: ответ `DEADLINE_EXCEEDED` или remote reset, server span `orders` заканчивается по deadline, а не по таймауту SpiceDB (5a.1–5a.4, 5.1) |
 | `infra-connectivity` | под политиками `orders` → свой PostgreSQL, Kafka, Temporal; Kafka из restaurants, delivery, payments; restaurants → своя MongoDB; чужая БД и Temporal для не-`orders` закрыты; `orders` → Alloy OTLP открыт, если Alloy развёрнут (`GRAFANA_CLOUD=1`) (6.2–6.7, 6.9, 6.10) |
 | `infra-workloads` | DNS из `orders` под политиками; `orders` и `orders-consumer` Available — они падают на старте без PostgreSQL, Kafka и Temporal (6.1, 6.8) |

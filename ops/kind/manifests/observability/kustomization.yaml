@@ -1,5 +1,6 @@
-# Alloy → Grafana Cloud (ADR 9) для Skaffold profile grafana-cloud: alloy.yaml и route Faro,
-# trace-capture.yaml применяется rawYaml всегда. Secret grafana-cloud-otlp генерируется из
+# Alloy → Grafana Cloud (ADR 9) для Skaffold profile grafana-cloud: alloy.yaml, route Faro и
+# internal gateway (../gateway) со spans в Alloy вместо trace-capture; без профиля Skaffold
+# применяет ../gateway напрямую. trace-capture.yaml применяется rawYaml всегда. Secret grafana-cloud-otlp генерируется из
 # ops/grafana-cloud/.env.grafana-cloud (вне каталога kustomization, поэтому Skaffold передаёт
 # --load-restrictor LoadRestrictionsNone). Суффикс-хеш имени Secret перезапускает Alloy при
 # изменении файла. Без файла рендер падает сразу; пустые значения отвергает init container.
@@ -8,6 +9,7 @@ kind: Kustomization
 resources:
   - alloy.yaml
   - faro-route.yaml
+  - ../gateway
 secretGenerator:
   - name: grafana-cloud-otlp
     namespace: nomnom-observability
@@ -25,3 +27,12 @@ patches:
       data:
         GRAFANA_CLOUD_STACK_URL: null
         GRAFANA_CLOUD_SA_TOKEN: null
+  # Spans internal gateway — туда же, куда spans сервисов (values/grafana-cloud.yaml).
+  - patch: |-
+      - op: replace
+        path: /spec/telemetry/tracing/provider/backendRefs/0/name
+        value: alloy
+    target:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: internal-gateway

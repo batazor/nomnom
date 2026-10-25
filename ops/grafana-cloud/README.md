@@ -28,19 +28,21 @@ Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) доб
 | Мера | Где |
 | --- | --- |
 | Метрики, traces и логи; profiles в pipeline Alloy нет | `alloy.yaml` |
-| Traces — только `service.namespace=nomnom`; логи — только stdout pods прикладных неймспейсов, в индексе Loki лишь `service_name`, `service_namespace`, `environment`, `severity`, а `trace_id`, `span_id`, версия — structured metadata | `alloy.yaml` |
+| Traces — только `service.namespace=nomnom` (internal gateway задаёт его resource attribute в EnvoyProxy); логи — только stdout pods прикладных неймспейсов, в индексе Loki лишь `service_name`, `service_namespace`, `environment`, `severity`, а `trace_id`, `span_id`, версия — structured metadata | `alloy.yaml` |
 | Только `service.namespace=nomnom`, остальной OTLP отбрасывается | `otelcol.processor.filter "nomnom"` |
 | Собственные метрики Alloy не отправляются | `alloy.yaml` |
-| Инфраструктура — только allowlist метрик (`prometheus.relabel`): SpiceDB без health-check и buckets datastore, PostgreSQL только база владельца, pods только прикладных неймспейсов и `condition="true"` readiness; kube-state-metrics генерирует три метрики pods | `alloy.yaml` |
+| Инфраструктура — только allowlist метрик (`prometheus.relabel`): SpiceDB без health-check и buckets datastore, PostgreSQL только база владельца, Envoy internal gateway только clusters GRPCRoute (~420 series), Hubble только drops и flows с context namespace (~200 series), pods только прикладных неймспейсов и `condition="true"` readiness; kube-state-metrics генерирует три метрики pods | `alloy.yaml` |
 | Экспорт раз в 60 s | `OTEL_METRIC_EXPORT_INTERVAL` |
 | Values профиля получают все releases orders, restaurants, delivery и payments (BFF — Cosmo, своя telemetry) | `skaffold.yaml`, `values/grafana-cloud.yaml` |
 | Отправка выключается без удаления кластера | `make kind-grafana-cloud-stop` |
 
-Расход виден в stack (**Cost management → Usage**) или запросом `count by (job) ({job=~"(nomnom|infra)/.+"})`: OTLP ingestion собирает `job` из `service.namespace/service.name`, у Prometheus scrape инфраструктуры `job` — `infra/spicedb`, `infra/postgresql`, `infra/kubernetes`.
+Расход виден в stack (**Cost management → Usage**) или запросом `count by (job) ({job=~"(nomnom|infra)/.+"})`: OTLP ingestion собирает `job` из `service.namespace/service.name`, у Prometheus scrape инфраструктуры `job` — `infra/spicedb`, `infra/postgresql`, `infra/internal-gateway`, `infra/hubble`, `infra/kubernetes`.
 
 ## Traces и логи
 
-Traces процессов приходят в тот же `otelcol.receiver.otlp` и уходят в Tempo stack (`grafanacloud-traces`) через OTLP gateway тем же токеном. Логи Alloy читает из stdout pods через API server (`loki.source.kubernetes`, ClusterRole `nomnom-alloy`: `pods/log`), разбирает JSON-запись ([docs/observability.md](../../docs/observability.md#логи)) и переводит её в OTLP: `service.*` и `deployment.environment.name` — resource attributes, `severity`, `trace_id`, `span_id` — поля записи (переход log → trace в Grafana). Строка не-JSON уходит как есть; сервис для неё — имя контейнера.
+Traces процессов и internal gateway приходят в тот же `otelcol.receiver.otlp` и уходят в Tempo stack (`grafanacloud-traces`) через OTLP gateway тем же токеном. Логи Alloy читает из stdout pods через API server (`loki.source.kubernetes`, ClusterRole `nomnom-alloy`: `pods/log`), разбирает JSON-запись ([docs/observability.md](../../docs/observability.md#логи)) и переводит её в OTLP: `service.*` и `deployment.environment.name` — resource attributes, `severity`, `trace_id`, `span_id` — поля записи (переход log → trace в Grafana). Строка не-JSON уходит как есть; сервис для неё — имя контейнера.
+
+Internal gateway (EnvoyProxy `internal-gateway`, [`gateway.yaml`](../kind/manifests/gateway/gateway.yaml)) пишет span `ingress` — потомок client span вызывающего — и span `router <cluster> egress` на каждую попытку к backend'у, поэтому retries ([ADR 15](../../docs/adr/0015-использовать-internal-gateway-для-синхронных-вызовов-бизнес-api.md)) и время в gateway видны в trace. Без профиля spans уходят в `trace-capture`; kustomization [`manifests/observability`](../kind/manifests/observability/kustomization.yaml) включает `manifests/gateway` и переключает их на Alloy.
 
 Проверено 2026-10-25: тестовый span и запись лога приняты gateway (HTTP 200/204), span найден в Tempo с resource `service.namespace=nomnom`; логи pods всех пяти прикладных неймспейсов видны в `grafanacloud-logs`.
 
@@ -52,6 +54,8 @@ Traces процессов приходят в тот же `otelcol.receiver.otlp
 | --- | --- | --- |
 | SpiceDB | scrape `:9090` pod в `nomnom-authz` | `infra/spicedb` |
 | PostgreSQL | `prometheus.exporter.postgres` на владельца (`orders`, `payments`, `delivery`), DSN из Secret `alloy-postgres` (chart [`ops/kind/bootstrap`](../kind/bootstrap) из тех же паролей, что базы) | `infra/postgresql` |
+| Internal gateway | scrape stats Envoy `:19001/stats/prometheus` pod `owning-gateway-name=internal` в `envoy-gateway-system` (NetworkPolicy `internal-gateway-ingress` пускает только Alloy): requests, класс ответа, retries, pending overflow, timeouts, connect failures, latency по clusters GRPCRoute. gRPC-ошибки приходят с HTTP 200 — статус вызова смотрится по метрикам сервисов | `infra/internal-gateway` |
+| Hubble | scrape `:9965` агента Cilium (`hubble.metrics` в [`skaffold.yaml`](../kind/skaffold/skaffold.yaml)): `hubble_drop_total` и `hubble_flows_processed_total` с context namespace — обход gateway виден как drop `POLICY_DENIED` ([ADR 16](../../docs/adr/0016-запрещать-обход-internal-gateway-через-cilium-и-networkpolicy.md)) | `infra/hubble` |
 | Pods | cAdvisor kubelet через API server proxy (ClusterRole `nomnom-alloy`: `nodes/proxy`) и kube-state-metrics v2.20.0 в `nomnom-observability` | `infra/kubernetes` |
 
 Инфраструктурные неймспейсы без NetworkPolicy, поэтому отдельных разрешений Alloy не нужно.

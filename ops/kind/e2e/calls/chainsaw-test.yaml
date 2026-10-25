@@ -2,10 +2,11 @@
 # Семантика вызова через internal gateway (ADR 15): metadata, status, trace context,
 # deadlines и retries. Вызывающий — grpc-caller (nomnom-bff) с service identity.
 #
-# Server span orders в приёмнике trace-capture (manifests/observability/trace-capture.yaml,
-# debug exporter) ищется по случайному span id вызывающего: он встречается в логе только
-# как Parent ID server span. Лог делится на spans по «Trace ID»; BatchSpanProcessor orders
-# отправляет spans раз в 5 секунд.
+# Spans в приёмнике trace-capture (manifests/observability/trace-capture.yaml, debug exporter)
+# ищутся по случайным trace id и span id вызывающего. Gateway (EnvoyProxy internal-gateway)
+# пишет server span «ingress» с Parent ID вызывающего и client span «egress» на каждую
+# попытку; server span orders — его потомок с именем RPC. Лог делится на spans по
+# «Trace ID»; BatchSpanProcessor orders отправляет spans раз в 5 секунд.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
@@ -13,7 +14,8 @@ metadata:
 spec:
   description: >
     Authorization metadata доходит до backend'а (PERMISSION_DENIED от SpiceDB: status и message
-    backend'а доходят до вызывающего); traceparent вызывающего продолжен server span orders.
+    backend'а доходят до вызывающего); traceparent вызывающего продолжен span gateway, а его —
+    server span orders.
   bindings:
     - name: trace_id
       value: (random('[0-9a-f]{32}'))
@@ -43,7 +45,7 @@ spec:
               value: "(join('', ['traceparent: 00-', $trace_id, '-', $parent_id, '-01']))"
             - {name: code, value: 7}
             - {name: message, value: 'permission denied: service:grpc-caller view_orders on customer:c1'}
-    - name: 4.2 orders server span continues caller trace
+    - name: 4.2 gateway and orders spans continue caller trace
       try:
         - sleep:
             duration: 7s
@@ -51,7 +53,11 @@ spec:
             content: kubectl -n nomnom-observability logs deploy/trace-capture --since=1m
             check:
               ($error): ~
-              (split($stdout, 'Trace ID')[?contains(@, $trace_id) && contains(@, $parent_id) && contains(@, 'OrdersService/ListCustomerOrders')] | length(@)): 1
+              # Gateway: server span с Parent ID вызывающего.
+              (split($stdout, 'Trace ID')[?contains(@, $trace_id) && contains(@, $parent_id) && regex_match('Name\s+:\singress', @)] | length(@)): 1
+              # Orders: server span в том же trace, родитель — span gateway, не вызывающий.
+              (split($stdout, 'Trace ID')[?contains(@, $trace_id) && regex_match('Name\s+:\snomnom\.orders\.v1\.OrdersService/ListCustomerOrders', @)] | length(@)): 1
+              (split($stdout, 'Trace ID')[?contains(@, $trace_id) && contains(@, $parent_id) && regex_match('Name\s+:\snomnom\.orders', @)] | length(@)): 0
   catch:
     - podLogs:
         namespace: nomnom-orders
@@ -139,8 +145,8 @@ spec:
             # span до таймаута SpiceDB (≥ 2 s) — не меньше 2 s.
             check:
               ($error): ~
-              (split($stdout, 'Trace ID')[?contains(@, $parent_id)] | length(@)): 1
-              (split($stdout, 'Trace ID')[?contains(@, $parent_id)] | [0] | time_before(time_parse('2006-01-02 15:04:05', regex_replace_all('(?s).*End time\s+:\s(\S+\s\S+).*', @, '$1')), time_add(time_parse('2006-01-02 15:04:05', regex_replace_all('(?s).*Start time\s+:\s(\S+\s\S+).*', @, '$1')), '2s'))): true
+              (split($stdout, 'Trace ID')[?contains(@, $trace_id) && regex_match('Name\s+:\snomnom\.orders', @)] | length(@)): 1
+              (split($stdout, 'Trace ID')[?contains(@, $trace_id) && regex_match('Name\s+:\snomnom\.orders', @)] | [0] | time_before(time_parse('2006-01-02 15:04:05', regex_replace_all('(?s).*End time\s+:\s(\S+\s\S+).*', @, '$1')), time_add(time_parse('2006-01-02 15:04:05', regex_replace_all('(?s).*Start time\s+:\s(\S+\s\S+).*', @, '$1')), '2s'))): true
   catch:
     - podLogs:
         namespace: nomnom-orders

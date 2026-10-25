@@ -1,0 +1,6 @@
+# Internal gateway отдельной kustomization: profile grafana-cloud (manifests/observability)
+# подключает её как resource и переключает приёмник spans EnvoyProxy на Alloy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gateway.yaml

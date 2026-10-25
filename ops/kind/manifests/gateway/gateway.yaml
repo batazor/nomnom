@@ -24,6 +24,26 @@ spec:
         pod:
           labels:
             nomnom.dev/component: internal-gateway
+  # Span gateway между client span вызывающего и server span backend'а: без него время
+  # в gateway (очередь, retries, connect) не видно в trace. Envoy продолжает traceparent
+  # вызывающего и передаёт backend'у свой. Приёмник по умолчанию — trace-capture проверок
+  # kind; profile grafana-cloud переключает его на Alloy (manifests/observability).
+  telemetry:
+    tracing:
+      # Решение о sampling принимает вызывающий (parent-based); 100 — для запросов без него.
+      samplingRate: 100
+      provider:
+        type: OpenTelemetry
+        serviceName: internal-gateway
+        openTelemetry:
+          # service.namespace проходит фильтр nomnom Alloy (только процессы nomnom).
+          resourceAttributes:
+            service.namespace: nomnom
+            deployment.environment.name: kind
+        backendRefs:
+          - name: trace-capture
+            namespace: nomnom-observability
+            port: 4317
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
