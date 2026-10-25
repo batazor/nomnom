@@ -11,3 +11,22 @@ podLabels:
 env:
   # Единственный адрес для синхронных вызовов бизнес-API других приложений.
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+
+# ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
+# создаёт scripts/identity-jwks.sh) и allowlist вызывающих workloads.
+identity:
+  issuer: https://kubernetes.default.svc.cluster.local
+  jwksConfigMap: cluster-jwks
+  serviceAccounts: nomnom-bff/bff=bff
+
+# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт scripts/authz.sh.
+spicedb:
+  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
+  insecure: true
+  presharedKeySecret:
+    name: spicedb-preshared-key
+
+# ADR 8: PostgreSQL orders тестового окружения; Secret orders-postgres создаёт scripts/postgres.sh.
+postgres:
+  dsnSecret:
+    name: orders-postgres

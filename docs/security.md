@@ -41,7 +41,11 @@ BFF проверяет внешний access token и формирует subject
 1. BFF передаёт исходный access token, и владелец use case самостоятельно проверяет token; либо
 2. BFF выпускает короткоживущую подписанную internal identity, и владелец проверяет signature, issuer, audience, expiry и replay-related claims.
 
-Обычный header `x-user-id`, `x-role`, `x-tenant` или аналогичное значение не является доказательством identity. Internal gateway обязан сохранить authorization metadata, но факт прохождения через gateway и NetworkPolicy не делает её доверенной. Выбор между propagated token и signed internal identity остаётся открытым до проектирования BFF identity flow.
+Обычный header `x-user-id`, `x-role`, `x-tenant` или аналогичное значение не является доказательством identity. Internal gateway обязан сохранить authorization metadata, но факт прохождения через gateway и NetworkPolicy не делает её доверенной. Для пользовательского subject выбор между propagated token и signed internal identity остаётся открытым до проектирования BFF identity flow.
+
+### Service identity
+
+`service` subject между bounded contexts доказывается Kubernetes projected ServiceAccount token ([ADR 27](adr/0027-service-identity-via-projected-serviceaccount-tokens.md)): metadata `authorization: Bearer <jwt>`, audience целевого контекста (`nomnom.orders`, `nomnom.restaurants`, `nomnom.delivery`, `nomnom.payments`), подпись по JWKS кластера, `iss`, `exp`/`nbf` с допуском 30 s и allowlist `namespace/serviceaccount=service-name`. Любое нарушение — `UNAUTHENTICATED`; без `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` и `IDENTITY__JWKS_FILE` сервер отклоняет всех (fail closed). Resolver только аутентифицирует: permissions identity по-прежнему проверяет SpiceDB в use case. Правила проверки во всех языках закреплены общими векторами `tests/identity`.
 
 ### Асинхронные операции
 
@@ -89,7 +93,7 @@ Definitions и permissions проектируются по согласован�
 
 ## Schema как shared contract
 
-Единая schema системы будет храниться в `authorization/schema.zed`. На этом шаге файл не создаётся.
+Единая schema системы хранится в [`authorization/schema.zed`](../authorization/schema.zed), grants развёртывания — в [`authorization/bootstrap.yaml`](../authorization/bootstrap.yaml), assertions путей пользовательских прав — в [`authorization/validation.yaml`](../authorization/validation.yaml) (`make authz-validate`, локальный SpiceDB — `make spicedb-dev`). Команды Order Fulfillment Workflow — capabilities синглтона `platform:nomnom`, выданные relation `fulfillment@service:orders-worker`: worker создаёт и адресует ресурсы по `order_id` раньше, чем у них появляются relationships. Пользовательские права остаются resource-level. Соответствие портов контекстов и permissions — в [design change `add-spicedb-authorization`](../openspec/changes/archive/2026-10-25-add-spicedb-authorization/design.md#соответствие-портов-и-permissions-нормативно).
 
 Каждый resource definition имеет owner:
 
@@ -102,7 +106,7 @@ Definitions и permissions проектируются по согласован�
 | `payment` | `payments`; permissions application-слоя: `create`, `authorize`, `capture`, `cancel_authorization`, `refund`, `view`, `view_operations` |
 | `user`, `service` | Общесистемный identity contract; lifecycle определяется вместе с authentication/workload identity. |
 
-Пока `schema.zed` не создана, имена permissions и resource types — константы application-слоя каждого контекста, а не утверждённые definitions:
+Порты authorization контекстов (SpiceDB-адаптеры переводят их в definitions `schema.zed`):
 
 | Boundary | Где объявлены | Что используется |
 | --- | --- | --- |
@@ -192,6 +196,8 @@ Authorization revision сохраняется рядом с resource как те
 
 `fully_consistent` не является способом скрыть отсутствие lifecycle design: он дороже и используется только с явным обоснованием.
 
+Реализация: `orders` хранит revision `order#customer` в строке `Order`; `restaurants` — revision `restaurant#owner/staff` в `Restaurant`; `delivery` — revision `courier#self` в `Courier` и `delivery#courier` в `Delivery`. Revision сохраняется и после `DELETE` (Revoke Staff, Reassign Courier, Cancel Delivery), поэтому отзыв доступа виден следующей проверке сразу. Проверки `platform:nomnom` и ресурсов без revision — `minimize_latency`.
+
 ## Relationship lifecycle
 
 Business storage bounded context остаётся source of truth; SpiceDB — производный authorization graph. Для каждой relation schema review обязан заполнить lifecycle contract:
@@ -211,8 +217,8 @@ Business storage bounded context остаётся source of truth; SpiceDB — �
 | --- | --- | --- |
 | `restaurant#owner@user` | Restaurant ownership в `restaurants`; writer `restaurants`. | Creation-time `TOUCH` до local commit; удаление/архивация удаляет relationships по resource. Failed write aborts commit; failed commit leaves orphan for reconciliation. |
 | `order#customer@user`, `order#restaurant@restaurant` | Создаваемый Order в `orders`; writer `orders`. | Creation-time associations до commit, если нужны для немедленного доступа. Compensation/removal follows Order lifecycle; orphan безопасен до reconciliation. |
-| `restaurant#staff@user` | Staff assignment в `restaurants`; writer dedicated relationship consumer. | Integration event через Outbox → consumer + Inbox; revoke тем же каналом. Eventual consistency window must be specified by the use case. |
-| `delivery#courier@user` | Courier assignment в `delivery`; writer dedicated relationship consumer. | Assignment/reassignment event через Outbox → consumer + Inbox; compensation removes or replaces relation idempotently. |
+| `restaurant#staff@user` | `Restaurant.staff` в `restaurants`; writer — use cases Assign Staff / Revoke Staff. | Синхронный `TOUCH`/`DELETE` до сохранения; расхождение исправляет reconciliation `restaurants`. |
+| `delivery#courier@user` | `Delivery.courier_id` в `delivery`; writer — use cases Accept Delivery Offer, Reassign Courier, Cancel Delivery. | Синхронный `TOUCH`/`DELETE` до commit (change `add-restaurant-delivery-relationships`); расхождение исправляет reconciliation `delivery`. |
 | `delivery#order@order` | Delivery association в `delivery`; writer `delivery`. | Стратегия определяется use case: sync at creation when required immediately, otherwise Outbox. |
 
 Таблица не фиксирует окончательную schema: names и exact triggers подтверждаются SDD use cases.
@@ -240,7 +246,7 @@ Kafka → dedicated consumer + Inbox → SpiceDB TOUCH/DELETE
 
 Consumer side effect в SpiceDB находится вне Inbox transaction, поэтому write должен быть идемпотентным и retryable. `TOUCH` заменяет `CREATE`; повторный `DELETE` при отсутствии relation успешен. Inbox фиксирует completion только после успешного side effect либо применяется эквивалентная recoverable state machine, чтобы crash не потерял update.
 
-При удалении/архивировании resource выполняется delete relationships по resource filter. Reconciliation периодически сравнивает business state и graph, исправляет missing/stale/orphan relationships и сообщает drift metric. Он не заменяет основной write path.
+При удалении/архивировании resource выполняется delete relationships по resource filter. Reconciliation периодически сравнивает business state и graph, исправляет missing/stale/orphan relationships и сообщает drift metric. Он не заменяет основной write path. Для `order#customer` он реализован в `orders` (`cmd/orders-reconciler`), для `restaurant#owner/staff`, `courier#self` и `delivery#courier` — фоновым циклом процессов `restaurants` и `delivery` (до постоянного хранилища): orphan/stale relationship удаляется только после двух проходов с интервалом не меньше grace, потому что creation-time `TOUCH` предшествует commit; missing восстанавливается сразу с обновлением authorization revision.
 
 ## Network and runtime
 
@@ -319,7 +325,7 @@ Kubernetes/NetworkPolicy and E2E scenarios run in kind.
 ## Открытые вопросы
 
 - definitions, relations and permissions after domain SDD use cases are agreed;
-- propagated access token or signed internal identity, including issuer/audience/key rotation;
+- propagated access token or signed internal identity for the user subject via BFF (service identity is decided by ADR 27);
 - exact local field, serialization and gRPC metadata key for ZedToken;
 - SpiceDB datastore, deployment topology, backups and HA;
 - reconciliation ownership, schedule, batching, repair policy and drift SLO;

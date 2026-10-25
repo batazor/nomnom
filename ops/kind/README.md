@@ -52,6 +52,9 @@ make kind-down
   тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
   `nomnom-infra`. Kafka и Temporal применяет `before`-hook helm-деплоера и ждёт их readiness:
   consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
+- Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в
+  `nomnom-observability` и OTLP метрик `orders`/`orders-consumer` в Grafana Cloud free tier;
+  настройка и лимиты — [`ops/grafana-cloud`](../grafana-cloud/README.md).
 - `scripts/verify.sh` выполняет проверки, `scripts/diagnostics.sh` собирает pod logs, events,
   состояние Gateway API, `cilium-dbg status` и DROPPED flows Hubble; `scripts/e2e.sh`
   связывает шаги и собирает диагностику при ошибке.

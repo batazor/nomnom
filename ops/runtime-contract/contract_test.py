@@ -157,6 +157,13 @@ class ServiceProcess:
             "MANAGEMENT__PORT": str(self.management_port),
             "SHUTDOWN__READINESS_DELAY": f"{int(READINESS_DELAY_S * 1000)}ms",
             "SHUTDOWN__DRAIN_TIMEOUT": f"{int(DRAIN_TIMEOUT_S * 1000)}ms",
+            # SpiceDB обязателен (ADR 18); клиенты подключаются лениво, поэтому
+            # контракт lifecycle проверяется без запущенного SpiceDB.
+            "SPICEDB__ENDPOINT": "127.0.0.1:50051",
+            "SPICEDB__PRESHARED_KEY": "runtime-contract",
+            "SPICEDB__INSECURE": "true",
+            # PostgreSQL обязателен для orders (ADR 8); pool подключается лениво.
+            "POSTGRES__DSN": "postgres://runtime:contract@127.0.0.1:1/orders?sslmode=disable",
             **overrides,
         }
         env.pop("PORT", None)
@@ -279,6 +286,20 @@ class RuntimeContract(unittest.TestCase):
 
     def test_invalid_config_fails_fast(self) -> None:
         proc = self.start(SHUTDOWN__DRAIN_TIMEOUT="0ms")
+
+        self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
+        self.assertIsNone(status_or_none(proc.management_port, "/health/startup"))
+
+    def test_missing_postgres_dsn_fails_fast(self) -> None:
+        if self.service.name != "orders":
+            self.skipTest("only orders keeps its state in PostgreSQL")
+        proc = self.start(POSTGRES__DSN="")
+
+        self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
+
+    def test_missing_spicedb_endpoint_fails_fast(self) -> None:
+        # ADR 18: процесс, проверяющий права, не стартует без SpiceDB.
+        proc = self.start(SPICEDB__ENDPOINT="")
 
         self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
         self.assertIsNone(status_or_none(proc.management_port, "/health/startup"))

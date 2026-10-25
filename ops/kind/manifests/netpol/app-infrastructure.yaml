@@ -41,6 +41,17 @@ spec:
       ports:
         - protocol: TCP
           port: 7233
+    # SpiceDB (ADR 18): authorization checks и relationship writes.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: spicedb
+      ports:
+        - protocol: TCP
+          port: 50051
 ---
 # restaurants: своя MongoDB, Kafka.
 apiVersion: networking.k8s.io/v1
@@ -72,6 +83,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+    # SpiceDB (ADR 18): authorization checks и relationship writes.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: spicedb
+      ports:
+        - protocol: TCP
+          port: 50051
 ---
 # delivery: Kafka; хранилище ещё не выбрано (ADR 8).
 apiVersion: networking.k8s.io/v1
@@ -93,6 +115,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+    # SpiceDB (ADR 18): authorization checks и relationship writes.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: spicedb
+      ports:
+        - protocol: TCP
+          port: 50051
 ---
 # payments: Kafka; хранилище ещё не выбрано (ADR 8).
 apiVersion: networking.k8s.io/v1
@@ -114,3 +147,14 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+    # SpiceDB (ADR 18): authorization checks и relationship writes.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: spicedb
+      ports:
+        - protocol: TCP
+          port: 50051

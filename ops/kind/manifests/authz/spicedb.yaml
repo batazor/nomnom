@@ -1,0 +1,75 @@
+# SpiceDB тестового окружения (ADR 18): memory datastore, schema и grants из
+# authorization/ (ConfigMap spicedb-bootstrap и Secret spicedb-preshared-key создаёт
+# scripts/authz.sh). После рестарта graph восстанавливается только из bootstrap.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spicedb
+  namespace: nomnom-authz
+  labels:
+    app.kubernetes.io/name: spicedb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spicedb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spicedb
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: spicedb
+          image: authzed/spicedb:v1.57.0
+          args:
+            - serve
+            - --datastore-engine=memory
+            - --datastore-bootstrap-files=bootstrap.yaml
+            - --http-enabled=false
+          workingDir: /authz
+          env:
+            - name: SPICEDB_GRPC_PRESHARED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: spicedb-preshared-key
+                  key: preshared-key
+          ports:
+            - name: grpc
+              containerPort: 50051
+          readinessProbe:
+            grpc:
+              port: 50051
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /authz
+              readOnly: true
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: spicedb-bootstrap
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spicedb
+  namespace: nomnom-authz
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: spicedb
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+      appProtocol: kubernetes.io/h2c

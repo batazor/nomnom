@@ -1,0 +1,150 @@
+# Grafana Alloy тестового окружения (ADR 9): приём OTLP метрик приложений и отправка в
+# Grafana Cloud (free tier). Подключается Skaffold profile grafana-cloud; Secret
+# grafana-cloud-otlp создаёт scripts/grafana-cloud.sh из ops/grafana-cloud/.env.grafana-cloud.
+# Free tier ограничен активными series, поэтому уходят только метрики service.namespace=nomnom:
+# без traces, logs, profiles и собственных метрик Alloy/Kubernetes.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-observability
+  labels:
+    nomnom.dev/tier: infra
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy
+  namespace: nomnom-observability
+data:
+  config.alloy: |
+    otelcol.receiver.otlp "apps" {
+      grpc {
+        endpoint = "0.0.0.0:4317"
+      }
+      http {
+        endpoint = "0.0.0.0:4318"
+      }
+      output {
+        metrics = [otelcol.processor.memory_limiter.default.input]
+      }
+    }
+
+    otelcol.processor.memory_limiter "default" {
+      check_interval = "1s"
+      limit          = "200MiB"
+      output {
+        metrics = [otelcol.processor.filter.nomnom.input]
+      }
+    }
+
+    // Только процессы nomnom: случайный OTLP-клиент в кластере не расходует квоту series.
+    otelcol.processor.filter "nomnom" {
+      error_mode = "ignore"
+      metrics {
+        metric = ["resource.attributes[\"service.namespace\"] != \"nomnom\""]
+      }
+      output {
+        metrics = [otelcol.processor.batch.default.input]
+      }
+    }
+
+    otelcol.processor.batch "default" {
+      timeout = "30s"
+      output {
+        metrics = [otelcol.exporter.otlphttp.grafana_cloud.input]
+      }
+    }
+
+    otelcol.auth.basic "grafana_cloud" {
+      username = sys.env("GRAFANA_CLOUD_OTLP_INSTANCE_ID")
+      password = sys.env("GRAFANA_CLOUD_OTLP_TOKEN")
+    }
+
+    otelcol.exporter.otlphttp "grafana_cloud" {
+      client {
+        endpoint = sys.env("GRAFANA_CLOUD_OTLP_ENDPOINT")
+        auth     = otelcol.auth.basic.grafana_cloud.handler
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  namespace: nomnom-observability
+  labels:
+    app.kubernetes.io/name: alloy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alloy
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 473
+        runAsGroup: 473
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alloy
+          image: docker.io/grafana/alloy:v1.21.2
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+            - --disable-reporting
+          envFrom:
+            - secretRef:
+                name: grafana-cloud-otlp
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: http
+              containerPort: 12345
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+            - name: data
+              mountPath: /var/lib/alloy/data
+      volumes:
+        - name: config
+          configMap:
+            name: alloy
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy
+  namespace: nomnom-observability
+spec:
+  selector:
+    app.kubernetes.io/name: alloy
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      appProtocol: kubernetes.io/h2c
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http

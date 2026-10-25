@@ -55,3 +55,19 @@ metadata:
   name: nomnom-outsider
   labels:
     nomnom.dev/tier: outsider
+---
+# Инфраструктура authorization (ADR 18): SpiceDB.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-authz
+  labels:
+    nomnom.dev/tier: infra
+---
+# Хранилища bounded contexts (ADR 8): PostgreSQL orders.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-data
+  labels:
+    nomnom.dev/tier: infra

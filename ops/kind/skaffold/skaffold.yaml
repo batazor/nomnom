@@ -84,6 +84,8 @@ build:
 manifests:
   rawYaml:
     - ../manifests/base/namespaces.yaml
+    - ../manifests/authz/spicedb.yaml
+    - ../manifests/data/postgres-orders.yaml
     - ../manifests/gateway/gateway.yaml
     - ../manifests/fixtures/net-probe.yaml
 deploy:
@@ -109,6 +111,15 @@ deploy:
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
                   -l gateway.envoyproxy.io/owning-gateway-name=internal
                 test "$(k -n envoy-gateway-system get service internal-gateway -o jsonpath='{.spec.type}')" = ClusterIP
+        # ADR 27: JWKS кластера для проверки projected ServiceAccount tokens (до установки charts).
+        - host:
+            command: ["sh", "-c", "../scripts/identity-jwks.sh \"$SKAFFOLD_KUBE_CONTEXT\""]
+        # ADR 18: schema, grants и preshared key SpiceDB (до установки charts).
+        - host:
+            command: ["sh", "-c", "../scripts/authz.sh \"$SKAFFOLD_KUBE_CONTEXT\""]
+        # ADR 8: пароль и DSN PostgreSQL orders (до установки charts).
+        - host:
+            command: ["sh", "-c", "../scripts/postgres.sh \"$SKAFFOLD_KUBE_CONTEXT\""]
   # Bounded contexts ставятся собственными charts (ADR 12) с values тестового окружения.
   # BFF chart не устанавливается: образ BFF ещё не определён (ADR 10).
   helm:
@@ -169,3 +180,19 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
           image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
+profiles:
+  # make kind-deploy GRAFANA_CLOUD=1: метрики orders и orders-consumer → Alloy → Grafana Cloud.
+  # Индексы releases: 0 — orders, 4 — orders-consumer; при изменении порядка поправить patches.
+  - name: grafana-cloud
+    patches:
+      - op: add
+        path: /deploy/helm/hooks/before/-
+        value:
+          host:
+            command: ["sh", "-c", "../scripts/grafana-cloud.sh \"$SKAFFOLD_KUBE_CONTEXT\""]
+      - op: add
+        path: /deploy/helm/releases/0/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/4/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
