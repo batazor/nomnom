@@ -5,7 +5,7 @@ TEMPORAL_IMAGE ?= temporalio/temporal:1.9.1
 TEMPORAL_PORT ?= 7233
 TEMPORAL_CONTAINER ?= orders-temporal-dev
 
-.PHONY: check run run-worker run-consumer generate proto-check proto-generate test test-integration temporal-dev temporal-dev-stop lint format format-check
+.PHONY: check run run-worker run-consumer generate proto-check proto-generate test test-integration test-integration-kafka temporal-dev temporal-dev-stop lint format format-check
 
 check: proto-check test lint format-check
 
@@ -55,6 +55,11 @@ test-integration:
 	$(MAKE) temporal-dev
 	TEMPORAL_ADDRESS=localhost:$(TEMPORAL_PORT) $(GO) test -tags integration -count=1 -run Integration\|AgainstTemporal ./di/...; \
 		status=$$?; $(MAKE) temporal-dev-stop; exit $$status
+
+# ADR 28: Kafka → Watermill → EventGroupProcessor → Inbox → handler против Kafka
+# в Testcontainers (нужен Docker).
+test-integration-kafka:
+	$(GO) test -tags integration -count=1 -run AgainstKafka ./slices/order/infrastructure/messaging/...
 
 lint:
 	$(GOLANGCI_LINT) run

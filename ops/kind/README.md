@@ -47,6 +47,11 @@ make kind-down
   [`values/`](values/) и `pullPolicy: Never`, манифесты gateway и pod проверок. Skaffold status
   check ждёт readiness workloads, hook — `Accepted`/`Programmed` у GatewayClass, Gateway и
   `BackendTrafficPolicy`.
+- `orders-consumer` ([ADR 28](../../docs/adr/0028-selective-use-of-watermill-cqrs.md)) — второй
+  release chart `orders` с `values-consumer.yaml` и [`values/orders-consumer.yaml`](values/orders-consumer.yaml):
+  тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
+  `nomnom-infra`. Kafka и Temporal применяет `before`-hook helm-деплоера и ждёт их readiness:
+  consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
 - `scripts/verify.sh` выполняет проверки, `scripts/diagnostics.sh` собирает pod logs, events,
   состояние Gateway API, `cilium-dbg status` и DROPPED flows Hubble; `scripts/e2e.sh`
   связывает шаги и собирает диагностику при ошибке.
@@ -70,6 +75,7 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура для ingress-проверок |
+| `nomnom-infra` | single-node Kafka (KRaft, `apache/kafka`) и Temporal dev server для `orders-consumer` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir` |
 
 ## Internal gateway
 

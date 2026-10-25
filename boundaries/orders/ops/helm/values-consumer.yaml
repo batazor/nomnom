@@ -1,0 +1,19 @@
+# Kafka consumer orders (ADR 28): отдельный release того же chart.
+#   helm upgrade --install orders-consumer ops/helm -f ops/helm/values-consumer.yaml
+# Brokers, consumer group и poison topic (KAFKA__BROKERS, KAFKA__CONSUMER_GROUP,
+# KAFKA__POISON_TOPIC), адрес и namespace Temporal (TEMPORAL__HOST_PORT, TEMPORAL__NAMESPACE)
+# задаются values окружения через env.
+component: consumer
+
+command:
+  - /orders-consumer
+
+# Consumer не обслуживает бизнес-API: без Service и бизнес-порта, только metrics и probes.
+service:
+  enabled: false
+
+# Router.Close ждёт начатые сообщения не дольше drainTimeout; offsets подтверждаются только
+# для сообщений, обработанных до commit, остальные доставляются повторно.
+shutdown:
+  readinessDelaySeconds: 2
+  drainTimeoutSeconds: 20

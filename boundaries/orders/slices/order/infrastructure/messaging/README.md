@@ -33,4 +33,8 @@ Kafka → Subscriber → EventGroupProcessor → watermill_handler → mapper �
 
 ## Тесты
 
-[`watermill_handler_test.go`](watermill_handler_test.go) — wiring на Watermill `gochannel`: маршрутизация по `event_type`, handler groups, порядок событий одного aggregate, duplicate, poison. Политика retry/poison/business — [`pkg/messaging/consumer_test.go`](../../../../pkg/messaging/consumer_test.go). Integration на Testcontainers Kafka и E2E в kind пока не реализованы.
+[`watermill_handler_test.go`](watermill_handler_test.go) — wiring на Watermill `gochannel`: маршрутизация по `event_type`, handler groups, порядок событий одного aggregate, duplicate, poison. Политика retry/poison/business — [`pkg/messaging/consumer_test.go`](../../../../pkg/messaging/consumer_test.go). [`kafka_integration_test.go`](kafka_integration_test.go) (build tag `integration`, `make test-integration-kafka`, нужен Docker) — Testcontainers Kafka `apache/kafka:4.4.0`: применение события и повторная доставка, порядок событий одного `aggregate_id` в топиках с 3 partitions, retry при временной недоступности workflow, poison topic.
+
+## Развёртывание
+
+Отдельный release chart с [`values-consumer.yaml`](../../../../ops/helm/values-consumer.yaml): `component: consumer`, `command: ["/orders-consumer"]`, без Service. В kind — release `orders-consumer` ([`ops/kind/values/orders-consumer.yaml`](../../../../../../ops/kind/values/orders-consumer.yaml)) против Kafka и Temporal dev server из [`manifests/messaging`](../../../../../../ops/kind/manifests/messaging/infrastructure.yaml).

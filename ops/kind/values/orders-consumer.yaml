@@ -1,0 +1,11 @@
+# Values тестового kind-окружения для release orders-consumer chart boundaries/orders/ops/helm
+# поверх values-consumer.yaml (ADR 12, ADR 28). image задаёт Skaffold (setValueTemplates).
+image:
+  pullPolicy: Never
+
+env:
+  KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
+  KAFKA__CLIENT_ID: orders-consumer
+  KAFKA__CONSUMER_GROUP: orders
+  TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
+  TEMPORAL__NAMESPACE: default
