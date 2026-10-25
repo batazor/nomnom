@@ -7,6 +7,7 @@ use tonic::metadata::MetadataMap;
 use tonic::transport::server::TcpIncoming;
 use tonic::{Request, Response, Status};
 
+use super::tracing::GrpcTraceLayer;
 use crate::di::ServiceModule;
 use crate::pkg::application::Subject;
 use crate::pkg::lifecycle::{Worker, wait_for_stop};
@@ -197,6 +198,7 @@ pub struct GrpcWorker {
     incoming: TcpIncoming,
     module: Arc<ServiceModule>,
     subjects: Arc<dyn SubjectResolver>,
+    tracing: GrpcTraceLayer,
 }
 
 impl GrpcWorker {
@@ -206,12 +208,20 @@ impl GrpcWorker {
         subjects: Arc<dyn SubjectResolver>,
     ) -> io::Result<Self> {
         let incoming = TcpIncoming::bind(addr)?;
-        println!("delivery gRPC listening on {}", incoming.local_addr()?);
+        tracing::info!(operation = "grpc.listen", address = %incoming.local_addr()?, "delivery gRPC listening");
         Ok(Self {
             incoming,
             module,
             subjects,
+            tracing: GrpcTraceLayer::global(),
         })
+    }
+
+    /// Replaces the server span layer (tests use an in-memory exporter).
+    #[must_use]
+    pub fn with_tracing(mut self, tracing: GrpcTraceLayer) -> Self {
+        self.tracing = tracing;
+        self
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
@@ -226,6 +236,7 @@ impl Worker for GrpcWorker {
             subjects: self.subjects,
         };
         tonic::transport::Server::builder()
+            .layer(self.tracing)
             .add_service(DeliveryServiceServer::new(service))
             .serve_with_incoming_shutdown(self.incoming, async move {
                 wait_for_stop(&mut stop).await;

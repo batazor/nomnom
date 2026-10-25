@@ -17,6 +17,7 @@ func poolSaturation(sc Scope) string {
 func poolPanels(sc Scope, db Database) []Panel {
 	name := string(db)
 	pool := "db_client_connection_pool_name"
+	limit := poolLimit(db)
 	panels := []Panel{
 		{Title: name + ": pool connections", Unit: "short", Queries: []Query{
 			{Sum("db_client_connection_state", sc.Gauge("db_client_connection_count")), "{{db_client_connection_state}}"},
@@ -24,7 +25,7 @@ func poolPanels(sc Scope, db Database) []Panel {
 			{Sum("", sc.Gauge("db_client_connection_idle_min")), "idle min"},
 		}, Description: "Сумма по процессам и пулам. Насыщение одного пула — панель «pool saturation»."},
 		{Title: name + ": pool saturation", Unit: "percentunit", Queries: []Query{{Max("job, "+pool, poolSaturation(sc)), "{{job}} {{" + pool + "}}"}},
-			Description: "used / max самого загруженного процесса по пулу. Долго около 1 — checkouts ждут в очереди: поднять maxPoolSize процесса или найти долгие операции (use time)."},
+			Description: "used / max самого загруженного процесса по пулу. Долго около 1 — checkouts ждут в очереди: поднять " + limit + " процесса или найти долгие операции (use time)."},
 		{Title: name + ": pending checkouts and timeouts", Unit: "short", Queries: []Query{
 			{Sum("job", sc.Gauge("db_client_connection_pending_requests")), "pending {{job}}"},
 			{Sum("job", sc.Increase("db_client_connection_timeouts_total")), "timeouts {{job}}"},
@@ -42,6 +43,15 @@ func poolPanels(sc Scope, db Database) []Panel {
 	return panels
 }
 
+// poolLimit — настройка размера пула процесса в Helm values. У PostgreSQL перед базой
+// пулер в session mode: соединения всех реплик занимают его pool_size.
+func poolLimit(db Database) string {
+	if db == PostgreSQL {
+		return "maxConns (Σ replicas × maxConns ≤ pool_size пулера)"
+	}
+	return "maxPoolSize"
+}
+
 // poolAlerts — правила пула; пороги — стартовые для тестового окружения.
 func poolAlerts(o Options, sc Scope, dash string) []Alert {
 	slug := func(s string) string { return o.Context + "-db-pool-" + s }
@@ -49,7 +59,7 @@ func poolAlerts(o Options, sc Scope, dash string) []Alert {
 	pool := "job, db_client_connection_pool_name"
 	alerts := []Alert{
 		{Slug: slug("saturation"), Title: title + "saturated", Severity: Warning, For: "10m", Op: ">", Threshold: 0.9, DashboardID: dash,
-			Summary: "Пул процесса занят больше чем на 90% (used / max) 10 минут: новые операции ждут соединения. Проверить use time и долгие операции, затем maxPoolSize процесса в Helm values.",
+			Summary: "Пул процесса занят больше чем на 90% (used / max) 10 минут: новые операции ждут соединения. Проверить use time и долгие операции, затем " + poolLimit(o.Database) + " процесса в Helm values.",
 			Value:   Max(pool, poolSaturation(sc))},
 		{Slug: slug("queued"), Title: title + "checkouts queued", Severity: Warning, For: "10m", Op: ">", Threshold: 0, DashboardID: dash,
 			Summary: "Checkouts ждут соединения пула 10 минут подряд: пул мал для нагрузки или соединения долго не возвращаются.",

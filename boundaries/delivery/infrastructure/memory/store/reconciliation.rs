@@ -19,15 +19,20 @@ impl MemoryStore {
         Ok(read(&state))
     }
 
-    /// Registered courier ids after `after`, ordered by id.
-    pub fn courier_page(&self, after: &str, limit: usize) -> Result<Vec<String>, RepositoryError> {
+    /// `(courier_id, version)` of registered couriers after `after`, ordered
+    /// by id.
+    pub fn courier_page(
+        &self,
+        after: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, u64)>, RepositoryError> {
         self.committed(|state| {
             state
                 .couriers
-                .keys()
-                .filter(|id| id.as_str() > after)
+                .iter()
+                .filter(|(id, _)| id.as_str() > after)
                 .take(limit)
-                .cloned()
+                .map(|(id, courier)| (id.clone(), courier.version()))
                 .collect()
         })
     }
@@ -42,13 +47,13 @@ impl MemoryStore {
         })
     }
 
-    /// `(delivery_id, courier_id)` of deliveries with an assigned courier
+    /// `(delivery_id, courier_id, version)` of deliveries with an assigned courier
     /// after `after`, ordered by delivery id.
     pub fn assignment_page(
         &self,
         after: &str,
         limit: usize,
-    ) -> Result<Vec<(String, String)>, RepositoryError> {
+    ) -> Result<Vec<(String, String, u64)>, RepositoryError> {
         self.committed(|state| {
             state
                 .deliveries
@@ -56,7 +61,7 @@ impl MemoryStore {
                 .filter_map(|(id, record)| {
                     record
                         .active_courier()
-                        .map(|courier| (id.clone(), courier.as_str().to_owned()))
+                        .map(|courier| (id.clone(), courier.as_str().to_owned(), record.version))
                 })
                 .take(limit)
                 .collect()

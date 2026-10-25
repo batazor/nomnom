@@ -4,12 +4,14 @@
 //! concurrent runs of several replicas are serialized.
 
 use sqlx::migrate::Migrator;
-use sqlx::postgres::PgPoolOptions;
 
 use crate::pkg::config::{DATABASE_URL_ENV, DatabaseConfig};
 
 /// Migrations embedded at compile time; append-only.
 pub static MIGRATOR: Migrator = sqlx::migrate!("infrastructure/postgres/migrations");
+
+/// Pool size of `delivery-migrate`, whatever `DATABASE__MAX_CONNS` says.
+pub const MIGRATE_MAX_CONNS: u32 = 1;
 
 /// Applies pending migrations; returns the versions applied by this run.
 pub fn migrate(config: &DatabaseConfig) -> Result<Vec<i64>, String> {
@@ -17,14 +19,15 @@ pub fn migrate(config: &DatabaseConfig) -> Result<Vec<i64>, String> {
         return Err(format!("{DATABASE_URL_ENV} is required"));
     }
     let url = config.url.clone();
+    // One connection: the migrator holds a session-level advisory lock on it.
+    let options = super::pool_options(config, MIGRATE_MAX_CONNS);
     super::blocking(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|error| format!("migration runtime: {error}"))?;
         runtime.block_on(async move {
-            let pool = PgPoolOptions::new()
-                .max_connections(1)
+            let pool = options
                 .connect(&url)
                 .await
                 .map_err(|error| format!("connect postgres: {error}"))?;

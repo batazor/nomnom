@@ -111,7 +111,7 @@ impl Lifecycle {
         let health = Arc::new(Health::default());
         let management =
             ManagementServer::bind(settings.management_addr, Arc::clone(&health)).await?;
-        println!("management listening on {}", management.local_addr());
+        tracing::info!(operation = "management.listen", address = %management.local_addr(), "management listening");
         Ok(Self {
             settings,
             health,
@@ -184,9 +184,11 @@ where
     }
 
     health.mark_shutting_down();
-    println!(
-        "shutting down: readiness delay {:?}, drain timeout {:?}",
-        settings.readiness_delay, settings.drain_timeout
+    tracing::info!(
+        operation = "shutdown",
+        readiness_delay = ?settings.readiness_delay,
+        drain_timeout = ?settings.drain_timeout,
+        "shutting down"
     );
 
     tokio::select! {

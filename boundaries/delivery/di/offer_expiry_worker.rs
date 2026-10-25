@@ -70,7 +70,7 @@ pub async fn run(expire: ExpireOffers, schedule: ExpirySchedule, mut stop: watch
         let pass =
             tokio::task::spawn_blocking(move || pass(&*expire, schedule.batch_size, &watcher));
         if let Err(error) = pass.await {
-            eprintln!("expire delivery offers: pass aborted: {error}");
+            tracing::error!(operation = "expire_delivery_offers", outcome = "error", error.message = %error, "expire delivery offers: pass aborted");
             return;
         }
         if *stop.borrow() {
@@ -96,13 +96,19 @@ fn pass(
                 }
             }
             Err(error) => {
-                eprintln!("expire delivery offers: batch failed: {error}");
+                tracing::error!(operation = "expire_delivery_offers", outcome = "error", error.message = %error, "expire delivery offers: batch failed");
                 break;
             }
         }
     }
     if expired > 0 || skipped > 0 {
-        println!("expire delivery offers: expired={expired} skipped={skipped}");
+        tracing::info!(
+            operation = "expire_delivery_offers",
+            outcome = "success",
+            expired,
+            skipped,
+            "delivery offers expired"
+        );
     }
 }
 

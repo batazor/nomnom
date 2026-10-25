@@ -9,15 +9,18 @@ use shaku::{HasComponent, module};
 use crate::infrastructure::memory::{
     MemoryStore, RecordingRelationships, SequentialIdGenerator, StaticCourierLocator,
 };
+use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::slices::courier::di::{CourierModule, CourierUseCases};
+use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
+use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
 
 use super::infrastructure::{
     InfrastructureModule, ProcessAuthorization, ProcessStores, infrastructure, local_authorization,
 };
 
 module! {
-    pub ServiceModule {
+    UseCaseModule {
         components = [],
         providers = [],
 
@@ -33,25 +36,40 @@ module! {
     }
 }
 
-/// Use cases процесса для транспортных адаптеров: они не импортируют shaku.
+/// Use cases процесса для транспортных адаптеров (они не импортируют shaku),
+/// каждый за декоратором telemetry слайса (docs/observability.md#use-cases):
+/// span `usecase <name>` и `nomnom.usecase.duration` на вызов.
+pub struct ServiceModule {
+    couriers: ObservedCourierUseCases,
+    deliveries: ObservedDeliveryUseCases,
+}
+
 impl ServiceModule {
     #[must_use]
     pub fn couriers(&self) -> &dyn CourierUseCases {
-        self.resolve_ref()
+        &self.couriers
     }
 
     #[must_use]
     pub fn deliveries(&self) -> &dyn DeliveryUseCases {
-        self.resolve_ref()
+        &self.deliveries
     }
 }
 
 /// Модули слайсов над портами `infrastructure` и итоговый модуль use cases.
+/// Instruments берутся у глобальных providers: telemetry запускается раньше.
 #[must_use]
 pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModule {
     let courier = Arc::new(CourierModule::builder(infrastructure.clone()).build());
     let delivery = Arc::new(DeliveryModule::builder(infrastructure).build());
-    ServiceModule::builder(courier, delivery).build()
+    let module = UseCaseModule::builder(courier, delivery).build();
+    let telemetry = Arc::new(UseCaseTelemetry::global());
+    let couriers: Arc<dyn CourierUseCases> = module.resolve();
+    let deliveries: Arc<dyn DeliveryUseCases> = module.resolve();
+    ServiceModule {
+        couriers: ObservedCourierUseCases::new(couriers, Arc::clone(&telemetry)),
+        deliveries: ObservedDeliveryUseCases::new(deliveries, telemetry),
+    }
 }
 
 /// Собирает тестовый граф с локальной авторизацией.
@@ -67,6 +85,22 @@ pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) ->
     service(infrastructure(
         ProcessStores::over(&Arc::new(MemoryStore::new())),
         Box::new(SequentialIdGenerator::new("delivery")),
+        Box::new(StaticCourierLocator::new(Vec::new())),
+        authorization,
+        Box::new(RecordingRelationships::new()),
+    ))
+}
+
+/// Тестовый граф над заданными хранилищами (PostgreSQL в integration-тестах)
+/// с UUID id, пустым locator и выбранной авторизацией.
+#[must_use]
+pub fn build_over(
+    stores: ProcessStores,
+    authorization: Box<dyn ProcessAuthorization>,
+) -> ServiceModule {
+    service(infrastructure(
+        stores,
+        Box::new(crate::infrastructure::ids::UuidIdGenerator),
         Box::new(StaticCourierLocator::new(Vec::new())),
         authorization,
         Box::new(RecordingRelationships::new()),

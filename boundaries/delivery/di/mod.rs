@@ -30,7 +30,7 @@ pub use infrastructure::{
 pub use offer_expiry_worker::{ExpireOffers, ExpirySchedule, OfferExpiryWorker};
 pub use reconciling_worker::ReconcilingWorker;
 pub use server::{postgres, spicedb, spicedb_authorization};
-pub use service::{ServiceModule, build, build_with_authorization};
+pub use service::{ServiceModule, build, build_over, build_with_authorization};
 
 #[cfg(test)]
 pub(crate) use service::build_with_locator;

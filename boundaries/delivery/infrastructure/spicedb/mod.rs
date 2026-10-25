@@ -23,7 +23,7 @@ pub mod v1 {
     include!("gen/authzed/api/v1/authzed.api.v1.rs");
 }
 
-pub use client::{PermissionChecker, SpiceDbClient, SpiceDbConfigError};
+pub use client::{ClientTelemetry, PermissionChecker, SpiceDbClient, SpiceDbConfigError};
 pub use mapping::{CheckConsistency, PermissionCheck, courier_check, delivery_check};
 pub use relationships::{
     COURIER, COURIER_SELF, DELIVERY, DELIVERY_COURIER, Relationship, RelationshipGraph,

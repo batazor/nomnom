@@ -41,11 +41,24 @@ impl Drop for ActiveTransaction<'_> {
     }
 }
 
-async fn execute(
-    connection: &mut sqlx::PgConnection,
-    statement: &'static str,
-) -> Result<(), sqlx::Error> {
-    sqlx::raw_sql(statement).execute(connection).await.map(drop)
+impl PostgresStore {
+    /// Runs a transaction control statement and records its duration.
+    fn control(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        statement: &'static str,
+    ) -> Result<(), sqlx::Error> {
+        let span = crate::pkg::telemetry::db::start(
+            &self.tracer,
+            &crate::pkg::telemetry::db::Statement::of_sql(statement),
+        );
+        let started = std::time::Instant::now();
+        let result = self
+            .block_on(async move { sqlx::raw_sql(statement).execute(connection).await.map(drop) });
+        crate::pkg::telemetry::db::end(span, &result);
+        self.metrics.operation(statement, None, started, &result);
+        result
+    }
 }
 
 impl UnitOfWork for PostgresStore {
@@ -63,7 +76,7 @@ impl UnitOfWork for PostgresStore {
         let mut lease = self
             .lease()
             .map_err(|error| begin_failed(error.to_string()))?;
-        if let Err(error) = self.block_on(execute(&mut lease.connection, "BEGIN")) {
+        if let Err(error) = self.control(&mut lease.connection, "BEGIN") {
             self.drop_connection(lease.connection);
             return Err(begin_failed(error.to_string()));
         }
@@ -78,7 +91,7 @@ impl UnitOfWork for PostgresStore {
             return Err(E::from(UnitOfWorkError::CommitOutcomeUnknown));
         };
         match result {
-            Ok(value) => match self.block_on(execute(&mut connection, "COMMIT")) {
+            Ok(value) => match self.control(&mut connection, "COMMIT") {
                 Ok(()) => {
                     self.drop_connection(connection);
                     Ok(value)
@@ -96,7 +109,7 @@ impl UnitOfWork for PostgresStore {
                 }
             },
             Err(error) => {
-                match self.block_on(execute(&mut connection, "ROLLBACK")) {
+                match self.control(&mut connection, "ROLLBACK") {
                     Ok(()) => self.drop_connection(connection),
                     Err(_) => self.discard_connection(connection),
                 }

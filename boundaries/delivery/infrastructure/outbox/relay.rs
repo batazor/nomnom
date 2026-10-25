@@ -1,6 +1,7 @@
 //! Relay cycle: head-of-line publication of one batch and the
 //! [`RelayWorker`] that runs cycles under the advisory lock.
 
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::io;
 use std::sync::Arc;
@@ -13,6 +14,7 @@ use super::postgres::PgOutbox;
 use crate::infrastructure::postgres::OUTBOX_TOPIC;
 use crate::pkg::config::OutboxConfig;
 use crate::pkg::lifecycle::{Worker, wait_for_stop};
+use crate::pkg::telemetry::messaging::{self, Publication};
 
 /// Unpublished Outbox row as the relay reads it.
 #[derive(Clone, Debug, PartialEq)]
@@ -101,21 +103,40 @@ pub async fn relay_batch<S: OutboxStore, P: Publisher>(
     metrics: &RelayMetrics,
 ) -> Result<BatchOutcome, String> {
     let entries = store.fetch(batch_size).await?;
+    let tracer = opentelemetry::global::tracer(messaging::INSTRUMENTATION);
     let mut outcome = BatchOutcome {
         fetched: entries.len(),
         ..BatchOutcome::default()
     };
     for entry in &entries {
         if !store.holds_lock().await {
-            eprintln!(
-                "outbox relay lost the lock before seq={}: batch stopped",
-                entry.seq
+            tracing::warn!(
+                operation = "outbox.relay",
+                seq = entry.seq,
+                "outbox relay lost the lock: batch stopped"
             );
             outcome.lock_lost = true;
             break;
         }
         let started = Instant::now();
-        match publisher.publish(entry).await {
+        // Producer span continues the trace stored with the row; the Kafka
+        // header carries the producer span.
+        let span = messaging::start_send(
+            &tracer,
+            &Publication {
+                topic: &entry.topic,
+                event_id: &entry.event_id,
+                event_type: &entry.event_type,
+                traceparent: entry.traceparent.as_deref(),
+            },
+        );
+        let sent = OutboxEntry {
+            traceparent: messaging::traceparent_of(&span).or_else(|| entry.traceparent.clone()),
+            ..entry.clone()
+        };
+        let published = publisher.publish(&sent).await;
+        messaging::end_send(&span, published.as_ref().err().map(|error| error.class));
+        match published {
             Ok(()) => {
                 metrics.published(
                     &entry.topic,
@@ -125,9 +146,13 @@ pub async fn relay_batch<S: OutboxStore, P: Publisher>(
                 );
                 store.mark_published(entry.seq).await?;
                 outcome.published += 1;
-                println!(
-                    "outbox published event_id={} event_type={} seq={}",
-                    entry.event_id, entry.event_type, entry.seq
+                tracing::info!(
+                    operation = "outbox.publish",
+                    outcome = "success",
+                    event_id = %entry.event_id,
+                    event_type = %entry.event_type,
+                    seq = entry.seq,
+                    "outbox event published"
                 );
             }
             Err(error) => {
@@ -137,9 +162,15 @@ pub async fn relay_batch<S: OutboxStore, P: Publisher>(
                     error.class,
                     started.elapsed(),
                 );
-                eprintln!(
-                    "outbox publish failed event_id={} event_type={} seq={} error_class={}: {}",
-                    entry.event_id, entry.event_type, entry.seq, error.class, error.message
+                tracing::warn!(
+                    operation = "outbox.publish",
+                    outcome = "error",
+                    event_id = %entry.event_id,
+                    event_type = %entry.event_type,
+                    seq = entry.seq,
+                    error.type = error.class,
+                    error.message = %error.message,
+                    "outbox publish failed"
                 );
                 store.record_failure(entry.seq, &error.message).await?;
                 outcome.failed = Some(entry.seq);
@@ -157,6 +188,29 @@ pub struct RelayWorker<P> {
     publisher: P,
     config: OutboxConfig,
     metrics: RelayMetrics,
+    /// Streams the backlog gauges have reported; see [`report_backlog`].
+    streams: std::sync::Mutex<BTreeSet<String>>,
+}
+
+/// Records the backlog gauges of one cycle. `backlog` lists only streams with
+/// unpublished rows, so every stream reported before (and the Outbox topic
+/// from the start) that is absent now records `0` pending and `0` age instead
+/// of keeping its last value.
+pub fn report_backlog(
+    metrics: &RelayMetrics,
+    streams: &mut BTreeSet<String>,
+    backlog: &[(String, u64, f64)],
+) {
+    streams.insert(OUTBOX_TOPIC.to_owned());
+    for stream in streams.iter() {
+        if !backlog.iter().any(|(pending, _, _)| pending == stream) {
+            metrics.backlog(stream, 0, 0.0);
+        }
+    }
+    for (stream, pending, age) in backlog {
+        metrics.backlog(stream, *pending, *age);
+        streams.insert(stream.clone());
+    }
 }
 
 impl<P: Publisher> RelayWorker<P> {
@@ -172,6 +226,7 @@ impl<P: Publisher> RelayWorker<P> {
             publisher,
             config,
             metrics,
+            streams: std::sync::Mutex::default(),
         }
     }
 
@@ -194,21 +249,22 @@ impl<P: Publisher> RelayWorker<P> {
                         && !*stop.borrow() => {}
                 Ok(_) => break,
                 Err(error) => {
-                    eprintln!("outbox relay cycle: {error}");
+                    tracing::error!(operation = "outbox.relay", error.message = %error, "outbox relay cycle failed");
                     break;
                 }
             }
         }
         match self.outbox.backlog().await {
             Ok(backlog) => {
-                if !backlog.iter().any(|(stream, _, _)| stream == OUTBOX_TOPIC) {
-                    self.metrics.backlog(OUTBOX_TOPIC, 0, 0.0);
-                }
-                for (stream, pending, age) in backlog {
-                    self.metrics.backlog(&stream, pending, age);
-                }
+                let mut streams = self
+                    .streams
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                report_backlog(&self.metrics, &mut streams, &backlog);
             }
-            Err(error) => eprintln!("outbox backlog: {error}"),
+            Err(error) => {
+                tracing::warn!(operation = "outbox.backlog", error.message = %error, "outbox backlog query failed");
+            }
         }
         true
     }
@@ -220,32 +276,46 @@ impl<P: Publisher> RelayWorker<P> {
             match self.outbox.try_acquire_lock().await {
                 Ok(acquired) => {
                     if acquired != holding {
-                        println!(
-                            "outbox relay {}",
+                        tracing::info!(
+                            operation = "outbox.lock",
+                            active = acquired,
+                            "{}",
                             if acquired {
-                                "is active: lock acquired"
+                                "outbox relay is active: lock acquired"
                             } else {
-                                "is standby: lock lost"
+                                "outbox relay is standby: lock lost"
                             }
                         );
                     }
                     holding = acquired;
                 }
                 Err(error) => {
-                    eprintln!("outbox lock: {error}");
+                    tracing::warn!(operation = "outbox.lock", error.message = %error, "outbox lock failed");
                     holding = false;
                 }
             }
             if holding {
                 if !self.cycle(&stop).await {
                     // Standby until the lock is acquired again; no cleanup.
-                    println!("outbox relay is standby: lock lost");
+                    tracing::info!(
+                        operation = "outbox.lock",
+                        active = false,
+                        "outbox relay is standby: lock lost"
+                    );
                     holding = false;
                 } else if Instant::now() >= next_cleanup {
                     match self.outbox.cleanup(self.config.retention).await {
                         Ok(0) => {}
-                        Ok(deleted) => println!("outbox retention deleted {deleted} rows"),
-                        Err(error) => eprintln!("outbox retention: {error}"),
+                        Ok(deleted) => {
+                            tracing::info!(
+                                operation = "outbox.retention",
+                                deleted,
+                                "outbox retention deleted rows"
+                            );
+                        }
+                        Err(error) => {
+                            tracing::warn!(operation = "outbox.retention", error.message = %error, "outbox retention failed");
+                        }
                     }
                     next_cleanup = Instant::now() + self.config.cleanup_interval;
                 }
@@ -268,7 +338,7 @@ impl<P: Publisher> Worker for RelayWorker<P> {
             .await
             .is_err()
         {
-            eprintln!("outbox lock release timed out");
+            tracing::warn!(operation = "outbox.lock", "outbox lock release timed out");
         }
         Ok(())
     }

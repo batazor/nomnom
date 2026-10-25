@@ -3,15 +3,19 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 
 use delivery::di;
+use delivery::di::server::SERVICE_NAME;
 use delivery::pkg::config;
 use delivery::pkg::lifecycle::{Lifecycle, Settings};
+use delivery::pkg::telemetry::log;
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Логи — JSON с первой записи, ошибки конфигурации тоже.
+    log::init_logs(SERVICE_NAME);
     match run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("delivery: {error}");
+            tracing::error!(operation = "startup", error.message = %error, "delivery stopped with an error");
             ExitCode::FAILURE
         }
     }

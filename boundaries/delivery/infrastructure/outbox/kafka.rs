@@ -44,7 +44,7 @@ impl KafkaPublisher {
     /// Waits for messages still in flight.
     pub fn flush(&self) {
         if let Err(error) = self.producer.flush(Timeout::After(self.timeout)) {
-            eprintln!("kafka flush: {error}");
+            tracing::warn!(operation = "kafka.flush", error.type = classify(&error), error.message = %error, "kafka flush failed");
         }
     }
 }

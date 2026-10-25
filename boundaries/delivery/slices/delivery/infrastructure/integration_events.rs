@@ -119,8 +119,7 @@ impl OutboxMapper for DeliveryIntegrationEvents {
         Some(OutboxRecord {
             event_type: event_type.to_owned(),
             payload,
-            // The process has no trace context yet; the relay sends traceparent
-            // when the row carries one.
+            // The Outbox adds the traceparent of the current span.
             metadata: serde_json::json!({}),
         })
     }

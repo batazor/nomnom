@@ -52,9 +52,10 @@ pub fn subject_resolver(
     match ServiceTokenSubjectResolver::from_config(config)? {
         Some(resolver) => Ok(Arc::new(resolver)),
         None => {
-            eprintln!(
-                "delivery: warning: IDENTITY__ISSUER, IDENTITY__AUDIENCE or IDENTITY__JWKS_FILE \
-                 is not set; every gRPC call is rejected as unauthenticated"
+            tracing::warn!(
+                operation = "identity.config",
+                "IDENTITY__ISSUER, IDENTITY__AUDIENCE or IDENTITY__JWKS_FILE is not set; \
+                 every gRPC call is rejected as unauthenticated"
             );
             Ok(Arc::new(RejectingSubjectResolver))
         }
@@ -128,9 +129,12 @@ impl ServiceTokenSubjectResolver {
             format!("user assertion from {service:?} rejected: user assertions are not configured")
         })?;
         let user = users.verify(&service, token)?;
-        eprintln!(
-            "delivery: user assertion accepted: jti={:?} delegate={service:?}",
-            user.jti
+        tracing::info!(
+            operation = "identity.user_assertion",
+            outcome = "accepted",
+            jti = ?user.jti,
+            delegate = %service,
+            "user assertion accepted"
         );
         Ok(Caller {
             subject: Subject::User(user.sub),
@@ -144,7 +148,7 @@ impl SubjectResolver for ServiceTokenSubjectResolver {
         self.authenticate(metadata)
             .map(|caller| caller.subject)
             .map_err(|reason| {
-                eprintln!("delivery: unauthenticated gRPC call: {reason}");
+                tracing::warn!(operation = "identity.verify", outcome = "rejected", error.type = "unauthenticated", error.message = %reason, "unauthenticated gRPC call");
                 Status::unauthenticated(UNAUTHENTICATED)
             })
     }

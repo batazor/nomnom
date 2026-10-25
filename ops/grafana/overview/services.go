@@ -9,7 +9,7 @@ func Services() []Options {
 		{
 			Context: "orders", Title: "Orders", Language: Go,
 			Services: []string{inventory.Orders, inventory.OrdersWorker, inventory.OrdersConsumer},
-			GRPC:     true, GRPCClients: true, Database: PostgreSQL,
+			GRPC:     true, GRPCClients: true, Database: PostgreSQL, DatabasePool: true,
 			Kafka:    &Kafka{Watermill: true, ConsumerGroup: "orders", Consumers: []string{inventory.OrdersConsumer}},
 			UseCases: true, UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Temporal: &Temporal{Worker: inventory.OrdersWorker},
@@ -25,8 +25,8 @@ func Services() []Options {
 		},
 		{
 			Context: "delivery", Title: "Delivery", Language: Rust,
-			Services:   []string{inventory.Delivery},
-			GRPC:       true,
+			Services: []string{inventory.Delivery},
+			GRPC:     true, Database: PostgreSQL, DatabasePool: true,
 			Kafka:      &Kafka{ConsumerGroup: "delivery", Consumers: []string{inventory.Delivery}},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: deliveryDomain, DomainAlerts: deliveryAlerts,
@@ -34,7 +34,7 @@ func Services() []Options {
 		{
 			Context: "payments", Title: "Payments", Language: Python,
 			Services: []string{inventory.Payments},
-			GRPC:     true, PaymentProvider: true,
+			GRPC:     true, Database: PostgreSQL, DatabasePool: true, PaymentProvider: true,
 			Kafka:      &Kafka{ConsumerGroup: "payments", Consumers: []string{inventory.Payments}},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: paymentsDomain,

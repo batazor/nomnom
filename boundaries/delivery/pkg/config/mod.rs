@@ -7,7 +7,8 @@ use config::ConfigError;
 use serde::Deserialize;
 
 pub use infrastructure::{
-    DatabaseConfig, KafkaConfig, OffersConfig, OutboxConfig, ReconcilerConfig, SpiceDbConfig,
+    DatabaseConfig, KafkaConfig, MAX_DATABASE_MAX_CONNS, MAX_DATABASE_MIN_CONNS, OffersConfig,
+    OutboxConfig, ReconcilerConfig, SpiceDbConfig,
 };
 pub use load::load;
 #[cfg(test)]
@@ -91,16 +92,28 @@ pub const OFFERS_EXPIRY_BATCH_ENV: &str = "OFFERS__EXPIRY_BATCH";
 pub const MAX_OFFERS_EXPIRY_BATCH: u32 = 1000;
 
 /// PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста): ключ, переменная, значение по умолчанию.
-const DATABASE_SETTINGS: [(&str, &str, &str); 2] = [
+const DATABASE_SETTINGS: [(&str, &str, &str); 6] = [
     ("database.url", DATABASE_URL_ENV, ""),
     (
         "database.max_conns",
         DATABASE_MAX_CONNS_ENV,
         DEFAULT_DATABASE_MAX_CONNS,
     ),
+    ("database.min_conns", DATABASE_MIN_CONNS_ENV, "0"),
+    ("database.max_lifetime", DATABASE_MAX_LIFETIME_ENV, "30m"),
+    ("database.idle_timeout", DATABASE_IDLE_TIMEOUT_ENV, "5m"),
+    (
+        "database.acquire_timeout",
+        DATABASE_ACQUIRE_TIMEOUT_ENV,
+        "5s",
+    ),
 ];
 pub const DATABASE_URL_ENV: &str = "DATABASE__URL";
 pub const DATABASE_MAX_CONNS_ENV: &str = "DATABASE__MAX_CONNS";
+pub const DATABASE_MIN_CONNS_ENV: &str = "DATABASE__MIN_CONNS";
+pub const DATABASE_MAX_LIFETIME_ENV: &str = "DATABASE__MAX_LIFETIME";
+pub const DATABASE_IDLE_TIMEOUT_ENV: &str = "DATABASE__IDLE_TIMEOUT";
+pub const DATABASE_ACQUIRE_TIMEOUT_ENV: &str = "DATABASE__ACQUIRE_TIMEOUT";
 pub const DEFAULT_DATABASE_MAX_CONNS: &str = "10";
 
 /// Kafka (ADR 31): ключ, переменная, значение по умолчанию. Brokers обязательны

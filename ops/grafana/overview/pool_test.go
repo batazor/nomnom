@@ -27,6 +27,11 @@ func TestPoolAlerts(t *testing.T) {
 			if !slices.Equal(got, want) {
 				t.Errorf("%s: pool rules %v, want %v", o.Context, got, want)
 			}
+		case o.DatabasePool:
+			// cleared — только MongoDB CMAP; у PostgreSQL пулов такого события нет.
+			if postgres := want[:len(want)-1]; !slices.Equal(got, postgres) {
+				t.Errorf("%s: pool rules %v, want %v", o.Context, got, postgres)
+			}
 		case !o.DatabasePool && len(got) > 0:
 			t.Errorf("%s: pool rules %v without DatabasePool", o.Context, got)
 		}

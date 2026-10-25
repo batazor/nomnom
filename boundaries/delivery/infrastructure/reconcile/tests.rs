@@ -5,17 +5,25 @@ use crate::infrastructure::memory::MemoryStore;
 use crate::infrastructure::spicedb::{FakeGraph, courier_self, delivery_courier};
 use crate::pkg::persistence::AuthorizationRevision;
 
-/// Business state of one relation.
+/// Business state of one relation: `(resource, subject, row version)`.
 #[derive(Default)]
-struct FakeSource(Mutex<Vec<(String, String)>>);
+struct FakeSource(Mutex<Vec<SourceRow>>);
 
 impl FakeSource {
+    /// Rows at version 1.
     fn with(rows: &[(&str, &str)]) -> Self {
         Self(Mutex::new(
             rows.iter()
-                .map(|(resource, subject)| ((*resource).to_owned(), (*subject).to_owned()))
+                .map(|(resource, subject)| ((*resource).to_owned(), (*subject).to_owned(), 1))
                 .collect(),
         ))
+    }
+
+    /// Assigns `subject` to `resource` at `version`, replacing its row.
+    fn assign(&self, resource: &str, subject: &str, version: u64) {
+        let mut rows = self.0.lock().expect("rows");
+        rows.retain(|(id, _, _)| id != resource);
+        rows.push((resource.to_owned(), subject.to_owned(), version));
     }
 }
 
@@ -26,17 +34,17 @@ impl RelationSource for Arc<FakeSource> {
             .lock()
             .expect("rows")
             .iter()
-            .filter(|(resource, _)| ids.contains(resource))
-            .cloned()
+            .filter(|(resource, _, _)| ids.contains(resource))
+            .map(|(resource, subject, _)| (resource.clone(), subject.clone()))
             .collect())
     }
 
-    fn page(&self, after: &str, limit: usize) -> Result<Vec<(String, String)>, String> {
+    fn page(&self, after: &str, limit: usize) -> Result<Vec<SourceRow>, String> {
         let mut rows = self.0.lock().expect("rows").clone();
         rows.sort();
         Ok(rows
             .into_iter()
-            .filter(|(resource, _)| resource.as_str() > after)
+            .filter(|(resource, _, _)| resource.as_str() > after)
             .take(limit)
             .collect())
     }
@@ -150,14 +158,41 @@ fn relationship_deleted_by_an_uncommitted_writer_is_not_resurrected() {
     assert!(h.graph.writes().is_empty());
 
     // Assigned again later: the grace starts over.
-    h.source
-        .0
-        .lock()
-        .expect("rows")
-        .push(("delivery-1".to_owned(), "courier-1".to_owned()));
+    h.source.assign("delivery-1", "courier-1", 3);
     h.advance(GRACE);
     assert_eq!(h.pass().missing_pending, 1);
     assert!(!h.graph.contains(&released));
+}
+
+/// FR-563: between the two passes the courier was re-assigned and revoked
+/// again (two commits, the subject is the same on both passes). Each commit
+/// bumped the row version, so the second pass does not restore: the
+/// relationship it sees missing may come from the newer writer's DELETE.
+#[test]
+fn reassigned_and_revoked_between_passes_is_not_restored() {
+    let released = delivery_courier("delivery-1", "courier-1");
+    let mut h = harness(
+        FakeGraph::default(),
+        FakeSource::with(&[("delivery-1", "courier-1")]),
+        500,
+    );
+
+    assert_eq!(h.pass().missing_pending, 1);
+    // Reassign Courier away and back to courier-1, then a new revoke deletes
+    // the relationship before its commit: same subject, newer version.
+    h.source.assign("delivery-1", "courier-1", 4);
+    h.advance(GRACE);
+    let second = h.pass();
+    assert_eq!((second.missing_pending, second.missing_repaired), (1, 0));
+    assert!(h.graph.writes().is_empty(), "not restored on a new version");
+
+    // Unchanged on two passes at the new version: restored after a full grace.
+    h.advance(GRACE - Duration::from_secs(1));
+    assert_eq!(h.pass().missing_pending, 1);
+    assert!(!h.graph.contains(&released));
+    h.advance(Duration::from_secs(1));
+    assert_eq!(h.pass().missing_repaired, 1);
+    assert!(h.graph.contains(&released));
 }
 
 #[test]
@@ -239,11 +274,7 @@ fn candidate_is_forgotten_when_business_catches_up() {
     );
 
     assert_eq!(h.pass().orphans_pending, 1);
-    h.source
-        .0
-        .lock()
-        .expect("rows")
-        .push(("delivery-1".to_owned(), "courier-1".to_owned()));
+    h.source.assign("delivery-1", "courier-1", 3);
     h.advance(GRACE);
     assert_eq!(
         h.pass(),

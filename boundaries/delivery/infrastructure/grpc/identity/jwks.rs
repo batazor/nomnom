@@ -27,7 +27,7 @@ pub(super) fn parse_user_jwks(
             if key.algorithm == Algorithm::ES256 {
                 Some((kid, key.key))
             } else {
-                eprintln!("delivery: warning: BFF JWKS key {kid:?} is not ES256 and is ignored");
+                tracing::warn!(operation = "identity.jwks", kid = ?kid, "BFF JWKS key is not ES256 and is ignored");
                 None
             }
         })
@@ -52,8 +52,10 @@ pub(super) fn parse_jwks(
             .filter(|kid| !kid.is_empty())
             .ok_or_else(|| config_error("JWKS key without kid"))?;
         let Some(algorithm) = verification_algorithm(jwk) else {
-            eprintln!(
-                "delivery: warning: JWKS key {kid:?} is not usable for RS256/ES256 and is ignored"
+            tracing::warn!(
+                operation = "identity.jwks",
+                kid = ?kid,
+                "JWKS key is not usable for RS256/ES256 and is ignored"
             );
             continue;
         };

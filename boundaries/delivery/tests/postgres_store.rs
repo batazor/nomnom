@@ -40,6 +40,7 @@ fn config() -> Option<DatabaseConfig> {
     Some(DatabaseConfig {
         url: dsn,
         max_conns: 4,
+        ..DatabaseConfig::default()
     })
 }
 
@@ -478,6 +479,22 @@ fn reconciliation_reads_only_active_assignments() {
         store.assigned_couriers(std::slice::from_ref(&id)),
         Ok(vec![(id.clone(), courier.clone())])
     );
+    // FR-563: the page carries the row version the missing candidate is keyed by.
+    let stored = DeliveryRepository::get(&store, delivery.id())
+        .expect("get")
+        .expect("delivery");
+    let page = store.assignment_page("", 10_000).expect("page");
+    assert!(page.contains(&(id.clone(), courier.clone(), stored.version())));
+    CourierRepository::add(&store, &Courier::new(courier_id.clone())).expect("courier");
+    let registered = CourierRepository::get(&store, &courier_id)
+        .expect("get")
+        .expect("courier");
+    assert!(
+        store
+            .courier_page("", 100_000)
+            .expect("couriers")
+            .contains(&(courier.clone(), registered.version()))
+    );
 
     let mut closed = DeliveryRepository::get(&store, delivery.id())
         .expect("get")
@@ -495,7 +512,7 @@ fn reconciliation_reads_only_active_assignments() {
             .assignment_page("", 10_000)
             .expect("page")
             .iter()
-            .all(|(delivery_id, _)| delivery_id != &id)
+            .all(|(delivery_id, _, _)| delivery_id != &id)
     );
     assert_eq!(
         store.record_assignment_revision(&id, &courier, AuthorizationRevision::new("zed-c")),

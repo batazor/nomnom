@@ -20,26 +20,25 @@
 //! together.
 
 mod migrate;
+mod pool;
 
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
 
-use sqlx::Postgres;
-use sqlx::pool::PoolConnection;
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::postgres::PgPool;
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 
 pub use migrate::{MIGRATOR, migrate};
 pub use outbox::{NoIntegrationEvents, OUTBOX_TOPIC, OutboxMapper, OutboxRecord, event_id};
+pub use pool::{
+    OPERATION_BUCKETS, ObservedConnection, POOL_METER_NAME, POOL_NAME, POOL_TIME_BUCKETS,
+    PoolMetrics, error_type, operation_name, pool_options,
+};
 
 use crate::pkg::config::{DATABASE_URL_ENV, DatabaseConfig};
 use crate::pkg::persistence::RepositoryError;
 use transaction::{put_active, take_active};
-
-/// How long a caller waits for a free connection.
-const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Runs blocking work without blocking an async worker in place.
 pub(crate) fn blocking<T: Send>(work: impl FnOnce() -> T + Send) -> T {
@@ -57,7 +56,7 @@ pub(crate) fn blocking<T: Send>(work: impl FnOnce() -> T + Send) -> T {
     }
 }
 
-type Connection = PoolConnection<Postgres>;
+type Connection = ObservedConnection;
 
 static NEXT_STORE_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -70,7 +69,10 @@ struct Lease {
 /// PostgreSQL adapter of every storage port of `delivery`.
 pub struct PostgresStore {
     id: usize,
-    pool: Option<PgPool>,
+    pool: Option<Arc<PgPool>>,
+    metrics: PoolMetrics,
+    /// Client spans of statements (`pkg/telemetry/db`).
+    tracer: opentelemetry::global::BoxedTracer,
     mapper: Arc<dyn OutboxMapper>,
     runtime: Option<Runtime>,
 }
@@ -88,16 +90,9 @@ impl PostgresStore {
             .build()
             .map_err(|error| format!("postgres runtime: {error}"))?;
         let url = config.url.clone();
-        let max = config.max_conns;
-        let pool = blocking(|| {
-            runtime.block_on(async move {
-                PgPoolOptions::new()
-                    .max_connections(max)
-                    .acquire_timeout(ACQUIRE_TIMEOUT)
-                    .connect(&url)
-                    .await
-            })
-        });
+        let metrics = PoolMetrics::global();
+        let options = metrics.instrument(pool_options(config, config.max_conns));
+        let pool = blocking(|| runtime.block_on(async move { options.connect(&url).await }));
         let pool = match pool {
             Ok(pool) => pool,
             Err(error) => {
@@ -105,8 +100,12 @@ impl PostgresStore {
                 return Err(format!("connect postgres: {error}"));
             }
         };
+        let pool = Arc::new(pool);
+        metrics.observe(&pool);
         Ok(Self {
             id: NEXT_STORE_ID.fetch_add(1, Ordering::Relaxed),
+            metrics,
+            tracer: opentelemetry::global::tracer(crate::pkg::telemetry::db::INSTRUMENTATION),
             pool: Some(pool),
             mapper: Arc::new(NoIntegrationEvents),
             runtime: Some(runtime),
@@ -124,7 +123,7 @@ impl PostgresStore {
         self.runtime.as_ref().expect("runtime lives until drop")
     }
 
-    fn pool(&self) -> PgPool {
+    fn pool(&self) -> Arc<PgPool> {
         self.pool.clone().expect("pool lives until drop")
     }
 
@@ -145,8 +144,9 @@ impl PostgresStore {
             });
         }
         let pool = self.pool();
+        let metrics = self.metrics.clone();
         let connection = self
-            .block_on(async move { pool.acquire().await })
+            .block_on(async move { metrics.acquire(&pool).await })
             .map_err(storage_error)?;
         Ok(Lease {
             connection,
@@ -191,13 +191,29 @@ impl Drop for PostgresStore {
 /// Runs one statement on the leased connection and maps the sqlx error.
 /// Dynamic statements are `format!` over column-list constants only
 /// (`AssertSqlSafe`); values are always bound.
+/// `$operation` is the SQL keyword for `db.client.operation.duration`; the
+/// table (`db.collection.name`) is read once from the statement literal of
+/// the call site. Inside a trace the statement gets a client span.
 macro_rules! sql {
-    ($store:expr, |$connection:ident| $body:expr) => {{
+    ($store:expr, $operation:literal, |$connection:ident| $body:expr) => {{
+        static STATEMENT: std::sync::OnceLock<crate::pkg::telemetry::db::Statement> =
+            std::sync::OnceLock::new();
+        let statement = STATEMENT
+            .get_or_init(|| crate::pkg::telemetry::db::Statement::of_source(stringify!($body)));
         let mut lease = $store.lease()?;
+        let span = crate::pkg::telemetry::db::start(&$store.tracer, statement);
+        let started = std::time::Instant::now();
         let result = {
             let $connection: &mut sqlx::PgConnection = &mut *lease.connection;
             $store.block_on(async move { $body.await })
         };
+        crate::pkg::telemetry::db::end(span, &result);
+        $store.metrics.operation(
+            $operation,
+            statement.collection.as_deref(),
+            started,
+            &result,
+        );
         $store.release(lease);
         result.map_err(storage_error)
     }};

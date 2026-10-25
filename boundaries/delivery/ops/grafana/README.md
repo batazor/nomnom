@@ -61,6 +61,17 @@ JSON — артефакт генератора: правки вносятся в
 | Memory working set by pod | live | — |
 | Network by pod | live | — |
 
+### Dependencies
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| postgresql: operations | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| postgresql: p95 by operation | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| postgresql: pool connections | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_idle_min`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| postgresql: pool saturation | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| postgresql: pending checkouts and timeouts | TODO | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| postgresql: pool wait / use / create p95 | TODO | [`db_client_connection_create_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_use_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+
 ### Kafka
 
 | Панель | Статус | Недостающие метрики |
@@ -113,7 +124,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
-Живых панелей: 6 из 41. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 6 из 47. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
@@ -124,6 +135,10 @@ Rule group `delivery` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.jso
 | Delivery: gRPC technical errors | critical | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
 | Delivery: gRPC p95 latency | warning | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
 | Delivery: messages sent to DLQ | warning | ждёт метрик | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Delivery: postgresql pool saturated | warning | ждёт метрик | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| Delivery: postgresql pool checkouts queued | warning | ждёт метрик | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db) |
+| Delivery: postgresql pool wait p95 | warning | ждёт метрик | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
+| Delivery: postgresql pool checkout timeouts | warning | ждёт метрик | [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db) |
 | Delivery: failures outside the reason catalog | warning | ждёт метрик | [`nomnom_delivery_failed_total`](../../../../docs/observability/metric-inventory.md#domain) |
 
 ## Переходы

@@ -6,6 +6,7 @@
 pub mod failure_log;
 mod integration_events;
 pub mod observability;
+pub mod observed_use_cases;
 
 pub use integration_events::{
     COURIER_ASSIGNED_TO_DELIVERY, DELIVERY_COMPLETED, DELIVERY_FAILED, DELIVERY_PICKED_UP,

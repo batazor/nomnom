@@ -202,13 +202,26 @@ spicedb:
 # создаётся развёртыванием (root ops/kind: delivery-postgres, ключ dsn), не этим chart.
 # migrate: init container `delivery-migrate` перед процессом в каждом pod; advisory lock
 # sqlx сериализует миграции реплик.
+# pool — лимиты пула одного pod (DATABASE__*); невалидные значения завершают startup.
+# Соединений на сервер: replicas × maxConns (+1 lock-соединение у relay). Pooler перед
+# PostgreSQL — только session mode: relay и миграции держат session advisory lock.
 database:
   urlSecret:
     name: delivery-postgres
     key: dsn
-  # Максимум соединений пула одного pod (DATABASE__MAX_CONNS).
-  maxConns: 10
   migrate: true
+  pool:
+    # API: Unit of Work держит соединение всю транзакцию (DATABASE__MAX_CONNS, 1..100).
+    maxConns: 10
+    # Init container delivery-migrate: одно соединение под advisory lock sqlx.
+    migrateMaxConns: 1
+    # Idle-минимум 0..1 (DATABASE__MIN_CONNS): idle не держат соединения pooler.
+    minConns: 0
+    maxLifetime: 30m
+    # Не больше maxLifetime.
+    idleTimeout: 5m
+    # Ожидание соединения пула; затем UNAVAILABLE и db.client.connection.timeouts.
+    acquireTimeout: 5s
 
 volumes: []
 volumeMounts: []

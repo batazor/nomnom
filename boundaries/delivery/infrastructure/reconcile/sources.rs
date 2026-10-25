@@ -13,20 +13,25 @@ use crate::slices::delivery::domains::delivery::Delivery;
 /// committed state; revision writes are single-statement transactions that
 /// bump the aggregate version.
 pub trait ReconciliationStore: Send + Sync {
-    /// Registered courier ids after `after`, ordered by id.
-    fn courier_page(&self, after: &str, limit: usize) -> Result<Vec<String>, RepositoryError>;
+    /// `(courier_id, version)` of registered couriers after `after`, ordered
+    /// by id.
+    fn courier_page(
+        &self,
+        after: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, u64)>, RepositoryError>;
 
     /// Which of `ids` are registered couriers.
     fn registered_couriers(&self, ids: &[String]) -> Result<Vec<String>, RepositoryError>;
 
-    /// `(delivery_id, courier_id)` of active assignments
+    /// `(delivery_id, courier_id, version)` of active assignments
     /// ([`Delivery::active_courier`]) after `after`, ordered by delivery id.
     /// A delivered or failed delivery keeps `courier_id` but is not listed.
     fn assignment_page(
         &self,
         after: &str,
         limit: usize,
-    ) -> Result<Vec<(String, String)>, RepositoryError>;
+    ) -> Result<Vec<(String, String, u64)>, RepositoryError>;
 
     /// `(delivery_id, courier_id)` for those of `ids` with an active
     /// assignment ([`Delivery::active_courier`]).
@@ -50,7 +55,11 @@ pub trait ReconciliationStore: Send + Sync {
 }
 
 impl ReconciliationStore for MemoryStore {
-    fn courier_page(&self, after: &str, limit: usize) -> Result<Vec<String>, RepositoryError> {
+    fn courier_page(
+        &self,
+        after: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, u64)>, RepositoryError> {
         MemoryStore::courier_page(self, after, limit)
     }
 
@@ -62,7 +71,7 @@ impl ReconciliationStore for MemoryStore {
         &self,
         after: &str,
         limit: usize,
-    ) -> Result<Vec<(String, String)>, RepositoryError> {
+    ) -> Result<Vec<(String, String, u64)>, RepositoryError> {
         MemoryStore::assignment_page(self, after, limit)
     }
 
@@ -88,13 +97,19 @@ impl ReconciliationStore for MemoryStore {
     }
 }
 
+/// `(resource_id, subject_id, version)`: a business row and the version of
+/// the Courier or Delivery row it was read from. Every committed write of the
+/// row bumps the version, so an unchanged version on two passes means no
+/// writer committed in between (FR-563).
+pub type SourceRow = (String, String, u64);
+
 /// Business side of one relation: `resource_id → subject_id`.
 pub trait RelationSource: Send + Sync {
     /// Subjects that business state assigns to those of `resource_ids` it knows.
     fn subjects_of(&self, resource_ids: &[String]) -> Result<HashMap<String, String>, String>;
 
     /// `(resource_id, subject_id)` after `after`, ordered by resource id.
-    fn page(&self, after: &str, limit: usize) -> Result<Vec<(String, String)>, String>;
+    fn page(&self, after: &str, limit: usize) -> Result<Vec<SourceRow>, String>;
 
     /// Stores the revision of a restored relationship with the resource, if
     /// business state still assigns `subject_id` to it.
@@ -118,12 +133,15 @@ impl RelationSource for RegisteredCouriers {
         Ok(registered.into_iter().map(|id| (id.clone(), id)).collect())
     }
 
-    fn page(&self, after: &str, limit: usize) -> Result<Vec<(String, String)>, String> {
+    fn page(&self, after: &str, limit: usize) -> Result<Vec<SourceRow>, String> {
         let page = self
             .0
             .courier_page(after, limit)
             .map_err(|error| error.to_string())?;
-        Ok(page.into_iter().map(|id| (id.clone(), id)).collect())
+        Ok(page
+            .into_iter()
+            .map(|(id, version)| (id.clone(), id, version))
+            .collect())
     }
 
     fn record_revision(
@@ -154,7 +172,7 @@ impl RelationSource for AssignedDeliveries {
             .collect())
     }
 
-    fn page(&self, after: &str, limit: usize) -> Result<Vec<(String, String)>, String> {
+    fn page(&self, after: &str, limit: usize) -> Result<Vec<SourceRow>, String> {
         self.0
             .assignment_page(after, limit)
             .map_err(|error| error.to_string())
