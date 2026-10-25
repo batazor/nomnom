@@ -296,7 +296,7 @@
 }
 
 /* Phone order: menu, then cart and checkout; side by side on wide screens. */
-@media (min-width: 64rem) {
+@container style(--viewport: lg) {
   .restaurant-page {
     padding-bottom: 0;
   }

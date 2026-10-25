@@ -80,6 +80,24 @@
   }
 }
 
+/* Named viewport breakpoints: media queries set one token on :root, and
+   layouts read it with style queries instead of repeating the widths. */
+:root {
+  --viewport: xs;
+
+  @media (min-width: 40rem) {
+    --viewport: sm;
+  }
+
+  @media (min-width: 48rem) {
+    --viewport: md;
+  }
+
+  @media (min-width: 64rem) {
+    --viewport: lg;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-fast: 0ms;

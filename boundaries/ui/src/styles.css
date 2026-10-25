@@ -22,9 +22,13 @@ body {
   overflow-x: hidden;
 }
 
+/* manipulation keeps pan and pinch zoom but drops double-tap zoom, so fast
+   repeated taps on the cart stepper do not zoom the page. */
 button,
-a {
+a,
+[role="button"] {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 :focus-visible {
@@ -83,6 +87,8 @@ a {
   color: var(--color-primary);
   font-size: var(--font-size-sm);
   font-weight: 700;
+  /* Trim the font's ascent and descent so the letter sits optically centred. */
+  text-box: trim-both cap alphabetic;
 }
 
 .brand-mark::after {
@@ -128,6 +134,7 @@ a {
   min-height: 2.75rem;
   border-radius: var(--radius-control);
   font-weight: 600;
+  text-box: trim-both cap alphabetic;
 }
 
 .nomnom-button[data-variant="primary"] {
@@ -159,7 +166,7 @@ a {
   min-width: 0;
 }
 
-@media (min-width: 48rem) {
+@container style(--viewport: md) or style(--viewport: lg) {
   .app-topbar {
     padding-inline: var(--space-8);
   }

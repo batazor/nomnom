@@ -127,7 +127,7 @@
   height: 2rem;
 }
 
-@media (min-width: 40rem) {
+@container style(--viewport: sm) or style(--viewport: md) or style(--viewport: lg) {
   .manage-opening {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
