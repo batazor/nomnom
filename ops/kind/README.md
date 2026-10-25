@@ -261,7 +261,8 @@ Traces браузера идут через тот же фильтр `service.na
 
 В том же profile BFF (Cosmo Router) пишет traces в Alloy по OTLP/HTTP
 (`values/bff-grafana-cloud.yaml`) и продолжает `traceparent` браузера: в Tempo корневой span —
-fetch `customer-ui`, под ним `query <Operation>` сервиса `bff`. Для проверки из браузера —
+fetch `customer-ui`, под ним `query <Operation>` сервиса `bff`, вызов plugin `bff-plugin` и его
+gRPC client span, затем server span и usecase контекста (например `restaurants`). Для проверки из браузера —
 конфигурация `customer-ui-kind` в `.claude/launch.json` (BFF на `localhost:3010`, Faro на
 `localhost:12347` через port-forward).
 

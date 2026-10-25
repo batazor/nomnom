@@ -11,6 +11,7 @@ require (
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.72.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc
 )
 

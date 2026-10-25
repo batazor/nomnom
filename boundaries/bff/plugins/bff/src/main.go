@@ -22,7 +22,13 @@ func main() {
 
 	plugin, err := routerplugin.NewRouterPlugin(func(server *grpc.Server) {
 		server.RegisterService(&service.BffService_ServiceDesc, bff)
-	}, routerplugin.WithTracing())
+	},
+		// Exporters come from the Router (telemetry.tracing); spans of the plugin
+		// get their own service so Alloy can admit them (wg.is_plugin, alloy.yaml).
+		routerplugin.WithTracing(),
+		routerplugin.WithServiceName("bff-plugin"),
+		routerplugin.WithServiceVersion(serviceVersion),
+	)
 	if err != nil {
 		log.Fatalf("create router plugin: %v", err)
 	}

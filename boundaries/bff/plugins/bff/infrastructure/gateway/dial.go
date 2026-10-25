@@ -5,6 +5,7 @@ package gateway
 import (
 	"fmt"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -13,11 +14,15 @@ import (
 
 // Dial opens a lazy connection to the internal gateway for one target context;
 // every call carries the service token of BFF for audience and, when the
-// request has a customer, a user assertion (ADR 32). No I/O happens here.
+// request has a customer, a user assertion (ADR 32). The client span continues
+// the trace of the GraphQL request: the router plugin installs the global
+// TracerProvider and W3C propagator, otelgrpc injects traceparent. No I/O
+// happens here.
 func Dial(gateway, audience string, credentials identity.OutgoingCredentials) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(gateway,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(identity.UnaryClientInterceptor(audience, credentials.ServiceTokens, credentials.Signer)),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("dial internal gateway %s for %s: %w", gateway, audience, err)
