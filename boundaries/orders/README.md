@@ -146,9 +146,9 @@ gateway не доверяет. Политика контрактов, генер
 
 ## Хранилище: PostgreSQL
 
-PostgreSQL предлагается как основное логическое хранилище `orders`. Реляционная модель и транзакции подходят для хранения `Order` и его `Order Item`, снимков названий, цен, выбранных вариантов и дополнительных опций на момент оформления, согласованного изменения связанных данных, контроля конкурентных изменений, уникальности и ограничений целостности.
+PostgreSQL — основное логическое хранилище `orders`. Реляционная модель и транзакции подходят для хранения `Order` и его `Order Item`, снимков названий, цен, выбранных вариантов и дополнительных опций на момент оформления, согласованного изменения связанных данных, контроля конкурентных изменений, уникальности и ограничений целостности.
 
-Доменная модель определяет бизнес-инварианты `Order`; ограничения базы дополняют, но не заменяют эти проверки. Реализация репозитория в `infrastructure` преобразует persistence-модели в доменные типы и сохраняет изменения агрегата в явно определённой транзакционной границе. Конкретные таблицы, isolation level и механизм контроля конкуренции будут спроектированы вместе с SDD-сценариями.
+Доменная модель определяет бизнес-инварианты `Order`; ограничения базы дополняют, но не заменяют эти проверки. Реализация репозитория в `infrastructure` преобразует persistence-модели в доменные типы и сохраняет изменения агрегата в явно определённой транзакционной границе. Реализация — [`slices/order/infrastructure/postgres`](slices/order/infrastructure/postgres): PostgreSQL 18, pgx v5, миграции goose (`migrations/`, применяет `cmd/orders-migrate` под advisory lock). Таблицы `orders` (с `version` и `authorization_revision`), `order_items`, `order_facts`, `inbox`, `idempotency_keys` и Outbox `watermill_orders_outbox`. Unit of Work — `READ COMMITTED` транзакция в context, вложенный `Do` присоединяется к внешней; `Save` проверяет `version` и при расхождении возвращает `ErrConcurrencyConflict`. API, worker, consumer и forwarder работают с одной базой; `POSTGRES__DSN` обязателен.
 
 `orders` — основной потребитель Unit of Work: `Order` + Outbox, Inbox + `Order` (+ Outbox) и idempotent commands фиксируются одной транзакцией PostgreSQL с `READ COMMITTED` по умолчанию и optimistic concurrency по `version`; queries выполняются без UoW. Workflow транзакцией не владеет, каждая Activity вызывает handler со своим UoW. Когда общий UoW-контракт будет реализован, его shared package размещается в `pkg/application`; use-case-specific ports — рядом с package владельца в `slices/<slice>/applications/<usecase>`, реализация — в infrastructure модуля. Правила и список слайсов — в [документации Unit of Work](../../docs/unit-of-work.md#orders--postgresql), решение — в [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md).
 
@@ -158,7 +158,7 @@ CQRS остаётся логическим разделением command- и qu
 
 Бизнес-данные заказов и техническое хранилище Temporal разделены. Репозитории приложения работают с PostgreSQL-базой `orders`; внутренними данными выполнения workflow владеет Temporal. Приложение не использует Temporal storage как репозиторий `Order` и не управляет его внутренними таблицами напрямую.
 
-Решение имеет статус Proposed в [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md). Версия PostgreSQL, драйвер, ORM, migrations и реализация репозитория относятся к следующим шагам.
+Решение — [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); контрактные тесты адаптеров — `make test-postgres` (PostgreSQL поднимается testcontainers в `TestMain`; `POSTGRES_DSN` — использовать готовую базу).
 
 ## Dependency Injection
 
@@ -182,7 +182,7 @@ Temporal Activity retries не заменяют Inbox Pattern. Kafka-событ�
 
 Публикация интеграционных событий `orders` использует Transactional Outbox по общесистемному [ADR 13](../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md). Изменение `Order` и сообщение Outbox записываются в одной транзакции PostgreSQL через `watermill-sql` publisher, созданный на `*sql.Tx`; [Watermill Forwarder](https://watermill.io/advanced/forwarder/) доставляет сообщения в Kafka через `watermill-kafka`. UUID сообщения Watermill равен `event_id` и передаётся в Kafka header `event_id`. Kafka key `order_id` передаётся через metadata и извлекается partitioning marshaler Kafka publisher'а. Forwarder работает как single active instance: replicas служат failover, а не throughput. Activity, изменяющая `Order` и Outbox, идемпотентна по ключу, производному от Workflow ID и шага процесса, или по ожидаемой `aggregate_version`; workflow-код не публикует события.
 
-Схема Inbox и Outbox, миграции, Forwarder и Watermill middleware относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+Domain Events переводятся в Integration Events `nomnom.orders.v1` (`OrderPlaced`, `OrderCompleted`, `OrderCancelled`, [`events.proto`](infrastructure/grpc/nomnom/orders/v1/events.proto)) в той же транзакции; `event_id` детерминирован (UUIDv5 от `order:<id>:<version>:<index>`). Процесс `cmd/orders-forwarder` переносит их из Outbox в Kafka `orders.v1.order-events` с ключом `order_id`. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 Архитектурные решения контекста хранятся в [локальном журнале ADR](docs/adr/). Выбор Temporal зафиксирован в [ADR 2](docs/adr/0002-use-temporal-to-orchestrate-orders.md), контракт orchestration — в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md).
 
@@ -314,14 +314,27 @@ OpenSpec change `implement-orders-application-layer` добавил application-
 
 Контракт Temporal-адаптера за портом `fulfillment` зафиксирован в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md) и разделе [Order Fulfillment Workflow](#order-fulfillment-workflow). OpenSpec change `implement-order-fulfillment-temporal-adapter` реализовал его в [`slices/order/infrastructure/temporal/fulfillorder`](slices/order/infrastructure/temporal/fulfillorder/README.md) на `go.temporal.io/sdk` v1.50.0: workflow с deadlines из `Policy`, replan и эскалацией Assignment, Saga и Update `CancellationRequested`; Activities поверх `completeorder`, `failorcancelorder` и client-портов `Payments`, `Restaurants`, `Delivery`; реализацию порта `fulfillment` на Temporal client. Значения `DefaultPolicy` — placeholders до продуктовых решений.
 
-OpenSpec change `add-orders-temporal-worker` добавил процесс `cmd/orders-worker`: Wire injector `InitializeWorker`, конфигурацию `temporal.*` и `fulfillment.*`, проверку и регистрацию Search Attribute `OrderFulfillmentStage` при старте, адаптеры соседей `unavailable` (по умолчанию) и `simulated` в `slices/order/infrastructure/neighbours`, values-worker.yaml Helm chart и integration-тест против Temporal dev server (`make test-integration`). До PostgreSQL у API и worker'а отдельные in-memory store: worker видит только заказы своего процесса, поэтому в окружениях он не исполняет реальные заказы.
+OpenSpec change `add-orders-temporal-worker` добавил процесс `cmd/orders-worker`: Wire injector `InitializeWorker`, конфигурацию `temporal.*` и `fulfillment.*`, проверку и регистрацию Search Attribute `OrderFulfillmentStage` при старте, адаптеры соседей `unavailable` (по умолчанию) и `simulated` в `slices/order/infrastructure/neighbours`, values-worker.yaml Helm chart и integration-тест против Temporal dev server (`make test-integration`).
 
 Реализован общий Kafka transport на Watermill: конфигурация brokers/client/group,
 publisher с обязательным partition key `order_id`, subscriber consumer group и
-единый mapping `event_id` в UUID/metadata. Не реализованы: PostgreSQL,
-Watermill SQL Inbox/Outbox и Forwarder, конкретные Kafka topics и event contracts,
-runnable consumers, SpiceDB, production `SubjectResolver`, остальные command RPC,
-verified caller identity для вызовов соседей. Query handlers зарегистрированы в DI и доступны
+единый mapping `event_id` в UUID/metadata.
+
+OpenSpec change `add-orders-postgresql` перевёл API, worker и consumer на общий PostgreSQL store
+([`slices/order/infrastructure/postgres`](slices/order/infrastructure/postgres)): Unit of Work,
+repository с optimistic concurrency, Inbox, idempotency keys, read models, authorization revision
+и Transactional Outbox с процессом `cmd/orders-forwarder`; миграции — `cmd/orders-migrate`.
+In-memory store остаётся для unit-тестов.
+
+Не реализованы: user identity через BFF, остальные command RPC, writers relationships
+`restaurant`/`courier`/`delivery` и их reconciliation.
+
+Reconciliation `order#customer` — [`slices/order/infrastructure/reconcile`](slices/order/infrastructure/reconcile)
+и процесс `cmd/orders-reconciler` (Helm `values-reconciler.yaml`): orphan и stale relationships
+удаляются, только если остались такими на двух проходах с интервалом не меньше `RECONCILER__GRACE`
+(связь пишется до commit заказа); missing relationship восстанавливается `TOUCH` с обновлением
+`authorization_revision`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`,
+`missing_repaired`, `unrepairable`. Query handlers зарегистрированы в DI и доступны
 через gRPC. `.feature` сценарии `confirmorder` и
 `recordcourierassignment` покрыты unit-тестами handlers; Gherkin runner не подключён.
 
@@ -354,8 +367,15 @@ make temporal-dev-stop
 | `TEMPORAL__CONNECT_TIMEOUT` | `10s` | Предел подключения и проверки Search Attribute в startup |
 | `TEMPORAL__REGISTER_SEARCH_ATTRIBUTES` | `false` | Создать `OrderFulfillmentStage`, если его нет (нужны права оператора) |
 | `FULFILLMENT__<KEY>` | см. `config.example.yaml` | `Policy` workflow (placeholders), `PUBLISH_STAGE`, `NEIGHBOURS` |
+| `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` | —, `nomnom.orders`, — | Проверка входящего projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)); без них все вызовы `UNAUTHENTICATED` |
+| `IDENTITY__SERVICE_ACCOUNTS` | — | Allowlist `namespace/serviceaccount=service-name,…` |
+| `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker); пусто — без credentials |
+| `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer` при оформлении; обязателен для API-процесса: без endpoint он не стартует |
+| `RECONCILER__INTERVAL`, `RECONCILER__GRACE`, `RECONCILER__PAGE_SIZE` | `5m`, `10m`, `500` | `cmd/orders-reconciler`: сверка `order#customer` SpiceDB ↔ PostgreSQL |
+| `POSTGRES__DSN`, `POSTGRES__MAX_CONNS` | —, `10` | PostgreSQL orders (обязателен для всех процессов); локально — `make postgres-dev`, `make migrate` |
+| `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` | `false`, `2s` | Plaintext (только kind/локально) и deadline проверки; ошибка или timeout — отказ |
 
-`FULFILLMENT__NEIGHBOURS=unavailable` (по умолчанию) — вызовы соседей завершаются retryable ошибкой, workflow ждёт на текущем шаге; `simulated` одобряет вызовы без эффекта и предназначен только для локальной проверки; `grpc` вызывает командные API `payments`, `restaurants`, `delivery` через `INTERNAL_GATEWAY_ADDR` клиентами [`neighbours/grpcclient`](slices/order/infrastructure/neighbours/grpcclient) (Go-код генерируется `make generate` из workspace-модулей до публикации в BSR). Пока verified caller identity не спроектирована, серверы соседей отвечают `UNAUTHENTICATED`; клиент считает это retryable.
+`FULFILLMENT__NEIGHBOURS=unavailable` (по умолчанию) — вызовы соседей завершаются retryable ошибкой, workflow ждёт на текущем шаге; `simulated` одобряет вызовы без эффекта и предназначен только для локальной проверки; `grpc` вызывает командные API `payments`, `restaurants`, `delivery` через `INTERNAL_GATEWAY_ADDR` клиентами [`neighbours/grpcclient`](slices/order/infrastructure/neighbours/grpcclient) (Go-код генерируется `make generate` из workspace-модулей до публикации в BSR). Клиент прикладывает projected token целевого контекста из `IDENTITY__TOKEN_DIR` (ADR 27); `UNAUTHENTICATED` и `PERMISSION_DENIED` клиент считает retryable.
 
 ## Проверка
 

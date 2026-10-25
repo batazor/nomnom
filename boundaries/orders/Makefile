@@ -4,18 +4,26 @@ DOCKER ?= docker
 TEMPORAL_IMAGE ?= temporalio/temporal:1.9.1
 TEMPORAL_PORT ?= 7233
 TEMPORAL_CONTAINER ?= orders-temporal-dev
+POSTGRES_IMAGE ?= postgres:18.6-alpine3.24
+POSTGRES_PORT ?= 5433
+POSTGRES_CONTAINER ?= orders-postgres-dev
+POSTGRES_DEV_DSN ?= postgres://orders:orders@localhost:$(POSTGRES_PORT)/orders?sslmode=disable
 
-.PHONY: check run run-worker run-consumer generate proto-check proto-generate test test-integration test-integration-kafka temporal-dev temporal-dev-stop lint format format-check
+.PHONY: check run run-worker migrate postgres-dev postgres-dev-stop test-postgres run-consumer generate proto-check proto-generate test test-integration test-integration-kafka temporal-dev temporal-dev-stop lint format format-check
 
 check: proto-check test lint format-check
 
+# API требует SpiceDB (ADR 18): по умолчанию — локальный из `make spicedb-dev` в корне.
 run:
-	$(GO) run ./cmd/orders
+	SPICEDB__ENDPOINT=$${SPICEDB__ENDPOINT:-localhost:50051} SPICEDB__PRESHARED_KEY=$${SPICEDB__PRESHARED_KEY:-devkey} \
+		SPICEDB__INSECURE=$${SPICEDB__INSECURE:-true} POSTGRES__DSN=$${POSTGRES__DSN:-$(POSTGRES_DEV_DSN)} \
+		$(GO) run ./cmd/orders
 
 # Worker против локального Temporal (make temporal-dev): регистрирует Search
 # Attribute и симулирует соседние контексты.
 run-worker:
 	MANAGEMENT__PORT=9082 TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true FULFILLMENT__NEIGHBOURS=simulated \
+		POSTGRES__DSN=$${POSTGRES__DSN:-$(POSTGRES_DEV_DSN)} \
 		$(GO) run ./cmd/orders-worker
 
 # Consumer против локальных Kafka и Temporal (make temporal-dev).
@@ -32,6 +40,25 @@ temporal-dev:
 
 temporal-dev-stop:
 	-$(DOCKER) rm -f $(TEMPORAL_CONTAINER)
+
+postgres-dev:
+	$(DOCKER) run -d --rm --name $(POSTGRES_CONTAINER) -p $(POSTGRES_PORT):5432 \
+		-e POSTGRES_USER=orders -e POSTGRES_PASSWORD=orders -e POSTGRES_DB=orders $(POSTGRES_IMAGE)
+	@for i in $$(seq 1 60); do \
+		$(DOCKER) exec $(POSTGRES_CONTAINER) pg_isready -U orders -d orders >/dev/null 2>&1 && exit 0; \
+		sleep 1; \
+	done; echo "postgres did not become ready" >&2; exit 1
+
+postgres-dev-stop:
+	-$(DOCKER) rm -f $(POSTGRES_CONTAINER)
+
+migrate:
+	POSTGRES__DSN=$${POSTGRES__DSN:-$(POSTGRES_DEV_DSN)} $(GO) run ./cmd/orders-migrate
+
+# Контракт PostgreSQL-адаптеров против postgres-dev (make postgres-dev).
+# PostgreSQL поднимается testcontainers в TestMain; POSTGRES_DSN — использовать готовую базу.
+test-postgres:
+	$(GO) test -tags integration -count=1 ./slices/order/infrastructure/postgres/...
 
 generate:
 	$(MAKE) proto-generate
@@ -53,7 +80,9 @@ test:
 # AC-446: worker end-to-end против Temporal dev server в Docker.
 test-integration:
 	$(MAKE) temporal-dev
-	TEMPORAL_ADDRESS=localhost:$(TEMPORAL_PORT) $(GO) test -tags integration -count=1 -run Integration\|AgainstTemporal ./di/...; \
+	$(DOCKER) inspect $(POSTGRES_CONTAINER) >/dev/null 2>&1 || $(MAKE) postgres-dev
+	TEMPORAL_ADDRESS=localhost:$(TEMPORAL_PORT) POSTGRES_DSN=$(POSTGRES_DEV_DSN) \
+		$(GO) test -tags integration -count=1 -run Integration\|AgainstTemporal ./di/...; \
 		status=$$?; $(MAKE) temporal-dev-stop; exit $$status
 
 # ADR 28: Kafka → Watermill → EventGroupProcessor → Inbox → handler против Kafka

@@ -168,7 +168,29 @@ Slice acceptance использует test authorization port и проверя�
 | System E2E | Полная система, Kubernetes и network policy | kind | Отдельный pipeline |
 | Load / Performance | Latency и error rate под нагрузкой и во времени | k6 | PR smoke против kind; scheduled и manual в production-like |
 
+«Когда» задаёт, какие изменения обязаны пройти проверку, а не где она выполняется: из-за лимитов GitHub Actions проверки запускаются локально, а workflow `ci.yaml` — только вручную ([ADR 30](adr/0030-ci-is-described-but-runs-only-on-demand.md)).
+
 BDD не заменяет unit tests, Testcontainers или kind. Тесты не используют реальные payment providers, wall-clock ожидания и shared mutable state. Обычное время управляется clock abstraction, orchestration time — Temporal time skipping.
+
+## Integration fixtures
+
+Integration-тесты помечаются build tag `integration` и сами поднимают инфраструктуру через Testcontainers: `make test` остаётся без Docker, integration-цели не требуют заранее запущенных dev-контейнеров.
+
+- Контейнер стартует один раз на test package в `TestMain`, а не в каждом тесте; schema migrations выполняются там же один раз.
+- Тесты пакета разделяют контейнер и изолируют данные уникальными идентификаторами, а не очисткой таблиц между тестами.
+- Переменная окружения с адресом готовой инфраструктуры (например, `POSTGRES_DSN`) заменяет контейнер — для отладки на dev-базе.
+- Ошибка старта или миграции завершает пакет с ненулевым кодом, а не пропускает тесты.
+- Fixture не знает schema и бизнес-данных: в Go — `orders/pkg/testfixture` (`StartPostgres`, `StartKafka`), образы совпадают с Makefile и kind.
+
+```go
+var pg *testfixture.Postgres
+
+func TestMain(m *testing.M) {
+	pg = testfixture.MustStartPostgres()
+	defer pg.Close()
+	m.Run()
+}
+```
 
 ## Watermill consumers
 

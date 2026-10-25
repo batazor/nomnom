@@ -5,9 +5,6 @@ package messaging_test
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net"
-	"net/netip"
 	"sync"
 	"testing"
 	"time"
@@ -16,12 +13,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	watermillkafka "github.com/ThreeDotsLabs/watermill-kafka/v3/pkg/kafka"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/protobuf/proto"
 
 	"nomnom/orders/pkg/config"
@@ -43,9 +36,6 @@ import (
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
 )
-
-// Тот же образ, что Kafka в ops/kind/manifests/messaging/infrastructure.yaml.
-const kafkaImage = "apache/kafka:4.4.0"
 
 // flakyWorkflow fails the first failures notifications of selected Orders, as a
 // temporarily unavailable Temporal does.
@@ -81,7 +71,7 @@ func (w *flakyWorkflow) kindsOf(id order.ID) []fulfillment.Kind {
 // ключу aggregate_id в топике с несколькими partitions, retry, DLQ стрима и битый record, который не блокирует partition.
 func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	ctx := context.Background()
-	brokers := startKafka(t)
+	brokers := kafka.Brokers
 
 	cfg := config.KafkaConfig{
 		Brokers:       brokers,
@@ -197,47 +187,6 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		t.Fatalf("unexpected dead letter %s: %s", msg.UUID, msg.Metadata.Get(messaging.ReasonDeadLetteredMetadata))
 	default:
 	}
-}
-
-// startKafka runs a single-node KRaft broker. The advertised listener must be the
-// host-mapped address, so the host port is chosen before the container starts.
-func startKafka(t *testing.T) []string {
-	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := listener.Addr().(*net.TCPAddr).Port
-	require.NoError(t, listener.Close())
-
-	broker := fmt.Sprintf("127.0.0.1:%d", port)
-	kafka, err := testcontainers.GenericContainer(context.Background(), testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        kafkaImage,
-			ExposedPorts: []string{"9092/tcp"},
-			Env: map[string]string{
-				"KAFKA_NODE_ID":                                  "1",
-				"KAFKA_PROCESS_ROLES":                            "broker,controller",
-				"KAFKA_LISTENERS":                                "PLAINTEXT://:9092,CONTROLLER://:9093",
-				"KAFKA_ADVERTISED_LISTENERS":                     "PLAINTEXT://" + broker,
-				"KAFKA_CONTROLLER_LISTENER_NAMES":                "CONTROLLER",
-				"KAFKA_LISTENER_SECURITY_PROTOCOL_MAP":           "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
-				"KAFKA_CONTROLLER_QUORUM_VOTERS":                 "1@localhost:9093",
-				"KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR":         "1",
-				"KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
-				"KAFKA_TRANSACTION_STATE_LOG_MIN_ISR":            "1",
-				"KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS":         "0",
-			},
-			HostConfigModifier: func(hc *container.HostConfig) {
-				hc.PortBindings = network.PortMap{
-					network.MustParsePort("9092/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: fmt.Sprint(port)}},
-				}
-			},
-			WaitingFor: wait.ForLog("Kafka Server started").WithStartupTimeout(2 * time.Minute),
-		},
-		Started: true,
-	})
-	testcontainers.CleanupContainer(t, kafka)
-	require.NoError(t, err)
-	return []string{broker}
 }
 
 func handlersOf(store *memory.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
