@@ -1,10 +1,7 @@
-//go:build integration
-
 package di
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -15,6 +12,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/testfixture"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/confirmorder"
@@ -29,18 +27,18 @@ import (
 	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
 // AC-446: the worker runs the Order Fulfillment Workflow end to end against a
 // real Temporal Server; inbound facts go through the application handlers.
 // AC-471: the Order lives in PostgreSQL, so another process placed it and the
-// worker completes it there. Run with `make test-integration` or
-// TEMPORAL_ADDRESS=host:port POSTGRES_DSN=….
+// worker completes it there. Temporal and PostgreSQL run in testcontainers.
 func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
-	address, dsn := os.Getenv("TEMPORAL_ADDRESS"), os.Getenv("POSTGRES_DSN")
-	if address == "" || dsn == "" {
-		t.Skip("TEMPORAL_ADDRESS and POSTGRES_DSN are not set")
-	}
+	temporal, err := testfixture.StartTemporal(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(temporal.Close)
+	address, dsn := temporal.Address, postgrestest.Open(t).DSN()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
@@ -67,7 +65,6 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 
 	orderID := order.ID("order-" + time.Now().UTC().Format("20060102T150405") + "-" + strconv.FormatInt(time.Now().UnixNano(), 36))
 	pg := config.PostgresConfig{DSN: dsn, MaxConns: 5}
-	require.NoError(t, postgres.Migrate(ctx, pg))
 	placing, err := postgres.Open(ctx, pg)
 	require.NoError(t, err)
 	defer placing.Close()

@@ -219,7 +219,7 @@ CQRS остаётся логическим разделением command- и qu
 
 Бизнес-данные заказов и техническое хранилище Temporal разделены. Репозитории приложения работают с PostgreSQL-базой `orders`; внутренними данными выполнения workflow владеет Temporal. Приложение не использует Temporal storage как репозиторий `Order` и не управляет его внутренними таблицами напрямую.
 
-Решение — [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); контрактные тесты адаптеров — `make test-postgres` (PostgreSQL поднимается testcontainers в `TestMain`; `POSTGRES_DSN` — использовать готовую базу).
+Решение — [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); контрактные тесты адаптеров — `make test-postgres` (PostgreSQL поднимается testcontainers в `TestMain`).
 
 ### Пулер PostgreSQL
 
@@ -412,7 +412,7 @@ OpenSpec change `implement-orders-application-layer` добавил application-
 
 Контракт Temporal-адаптера за портом `fulfillment` зафиксирован в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md) и разделе [Order Fulfillment Workflow](#order-fulfillment-workflow). OpenSpec change `implement-order-fulfillment-temporal-adapter` реализовал его на `go.temporal.io/sdk` v1.50.0: workflow с deadlines из `Policy`, replan и эскалацией Assignment, Saga и Update `CancellationRequested`; Activities поверх `completeorder`, `failorcancelorder` и client-портов `Payments`, `Restaurants`, `Delivery`; реализацию порта `fulfillment` на Temporal client. Значения `DefaultPolicy` — placeholders до продуктовых решений. OpenSpec change `extract-order-fulfillment-slice` выделил процесс в слайс [`fulfillment`](slices/fulfillment/README.md): правила — в доменной модели `domains/fulfillment` с табличными unit-тестами, workflow — тонкий адаптер [`infrastructure/temporal`](slices/fulfillment/infrastructure/temporal/README.md) с прежними именами workflow, Signals, Update, Activities, task queue, Search Attribute и idempotency key шагов.
 
-OpenSpec change `add-orders-temporal-worker` добавил процесс `cmd/orders-worker`: Wire injector `InitializeWorker`, конфигурацию `temporal.*` и `fulfillment.*`, проверку и регистрацию Search Attribute `OrderFulfillmentStage` при старте, адаптеры соседей `unavailable` (по умолчанию) и `simulated` (теперь в `slices/fulfillment/infrastructure/neighbours`), values-worker.yaml Helm chart и integration-тест против Temporal dev server (`make test-integration`).
+OpenSpec change `add-orders-temporal-worker` добавил процесс `cmd/orders-worker`: Wire injector `InitializeWorker`, конфигурацию `temporal.*` и `fulfillment.*`, проверку и регистрацию Search Attribute `OrderFulfillmentStage` при старте, адаптеры соседей `unavailable` (по умолчанию) и `simulated` (теперь в `slices/fulfillment/infrastructure/neighbours`), values-worker.yaml Helm chart и integration-тест против Temporal dev server в testcontainers (`make test`).
 
 Реализован общий Kafka transport на Watermill: конфигурация brokers/client/group,
 publisher с обязательным partition key `order_id`, subscriber consumer group и
@@ -541,11 +541,7 @@ production resolver по общим векторам `tests/identity/fixtures` (
 make format
 ```
 
-Integration-тест worker'а против Temporal dev server в Docker (поднимает и останавливает контейнер):
-
-```bash
-make test-integration
-```
+`make test` (`go test ./...`) запускает все тесты без build tags и переменных окружения: PostgreSQL, Kafka, SpiceDB и Temporal dev server поднимаются testcontainers (нужен Docker).
 
 ## Контейнер
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -14,9 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/testfixture"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/postgres"
+	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
 
@@ -29,20 +30,21 @@ type env struct {
 	now         time.Time
 }
 
-// newEnv needs `make spicedb-dev` (root) and `make postgres-dev` (orders).
+// authz is the SpiceDB container of the package; tests isolate by identifiers.
+var authz *testfixture.SpiceDB
+
+func TestMain(m *testing.M) {
+	authz = testfixture.MustStartSpiceDB()
+	defer authz.Close()
+	postgrestest.Main(m)
+}
+
+// newEnv gives the test a fresh PostgreSQL database and the shared SpiceDB.
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	endpoint, dsn := os.Getenv("SPICEDB_ENDPOINT"), os.Getenv("POSTGRES_DSN")
-	if endpoint == "" || dsn == "" {
-		t.Skip("SPICEDB_ENDPOINT and POSTGRES_DSN are not set")
-	}
 	ctx := context.Background()
-	pg := config.PostgresConfig{DSN: dsn, MaxConns: 5}
-	require.NoError(t, postgres.Migrate(ctx, pg))
-	store, err := postgres.Open(ctx, pg)
-	require.NoError(t, err)
-	t.Cleanup(store.Close)
-	client, err := spicedb.Dial(config.SpiceDBConfig{Endpoint: endpoint, PresharedKey: "devkey", Insecure: true, Timeout: 2 * time.Second})
+	store := postgrestest.Open(t).Store
+	client, err := spicedb.Dial(config.SpiceDBConfig{Endpoint: authz.Endpoint, PresharedKey: testfixture.SpiceDBPresharedKey, Insecure: true, Timeout: 2 * time.Second})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 

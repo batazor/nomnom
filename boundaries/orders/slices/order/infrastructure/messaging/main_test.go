@@ -1,5 +1,3 @@
-//go:build integration
-
 package messaging_test
 
 import (
@@ -9,7 +7,7 @@ import (
 	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 )
 
-// kafka is the broker of the package, started once for all integration tests.
+// kafka is the broker of the package, started once; PostgreSQL is shared through postgrestest.
 var kafka *testfixture.Kafka
 
 func TestMain(m *testing.M) {

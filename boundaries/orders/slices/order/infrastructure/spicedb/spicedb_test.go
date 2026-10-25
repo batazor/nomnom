@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -16,6 +15,7 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/testfixture"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
@@ -163,14 +163,13 @@ func TestUnlinkDeliveryDeletesTheRelationship(t *testing.T) {
 	assert.Equal(t, []string{"OPERATION_DELETE order-1#delivery@delivery:delivery-1"}, relationships(fake.writes[0].GetUpdates()))
 }
 
-// AC-465, AC-467, AC-518, AC-519, AC-522, AC-534, AC-535 against the SpiceDB
-// of `make spicedb-dev`.
+// AC-465, AC-467, AC-518, AC-519, AC-522, AC-534, AC-535 against SpiceDB in a
+// testcontainer with the repository bootstrap.
 func TestAgainstSpiceDB(t *testing.T) {
-	endpoint := os.Getenv("SPICEDB_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("SPICEDB_ENDPOINT is not set")
-	}
-	client, err := spicedb.Dial(config.SpiceDBConfig{Endpoint: endpoint, PresharedKey: "devkey", Insecure: true, Timeout: 2 * time.Second})
+	server, err := testfixture.StartSpiceDB(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(server.Close)
+	client, err := spicedb.Dial(config.SpiceDBConfig{Endpoint: server.Endpoint, PresharedKey: testfixture.SpiceDBPresharedKey, Insecure: true, Timeout: 2 * time.Second})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 	stored := revisions{}

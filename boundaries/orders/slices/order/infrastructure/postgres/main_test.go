@@ -1,5 +1,3 @@
-//go:build integration
-
 package postgres_test
 
 import (
@@ -12,7 +10,7 @@ import (
 	"nomnom/orders/slices/order/infrastructure/postgres"
 )
 
-// pg is the database of the package: POSTGRES_DSN or a container, migrated once.
+// pg is the database container of the package, migrated once.
 var pg *testfixture.Postgres
 
 func TestMain(m *testing.M) {

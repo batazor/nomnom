@@ -19,7 +19,8 @@ import (
 	"log"
 	"net"
 	"net/netip"
-	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
@@ -33,6 +34,12 @@ const (
 	PostgresImage = "postgres:18.6-alpine3.24"
 	// KafkaImage is the Kafka of ops/kind/manifests/messaging/infrastructure.yaml.
 	KafkaImage = "apache/kafka:4.4.0"
+	// SpiceDBImage is SPICEDB_IMAGE of the root Makefile.
+	SpiceDBImage = "authzed/spicedb:v1.57.0"
+	// TemporalImage is TEMPORAL_IMAGE of the Makefile (Temporal CLI dev server).
+	TemporalImage = "temporalio/temporal:1.9.1"
+	// SpiceDBPresharedKey is the key of the SpiceDB container.
+	SpiceDBPresharedKey = "devkey"
 )
 
 const startupTimeout = 2 * time.Minute
@@ -43,13 +50,9 @@ type Postgres struct {
 	container testcontainers.Container
 }
 
-// StartPostgres reuses the database of POSTGRES_DSN when it is set (make
-// postgres-dev) and starts a container otherwise. Migrations are the caller's:
+// StartPostgres starts a PostgreSQL container. Migrations are the caller's:
 // the fixture does not know the schema.
 func StartPostgres(ctx context.Context) (*Postgres, error) {
-	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
-		return &Postgres{DSN: dsn}, nil
-	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        PostgresImage,
@@ -87,7 +90,7 @@ func MustStartPostgres() *Postgres {
 	return pg
 }
 
-// Close removes the container; a database of POSTGRES_DSN is left as is.
+// Close removes the container.
 func (p *Postgres) Close() { closeContainer(p.container) }
 
 // Kafka is a single-node KRaft broker for the tests of one package.
@@ -151,6 +154,99 @@ func MustStartKafka() *Kafka {
 }
 
 func (k *Kafka) Close() { closeContainer(k.container) }
+
+// SpiceDB is an in-memory SpiceDB with authorization/bootstrap.yaml of the
+// repository: the schema plus the grants deployment owns, as in kind.
+type SpiceDB struct {
+	Endpoint  string
+	container testcontainers.Container
+}
+
+// StartSpiceDB runs SpiceDB with the bootstrap of `make spicedb-dev`.
+func StartSpiceDB(ctx context.Context) (*SpiceDB, error) {
+	_, file, _, _ := runtime.Caller(0)
+	authz := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "authorization")
+	files := make([]testcontainers.ContainerFile, 0, 2)
+	for _, name := range []string{"bootstrap.yaml", "schema.zed"} {
+		files = append(files, testcontainers.ContainerFile{HostFilePath: filepath.Join(authz, name), ContainerFilePath: "/authz/" + name, FileMode: 0o644})
+	}
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        SpiceDBImage,
+			ExposedPorts: []string{"50051/tcp"},
+			Files:        files,
+			WorkingDir:   "/authz",
+			Cmd: []string{"serve", "--grpc-preshared-key", SpiceDBPresharedKey,
+				"--datastore-engine", "memory", "--datastore-bootstrap-files", "bootstrap.yaml"},
+			WaitingFor: wait.ForAll(
+				wait.ForLog("grpc server started serving"),
+				wait.ForListeningPort("50051/tcp"),
+			).WithDeadline(startupTimeout),
+		},
+		Started: true,
+	})
+	if err != nil {
+		return nil, terminate(c, fmt.Errorf("start spicedb: %w", err))
+	}
+	endpoint, err := c.PortEndpoint(ctx, "50051/tcp", "")
+	if err != nil {
+		return nil, terminate(c, fmt.Errorf("spicedb endpoint: %w", err))
+	}
+	return &SpiceDB{Endpoint: endpoint, container: c}, nil
+}
+
+// MustStartSpiceDB is StartSpiceDB for TestMain.
+func MustStartSpiceDB() *SpiceDB {
+	s, err := StartSpiceDB(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	return s
+}
+
+func (s *SpiceDB) Close() { closeContainer(s.container) }
+
+// Temporal is a Temporal dev server (`temporal server start-dev`) with the
+// default namespace.
+type Temporal struct {
+	Address   string
+	container testcontainers.Container
+}
+
+// StartTemporal runs the dev server of `make temporal-dev`.
+func StartTemporal(ctx context.Context) (*Temporal, error) {
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        TemporalImage,
+			ExposedPorts: []string{"7233/tcp"},
+			Cmd:          []string{"server", "start-dev", "--ip", "0.0.0.0", "--headless"},
+			WaitingFor: wait.ForAll(
+				wait.ForListeningPort("7233/tcp"),
+				wait.ForExec([]string{"temporal", "operator", "namespace", "describe", "--namespace", "default"}),
+			).WithDeadline(startupTimeout),
+		},
+		Started: true,
+	})
+	if err != nil {
+		return nil, terminate(c, fmt.Errorf("start temporal: %w", err))
+	}
+	endpoint, err := c.PortEndpoint(ctx, "7233/tcp", "")
+	if err != nil {
+		return nil, terminate(c, fmt.Errorf("temporal endpoint: %w", err))
+	}
+	return &Temporal{Address: endpoint, container: c}, nil
+}
+
+// MustStartTemporal is StartTemporal for TestMain.
+func MustStartTemporal() *Temporal {
+	tc, err := StartTemporal(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	return tc
+}
+
+func (t *Temporal) Close() { closeContainer(t.container) }
 
 // terminate removes a container that failed to start, keeping the start error.
 func terminate(c testcontainers.Container, err error) error {

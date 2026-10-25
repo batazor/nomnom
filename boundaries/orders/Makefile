@@ -9,7 +9,7 @@ POSTGRES_PORT ?= 5433
 POSTGRES_CONTAINER ?= orders-postgres-dev
 POSTGRES_DEV_DSN ?= postgres://orders:orders@localhost:$(POSTGRES_PORT)/orders?sslmode=disable
 
-.PHONY: check run run-worker migrate postgres-dev postgres-dev-stop test-postgres run-consumer generate proto-check proto-generate test test-integration test-integration-kafka temporal-dev temporal-dev-stop lint format format-check
+.PHONY: check run run-worker migrate postgres-dev postgres-dev-stop test-postgres run-consumer generate proto-check proto-generate test temporal-dev temporal-dev-stop lint format format-check
 
 check: proto-check test lint format-check
 
@@ -55,10 +55,9 @@ postgres-dev-stop:
 migrate:
 	POSTGRES__DSN=$${POSTGRES__DSN:-$(POSTGRES_DEV_DSN)} $(GO) run ./cmd/orders-migrate
 
-# Контракт PostgreSQL-адаптеров против postgres-dev (make postgres-dev).
-# PostgreSQL поднимается testcontainers в TestMain; POSTGRES_DSN — использовать готовую базу.
+# Контракт PostgreSQL-адаптеров; PostgreSQL поднимается testcontainers в TestMain.
 test-postgres:
-	$(GO) test -tags integration -count=1 ./slices/order/infrastructure/postgres/...
+	$(GO) test -count=1 ./slices/order/infrastructure/postgres/...
 
 generate:
 	$(MAKE) proto-generate
@@ -74,21 +73,9 @@ proto-generate:
 	cd pkg/gateway && buf generate --template buf.gen.yaml
 	cd slices/order/infrastructure/messaging && buf generate --template buf.gen.yaml
 
+# Все тесты, включая PostgreSQL, Kafka, SpiceDB и Temporal в testcontainers (нужен Docker).
 test:
 	$(GO) test ./...
-
-# AC-446: worker end-to-end против Temporal dev server в Docker.
-test-integration:
-	$(MAKE) temporal-dev
-	$(DOCKER) inspect $(POSTGRES_CONTAINER) >/dev/null 2>&1 || $(MAKE) postgres-dev
-	TEMPORAL_ADDRESS=localhost:$(TEMPORAL_PORT) POSTGRES_DSN=$(POSTGRES_DEV_DSN) \
-		$(GO) test -tags integration -count=1 -run Integration\|AgainstTemporal ./di/...; \
-		status=$$?; $(MAKE) temporal-dev-stop; exit $$status
-
-# ADR 28: Kafka → Watermill → EventGroupProcessor → Inbox → handler против Kafka
-# в Testcontainers (нужен Docker).
-test-integration-kafka:
-	$(GO) test -tags integration -count=1 -run AgainstKafka ./slices/order/infrastructure/messaging/...
 
 lint:
 	$(GOLANGCI_LINT) run

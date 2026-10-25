@@ -1,5 +1,5 @@
 // Package postgrestest gives tests of other packages the real PostgreSQL store
-// of orders. The container (or POSTGRES_DSN) starts on the first Open of the
+// of orders. The container starts on the first Open of the
 // test binary and is migrated once into a template database; every Open
 // clones the template, so each test starts from an empty, isolated database
 // and may use fixed identifiers such as "order-1".
@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -60,9 +59,7 @@ func start() {
 	if startErr != nil {
 		return
 	}
-	// The process id keeps templates of parallel test binaries apart when
-	// they share POSTGRES_DSN.
-	template = fmt.Sprintf("orders_template_%d", os.Getpid())
+	template = "orders_template"
 	if startErr = exec(ctx, "CREATE DATABASE "+pgx.Identifier{template}.Sanitize()); startErr != nil {
 		return
 	}
