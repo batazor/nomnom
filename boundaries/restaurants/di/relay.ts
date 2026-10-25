@@ -23,6 +23,16 @@ import {
 } from "../pkg/infrastructure/outbox/relay.ts";
 import { IdleWorker, type Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
+import { MENU_EVENTS_TOPIC } from "../slices/menu/infrastructure/integration/menu-events.ts";
+import { RESTAURANT_EVENTS_TOPIC } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
+import { RESTAURANT_ORDER_EVENTS_TOPIC } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+
+/** Topics the restaurants Outbox writes; reported at 0 when empty. */
+export const OUTBOX_TOPICS = [
+  RESTAURANT_ORDER_EVENTS_TOPIC,
+  RESTAURANT_EVENTS_TOPIC,
+  MENU_EVENTS_TOPIC,
+] as const;
 
 /** Configuration and resources the composition root hands to the container. */
 export type RelayResources = Readonly<{
@@ -57,7 +67,7 @@ export const createRelayContainer = (
       ({ db }: RelayCradle) => new MongoOutboxRelayStore(db),
     ).singleton(),
     relayMetrics: asFunction(
-      () => new OtelRelayMetrics("restaurants"),
+      () => new OtelRelayMetrics("restaurants", { knownTopics: OUTBOX_TOPICS }),
     ).singleton(),
     outboxRelay: asFunction(
       ({

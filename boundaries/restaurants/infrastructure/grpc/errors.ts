@@ -15,6 +15,8 @@ const STATUS_BY_ERROR_CODE: Readonly<Record<string, Code>> = {
   duplicate_order_id: Code.AlreadyExists,
   concurrency_conflict: Code.Aborted,
   invalid_restaurant: Code.InvalidArgument,
+  invalid_menu: Code.InvalidArgument,
+  invalid_money: Code.InvalidArgument,
   invalid_restaurant_order: Code.InvalidArgument,
   invalid_quantity: Code.InvalidArgument,
   invalid_page_size: Code.InvalidArgument,

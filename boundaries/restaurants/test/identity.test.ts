@@ -326,6 +326,12 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
+    openRestaurant: world.open,
+    closeRestaurant: world.close,
+    createMenu: world.createMenu,
+    addMenuItem: world.addMenuItem,
+    updateMenuItem: world.updateMenuItem,
+    setMenuItemAvailability: world.setAvailability,
     subjects: {
       resolve: async (context) => {
         const subject = await resolver.resolve(context);

@@ -1,6 +1,7 @@
 import kafka from "@confluentinc/kafka-javascript";
 
 import type { Worker } from "../../lifecycle/lifecycle.ts";
+import { extractContext, SpanKind, withSpan } from "../../telemetry/tracing.ts";
 import type { InboundMessage } from "../messaging/envelope.ts";
 import type { ProcessOutcome } from "../messaging/processor.ts";
 
@@ -102,16 +103,34 @@ export class KafkaConsumerWorker implements Worker {
     await this.#client.subscribe({ topics: [...this.#topics] });
     await this.#client.run({
       eachMessage: async ({ topic, partition, message }) => {
-        await this.#handler.process(
+        const headers = stringHeaders(message.headers);
+        // CONSUMER span continuing the producer's `traceparent` header, so
+        // the Outbox records of the handler stay in the same trace.
+        await withSpan(
+          `${topic} process`,
           {
-            topic,
-            partition,
-            offset: message.offset,
-            key: message.key ?? undefined,
-            value: message.value ?? new Uint8Array(),
-            headers: stringHeaders(message.headers),
+            parent: extractContext(headers),
+            kind: SpanKind.CONSUMER,
+            attributes: {
+              "messaging.system": "kafka",
+              "messaging.operation.type": "process",
+              "messaging.destination.name": topic,
+              "messaging.destination.partition.id": String(partition),
+              "messaging.kafka.offset": Number(message.offset),
+            },
           },
-          this.#abort.signal,
+          () =>
+            this.#handler.process(
+              {
+                topic,
+                partition,
+                offset: message.offset,
+                key: message.key ?? undefined,
+                value: message.value ?? new Uint8Array(),
+                headers,
+              },
+              this.#abort.signal,
+            ),
         );
       },
     });

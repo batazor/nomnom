@@ -1,9 +1,17 @@
 /** Relationship holders of one restaurant as stored in the business state. */
 export type RestaurantMembers = Readonly<{
   restaurantId: string;
+  /**
+   * Version of the stored Restaurant document. A missing relationship is
+   * restored only when two passes grace apart saw the same version (FR-445).
+   */
+  version: number;
   ownerId: string;
   staff: readonly string[];
 }>;
+
+/** Version change of a Restaurant document by the reconciler's revision write. */
+export type RevisionWrite = Readonly<{ from: number; to: number }>;
 
 /** Business side of the reconciliation. */
 export interface RestaurantMemberships {
@@ -18,13 +26,14 @@ export interface RestaurantMemberships {
   ): Promise<readonly RestaurantMembers[]>;
   /**
    * Stores the revision (ZedToken) of a repairing TOUCH on the restaurant, so
-   * its next check sees the restored relationship (FR-447). A restaurant
-   * that no longer exists is skipped.
+   * its next check sees the restored relationship (FR-447). Returns the
+   * document version it overwrote and the version it wrote; `undefined` when
+   * the restaurant no longer exists and was skipped.
    */
   recordAuthorizationRevision(
     restaurantId: string,
     revision: string,
-  ): Promise<void>;
+  ): Promise<RevisionWrite | undefined>;
 }
 
 /** Drift counters of one pass, summed over both relations. */

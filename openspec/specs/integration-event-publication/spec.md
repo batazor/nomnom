@@ -33,11 +33,11 @@ Mapper Domain Event → Integration Event SHALL находиться в `infrast
 - **WHEN** провайдер отклоняет операцию и `Payment` записывает `PaymentOperationDeclined`
 - **THEN** Outbox не содержит записи для этого события
 
-#### Scenario: Локальные факты и события Restaurant/Menu не публикуются
+#### Scenario: Внутренние факты restaurants вне allowlist не публикуются
 **ID:** AC-603
 
-- **WHEN** транзакция `restaurants` записывает `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled`, `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged`, `MenuCreated`, `MenuItemAdded` или `MenuItemUpdated` (внутренние события `Restaurant` и `Menu` без контракта)
-- **THEN** коллекция `outbox` не пополняется
+- **WHEN** транзакция `restaurants` записывает `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled`, `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged`, `MenuCreated`, `MenuItemAdded` или `MenuItemUpdated` (внутренние события `Restaurant` и `Menu` без контракта; `RestaurantOpened`, `RestaurantClosed` и `MenuItemAvailabilityChanged` публикуются по FR-560 и FR-561)
+- **THEN** коллекция `outbox` не пополняется для этих событий
 
 #### Scenario: Новый Domain Event delivery требует решения о публикации
 **ID:** AC-604

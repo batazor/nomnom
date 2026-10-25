@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import { FixedClock } from "../pkg/infrastructure/memory/clock.ts";
+import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import type {
   Restaurant,
@@ -336,4 +337,84 @@ test("a missing candidate whose relationship came back is forgotten", async () =
   const stats = await reconciler.reconcile();
   assert.equal(stats.missingPending, 1);
   assert.deepEqual(client.writes, []);
+});
+
+test("AC-710 a re-assign and a second revoke between passes restart the grace", async () => {
+  const { store, client, clock, reconciler } = setup(
+    [{ id: "r-1", ownerId: owner.id, staff: ["bob"] }],
+    [`restaurant:r-1#owner@user:${owner.id}`, "restaurant:r-1#staff@user:bob"],
+  );
+  const writer = new SpiceDbRelationshipWriter({ client, timeoutMs: 1000 });
+  const accessControl = {
+    canRegisterRestaurant: async () => false,
+    canManageRestaurant: async () => true,
+  };
+  const revokeInFlight = () => {
+    const restaurants = new GatedRestaurantRepository(store);
+    const revoking = new RevokeStaffHandler({
+      accessControl,
+      staffRelationships: writer,
+      restaurants,
+    }).execute({ subject: owner, restaurantId: "r-1", userId: "bob" });
+    return { restaurants, revoking };
+  };
+
+  // Pass 1 sees the first revoke in flight: DELETEd, not yet saved.
+  const first = revokeInFlight();
+  await first.restaurants.saving;
+  const version1 = store.get("r-1")?.version;
+  assert.equal((await reconciler.reconcile()).missingPending, 1);
+
+  // Between the passes: the revoke is saved, bob is re-assigned, and a second
+  // revoke DELETEs again and waits before its save.
+  first.restaurants.commit();
+  await first.revoking;
+  await new AssignStaffHandler({
+    accessControl,
+    staffRelationships: writer,
+    restaurants: new InMemoryRestaurantRepository(store),
+  }).execute({ subject: owner, restaurantId: "r-1", userId: "bob" });
+  const second = revokeInFlight();
+  await second.restaurants.saving;
+  assert.notEqual(store.get("r-1")?.version, version1);
+  assert.deepEqual(store.get("r-1")?.document.staff, ["bob"]);
+
+  // Pass 2, grace later, sees bob missing again but on another version.
+  clock.advance(GRACE);
+  const during = await reconciler.reconcile();
+  assert.equal(during.missingRepaired, 0);
+  assert.equal(during.missingPending, 1, "the grace starts over");
+  assert.equal(client.has("restaurant:r-1#staff@user:bob"), false);
+
+  second.restaurants.commit();
+  await second.revoking;
+  clock.advance(GRACE);
+  const after = await reconciler.reconcile();
+  assert.equal(after.missingRepaired, 0);
+  assert.equal(reconciler.pendingMissing, 0);
+  assert.equal(client.has("restaurant:r-1#staff@user:bob"), false);
+  // The only TOUCH is Assign Staff's own; the reconciler restored nothing.
+  assert.deepEqual(client.writes, [
+    "delete restaurant:r-1#staff@user:bob",
+    "touch restaurant:r-1#staff@user:bob",
+    "delete restaurant:r-1#staff@user:bob",
+  ]);
+});
+
+test("a missing relationship on an unchanged version is restored after the grace", async () => {
+  const { store, client, clock, reconciler } = setup(
+    [{ id: "r-1", ownerId: "alice", staff: ["bob"] }],
+    ["restaurant:r-1#owner@user:alice"],
+  );
+  await reconciler.reconcile();
+  // An unrelated save between the passes restarts the grace.
+  const stored = store.get("r-1");
+  assert.ok(stored);
+  store.save("r-1", stored.version, { ...stored.document, name: "Pho 2" });
+  clock.advance(GRACE);
+  assert.equal((await reconciler.reconcile()).missingRepaired, 0);
+
+  clock.advance(GRACE);
+  assert.equal((await reconciler.reconcile()).missingRepaired, 1);
+  assert.ok(client.has("restaurant:r-1#staff@user:bob"));
 });

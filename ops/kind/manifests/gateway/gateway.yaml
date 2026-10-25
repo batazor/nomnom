@@ -152,8 +152,8 @@ spec:
           port: 8082
 ---
 # Команды restaurants, которые вызывает Order Fulfillment (orders-worker). Команды кухни
-# и управления рестораном не опубликованы: у них ещё нет вызывающих, gateway отвечает
-# UNIMPLEMENTED.
+# и администрирования (RegisterRestaurant, AssignStaff, RevokeStaff) не опубликованы: у них
+# ещё нет вызывающих, gateway отвечает UNIMPLEMENTED.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -173,6 +173,48 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: CancelRestaurantOrder
+      backendRefs:
+        - name: restaurants
+          namespace: nomnom-restaurants
+          port: 8082
+---
+# Команды управления рестораном и меню, которые вызывает BFF от имени управляющего
+# (restaurant#manage, restaurant#manage_menu).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: restaurants-v1-management
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: OpenRestaurant
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: CloseRestaurant
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: CreateMenu
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: AddMenuItem
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: UpdateMenuItem
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: SetMenuItemAvailability
       backendRefs:
         - name: restaurants
           namespace: nomnom-restaurants
@@ -291,6 +333,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: restaurants-v1-commands
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: restaurants-v1-management
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: delivery-v1-commands

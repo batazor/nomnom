@@ -8,13 +8,12 @@
 // are connected and released by cmd/restaurants and registered as values;
 // the SpiceDB client is built by the container and closed by its disposer.
 import { randomUUID } from "node:crypto";
-import { createServer, type Http2Server } from "node:http2";
+import type { Http2Server } from "node:http2";
 
-import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { type AwilixContainer, aliasTo, asFunction, asValue } from "awilix";
 import type { Db, MongoClient } from "mongodb";
 
-import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
@@ -47,6 +46,7 @@ import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integ
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
+import type { MenuAccessControl } from "../slices/menu/applications/access-control.ts";
 import {
   type MenuCradle,
   registerMenu,
@@ -109,6 +109,7 @@ export interface InfrastructureCradle {
   readonly spicedbAccessControl: SpiceDbAccessControl;
   readonly kitchenAccessControl: KitchenAccess;
   readonly restaurantAccessControl: RestaurantAccessControl;
+  readonly menuAccessControl: MenuAccessControl;
   readonly relationshipWriter: SpiceDbRelationshipWriter;
   readonly ownerRelationships: OwnerRelationshipWriter;
   readonly staffRelationships: StaffRelationshipWriter;
@@ -202,6 +203,7 @@ const infrastructureRegistrations = (
   ).singleton(),
   kitchenAccessControl: aliasTo("spicedbAccessControl"),
   restaurantAccessControl: aliasTo("spicedbAccessControl"),
+  menuAccessControl: aliasTo("spicedbAccessControl"),
   // Owner/staff relationships are written before the restaurant is saved
   // (dual-write, repaired by the reconciler).
   relationshipWriter: asFunction(
@@ -237,12 +239,15 @@ const processRegistrations = (
       registerRestaurant: cradle.registerRestaurant,
       assignStaff: cradle.assignStaff,
       revokeStaff: cradle.revokeStaff,
+      openRestaurant: cradle.openRestaurant,
+      closeRestaurant: cradle.closeRestaurant,
+      createMenu: cradle.createMenu,
+      addMenuItem: cradle.addMenuItem,
+      updateMenuItem: cradle.updateMenuItem,
+      setMenuItemAvailability: cradle.setMenuItemAvailability,
     });
-    return createServer(
-      connectNodeAdapter({
-        routes: (router) => router.service(RestaurantsService, service),
-      }),
-    );
+    // Server spans continue the caller's traceparent (tracingInterceptor).
+    return createGrpcServer(service);
   }).singleton(),
   // Reconciliation (FR-445) runs in this process and stops before the gRPC
   // drain.

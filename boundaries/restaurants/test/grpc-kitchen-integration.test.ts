@@ -143,6 +143,12 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
       registerRestaurant: unused,
       assignStaff: unused,
       revokeStaff: unused,
+      openRestaurant: unused,
+      closeRestaurant: unused,
+      createMenu: unused,
+      addMenuItem: unused,
+      updateMenuItem: unused,
+      setMenuItemAvailability: unused,
       acceptRestaurantOrder: new AcceptOrderHandler({
         ...commands,
         facts: new RepositoryAcceptanceFactsReader({ restaurants, menus }),

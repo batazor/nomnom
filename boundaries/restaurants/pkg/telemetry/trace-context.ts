@@ -1,8 +1,9 @@
 import { isSpanContextValid, trace } from "@opentelemetry/api";
 
 /**
- * W3C `traceparent` of the active span for the Outbox `metadata`; empty
- * without an active, valid span (no tracer provider is registered yet).
+ * W3C `traceparent` of the active span for the Outbox `metadata`: the
+ * server span of a gRPC call or the consumer span of a Kafka message
+ * (pkg/telemetry/tracing.ts). Empty without an active, valid span.
  */
 export function currentTraceMetadata(): { traceparent?: string } {
   const context = trace.getActiveSpan()?.spanContext();

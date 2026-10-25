@@ -51,6 +51,12 @@ const createWorld = () => {
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
+    openRestaurant: unused,
+    closeRestaurant: unused,
+    createMenu: unused,
+    addMenuItem: unused,
+    updateMenuItem: unused,
+    setMenuItemAvailability: unused,
     subjects: { resolve: async () => caller },
   });
   const as = (subject: Subject) => {
@@ -247,6 +253,12 @@ test("staff RPCs map missing input to INVALID_ARGUMENT and unknown restaurants t
     registerRestaurant: unused,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
+    openRestaurant: unused,
+    closeRestaurant: unused,
+    createMenu: unused,
+    addMenuItem: unused,
+    updateMenuItem: unused,
+    setMenuItemAvailability: unused,
     subjects: { resolve: async () => owner },
   });
   await assert.rejects(
@@ -281,6 +293,12 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
     registerRestaurant: failing,
     assignStaff: failing,
     revokeStaff: failing,
+    openRestaurant: failing,
+    closeRestaurant: failing,
+    createMenu: failing,
+    addMenuItem: failing,
+    updateMenuItem: failing,
+    setMenuItemAvailability: failing,
     subjects: { resolve: async () => owner },
   });
 
@@ -324,6 +342,12 @@ test("admin RPCs are UNAUTHENTICATED with the default rejecting resolver", async
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
+    openRestaurant: unused,
+    closeRestaurant: unused,
+    createMenu: unused,
+    addMenuItem: unused,
+    updateMenuItem: unused,
+    setMenuItemAvailability: unused,
   });
 
   await assert.rejects(

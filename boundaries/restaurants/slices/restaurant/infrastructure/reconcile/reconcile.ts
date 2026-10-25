@@ -8,7 +8,14 @@
 // two-pass rule (FR-445): Revoke Staff DELETEs before the restaurant is saved
 // and holds no lock MongoDB could make the reconciler wait on, so a pass that
 // read the graph after the DELETE and the restaurant before the save would
-// otherwise TOUCH the revoked staff member back.
+// otherwise TOUCH the revoked staff member back. A missing candidate is keyed
+// by the Restaurant document version as well: a re-assign and a second revoke
+// between the passes change the version, so the second pass starts a new
+// grace period instead of restoring a relationship that a newer, not yet
+// saved Revoke Staff has just DELETEd. Any other save of the restaurant also
+// restarts the grace period, which only delays the repair; the reconciler's
+// own revision write after a repair carries its candidates over to the new
+// version, because it changes no membership.
 // SpiceDB stays a derived graph; the restaurant storage is the source of truth.
 import { v1 } from "@authzed/authzed-node";
 
@@ -34,6 +41,7 @@ export type {
   ReconcileStats,
   RestaurantMembers,
   RestaurantMemberships,
+  RevisionWrite,
 } from "./memberships.ts";
 
 /** SpiceDB object id grammar. */
@@ -80,8 +88,14 @@ export class RelationshipReconciler {
   readonly #log: (message: string) => void;
   /** `relation:restaurantId:userId` → first time seen orphan (ms). */
   readonly #candidates = new Map<string, number>();
-  /** `relation:restaurantId:userId` → first time seen missing (ms). */
-  readonly #missing = new Map<string, number>();
+  /**
+   * `relation:restaurantId:userId` → first time seen missing (ms) and the
+   * Restaurant document version of that pass.
+   */
+  readonly #missing = new Map<
+    string,
+    { restaurantId: string; since: number; version: number }
+  >();
 
   constructor(options: RelationshipReconcilerOptions) {
     this.#client = options.client;
@@ -228,12 +242,17 @@ export class RelationshipReconciler {
           missing.add(key);
           const now = this.#clock.now().getTime();
           const first = this.#missing.get(key);
-          if (first === undefined) {
-            this.#missing.set(key, now);
+          if (first === undefined || first.version !== members.version) {
+            // New candidate, or the restaurant changed since the last pass.
+            this.#missing.set(key, {
+              restaurantId: members.restaurantId,
+              since: now,
+              version: members.version,
+            });
             stats.missingPending += 1;
             continue;
           }
-          if (now - first < this.#graceMs) {
+          if (now - first.since < this.#graceMs) {
             stats.missingPending += 1;
             continue;
           }
@@ -245,10 +264,15 @@ export class RelationshipReconciler {
             userId,
           );
           if (revision !== "") {
-            await this.#restaurants.recordAuthorizationRevision(
+            const write = await this.#restaurants.recordAuthorizationRevision(
               members.restaurantId,
               revision,
             );
+            // Only a write over the version this pass read is known to change
+            // nothing but the revision.
+            if (write !== undefined && write.from === members.version) {
+              this.#carryOver(members.restaurantId, write.from, write.to);
+            }
           }
           this.#missing.delete(key);
           stats.missingRepaired += 1;
@@ -256,6 +280,18 @@ export class RelationshipReconciler {
       }
       if (page.length < this.#pageSize) return;
       after = page.at(-1)?.restaurantId;
+    }
+  }
+
+  /** Moves missing candidates of a restaurant from one version to the next. */
+  #carryOver(restaurantId: string, from: number, to: number): void {
+    for (const candidate of this.#missing.values()) {
+      if (
+        candidate.restaurantId === restaurantId &&
+        candidate.version === from
+      ) {
+        candidate.version = to;
+      }
     }
   }
 

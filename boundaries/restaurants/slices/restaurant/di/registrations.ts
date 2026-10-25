@@ -7,6 +7,7 @@ import type { Db } from "mongodb";
 import type { RelationshipsClient } from "../../../infrastructure/spicedb/client.ts";
 import type { Clock } from "../../../pkg/application/clock.ts";
 import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
+import type { Outbox } from "../../../pkg/application/outbox.ts";
 import type {
   ReconcilerConfig,
   SpiceDbEnabledConfig,
@@ -21,8 +22,10 @@ import type {
   StaffRelationshipWriter,
 } from "../applications/access-control.ts";
 import { AssignStaffHandler } from "../applications/assign-staff/assign-staff.ts";
+import { CloseRestaurantHandler } from "../applications/close-restaurant/close-restaurant.ts";
 import { GetRestaurantHandler } from "../applications/get-restaurant/get-restaurant.ts";
 import { ListRestaurantsHandler } from "../applications/list-restaurants/list-restaurants.ts";
+import { OpenRestaurantHandler } from "../applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
 import { restaurantEventMapper } from "../infrastructure/integration/restaurant-events.ts";
@@ -41,6 +44,7 @@ export interface RestaurantDependencies {
   readonly unitOfWork: MongoUnitOfWork;
   readonly clock: Clock;
   readonly ids: IdGenerator;
+  readonly outbox: Outbox;
   readonly restaurantAccessControl: RestaurantAccessControl;
   readonly ownerRelationships: OwnerRelationshipWriter;
   readonly staffRelationships: StaffRelationshipWriter;
@@ -71,6 +75,8 @@ export interface RestaurantCradle {
   readonly registerRestaurant: RegisterRestaurantHandler;
   readonly assignStaff: AssignStaffHandler;
   readonly revokeStaff: RevokeStaffHandler;
+  readonly openRestaurant: OpenRestaurantHandler;
+  readonly closeRestaurant: CloseRestaurantHandler;
   readonly relationshipReconciler: RelationshipReconciler;
 }
 
@@ -134,6 +140,40 @@ export const registerRestaurant = (
           accessControl: restaurantAccessControl,
           staffRelationships,
           restaurants,
+        }),
+    ).singleton(),
+    // Open/Close Restaurant write RestaurantOpened/RestaurantClosed to the
+    // Outbox in the Unit of Work of the opening change (FR-203).
+    openRestaurant: asFunction(
+      ({
+        restaurantAccessControl,
+        unitOfWork,
+        restaurants,
+        outbox,
+        clock,
+      }: Cradle) =>
+        new OpenRestaurantHandler({
+          accessControl: restaurantAccessControl,
+          unitOfWork,
+          restaurants,
+          outbox,
+          clock,
+        }),
+    ).singleton(),
+    closeRestaurant: asFunction(
+      ({
+        restaurantAccessControl,
+        unitOfWork,
+        restaurants,
+        outbox,
+        clock,
+      }: Cradle) =>
+        new CloseRestaurantHandler({
+          accessControl: restaurantAccessControl,
+          unitOfWork,
+          restaurants,
+          outbox,
+          clock,
         }),
     ).singleton(),
     // Repairs owner/staff relationships of the dual-write (FR-445).

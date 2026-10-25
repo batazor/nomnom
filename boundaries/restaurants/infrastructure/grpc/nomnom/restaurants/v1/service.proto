@@ -38,6 +38,25 @@ service RestaurantsService {
   rpc RegisterRestaurant(RegisterRestaurantRequest) returns (RegisterRestaurantResponse);
   rpc AssignStaff(AssignStaffRequest) returns (AssignStaffResponse);
   rpc RevokeStaff(RevokeStaffRequest) returns (RevokeStaffResponse);
+
+  // Opening of a restaurant for new Restaurant Orders (FR-203). Both require
+  // restaurant#manage and write RestaurantOpened/RestaurantClosed to the Outbox
+  // in the same Unit of Work. A repeat succeeds with changed = false and no new
+  // fact (AC-209). An unknown restaurant is NOT_FOUND.
+  rpc OpenRestaurant(OpenRestaurantRequest) returns (OpenRestaurantResponse);
+  rpc CloseRestaurant(CloseRestaurantRequest) returns (CloseRestaurantResponse);
+
+  // Menu management (FR-210..FR-215). All require restaurant#manage_menu
+  // (owner or staff). CreateMenu of a restaurant that has a menu is
+  // ALREADY_EXISTS; a missing restaurant, menu or menu item is NOT_FOUND; an
+  // invalid name or price is INVALID_ARGUMENT. AddMenuItem is not idempotent:
+  // every call adds a new item. UpdateMenuItem and SetMenuItemAvailability
+  // repeating the current values succeed with changed = false; a change of
+  // availability writes MenuItemAvailabilityChanged to the Outbox.
+  rpc CreateMenu(CreateMenuRequest) returns (CreateMenuResponse);
+  rpc AddMenuItem(AddMenuItemRequest) returns (AddMenuItemResponse);
+  rpc UpdateMenuItem(UpdateMenuItemRequest) returns (UpdateMenuItemResponse);
+  rpc SetMenuItemAvailability(SetMenuItemAvailabilityRequest) returns (SetMenuItemAvailabilityResponse);
 }
 
 message GetRestaurantRequest {
@@ -230,4 +249,89 @@ message RevokeStaffResponse {
   repeated string staff = 2;
   // false when the user was not staff.
   bool changed = 3;
+}
+
+message OpenRestaurantRequest {
+  string restaurant_id = 1;
+}
+
+message OpenRestaurantResponse {
+  Restaurant restaurant = 1;
+  // Version of the restaurant after the command.
+  int64 version = 2;
+  // false when the restaurant was already open.
+  bool changed = 3;
+}
+
+message CloseRestaurantRequest {
+  string restaurant_id = 1;
+}
+
+message CloseRestaurantResponse {
+  Restaurant restaurant = 1;
+  int64 version = 2;
+  // false when the restaurant was already closed.
+  bool changed = 3;
+}
+
+message CreateMenuRequest {
+  string restaurant_id = 1;
+}
+
+message CreateMenuResponse {
+  string menu_id = 1;
+  string restaurant_id = 2;
+  int64 version = 3;
+}
+
+message AddMenuItemRequest {
+  string restaurant_id = 1;
+  // Required, not blank.
+  string name = 2;
+  // Optional; empty means no description.
+  string description = 3;
+  // Required.
+  Money price = 4;
+  // Defaults to true when unset.
+  optional bool available = 5;
+}
+
+message AddMenuItemResponse {
+  string menu_id = 1;
+  MenuItem menu_item = 2;
+  // Version of the menu after the command.
+  int64 version = 3;
+}
+
+message UpdateMenuItemRequest {
+  string restaurant_id = 1;
+  string menu_item_id = 2;
+  // Unset fields stay unchanged.
+  optional string name = 3;
+  // An empty value removes the description.
+  optional string description = 4;
+  Money price = 5;
+  optional bool available = 6;
+}
+
+message UpdateMenuItemResponse {
+  string menu_id = 1;
+  MenuItem menu_item = 2;
+  int64 version = 3;
+  // false when the request repeated the current values.
+  bool changed = 4;
+}
+
+message SetMenuItemAvailabilityRequest {
+  string restaurant_id = 1;
+  string menu_item_id = 2;
+  bool available = 3;
+}
+
+message SetMenuItemAvailabilityResponse {
+  string menu_id = 1;
+  MenuItem menu_item = 2;
+  int64 version = 3;
+  // false when the item already had this availability.
+  bool changed = 4;
 }

@@ -192,11 +192,17 @@ describe("MongoDB storage", { skip }, () => {
       ).map((view) => view.restaurantId),
       ["r-1"],
     );
-    await memberships.recordAuthorizationRevision("r-1", "zed-2");
-    await memberships.recordAuthorizationRevision("missing", "zed-3");
+    assert.deepEqual(
+      await memberships.recordAuthorizationRevision("r-1", "zed-2"),
+      { from: 2, to: 3 },
+    );
+    assert.equal(
+      await memberships.recordAuthorizationRevision("missing", "zed-3"),
+      undefined,
+    );
     assert.equal(await repository.authorizationRevision("r-1"), "zed-2");
     assert.deepEqual(await memberships.page(undefined, 10), [
-      { restaurantId: "r-1", ownerId: "owner", staff: ["cook"] },
+      { restaurantId: "r-1", version: 3, ownerId: "owner", staff: ["cook"] },
     ]);
   });
 

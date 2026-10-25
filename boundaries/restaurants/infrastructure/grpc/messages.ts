@@ -1,6 +1,9 @@
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import type { MenuView } from "../../slices/menu/applications/menu-support.ts";
+import type {
+  MenuItemView,
+  MenuView,
+} from "../../slices/menu/applications/menu-support.ts";
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type { RestaurantView } from "../../slices/restaurant/applications/restaurant-view.ts";
 import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-view.ts";
@@ -21,16 +24,17 @@ export const toRestaurantMessage = (view: RestaurantView) =>
     address: view.address,
   });
 
+export const toMenuItemMessage = (item: MenuItemView) =>
+  create(MenuItemSchema, {
+    menuItemId: item.menuItemId,
+    name: item.name,
+    description: item.description ?? "",
+    price: { amount: item.price.amount, currency: item.price.currency },
+    available: item.isAvailable,
+  });
+
 export const toMenuItemMessages = (view: MenuView) =>
-  view.items.map((item) =>
-    create(MenuItemSchema, {
-      menuItemId: item.menuItemId,
-      name: item.name,
-      description: item.description ?? "",
-      price: { amount: item.price.amount, currency: item.price.currency },
-      available: item.isAvailable,
-    }),
-  );
+  view.items.map(toMenuItemMessage);
 
 const STATE_MESSAGES: Readonly<
   Record<RestaurantOrderView["state"], RestaurantOrderState>

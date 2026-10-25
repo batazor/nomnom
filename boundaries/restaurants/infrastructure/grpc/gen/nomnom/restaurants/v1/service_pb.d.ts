@@ -4,7 +4,7 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
-import type { MenuItem, Restaurant } from "./restaurants_pb.js";
+import type { MenuItem, Money, Restaurant } from "./restaurants_pb.js";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -735,6 +735,347 @@ export declare type RevokeStaffResponse = Message<"nomnom.restaurants.v1.RevokeS
 export declare const RevokeStaffResponseSchema: GenMessage<RevokeStaffResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.OpenRestaurantRequest
+ */
+export declare type OpenRestaurantRequest = Message<"nomnom.restaurants.v1.OpenRestaurantRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.OpenRestaurantRequest.
+ * Use `create(OpenRestaurantRequestSchema)` to create a new message.
+ */
+export declare const OpenRestaurantRequestSchema: GenMessage<OpenRestaurantRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.OpenRestaurantResponse
+ */
+export declare type OpenRestaurantResponse = Message<"nomnom.restaurants.v1.OpenRestaurantResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Restaurant restaurant = 1;
+   */
+  restaurant?: Restaurant | undefined;
+
+  /**
+   * Version of the restaurant after the command.
+   *
+   * @generated from field: int64 version = 2;
+   */
+  version: bigint;
+
+  /**
+   * false when the restaurant was already open.
+   *
+   * @generated from field: bool changed = 3;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.OpenRestaurantResponse.
+ * Use `create(OpenRestaurantResponseSchema)` to create a new message.
+ */
+export declare const OpenRestaurantResponseSchema: GenMessage<OpenRestaurantResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.CloseRestaurantRequest
+ */
+export declare type CloseRestaurantRequest = Message<"nomnom.restaurants.v1.CloseRestaurantRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.CloseRestaurantRequest.
+ * Use `create(CloseRestaurantRequestSchema)` to create a new message.
+ */
+export declare const CloseRestaurantRequestSchema: GenMessage<CloseRestaurantRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.CloseRestaurantResponse
+ */
+export declare type CloseRestaurantResponse = Message<"nomnom.restaurants.v1.CloseRestaurantResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Restaurant restaurant = 1;
+   */
+  restaurant?: Restaurant | undefined;
+
+  /**
+   * @generated from field: int64 version = 2;
+   */
+  version: bigint;
+
+  /**
+   * false when the restaurant was already closed.
+   *
+   * @generated from field: bool changed = 3;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.CloseRestaurantResponse.
+ * Use `create(CloseRestaurantResponseSchema)` to create a new message.
+ */
+export declare const CloseRestaurantResponseSchema: GenMessage<CloseRestaurantResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.CreateMenuRequest
+ */
+export declare type CreateMenuRequest = Message<"nomnom.restaurants.v1.CreateMenuRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.CreateMenuRequest.
+ * Use `create(CreateMenuRequestSchema)` to create a new message.
+ */
+export declare const CreateMenuRequestSchema: GenMessage<CreateMenuRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.CreateMenuResponse
+ */
+export declare type CreateMenuResponse = Message<"nomnom.restaurants.v1.CreateMenuResponse"> & {
+  /**
+   * @generated from field: string menu_id = 1;
+   */
+  menuId: string;
+
+  /**
+   * @generated from field: string restaurant_id = 2;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: int64 version = 3;
+   */
+  version: bigint;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.CreateMenuResponse.
+ * Use `create(CreateMenuResponseSchema)` to create a new message.
+ */
+export declare const CreateMenuResponseSchema: GenMessage<CreateMenuResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.AddMenuItemRequest
+ */
+export declare type AddMenuItemRequest = Message<"nomnom.restaurants.v1.AddMenuItemRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * Required, not blank.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Optional; empty means no description.
+   *
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * Required.
+   *
+   * @generated from field: nomnom.restaurants.v1.Money price = 4;
+   */
+  price?: Money | undefined;
+
+  /**
+   * Defaults to true when unset.
+   *
+   * @generated from field: optional bool available = 5;
+   */
+  available?: boolean | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.AddMenuItemRequest.
+ * Use `create(AddMenuItemRequestSchema)` to create a new message.
+ */
+export declare const AddMenuItemRequestSchema: GenMessage<AddMenuItemRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.AddMenuItemResponse
+ */
+export declare type AddMenuItemResponse = Message<"nomnom.restaurants.v1.AddMenuItemResponse"> & {
+  /**
+   * @generated from field: string menu_id = 1;
+   */
+  menuId: string;
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.MenuItem menu_item = 2;
+   */
+  menuItem?: MenuItem | undefined;
+
+  /**
+   * Version of the menu after the command.
+   *
+   * @generated from field: int64 version = 3;
+   */
+  version: bigint;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.AddMenuItemResponse.
+ * Use `create(AddMenuItemResponseSchema)` to create a new message.
+ */
+export declare const AddMenuItemResponseSchema: GenMessage<AddMenuItemResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.UpdateMenuItemRequest
+ */
+export declare type UpdateMenuItemRequest = Message<"nomnom.restaurants.v1.UpdateMenuItemRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string menu_item_id = 2;
+   */
+  menuItemId: string;
+
+  /**
+   * Unset fields stay unchanged.
+   *
+   * @generated from field: optional string name = 3;
+   */
+  name?: string | undefined;
+
+  /**
+   * An empty value removes the description.
+   *
+   * @generated from field: optional string description = 4;
+   */
+  description?: string | undefined;
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.Money price = 5;
+   */
+  price?: Money | undefined;
+
+  /**
+   * @generated from field: optional bool available = 6;
+   */
+  available?: boolean | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.UpdateMenuItemRequest.
+ * Use `create(UpdateMenuItemRequestSchema)` to create a new message.
+ */
+export declare const UpdateMenuItemRequestSchema: GenMessage<UpdateMenuItemRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.UpdateMenuItemResponse
+ */
+export declare type UpdateMenuItemResponse = Message<"nomnom.restaurants.v1.UpdateMenuItemResponse"> & {
+  /**
+   * @generated from field: string menu_id = 1;
+   */
+  menuId: string;
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.MenuItem menu_item = 2;
+   */
+  menuItem?: MenuItem | undefined;
+
+  /**
+   * @generated from field: int64 version = 3;
+   */
+  version: bigint;
+
+  /**
+   * false when the request repeated the current values.
+   *
+   * @generated from field: bool changed = 4;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.UpdateMenuItemResponse.
+ * Use `create(UpdateMenuItemResponseSchema)` to create a new message.
+ */
+export declare const UpdateMenuItemResponseSchema: GenMessage<UpdateMenuItemResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.SetMenuItemAvailabilityRequest
+ */
+export declare type SetMenuItemAvailabilityRequest = Message<"nomnom.restaurants.v1.SetMenuItemAvailabilityRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string menu_item_id = 2;
+   */
+  menuItemId: string;
+
+  /**
+   * @generated from field: bool available = 3;
+   */
+  available: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SetMenuItemAvailabilityRequest.
+ * Use `create(SetMenuItemAvailabilityRequestSchema)` to create a new message.
+ */
+export declare const SetMenuItemAvailabilityRequestSchema: GenMessage<SetMenuItemAvailabilityRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.SetMenuItemAvailabilityResponse
+ */
+export declare type SetMenuItemAvailabilityResponse = Message<"nomnom.restaurants.v1.SetMenuItemAvailabilityResponse"> & {
+  /**
+   * @generated from field: string menu_id = 1;
+   */
+  menuId: string;
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.MenuItem menu_item = 2;
+   */
+  menuItem?: MenuItem | undefined;
+
+  /**
+   * @generated from field: int64 version = 3;
+   */
+  version: bigint;
+
+  /**
+   * false when the item already had this availability.
+   *
+   * @generated from field: bool changed = 4;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SetMenuItemAvailabilityResponse.
+ * Use `create(SetMenuItemAvailabilityResponseSchema)` to create a new message.
+ */
+export declare const SetMenuItemAvailabilityResponseSchema: GenMessage<SetMenuItemAvailabilityResponse>;
+
+/**
  * @generated from enum nomnom.restaurants.v1.RestaurantOrderState
  */
 export enum RestaurantOrderState {
@@ -936,6 +1277,67 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof RevokeStaffRequestSchema;
     output: typeof RevokeStaffResponseSchema;
+  },
+  /**
+   * Opening of a restaurant for new Restaurant Orders (FR-203). Both require
+   * restaurant#manage and write RestaurantOpened/RestaurantClosed to the Outbox
+   * in the same Unit of Work. A repeat succeeds with changed = false and no new
+   * fact (AC-209). An unknown restaurant is NOT_FOUND.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.OpenRestaurant
+   */
+  openRestaurant: {
+    methodKind: "unary";
+    input: typeof OpenRestaurantRequestSchema;
+    output: typeof OpenRestaurantResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.CloseRestaurant
+   */
+  closeRestaurant: {
+    methodKind: "unary";
+    input: typeof CloseRestaurantRequestSchema;
+    output: typeof CloseRestaurantResponseSchema;
+  },
+  /**
+   * Menu management (FR-210..FR-215). All require restaurant#manage_menu
+   * (owner or staff). CreateMenu of a restaurant that has a menu is
+   * ALREADY_EXISTS; a missing restaurant, menu or menu item is NOT_FOUND; an
+   * invalid name or price is INVALID_ARGUMENT. AddMenuItem is not idempotent:
+   * every call adds a new item. UpdateMenuItem and SetMenuItemAvailability
+   * repeating the current values succeed with changed = false; a change of
+   * availability writes MenuItemAvailabilityChanged to the Outbox.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.CreateMenu
+   */
+  createMenu: {
+    methodKind: "unary";
+    input: typeof CreateMenuRequestSchema;
+    output: typeof CreateMenuResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.AddMenuItem
+   */
+  addMenuItem: {
+    methodKind: "unary";
+    input: typeof AddMenuItemRequestSchema;
+    output: typeof AddMenuItemResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.UpdateMenuItem
+   */
+  updateMenuItem: {
+    methodKind: "unary";
+    input: typeof UpdateMenuItemRequestSchema;
+    output: typeof UpdateMenuItemResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.SetMenuItemAvailability
+   */
+  setMenuItemAvailability: {
+    methodKind: "unary";
+    input: typeof SetMenuItemAvailabilityRequestSchema;
+    output: typeof SetMenuItemAvailabilityResponseSchema;
   },
 }>;
 

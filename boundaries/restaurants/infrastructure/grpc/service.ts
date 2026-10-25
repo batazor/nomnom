@@ -1,9 +1,15 @@
 import { create } from "@bufbuild/protobuf";
 import type { ServiceImpl } from "@connectrpc/connect";
+import type { AddMenuItemHandler } from "../../slices/menu/applications/add-menu-item/add-menu-item.ts";
+import type { CreateMenuHandler } from "../../slices/menu/applications/create-menu/create-menu.ts";
 import type { GetMenuHandler } from "../../slices/menu/applications/get-menu/get-menu.ts";
+import type { SetMenuItemAvailabilityHandler } from "../../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
+import type { UpdateMenuItemHandler } from "../../slices/menu/applications/update-menu-item/update-menu-item.ts";
 import type { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
+import type { CloseRestaurantHandler } from "../../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
 import type { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import type { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
+import type { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import type { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import type { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import type { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
@@ -28,11 +34,13 @@ import {
   RevokeStaffResponseSchema,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import { createKitchenRpcs } from "./kitchen.ts";
+import { createMenuRpcs } from "./menu-commands.ts";
 import {
   toMenuItemMessages,
   toRestaurantMessage,
   toStaffMessage,
 } from "./messages.ts";
+import { createOpeningRpcs } from "./restaurant-commands.ts";
 import { withRequestRevision } from "./revision.ts";
 import { RejectingSubjectResolver, type SubjectResolver } from "./subject.ts";
 
@@ -57,6 +65,12 @@ export type RestaurantsServiceDependencies = Readonly<{
   registerRestaurant: Pick<RegisterRestaurantHandler, "execute">;
   assignStaff: Pick<AssignStaffHandler, "execute">;
   revokeStaff: Pick<RevokeStaffHandler, "execute">;
+  openRestaurant: Pick<OpenRestaurantHandler, "execute">;
+  closeRestaurant: Pick<CloseRestaurantHandler, "execute">;
+  createMenu: Pick<CreateMenuHandler, "execute">;
+  addMenuItem: Pick<AddMenuItemHandler, "execute">;
+  updateMenuItem: Pick<UpdateMenuItemHandler, "execute">;
+  setMenuItemAvailability: Pick<SetMenuItemAvailabilityHandler, "execute">;
   /** Defaults to {@link RejectingSubjectResolver}: commands fail UNAUTHENTICATED. */
   subjects?: SubjectResolver;
 }>;
@@ -230,5 +244,8 @@ export const createRestaurantsService = (
         throw transportError(error);
       }
     },
+
+    ...createOpeningRpcs(dependencies, subjects),
+    ...createMenuRpcs(dependencies, subjects),
   };
 };

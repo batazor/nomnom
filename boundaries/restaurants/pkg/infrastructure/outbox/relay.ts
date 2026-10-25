@@ -59,14 +59,20 @@ export interface MessagePublisher {
 export interface RelayMetrics {
   published(record: RelayRecord, durationS: number, lagS: number): void;
   failed(record: RelayRecord, errorClass: string): void;
-  /** Current backlog; an empty list while this instance has no lease. */
+  /**
+   * Backlog of the lease holder by topic; topics without unpublished records
+   * are absent from `stats`.
+   */
   backlog(stats: readonly PendingStats[]): void;
+  /** This instance has no lease: it MUST NOT report a backlog. */
+  standby(): void;
 }
 
 export const noRelayMetrics: RelayMetrics = {
   published: () => {},
   failed: () => {},
   backlog: () => {},
+  standby: () => {},
 };
 
 /**
@@ -169,7 +175,7 @@ export class OutboxRelay {
   async cycle(signal?: AbortSignal): Promise<CycleResult> {
     const { store } = this.#options;
     if (!(await this.#renewLease())) {
-      this.#metrics.backlog([]);
+      this.#metrics.standby();
       return { leased: false, published: 0, deleted: 0 };
     }
 
@@ -185,7 +191,7 @@ export class OutboxRelay {
           this.#options.leaseTtlMs / LEASE_RENEW_FRACTION &&
         !(await this.#renewLease())
       ) {
-        this.#metrics.backlog([]);
+        this.#metrics.standby();
         return { leased: false, published, deleted: 0 };
       }
       const started = performance.now();

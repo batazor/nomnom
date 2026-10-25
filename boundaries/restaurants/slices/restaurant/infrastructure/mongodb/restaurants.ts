@@ -19,6 +19,7 @@ import {
 import type {
   RestaurantMembers,
   RestaurantMemberships,
+  RevisionWrite,
 } from "../reconcile/reconcile.ts";
 
 export const RESTAURANTS_COLLECTION = "restaurants";
@@ -112,6 +113,7 @@ export class MongoRestaurantRepository implements RestaurantRepository {
 
 const toMembers = (document: RestaurantDocument): RestaurantMembers => ({
   restaurantId: document._id,
+  version: Number(document.version),
   ownerId: document.ownerId,
   staff: document.staff ?? [],
 });
@@ -153,22 +155,22 @@ export class MongoRestaurantMemberships implements RestaurantMemberships {
   async recordAuthorizationRevision(
     restaurantId: string,
     revision: AuthorizationRevision,
-  ): Promise<void> {
+  ): Promise<RevisionWrite | undefined> {
     for (let attempt = 0; ; attempt += 1) {
       const document = await this.#collection.findOne({ _id: restaurantId });
-      if (document === undefined) return;
+      if (document === undefined) return undefined;
       const restaurant = Restaurant.restore(
         toSnapshot(document),
         document.version,
       );
       restaurant.recordAuthorizationRevision(revision);
       try {
-        await this.#collection.save(
+        const to = await this.#collection.save(
           restaurantId,
           document.version,
           toData(restaurant),
         );
-        return;
+        return { from: Number(document.version), to };
       } catch (error) {
         if (!(error instanceof ConcurrencyConflictError) || attempt >= 2) {
           throw error;

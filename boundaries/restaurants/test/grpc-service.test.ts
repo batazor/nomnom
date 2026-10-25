@@ -284,6 +284,12 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
+    openRestaurant: world.open,
+    closeRestaurant: world.close,
+    createMenu: world.createMenu,
+    addMenuItem: world.addMenuItem,
+    updateMenuItem: world.updateMenuItem,
+    setMenuItemAvailability: world.setAvailability,
     subjects: resolverOf(ordersService),
   });
   await assert.rejects(

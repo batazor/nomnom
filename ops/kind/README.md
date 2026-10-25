@@ -145,6 +145,7 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 | `orders-v1` | остальные методы `OrdersService` (совпадение по сервису) | `commands` |
 | `restaurants-v1-reads` | `GetRestaurant`, `GetMenu`, `ListRestaurants` | `reads` |
 | `restaurants-v1-commands` | `ReceiveOrderRequest`, `CancelRestaurantOrder` | `commands` |
+| `restaurants-v1-management` | `OpenRestaurant`, `CloseRestaurant`, `CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability` | `commands` |
 | `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
 

@@ -18,6 +18,7 @@ import {
 import type {
   RestaurantMembers,
   RestaurantMemberships,
+  RevisionWrite,
 } from "../reconcile/reconcile.ts";
 
 export const createRestaurantStore =
@@ -74,7 +75,7 @@ export class InMemoryRestaurantMemberships implements RestaurantMemberships {
     const members = new Map<string, RestaurantMembers>();
     for (const id of new Set(ids)) {
       const stored = this.#store.get(id);
-      if (stored !== undefined) members.set(id, toMembers(stored.document));
+      if (stored !== undefined) members.set(id, toMembers(stored));
     }
     return members;
   }
@@ -85,9 +86,8 @@ export class InMemoryRestaurantMemberships implements RestaurantMemberships {
   ): Promise<readonly RestaurantMembers[]> {
     return this.#store
       .all()
-      .map((stored) => stored.document)
-      .filter((restaurant) => after === undefined || restaurant.id > after)
-      .sort((left, right) => (left.id < right.id ? -1 : 1))
+      .filter((stored) => after === undefined || stored.document.id > after)
+      .sort((left, right) => (left.document.id < right.document.id ? -1 : 1))
       .slice(0, limit)
       .map(toMembers);
   }
@@ -99,15 +99,19 @@ export class InMemoryRestaurantMemberships implements RestaurantMemberships {
   async recordAuthorizationRevision(
     restaurantId: string,
     revision: AuthorizationRevision,
-  ): Promise<void> {
+  ): Promise<RevisionWrite | undefined> {
     for (let attempt = 0; ; attempt += 1) {
       const stored = this.#store.get(restaurantId);
-      if (stored === undefined) return;
+      if (stored === undefined) return undefined;
       const restaurant = Restaurant.restore(stored.document, stored.version);
       restaurant.recordAuthorizationRevision(revision);
       try {
-        this.#store.save(restaurantId, stored.version, restaurant.toSnapshot());
-        return;
+        const to = this.#store.save(
+          restaurantId,
+          stored.version,
+          restaurant.toSnapshot(),
+        );
+        return { from: stored.version, to };
       } catch (error) {
         if (!(error instanceof ConcurrencyConflictError) || attempt >= 2) {
           throw error;
@@ -117,10 +121,17 @@ export class InMemoryRestaurantMemberships implements RestaurantMemberships {
   }
 }
 
-const toMembers = (snapshot: StoredRestaurantSnapshot): RestaurantMembers => ({
-  restaurantId: snapshot.id,
-  ownerId: snapshot.ownerId,
-  staff: snapshot.staff ?? [],
+const toMembers = ({
+  document,
+  version,
+}: {
+  document: StoredRestaurantSnapshot;
+  version: number;
+}): RestaurantMembers => ({
+  restaurantId: document.id,
+  version,
+  ownerId: document.ownerId,
+  staff: document.staff ?? [],
 });
 
 const toView = (snapshot: StoredRestaurantSnapshot): RestaurantView => ({

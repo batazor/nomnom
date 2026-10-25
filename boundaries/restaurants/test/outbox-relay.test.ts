@@ -124,6 +124,7 @@ const recordingMetrics = () => {
     },
     failed: (_record, errorClassValue) => calls.failed.push(errorClassValue),
     backlog: (stats) => calls.backlog.push([...stats]),
+    standby: () => calls.backlog.push([]),
   };
   return { calls, metrics };
 };

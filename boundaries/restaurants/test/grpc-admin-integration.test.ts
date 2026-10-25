@@ -183,6 +183,12 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
       }),
       assignStaff: new AssignStaffHandler(staff),
       revokeStaff: new RevokeStaffHandler(staff),
+      openRestaurant: unused,
+      closeRestaurant: unused,
+      createMenu: unused,
+      addMenuItem: unused,
+      updateMenuItem: unused,
+      setMenuItemAvailability: unused,
       subjects: { resolve: async () => caller },
     });
     const as = (subject: Subject) => {

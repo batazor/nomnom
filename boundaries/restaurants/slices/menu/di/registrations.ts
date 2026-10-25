@@ -1,13 +1,22 @@
 // Awilix registrations of the `menu` slice (ADR 5): MongoDB adapters of its
-// ports, the Outbox mapper of the Menu aggregate and the public Get Menu query
-// served by gRPC.
+// ports, the Outbox mapper of the Menu aggregate, the public Get Menu query
+// and the menu management commands served by gRPC.
 import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Db } from "mongodb";
 
+import type { Clock } from "../../../pkg/application/clock.ts";
+import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
+import type { Outbox } from "../../../pkg/application/outbox.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/mongodb/outbox.ts";
 import type { MongoUnitOfWork } from "../../../pkg/infrastructure/mongodb/unit-of-work.ts";
+import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
+import type { MenuAccessControl } from "../applications/access-control.ts";
+import { AddMenuItemHandler } from "../applications/add-menu-item/add-menu-item.ts";
+import { CreateMenuHandler } from "../applications/create-menu/create-menu.ts";
 import { GetMenuHandler } from "../applications/get-menu/get-menu.ts";
+import { SetMenuItemAvailabilityHandler } from "../applications/set-menu-item-availability/set-menu-item-availability.ts";
+import { UpdateMenuItemHandler } from "../applications/update-menu-item/update-menu-item.ts";
 import type { MenuRepository } from "../domains/menu/menu.ts";
 import { menuEventMapper } from "../infrastructure/integration/menu-events.ts";
 import {
@@ -20,6 +29,12 @@ import {
 export interface MenuDependencies {
   readonly db: Db;
   readonly unitOfWork: MongoUnitOfWork;
+  readonly clock: Clock;
+  readonly ids: IdGenerator;
+  readonly outbox: Outbox;
+  readonly menuAccessControl: MenuAccessControl;
+  /** Create Menu requires an existing restaurant (FR-211). */
+  readonly restaurants: RestaurantRepository;
 }
 
 /** What the slice provides to the process and to other slices. */
@@ -31,6 +46,10 @@ export interface MenuCradle {
   readonly menuOutboxEventMapper: OutboxEventMapper;
   readonly menus: MenuRepository;
   readonly getMenu: GetMenuHandler;
+  readonly createMenu: CreateMenuHandler;
+  readonly addMenuItem: AddMenuItemHandler;
+  readonly updateMenuItem: UpdateMenuItemHandler;
+  readonly setMenuItemAvailability: SetMenuItemAvailabilityHandler;
 }
 
 export const registerMenu = (
@@ -46,6 +65,68 @@ export const registerMenu = (
       ({ db, unitOfWork }: MenuDependencies) =>
         new GetMenuHandler({
           reader: new MongoMenuReader(createMenuCollection(db, unitOfWork)),
+        }),
+    ).singleton(),
+    createMenu: asFunction(
+      ({
+        menuAccessControl,
+        restaurants,
+        menus,
+        ids,
+        clock,
+      }: MenuDependencies & MenuCradle) =>
+        new CreateMenuHandler({
+          accessControl: menuAccessControl,
+          restaurants,
+          menus,
+          ids,
+          clock,
+        }),
+    ).singleton(),
+    addMenuItem: asFunction(
+      ({
+        menuAccessControl,
+        menus,
+        ids,
+        clock,
+      }: MenuDependencies & MenuCradle) =>
+        new AddMenuItemHandler({
+          accessControl: menuAccessControl,
+          menus,
+          ids,
+          clock,
+        }),
+    ).singleton(),
+    updateMenuItem: asFunction(
+      ({
+        menuAccessControl,
+        unitOfWork,
+        menus,
+        outbox,
+        clock,
+      }: MenuDependencies & MenuCradle) =>
+        new UpdateMenuItemHandler({
+          accessControl: menuAccessControl,
+          unitOfWork,
+          menus,
+          outbox,
+          clock,
+        }),
+    ).singleton(),
+    setMenuItemAvailability: asFunction(
+      ({
+        menuAccessControl,
+        unitOfWork,
+        menus,
+        outbox,
+        clock,
+      }: MenuDependencies & MenuCradle) =>
+        new SetMenuItemAvailabilityHandler({
+          accessControl: menuAccessControl,
+          unitOfWork,
+          menus,
+          outbox,
+          clock,
         }),
     ).singleton(),
   };

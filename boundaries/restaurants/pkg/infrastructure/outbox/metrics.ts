@@ -16,17 +16,34 @@ const EVENT_TYPE = "nomnom.event.type";
 const ERROR_CLASS = "nomnom.error.class";
 const OUTCOME = "nomnom.outcome";
 
+export type OtelRelayMetricsOptions = Readonly<{
+  meter?: Meter;
+  /**
+   * Topics of the context: the active relay reports them with 0 even before
+   * the first record, so an empty backlog is a series at 0, not a gap.
+   */
+  knownTopics?: readonly string[];
+}>;
+
 /**
  * Outbox metrics of the relay (docs/observability/metric-inventory.md#outbox).
  * OTel names and attributes follow ops/semconv; never event or aggregate ids.
+ *
+ * The pending store aggregates only unpublished records by topic, so a topic
+ * whose backlog drained disappears from {@link PendingStats}. The active relay
+ * reports every known or previously seen topic, with 0 when it is empty; a
+ * standby relay (empty `backlog([])` without lease) reports nothing.
  */
 export class OtelRelayMetrics implements RelayMetrics {
   #backlog: readonly PendingStats[] = [];
+  readonly #topics: Set<string>;
   readonly #retries;
   readonly #duration;
   readonly #lag;
 
-  constructor(boundary: string, meter: Meter = metrics.getMeter(boundary)) {
+  constructor(boundary: string, options: OtelRelayMetricsOptions = {}) {
+    const meter = options.meter ?? metrics.getMeter(boundary);
+    this.#topics = new Set(options.knownTopics ?? []);
     this.#retries = meter.createCounter("nomnom.outbox.publish.retries", {
       unit: "{retry}",
       description:
@@ -86,7 +103,18 @@ export class OtelRelayMetrics implements RelayMetrics {
   }
 
   backlog(stats: readonly PendingStats[]): void {
-    this.#backlog = stats;
+    for (const { stream } of stats) this.#topics.add(stream);
+    const reported = new Set(stats.map(({ stream }) => stream));
+    this.#backlog = [
+      ...stats,
+      ...[...this.#topics]
+        .filter((topic) => !reported.has(topic))
+        .map((stream) => ({ stream, pending: 0, oldestOccurredAt: undefined })),
+    ];
+  }
+
+  standby(): void {
+    this.#backlog = [];
   }
 
   #attributes(record: RelayRecord) {
