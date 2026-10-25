@@ -16,6 +16,8 @@ type Config struct {
 	Temporal    TemporalConfig    `mapstructure:"temporal"`
 	Fulfillment FulfillmentConfig `mapstructure:"fulfillment"`
 
+	Cancellation CancellationConfig `mapstructure:"cancellation"`
+
 	InternalGateway InternalGatewayConfig `mapstructure:"internal_gateway"`
 	Identity        IdentityConfig        `mapstructure:"identity"`
 	SpiceDB         SpiceDBConfig         `mapstructure:"spicedb"`
@@ -44,6 +46,9 @@ func Load() (Config, error) {
 	}
 	if err := configureFulfillment(loader); err != nil {
 		return Config{}, fmt.Errorf("configure fulfillment: %w", err)
+	}
+	if err := configureCancellation(loader); err != nil {
+		return Config{}, fmt.Errorf("configure cancellation: %w", err)
 	}
 	if err := configureInternalGateway(loader); err != nil {
 		return Config{}, fmt.Errorf("configure internal gateway: %w", err)
@@ -91,6 +96,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := cfg.Fulfillment.Validate(); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.Cancellation.Validate(); err != nil {
 		return Config{}, err
 	}
 	if err := cfg.Identity.Validate(); err != nil {

@@ -20,6 +20,13 @@ var allStates = [...]State{StatePlaced, StateConfirmed, StateCancelled, StateCom
 // IsFinal reports whether the state is a terminal outcome of the Order lifecycle.
 func (s State) IsFinal() bool { return s == StateCancelled || s == StateCompleted }
 
+// AcceptsCancellation reports whether the transition table lets an Order in
+// this State be cancelled; CheckCancellation reads the same row.
+func (s State) AcceptsCancellation() bool {
+	definition, ok := transitionTable[transitionKey{from: s, trigger: TriggerCancel}]
+	return ok && definition.outcome == transitionAllowed
+}
+
 type Trigger string
 
 const (

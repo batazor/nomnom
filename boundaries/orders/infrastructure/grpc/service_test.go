@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,8 @@ import (
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/application"
 	orderdi "nomnom/orders/slices/order/di"
+	"nomnom/orders/slices/order/domains/order"
+	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/memory"
 )
 
@@ -30,11 +33,19 @@ func (r fixedSubject) Resolve(context.Context) (application.Subject, error) {
 	return r.subject, r.err
 }
 
+const cancellationWindow = 5 * time.Minute
+
 func newClient(t *testing.T, subjects grpcadapter.SubjectResolver) ordersv1.OrdersServiceClient {
+	t.Helper()
+	return newClientWith(t, subjects, memory.NewStore(), memory.NewAuthorizer())
+}
+
+func newClientWith(t *testing.T, subjects grpcadapter.SubjectResolver, store *memory.Store, authorizer *memory.Authorizer) ordersv1.OrdersServiceClient {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
-	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(orderdi.NewModule(memory.NewStore(), memory.NewAuthorizer()), subjects))
+	module := orderdi.NewModule(store, authorizer, memory.FixedWindow{Duration: cancellationWindow})
+	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module, subjects))
 	go func() {
 		_ = server.Serve(listener)
 	}()
@@ -93,4 +104,31 @@ func TestServiceRejectsUnverifiedCallerByDefault(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+// AC-504, AC-505: GetOrder carries the window only while the Order may be cancelled.
+func TestGetOrderMapsCancellationWindow(t *testing.T) {
+	store := memory.NewStore()
+	authorizer := memory.NewAuthorizer()
+	for id, state := range map[order.ID]order.State{"order-placed": order.StatePlaced, "order-completed": order.StateCompleted} {
+		o := ordertest.New(t, id, ordertest.WithState(state))
+		require.NoError(t, store.Add(context.Background(), o))
+		_, err := authorizer.GrantOrderCustomer(context.Background(), o.ID(), o.CustomerID())
+		require.NoError(t, err)
+	}
+	client := newClientWith(t, fixedSubject{subject: application.Subject{
+		Kind: application.SubjectUser,
+		ID:   "customer-1",
+	}}, store, authorizer)
+
+	placed, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-placed"})
+	require.NoError(t, err)
+	window := placed.GetOrder().GetCancellationWindow()
+	require.NotNil(t, window)
+	assert.Equal(t, ordertest.PlacedAt, window.GetOpensAt().AsTime())
+	assert.Equal(t, ordertest.PlacedAt.Add(cancellationWindow), window.GetClosesAt().AsTime())
+
+	completed, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-completed"})
+	require.NoError(t, err)
+	assert.Nil(t, completed.GetOrder().GetCancellationWindow())
 }

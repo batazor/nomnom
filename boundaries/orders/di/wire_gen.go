@@ -28,7 +28,14 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	module := di.NewModule(diStore, authorizer)
+	cancellationConfig := cfg.Cancellation
+	v, err := di.NewCancellationPolicy(cancellationConfig)
+	if err != nil {
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	module := di.NewModule(diStore, authorizer, v)
 	identityConfig := cfg.Identity
 	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
 	if err != nil {

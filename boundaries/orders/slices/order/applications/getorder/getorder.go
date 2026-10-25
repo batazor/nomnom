@@ -33,6 +33,9 @@ type OrderView struct {
 	Facts           []FactView
 	// Cancellation is nil unless the Order is cancelled.
 	Cancellation *CancellationView
+	// CancellationWindow is nil when the Order State does not admit Order
+	// Cancellation or the policy could not supply the window.
+	CancellationWindow *order.CancellationWindow
 }
 
 type ItemView struct {
@@ -62,13 +65,20 @@ type Reader interface {
 	OrderView(ctx context.Context, id order.ID) (OrderView, error)
 }
 
+// CancellationPolicy is the policy Request Order Cancellation checks against;
+// the view publishes the same window.
+type CancellationPolicy interface {
+	Window(ctx context.Context, placedAt time.Time) (order.CancellationWindow, error)
+}
+
 type Handler struct {
 	authorizer Authorizer
 	reader     Reader
+	policy     CancellationPolicy
 }
 
-func NewHandler(authorizer Authorizer, reader Reader) Handler {
-	return Handler{authorizer: authorizer, reader: reader}
+func NewHandler(authorizer Authorizer, reader Reader, policy CancellationPolicy) Handler {
+	return Handler{authorizer: authorizer, reader: reader, policy: policy}
 }
 
 // Handle authorizes before reading, so a denied subject learns nothing about
@@ -88,5 +98,24 @@ func (h Handler) Handle(ctx context.Context, q Query) (OrderView, error) {
 	if err := application.FailClosed(err); err != nil {
 		return OrderView{}, err
 	}
-	return h.reader.OrderView(ctx, q.OrderID)
+	view, err := h.reader.OrderView(ctx, q.OrderID)
+	if err != nil {
+		return OrderView{}, err
+	}
+	view.CancellationWindow = h.cancellationWindow(ctx, view)
+	return view, nil
+}
+
+// cancellationWindow is advisory: the authoritative check is Request Order
+// Cancellation, so a failing policy hides the window instead of failing the
+// read. The policy adapter reports its own failures.
+func (h Handler) cancellationWindow(ctx context.Context, view OrderView) *order.CancellationWindow {
+	if !view.State.AcceptsCancellation() {
+		return nil
+	}
+	window, err := h.policy.Window(ctx, view.PlacedAt)
+	if err != nil {
+		return nil
+	}
+	return &window
 }

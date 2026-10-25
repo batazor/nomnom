@@ -309,6 +309,60 @@ func (x *Cancellation) GetCancelledAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Interval in which Request Order Cancellation admits a request. Whether it is
+// open now is decided by the reader's clock; the request itself is checked again.
+type CancellationWindow struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OpensAt       *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=opens_at,json=opensAt,proto3" json:"opens_at,omitempty"`
+	ClosesAt      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=closes_at,json=closesAt,proto3" json:"closes_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancellationWindow) Reset() {
+	*x = CancellationWindow{}
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancellationWindow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancellationWindow) ProtoMessage() {}
+
+func (x *CancellationWindow) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancellationWindow.ProtoReflect.Descriptor instead.
+func (*CancellationWindow) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CancellationWindow) GetOpensAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.OpensAt
+	}
+	return nil
+}
+
+func (x *CancellationWindow) GetClosesAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ClosesAt
+	}
+	return nil
+}
+
 type Order struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	OrderId          string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -321,13 +375,15 @@ type Order struct {
 	PlacedAt         *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
 	FulfillmentFacts []*FulfillmentFact     `protobuf:"bytes,9,rep,name=fulfillment_facts,json=fulfillmentFacts,proto3" json:"fulfillment_facts,omitempty"`
 	Cancellation     *Cancellation          `protobuf:"bytes,10,opt,name=cancellation,proto3" json:"cancellation,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Present only while the Order State admits Order Cancellation.
+	CancellationWindow *CancellationWindow `protobuf:"bytes,11,opt,name=cancellation_window,json=cancellationWindow,proto3" json:"cancellation_window,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Order) Reset() {
 	*x = Order{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[4]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -339,7 +395,7 @@ func (x *Order) String() string {
 func (*Order) ProtoMessage() {}
 
 func (x *Order) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[4]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -352,7 +408,7 @@ func (x *Order) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Order.ProtoReflect.Descriptor instead.
 func (*Order) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{4}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Order) GetOrderId() string {
@@ -425,6 +481,13 @@ func (x *Order) GetCancellation() *Cancellation {
 	return nil
 }
 
+func (x *Order) GetCancellationWindow() *CancellationWindow {
+	if x != nil {
+		return x.CancellationWindow
+	}
+	return nil
+}
+
 type OrderSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -438,7 +501,7 @@ type OrderSummary struct {
 
 func (x *OrderSummary) Reset() {
 	*x = OrderSummary{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[5]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -450,7 +513,7 @@ func (x *OrderSummary) String() string {
 func (*OrderSummary) ProtoMessage() {}
 
 func (x *OrderSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[5]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -463,7 +526,7 @@ func (x *OrderSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderSummary.ProtoReflect.Descriptor instead.
 func (*OrderSummary) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{5}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *OrderSummary) GetOrderId() string {
@@ -524,7 +587,10 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\aoutcome\x18\x01 \x01(\tR\aoutcome\x12\x1f\n" +
 	"\vreason_code\x18\x02 \x01(\tR\n" +
 	"reasonCode\x12=\n" +
-	"\fcancelled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcancelledAt\"\xf6\x03\n" +
+	"\fcancelled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcancelledAt\"\x84\x01\n" +
+	"\x12CancellationWindow\x125\n" +
+	"\bopens_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\aopensAt\x127\n" +
+	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xcd\x04\n" +
 	"\x05Order\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -537,7 +603,8 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\tplaced_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\x12N\n" +
 	"\x11fulfillment_facts\x18\t \x03(\v2!.nomnom.orders.v1.FulfillmentFactR\x10fulfillmentFacts\x12B\n" +
 	"\fcancellation\x18\n" +
-	" \x01(\v2\x1e.nomnom.orders.v1.CancellationR\fcancellation\"\xea\x01\n" +
+	" \x01(\v2\x1e.nomnom.orders.v1.CancellationR\fcancellation\x12U\n" +
+	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindow\"\xea\x01\n" +
 	"\fOrderSummary\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x122\n" +
@@ -566,35 +633,39 @@ func file_nomnom_orders_v1_orders_proto_rawDescGZIP() []byte {
 }
 
 var file_nomnom_orders_v1_orders_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_nomnom_orders_v1_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_nomnom_orders_v1_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_nomnom_orders_v1_orders_proto_goTypes = []any{
 	(OrderState)(0),               // 0: nomnom.orders.v1.OrderState
 	(*Money)(nil),                 // 1: nomnom.orders.v1.Money
 	(*OrderItem)(nil),             // 2: nomnom.orders.v1.OrderItem
 	(*FulfillmentFact)(nil),       // 3: nomnom.orders.v1.FulfillmentFact
 	(*Cancellation)(nil),          // 4: nomnom.orders.v1.Cancellation
-	(*Order)(nil),                 // 5: nomnom.orders.v1.Order
-	(*OrderSummary)(nil),          // 6: nomnom.orders.v1.OrderSummary
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*CancellationWindow)(nil),    // 5: nomnom.orders.v1.CancellationWindow
+	(*Order)(nil),                 // 6: nomnom.orders.v1.Order
+	(*OrderSummary)(nil),          // 7: nomnom.orders.v1.OrderSummary
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
 }
 var file_nomnom_orders_v1_orders_proto_depIdxs = []int32{
 	1,  // 0: nomnom.orders.v1.OrderItem.unit_price:type_name -> nomnom.orders.v1.Money
-	7,  // 1: nomnom.orders.v1.FulfillmentFact.occurred_at:type_name -> google.protobuf.Timestamp
-	7,  // 2: nomnom.orders.v1.Cancellation.cancelled_at:type_name -> google.protobuf.Timestamp
-	2,  // 3: nomnom.orders.v1.Order.items:type_name -> nomnom.orders.v1.OrderItem
-	1,  // 4: nomnom.orders.v1.Order.total:type_name -> nomnom.orders.v1.Money
-	0,  // 5: nomnom.orders.v1.Order.state:type_name -> nomnom.orders.v1.OrderState
-	7,  // 6: nomnom.orders.v1.Order.placed_at:type_name -> google.protobuf.Timestamp
-	3,  // 7: nomnom.orders.v1.Order.fulfillment_facts:type_name -> nomnom.orders.v1.FulfillmentFact
-	4,  // 8: nomnom.orders.v1.Order.cancellation:type_name -> nomnom.orders.v1.Cancellation
-	0,  // 9: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
-	1,  // 10: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
-	7,  // 11: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	8,  // 1: nomnom.orders.v1.FulfillmentFact.occurred_at:type_name -> google.protobuf.Timestamp
+	8,  // 2: nomnom.orders.v1.Cancellation.cancelled_at:type_name -> google.protobuf.Timestamp
+	8,  // 3: nomnom.orders.v1.CancellationWindow.opens_at:type_name -> google.protobuf.Timestamp
+	8,  // 4: nomnom.orders.v1.CancellationWindow.closes_at:type_name -> google.protobuf.Timestamp
+	2,  // 5: nomnom.orders.v1.Order.items:type_name -> nomnom.orders.v1.OrderItem
+	1,  // 6: nomnom.orders.v1.Order.total:type_name -> nomnom.orders.v1.Money
+	0,  // 7: nomnom.orders.v1.Order.state:type_name -> nomnom.orders.v1.OrderState
+	8,  // 8: nomnom.orders.v1.Order.placed_at:type_name -> google.protobuf.Timestamp
+	3,  // 9: nomnom.orders.v1.Order.fulfillment_facts:type_name -> nomnom.orders.v1.FulfillmentFact
+	4,  // 10: nomnom.orders.v1.Order.cancellation:type_name -> nomnom.orders.v1.Cancellation
+	5,  // 11: nomnom.orders.v1.Order.cancellation_window:type_name -> nomnom.orders.v1.CancellationWindow
+	0,  // 12: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
+	1,  // 13: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
+	8,  // 14: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_orders_proto_init() }
@@ -608,7 +679,7 @@ func file_nomnom_orders_v1_orders_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_orders_v1_orders_proto_rawDesc), len(file_nomnom_orders_v1_orders_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

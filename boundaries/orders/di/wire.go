@@ -12,7 +12,7 @@ import (
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
 	wire.Build(
-		wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Postgres"),
+		wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Postgres", "Cancellation"),
 		orderdi.ProviderSet,
 		grpcadapter.NewSubjectResolver,
 		NewGRPCServer,

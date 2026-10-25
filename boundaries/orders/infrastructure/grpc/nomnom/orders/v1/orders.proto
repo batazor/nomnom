@@ -35,6 +35,13 @@ message Cancellation {
   google.protobuf.Timestamp cancelled_at = 3;
 }
 
+// Interval in which Request Order Cancellation admits a request. Whether it is
+// open now is decided by the reader's clock; the request itself is checked again.
+message CancellationWindow {
+  google.protobuf.Timestamp opens_at = 1;
+  google.protobuf.Timestamp closes_at = 2;
+}
+
 message Order {
   string order_id = 1;
   string customer_id = 2;
@@ -46,6 +53,8 @@ message Order {
   google.protobuf.Timestamp placed_at = 8;
   repeated FulfillmentFact fulfillment_facts = 9;
   Cancellation cancellation = 10;
+  // Present only while the Order State admits Order Cancellation.
+  CancellationWindow cancellation_window = 11;
 }
 
 message OrderSummary {

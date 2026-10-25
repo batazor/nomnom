@@ -43,7 +43,7 @@ BFF — отдельный сервис и единая прикладная т�
 - Бизнес-отказы mutations возвращаются в payload (`problems`, `problem`), GraphQL errors — только transport, authentication и нереализованные операции.
 - Покупатель не передаётся аргументом: subject определяется по аутентифицированному запросу.
 - Моменты времени — `String` в RFC 3339, `Money.amount` — десятичная строка; unions и custom scalars не используются.
-- `Order.cancellation` можно заполнить только после публикации окна отмены в `orders` `GetOrder`.
+- `Order.cancellation` берётся из `Order.cancellation_window` ответа `orders` `GetOrder`: `availableUntil = closes_at`, если `opens_at ≤ now ≤ closes_at` по часам BFF, иначе `null`. `orders` возвращает окно, только пока Order State допускает отмену; сам запрос отмены `orders` проверяет заново.
 
 ## Место в архитектуре
 

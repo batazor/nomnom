@@ -122,3 +122,11 @@ func TestOnlyCancelledAndCompletedAreFinal(t *testing.T) {
 		assert.Equal(t, final[state], state.IsFinal(), state)
 	}
 }
+
+func TestOnlyPlacedAndConfirmedAcceptCancellation(t *testing.T) {
+	accepts := map[State]bool{StatePlaced: true, StateConfirmed: true, StateCancelled: false, StateCompleted: false}
+	require.Len(t, accepts, len(allStates))
+	for _, state := range allStates {
+		assert.Equal(t, accepts[state], state.AcceptsCancellation(), state)
+	}
+}

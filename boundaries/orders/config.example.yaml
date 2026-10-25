@@ -16,6 +16,10 @@ temporal:
   connect_timeout: 10s
   # Создание Search Attribute требует прав оператора namespace; включать локально.
   register_search_attributes: false
+# Окно отмены от момента Place Order (env CANCELLATION__WINDOW). Placeholder до
+# продуктового решения; значение должно быть положительным.
+cancellation:
+  window: 5m
 # Policy Order Fulfillment Workflow. Значения — placeholders, не продуктовые сроки.
 fulfillment:
   acceptance_timeout: 10m

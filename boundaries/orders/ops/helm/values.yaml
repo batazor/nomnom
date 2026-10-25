@@ -94,6 +94,7 @@ resources:
 #   OTEL_SERVICE_NAME: orders
 #   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
 #   OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+#   CANCELLATION__WINDOW: 5m  # окно отмены; без значения действует placeholder 5m
 env: {}
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:

@@ -83,7 +83,16 @@ Temporal workflow относится к прикладному процессу 
 
 В `google.rpc.ErrorInfo.domain` передаётся `nomnom.orders.v1`. Реализованы Buf-модуль,
 сгенерированные Go stubs и RPC `GetOrder` / `ListCustomerOrders`. Оба RPC вызывают
-application handlers и используют структурированные `ErrorInfo`. Composition root по
+application handlers и используют структурированные `ErrorInfo`.
+
+`GetOrder` возвращает `Order.cancellation_window { opens_at, closes_at }`, пока Order State
+допускает Order Cancellation (`placed`, `confirmed`); для `cancelled` и `completed` поля нет.
+Окно задаёт та же cancellation policy, что использует Request Order Cancellation: оно
+открывается в момент Place Order и длится `cancellation.window` (`CANCELLATION__WINDOW`,
+по умолчанию `5m` — placeholder до продуктового решения; `0s` или неразбираемое значение
+останавливают процесс на старте). Открыто ли окно сейчас, решает потребитель по своему
+clock, а сам запрос отмены проверяется заново. Если политика вернёт ошибку, `GetOrder`
+отдаёт заказ без окна, а декоратор `cancellationpolicy.Observed` пишет ошибку в log и span. Composition root по
 умолчанию устанавливает deny-by-default `SubjectResolver`: пока не подключён adapter
 проверки internal identity, вызов завершается `UNAUTHENTICATED`, а произвольным metadata
 gateway не доверяет. Политика контрактов, генерации и совместимости описана в
@@ -300,7 +309,9 @@ Workflow Stage публикуется низкокардинальным Search 
 
 ## Observability
 
-Для `orders` observability охватывает gRPC, PostgreSQL, Watermill/Kafka, Temporal workflows и Activities, API и workers. W3C Trace Context передаётся через gRPC metadata и Watermill message metadata/Kafka headers; telemetry при replay workflow не должна повторно считаться бизнес-результатом. Общие правила и путь Pyroscope для Go описаны в [общесистемной документации observability](../../docs/observability.md).
+Для `orders` observability охватывает gRPC, PostgreSQL, Watermill/Kafka, Temporal workflows и Activities, API и workers. W3C Trace Context передаётся через gRPC metadata и Watermill message metadata/Kafka headers; telemetry при replay workflow не должна повторно считаться бизнес-результатом.
+
+`pkg/telemetry` во всех процессах регистрирует W3C propagator и экспортирует metrics по OTLP при заданном `OTEL_EXPORTER_OTLP_ENDPOINT`. Traces (server и client spans `otelgrpc`) экспортируются по OTLP gRPC, только если задан `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`; без них trace context всё равно передаётся соседям, но spans не отправляются. В kind traces API уходят в приёмник проверок `trace-capture` ([`ops/kind`](../../ops/kind/README.md#проверки)). Общие правила и путь Pyroscope для Go описаны в [общесистемной документации observability](../../docs/observability.md).
 
 ## Статус реализации
 

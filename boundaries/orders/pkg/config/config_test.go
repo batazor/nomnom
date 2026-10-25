@@ -114,7 +114,7 @@ func clearConfigEnvironment(t *testing.T) {
 		EnvKafkaBrokers, EnvKafkaClientID, EnvKafkaConsumerGroup,
 		EnvTemporalHostPort, EnvTemporalNamespace, EnvTemporalConnectTimeout, EnvTemporalRegisterSearchAttributes,
 		EnvFulfillment("acceptance_timeout"), EnvFulfillment("max_replans"), EnvFulfillment("neighbours"),
-		EnvFulfillment("publish_stage"), EnvInternalGatewayAddr,
+		EnvFulfillment("publish_stage"), EnvInternalGatewayAddr, EnvCancellationWindow,
 	} {
 		value, exists := os.LookupEnv(name)
 		require.NoError(t, os.Unsetenv(name))
@@ -207,4 +207,34 @@ func TestLoadRequiresGatewayForGRPCNeighbours(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, NeighboursGRPC, cfg.Fulfillment.Neighbours)
 	assert.Equal(t, "internal-gateway:8080", cfg.InternalGateway.Address)
+}
+
+func TestLoadUsesPlaceholderCancellationWindow(t *testing.T) {
+	clearConfigEnvironment(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, DefaultCancellationWindow, cfg.Cancellation.Window)
+}
+
+func TestLoadReadsCancellationWindowFromEnvironment(t *testing.T) {
+	clearConfigEnvironment(t)
+	t.Setenv(EnvCancellationWindow, "90s")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, 90*time.Second, cfg.Cancellation.Window)
+}
+
+// AC-506: an unusable window stops the process at startup.
+func TestLoadRejectsUnusableCancellationWindow(t *testing.T) {
+	for _, value := range []string{"0s", "-1m", "soon"} {
+		t.Run(value, func(t *testing.T) {
+			clearConfigEnvironment(t)
+			t.Setenv(EnvCancellationWindow, value)
+
+			_, err := Load()
+			require.Error(t, err)
+		})
+	}
 }

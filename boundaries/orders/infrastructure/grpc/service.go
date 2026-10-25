@@ -104,6 +104,12 @@ func orderView(view getorder.OrderView) *ordersv1.Order {
 			CancelledAt: timestamppb.New(view.Cancellation.CancelledAt),
 		}
 	}
+	if view.CancellationWindow != nil {
+		result.CancellationWindow = &ordersv1.CancellationWindow{
+			OpensAt:  timestamppb.New(view.CancellationWindow.OpensAt),
+			ClosesAt: timestamppb.New(view.CancellationWindow.ClosesAt),
+		}
+	}
 	return result
 }
 

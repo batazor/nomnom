@@ -5,6 +5,7 @@ package di
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/wire"
@@ -15,6 +16,7 @@ import (
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/domains/order"
+	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
@@ -22,7 +24,7 @@ import (
 
 // ProviderSet собирает компоненты слайса order. Provider'ы handlers
 // добавляются сюда вместе с реализацией соответствующих use cases.
-var ProviderSet = wire.NewSet(NewPostgresStore, NewStore, NewAuthorizer, NewModule)
+var ProviderSet = wire.NewSet(NewPostgresStore, NewStore, NewAuthorizer, NewCancellationPolicy, NewModule)
 
 // Store — persistence-порты слайса: Unit of Work, repository, Inbox, Outbox,
 // idempotency keys, read models и authorization revision. В процессах — общий
@@ -44,6 +46,20 @@ type Store interface {
 type Authorizer interface {
 	Check(ctx context.Context, check application.AccessCheck) error
 	GrantOrderCustomer(ctx context.Context, orderID order.ID, customerID order.CustomerID) (application.AuthorizationRevision, error)
+}
+
+// CancellationPolicy — окно отмены, общее для Get Order и Request Order
+// Cancellation.
+type CancellationPolicy = getorder.CancellationPolicy
+
+// NewCancellationPolicy строит production-политику из конфигурации; тестовые
+// memory.AlwaysOpen и memory.FixedWindow сюда не попадают (FR-462).
+func NewCancellationPolicy(cfg config.CancellationConfig) (CancellationPolicy, error) {
+	policy, err := cancellationpolicy.NewFixed(cfg.Window)
+	if err != nil {
+		return nil, err
+	}
+	return cancellationpolicy.Observe(policy, slog.Default()), nil
 }
 
 // Module — собранный слайс order, который получает composition root процесса.
@@ -80,10 +96,10 @@ func NewAuthorizer(cfg config.SpiceDBConfig, store Store) (Authorizer, func(), e
 }
 
 // NewModule собирает handlers под декоратором телеметрии use cases.
-func NewModule(store Store, authorizer Authorizer) *Module {
+func NewModule(store Store, authorizer Authorizer, policy CancellationPolicy) *Module {
 	uc := observability.UseCases()
 	return &Module{
-		GetOrder:           telemetry.Instrument(uc, observability.GetOrder, getorder.NewHandler(authorizer, store).Handle),
+		GetOrder:           telemetry.Instrument(uc, observability.GetOrder, getorder.NewHandler(authorizer, store, policy).Handle),
 		ListCustomerOrders: telemetry.Instrument(uc, observability.ListCustomerOrders, listcustomerorders.NewHandler(authorizer, store).Handle),
 	}
 }

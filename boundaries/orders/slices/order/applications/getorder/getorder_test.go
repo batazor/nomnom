@@ -22,7 +22,14 @@ var (
 	support  = application.Subject{Kind: application.SubjectService, ID: "support-console"}
 )
 
+const window = 5 * time.Minute
+
 func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *memory.Authorizer) {
+	t.Helper()
+	return setupWithPolicy(t, memory.FixedWindow{Duration: window}, seeded...)
+}
+
+func setupWithPolicy(t *testing.T, policy getorder.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *memory.Authorizer) {
 	t.Helper()
 	store := memory.NewStore()
 	authorizer := memory.NewAuthorizer()
@@ -31,7 +38,7 @@ func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *memory.Auth
 		_, err := authorizer.GrantOrderCustomer(context.Background(), o.ID(), o.CustomerID())
 		require.NoError(t, err)
 	}
-	return getorder.NewHandler(authorizer, store), authorizer
+	return getorder.NewHandler(authorizer, store, policy), authorizer
 }
 
 // AC-126: an authorized subject receives the full view.
@@ -94,4 +101,52 @@ func TestGetOrderFailsClosed(t *testing.T) {
 	_, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
 
 	require.ErrorIs(t, err, application.ErrPermissionDenied)
+}
+
+// AC-504: an Order that may still be cancelled carries the policy window.
+func TestGetOrderPublishesCancellationWindowWhileCancellable(t *testing.T) {
+	for _, state := range []order.State{order.StatePlaced, order.StateConfirmed} {
+		t.Run(string(state), func(t *testing.T) {
+			handler, _ := setup(t, ordertest.New(t, "order-1", ordertest.WithState(state)))
+
+			view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
+
+			require.NoError(t, err)
+			assert.Equal(t, &order.CancellationWindow{
+				OpensAt:  ordertest.PlacedAt,
+				ClosesAt: ordertest.PlacedAt.Add(window),
+			}, view.CancellationWindow)
+		})
+	}
+}
+
+// AC-505: a final Order has no window, whatever the policy says.
+func TestGetOrderOmitsCancellationWindowForFinalOrders(t *testing.T) {
+	for _, state := range []order.State{order.StateCancelled, order.StateCompleted} {
+		t.Run(string(state), func(t *testing.T) {
+			handler, _ := setupWithPolicy(t, memory.AlwaysOpen{}, ordertest.New(t, "order-1", ordertest.WithState(state)))
+
+			view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
+
+			require.NoError(t, err)
+			assert.Nil(t, view.CancellationWindow)
+		})
+	}
+}
+
+type failingPolicy struct{}
+
+func (failingPolicy) Window(context.Context, time.Time) (order.CancellationWindow, error) {
+	return order.CancellationWindow{}, errors.New("policy unavailable")
+}
+
+// AC-507: a failing policy hides the window instead of failing the read.
+func TestGetOrderHidesCancellationWindowWhenPolicyFails(t *testing.T) {
+	handler, _ := setupWithPolicy(t, failingPolicy{}, ordertest.New(t, "order-1"))
+
+	view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
+
+	require.NoError(t, err)
+	assert.Equal(t, order.ID("order-1"), view.OrderID)
+	assert.Nil(t, view.CancellationWindow)
 }
