@@ -17,9 +17,7 @@ use delivery::slices::delivery::applications::authorization::{
 use delivery::slices::delivery::domains::delivery::{DeliveryId, OrderId};
 
 fn authorization(config: &SpiceDbConfig) -> SpiceDbAuthorization {
-    SpiceDbAuthorization::from_config(config)
-        .expect("valid config")
-        .expect("endpoint is set")
+    SpiceDbAuthorization::from_config(config).expect("valid config")
 }
 
 fn live() -> SpiceDbAuthorization {

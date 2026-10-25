@@ -1,6 +1,7 @@
 use std::sync::{Mutex, PoisonError};
 
 use super::*;
+use crate::pkg::config::SPICEDB_ENDPOINT_ENV;
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId};
@@ -213,9 +214,9 @@ fn unmapped_check_is_denied_without_calling_spicedb() {
 }
 
 #[test]
-fn empty_endpoint_keeps_local_authorization() {
-    assert!(matches!(
-        SpiceDbAuthorization::from_config(&SpiceDbConfig::default()),
-        Ok(None)
-    ));
+fn empty_endpoint_is_a_config_error() {
+    let Err(error) = SpiceDbAuthorization::from_config(&SpiceDbConfig::default()) else {
+        panic!("an empty endpoint must not build an authorization");
+    };
+    assert!(error.to_string().contains(SPICEDB_ENDPOINT_ENV));
 }

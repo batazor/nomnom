@@ -216,8 +216,7 @@ impl ReconcilerConfig {
     }
 }
 
-/// Проверка прав в SpiceDB (ADR 18). Пустой `endpoint` оставляет локальную
-/// авторизацию процесса.
+/// Проверка прав в SpiceDB (ADR 18). Пустой `endpoint` — ошибка startup.
 #[derive(Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct SpiceDbConfig {

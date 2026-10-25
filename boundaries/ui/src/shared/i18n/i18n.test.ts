@@ -9,7 +9,7 @@ describe("i18n foundation", () => {
     );
   });
 
-  it("falls back to Russian messages for an unknown locale", () => {
-    expect(createTranslator("id")("menu.title")).toBe("Меню");
+  it("rejects an unknown locale", () => {
+    expect(() => createTranslator("id")).toThrow("Unsupported locale: id");
   });
 });

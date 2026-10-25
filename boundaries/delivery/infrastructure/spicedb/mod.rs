@@ -78,12 +78,9 @@ impl SpiceDbAuthorization {
         self
     }
 
-    /// `None`, если endpoint не задан; ошибка — невалидная конфигурация.
-    pub fn from_config(config: &SpiceDbConfig) -> Result<Option<Self>, SpiceDbConfigError> {
-        if !config.enabled() {
-            return Ok(None);
-        }
-        Ok(Some(Self::new(Box::new(SpiceDbClient::connect(config)?))))
+    /// Ошибка — пустой endpoint или невалидная конфигурация.
+    pub fn from_config(config: &SpiceDbConfig) -> Result<Self, SpiceDbConfigError> {
+        Ok(Self::new(Box::new(SpiceDbClient::connect(config)?)))
     }
 
     fn decide(&self, check: Option<PermissionCheck>) -> Result<(), AuthorizationError> {

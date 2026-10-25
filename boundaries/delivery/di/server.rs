@@ -30,9 +30,7 @@ use crate::infrastructure::spicedb::{
     RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization, SpiceDbClient,
     SpiceDbConfigError, SpiceDbRelationships,
 };
-use crate::pkg::config::{
-    AppConfig, DatabaseConfig, OffersConfig, SPICEDB_ENDPOINT_ENV, SpiceDbConfig,
-};
+use crate::pkg::config::{AppConfig, DatabaseConfig, OffersConfig, SpiceDbConfig};
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::delivery::domains::delivery::DeliveryRepository;
@@ -54,9 +52,6 @@ const FIRST_RECONCILIATION: Duration = Duration::from_secs(10);
 /// Клиент SpiceDB процесса: проверки прав, запись relationships и
 /// reconciliation делят одно соединение. Пустой endpoint — ошибка startup.
 pub fn spicedb(config: &SpiceDbConfig) -> Result<SpiceDbClient, SpiceDbConfigError> {
-    if !config.enabled() {
-        return Err(SpiceDbConfigError::missing_endpoint(SPICEDB_ENDPOINT_ENV));
-    }
     SpiceDbClient::connect(config)
 }
 
@@ -390,6 +385,7 @@ mod tests {
     use crate::infrastructure::memory::RecordingRelationships;
     use crate::infrastructure::postgres::test_support::TestStore;
     use crate::pkg::application::Subject;
+    use crate::pkg::config::SPICEDB_ENDPOINT_ENV;
     use crate::slices::courier::applications::{
         register_courier, set_courier_availability, update_courier_location,
     };

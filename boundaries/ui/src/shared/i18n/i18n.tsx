@@ -12,13 +12,15 @@ function interpolate(message: string, variables: Variables = {}): string {
 }
 
 export function createTranslator(locale: string) {
-  const localizedMessages =
-    locale in messages ? messages[locale as SupportedLocale] : messages.ru;
+  if (!Object.hasOwn(messages, locale)) {
+    throw new Error(`Unsupported locale: ${locale}`);
+  }
+  // Every locale must define every key: a missing message fails typecheck.
+  const localizedMessages: Readonly<Record<MessageKey, string>> =
+    messages[locale as SupportedLocale];
 
-  return (key: MessageKey, variables?: Variables): string => {
-    const localized = localizedMessages[key] ?? messages.ru[key];
-    return interpolate(localized, variables);
-  };
+  return (key: MessageKey, variables?: Variables): string =>
+    interpolate(localizedMessages[key], variables);
 }
 
 export function createFormatters(locale: SupportedLocale) {

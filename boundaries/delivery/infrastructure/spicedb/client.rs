@@ -39,7 +39,7 @@ use super::v1::{
     CheckPermissionRequest, ReadRelationshipsRequest, WriteRelationshipsRequest,
     WriteRelationshipsResponse,
 };
-use crate::pkg::config::SpiceDbConfig;
+use crate::pkg::config::{SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::pkg::telemetry::rpc::{self, ClientCall, RpcMetrics};
 
@@ -188,7 +188,7 @@ impl fmt::Debug for SpiceDbClient {
 }
 
 impl SpiceDbClient {
-    /// Проверяет конфигурацию и запускает поток клиента. Соединение
+    /// Проверяет конфигурацию (пустой endpoint — ошибка) и запускает поток клиента. Соединение
     /// устанавливается лениво: недоступный SpiceDB не мешает startup, а
     /// отклоняет checks как unavailable.
     pub fn connect(config: &SpiceDbConfig) -> Result<Self, SpiceDbConfigError> {
@@ -200,6 +200,9 @@ impl SpiceDbClient {
         config: &SpiceDbConfig,
         telemetry: ClientTelemetry,
     ) -> Result<Self, SpiceDbConfigError> {
+        if !config.enabled() {
+            return Err(SpiceDbConfigError::missing_endpoint(SPICEDB_ENDPOINT_ENV));
+        }
         if config.preshared_key.is_empty() {
             return Err(config_error("preshared key is required"));
         }
