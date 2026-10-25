@@ -2,7 +2,7 @@
 
 ## 1. Проверка
 
-- [ ] 1.1 `ops/checks/file-size.sh`, `ops/checks/file-size-allowlist.txt`, цель `check-file-size` в корневом `Makefile`; исключения по design (решение 2); проверить на временном файле на 320 строк (`FR-488`, `AC-553`).
+- [x] 1.1 `ops/checks/file-size.sh`, `ops/checks/file-size-allowlist.txt`, цель `check-file-size` в корневом `Makefile`; исключения по design (решение 2); проверить на временном файле на 320 строк (`FR-488`, `AC-553`).
 
 ## 2. Разбиение по контекстам
 
