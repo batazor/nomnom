@@ -63,11 +63,11 @@ securityContext:
   privileged: false
   readOnlyRootFilesystem: false
 
-# Команда контейнера; пусто — CMD образа. Relay-release задаёт свою (values-relay.yaml).
+# Команда контейнера; пусто — CMD образа. Consumer-release задаёт свою (values-consumer.yaml).
 command: []
 
 service:
-  # false — без Service и бизнес-порта контейнера (Outbox relay).
+  # false — без Service и бизнес-порта контейнера (consumer).
   enabled: true
   type: ClusterIP
   # Порт Service и порт приложения. Приложение слушает 8082 по умолчанию
@@ -134,7 +134,7 @@ terminationGracePeriodSeconds: 35
 # OTEL_EXPORTER_OTLP_ENDPOINT. Явные переменные chart перекрывают одноимённые из env
 # (ConfigMap), поэтому OTEL_* через env не задаются.
 telemetry:
-  # service.name процесса: restaurants, restaurants-consumer, restaurants-relay.
+  # service.name процесса: restaurants, restaurants-consumer.
   serviceName: restaurants
   # OTLP/gRPC endpoint Alloy для traces и metrics, например
   # http://alloy.nomnom-observability.svc.cluster.local:4317. Пусто — экспорт выключен,
@@ -174,10 +174,9 @@ readinessProbe:
   timeoutSeconds: 1
   failureThreshold: 1
 
-# Service identity по projected ServiceAccount token (ADR 27). Пока jwksConfigMap пуст,
-# переменные IDENTITY__* не задаются и приложение отклоняет вызовы с subject
-# (RejectingSubjectResolver). Если jwksConfigMap задан, его ключ jwks.json монтируется
-# read-only в /etc/nomnom/identity/jwks.json, а issuer и serviceAccounts обязательны.
+# Service identity по projected ServiceAccount token (ADR 27). Для release с gRPC API
+# (service.enabled) jwksConfigMap, issuer и serviceAccounts обязательны; ключ jwks.json
+# ConfigMap монтируется read-only в /etc/nomnom/identity/jwks.json.
 identity:
   # Issuer токенов кластера (/.well-known/openid-configuration), например
   # https://kubernetes.default.svc.cluster.local.
@@ -233,8 +232,8 @@ mongodb:
   # останавливают render chart и старт процесса. Метрики пула — db.client.connection.*
   # (docs/observability/metric-inventory.md#db).
   pool:
-    # Соединений на сервер (1..100): API обслуживает конкурентные RPC. Relay — 3,
-    # consumer — 5 (values-relay.yaml, values-consumer.yaml).
+    # Соединений на сервер (1..100): API обслуживает конкурентные RPC, consumer — 5
+    # (values-consumer.yaml).
     maxPoolSize: 20
     # Прогретые соединения; 0 — пул растёт по требованию и не держит idle-соединения.
     minPoolSize: 0
@@ -253,6 +252,45 @@ mongodb:
     command: ["node", "dist/cmd/restaurants-migrate/main.js"]
     # maxPoolSize init container: DDL и миграции документов выполняются последовательно.
     maxPoolSize: 2
+
+# ADR 37: Outbox restaurants доставляет Debezium (Kafka Connect) из change streams MongoDB.
+# Включается в одном release контекста (API): hook Job регистрирует коннектор
+# cdc.connector.name в cdc.connectUrl.
+cdc:
+  enabled: false
+  # REST Kafka Connect, например http://kafka-connect.nomnom-infra.svc.cluster.local:8083.
+  connectUrl: ""
+  # URI replica set для Kafka Connect — ссылка config provider Connect, не сам URI с паролем,
+  # например ${dir:/etc/nomnom/cdc:restaurants-uri}.
+  connectionString: ""
+  registrar:
+    image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+  # Контракт Outbox (ADR 37): коллекция restaurants.outbox, только insert; топик — поле topic,
+  # ключ — aggregateId, value — payload (Binary) как есть, Event Envelope — заголовки из полей
+  # документа. Документ без поля из additional.placement останавливает коннектор.
+  connector:
+    name: restaurants-outbox
+    config:
+      connector.class: io.debezium.connector.mongodb.MongoDbConnector
+      topic.prefix: restaurants-outbox
+      collection.include.list: restaurants.outbox
+      capture.mode: change_streams
+      snapshot.mode: no_data
+      skipped.operations: u,d,t
+      tombstones.on.delete: "false"
+      extended.headers.enabled: "false"
+      key.converter: org.apache.kafka.connect.storage.StringConverter
+      value.converter: org.apache.kafka.connect.converters.ByteArrayConverter
+      header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
+      transforms: outbox
+      transforms.outbox.type: io.debezium.connector.mongodb.transforms.outbox.MongoEventRouter
+      transforms.outbox.collection.field.event.id: eventId
+      transforms.outbox.collection.field.event.key: aggregateId
+      transforms.outbox.collection.field.event.payload: payload
+      transforms.outbox.collection.expand.json.payload: "false"
+      transforms.outbox.route.by.field: topic
+      transforms.outbox.route.topic.replacement: ${routedByValue}
+      transforms.outbox.collection.fields.additional.placement: eventId:header:_watermill_message_uuid,eventId:header:event_id,eventType:header:event_type,occurredAt:header:occurred_at,aggregateType:header:aggregate_type,aggregateId:header:aggregate_id,aggregateVersion:header:aggregate_version,traceparent:header:traceparent
 
 volumes: []
 volumeMounts: []

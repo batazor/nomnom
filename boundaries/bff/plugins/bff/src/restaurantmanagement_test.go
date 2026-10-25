@@ -90,9 +90,6 @@ func TestOpeningRequiresAccessToken(t *testing.T) {
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
 	assert.False(t, open.called)
 	assert.False(t, closer.called)
-
-	_, err = (&BffService{}).MutationOpenRestaurant(context.Background(), &service.MutationOpenRestaurantRequest{RestaurantId: nightBakery.ID})
-	assert.Equal(t, codes.Unauthenticated, status.Code(err), "authentication is not configured")
 }
 
 func TestOpeningRequiresARestaurantID(t *testing.T) {
@@ -103,15 +100,6 @@ func TestOpeningRequiresARestaurantID(t *testing.T) {
 
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	assert.False(t, open.called)
-}
-
-func TestOpeningWithoutTheSliceIsUnavailable(t *testing.T) {
-	svc, ctx := managementService(t, &fakeOpening{}, &fakeOpening{})
-	svc.management = nil
-
-	_, err := svc.MutationCloseRestaurant(ctx, &service.MutationCloseRestaurantRequest{RestaurantId: nightBakery.ID})
-
-	assert.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 // AC-754: refusals of restaurants become GraphQL errors without internal details.

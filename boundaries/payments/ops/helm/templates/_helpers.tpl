@@ -69,22 +69,21 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- end -}}
 
 {{/*
-Service identity (ADR 27): при заданном identity.jwksConfigMap приложение проверяет token,
-поэтому issuer, audience и allowlist обязательны — иначе процесс не стартует.
+Service identity (ADR 27): процесс проверяет token, поэтому JWKS, issuer, audience
+и allowlist обязательны — иначе процесс не стартует. User assertions (ADR 32)
+задаются целиком: JWKS BFF, issuer BFF и делегаты.
 */}}
 {{- define "payments.validateIdentity" -}}
+{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" -}}
+{{- if not (get $.Values.identity $key) -}}
+{{- fail (printf "identity.%s is required" $key) -}}
+{{- end -}}
+{{- end -}}
 {{- with .Values.identity -}}
-{{- if .jwksConfigMap -}}
-{{- range $key := list "issuer" "audience" "serviceAccounts" -}}
+{{- if or .userJwksConfigMap .userIssuer .userDelegates -}}
+{{- range $key := list "userJwksConfigMap" "userIssuer" "userDelegates" -}}
 {{- if not (get $.Values.identity $key) -}}
-{{- fail (printf "identity.%s is required when identity.jwksConfigMap is set" $key) -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-{{- if .userJwksConfigMap -}}
-{{- range $key := list "jwksConfigMap" "userIssuer" "userDelegates" -}}
-{{- if not (get $.Values.identity $key) -}}
-{{- fail (printf "identity.%s is required when identity.userJwksConfigMap is set" $key) -}}
+{{- fail (printf "identity.%s is required with the other user assertion settings" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -92,11 +91,14 @@ Service identity (ADR 27): при заданном identity.jwksConfigMap при
 {{- end -}}
 
 {{/*
-SpiceDB (ADR 18): при заданном spicedb.endpoint приложение требует preshared key из Secret
-и timeout в формате <int>(ms|s|m) — иначе процесс не стартует.
+SpiceDB (ADR 18): endpoint, preshared key из Secret и timeout в формате <int>(ms|s|m)
+обязательны — иначе процесс не стартует.
 */}}
 {{- define "payments.validateSpiceDB" -}}
 {{- with .Values.spicedb -}}
+{{- if not .endpoint -}}
+{{- fail "spicedb.endpoint is required" -}}
+{{- end -}}
 {{- if .endpoint -}}
 {{- if not .presharedKeySecret.name -}}
 {{- fail "spicedb.presharedKeySecret.name is required when spicedb.endpoint is set" -}}

@@ -58,7 +58,6 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 			PickupTimeout:           time.Minute,
 			DeliveryTimeout:         time.Minute,
 			PublishStage:            true,
-			Neighbours:              config.NeighboursSimulated,
 		},
 		Shutdown: config.ShutdownConfig{DrainTimeout: 5 * time.Second},
 	}
@@ -75,10 +74,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	neighbours, cleanup, err := fulfillmentdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
-	require.NoError(t, err)
-	defer cleanup()
-	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewProcessStore(store, nil), neighbours, observability.UseCases()))
+	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewProcessStore(store, nil), testNeighbours(), observability.UseCases()))
 	require.NoError(t, worker.Start(ctx))
 	runErr := make(chan error, 1)
 	go func() { runErr <- worker.Run() }()

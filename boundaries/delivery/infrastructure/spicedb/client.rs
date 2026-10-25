@@ -207,7 +207,7 @@ impl SpiceDbClient {
             return Err(config_error("timeout must be positive"));
         }
         let endpoint = endpoint(config)?;
-        let target = server_target(endpoint.uri());
+        let target = server_target(endpoint.uri())?;
         let key = PresharedKey(
             format!("Bearer {}", config.preshared_key)
                 .parse()
@@ -247,17 +247,15 @@ type Client = PermissionsServiceClient<
     tonic::service::interceptor::InterceptedService<tonic::transport::Channel, PresharedKey>,
 >;
 
-/// `server.address` / `server.port` endpoint'а.
-fn server_target(uri: &tonic::codegen::http::Uri) -> (String, u16) {
-    let default_port = if uri.scheme_str() == Some("https") {
-        443
-    } else {
-        80
-    };
-    (
-        uri.host().unwrap_or_default().to_owned(),
-        uri.port_u16().unwrap_or(default_port),
-    )
+/// `server.address` / `server.port` endpoint'а: хост и порт задаются явно.
+fn server_target(uri: &tonic::codegen::http::Uri) -> Result<(String, u16), SpiceDbConfigError> {
+    let host = uri
+        .host()
+        .ok_or_else(|| config_error(format!("SPICEDB__ENDPOINT {uri} has no host")))?;
+    let port = uri
+        .port_u16()
+        .ok_or_else(|| config_error(format!("SPICEDB__ENDPOINT {uri} has no port")))?;
+    Ok((host.to_owned(), port))
 }
 
 /// Telemetry context одного запроса.

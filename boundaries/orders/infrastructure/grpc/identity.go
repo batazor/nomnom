@@ -33,13 +33,12 @@ type ServiceTokenSubjectResolver struct {
 	now  func() time.Time
 }
 
-// NewSubjectResolver returns the token resolver when identity is configured
-// and the rejecting resolver otherwise (fail closed).
+// NewSubjectResolver returns the token resolver; identity is required, so a
+// missing issuer, audience or JWKS stops the start.
 func NewSubjectResolver(cfg config.IdentityConfig) (SubjectResolver, error) {
 	if !cfg.Verifying() {
-		slog.Warn(fmt.Sprintf("%s, %s or %s is not set: every caller is rejected",
-			config.EnvIdentityIssuer, config.EnvIdentityAudience, config.EnvIdentityJWKSFile))
-		return NewRejectingSubjectResolver(), nil
+		return nil, fmt.Errorf("%s, %s and %s are required",
+			config.EnvIdentityIssuer, config.EnvIdentityAudience, config.EnvIdentityJWKSFile)
 	}
 	service, err := newServiceTokenVerifier(cfg)
 	if err != nil {

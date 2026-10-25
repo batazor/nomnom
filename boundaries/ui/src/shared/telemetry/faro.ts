@@ -46,14 +46,14 @@ export function bffUrlPattern(graphqlUrl: string): RegExp {
 }
 
 export function initTelemetry(config: RuntimeConfig): Faro | undefined {
-  if (!config.telemetryUrl || config.enableMocks) return undefined;
+  if (!config.telemetry || config.enableMocks) return undefined;
 
   return initializeFaro({
-    url: config.telemetryUrl,
+    url: config.telemetry.url,
     app: {
       name: "customer-ui",
       namespace: "nomnom",
-      version: import.meta.env.VITE_APP_VERSION ?? "dev",
+      version: config.telemetry.appVersion,
       environment: config.environment,
     },
     instrumentations: [

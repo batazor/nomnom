@@ -74,8 +74,7 @@ func configureIdentity(loader *viper.Viper) error {
 	return nil
 }
 
-// Verifying reports whether inbound tokens are verified; otherwise every
-// caller is rejected.
+// Verifying reports whether the inbound token settings are complete.
 func (cfg IdentityConfig) Verifying() bool {
 	return strings.TrimSpace(cfg.Issuer) != "" && strings.TrimSpace(cfg.Audience) != "" && strings.TrimSpace(cfg.JWKSFile) != ""
 }

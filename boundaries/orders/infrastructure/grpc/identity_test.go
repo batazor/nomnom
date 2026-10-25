@@ -91,21 +91,15 @@ func TestServiceTokenResolverRejectsMalformedAuthorization(t *testing.T) {
 }
 
 // AC-462: without identity configuration every caller is rejected.
-func TestSubjectResolverFailsClosedWithoutConfiguration(t *testing.T) {
-	v, cfg := loadVectors(t)
-	cfg.Issuer = ""
-
-	resolver, err := NewSubjectResolver(cfg)
-	require.NoError(t, err)
-
-	_, err = resolver.Resolve(withAuthorization("Bearer " + v.Tokens["valid"]))
-	require.ErrorIs(t, err, ErrUnauthenticated)
-}
-
-func TestSubjectResolverRejectsUnusableJWKS(t *testing.T) {
+func TestSubjectResolverRejectsMissingOrUnusableJWKS(t *testing.T) {
 	_, cfg := loadVectors(t)
+	unset := cfg
+	unset.Issuer = ""
+	_, err := NewSubjectResolver(unset)
+	require.ErrorContains(t, err, "are required")
+
 	cfg.JWKSFile = filepath.Join(t.TempDir(), "missing.json")
-	_, err := NewSubjectResolver(cfg)
+	_, err = NewSubjectResolver(cfg)
 	require.Error(t, err)
 
 	empty := filepath.Join(t.TempDir(), "empty.json")

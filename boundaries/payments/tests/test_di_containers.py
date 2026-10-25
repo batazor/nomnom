@@ -8,7 +8,8 @@ import time
 import unittest
 from collections.abc import Iterator
 from contextlib import redirect_stdout
-from typing import Any, override
+from pathlib import Path
+from typing import override
 from unittest.mock import patch
 
 import pytest
@@ -18,18 +19,15 @@ from payment_fakes import (
     PaymentsTestKit,
     close_container,
     payments_container,
-    unreachable_database,
 )
 
 from di.migrate import MigrateContainer
 from di.payments import PaymentsContainer, SpiceDBConfigurationError
-from di.relay import RelayContainer
-from di.resources import ProcessResource, TelemetryResource, sections
+from di.resources import ProcessResource, TelemetryResource
 from entrypoints.payments import main as payments_main
-from entrypoints.payments_relay import main as relay_main
 from infrastructure.authorization import SpiceDBPermissionChecker
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
-from infrastructure.messaging import OutboxRelay, PaymentEventsMapper, RelayWorker
+from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
 from infrastructure.postgres import PostgresDatabase, PostgresPaymentOutbox
 from infrastructure.provider import (
@@ -39,7 +37,7 @@ from infrastructure.provider import (
     sign_payload,
 )
 from pkg.application import Subject, SubjectKind
-from pkg.config import DatabaseSettings, load_relay_settings
+from pkg.config import DatabaseSettings
 from pkg.lifecycle import HttpWorker, WorkerGroup
 from slices.payment.applications.create_payment import CreatePaymentInput
 from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
@@ -50,11 +48,18 @@ SPICEDB_ENV = {
     "SPICEDB__INSECURE": "true",
 }
 SECRET = "whsec_test"
-WORKER = Subject(SubjectKind.SERVICE, "orders-worker")
-RELAY_ENV = {
-    "DATABASE__URL": "postgresql://payments@127.0.0.1:1/x",
-    "KAFKA__BROKERS": "127.0.0.1:1",
+_FIXTURES = Path(__file__).resolve().parents[1].parent.parent / "tests" / "identity" / "fixtures"
+_VECTORS = json.loads((_FIXTURES / "vectors.json").read_text(encoding="utf-8"))
+# Process settings the payments container requires besides SpiceDB.
+PROCESS_ENV = {
+    "IDENTITY__ISSUER": _VECTORS["issuer"],
+    "IDENTITY__AUDIENCE": _VECTORS["audience"],
+    "IDENTITY__JWKS_FILE": str(_FIXTURES / "jwks.json"),
+    "IDENTITY__SERVICE_ACCOUNTS": _VECTORS["service_accounts"],
+    "PROVIDER__KIND": "fake",
+    "PROVIDER__WEBHOOK_SECRET": SECRET,
 }
+WORKER = Subject(SubjectKind.SERVICE, "orders-worker")
 
 
 def _shutdown_workers(container: PaymentsContainer) -> None:
@@ -66,7 +71,7 @@ class PaymentsContainerTest(unittest.TestCase):
     database: PostgresDatabase
 
     def container(self, **environment: str) -> PaymentsContainer:
-        container = payments_container({**SPICEDB_ENV, **environment})
+        container = payments_container({**SPICEDB_ENV, **PROCESS_ENV, **environment})
         self.addCleanup(close_container, container)
         return container
 
@@ -92,7 +97,7 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertIs(container.workers(), workers)
 
     def test_empty_spicedb_endpoint_fails_startup(self) -> None:
-        container = payments_container()
+        container = payments_container(PROCESS_ENV)
         self.addCleanup(close_container, container)
         with self.assertRaisesRegex(SpiceDBConfigurationError, "SPICEDB__ENDPOINT is required"):
             container.workers()
@@ -162,34 +167,6 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertEqual(kit.operation(operation_id).state, OperationState.SUCCEEDED)
 
 
-class RelayContainerTest(unittest.TestCase):
-    def container(self) -> RelayContainer:
-        with patch.dict(os.environ, RELAY_ENV, clear=True):
-            settings = load_relay_settings()
-        container = RelayContainer()
-        container.config.from_dict(sections(settings))
-        database = unreachable_database()
-        self.addCleanup(database.close)
-        container.database.override(providers.Object(database))
-        return container
-
-    def test_resolves_the_process_graph_with_overridden_publisher(self) -> None:
-        container = self.container()
-        publisher = _RecordingPublisher()
-        container.publisher.override(providers.Object(publisher))
-
-        worker = container.worker()
-
-        self.assertIsInstance(worker, RelayWorker)
-        self.assertIsInstance(container.relay(), OutboxRelay)
-        self.assertIs(container.worker(), worker)
-        self.assertIs(container.publisher(), publisher)
-
-    def test_config_is_strict(self) -> None:
-        with self.assertRaises(errors.Error):
-            RelayContainer().worker()
-
-
 class MigrateContainerTest(unittest.TestCase):
     def test_config_is_strict(self) -> None:
         with self.assertRaises(errors.Error):
@@ -204,14 +181,6 @@ class MigrateContainerDatabaseTest(unittest.TestCase):
         container = MigrateContainer()
         container.config.from_dict({"database": DatabaseSettings(DATABASE__URL=self.dsn)})
         self.assertEqual(container.migrations(), [])
-
-
-class _RecordingPublisher:
-    def publish(self, record: Any) -> None:
-        raise AssertionError("not expected")
-
-    def close(self, timeout: float) -> None:
-        pass
 
 
 class _Lifecycle:
@@ -298,38 +267,6 @@ class EntrypointResourceOrderTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("payments: drain timeout", stderr)
         self.assertEqual(events[-2:], ["shutdown database", "shutdown telemetry"])
-
-    def test_relay_opens_the_producer_after_the_database(self) -> None:
-        events: list[str] = []
-        container = RelayContainer()
-        container.telemetry.override(TelemetryResource(_resource, events, "telemetry"))
-        container.database.override(ProcessResource(_resource, events, "database"))
-        container.lifecycle.override(providers.Object(_Lifecycle(events)))
-        container.worker.override(providers.Object(object()))
-
-        class Publisher:
-            def __init__(self, brokers: str, client_id: str) -> None:
-                events.append(f"init publisher {brokers} {client_id}")
-
-        with (
-            patch.dict(os.environ, RELAY_ENV, clear=True),
-            patch.object(relay_main, "RelayContainer", lambda: container),
-            patch("di.relay.KafkaPublisher", Publisher),
-        ):
-            code = relay_main.main()
-
-        self.assertEqual(code, 0)
-        self.assertEqual(
-            events,
-            [
-                "init telemetry",
-                "init database",
-                "init publisher 127.0.0.1:1 payments-relay",
-                "run",
-                "shutdown database",
-                "shutdown telemetry",
-            ],
-        )
 
 
 if __name__ == "__main__":

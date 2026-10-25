@@ -68,11 +68,16 @@ export function KitchenColumn({
           if (preferredRestaurantId && !ids.includes(preferredRestaurantId)) {
             return <p className="board-empty">{t("board.kitchen.notOwned")}</p>;
           }
-          const restaurantId = preferredRestaurantId ?? ids[0] ?? null;
-          const restaurant = restaurants.find((r) => r.id === restaurantId);
-          if (!restaurantId || !restaurant) {
+          if (ids.length === 0) {
             return <p className="board-empty">{t("board.kitchen.none")}</p>;
           }
+          const restaurant = restaurants.find(
+            (r) => r.id === preferredRestaurantId,
+          );
+          if (!restaurant) {
+            return <p className="board-empty">{t("board.kitchen.pick")}</p>;
+          }
+          const restaurantId = restaurant.id;
           return (
             <>
               <RestaurantOpening key={restaurantId} restaurant={restaurant} />

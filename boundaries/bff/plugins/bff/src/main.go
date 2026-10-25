@@ -38,17 +38,14 @@ func main() {
 
 type BffService struct {
 	service.UnimplementedBffServiceServer
-	// accessTokens is nil until BFF identity is configured; customer resolvers
-	// verify the access token with it.
+	// accessTokens verifies the access token of customer resolvers.
 	accessTokens *identity.AccessTokenVerifier
-	// tracking, catalog, checkout, management, kitchen and courier are nil
-	// until identity and the internal gateway are configured.
-	tracking   *orderTracking
-	catalog    *restaurantCatalog
-	checkout   *checkout
-	management *restaurantManagement
-	kitchen    *kitchen
-	courier    *courier
+	tracking     *orderTracking
+	catalog      *restaurantCatalog
+	checkout     *checkout
+	management   *restaurantManagement
+	kitchen      *kitchen
+	courier      *courier
 }
 
 func (s *BffService) QueryBffInfo(context.Context, *service.QueryBffInfoRequest) (*service.QueryBffInfoResponse, error) {

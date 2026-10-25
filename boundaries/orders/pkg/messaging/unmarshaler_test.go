@@ -27,7 +27,7 @@ func validHeaders() map[string]string {
 	}
 }
 
-func TestGuardedUnmarshalerUsesEventIDWithoutWatermillUUID(t *testing.T) {
+func TestGuardedUnmarshalerIdentifiesEventByEventID(t *testing.T) {
 	msg, err := messaging.GuardedUnmarshaler{}.Unmarshal(record(validHeaders()))
 
 	require.NoError(t, err)

@@ -11,20 +11,20 @@ PROVIDER_KIND_ENV = "PROVIDER__KIND"
 PROVIDER_WEBHOOK_SECRET_ENV = "PROVIDER__WEBHOOK_SECRET"  # noqa: S105 - env var name, not a secret
 PROVIDER_WEBHOOK_TOLERANCE_ENV = "PROVIDER__WEBHOOK_TOLERANCE"
 DEFAULT_PROVIDER_WEBHOOK_TOLERANCE = timedelta(minutes=5)
-PROVIDER_KINDS = ("unconfigured", "fake")
+PROVIDER_KINDS = ("fake",)
 PROVIDER_WEBHOOK_PORT_ENV = "PROVIDER__WEBHOOK_PORT"
 DEFAULT_PROVIDER_WEBHOOK_PORT = 8085
 
 
 class ProviderSettings(BaseSettings):
-    """Payment provider selection; with ``unconfigured`` every operation is ``UNAVAILABLE``.
+    """Payment provider selection, required by the ``payments`` process.
 
     ``fake`` is a deterministic in-process sandbox that moves no real money.
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    kind: str = Field(default="unconfigured", validation_alias=PROVIDER_KIND_ENV)
+    kind: str = Field(default="", validation_alias=PROVIDER_KIND_ENV)
     # Общий секрет HMAC подписи webhooks; в кластере приходит из Secret.
     webhook_secret: str = Field(
         default="", validation_alias=PROVIDER_WEBHOOK_SECRET_ENV, repr=False
@@ -50,7 +50,7 @@ class ProviderSettings(BaseSettings):
     @field_validator("kind")
     @classmethod
     def _known_kind(cls, value: str) -> str:
-        if value not in PROVIDER_KINDS:
+        if value and value not in PROVIDER_KINDS:
             raise ValueError(f"{PROVIDER_KIND_ENV} must be one of {PROVIDER_KINDS}, got {value!r}")
         return value
 

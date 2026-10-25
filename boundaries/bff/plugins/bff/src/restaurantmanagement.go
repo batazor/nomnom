@@ -11,9 +11,6 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
 
-// restaurantManagementSlice names the slice in "not available" errors.
-const restaurantManagementSlice = "restaurant management"
-
 type openingHandler interface {
 	Handle(ctx context.Context, restaurantID string) (applications.OpeningResult, error)
 }
@@ -27,9 +24,6 @@ type ownedRestaurantsHandler interface {
 func (s *BffService) QueryMyRestaurants(ctx context.Context, request *service.QueryMyRestaurantsRequest) (*service.QueryMyRestaurantsResponse, error) {
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireSlice(restaurantManagementSlice, s.management != nil); err != nil {
 		return nil, err
 	}
 	page, err := s.management.listOwnedRestaurants.Handle(ctx, int(request.GetFirst()), request.GetAfter().GetValue())
@@ -71,9 +65,6 @@ func (s *BffService) changeOpening(ctx context.Context, operation, restaurantID 
 	}
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireSlice(restaurantManagementSlice, s.management != nil); err != nil {
 		return nil, err
 	}
 	result, err := handler(s.management).Handle(ctx, restaurantID)

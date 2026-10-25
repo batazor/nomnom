@@ -53,7 +53,7 @@ func testConfig() config.Config {
 			Namespace:      "orders-local",
 			ConnectTimeout: time.Second,
 		},
-		Fulfillment: config.FulfillmentConfig{PublishStage: true, Neighbours: config.NeighboursUnavailable},
+		Fulfillment: config.FulfillmentConfig{PublishStage: true},
 		Shutdown:    config.ShutdownConfig{DrainTimeout: 3 * time.Second},
 	}
 }
@@ -61,9 +61,7 @@ func testConfig() config.Config {
 func newTestWorker(t *testing.T, cfg config.Config, fake *fakeRunner) (*TemporalWorker, *mocks.Client) {
 	t.Helper()
 	temporalClient := mocks.NewClient(t)
-	neighbours, _, err := fulfillmentdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
-	require.NoError(t, err)
-	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(postgrestest.Open(t), neighbours, observability.UseCases()))
+	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(postgrestest.Open(t), testNeighbours(), observability.UseCases()))
 	w.dial = func(ctx context.Context, options client.Options) (client.Client, error) {
 		_, hasDeadline := ctx.Deadline()
 		assert.True(t, hasDeadline, "connection is bounded by connect timeout")

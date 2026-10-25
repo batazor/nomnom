@@ -25,6 +25,7 @@ spec:
         {{- include "orders.labels" (dict "customLabels" .Values.podLabels "context" $) | nindent 8 }}
     spec:
       {{- include "orders.validateShutdownBudget" . }}
+      {{- include "orders.validateIdentity" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

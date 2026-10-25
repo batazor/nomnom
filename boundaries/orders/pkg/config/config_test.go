@@ -113,7 +113,7 @@ func clearConfigEnvironment(t *testing.T) {
 		"CONFIG_FILE", EnvPort, "PORT", EnvManagementPort, EnvDrainTimeout, EnvReadinessDelay,
 		EnvKafkaBrokers, EnvKafkaClientID, EnvKafkaConsumerGroup,
 		EnvTemporalHostPort, EnvTemporalNamespace, EnvTemporalConnectTimeout, EnvTemporalRegisterSearchAttributes,
-		EnvFulfillment("acceptance_timeout"), EnvFulfillment("max_replans"), EnvFulfillment("neighbours"),
+		EnvFulfillment("acceptance_timeout"), EnvFulfillment("max_replans"),
 		EnvFulfillment("publish_stage"), EnvInternalGatewayAddr, EnvCancellationWindow,
 		EnvCatalogMinimumTotal, EnvCatalogMaximumTotal, EnvCatalogTimeout,
 	} {
@@ -127,7 +127,7 @@ func clearConfigEnvironment(t *testing.T) {
 			}
 		})
 	}
-	// The default grpc neighbours require a gateway address.
+	// The neighbours and the catalog require a gateway address.
 	t.Setenv(EnvInternalGatewayAddr, "internal-gateway:8080")
 }
 
@@ -151,7 +151,6 @@ func TestLoadUsesTemporalAndFulfillmentDefaults(t *testing.T) {
 		PickupTimeout:           60 * time.Minute,
 		DeliveryTimeout:         120 * time.Minute,
 		PublishStage:            true,
-		Neighbours:              NeighboursGRPC,
 	}, cfg.Fulfillment)
 }
 
@@ -163,7 +162,6 @@ func TestLoadReadsTemporalAndFulfillmentFromEnvironment(t *testing.T) {
 	t.Setenv(EnvFulfillment("acceptance_timeout"), "2m")
 	t.Setenv(EnvFulfillment("max_replans"), "0")
 	t.Setenv(EnvFulfillment("publish_stage"), "false")
-	t.Setenv(EnvFulfillment("neighbours"), "simulated")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -173,7 +171,6 @@ func TestLoadReadsTemporalAndFulfillmentFromEnvironment(t *testing.T) {
 	assert.Equal(t, 2*time.Minute, cfg.Fulfillment.AcceptanceTimeout)
 	assert.Zero(t, cfg.Fulfillment.MaxReplans)
 	assert.False(t, cfg.Fulfillment.PublishStage)
-	assert.Equal(t, NeighboursSimulated, cfg.Fulfillment.Neighbours)
 }
 
 // AC-448: an invalid worker setting fails the load before startup.
@@ -181,7 +178,6 @@ func TestLoadRejectsInvalidWorkerSettings(t *testing.T) {
 	tests := map[string]string{
 		EnvFulfillment("acceptance_timeout"): "0s",
 		EnvFulfillment("max_replans"):        "-1",
-		EnvFulfillment("neighbours"):         "real",
 		EnvTemporalNamespace:                 " ",
 		EnvTemporalConnectTimeout:            "0s",
 	}
@@ -196,7 +192,7 @@ func TestLoadRejectsInvalidWorkerSettings(t *testing.T) {
 	}
 }
 
-func TestLoadRequiresGatewayForGRPCNeighbours(t *testing.T) {
+func TestLoadRequiresGateway(t *testing.T) {
 	clearConfigEnvironment(t)
 	t.Setenv(EnvInternalGatewayAddr, "")
 
@@ -206,7 +202,6 @@ func TestLoadRequiresGatewayForGRPCNeighbours(t *testing.T) {
 	t.Setenv(EnvInternalGatewayAddr, "internal-gateway:8080")
 	cfg, err := Load()
 	require.NoError(t, err)
-	assert.Equal(t, NeighboursGRPC, cfg.Fulfillment.Neighbours)
 	assert.Equal(t, "internal-gateway:8080", cfg.InternalGateway.Address)
 }
 

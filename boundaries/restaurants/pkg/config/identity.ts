@@ -10,8 +10,8 @@ import {
 
 /**
  * Проверка service identity по projected ServiceAccount token (ADR 27).
- * `enabled: false`, пока не заданы issuer, audience и JWKS: сервер остаётся
- * на `RejectingSubjectResolver` (fail closed).
+ * `enabled: false`, пока не заданы issuer, audience и JWKS: процесс с gRPC
+ * API без них не стартует (`createSubjectResolver`).
  */
 export type IdentityConfig =
   | Readonly<{ enabled: false }>
@@ -26,9 +26,9 @@ export type IdentityConfig =
     }>;
 
 /**
- * Проверка user assertion BFF (ADR 32). `enabled: false`, пока не заданы
- * issuer, JWKS и непустой список делегатов: любой вызов с assertion
- * отклоняется, вызовы без него проверяются как раньше.
+ * Проверка user assertion BFF (ADR 32). `enabled: false`, если не задан ни
+ * один из issuer, JWKS и списка делегатов: любой вызов с assertion
+ * отклоняется. Частичная настройка — ошибка старта.
  */
 export type UserIdentityConfig =
   | Readonly<{ enabled: false }>
@@ -81,8 +81,13 @@ function loadUserIdentityConfig(
   const delegates = parseDelegates(
     environment[IDENTITY_USER_DELEGATES_ENV] ?? "",
   );
-  if (issuer === "" || jwksFile === "" || delegates.size === 0) {
+  if (issuer === "" && jwksFile === "" && delegates.size === 0) {
     return Object.freeze({ enabled: false });
+  }
+  if (issuer === "" || jwksFile === "" || delegates.size === 0) {
+    throw new Error(
+      `${IDENTITY_USER_ISSUER_ENV}, ${IDENTITY_USER_JWKS_FILE_ENV} and ${IDENTITY_USER_DELEGATES_ENV} must be set together`,
+    );
   }
   return Object.freeze({ enabled: true, issuer, jwksFile, delegates });
 }

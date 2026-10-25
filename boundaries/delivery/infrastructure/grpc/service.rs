@@ -42,22 +42,11 @@ mod status;
 
 use status::{courier_transport_error, delivery_transport_error};
 
-/// Resolves only verified caller identities. Without identity configuration
-/// the composition root keeps [`RejectingSubjectResolver`]; otherwise
+/// Resolves only verified caller identities;
 /// [`super::ServiceTokenSubjectResolver`] verifies projected ServiceAccount
 /// tokens (ADR 27).
 pub trait SubjectResolver: Send + Sync + 'static {
     fn resolve(&self, metadata: &MetadataMap) -> Result<Subject, Status>;
-}
-
-pub struct RejectingSubjectResolver;
-
-impl SubjectResolver for RejectingSubjectResolver {
-    fn resolve(&self, _metadata: &MetadataMap) -> Result<Subject, Status> {
-        Err(Status::unauthenticated(
-            "verified caller identity is required",
-        ))
-    }
 }
 
 struct DeliveryGrpcService {

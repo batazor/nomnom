@@ -2,37 +2,68 @@ import { describe, expect, it } from "vitest";
 
 import { parseRuntimeConfig } from "./runtime-config";
 
+const required = {
+  VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
+  VITE_LOCALE: "en",
+  VITE_DEPLOYMENT_ENVIRONMENT: "development",
+} as const;
+
+const oidc = {
+  VITE_OIDC_ISSUER: "https://login.example.test/dex/",
+  VITE_OIDC_CLIENT_ID: "nomnom-ui",
+  VITE_OIDC_AUDIENCE: "nomnom-bff",
+} as const;
+
 describe("parseRuntimeConfig", () => {
   it("accepts a public HTTP endpoint and explicit locale", () => {
     expect(
-      parseRuntimeConfig({
-        VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
-        VITE_LOCALE: "en",
-        VITE_ENABLE_MOCKS: "true",
-      }),
+      parseRuntimeConfig({ ...required, VITE_ENABLE_MOCKS: "true" }),
     ).toEqual({
       publicGraphqlUrl: "https://api.example.test/graphql",
       locale: "en",
       enableMocks: true,
-      telemetryUrl: undefined,
+      telemetry: undefined,
       environment: "development",
       oidc: undefined,
     });
   });
 
-  it("enables browser telemetry only with a collector URL", () => {
+  it("fails fast without locale or deployment environment", () => {
+    const { VITE_LOCALE: _locale, ...withoutLocale } = required;
+    expect(() =>
+      parseRuntimeConfig({ ...withoutLocale, VITE_ENABLE_MOCKS: "true" }),
+    ).toThrow("VITE_LOCALE is required");
+    const { VITE_DEPLOYMENT_ENVIRONMENT: _environment, ...withoutEnvironment } =
+      required;
+    expect(() =>
+      parseRuntimeConfig({ ...withoutEnvironment, VITE_ENABLE_MOCKS: "true" }),
+    ).toThrow("VITE_DEPLOYMENT_ENVIRONMENT is required");
+  });
+
+  it("enables browser telemetry only with a collector URL and app version", () => {
     const config = parseRuntimeConfig({
-      VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
+      ...required,
+      ...oidc,
       VITE_FARO_URL: "https://telemetry.example.test/collect",
-      VITE_DEPLOYMENT_ENVIRONMENT: "kind",
-      VITE_OIDC_ISSUER: "https://login.example.test/dex",
+      VITE_APP_VERSION: "1.2.3",
     });
-    expect(config.telemetryUrl).toBe("https://telemetry.example.test/collect");
-    expect(config.environment).toBe("kind");
+    expect(config.telemetry).toEqual({
+      url: "https://telemetry.example.test/collect",
+      appVersion: "1.2.3",
+    });
     expect(() =>
       parseRuntimeConfig({
-        VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
+        ...required,
+        ...oidc,
+        VITE_FARO_URL: "https://telemetry.example.test/collect",
+      }),
+    ).toThrow("VITE_APP_VERSION is required");
+    expect(() =>
+      parseRuntimeConfig({
+        ...required,
+        ...oidc,
         VITE_FARO_URL: "ftp://telemetry.example.test",
+        VITE_APP_VERSION: "1.2.3",
       }),
     ).toThrow("VITE_FARO_URL must use http or https");
   });
@@ -44,17 +75,23 @@ describe("parseRuntimeConfig", () => {
   });
 
   it("fails fast without a login issuer unless mocks are on", () => {
+    expect(() => parseRuntimeConfig(required)).toThrow(
+      "VITE_OIDC_ISSUER is required unless mocks are enabled",
+    );
+    expect(parseRuntimeConfig({ ...required, ...oidc }).oidc?.issuer).toBe(
+      "https://login.example.test/dex",
+    );
+  });
+
+  it("requires the OIDC client and audience with an issuer", () => {
+    const { VITE_OIDC_CLIENT_ID: _client, ...withoutClient } = oidc;
+    expect(() => parseRuntimeConfig({ ...required, ...withoutClient })).toThrow(
+      "VITE_OIDC_CLIENT_ID is required",
+    );
+    const { VITE_OIDC_AUDIENCE: _audience, ...withoutAudience } = oidc;
     expect(() =>
-      parseRuntimeConfig({
-        VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
-      }),
-    ).toThrow("VITE_OIDC_ISSUER is required unless mocks are enabled");
-    expect(
-      parseRuntimeConfig({
-        VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
-        VITE_OIDC_ISSUER: "https://login.example.test/dex/",
-      }).oidc?.issuer,
-    ).toBe("https://login.example.test/dex");
+      parseRuntimeConfig({ ...required, ...withoutAudience }),
+    ).toThrow("VITE_OIDC_AUDIENCE is required");
   });
 
   it("rejects non-HTTP protocols", () => {

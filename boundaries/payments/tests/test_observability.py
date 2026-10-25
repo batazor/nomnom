@@ -6,6 +6,7 @@ Names and attributes are the contract of ``ops/grafana/inventory`` and ``ops/sem
 import io
 import json
 import logging
+import sys
 import threading
 import time
 import unittest
@@ -34,12 +35,10 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
-from infrastructure.messaging.outbox import OutboxRecord, kafka_headers
-from infrastructure.messaging.tracing import publish_span
 from infrastructure.observability import ObservedProvider, classify_payment_error
 from infrastructure.observability import usecases as names
 from infrastructure.postgres import PostgresDatabase
-from infrastructure.postgres.outbox import outbox_metadata
+from infrastructure.postgres.outbox import outbox_traceparent
 from infrastructure.provider import (
     WEBHOOK_PATH,
     FakePaymentProvider,
@@ -384,63 +383,24 @@ class ProviderTelemetryTest(unittest.TestCase):
         )
 
 
-class KafkaPropagationTest(unittest.TestCase):
-    """The Outbox stores the write-time context; Kafka headers carry it to consumers."""
+class OutboxTraceparentTest(unittest.TestCase):
+    """The Outbox stores the write-time ``traceparent``; Debezium copies it to the header."""
 
-    def test_relay_publishes_the_context_captured_at_write(self) -> None:
+    def test_outbox_stores_the_context_of_the_write(self) -> None:
         signals = Signals()
         self.addCleanup(signals.close)
         tracer = signals.tracer_provider.get_tracer("test")
         with tracer.start_as_current_span("usecase capture_payment") as written:
-            metadata = outbox_metadata()
-        # tracestate хранится вместе с traceparent.
-        self.assertEqual(set(metadata), {"traceparent"})
-
-        record = OutboxRecord(
-            seq=1,
-            event_id="event-1",
-            event_type="nomnom.payments.v1.PaymentCaptured",
-            aggregate_type="payment",
-            aggregate_id="payment-1",
-            aggregate_version=2,
-            occurred_at=datetime(2026, 10, 25, tzinfo=UTC),
-            topic="payments.v1.payment-events",
-            payload=b"secret-payload",
-            metadata={**metadata, "tracestate": "vendor=value"},
-        )
-        headers = dict(kafka_headers(record))
-        self.assertEqual(headers["traceparent"], metadata["traceparent"].encode())
-        self.assertEqual(headers["tracestate"], b"vendor=value")
-        context = propagate.extract({k: v.decode() for k, v in headers.items()})
+            traceparent = outbox_traceparent()
+        context = propagate.extract({"traceparent": traceparent})
         self.assertEqual(
-            trace.get_current_span(context).get_span_context().trace_id,
-            written.get_span_context().trace_id,
+            trace.get_current_span(context).get_span_context().span_id,
+            written.get_span_context().span_id,
         )
 
-        # Relay: span отправки — потомок контекста записи, а не корень своего trace.
-        with publish_span(record, tracer):
-            pass
-        send = signals.span("send payments.v1.payment-events")
-        self.assertIs(send.kind, SpanKind.PRODUCER)
-        assert send.parent is not None
-        self.assertEqual(send.parent.span_id, written.get_span_context().span_id)
-        self.assertEqual((send.attributes or {})["messaging.system"], "kafka")
-        self.assertNotIn("secret-payload", json.dumps(dict(send.attributes or {})))
-
-    def test_failed_publish_marks_the_span(self) -> None:
-        signals = Signals()
-        self.addCleanup(signals.close)
-        record = OutboxRecord(
-            1, "e", "t", "payment", "p", 1, datetime(2026, 1, 1, tzinfo=UTC), "topic", b""
-        )
-        with (
-            self.assertRaises(RuntimeError),
-            publish_span(record, signals.tracer_provider.get_tracer("t")),
-        ):
-            raise RuntimeError("broker down")
-        span = signals.span("send topic")
-        self.assertIs(span.status.status_code, StatusCode.ERROR)
-        self.assertEqual((span.attributes or {})["error.type"], "RuntimeError")
+    def test_without_a_span_the_traceparent_is_empty(self) -> None:
+        # Колонка NOT NULL: Debezium требует поле, пустая строка — «без контекста».
+        self.assertEqual(outbox_traceparent(), "")
 
 
 class BaggageAllowlistTest(unittest.TestCase):
@@ -561,6 +521,7 @@ class JsonLogTest(unittest.TestCase):
 
 
 class RuntimeAndResourceTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "process metrics read /proc")
     def test_runtime_metrics_and_shared_resource(self) -> None:
         signals = Signals()
         self.addCleanup(signals.close)
@@ -581,7 +542,7 @@ class RuntimeAndResourceTest(unittest.TestCase):
         self.assertEqual(signals.tracer_provider.resource.attributes, resource)
 
     def test_service_name_override(self) -> None:
-        resource = telemetry.build_resource("payments-relay", {"OTEL_SERVICE_NAME": "canary"})
+        resource = telemetry.build_resource("payments-migrate", {"OTEL_SERVICE_NAME": "canary"})
         self.assertEqual(resource.attributes["service.name"], "canary")
         self.assertEqual(resource.attributes["service.namespace"], "nomnom")
 

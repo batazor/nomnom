@@ -33,7 +33,7 @@ npm run dev
 
 Customer-схема BFF зафиксирована раньше resolvers (OpenSpec change [`add-customer-graphql-contract`](../../openspec/changes/add-customer-graphql-contract/)), поэтому UI развивается на MSW-моках той же схемы. Моки — только development и tests: в production bundle они не включаются, а данные fixtures демонстрационные.
 
-- Публичная схема подключается alias `@public-schema` из `vite.config.ts` — тот же файл, что читает codegen (`GRAPHQL_SCHEMA` или `../bff/client-schema.graphql`). Handler (`src/shared/graphql/mocks/handlers.ts`) валидирует и исполняет каждую operation через `graphql-js` против этой схемы, поэтому мок не может ответить формой, которую не вернёт BFF. Subscriptions моков выполняются внутри процесса (`mocks/subscriptions.ts`, транспорт `subscriptions` клиента) против той же схемы и store: MSW в Node не держит потоковые ответы fetch. Мутации store будят подписчиков `orderChanged`, `kitchenChanged` и `courierChanged`, `order-live` сам продвигается на шаг каждые 4 с, пока за ним следят.
+- Публичная схема подключается alias `@public-schema` из `vite.config.ts` — тот же файл, что читает codegen (`../bff/client-schema.graphql`). Handler (`src/shared/graphql/mocks/handlers.ts`) валидирует и исполняет каждую operation через `graphql-js` против этой схемы, поэтому мок не может ответить формой, которую не вернёт BFF. Subscriptions моков выполняются внутри процесса (`mocks/subscriptions.ts`, транспорт `subscriptions` клиента) против той же схемы и store: MSW в Node не держит потоковые ответы fetch. Мутации store будят подписчиков `orderChanged`, `kitchenChanged` и `courierChanged`, `order-live` сам продвигается на шаг каждые 4 с, пока за ним следят.
 - In-memory backend — `createMockStore` (`mocks/store.ts`): у каждого экземпляра свои заказы, прогресс `order-live` и idempotency keys; clock подменяется в тестах.
 - Тест соответствия (`mocks/contract.test.ts`) исполняет каждый document из `src/features/**/*.graphql` и `mocks/operations/*.graphql` против схемы с ответами моков; `schemaMismatches` (`mocks/conformance.ts`) находит поля вне схемы, неизвестные enum values, неверные scalars и отсутствующие non-null поля.
 
@@ -133,10 +133,9 @@ UI не знает адреса backend boundaries и не импортируе�
 
 ```bash
 npm run codegen
-GRAPHQL_SCHEMA=https://example.test/graphql npm run codegen
 ```
 
-Локальный default schema source — `../bff/client-schema.graphql`: композиция subgraphs BFF, включая subscriptions (`npm run compose` в `boundaries/bff`). Generated files не редактируются вручную.
+Schema source — `../bff/client-schema.graphql`: композиция subgraphs BFF, включая subscriptions (`npm run compose` в `boundaries/bff`). Generated files не редактируются вручную.
 
 ## Headless UI ownership
 

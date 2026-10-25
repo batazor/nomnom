@@ -48,7 +48,7 @@ import {
 } from "./messages.ts";
 import { createOpeningRpcs } from "./restaurant-commands.ts";
 import { withRequestRevision } from "./revision.ts";
-import { RejectingSubjectResolver, type SubjectResolver } from "./subject.ts";
+import type { SubjectResolver } from "./subject.ts";
 
 export {
   AUTHORIZATION_REVISION_HEADER,
@@ -84,15 +84,14 @@ export type RestaurantsServiceDependencies = Readonly<{
   addMenuItem: Pick<AddMenuItemHandler, "execute">;
   updateMenuItem: Pick<UpdateMenuItemHandler, "execute">;
   setMenuItemAvailability: Pick<SetMenuItemAvailabilityHandler, "execute">;
-  /** Defaults to {@link RejectingSubjectResolver}: commands fail UNAUTHENTICATED. */
-  subjects?: SubjectResolver;
+  subjects: SubjectResolver;
 }>;
 
 /** Connect/gRPC adapter. Generated messages never cross this boundary. */
 export const createRestaurantsService = (
   dependencies: RestaurantsServiceDependencies,
 ): ServiceImpl<typeof RestaurantsService> => {
-  const subjects = dependencies.subjects ?? new RejectingSubjectResolver();
+  const subjects = dependencies.subjects;
   return {
     async getRestaurant(request) {
       try {

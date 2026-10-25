@@ -2,6 +2,7 @@ package di
 
 import (
 	"context"
+	"time"
 
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
@@ -42,14 +43,15 @@ func (s *ProcessStore) Add(ctx context.Context, created *order.Order) error {
 	if err := s.Store.Add(ctx, created); err != nil {
 		return err
 	}
-	return s.changes.Notify(ctx, created.ID())
+	return s.changes.Notify(ctx, created.ID(), created.Version(), time.Now())
 }
 
 func (s *ProcessStore) Save(ctx context.Context, changed *order.Order) error {
 	if err := s.Store.Save(ctx, changed); err != nil {
 		return err
 	}
-	return s.changes.Notify(ctx, changed.ID())
+	// Save stores the loaded Version()+1.
+	return s.changes.Notify(ctx, changed.ID(), changed.Version()+1, time.Now())
 }
 
 func (s *ProcessStore) Append(ctx context.Context, aggregateID order.ID, aggregateVersion uint64, events []order.DomainEvent) error {

@@ -102,10 +102,6 @@ func TestKitchenRequiresAccessTokenAndRestaurant(t *testing.T) {
 	_, err = svc.QueryKitchen(ctx, &service.QueryKitchenRequest{})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	assert.False(t, get.called)
-
-	svc.kitchen = nil
-	_, err = svc.QueryKitchen(ctx, &service.QueryKitchenRequest{RestaurantId: "restaurant-1"})
-	assert.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 func TestApplyKitchenActionPayload(t *testing.T) {

@@ -168,16 +168,6 @@ func TestRequestOrderCancellationMapsOutcomeAndProblem(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestCustomerResolversWithoutGatewayAreUnavailable(t *testing.T) {
-	verifier, token := accessToken(t)
-	svc := &BffService{accessTokens: verifier}
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
-
-	_, err := svc.QueryOrder(ctx, &service.QueryOrderRequest{Id: "order-1"})
-	assert.Equal(t, codes.Unavailable, status.Code(err))
-	assert.Contains(t, status.Convert(err).Message(), "order operations")
-}
-
 // AC-641: a status the presenter does not know is an error, not UNSPECIFIED.
 func TestQueryOrderWithUnknownStatusIsAnError(t *testing.T) {
 	svc, ctx := newService(t, &fakeGetOrder{view: applications.OrderView{ID: "order-1", Status: "LOST"}}, &fakeCancellation{})

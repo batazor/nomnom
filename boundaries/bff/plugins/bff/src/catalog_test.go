@@ -82,9 +82,6 @@ func TestQueryRestaurantsErrors(t *testing.T) {
 	_, err = catalogService(&fakeListRestaurants{err: errors.New("down")}, &fakeGetRestaurant{}).
 		QueryRestaurants(context.Background(), &service.QueryRestaurantsRequest{First: 10})
 	assert.Equal(t, codes.Unavailable, status.Code(err))
-
-	_, err = (&BffService{}).QueryRestaurants(context.Background(), &service.QueryRestaurantsRequest{First: 10})
-	assert.Equal(t, codes.Unavailable, status.Code(err), "catalog is not connected")
 }
 
 // AC-568: a restaurant comes with its menu, prices and availability.

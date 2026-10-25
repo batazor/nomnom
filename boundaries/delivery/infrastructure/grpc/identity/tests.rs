@@ -98,7 +98,7 @@ fn token_for_another_audience_is_rejected() {
 }
 
 #[test]
-fn falls_back_to_rejecting_resolver_without_configuration() {
+fn requires_service_identity_configuration() {
     let configured = fixture_identity();
     let unconfigured = [
         IdentityConfig::default(),
@@ -118,14 +118,7 @@ fn falls_back_to_rejecting_resolver_without_configuration() {
     let token = fixtures::vectors().token("valid").to_owned();
 
     for config in unconfigured {
-        assert!(
-            ServiceTokenSubjectResolver::from_config(&config)
-                .expect("not an error")
-                .is_none()
-        );
-        let resolver = subject_resolver(&config).expect("fallback");
-        let status = resolver.resolve(&bearer(&token)).expect_err("rejected");
-        assert_eq!(status.code(), Code::Unauthenticated);
+        assert!(subject_resolver(&config).is_err());
     }
 
     let resolver = subject_resolver(&configured).expect("configured");
@@ -373,13 +366,13 @@ fn resolver_without_user_settings_rejects_assertions() {
     // вызов без assertion остаётся Subject{service, bff}.
     let vectors = fixtures::user_vectors();
     let full = user_identity();
-    let unconfigured = [
-        IdentityConfig {
-            user_issuer: String::new(),
-            user_jwks_file: String::new(),
-            user_delegates: String::new(),
-            ..user_identity()
-        },
+    let unconfigured = IdentityConfig {
+        user_issuer: String::new(),
+        user_jwks_file: String::new(),
+        user_delegates: String::new(),
+        ..user_identity()
+    };
+    let partial = [
         IdentityConfig {
             user_jwks_file: String::new(),
             ..user_identity()
@@ -399,7 +392,12 @@ fn resolver_without_user_settings_rejects_assertions() {
             .is_some()
     );
 
-    for config in unconfigured {
+    for config in partial {
+        assert!(UserAssertionVerifier::from_config(&config).is_err());
+    }
+
+    {
+        let config = unconfigured;
         assert!(
             UserAssertionVerifier::from_config(&config)
                 .expect("not an error")
@@ -432,7 +430,6 @@ fn configured_user_verifier_accepts_vectors_with_fixed_clock() {
         .with_clock(vectors.clock());
     let resolver = ServiceTokenSubjectResolver::from_config(&config)
         .expect("valid")
-        .expect("configured")
         .with_user_assertions(Some(users));
 
     assert_eq!(

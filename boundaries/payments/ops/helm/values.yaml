@@ -63,12 +63,7 @@ securityContext:
   privileged: false
   readOnlyRootFilesystem: false
 
-# Команда контейнера; пусто — CMD образа. Relay-release задаёт свою (values-relay.yaml).
-command: []
-
 service:
-  # false — без Service и бизнес-порта контейнера (Outbox relay).
-  enabled: true
   type: ClusterIP
   # Порт Service и порт приложения. Приложение слушает 8084 по умолчанию
   # (переменная SERVER__PORT или PORT); targetPort должен совпадать с портом,
@@ -94,7 +89,7 @@ resources:
 env: {}
 
 # ADR 9, docs/observability.md: OpenTelemetry процесса. service.namespace=nomnom задаёт код,
-# service.name по умолчанию — имя процесса (payments, payments-relay, payments-migrate).
+# service.name по умолчанию — имя процесса (payments, payments-migrate).
 # Chart всегда передаёт OTEL_RESOURCE_ATTRIBUTES: service.instance.id — имя pod (downward
 # API), service.version — image.tag (или "unknown"), плюс resourceAttributes, например
 # deployment.environment.name.
@@ -185,14 +180,14 @@ readinessProbe:
 # когда задан jwksConfigMap: ConfigMap с ключом jwks.json (публичные ключи кластера,
 # /openid/v1/jwks) монтируется read-only в /etc/nomnom/identity/jwks.json, а значения
 # передаются приложению как IDENTITY__ISSUER, IDENTITY__AUDIENCE, IDENTITY__JWKS_FILE и
-# IDENTITY__SERVICE_ACCOUNTS. Без jwksConfigMap все вызовы отклоняются UNAUTHENTICATED.
+# IDENTITY__SERVICE_ACCOUNTS. jwksConfigMap, issuer и serviceAccounts обязательны.
 identity:
-  # Issuer токенов кластера (/.well-known/openid-configuration). Обязателен вместе с jwksConfigMap.
+  # Issuer токенов кластера (/.well-known/openid-configuration). Обязателен.
   issuer: ""
   # Audience этого контекста: token другого контекста отклоняется.
   audience: "nomnom.payments"
   # Allowlist через запятую: namespace/serviceaccount=service-name,
-  # например nomnom/orders-worker=orders-worker. Обязателен вместе с jwksConfigMap.
+  # например nomnom/orders-worker=orders-worker. Обязателен.
   serviceAccounts: ""
   # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart.
   jwksConfigMap: ""
@@ -234,9 +229,8 @@ database:
     name: ""
     key: "dsn"
   # Пул процесса (DATABASE__*). За пулером PostgreSQL в session mode каждое соединение
-  # держит server-соединение: Σ(replicas × maxConns) всех release (плюс одно lock-соединение
-  # relay) должна помещаться в pool_size пулера (README, «Пулер PostgreSQL»). maxConns — по
-  # конкурентности процесса: API с webhooks 10, relay 2 (values-relay.yaml).
+  # держит server-соединение: replicas × maxConns должна помещаться в pool_size пулера
+  # (README, «Пулер PostgreSQL»). maxConns — по конкурентности процесса: API с webhooks 10.
   maxConns: 10
   # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
   minConns: 1
@@ -249,6 +243,52 @@ database:
   # Init container `python -m entrypoints.payments_migrate.main` перед процессом;
   # advisory lock сериализует параллельные запуски реплик; одно соединение (пул 1).
   migrate: true
+
+# ADR 37: Outbox payments доставляет Debezium (Kafka Connect) из WAL. Hook Job release
+# регистрирует коннектор cdc.connector.name в cdc.connectUrl.
+cdc:
+  enabled: false
+  # REST Kafka Connect, например http://kafka-connect.nomnom-infra.svc.cluster.local:8083.
+  connectUrl: ""
+  # Адрес базы для Kafka Connect. password — ссылка config provider Connect, не сам пароль,
+  # например ${dir:/etc/nomnom/cdc:payments-password}.
+  database:
+    hostname: ""
+    port: 5432
+    name: ""
+    user: ""
+    password: ""
+  registrar:
+    image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+  # Контракт Outbox (ADR 37): таблица payments_outbox, publication payments_outbox (миграция
+  # 00002), слот payments_outbox; топик — поле topic, ключ — aggregate_id, value — payload как
+  # есть, Event Envelope — заголовки из полей записи (как у прежнего payments-relay).
+  connector:
+    name: payments-outbox
+    config:
+      connector.class: io.debezium.connector.postgresql.PostgresConnector
+      plugin.name: pgoutput
+      topic.prefix: payments-outbox
+      slot.name: payments_outbox
+      publication.name: payments_outbox
+      publication.autocreate.mode: disabled
+      table.include.list: public.payments_outbox
+      snapshot.mode: no_data
+      skipped.operations: u,d,t
+      tombstones.on.delete: "false"
+      extended.headers.enabled: "false"
+      key.converter: org.apache.kafka.connect.storage.StringConverter
+      value.converter: org.apache.kafka.connect.converters.ByteArrayConverter
+      header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
+      transforms: outbox
+      transforms.outbox.type: io.debezium.transforms.outbox.EventRouter
+      transforms.outbox.table.field.event.id: event_id
+      transforms.outbox.table.field.event.key: aggregate_id
+      transforms.outbox.table.field.event.payload: payload
+      transforms.outbox.table.expand.json.payload: "false"
+      transforms.outbox.route.by.field: topic
+      transforms.outbox.route.topic.replacement: ${routedByValue}
+      transforms.outbox.table.fields.additional.placement: event_id:header:_watermill_message_uuid,event_id:header:event_id,event_type:header:event_type,occurred_at:header:occurred_at,aggregate_type:header:aggregate_type,aggregate_id:header:aggregate_id,aggregate_version:header:aggregate_version,traceparent:header:traceparent
 
 volumes: []
 volumeMounts: []

@@ -40,11 +40,10 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	fulfillmentConfig := cfg.Fulfillment
 	internalGatewayConfig := cfg.InternalGateway
 	identityConfig := cfg.Identity
 	catalogConfig := cfg.Catalog
-	catalog, cleanup3, err := di.NewCatalog(fulfillmentConfig, internalGatewayConfig, identityConfig, catalogConfig)
+	catalog, cleanup3, err := di.NewCatalog(internalGatewayConfig, identityConfig, catalogConfig)
 	if err != nil {
 		cleanup2()
 		cleanup()
@@ -58,6 +57,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
+	fulfillmentConfig := cfg.Fulfillment
 	workflow := NewFulfillmentWorkflow(client, fulfillmentConfig)
 	clock := di.NewClock()
 	idGenerator := di.NewOrderIDs()
@@ -102,10 +102,9 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	reasonCodes := NewReasonCodes()
 	domainMetrics := observability.NewDomainMetrics(reasonCodes)
 	processStore := di.NewProcessStore(store, domainMetrics)
-	fulfillmentConfig := cfg.Fulfillment
 	internalGatewayConfig := cfg.InternalGateway
 	identityConfig := cfg.Identity
-	neighbours, cleanup2, err := di2.NewNeighbours(fulfillmentConfig, internalGatewayConfig, identityConfig)
+	neighbours, cleanup2, err := di2.NewNeighbours(internalGatewayConfig, identityConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -143,18 +142,6 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	kafkaConsumer := NewKafkaConsumer(cfg, consumer)
 	return kafkaConsumer, func() {
 		cleanup2()
-		cleanup()
-	}, nil
-}
-
-func InitializeForwarder(cfg config.Config) (*OutboxForwarder, func(), error) {
-	postgresConfig := cfg.Postgres
-	store, cleanup, err := di.NewPostgresStore(postgresConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	outboxForwarder := NewOutboxForwarder(cfg, store)
-	return outboxForwarder, func() {
 		cleanup()
 	}, nil
 }

@@ -1,14 +1,13 @@
 import { type ReactNode, useCallback, useState } from "react";
 import { useQuery } from "urql";
-
-import { BoardOrderStatusDocument } from "../../shared/graphql/generated/graphql";
-import { useI18n } from "../../shared/i18n/i18n";
-import type { MessageKey } from "../../shared/i18n/messages";
 import {
   boardUser,
   SignInButton,
   useSignInAvailable,
 } from "../../shared/auth/sign-in";
+import { BoardOrderStatusDocument } from "../../shared/graphql/generated/graphql";
+import { useI18n } from "../../shared/i18n/i18n";
+import type { MessageKey } from "../../shared/i18n/messages";
 import { AsRole, useCanAct } from "../../shared/session/roles";
 import { Illustration, SidePanel } from "../../shared/ui";
 import { RestaurantPicker } from "../browse-restaurants";
@@ -45,9 +44,7 @@ function Board() {
   const signInAvailable = useSignInAvailable();
   const canAct = useCanAct();
   const orders = useBoardOrders();
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(
-    () => orders.ids[0] ?? null,
-  );
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [customerRestaurantId, setCustomerRestaurantId] = useState<
     string | null
   >(null);

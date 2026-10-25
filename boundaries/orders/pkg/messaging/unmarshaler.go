@@ -17,38 +17,29 @@ const DeserializationErrorMetadata = "deserialization_error"
 // and the partition stops. An invalid record becomes a message with the raw
 // payload and deserialization_error metadata instead (ADR 28).
 //
-// Publishers in other languages do not set the Watermill UUID header
-// (_watermill_message_uuid, reserved by watermill-kafka), so the message UUID
-// falls back to event_id and then to the record coordinates.
-type GuardedUnmarshaler struct {
-	// Next defaults to watermillkafka.DefaultMarshaler.
-	Next watermillkafka.Unmarshaler
-}
+// A valid Integration Event is identified by its event_id: publishers in other
+// languages do not set the Watermill UUID header. An invalid record has no
+// trusted event_id and is identified by its record coordinates.
+type GuardedUnmarshaler struct{}
 
 var _ watermillkafka.Unmarshaler = GuardedUnmarshaler{}
 
-func (u GuardedUnmarshaler) Unmarshal(record *sarama.ConsumerMessage) (*message.Message, error) {
-	next := u.Next
-	if next == nil {
-		next = watermillkafka.DefaultMarshaler{}
-	}
-
-	msg, err := next.Unmarshal(record)
+func (GuardedUnmarshaler) Unmarshal(record *sarama.ConsumerMessage) (*message.Message, error) {
+	msg, err := watermillkafka.DefaultMarshaler{}.Unmarshal(record)
 	if err != nil {
-		msg = rawMessage(record)
-		msg.Metadata.Set(DeserializationErrorMetadata, err.Error())
-		return msg, nil
-	}
-	if msg.UUID == "" {
-		msg.UUID = msg.Metadata.Get(EventIDMetadata)
-	}
-	if msg.UUID == "" {
-		msg.UUID = recordID(record)
+		return invalid(record, err), nil
 	}
 	if _, err := EnvelopeFromMessage(msg); err != nil {
-		msg.Metadata.Set(DeserializationErrorMetadata, err.Error())
+		return invalid(record, err), nil
 	}
+	msg.UUID = msg.Metadata.Get(EventIDMetadata)
 	return msg, nil
+}
+
+func invalid(record *sarama.ConsumerMessage, err error) *message.Message {
+	msg := rawMessage(record)
+	msg.Metadata.Set(DeserializationErrorMetadata, err.Error())
+	return msg
 }
 
 func rawMessage(record *sarama.ConsumerMessage) *message.Message {

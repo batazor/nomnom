@@ -54,11 +54,6 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	return nil, nil, nil
 }
 
-func InitializeForwarder(cfg config.Config) (*OutboxForwarder, func(), error) {
-	wire.Build(configSet, orderdi.PostgresSet, NewOutboxForwarder)
-	return nil, nil, nil
-}
-
 func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), error) {
 	wire.Build(configSet, orderdi.PostgresSet, spiceDBSet, NewRelationshipReconciler)
 	return nil, nil, nil

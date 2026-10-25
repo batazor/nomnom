@@ -37,8 +37,7 @@ if (!config.spicedb.enabled) {
 // OTLP metrics and traces are exported only with OTEL_EXPORTER_OTLP_*.
 const telemetry = startTelemetry(SERVICE_NAME);
 // Projected ServiceAccount token verification (ADR 27) and BFF user
-// assertions (ADR 32). Without issuer, audience and JWKS the
-// RejectingSubjectResolver keeps commands fail closed; an invalid JWKS or
+// assertions (ADR 32). Missing issuer, audience or JWKS, an invalid JWKS or
 // allowlist stops startup.
 const identityLog = logger.child({ operation: "identity" });
 const subjects = await createSubjectResolver(

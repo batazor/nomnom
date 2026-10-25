@@ -9,7 +9,6 @@ the inventory labels ``cpu_mode`` and ``cpython_gc_generation`` would be missing
 
 import gc
 import os
-import threading
 from collections.abc import Iterable
 
 from opentelemetry.metrics import CallbackOptions, Meter, Observation
@@ -26,43 +25,26 @@ def _cpu_time(_options: CallbackOptions) -> Iterable[Observation]:
 
 
 def _memory_usage(_options: CallbackOptions) -> Iterable[Observation]:
-    rss = _resident_bytes()
-    observations: list[Observation] = [] if rss is None else [Observation(rss)]
-    return observations
+    return [Observation(_resident_bytes())]
 
 
-def _resident_bytes() -> int | None:
-    """Resident set size: ``/proc/self/statm`` on Linux, ``ru_maxrss`` as a fallback."""
-    try:
-        with open("/proc/self/statm", encoding="ascii") as statm:  # noqa: PTH123
-            return int(statm.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
-    except OSError, ValueError, IndexError:
-        pass
-    try:
-        import resource
-        import sys
-
-        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    except ImportError, OSError:
-        return None
-    # macOS отдаёт байты, Linux — килобайты; на Linux сюда попадаем только без /proc.
-    return peak if sys.platform == "darwin" else peak * 1024
+def _resident_bytes() -> int:
+    """Resident set size from ``/proc/self/statm``: the process runs on Linux."""
+    with open("/proc/self/statm", encoding="ascii") as statm:  # noqa: PTH123
+        return int(statm.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
 
 
 def _thread_count(_options: CallbackOptions) -> Iterable[Observation]:
-    return [Observation(_os_threads() or threading.active_count())]
+    return [Observation(_os_threads())]
 
 
-def _os_threads() -> int | None:
-    """OS threads of the process (gRPC core and librdkafka included) on Linux."""
-    try:
-        with open("/proc/self/status", encoding="ascii") as status:  # noqa: PTH123
-            for line in status:
-                if line.startswith("Threads:"):
-                    return int(line.split()[1])
-    except OSError, ValueError, IndexError:
-        return None
-    return None
+def _os_threads() -> int:
+    """OS threads of the process (gRPC core and librdkafka included) from ``/proc``."""
+    with open("/proc/self/status", encoding="ascii") as status:  # noqa: PTH123
+        for line in status:
+            if line.startswith("Threads:"):
+                return int(line.split()[1])
+    raise RuntimeError("/proc/self/status has no Threads line")
 
 
 def _gc_collections(_options: CallbackOptions) -> Iterable[Observation]:

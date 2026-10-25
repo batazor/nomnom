@@ -11,9 +11,6 @@ import (
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 )
 
-// checkoutSlice names the slice in "not available" errors.
-const checkoutSlice = "checkout"
-
 // MutationPlaceOrder places the Order on behalf of the verified customer;
 // business refusals are payload problems, not GraphQL errors (FR-500).
 func (s *BffService) MutationPlaceOrder(ctx context.Context, request *service.MutationPlaceOrderRequest) (*service.MutationPlaceOrderResponse, error) {
@@ -23,9 +20,6 @@ func (s *BffService) MutationPlaceOrder(ctx context.Context, request *service.Mu
 	}
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireSlice(checkoutSlice, s.checkout != nil); err != nil {
 		return nil, err
 	}
 	lines := make([]applications.Line, 0, len(input.GetItems()))

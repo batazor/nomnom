@@ -12,15 +12,9 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
-// orderTrackingSlice names the slice in "not available" errors.
-const orderTrackingSlice = "order"
-
 func (s *BffService) QueryOrder(ctx context.Context, request *service.QueryOrderRequest) (*service.QueryOrderResponse, error) {
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireSlice(orderTrackingSlice, s.tracking != nil); err != nil {
 		return nil, err
 	}
 	view, err := s.tracking.getOrder.Handle(ctx, request.GetId())
@@ -45,9 +39,6 @@ func (s *BffService) QueryOrder(ctx context.Context, request *service.QueryOrder
 func (s *BffService) LookupOrderById(ctx context.Context, request *service.LookupOrderByIdRequest) (*service.LookupOrderByIdResponse, error) {
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireSlice(orderTrackingSlice, s.tracking != nil); err != nil {
 		return nil, err
 	}
 	orders := make([]*service.Order, 0, len(request.GetKeys()))
@@ -77,9 +68,6 @@ func (s *BffService) MutationRequestOrderCancellation(ctx context.Context, reque
 	if err != nil {
 		return nil, err
 	}
-	if err := requireSlice(orderTrackingSlice, s.tracking != nil); err != nil {
-		return nil, err
-	}
 	result, err := s.tracking.requestCancellation.Handle(ctx, applications.CancellationRequest{
 		OrderID:   input.GetOrderId(),
 		RequestID: input.GetRequestId(),
@@ -104,9 +92,6 @@ func (s *BffService) MutationRequestOrderCancellation(ctx context.Context, reque
 func (s *BffService) QueryCustomerOrders(ctx context.Context, request *service.QueryCustomerOrdersRequest) (*service.QueryCustomerOrdersResponse, error) {
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireSlice(orderTrackingSlice, s.tracking != nil); err != nil {
 		return nil, err
 	}
 	customer, _ := identity.UserFrom(ctx)

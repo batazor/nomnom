@@ -95,7 +95,11 @@ describe("flow board", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Курьер" }),
     ).toBeInTheDocument();
-    expect(await within(column("Кухня")).findByText("Открыт")).toBeVisible();
+    expect(
+      await within(column("Кухня")).findByText(
+        "Выберите ресторан, чтобы открыть его кухню.",
+      ),
+    ).toBeVisible();
     expect(
       within(column("Кухня")).queryByRole("combobox"),
     ).not.toBeInTheDocument();

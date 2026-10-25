@@ -169,8 +169,8 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Service identity (ADR 27). Пустой jwksConfigMap — проверка выключена, все вызовы
-# отклоняются (fail closed). Окружение задаёт issuer кластера, ConfigMap с JWKS кластера
+# Service identity (ADR 27). jwksConfigMap, issuer и serviceAccounts обязательны для
+# release с gRPC API (service.enabled). Окружение задаёт issuer кластера, ConfigMap с JWKS кластера
 # (ключ jwks.json) и allowlist "namespace/serviceaccount=service-name,…".
 identity:
   issuer: ""
@@ -187,7 +187,7 @@ identity:
   userIssuer: ""
   userDelegates: ""
 
-# SpiceDB (ADR 18). Пустой endpoint — authorization отклоняет все проверки (fail closed).
+# SpiceDB (ADR 18). endpoint обязателен: без SPICEDB__ENDPOINT процесс не стартует.
 # Preshared key берётся из внешнего Secret и не хранится в values.
 spicedb:
   endpoint: ""
@@ -206,7 +206,7 @@ postgres:
   # Пул процесса (POSTGRES__*). За пулером PostgreSQL в session mode каждое соединение
   # держит server-соединение: Σ(replicas × maxConns) всех ролей должна помещаться в
   # pool_size пулера (README, «Пулер PostgreSQL»). maxConns — по конкурентности роли:
-  # API 10, worker и consumer 5, forwarder и reconciler 2 (values-<role>.yaml).
+  # API 10, worker и consumer 5, reconciler 2 (values-<role>.yaml).
   maxConns: 10
   # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
   minConns: 1
@@ -219,12 +219,58 @@ postgres:
   # Init container использует пул 2 (advisory lock goose + миграция), minConns 0.
   migrate: true
 
+# ADR 37: Outbox orders доставляет Debezium (Kafka Connect) из WAL. Включается в одном release
+# контекста (API): hook Job регистрирует коннектор cdc.connector.name в cdc.connectUrl.
+cdc:
+  enabled: false
+  # REST Kafka Connect, например http://kafka-connect.nomnom-infra.svc.cluster.local:8083.
+  connectUrl: ""
+  # Адрес базы для Kafka Connect. password — ссылка config provider Connect, не сам пароль,
+  # например ${dir:/etc/nomnom/cdc:orders-password}.
+  database:
+    hostname: ""
+    port: 5432
+    name: ""
+    user: ""
+    password: ""
+  registrar:
+    image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+  # Контракт Outbox (ADR 37): таблица orders_outbox, publication orders_outbox (миграция),
+  # слот orders_outbox; топик — поле topic, ключ — aggregate_id, value — payload как есть,
+  # Event Envelope — заголовки из полей записи.
+  connector:
+    name: orders-outbox
+    config:
+      connector.class: io.debezium.connector.postgresql.PostgresConnector
+      plugin.name: pgoutput
+      topic.prefix: orders-outbox
+      slot.name: orders_outbox
+      publication.name: orders_outbox
+      publication.autocreate.mode: disabled
+      table.include.list: public.orders_outbox
+      snapshot.mode: no_data
+      skipped.operations: u,d,t
+      tombstones.on.delete: "false"
+      extended.headers.enabled: "false"
+      key.converter: org.apache.kafka.connect.storage.StringConverter
+      value.converter: org.apache.kafka.connect.converters.ByteArrayConverter
+      header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
+      transforms: outbox
+      transforms.outbox.type: io.debezium.transforms.outbox.EventRouter
+      transforms.outbox.table.field.event.id: event_id
+      transforms.outbox.table.field.event.key: aggregate_id
+      transforms.outbox.table.field.event.payload: payload
+      transforms.outbox.table.expand.json.payload: "false"
+      transforms.outbox.route.by.field: topic
+      transforms.outbox.route.topic.replacement: ${routedByValue}
+      transforms.outbox.table.fields.additional.placement: event_id:header:_watermill_message_uuid,event_id:header:event_id,event_type:header:event_type,occurred_at:header:occurred_at,aggregate_type:header:aggregate_type,aggregate_id:header:aggregate_id,aggregate_version:header:aggregate_version,traceparent:header:traceparent
+
 # ADR 9: OTel resource attributes процесса. service.instance.id (имя pod) и service.version
 # (image.tag) chart задаёт сам; здесь — атрибуты окружения, например
 # deployment.environment.name. Не задавать OTEL_RESOURCE_ATTRIBUTES через env: явная
 # переменная chart её перекроет.
 telemetry:
-  # service.name роли: orders, orders-worker, orders-consumer, orders-forwarder,
+  # service.name роли: orders, orders-worker, orders-consumer,
   # orders-reconciler (values-<role>.yaml). Совпадает с default процесса.
   serviceName: orders
   resourceAttributes: {}

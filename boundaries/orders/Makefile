@@ -20,9 +20,9 @@ run:
 		$(GO) run ./cmd/orders
 
 # Worker против локального Temporal (make temporal-dev): регистрирует Search
-# Attribute и симулирует соседние контексты.
+# Attribute; соседние контексты вызываются через INTERNAL_GATEWAY_ADDR.
 run-worker:
-	MANAGEMENT__PORT=9082 TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true FULFILLMENT__NEIGHBOURS=simulated \
+	MANAGEMENT__PORT=9082 TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true \
 		POSTGRES__DSN=$${POSTGRES__DSN:-$(POSTGRES_DEV_DSN)} \
 		$(GO) run ./cmd/orders-worker
 

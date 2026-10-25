@@ -21,7 +21,6 @@ import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurant
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import {
   createSubjectResolver,
-  RejectingSubjectResolver,
   ServiceTokenSubjectResolver,
   type SubjectResolver,
 } from "../infrastructure/grpc/subject.ts";
@@ -98,8 +97,6 @@ test("accepted vectors resolve to the orders-worker service subject (AC-459, AC-
 test("rejected vectors are UNAUTHENTICATED with a generic message (AC-460, AC-461)", async () => {
   const reasons: string[] = [];
   const resolver = await createResolver((message) => reasons.push(message));
-  // Startup warning: user assertions (ADR 32) are not configured here.
-  reasons.length = 0;
   assert.ok(vectors.rejected.length > 0);
 
   for (const name of vectors.rejected) {
@@ -167,32 +164,24 @@ test("an allowlisted token for another audience is rejected (AC-460)", async () 
   );
 });
 
-test("falls back to the rejecting resolver without issuer, audience or JWKS (AC-462)", async () => {
+test("requires issuer, audience and JWKS (AC-462)", async () => {
   for (const missing of [
     "IDENTITY__ISSUER",
     "IDENTITY__AUDIENCE",
     "IDENTITY__JWKS_FILE",
   ]) {
-    const warnings: string[] = [];
     const environment: Record<string, string> = { ...identityEnvironment };
     delete environment[missing];
     if (missing === "IDENTITY__ISSUER") {
       delete environment.IDENTITY__SERVICE_ACCOUNTS;
     }
 
-    const resolver: SubjectResolver = await createSubjectResolver(
-      loadIdentityConfig(environment),
-      (message) => warnings.push(message),
-    );
-
-    assert.equal(resolver.constructor, RejectingSubjectResolver, missing);
-    assert.equal(warnings.length, 1, missing);
     await assert.rejects(
-      resolver.resolve(bearer(vectors.tokens.valid ?? "")),
-      unauthenticated,
+      createSubjectResolver(loadIdentityConfig(environment), silent),
+      /are required/,
+      missing,
     );
   }
-  assert.deepEqual(loadIdentityConfig({}), { enabled: false });
 });
 
 test("parses the ServiceAccount allowlist", () => {

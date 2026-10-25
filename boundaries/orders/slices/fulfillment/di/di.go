@@ -3,7 +3,6 @@
 package di
 
 import (
-	"log/slog"
 	"nomnom/orders/pkg/application"
 	gatewayclient "nomnom/orders/pkg/gateway"
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
@@ -12,7 +11,6 @@ import (
 
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/slices/fulfillment/infrastructure/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/completeorder"
@@ -42,26 +40,18 @@ type Neighbours struct {
 	Delivery    ports.Delivery
 }
 
-// NewNeighbours выбирает адаптеры соседних контекстов по fulfillment.neighbours;
-// cleanup закрывает соединение с internal gateway.
-func NewNeighbours(cfg config.FulfillmentConfig, gateway config.InternalGatewayConfig, identity config.IdentityConfig) (Neighbours, func(), error) {
-	switch cfg.Neighbours {
-	case config.NeighboursGRPC:
-		conn, err := gatewayclient.Dial(gateway.Address, identity.TokenDir)
-		if err != nil {
-			return Neighbours{}, nil, err
-		}
-		return Neighbours{
-			Payments:    grpcclient.NewPayments(conn),
-			Restaurants: grpcclient.NewRestaurants(conn),
-			Delivery:    grpcclient.NewDelivery(conn),
-		}, func() { _ = conn.Close() }, nil
-	case config.NeighboursSimulated:
-		slog.Warn("fulfillment neighbours are simulated: payments, restaurants and delivery calls are approved without effect")
-		return Neighbours{Payments: neighbours.Simulated{}, Restaurants: neighbours.Simulated{}, Delivery: neighbours.Simulated{}}, func() {}, nil
-	default:
-		return Neighbours{Payments: neighbours.Unavailable{}, Restaurants: neighbours.Unavailable{}, Delivery: neighbours.Unavailable{}}, func() {}, nil
+// NewNeighbours — gRPC-клиенты payments, restaurants и delivery через internal
+// gateway; cleanup закрывает соединение.
+func NewNeighbours(gateway config.InternalGatewayConfig, identity config.IdentityConfig) (Neighbours, func(), error) {
+	conn, err := gatewayclient.Dial(gateway.Address, identity.TokenDir)
+	if err != nil {
+		return Neighbours{}, nil, err
 	}
+	return Neighbours{
+		Payments:    grpcclient.NewPayments(conn),
+		Restaurants: grpcclient.NewRestaurants(conn),
+		Delivery:    grpcclient.NewDelivery(conn),
+	}, func() { _ = conn.Close() }, nil
 }
 
 // NewActivities собирает Activities fulfillment поверх store слайса order и

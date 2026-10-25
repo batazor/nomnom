@@ -231,7 +231,7 @@ class PaymentsTestKit:
     def __init__(self, database: PostgresDatabase) -> None:
         self.database = database
         with database.connection() as conn:
-            conn.execute("TRUNCATE payments, payment_operations, outbox, inbox")
+            conn.execute("TRUNCATE payments, payment_operations, payments_outbox, inbox")
         self.uow = CountingUnitOfWork(PostgresUnitOfWork(database))
         self.payments = PostgresPaymentRepository(database)
         self.operations = StaleOperationRepository(database)
@@ -338,21 +338,26 @@ class PaymentsTestKit:
             rows = conn.execute("SELECT event_id FROM inbox").fetchall()
         return {row[0] for row in rows}
 
+    # Порядок записи Outbox: seq больше нет, строки одной транзакции различает только ctid
+    # (в тестах таблица без удалений, ctid растёт по вставке).
     def outbox_aggregates(self) -> list[AggregateRef]:
         with self.database.connection() as conn:
             rows = conn.execute(
-                "SELECT aggregate_type, aggregate_id, aggregate_version FROM outbox ORDER BY seq"
+                "SELECT aggregate_type, aggregate_id, aggregate_version "
+                "FROM payments_outbox ORDER BY created_at, ctid"
             ).fetchall()
         return [AggregateRef(t, i, int(v)) for t, i, v in rows]
 
     def published(self) -> list[PaymentDomainEvent]:
         with self.database.connection() as conn:
-            rows = conn.execute("SELECT payload FROM outbox ORDER BY seq").fetchall()
+            rows = conn.execute(
+                "SELECT payload FROM payments_outbox ORDER BY created_at, ctid"
+            ).fetchall()
         return [pickle.loads(row[0]) for row in rows]  # noqa: S301 - payloads written by this kit
 
     def snapshot(self) -> dict[str, list[tuple[Any, ...]]]:
         """Every row of every payments table, for asserting that a query changed nothing."""
-        tables = ("payments", "payment_operations", "outbox", "inbox")
+        tables = ("payments", "payment_operations", "payments_outbox", "inbox")
         with self.database.connection() as conn:
             return {
                 table: conn.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall()  # noqa: S608 - fixed table names

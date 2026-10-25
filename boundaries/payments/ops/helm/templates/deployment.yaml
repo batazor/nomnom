@@ -57,28 +57,20 @@ spec:
         - name: {{ .Chart.Name }}
           image: {{ include "payments.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.command }}
-          command:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
           {{- with .Values.securityContext }}
           securityContext:
             {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
           {{- end }}
           ports:
-            {{- if .Values.service.enabled }}
             - name: {{ .Values.service.portName }}
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
-            {{- end }}
             - name: metrics
               containerPort: {{ .Values.management.port }}
               protocol: TCP
-            {{- if .Values.service.enabled }}
             - name: webhooks
               containerPort: {{ .Values.providerWebhooks.port }}
               protocol: TCP
-            {{- end }}
           {{- if or .Values.env .Values.envFrom }}
           envFrom:
             {{- if .Values.env }}

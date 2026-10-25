@@ -5,9 +5,9 @@ from typing import cast, override
 import grpc
 import pytest
 from dependency_injector import providers
-from payment_fakes import PaymentsTestKit, close_container, payments_container
+from payment_fakes import FakePermissions, PaymentsTestKit, close_container, payments_container
 
-from infrastructure.authorization import DenyAllPermissions
+from infrastructure.grpc.identity import IdentityConfigError
 from infrastructure.grpc.service import (
     GrpcWorker,
     PaymentsHandlers,
@@ -240,26 +240,12 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
 
 
 class DefaultWorkerTest(unittest.TestCase):
-    def test_default_worker_rejects_calls_without_verified_identity(self) -> None:
+    def test_default_worker_requires_identity(self) -> None:
         container = payments_container()
         self.addCleanup(close_container, container)
-        container.permissions.override(providers.Object(DenyAllPermissions()))
-        worker = container.grpc_worker()
-        worker.start()
-        channel = grpc.insecure_channel(f"127.0.0.1:{worker.port}")
-        try:
-            client = service_pb2_grpc.PaymentsServiceStub(channel)
-            with self.assertRaises(grpc.RpcError) as raised:
-                client.CreatePayment(
-                    service_pb2.CreatePaymentRequest(
-                        order_id="order-1",
-                        amount=payments_pb2.Money(amount="25.00", currency="EUR"),
-                    )
-                )
-            self.assertEqual(_code(raised.exception), grpc.StatusCode.UNAUTHENTICATED)
-        finally:
-            channel.close()
-            worker.shutdown(time.monotonic() + 1)
+        container.permissions.override(providers.Object(FakePermissions()))
+        with self.assertRaises(IdentityConfigError):
+            container.grpc_worker()
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 
 from .identity import (
     IdentityConfigError,
-    RejectingSubjectResolver,
     ServiceTokenSubjectResolver,
     ServiceTokenVerifier,
     SubjectResolver,
@@ -14,7 +13,6 @@ from .worker import GrpcWorker
 __all__ = [
     "GrpcWorker",
     "IdentityConfigError",
-    "RejectingSubjectResolver",
     "ServiceTokenSubjectResolver",
     "ServiceTokenVerifier",
     "SubjectResolver",

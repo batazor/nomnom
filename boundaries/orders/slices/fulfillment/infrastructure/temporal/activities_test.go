@@ -198,18 +198,15 @@ func TestCompleteOrderActivityIsIdempotent(t *testing.T) {
 	assert.True(t, completeStep.DecidedAt.Equal(completedAt))
 }
 
-// An Activity scheduled before StepInput carried DecidedAt completes the
-// Order at the time it was scheduled.
-func TestCompleteOrderActivityFallsBackToScheduledTime(t *testing.T) {
+func TestCompleteOrderActivityRequiresDecidedAt(t *testing.T) {
 	a, _, store := activities(t, order.StateConfirmed)
 	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivityWithOptions(a.CompleteOrder, activity.RegisterOptions{Name: temporal.ActivityCompleteOrder})
 
 	_, err := env.ExecuteActivity(temporal.ActivityCompleteOrder, temporal.StepInput{OrderID: orderID, IdempotencyKey: "k"})
 
-	require.NoError(t, err)
-	require.Len(t, store.OutboxRecords(), 1)
-	assert.NotEmpty(t, store.OutboxRecords()[0].OccurredAt)
+	require.Error(t, err)
+	assert.Empty(t, store.OutboxRecords())
 }
 
 func TestFailOrCancelOrderActivityMapsOutcome(t *testing.T) {

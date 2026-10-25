@@ -65,11 +65,18 @@ spec:
             # ADR 36: Cosmo Streams; образ без брокера Router не запускает.
             - name: BFF__KAFKA_BROKERS
               value: {{ required "kafka.brokers is required (ADR 36)" .Values.kafka.brokers | quote }}
-            {{- with .Values.internalGateway.address }}
             - name: BFF__INTERNAL_GATEWAY_ADDR
-              value: {{ . | quote }}
-            {{- end }}
+              value: {{ required "internalGateway.address is required" .Values.internalGateway.address | quote }}
             {{- with .Values.identity }}
+            {{- if not .providers }}
+            {{- fail "identity.providers is required" }}
+            {{- end }}
+            {{- if not .assertionKeySecret.name }}
+            {{- fail "identity.assertionKeySecret.name is required" }}
+            {{- end }}
+            {{- if not .assertionKeyId }}
+            {{- fail "identity.assertionKeyId is required" }}
+            {{- end }}
             {{- if .providers }}
             # Router: execution config образа и проверка access tokens по JWKS providers.
             - name: CONFIG_PATH

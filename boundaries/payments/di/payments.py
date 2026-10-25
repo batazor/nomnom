@@ -19,7 +19,6 @@ from di.resources import (
     telemetry_providers,
 )
 from infrastructure.authorization import (
-    DenyAllPermissions,
     PermissionsClient,
     SpiceDBPermissionChecker,
     create_spicedb_client,
@@ -47,7 +46,6 @@ from infrastructure.postgres import (
 )
 from infrastructure.provider import (
     FakePaymentProvider,
-    UnconfiguredProvider,
     WebhookVerifier,
     create_webhook_handler,
 )
@@ -74,26 +72,27 @@ class SpiceDBConfigurationError(RuntimeError):
     """The process checks permissions but SpiceDB is not configured."""
 
 
-def spicedb_client(settings: SpiceDBSettings) -> Iterator[PermissionsClient | None]:
-    """The authzed client of the process; ``None`` while ``SPICEDB__ENDPOINT`` is empty.
+class ProviderConfigurationError(RuntimeError):
+    """The payment provider of the process is not configured."""
+
+
+def spicedb_client(settings: SpiceDBSettings) -> Iterator[PermissionsClient]:
+    """The authzed client of the process; ``SPICEDB__ENDPOINT`` is required.
 
     Channels connect lazily on the first check. The authzed client keeps no handle on
     its channel, so there is nothing to release before the process exits.
     """
-    yield create_spicedb_client(settings) if settings.enabled else None
+    if not settings.enabled:
+        raise SpiceDBConfigurationError(
+            "SPICEDB__ENDPOINT is required: payments checks permissions in SpiceDB"
+        )
+    yield create_spicedb_client(settings)
 
 
 def create_permission_checker(
-    settings: SpiceDBSettings | None, client: PermissionsClient | None = None
+    settings: SpiceDBSettings, client: PermissionsClient | None = None
 ) -> PaymentPermissionChecker:
-    """Authorization port.
-
-    ``None`` is the test composition without SpiceDB and denies everything. A
-    process with settings requires ``SPICEDB__ENDPOINT`` and refuses to start
-    without it.
-    """
-    if settings is None:
-        return DenyAllPermissions()
+    """Authorization port; ``SPICEDB__ENDPOINT`` is required."""
     if not settings.enabled:
         raise SpiceDBConfigurationError(
             "SPICEDB__ENDPOINT is required: payments checks permissions in SpiceDB"
@@ -104,11 +103,11 @@ def create_permission_checker(
     )
 
 
-def create_provider(settings: ProviderSettings | None) -> PaymentProviderGateway:
-    """Payment provider port: the sandbox for ``PROVIDER__KIND=fake``, otherwise none."""
-    if settings is not None and settings.kind == "fake":
+def create_provider(settings: ProviderSettings) -> PaymentProviderGateway:
+    """Payment provider port: the sandbox of ``PROVIDER__KIND=fake``."""
+    if settings.kind == "fake":
         return FakePaymentProvider()
-    return UnconfiguredProvider()
+    raise ProviderConfigurationError(f"unsupported PROVIDER__KIND {settings.kind!r}")
 
 
 def instrument[In, Out](
@@ -128,12 +127,9 @@ def create_grpc_worker(
 class PaymentsContainer(containers.DeclarativeContainer):
     """One instance per ``payments`` process; ``config`` holds ``pkg.config.Settings``.
 
-    Without ``IDENTITY__ISSUER``, ``IDENTITY__AUDIENCE`` or ``IDENTITY__JWKS_FILE`` every
-    call is rejected ``UNAUTHENTICATED``; an invalid JWKS raises before any port opens.
-    An empty ``SPICEDB__ENDPOINT`` stops the process; otherwise each protected use case
-    checks SpiceDB and fails closed (``UNAVAILABLE``). Without ``PROVIDER__KIND=fake``
-    every financial operation is ``UNAVAILABLE``. Without ``PROVIDER__WEBHOOK_SECRET``
-    the webhook port opens but every webhook is 400.
+    Identity (``IDENTITY__ISSUER``, ``IDENTITY__AUDIENCE``, ``IDENTITY__JWKS_FILE``),
+    ``SPICEDB__ENDPOINT``, ``PROVIDER__KIND`` and ``PROVIDER__WEBHOOK_SECRET`` are
+    required: a missing or invalid value stops the process before any port opens.
     """
 
     # Sections are typed ``pkg.config`` settings, keyed as ``di.resources.sections``.
@@ -152,7 +148,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
     provider = providers.Singleton(
         ObservedProvider, providers.Singleton(create_provider, config.payment_provider)
     )
-    # Integration Events payments.v1.payment-events (ADR 31); publishes payments-relay.
+    # Integration Events payments.v1.payment-events (ADR 31); publishes Debezium (ADR 37).
     outbox_mapper = providers.Singleton(PaymentEventsMapper)
     clock = providers.Singleton(SystemClock)
     ids = providers.Singleton(UuidIdentifiers)

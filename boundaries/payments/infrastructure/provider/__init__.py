@@ -1,6 +1,6 @@
 """Payment provider adapters: gateway implementations and webhook verification."""
 
-from .fake import DECLINE_AMOUNT, FakePaymentProvider, UnconfiguredProvider
+from .fake import DECLINE_AMOUNT, FakePaymentProvider
 from .http import MAX_BODY_BYTES, WEBHOOK_PATH, create_webhook_handler
 from .webhook import (
     SIGNATURE_HEADER,
@@ -17,7 +17,6 @@ __all__ = [
     "WEBHOOK_PATH",
     "FakePaymentProvider",
     "InvalidWebhookError",
-    "UnconfiguredProvider",
     "WebhookVerifier",
     "create_webhook_handler",
     "parse_callback",

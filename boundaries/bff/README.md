@@ -180,7 +180,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 | `BFF__ASSERTION_KEY_FILE`, `BFF__ASSERTION_KEY_ID` | ключ подписи assertions (P-256, PEM) и его `kid` |
 | `IDENTITY__TOKEN_DIR` | каталог projected ServiceAccount tokens, файл на audience |
 
-Без этих переменных identity выключена; частичная конфигурация останавливает плагин на старте. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — providers с JWKS URL, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`).
+Переменные и `BFF__INTERNAL_GATEWAY_ADDR` обязательны: без них или с частичной конфигурацией плагин не стартует. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — providers с JWKS URL, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`).
 
 ## Место в архитектуре
 

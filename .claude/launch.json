@@ -16,7 +16,8 @@
       "env": {
         "VITE_PUBLIC_GRAPHQL_URL": "http://localhost:4173/graphql",
         "VITE_LOCALE": "ru",
-        "VITE_ENABLE_MOCKS": "true"
+        "VITE_ENABLE_MOCKS": "true",
+        "VITE_DEPLOYMENT_ENVIRONMENT": "development"
       },
       "port": 4173
     },
@@ -30,7 +31,8 @@
       "env": {
         "VITE_PUBLIC_GRAPHQL_URL": "http://localhost:4187/graphql",
         "VITE_LOCALE": "ru",
-        "VITE_ENABLE_MOCKS": "true"
+        "VITE_ENABLE_MOCKS": "true",
+        "VITE_DEPLOYMENT_ENVIRONMENT": "development"
       },
       "port": 4187
     },
@@ -52,6 +54,8 @@
         "VITE_ENABLE_MOCKS": "false",
         "VITE_OIDC_ISSUER": "http://localhost:5556/dex",
         "VITE_DEPLOYMENT_ENVIRONMENT": "kind",
+        "VITE_OIDC_CLIENT_ID": "nomnom-ui",
+        "VITE_OIDC_AUDIENCE": "nomnom-bff",
         "VITE_OIDC_DEMO_EMAIL_DOMAIN": "nomnom.test",
         "VITE_OIDC_DEMO_PASSWORD": "nomnom"
       },

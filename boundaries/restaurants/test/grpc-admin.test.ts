@@ -10,7 +10,7 @@ import {
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
-import { createService } from "./support/grpc.ts";
+import { createService, rejectingSubjects } from "./support/grpc.ts";
 import {
   createRestaurantWorld,
   operator,
@@ -334,9 +334,10 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
   );
 });
 
-test("admin RPCs are UNAUTHENTICATED with the default rejecting resolver", async () => {
+test("admin RPCs are UNAUTHENTICATED for an unverified caller", async () => {
   const world = await createRestaurantWorld();
   const service = createService({
+    subjects: rejectingSubjects,
     getRestaurant: unused,
     getMenu: unused,
     listRestaurants: unused,

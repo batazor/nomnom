@@ -22,7 +22,6 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/catalog"
-	"nomnom/orders/slices/order/infrastructure/neighbours"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
@@ -82,19 +81,9 @@ type Workflow interface {
 	fulfillment.CancellationRequester
 }
 
-// NewCatalog — catalog snapshot Place Order, выбранный тем же
-// fulfillment.neighbours, что и адаптеры Activities. grpc (по умолчанию) читает
-// GetRestaurant и GetMenu restaurants через internal gateway (lazy connection,
-// projected token из IDENTITY__TOKEN_DIR, если задан); unavailable и simulated
-// оставляют fail-closed catalog: цены, которые orders не может проверить, не
-// симулируются, и Place Order отвечает UNAVAILABLE.
-func NewCatalog(cfg config.FulfillmentConfig, gateway config.InternalGatewayConfig, identity config.IdentityConfig, limits config.CatalogConfig) (placeorder.Catalog, func(), error) {
-	if cfg.Neighbours != config.NeighboursGRPC {
-		if cfg.Neighbours == config.NeighboursSimulated {
-			slog.Warn("restaurants catalog is not simulated: Place Order answers UNAVAILABLE", "neighbours", cfg.Neighbours)
-		}
-		return neighbours.UnavailableCatalog{}, func() {}, nil
-	}
+// NewCatalog — catalog snapshot Place Order: GetRestaurant и GetMenu restaurants
+// через internal gateway (lazy connection, projected token из IDENTITY__TOKEN_DIR).
+func NewCatalog(gateway config.InternalGatewayConfig, identity config.IdentityConfig, limits config.CatalogConfig) (placeorder.Catalog, func(), error) {
 	minimum, err := decimal.NewFromString(limits.MinimumTotal)
 	if err != nil {
 		return nil, nil, fmt.Errorf("catalog minimum_total: %w", err)
@@ -117,7 +106,7 @@ func NewClock() application.Clock { return system.Clock{} }
 // NewOrderIDs — генератор UUIDv7 идентификаторов Order.
 func NewOrderIDs() placeorder.IDGenerator { return system.OrderIDs{} }
 
-// NewPostgresStore — общий store API, worker'а, consumer'а и forwarder'а;
+// NewPostgresStore — общий store API, worker'а и consumer'а;
 // без POSTGRES__DSN процесс не стартует. Pool подключается лениво.
 func NewPostgresStore(cfg config.PostgresConfig) (*postgres.Store, func(), error) {
 	store, err := postgres.Open(context.Background(), cfg)

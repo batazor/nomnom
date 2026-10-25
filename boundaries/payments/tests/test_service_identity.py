@@ -19,7 +19,6 @@ from pydantic import ValidationError
 from infrastructure.grpc import identity
 from infrastructure.grpc.identity import (
     IdentityConfigError,
-    RejectingSubjectResolver,
     ServiceTokenSubjectResolver,
     ServiceTokenVerifier,
     create_subject_resolver,
@@ -253,7 +252,7 @@ class EcdsaTokenTest(unittest.TestCase):
 
 
 class IdentityConfigTest(unittest.TestCase):
-    """FR-432, AC-462: fail closed without configuration, fail startup on invalid config."""
+    """FR-432, AC-462: missing or invalid configuration fails startup."""
 
     def test_identity_is_disabled_by_default(self) -> None:
         with patch.dict(os.environ, REQUIRED_ENV, clear=True):
@@ -282,25 +281,14 @@ class IdentityConfigTest(unittest.TestCase):
             },
         )
 
-    def test_missing_issuer_audience_or_jwks_keeps_rejecting_resolver(self) -> None:
+    def test_missing_issuer_audience_or_jwks_is_a_config_error(self) -> None:
         for env in ("IDENTITY__ISSUER", "IDENTITY__AUDIENCE", "IDENTITY__JWKS_FILE"):
             with self.subTest(empty=env):
                 overrides = {env: ""}
                 if env == "IDENTITY__ISSUER":
                     overrides["IDENTITY__SERVICE_ACCOUNTS"] = ""
-                with self.assertLogs("infrastructure.grpc.identity", level="WARNING"):
-                    resolver = create_subject_resolver(_vector_settings(**overrides))
-                self.assertIsInstance(resolver, RejectingSubjectResolver)
-
-    def test_without_issuer_valid_token_is_unauthenticated(self) -> None:
-        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
-            settings = load_settings().identity
-        with self.assertLogs("infrastructure.grpc.identity", level="WARNING"):
-            resolver = create_subject_resolver(settings)
-        context = _bearer(VECTORS["tokens"]["valid"])
-        with self.assertRaises(_AbortedError):
-            resolver.resolve(cast(grpc.ServicerContext, context))
-        self.assertEqual(context.code, grpc.StatusCode.UNAUTHENTICATED)
+                with self.assertRaises(IdentityConfigError):
+                    create_subject_resolver(_vector_settings(**overrides))
 
     def test_issuer_with_empty_allowlist_is_a_config_error(self) -> None:
         with self.assertRaises(ValidationError):

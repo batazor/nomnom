@@ -28,20 +28,6 @@ export interface SubjectResolver {
   resolve(context: HandlerContext): Promise<Subject>;
 }
 
-/**
- * Secure default until the internal identity verification adapter is
- * configured. It deliberately does not trust arbitrary gRPC metadata or the
- * fact that a request passed through the gateway.
- */
-export class RejectingSubjectResolver implements SubjectResolver {
-  async resolve(): Promise<Subject> {
-    throw new ConnectError(
-      "verified caller identity is required",
-      Code.Unauthenticated,
-    );
-  }
-}
-
 const MAX_LOGGED_JTI_LENGTH = 128;
 
 export interface ServiceTokenSubjectResolverOptions {
@@ -157,9 +143,9 @@ export interface CreateSubjectResolverOptions {
 }
 
 /**
- * Builds the resolver from configuration. Without issuer, audience and JWKS
- * the server stays fail closed; an unreadable or invalid JWKS (cluster or
- * BFF) is a startup error. Without user settings assertions are rejected.
+ * Builds the resolver from configuration. Issuer, audience and JWKS are
+ * required; their absence or an unreadable or invalid JWKS (cluster or BFF)
+ * is a startup error. Without user settings assertions are rejected.
  */
 export async function createSubjectResolver(
   identity: IdentityConfig,
@@ -167,10 +153,9 @@ export async function createSubjectResolver(
   options: CreateSubjectResolverOptions = {},
 ): Promise<SubjectResolver> {
   if (!identity.enabled) {
-    log(
-      "service identity is not configured (IDENTITY__ISSUER, IDENTITY__AUDIENCE, IDENTITY__JWKS_FILE); all calls requiring a subject are rejected",
+    throw new Error(
+      "IDENTITY__ISSUER, IDENTITY__AUDIENCE and IDENTITY__JWKS_FILE are required",
     );
-    return new RejectingSubjectResolver();
   }
   return new ServiceTokenSubjectResolver({
     issuer: identity.issuer,
@@ -180,18 +165,14 @@ export async function createSubjectResolver(
     log,
     audit: options.audit,
     now: options.now,
-    userAssertions: await userAssertionOptions(identity.user, log),
+    userAssertions: await userAssertionOptions(identity.user),
   });
 }
 
 async function userAssertionOptions(
   user: UserIdentityConfig,
-  log: (message: string) => void,
 ): Promise<UserAssertionOptions | undefined> {
   if (!user.enabled) {
-    log(
-      "user assertions are not configured (IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE, IDENTITY__USER_DELEGATES); calls carrying x-nomnom-user-assertion are rejected",
-    );
     return undefined;
   }
   return {

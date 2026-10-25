@@ -11,7 +11,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use shaku::{Component, Interface, module};
 
-use crate::infrastructure::memory::{RecordingRelationships, StaticAuthorization};
+#[cfg(test)]
+use crate::infrastructure::memory::StaticAuthorization;
 use crate::pkg::application::{Clock, IdGenerator, TransactionScope, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
@@ -92,6 +93,7 @@ impl<T: CourierAuthorization + DeliveryAuthorization + Send + Sync> ProcessAutho
 
 /// Разрешающая авторизация тестовых графов [`super::service`]; процесс без
 /// SpiceDB не стартует (см. [`super::server::spicedb`]).
+#[cfg(test)]
 pub(super) fn local_authorization() -> StaticAuthorization {
     StaticAuthorization::allow_all()
 }
@@ -105,7 +107,6 @@ pub trait SharedAuthorization: Interface {
 #[derive(Component)]
 #[shaku(interface = SharedAuthorization)]
 pub struct LocalAuthorization {
-    #[shaku(default = Box::new(local_authorization()))]
     authorization: Box<dyn ProcessAuthorization>,
 }
 
@@ -139,8 +140,6 @@ pub trait SharedRelationships: Interface {
 #[derive(Component)]
 #[shaku(interface = SharedRelationships)]
 pub struct LocalRelationships {
-    /// Writes nowhere; the process passes the SpiceDB adapter.
-    #[shaku(default = Box::new(RecordingRelationships::new()))]
     relationships: Box<dyn ProcessRelationships>,
 }
 

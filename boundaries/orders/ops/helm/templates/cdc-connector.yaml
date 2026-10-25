@@ -1,0 +1,108 @@
+{{- /*
+ADR 37: коннектор Debezium, который доставляет Outbox orders из WAL в Kafka. Конфигурация —
+cdc.connector (контракт Outbox, общий для окружений) поверх cdc.database (адрес базы и
+ссылка на пароль в Kafka Connect). Hook Job после install/upgrade кладёт её в Kafka Connect
+(PUT /connectors/<name>/config: создаёт или обновляет). Release без cdc.enabled (worker,
+consumer, reconciler) коннектор не трогает.
+*/ -}}
+{{- if .Values.cdc.enabled }}
+{{- $name := required "cdc.connector.name is required" .Values.cdc.connector.name }}
+{{- $url := required "cdc.connectUrl is required (ADR 37)" .Values.cdc.connectUrl }}
+{{- $db := .Values.cdc.database }}
+{{- $config := merge (dict
+      "database.hostname" (required "cdc.database.hostname is required" $db.hostname)
+      "database.port" ($db.port | toString)
+      "database.dbname" (required "cdc.database.name is required" $db.name)
+      "database.user" (required "cdc.database.user is required" $db.user)
+      "database.password" (required "cdc.database.password is required" $db.password))
+    .Values.cdc.connector.config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}-cdc-connector
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels:
+    {{- include "orders.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-1"
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  connector.json: {{ $config | toJson | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "common.names.fullname" . }}-cdc-connector
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels:
+    {{- include "orders.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        {{- include "orders.labels" (dict "customLabels" (dict) "context" $) | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: register
+          image: {{ .Values.cdc.registrar.image | quote }}
+          env:
+            - name: CONNECTOR_URL
+              value: {{ printf "%s/connectors/%s" (trimSuffix "/" $url) $name | quote }}
+          # Kafka Connect может ещё подниматься: PUT повторяет и ошибки соединения, и 5xx.
+          # Источник (publication PostgreSQL) создаёт миграция init container release, она
+          # может закончиться позже hook: задачу, упавшую до неё, Job перезапускает и ждёт
+          # RUNNING; иначе release падает, а не оставляет Outbox без доставки.
+          command:
+            - sh
+            - -ec
+            - |
+              curl --fail-with-body --silent --show-error --retry 30 --retry-all-errors --retry-delay 2 \
+                --request PUT --header "Content-Type: application/json" \
+                --data @/etc/nomnom/cdc/connector.json "$CONNECTOR_URL/config" >/dev/null
+              status=""
+              for attempt in $(seq 1 36); do
+                sleep 5
+                status=$(curl --fail --silent --show-error "$CONNECTOR_URL/status")
+                case "$status" in
+                  *'"state":"FAILED"'*)
+                    curl --fail --silent --show-error --request POST \
+                      "$CONNECTOR_URL/restart?includeTasks=true&onlyFailed=true" >/dev/null ;;
+                  *'"tasks":[{'*)
+                    case "${status#*\"tasks\":}" in *'"state":"RUNNING"'*) exit 0 ;; esac ;;
+                esac
+              done
+              echo "connector is not RUNNING: $status" >&2
+              exit 1
+          resources:
+            requests:
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: connector
+              mountPath: /etc/nomnom/cdc
+              readOnly: true
+      volumes:
+        - name: connector
+          configMap:
+            name: {{ include "common.names.fullname" . }}-cdc-connector
+{{- end }}

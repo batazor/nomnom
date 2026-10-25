@@ -43,7 +43,7 @@ fulfillment:
 # Адрес internal gateway (env INTERNAL_GATEWAY_ADDR); обязателен при neighbours: grpc.
 internal_gateway:
   address: ""
-# Service identity (ADR 27). Без issuer, audience и jwks_file все вызовы отклоняются.
+# Service identity (ADR 27). issuer, audience и jwks_file обязательны для gRPC API.
 identity:
   issuer: ""
   audience: nomnom.orders

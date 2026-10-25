@@ -35,12 +35,6 @@ func ConfigFromEnv(getenv func(string) string) Config {
 	}
 }
 
-// Enabled reports whether any identity setting is present. Without settings
-// BFF serves only operations that need no customer.
-func (c Config) Enabled() bool {
-	return c != Config{}
-}
-
 // Identity is the assembled BFF identity: the incoming check of access tokens
 // and the outgoing credentials of calls to contexts.
 type Identity struct {
@@ -48,18 +42,15 @@ type Identity struct {
 	Outgoing     OutgoingCredentials
 }
 
-// Load fails on a partial or invalid configuration: a BFF that cannot prove
-// customers must not start half-configured.
+// Load fails on a missing or invalid configuration: a BFF that cannot prove
+// customers must not start.
 func Load(c Config) (*Identity, error) {
-	if !c.Enabled() {
-		return nil, nil
-	}
 	for name, value := range map[string]string{
 		EnvIdPProviders: c.IdPProviders, EnvIdPAudience: c.IdPAudience,
 		EnvAssertionKeyFile: c.AssertionKeyFile, EnvAssertionKeyID: c.AssertionKeyID, EnvServiceTokenDir: c.ServiceTokenDir,
 	} {
 		if value == "" {
-			return nil, fmt.Errorf("%s is required when BFF identity is configured", name)
+			return nil, fmt.Errorf("%s is required", name)
 		}
 	}
 	var providers []Provider

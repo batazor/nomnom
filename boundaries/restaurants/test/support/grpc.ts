@@ -5,7 +5,7 @@ import {
   type MessageShape,
 } from "@bufbuild/protobuf";
 import {
-  type Code,
+  Code,
   ConnectError,
   type HandlerContext,
   type ServiceImpl,
@@ -75,9 +75,20 @@ const notComposed = {
   },
 };
 
+/** Rejects every call as an unverified caller. */
+export const rejectingSubjects: SubjectResolver = {
+  resolve: async () => {
+    throw new ConnectError(
+      "verified caller identity is required",
+      Code.Unauthenticated,
+    );
+  },
+};
+
 /** Service over the MongoDB kitchen world with an `orders-worker` caller. */
 export const createWorld = async (
   options: {
+    /** `null` rejects every caller as unverified. */
     subjects?: SubjectResolver | null;
     /** Query over a fake reader instead of the MongoDB one. */
     listIncomingOrders?: Pick<ListIncomingOrdersHandler, "execute">;
@@ -120,7 +131,7 @@ export const createWorld = async (
     setMenuItemAvailability: world.setAvailability,
     subjects:
       options.subjects === null
-        ? undefined
+        ? rejectingSubjects
         : (options.subjects ?? resolverOf(ordersService)),
   });
   return { world, service };

@@ -215,31 +215,16 @@ test("assertion expiry and not-before honour the 30s clock tolerance", async () 
 });
 
 test("without user settings assertions are rejected and service calls still work (AC-529)", async () => {
-  for (const missing of [
-    "IDENTITY__USER_ISSUER",
-    "IDENTITY__USER_JWKS_FILE",
-    "IDENTITY__USER_DELEGATES",
-  ]) {
-    const warnings: string[] = [];
-    const environment: Record<string, string> = { ...userEnvironment };
-    delete environment[missing];
-    const resolver = await createResolver(environment, (message) =>
-      warnings.push(message),
-    );
+  const resolver = await createResolver(serviceEnvironment, () => {});
 
-    assert.equal(warnings.length, 1, missing);
-    assert.match(warnings[0] ?? "", /user assertions are not configured/);
-    await assert.rejects(
-      resolver.resolve(call(vectors.delegate_token, valid)),
-      unauthenticated,
-      missing,
-    );
-    assert.deepEqual(
-      await resolver.resolve(call(vectors.delegate_token)),
-      { type: "service", id: "bff" },
-      missing,
-    );
-  }
+  await assert.rejects(
+    resolver.resolve(call(vectors.delegate_token, valid)),
+    unauthenticated,
+  );
+  assert.deepEqual(await resolver.resolve(call(vectors.delegate_token)), {
+    type: "service",
+    id: "bff",
+  });
 });
 
 test("loads the user assertion settings", () => {
@@ -256,16 +241,22 @@ test("loads the user assertion settings", () => {
   assert.deepEqual([...config.user.delegates], ["bff", "support-console"]);
 });
 
-test("user assertions stay disabled without issuer, JWKS or delegates (FR-473)", () => {
+test("user assertions are disabled without any user setting (FR-473)", () => {
+  const config = loadIdentityConfig(serviceEnvironment);
+  assert.ok(config.enabled);
+  assert.deepEqual(config.user, { enabled: false });
+});
+
+test("partial user assertion settings are a startup error (FR-473)", () => {
   for (const environment of [
-    serviceEnvironment,
     { ...userEnvironment, IDENTITY__USER_ISSUER: "" },
     { ...userEnvironment, IDENTITY__USER_JWKS_FILE: " " },
     { ...userEnvironment, IDENTITY__USER_DELEGATES: "" },
   ]) {
-    const config = loadIdentityConfig(environment);
-    assert.ok(config.enabled);
-    assert.deepEqual(config.user, { enabled: false });
+    assert.throws(
+      () => loadIdentityConfig(environment),
+      /must be set together/,
+    );
   }
 });
 

@@ -210,6 +210,7 @@ export const messages = {
       "Не получилось. Проверьте соединение и попробуйте ещё раз.",
     "board.session.neededSignIn": "Войдите, чтобы открыть колонку.",
     "board.kitchen.none": "У владельца пока нет ресторанов.",
+    "board.kitchen.pick": "Выберите ресторан, чтобы открыть его кухню.",
     "board.kitchen.notOwned":
       "Этот ресторан не принадлежит владельцу, вошедшему на доску.",
     "board.kitchen.orders": "Заказы кухни",
@@ -476,6 +477,7 @@ export const messages = {
       "That did not work. Check your connection and try again.",
     "board.session.neededSignIn": "Sign in to open this column.",
     "board.kitchen.none": "The owner has no restaurants yet.",
+    "board.kitchen.pick": "Pick a restaurant to open its kitchen.",
     "board.kitchen.notOwned":
       "This restaurant does not belong to the owner signed in to the board.",
     "board.kitchen.orders": "Kitchen orders",

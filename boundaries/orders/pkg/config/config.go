@@ -120,8 +120,8 @@ func Load() (Config, error) {
 	if err := cfg.Reconciler.Validate(); err != nil {
 		return Config{}, err
 	}
-	if cfg.Fulfillment.Neighbours == NeighboursGRPC && strings.TrimSpace(cfg.InternalGateway.Address) == "" {
-		return Config{}, fmt.Errorf("%s is required when fulfillment neighbours is %q", EnvInternalGatewayAddr, NeighboursGRPC)
+	if strings.TrimSpace(cfg.InternalGateway.Address) == "" {
+		return Config{}, fmt.Errorf("%s is required", EnvInternalGatewayAddr)
 	}
 
 	return cfg, nil

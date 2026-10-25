@@ -66,22 +66,12 @@ func TestWiringOpensOneConnectionPerAudience(t *testing.T) {
 	assert.NotNil(t, bff.courier)
 }
 
-func TestWiringWithoutGatewayOrIdentityLeavesSlicesUnconnected(t *testing.T) {
-	dial := &recordingDial{}
-	bff, err := newBffService(config{internalGateway: "gateway:8080"}, dial.dial)
-	require.NoError(t, err)
-	assert.Equal(t, &BffService{}, bff, "no identity")
+func TestWiringRequiresIdentityAndGateway(t *testing.T) {
+	_, err := newBffService(config{internalGateway: "gateway:8080"}, (&recordingDial{}).dial)
+	assert.Error(t, err, "no identity")
 
-	bff, err = newBffService(config{identity: identityConfig(t)}, dial.dial)
-	require.NoError(t, err)
-	assert.NotNil(t, bff.accessTokens, "customers are still authenticated")
-	assert.Nil(t, bff.tracking)
-	assert.Nil(t, bff.catalog)
-	assert.Nil(t, bff.checkout)
-	assert.Nil(t, bff.management)
-	assert.Nil(t, bff.kitchen)
-	assert.Nil(t, bff.courier)
-	assert.Empty(t, dial.audiences)
+	_, err = newBffService(config{identity: identityConfig(t)}, (&recordingDial{}).dial)
+	assert.ErrorContains(t, err, envInternalGateway)
 }
 
 func TestWiringReturnsErrorsInsteadOfStopping(t *testing.T) {

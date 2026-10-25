@@ -10,7 +10,6 @@ from pydantic import ValidationError
 from di.payments import SpiceDBConfigurationError, create_permission_checker
 from infrastructure.authorization import (
     PERMISSION_MAPPING,
-    DenyAllPermissions,
     SpiceDBPermissionChecker,
 )
 from pkg.application import (
@@ -163,11 +162,6 @@ class DecisionTest(unittest.TestCase):
 
 
 class CompositionTest(unittest.TestCase):
-    def test_test_composition_without_settings_denies_all(self) -> None:
-        checker = create_permission_checker(None)
-        self.assertIsInstance(checker, DenyAllPermissions)
-        self.assertFalse(checker.is_allowed(WORKER, PaymentPermission.VIEW, RESOURCE))
-
     def test_empty_endpoint_fails_startup(self) -> None:
         with self.assertRaisesRegex(SpiceDBConfigurationError, "SPICEDB__ENDPOINT"):
             create_permission_checker(SpiceDBSettings.model_validate({}))

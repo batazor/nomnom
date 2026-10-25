@@ -225,9 +225,8 @@ func TestServiceTokensReadFilePerAudience(t *testing.T) {
 }
 
 func TestLoadRequiresCompleteConfig(t *testing.T) {
-	none, err := Load(Config{})
-	require.NoError(t, err)
-	assert.Nil(t, none)
+	_, err := Load(Config{})
+	assert.Error(t, err)
 
 	_, err = Load(Config{IdPAudience: "nomnom-bff"})
 	assert.Error(t, err)

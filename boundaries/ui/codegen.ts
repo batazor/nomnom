@@ -1,7 +1,7 @@
 import type { CodegenConfig } from "@graphql-codegen/cli";
 
 const config: CodegenConfig = {
-  schema: process.env.GRAPHQL_SCHEMA ?? "../bff/client-schema.graphql",
+  schema: "../bff/client-schema.graphql",
   documents: ["src/features/**/*.graphql"],
   ignoreNoDocuments: true,
   generates: {

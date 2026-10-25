@@ -303,18 +303,14 @@ class UserIdentityConfigTest(_ResolverCase):
         self.assertIn("not configured", "\n".join(output))
         self.assertEqual(self._resolve(_context(USER_VECTORS["delegate_token"])), BFF)
 
-    def test_partial_user_settings_reject_assertions(self) -> None:
+    def test_partial_user_settings_are_a_config_error(self) -> None:
         for env in (
             "IDENTITY__USER_ISSUER",
             "IDENTITY__USER_JWKS_FILE",
             "IDENTITY__USER_DELEGATES",
         ):
-            with self.subTest(empty=env):
-                self.resolver = _resolver(user=True, **{env: ""})
-                self._assert_rejected(
-                    _context(USER_VECTORS["delegate_token"], USER_VECTORS["tokens"]["valid"])
-                )
-                self.assertEqual(self._resolve(_context(USER_VECTORS["delegate_token"])), BFF)
+            with self.subTest(empty=env), self.assertRaises(IdentityConfigError):
+                create_subject_resolver(_settings(user=True, **{env: ""}))
 
     def test_unreadable_or_invalid_user_jwks_is_a_startup_error(self) -> None:
         p384 = json.loads(ECAlgorithm.to_jwk(ec.generate_private_key(ec.SECP384R1()).public_key()))
@@ -332,14 +328,8 @@ class UserIdentityConfigTest(_ResolverCase):
                 path = Path(directory) / name
                 if content is not None:
                     path.write_text(content, encoding="utf-8")
-                with self.subTest(jwks=name):
-                    with self.assertRaises(IdentityConfigError):
-                        create_subject_resolver(_settings(IDENTITY__USER_JWKS_FILE=str(path)))
-                    # Even with the rest of the user settings missing.
-                    with self.assertRaises(IdentityConfigError):
-                        create_subject_resolver(
-                            _settings(user=False, IDENTITY__USER_JWKS_FILE=str(path))
-                        )
+                with self.subTest(jwks=name), self.assertRaises(IdentityConfigError):
+                    create_subject_resolver(_settings(IDENTITY__USER_JWKS_FILE=str(path)))
 
     def test_bff_jwks_fixture_loads(self) -> None:
         self.assertEqual(list(load_user_jwks(BFF_JWKS_FILE)), ["nomnom-bff-test-key"])

@@ -2,7 +2,6 @@
 
 from .spicedb import (
     PERMISSION_MAPPING,
-    DenyAllPermissions,
     PermissionsClient,
     SpiceDBPermissionChecker,
     check_request,
@@ -11,7 +10,6 @@ from .spicedb import (
 
 __all__ = [
     "PERMISSION_MAPPING",
-    "DenyAllPermissions",
     "PermissionsClient",
     "SpiceDBPermissionChecker",
     "check_request",

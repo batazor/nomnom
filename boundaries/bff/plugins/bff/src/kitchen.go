@@ -11,9 +11,6 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 )
 
-// kitchenSlice names the slice in "not available" errors.
-const kitchenSlice = "kitchen"
-
 // QueryKitchen shows the active orders of a restaurant on behalf of the
 // verified user; restaurants decides whether the user may operate its kitchen.
 // A missing restaurant and a kitchen the user may not operate are both null.
@@ -23,9 +20,6 @@ func (s *BffService) QueryKitchen(ctx context.Context, request *service.QueryKit
 	}
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireSlice(kitchenSlice, s.kitchen != nil); err != nil {
 		return nil, err
 	}
 	view, err := s.kitchen.getKitchen.Handle(ctx, request.GetRestaurantId())
@@ -75,9 +69,6 @@ func (s *BffService) MutationApplyKitchenAction(ctx context.Context, request *se
 	}
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireSlice(kitchenSlice, s.kitchen != nil); err != nil {
 		return nil, err
 	}
 	result, err := s.kitchen.applyAction.Handle(ctx, applications.ActionRequest{

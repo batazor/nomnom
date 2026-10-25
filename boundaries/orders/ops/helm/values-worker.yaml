@@ -1,7 +1,7 @@
 # Temporal worker orders: отдельный release того же chart.
 #   helm upgrade --install orders-worker ops/helm -f ops/helm/values-worker.yaml
 # Адрес и namespace Temporal (TEMPORAL__HOST_PORT, TEMPORAL__NAMESPACE) задаются values окружения
-# через env; FULFILLMENT__NEIGHBOURS=simulated в окружения не задаётся.
+# через env.
 component: worker
 
 telemetry:

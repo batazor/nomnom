@@ -124,8 +124,4 @@ func TestPlaceOrderErrors(t *testing.T) {
 	_, err := svc.MutationPlaceOrder(ctx, request)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	svc.checkout = nil
-	_, err = svc.MutationPlaceOrder(ctx, placeOrderRequest())
-	assert.Equal(t, codes.Unavailable, status.Code(err), "checkout is not connected")
-	assert.Contains(t, status.Convert(err).Message(), "checkout operations")
 }

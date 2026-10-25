@@ -126,16 +126,6 @@ def _reason(error: Exception) -> str:
     return type(error).__name__
 
 
-class DenyAllPermissions:
-    """Deny every permission while SpiceDB is not configured."""
-
-    def is_allowed(
-        self, subject: Subject, permission: PaymentPermission, resource: PaymentResource
-    ) -> bool:
-        """Always deny."""
-        return False
-
-
 def create_spicedb_client(
     settings: SpiceDBSettings, telemetry: ClientTelemetryInterceptor | None = None
 ) -> PermissionsClient:

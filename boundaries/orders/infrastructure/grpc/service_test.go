@@ -2,6 +2,7 @@ package grpcadapter_test
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"strings"
@@ -26,7 +27,6 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/neighbours"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
@@ -130,8 +130,15 @@ func TestServiceReturnsStructuredInvalidArgument(t *testing.T) {
 	assert.Equal(t, "nomnom.orders.v1", info.GetDomain())
 }
 
-func TestServiceRejectsUnverifiedCallerByDefault(t *testing.T) {
-	client := newClient(t, grpcadapter.NewRejectingSubjectResolver())
+// rejectingResolver fails every call as an unverified caller.
+type rejectingResolver struct{}
+
+func (rejectingResolver) Resolve(context.Context) (application.Subject, error) {
+	return application.Subject{}, grpcadapter.ErrUnauthenticated
+}
+
+func TestServiceRejectsUnverifiedCaller(t *testing.T) {
+	client := newClient(t, rejectingResolver{})
 
 	_, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
 		CustomerId: "customer-1",
@@ -218,10 +225,12 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 	assert.True(t, replayed.GetReplayed())
 }
 
-// AC-509: a fail-closed catalog (neighbours unavailable or simulated) is UNAVAILABLE.
+// AC-509: an unavailable catalog is UNAVAILABLE.
 func TestPlaceOrderUnavailableCatalogIsUnavailable(t *testing.T) {
 	ports := newCommandPorts()
-	ports.catalog = neighbours.UnavailableCatalog{}
+	catalog := fake.NewCatalog()
+	catalog.Fail(fmt.Errorf("restaurants menu: %w", application.ErrDependencyUnavailable))
+	ports.catalog = catalog
 	client := newClientWithPorts(t, fixedSubject{subject: customer}, postgrestest.Open(t), fake.NewAuthorizer(), ports)
 
 	_, err := client.PlaceOrder(context.Background(), placeRequest())

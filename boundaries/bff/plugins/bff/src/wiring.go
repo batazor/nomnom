@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"google.golang.org/grpc"
 
@@ -139,25 +138,18 @@ type courier struct {
 	applyAction     deliveryActionHandler
 }
 
-// newBffService assembles BFF from cfg. A partial identity configuration is an
-// error: customer operations must not run without a verified customer
-// (ADR 32). Without BFF identity or a gateway address the slices stay nil:
-// their resolvers answer that they are not available, while bffInfo keeps
-// working. The catalog reads are public, but the internal gateway still needs
-// the service token of BFF, so the catalog needs identity too.
+// newBffService assembles BFF from cfg. BFF identity and the gateway address
+// are required: customer operations must not run without a verified customer
+// (ADR 32), and every slice calls contexts through the internal gateway.
 func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	customers, err := identity.Load(cfg.identity)
 	if err != nil {
 		return nil, fmt.Errorf("load identity: %w", err)
 	}
-	service := &BffService{}
-	if customers != nil {
-		service.accessTokens = customers.AccessTokens
+	if cfg.internalGateway == "" {
+		return nil, fmt.Errorf("%s is required", envInternalGateway)
 	}
-	if customers == nil || cfg.internalGateway == "" {
-		log.Printf("%s or BFF identity is not set: catalog, checkout, order, restaurant management, kitchen and courier operations are unavailable", envInternalGateway)
-		return service, nil
-	}
+	service := &BffService{accessTokens: customers.AccessTokens}
 	orders, err := dial(cfg.internalGateway, audienceOrders, customers.Outgoing)
 	if err != nil {
 		return nil, err

@@ -63,11 +63,11 @@ securityContext:
   privileged: false
   readOnlyRootFilesystem: false
 
-# Команда контейнера; пусто — CMD образа. Relay-release задаёт свою (values-relay.yaml).
+# Команда контейнера; пусто — CMD образа.
 command: []
 
 service:
-  # false — без Service и бизнес-порта контейнера (Outbox relay).
+  # false — без Service и бизнес-порта контейнера.
   enabled: true
   type: ClusterIP
   # Порт Service и порт приложения. Приложение слушает 8083 по умолчанию
@@ -159,8 +159,8 @@ readinessProbe:
   failureThreshold: 1
 
 # Service identity (ADR 27): проверка projected ServiceAccount token входящих gRPC-вызовов.
-# Пока jwksConfigMap пуст, IDENTITY__* не задаются и приложение отклоняет все вызовы
-# UNAUTHENTICATED (fail closed). Если jwksConfigMap задан, его ключ jwks.json (публичные
+# Для release с gRPC API (service.enabled) jwksConfigMap, issuer и serviceAccounts
+# обязательны. Ключ jwks.json (публичные
 # ключи кластера из /openid/v1/jwks) монтируется read-only в /etc/nomnom/identity/jwks.json.
 identity:
   # Ожидаемый iss token: issuer кластера из /.well-known/openid-configuration.
@@ -204,8 +204,8 @@ spicedb:
 # migrate: init container `delivery-migrate` перед процессом в каждом pod; advisory lock
 # sqlx сериализует миграции реплик.
 # pool — лимиты пула одного pod (DATABASE__*); невалидные значения завершают startup.
-# Соединений на сервер: replicas × maxConns (+1 lock-соединение у relay). Pooler перед
-# PostgreSQL — только session mode: relay и миграции держат session advisory lock.
+# Соединений на сервер: replicas × maxConns. Pooler перед PostgreSQL — только session
+# mode: миграции держат session advisory lock.
 database:
   urlSecret:
     name: delivery-postgres
@@ -224,6 +224,52 @@ database:
     # Ожидание соединения пула; затем UNAVAILABLE и db.client.connection.timeouts.
     acquireTimeout: 5s
 
+# ADR 37: коннектор Debezium в Kafka Connect публикует Outbox из WAL (CDC); процесса relay
+# нет. Hook Job release регистрирует конфигурацию коннектора (templates/cdc-connector.yaml).
+cdc:
+  enabled: false
+  # REST Kafka Connect, например http://kafka-connect.nomnom-infra.svc.cluster.local:8083.
+  connectUrl: ""
+  # Адрес базы для Kafka Connect. password — ссылка config provider Connect, не сам пароль,
+  # например ${dir:/etc/nomnom/cdc:delivery-password}.
+  database:
+    hostname: ""
+    port: 5432
+    name: ""
+    user: ""
+    password: ""
+  registrar:
+    image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+  # Контракт Outbox (ADR 37): таблица delivery_outbox, publication delivery_outbox (миграция),
+  # слот delivery_outbox; топик — поле topic, ключ — aggregate_id, value — payload как есть,
+  # Event Envelope — заголовки из полей записи.
+  connector:
+    name: delivery-outbox
+    config:
+      connector.class: io.debezium.connector.postgresql.PostgresConnector
+      plugin.name: pgoutput
+      topic.prefix: delivery-outbox
+      slot.name: delivery_outbox
+      publication.name: delivery_outbox
+      publication.autocreate.mode: disabled
+      table.include.list: public.delivery_outbox
+      snapshot.mode: no_data
+      skipped.operations: u,d,t
+      tombstones.on.delete: "false"
+      extended.headers.enabled: "false"
+      key.converter: org.apache.kafka.connect.storage.StringConverter
+      value.converter: org.apache.kafka.connect.converters.ByteArrayConverter
+      header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
+      transforms: outbox
+      transforms.outbox.type: io.debezium.transforms.outbox.EventRouter
+      transforms.outbox.table.field.event.id: event_id
+      transforms.outbox.table.field.event.key: aggregate_id
+      transforms.outbox.table.field.event.payload: payload
+      transforms.outbox.table.expand.json.payload: "false"
+      transforms.outbox.route.by.field: topic
+      transforms.outbox.route.topic.replacement: ${routedByValue}
+      transforms.outbox.table.fields.additional.placement: event_id:header:_watermill_message_uuid,event_id:header:event_id,event_type:header:event_type,occurred_at:header:occurred_at,aggregate_type:header:aggregate_type,aggregate_id:header:aggregate_id,aggregate_version:header:aggregate_version,traceparent:header:traceparent
+
 volumes: []
 volumeMounts: []
 
@@ -237,8 +283,7 @@ telemetry:
   # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT), например
   # "http://alloy.observability.svc:4317". Пусто — traces и metrics не экспортируются.
   otlpEndpoint: ""
-  # service.name (OTEL_SERVICE_NAME); пусто — имя процесса по умолчанию
-  # (delivery, delivery-relay).
+  # service.name (OTEL_SERVICE_NAME); пусто — имя процесса по умолчанию (delivery).
   serviceName: ""
   # service.instance.id (имя pod) и service.version (image.tag) chart задаёт сам; здесь —
   # атрибуты окружения, например deployment.environment.name: local. Не задавать

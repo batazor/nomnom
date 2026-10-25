@@ -28,9 +28,11 @@ def sign_payload(secret: str, timestamp: int, body: bytes) -> str:
 
 
 class WebhookVerifier:
-    """Without a secret every webhook is rejected (fail closed)."""
+    """Verifies webhook signatures with the shared secret; the secret is required."""
 
     def __init__(self, secret: str, tolerance: timedelta) -> None:
+        if not secret:
+            raise ValueError("PROVIDER__WEBHOOK_SECRET is required")
         self._secret = secret
         self._tolerance = tolerance
 
@@ -38,11 +40,9 @@ class WebhookVerifier:
         """Accept the webhook only with a valid signature inside the timestamp tolerance.
 
         Raises:
-            InvalidWebhookError: no secret configured, malformed header, stale timestamp or
+            InvalidWebhookError: malformed header, stale timestamp or
                 signature mismatch.
         """
-        if not self._secret:
-            raise InvalidWebhookError("webhook secret is not configured")
         timestamp, signatures = _parse_header(header or "")
         if abs(now.timestamp() - timestamp) > self._tolerance.total_seconds():
             raise InvalidWebhookError("webhook timestamp is outside the tolerance")

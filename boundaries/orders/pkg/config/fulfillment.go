@@ -8,20 +8,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Neighbours selects the client adapters of payments, restaurants and delivery.
-type Neighbours string
-
-const (
-	// NeighboursUnavailable fails every call with a retryable error; an explicit
-	// opt-out while a neighbouring context is not deployed.
-	NeighboursUnavailable Neighbours = "unavailable"
-	// NeighboursSimulated approves every call without effect; local checks only.
-	NeighboursSimulated Neighbours = "simulated"
-	// NeighboursGRPC calls the command APIs through the internal gateway; the
-	// default, requires INTERNAL_GATEWAY_ADDR.
-	NeighboursGRPC Neighbours = "grpc"
-)
-
 const (
 	configKeyFulfillment = "fulfillment"
 	envPrefixFulfillment = "FULFILLMENT__"
@@ -40,7 +26,6 @@ type FulfillmentConfig struct {
 	PickupTimeout           time.Duration `mapstructure:"pickup_timeout"`
 	DeliveryTimeout         time.Duration `mapstructure:"delivery_timeout"`
 	PublishStage            bool          `mapstructure:"publish_stage"`
-	Neighbours              Neighbours    `mapstructure:"neighbours"`
 }
 
 var fulfillmentDefaults = map[string]any{
@@ -53,7 +38,6 @@ var fulfillmentDefaults = map[string]any{
 	"pickup_timeout":            60 * time.Minute,
 	"delivery_timeout":          120 * time.Minute,
 	"publish_stage":             true,
-	"neighbours":                string(NeighboursGRPC),
 }
 
 // EnvFulfillment returns the environment variable of a fulfillment key, for
@@ -89,12 +73,6 @@ func (cfg FulfillmentConfig) Validate() error {
 	}
 	if cfg.MaxReplans < 0 {
 		return fmt.Errorf("fulfillment max_replans must not be negative, got %d", cfg.MaxReplans)
-	}
-	switch cfg.Neighbours {
-	case NeighboursUnavailable, NeighboursSimulated, NeighboursGRPC:
-	default:
-		return fmt.Errorf("fulfillment neighbours must be %q, %q or %q, got %q",
-			NeighboursUnavailable, NeighboursSimulated, NeighboursGRPC, cfg.Neighbours)
 	}
 	return nil
 }

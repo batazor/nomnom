@@ -69,23 +69,23 @@ drain timeout и flush telemetry с запасом, иначе kubelet отпр�
 {{- end -}}
 
 {{/*
-Service identity (ADR 27): с JWKS приложению нужны issuer, audience и allowlist,
-иначе оно не стартует или остаётся fail closed. User assertions (ADR 32) требуют
-service identity, issuer BFF и делегатов.
+Service identity (ADR 27): процесс с gRPC API (service.enabled) проверяет token, поэтому JWKS, issuer, audience
+и allowlist обязательны — иначе процесс не стартует. User assertions (ADR 32)
+задаются целиком: JWKS BFF, issuer BFF и делегаты.
 */}}
 {{- define "restaurants.validateIdentity" -}}
+{{- if .Values.service.enabled -}}
+{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" -}}
+{{- if not (get $.Values.identity $key) -}}
+{{- fail (printf "identity.%s is required" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- with .Values.identity -}}
-{{- if .jwksConfigMap -}}
-{{- range $key := list "issuer" "audience" "serviceAccounts" -}}
+{{- if or .userJwksConfigMap .userIssuer .userDelegates -}}
+{{- range $key := list "userJwksConfigMap" "userIssuer" "userDelegates" -}}
 {{- if not (get $.Values.identity $key) -}}
-{{- fail (printf "identity.%s is required when identity.jwksConfigMap is set" $key) -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-{{- if .userJwksConfigMap -}}
-{{- range $key := list "jwksConfigMap" "userIssuer" "userDelegates" -}}
-{{- if not (get $.Values.identity $key) -}}
-{{- fail (printf "identity.%s is required when identity.userJwksConfigMap is set" $key) -}}
+{{- fail (printf "identity.%s is required with the other user assertion settings" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -188,7 +188,7 @@ telemetry.resourceAttributes. Явная env имеет приоритет на�
 OTEL_RESOURCE_ATTRIBUTES из env (ConfigMap) была бы перекрыта.
 */}}
 {{- define "restaurants.otelResourceEnv" -}}
-{{- $version := .Values.image.tag | default .Values.image.digest | default "unknown" -}}
+{{- $version := required "image.tag or image.digest is required" (.Values.image.tag | default .Values.image.digest) -}}
 {{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" $version) -}}
 {{- range $key, $value := .Values.telemetry.resourceAttributes }}
 {{- $attrs = append $attrs (printf "%s=%s" $key (toString $value)) -}}

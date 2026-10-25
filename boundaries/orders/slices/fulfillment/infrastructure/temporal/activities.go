@@ -3,7 +3,6 @@ package temporal
 import (
 	"context"
 
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
 	"nomnom/orders/pkg/application"
@@ -111,14 +110,12 @@ func (a *Activities) CancelDelivery(ctx context.Context, in StepInput) error {
 
 // CompleteOrder runs the completeorder use case; a repeat after commit is a
 // no-op. The completion moment is the workflow time in the input, identical on
-// every attempt; an Activity scheduled before the input carried it falls back
-// to the time it was scheduled, which retries keep as well.
+// every attempt, and is required.
 func (a *Activities) CompleteOrder(ctx context.Context, in StepInput) error {
-	completedAt := in.DecidedAt
-	if completedAt.IsZero() && activity.IsActivity(ctx) {
-		completedAt = activity.GetInfo(ctx).ScheduledTime
+	if in.DecidedAt.IsZero() {
+		return classify(application.InvalidInput("step", "decided_at is required"))
 	}
-	_, err := a.Complete.Handle(ctx, completeorder.Input{OrderID: order.ID(in.OrderID), CompletedAt: completedAt})
+	_, err := a.Complete.Handle(ctx, completeorder.Input{OrderID: order.ID(in.OrderID), CompletedAt: in.DecidedAt})
 	return classify(err)
 }
 

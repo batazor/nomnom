@@ -12,7 +12,9 @@ from typing import Any, override
 
 import psycopg
 import pytest
+from opentelemetry import trace
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
+from psycopg import sql
 
 from infrastructure.postgres import (
     PAYMENT_EVENTS_TOPIC,
@@ -29,6 +31,7 @@ from infrastructure.postgres import (
     migrate,
     outbox_event_id,
 )
+from infrastructure.postgres.migrate import migrations
 from pkg.application import AggregateRef, ConcurrencyConflictError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -98,7 +101,7 @@ class PostgresIntegrationTest(unittest.TestCase):
     @override
     def setUp(self) -> None:
         with self.database.connection() as conn:
-            conn.execute("TRUNCATE payments, payment_operations, outbox, inbox")
+            conn.execute("TRUNCATE payments, payment_operations, payments_outbox, inbox")
         self.uow = PostgresUnitOfWork(self.database)
         self.payments = PostgresPaymentRepository(self.database)
         self.operations = PostgresPaymentOperationRepository(self.database)
@@ -130,7 +133,7 @@ class PostgresIntegrationTest(unittest.TestCase):
         with self.database.connection() as conn:
             return conn.execute(
                 "SELECT event_id, aggregate_type, aggregate_id, aggregate_version, event_type, "
-                "topic, payload, attempts, published_at FROM outbox ORDER BY seq"
+                "topic, payload, traceparent FROM payments_outbox ORDER BY created_at, event_id"
             ).fetchall()
 
     def test_migrations_are_idempotent(self) -> None:
@@ -249,8 +252,7 @@ class PostgresIntegrationTest(unittest.TestCase):
                     AUTHORIZED_TYPE,
                     PAYMENT_EVENTS_TOPIC,
                     b"authorized:payment-1",
-                    0,
-                    None,
+                    "",
                 )
             ],
         )
@@ -278,6 +280,98 @@ class PostgresIntegrationTest(unittest.TestCase):
         with self.assertRaises(psycopg.errors.UniqueViolation):
             self.uow.run(lambda: self.outbox.add(ref, events))
         self.assertEqual(len(self._outbox_rows()), 1)
+
+    def test_outbox_table_matches_the_debezium_contract(self) -> None:
+        with self.database.connection() as conn:
+            columns = dict(
+                conn.execute(
+                    "SELECT column_name, column_default FROM information_schema.columns "
+                    "WHERE table_name = 'payments_outbox'"
+                ).fetchall()
+            )
+            published = conn.execute(
+                "SELECT p.pubinsert, p.pubupdate, p.pubdelete, p.pubtruncate, t.tablename "
+                "FROM pg_publication p JOIN pg_publication_tables t USING (pubname) "
+                "WHERE pubname = 'payments_outbox'"
+            ).fetchall()
+        # ADR 37: только поля контракта и created_at для retention, без полей relay.
+        self.assertEqual(
+            set(columns),
+            {
+                "event_id",
+                "event_type",
+                "aggregate_type",
+                "aggregate_id",
+                "aggregate_version",
+                "occurred_at",
+                "topic",
+                "payload",
+                "traceparent",
+                "created_at",
+            },
+        )
+        self.assertEqual(columns["traceparent"], "''::text")
+        self.assertEqual(published, [(True, False, False, False, "payments_outbox")])
+
+    def test_outbox_row_fills_every_contract_column(self) -> None:
+        payment = self._payment()
+        payment.authorize("auth-ref")
+        events = payment.pull_events()
+        traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+        span = trace.NonRecordingSpan(
+            trace.SpanContext(
+                int("0af7651916cd43dd8448eb211c80319c", 16),
+                int("b7ad6b7169203331", 16),
+                is_remote=False,
+                trace_flags=trace.TraceFlags(trace.TraceFlags.SAMPLED),
+            )
+        )
+        with trace.use_span(span):
+            self.uow.run(lambda: self.outbox.add(AggregateRef("Payment", payment.id, 2), events))
+        with self.database.connection() as conn:
+            row = conn.execute(
+                "SELECT occurred_at IS NOT NULL, occurred_at = created_at, traceparent "
+                "FROM payments_outbox"
+            ).fetchone()
+        self.assertEqual(row, (True, True, traceparent))
+
+    def test_outbox_write_deletes_rows_older_than_an_hour(self) -> None:
+        payment = self._payment()
+        with self.database.connection() as conn:
+            conn.execute(
+                "INSERT INTO payments_outbox (event_id, event_type, aggregate_type, "
+                "aggregate_id, aggregate_version, occurred_at, topic, payload, created_at) "
+                "VALUES (%s, 't', 'Payment', 'old', 1, now(), 'topic', '', "
+                "now() - interval '61 minutes'), "
+                "(%s, 't', 'Payment', 'recent', 1, now(), 'topic', '', "
+                "now() - interval '59 minutes')",
+                (uuid.uuid4(), uuid.uuid4()),
+            )
+        payment.authorize("auth-ref")
+        events = payment.pull_events()
+        self.uow.run(lambda: self.outbox.add(AggregateRef("Payment", payment.id, 2), events))
+        self.assertEqual([row[2] for row in self._outbox_rows()], ["recent", "payment-1"])
+
+    def test_retention_delete_rolls_back_with_the_write(self) -> None:
+        payment = self._payment()
+        with self.database.connection() as conn:
+            conn.execute(
+                "INSERT INTO payments_outbox (event_id, event_type, aggregate_type, "
+                "aggregate_id, aggregate_version, occurred_at, topic, payload, created_at) "
+                "VALUES (%s, 't', 'Payment', 'old', 1, now(), 'topic', '', "
+                "now() - interval '2 hours')",
+                (uuid.uuid4(),),
+            )
+        payment.authorize("auth-ref")
+        events = payment.pull_events()
+
+        def work() -> None:
+            self.outbox.add(AggregateRef("Payment", payment.id, 2), events)
+            raise RuntimeError("boom")
+
+        with self.assertRaises(RuntimeError):
+            self.uow.run(work)
+        self.assertEqual([row[2] for row in self._outbox_rows()], ["old"])
 
     def test_inbox_deduplicates_provider_messages(self) -> None:
         self.assertTrue(self.inbox.register("message-1"))
@@ -312,6 +406,40 @@ class PostgresIntegrationTest(unittest.TestCase):
         self.assertEqual((stored.state, stored.version), (PaymentState.AUTHORIZED, 2))
         rows = self._outbox_rows()
         self.assertEqual([row[4] for row in rows], [AUTHORIZED_TYPE])
+
+
+@pytest.mark.usefixtures("postgres")
+class OutboxMigrationTest(unittest.TestCase):
+    """00002 moves the relay ``outbox`` to ``payments_outbox`` of ADR 37 with its rows."""
+
+    dsn: str
+
+    def test_relay_rows_keep_their_traceparent(self) -> None:
+        name = f"migration_{uuid.uuid4().hex}"
+        with psycopg.connect(self.dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        self.addCleanup(self._drop, name)
+        dsn = self.dsn.rsplit("/", 1)[0] + f"/{name}"
+        (_, _, first), (_, _, second) = migrations()[:2]
+        with psycopg.connect(dsn) as conn:
+            conn.execute(first.encode())
+            conn.execute(
+                "INSERT INTO outbox (event_id, event_type, aggregate_type, aggregate_id, "
+                "aggregate_version, topic, payload, metadata, published_at) VALUES "
+                "(%s, 't', 'Payment', 'traced', 1, 'topic', '', "
+                '\'{"traceparent": "00-trace"}\', now()), '
+                "(%s, 't', 'Payment', 'untraced', 1, 'topic', '', '{}', NULL)",
+                (uuid.uuid4(), uuid.uuid4()),
+            )
+            conn.execute(second.encode())
+            rows = conn.execute(
+                "SELECT aggregate_id, traceparent FROM payments_outbox ORDER BY aggregate_id"
+            ).fetchall()
+        self.assertEqual(rows, [("traced", "00-trace"), ("untraced", "")])
+
+    def _drop(self, name: str) -> None:
+        with psycopg.connect(self.dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
 if __name__ == "__main__":

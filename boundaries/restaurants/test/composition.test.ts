@@ -6,12 +6,10 @@ import { MongoClient } from "mongodb";
 
 import { createConsumerContainer } from "../di/consumer.ts";
 import { createMigrateContainer } from "../di/migrate.ts";
-import { createRelayContainer } from "../di/relay.ts";
 import {
   createRestaurantsContainer,
   type RestaurantsResources,
 } from "../di/restaurants.ts";
-import { RejectingSubjectResolver } from "../infrastructure/grpc/subject.ts";
 import { type AppConfig, loadConfig } from "../pkg/config/config.ts";
 import {
   connectMongoDb,
@@ -19,6 +17,7 @@ import {
 } from "../pkg/infrastructure/mongodb/client.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { rejectingSubjects } from "./support/grpc.ts";
 import { mongoUri } from "./support/mongodb.ts";
 
 const environment = {
@@ -44,7 +43,7 @@ const resourcesOf = (
     reconciler: config.reconciler,
     kitchen: config.kitchen,
     mongo,
-    subjects: new RejectingSubjectResolver(),
+    subjects: rejectingSubjects,
     logger: silentLogger,
   };
 };
@@ -155,26 +154,17 @@ test("the kitchen tunables reach the composed handlers from configuration", asyn
   }
 });
 
-test("the relay and migrate containers resolve every registration", async () => {
+test("the migrate container resolves every registration", async () => {
   const mongo = offlineMongo();
-  const relay = createRelayContainer({
-    outbox: loadConfig({}).outbox,
-    db: mongo.db,
-    publisher: { publish: async () => {} },
-    logger: silentLogger,
-  });
   const migrate = createMigrateContainer({
     db: mongo.db,
     logger: silentLogger,
   });
   try {
-    for (const container of [relay, migrate]) {
-      for (const name of Object.keys(container.registrations)) {
-        assert.notEqual(container.resolve(name), undefined, name);
-      }
+    for (const name of Object.keys(migrate.registrations)) {
+      assert.notEqual(migrate.resolve(name), undefined, name);
     }
   } finally {
-    await relay.dispose();
     await migrate.dispose();
     await mongo.close();
   }

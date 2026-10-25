@@ -30,20 +30,20 @@ pub(super) fn config_error(message: impl Into<String>) -> IdentityConfigError {
 }
 
 impl ServiceTokenVerifier {
-    /// `Ok(None)`, если проверка не настроена (пусты issuer, audience или
-    /// путь к JWKS). Нечитаемый JWKS и невалидный allowlist — ошибка.
-    pub(super) fn from_config(
-        config: &IdentityConfig,
-    ) -> Result<Option<Self>, IdentityConfigError> {
+    /// Issuer, audience и путь к JWKS обязательны; пустое значение,
+    /// нечитаемый JWKS и невалидный allowlist — ошибка startup.
+    pub(super) fn from_config(config: &IdentityConfig) -> Result<Self, IdentityConfigError> {
         let issuer = config.issuer.trim();
         let audience = config.audience.trim();
         let jwks_file = config.jwks_file.trim();
         if issuer.is_empty() || audience.is_empty() || jwks_file.is_empty() {
-            return Ok(None);
+            return Err(config_error(
+                "IDENTITY__ISSUER, IDENTITY__AUDIENCE and IDENTITY__JWKS_FILE are required",
+            ));
         }
         let jwks = std::fs::read_to_string(jwks_file)
             .map_err(|error| config_error(format!("read JWKS {jwks_file}: {error}")))?;
-        Self::new(issuer, audience, &jwks, &config.service_accounts).map(Some)
+        Self::new(issuer, audience, &jwks, &config.service_accounts)
     }
 }
 
@@ -57,24 +57,15 @@ impl UserAssertionVerifier {
         let audience = config.audience.trim();
         if issuer.is_empty() || jwks_file.is_empty() || delegates.is_empty() {
             if !(issuer.is_empty() && jwks_file.is_empty() && delegates.is_empty()) {
-                tracing::warn!(
-                    operation = "identity.config",
+                return Err(config_error(
                     "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE and \
-                     IDENTITY__USER_DELEGATES must all be set; every call with a user assertion \
-                     is rejected as unauthenticated"
-                );
+                     IDENTITY__USER_DELEGATES must be set together",
+                ));
             }
             return Ok(None);
         }
         let jwks = std::fs::read_to_string(jwks_file)
             .map_err(|error| config_error(format!("read BFF JWKS {jwks_file}: {error}")))?;
-        if audience.is_empty() {
-            // Service identity выключена, и вызовы всё равно отклоняются;
-            // JWKS и делегаты проверяются, чтобы ошибка не ждала audience.
-            parse_user_jwks(&jwks)?;
-            parse_delegates(delegates)?;
-            return Ok(None);
-        }
         Self::new(issuer, audience, &jwks, delegates).map(Some)
     }
 }

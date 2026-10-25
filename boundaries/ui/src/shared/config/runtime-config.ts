@@ -9,7 +9,7 @@ export type RuntimeConfig = Readonly<{
   locale: SupportedLocale;
   enableMocks: boolean;
   // Faro collector (Alloy faro.receiver); without it browser telemetry is off.
-  telemetryUrl?: string;
+  telemetry?: Readonly<{ url: string; appVersion: string }>;
   environment: string;
   // Browser login (ADR 35); required unless the app runs on mocks.
   oidc?: OidcConfig;
@@ -21,6 +21,7 @@ type RuntimeEnv = Readonly<{
   VITE_ENABLE_MOCKS?: string;
   VITE_FARO_URL?: string;
   VITE_DEPLOYMENT_ENVIRONMENT?: string;
+  VITE_APP_VERSION?: string;
   VITE_OIDC_ISSUER?: string;
   VITE_OIDC_CLIENT_ID?: string;
   VITE_OIDC_AUDIENCE?: string;
@@ -45,12 +46,27 @@ function parsePublicUrl(value: string | undefined): string {
   return parseHttpUrl("VITE_PUBLIC_GRAPHQL_URL", value);
 }
 
+function required(name: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
 function parseLocale(value: string | undefined): SupportedLocale {
-  const locale = value ?? "ru";
+  const locale = required("VITE_LOCALE", value);
   if (!supportedLocales.includes(locale as SupportedLocale)) {
     throw new Error(`Unsupported VITE_LOCALE: ${locale}`);
   }
   return locale as SupportedLocale;
+}
+
+function parseTelemetry(env: RuntimeEnv): RuntimeConfig["telemetry"] {
+  if (!env.VITE_FARO_URL) return undefined;
+  return Object.freeze({
+    url: parseHttpUrl("VITE_FARO_URL", env.VITE_FARO_URL),
+    appVersion: required("VITE_APP_VERSION", env.VITE_APP_VERSION),
+  });
 }
 
 export function parseRuntimeConfig(env: RuntimeEnv): RuntimeConfig {
@@ -58,10 +74,11 @@ export function parseRuntimeConfig(env: RuntimeEnv): RuntimeConfig {
     publicGraphqlUrl: parsePublicUrl(env.VITE_PUBLIC_GRAPHQL_URL),
     locale: parseLocale(env.VITE_LOCALE),
     enableMocks: env.VITE_ENABLE_MOCKS === "true",
-    telemetryUrl: env.VITE_FARO_URL
-      ? parseHttpUrl("VITE_FARO_URL", env.VITE_FARO_URL)
-      : undefined,
-    environment: env.VITE_DEPLOYMENT_ENVIRONMENT ?? "development",
+    telemetry: parseTelemetry(env),
+    environment: required(
+      "VITE_DEPLOYMENT_ENVIRONMENT",
+      env.VITE_DEPLOYMENT_ENVIRONMENT,
+    ),
     oidc: parseOidc(env),
   });
 }
@@ -76,8 +93,8 @@ function parseOidc(env: RuntimeEnv): OidcConfig | undefined {
       /\/$/,
       "",
     ),
-    clientId: env.VITE_OIDC_CLIENT_ID || "nomnom-ui",
-    audience: env.VITE_OIDC_AUDIENCE || "nomnom-bff",
+    clientId: required("VITE_OIDC_CLIENT_ID", env.VITE_OIDC_CLIENT_ID),
+    audience: required("VITE_OIDC_AUDIENCE", env.VITE_OIDC_AUDIENCE),
     demoEmailDomain: env.VITE_OIDC_DEMO_EMAIL_DOMAIN || undefined,
     demoPassword: env.VITE_OIDC_DEMO_PASSWORD || undefined,
     redirectUri: new URL(

@@ -42,7 +42,10 @@ describe("initTelemetry", () => {
       initTelemetry({
         ...base,
         enableMocks: true,
-        telemetryUrl: "https://telemetry.test/collect",
+        telemetry: {
+          url: "https://telemetry.test/collect",
+          appVersion: "1.0.0",
+        },
       }),
     ).toBeUndefined();
   });

@@ -27,7 +27,7 @@ const (
 	EnvPostgresHealthCheckPeriod     = "POSTGRES__HEALTH_CHECK_PERIOD"
 
 	// Defaults fit one API process behind a session-mode pooler; Helm sizes
-	// MaxConns per process (worker, consumer, forwarder, reconciler).
+	// MaxConns per process (worker, consumer, reconciler).
 	DefaultPostgresMaxConns              = 10
 	DefaultPostgresMinConns              = 0
 	DefaultPostgresMaxConnLifetime       = 30 * time.Minute

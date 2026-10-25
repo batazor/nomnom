@@ -41,7 +41,6 @@ __all__ = [
     "USER_ASSERTION_MAX_TTL_SECONDS",
     "USER_ASSERTION_METADATA",
     "IdentityConfigError",
-    "RejectingSubjectResolver",
     "ServiceTokenSubjectResolver",
     "ServiceTokenVerifier",
     "SubjectResolver",
@@ -63,14 +62,6 @@ class SubjectResolver(Protocol):
     def resolve(self, context: grpc.ServicerContext) -> Subject:
         """Return the caller, or abort the call with ``UNAUTHENTICATED``."""
         ...
-
-
-class RejectingSubjectResolver:
-    """Deny by default until verified identity is configured."""
-
-    def resolve(self, context: grpc.ServicerContext) -> NoReturn:
-        """Abort every call with ``UNAUTHENTICATED``."""
-        context.abort(grpc.StatusCode.UNAUTHENTICATED, "verified caller identity is required")
 
 
 class ServiceTokenSubjectResolver:
@@ -171,13 +162,11 @@ def create_subject_resolver(
     settings: IdentitySettings,
     clock: Callable[[], float] = time.time,
 ) -> SubjectResolver:
-    """Build the production resolver; without issuer, audience or JWKS fail closed."""
+    """Build the production resolver; issuer, audience and JWKS are required."""
     if not settings.enabled:
-        logger.warning(
-            "service identity is not configured (IDENTITY__ISSUER, IDENTITY__AUDIENCE, "
-            "IDENTITY__JWKS_FILE): all calls are rejected",
+        raise IdentityConfigError(
+            "IDENTITY__ISSUER, IDENTITY__AUDIENCE and IDENTITY__JWKS_FILE are required"
         )
-        return RejectingSubjectResolver()
     return ServiceTokenSubjectResolver(
         ServiceTokenVerifier(
             issuer=settings.issuer,
@@ -195,18 +184,20 @@ def create_user_assertion_verifier(
     settings: IdentitySettings,
     clock: Callable[[], float] = time.time,
 ) -> UserAssertionVerifier | None:
-    """Build the BFF assertion verifier; without user issuer, JWKS or delegates, none.
+    """Build the BFF assertion verifier; ``None`` when no delegate passes users.
 
-    A configured but unusable user JWKS is a startup error even when the rest is missing.
+    User issuer, JWKS and delegates are set together; a partial setting or an unusable
+    user JWKS is a startup error.
     """
-    keys = load_user_jwks(settings.user_jwks_file) if settings.user_jwks_file else None
-    if keys is None or not settings.user_assertions_enabled:
-        logger.info(
-            "user assertions are not configured (IDENTITY__USER_ISSUER, "
-            "IDENTITY__USER_JWKS_FILE, IDENTITY__USER_DELEGATES): calls carrying "
-            "x-nomnom-user-assertion are rejected",
-        )
+    configured = (settings.user_issuer, settings.user_jwks_file, settings.user_delegates)
+    if not any(configured):
         return None
+    if not all(configured):
+        raise IdentityConfigError(
+            "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE and IDENTITY__USER_DELEGATES "
+            "must be set together"
+        )
+    keys = load_user_jwks(settings.user_jwks_file)
     return UserAssertionVerifier(
         issuer=settings.user_issuer,
         audience=settings.audience,

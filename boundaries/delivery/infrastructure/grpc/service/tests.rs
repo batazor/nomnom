@@ -424,8 +424,19 @@ async fn service_token_reaches_the_handler_as_service_subject() {
     running.await.expect("join").expect("graceful shutdown");
 }
 
+/// Rejects every call as an unverified caller.
+struct RejectingSubjectResolver;
+
+impl SubjectResolver for RejectingSubjectResolver {
+    fn resolve(&self, _metadata: &MetadataMap) -> Result<Subject, Status> {
+        Err(Status::unauthenticated(
+            "verified caller identity is required",
+        ))
+    }
+}
+
 #[tokio::test]
-async fn rejects_unverified_callers_by_default() {
+async fn rejects_unverified_callers() {
     let worker = GrpcWorker::bind(
         ([127, 0, 0, 1], 0).into(),
         Arc::new(crate::di::build_with_locator(

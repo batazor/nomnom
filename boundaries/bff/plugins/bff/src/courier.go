@@ -12,17 +12,11 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 )
 
-// courierSlice names the slice in "not available" errors.
-const courierSlice = "courier"
-
 // requireCourier authenticates the user and returns the courier id: delivery
 // registers a courier under the user id of that user.
 func (s *BffService) requireCourier(ctx context.Context) (context.Context, string, error) {
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
-		return nil, "", err
-	}
-	if err := requireSlice(courierSlice, s.courier != nil); err != nil {
 		return nil, "", err
 	}
 	user, _ := identity.UserFrom(ctx)

@@ -29,7 +29,7 @@ use tonic::metadata::MetadataMap;
 use crate::pkg::application::Subject;
 use crate::pkg::config::IdentityConfig;
 
-use super::service::{RejectingSubjectResolver, SubjectResolver};
+use super::service::SubjectResolver;
 use service_token::ServiceTokenVerifier;
 
 pub use config::IdentityConfigError;
@@ -44,22 +44,12 @@ pub const CLOCK_LEEWAY_SECONDS: u64 = 30;
 const USER_ASSERTION: &str = "x-nomnom-user-assertion";
 const UNAUTHENTICATED: &str = "verified caller identity is required";
 
-/// Выбирает resolver процесса: без issuer, audience или JWKS — fail closed
-/// через [`RejectingSubjectResolver`], иначе проверка service token.
+/// Resolver процесса: проверка service token; без issuer, audience или JWKS
+/// процесс не стартует.
 pub fn subject_resolver(
     config: &IdentityConfig,
 ) -> Result<Arc<dyn SubjectResolver>, IdentityConfigError> {
-    match ServiceTokenSubjectResolver::from_config(config)? {
-        Some(resolver) => Ok(Arc::new(resolver)),
-        None => {
-            tracing::warn!(
-                operation = "identity.config",
-                "IDENTITY__ISSUER, IDENTITY__AUDIENCE or IDENTITY__JWKS_FILE is not set; \
-                 every gRPC call is rejected as unauthenticated"
-            );
-            Ok(Arc::new(RejectingSubjectResolver))
-        }
-    }
+    Ok(Arc::new(ServiceTokenSubjectResolver::from_config(config)?))
 }
 
 pub struct ServiceTokenSubjectResolver {
@@ -79,11 +69,12 @@ pub struct Caller {
 impl ServiceTokenSubjectResolver {
     /// `Ok(None)`, если проверка не настроена (пусты issuer, audience или
     /// путь к JWKS). Нечитаемый JWKS и невалидный allowlist — ошибка.
-    pub fn from_config(config: &IdentityConfig) -> Result<Option<Self>, IdentityConfigError> {
-        // Невалидная user-конфигурация — ошибка startup, даже если service
-        // identity выключена.
-        let users = UserAssertionVerifier::from_config(config)?;
-        Ok(ServiceTokenVerifier::from_config(config)?.map(|services| Self { services, users }))
+    pub fn from_config(config: &IdentityConfig) -> Result<Self, IdentityConfigError> {
+        let services = ServiceTokenVerifier::from_config(config)?;
+        Ok(Self {
+            services,
+            users: UserAssertionVerifier::from_config(config)?,
+        })
     }
 
     pub fn new(

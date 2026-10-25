@@ -6,20 +6,11 @@ from decimal import Decimal
 from slices.payment.applications.ports import (
     ProviderOperationOutcome,
     ProviderOperationRequest,
-    ProviderUnavailableError,
 )
 from slices.payment.domains.payment import OperationKind
 
 # A sandbox Authorization of this amount is declined, like a test card of a real provider.
 DECLINE_AMOUNT = Decimal("666.00")
-
-
-class UnconfiguredProvider:
-    """Provider stand-in while no provider is configured: every call is a technical failure."""
-
-    def execute(self, request: ProviderOperationRequest) -> ProviderOperationOutcome:
-        """Always raise ``ProviderUnavailableError``."""
-        raise ProviderUnavailableError("payment provider is not configured")
 
 
 class FakePaymentProvider:

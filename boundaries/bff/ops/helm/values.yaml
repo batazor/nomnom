@@ -124,8 +124,8 @@ kafka:
 # ADR 32: identity покупателя. Router и plugin проверяют access token по JWKS identity
 # provider, которого называет iss (providers: issuer и jwksUrl); plugin подписывает user
 # assertions ключом из Secret assertionKeySecret (P-256 в PEM). tokenAudiences — контексты,
-# для которых Pod получает projected ServiceAccount token (ADR 27). Пустой providers —
-# identity выключена, customer-операции недоступны. Ключ подписи не хранится в values.
+# для которых Pod получает projected ServiceAccount token (ADR 27). providers, ключ подписи
+# и его id обязательны: без них chart не рендерится. Ключ подписи не хранится в values.
 identity:
   # Пример:
   # providers:
