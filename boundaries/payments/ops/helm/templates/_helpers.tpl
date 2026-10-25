@@ -64,3 +64,39 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- fail "management.port must differ from service.targetPort" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Service identity (ADR 27): при заданном identity.jwksConfigMap приложение проверяет token,
+поэтому issuer, audience и allowlist обязательны — иначе процесс не стартует.
+*/}}
+{{- define "payments.validateIdentity" -}}
+{{- with .Values.identity -}}
+{{- if .jwksConfigMap -}}
+{{- range $key := list "issuer" "audience" "serviceAccounts" -}}
+{{- if not (get $.Values.identity $key) -}}
+{{- fail (printf "identity.%s is required when identity.jwksConfigMap is set" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+SpiceDB (ADR 18): при заданном spicedb.endpoint приложение требует preshared key из Secret
+и timeout в формате <int>(ms|s|m) — иначе процесс не стартует.
+*/}}
+{{- define "payments.validateSpiceDB" -}}
+{{- with .Values.spicedb -}}
+{{- if .endpoint -}}
+{{- if not .presharedKeySecret.name -}}
+{{- fail "spicedb.presharedKeySecret.name is required when spicedb.endpoint is set" -}}
+{{- end -}}
+{{- if not .presharedKeySecret.key -}}
+{{- fail "spicedb.presharedKeySecret.key is required when spicedb.endpoint is set" -}}
+{{- end -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .timeout)) -}}
+{{- fail (printf "spicedb.timeout %q must be a positive duration <int>(ms|s|m), e.g. 2s" (toString .timeout)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

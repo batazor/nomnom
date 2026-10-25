@@ -25,6 +25,8 @@ spec:
         {{- include "payments.labels" (dict "customLabels" .Values.podLabels "context" $) | nindent 8 }}
     spec:
       {{- include "payments.validateShutdownBudget" . }}
+      {{- include "payments.validateIdentity" . }}
+      {{- include "payments.validateSpiceDB" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -68,6 +70,29 @@ spec:
               value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
             - name: SHUTDOWN__DRAIN_TIMEOUT
               value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
+            {{- if .Values.identity.jwksConfigMap }}
+            - name: IDENTITY__ISSUER
+              value: {{ .Values.identity.issuer | quote }}
+            - name: IDENTITY__AUDIENCE
+              value: {{ .Values.identity.audience | quote }}
+            - name: IDENTITY__JWKS_FILE
+              value: "/etc/nomnom/identity/jwks.json"
+            - name: IDENTITY__SERVICE_ACCOUNTS
+              value: {{ .Values.identity.serviceAccounts | quote }}
+            {{- end }}
+            {{- if .Values.spicedb.endpoint }}
+            - name: SPICEDB__ENDPOINT
+              value: {{ .Values.spicedb.endpoint | quote }}
+            - name: SPICEDB__INSECURE
+              value: {{ .Values.spicedb.insecure | toString | quote }}
+            - name: SPICEDB__TIMEOUT
+              value: {{ .Values.spicedb.timeout | quote }}
+            - name: SPICEDB__PRESHARED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.spicedb.presharedKeySecret.name | quote }}
+                  key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
@@ -83,13 +108,31 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
+          {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap }}
           volumeMounts:
+            {{- if .Values.identity.jwksConfigMap }}
+            - name: identity-jwks
+              mountPath: /etc/nomnom/identity
+              readOnly: true
+            {{- end }}
+            {{- with .Values.volumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- with .Values.volumes }}
+      {{- if or .Values.volumes .Values.identity.jwksConfigMap }}
       volumes:
+        {{- if .Values.identity.jwksConfigMap }}
+        # Публичные ключи кластера для проверки service identity (ADR 27).
+        - name: identity-jwks
+          configMap:
+            name: {{ .Values.identity.jwksConfigMap | quote }}
+            items:
+              - key: jwks.json
+                path: jwks.json
+        {{- end }}
+        {{- with .Values.volumes }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

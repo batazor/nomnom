@@ -13,6 +13,7 @@ from typing import NoReturn, TypeVar
 
 import grpc
 
+from infrastructure.authorization import create_permission_checker
 from infrastructure.grpc.identity import (
     RejectingSubjectResolver,
     SubjectResolver,
@@ -23,7 +24,7 @@ from pkg.application import (
     ConcurrencyConflict,
     PermissionDenied,
 )
-from pkg.config import IdentitySettings
+from pkg.config import IdentitySettings, SpiceDBSettings
 from pkg.lifecycle import DrainTimeoutError, LifecycleError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -60,7 +61,7 @@ from slices.payment.applications.operation_flow import (
     PaymentOperationExecutor,
     PaymentOperationResult,
 )
-from slices.payment.applications.ports import ProviderUnavailable
+from slices.payment.applications.ports import PaymentPermissionChecker, ProviderUnavailable
 from slices.payment.applications.refund_payment import (
     RefundPaymentHandler,
     RefundPaymentInput,
@@ -291,11 +292,6 @@ class GrpcWorker:
             raise DrainTimeoutError("payments gRPC requests exceeded drain timeout")
 
 
-class DenyAllPermissions:
-    def is_allowed(self, subject, permission, resource):  # type: ignore[no-untyped-def]
-        return False
-
-
 class StorageNotConfigured(RuntimeError):
     """Persistent storage of payments is not connected yet."""
 
@@ -366,10 +362,16 @@ class UuidIdentifiers:
         return OperationId(str(uuid.uuid4()))
 
 
-def create_default_handlers() -> PaymentsHandlers:
-    """Fail-closed composition until storage, provider and SpiceDB adapters exist."""
+def create_default_handlers(
+    permissions: PaymentPermissionChecker | None = None,
+) -> PaymentsHandlers:
+    """Fail-closed composition until storage and provider adapters exist.
+
+    Without a permission checker every permission is denied (SpiceDB not configured).
+    """
     payments = UnconfiguredPaymentRepository()
-    permissions = DenyAllPermissions()
+    if permissions is None:
+        permissions = create_permission_checker(None)
     ids = UuidIdentifiers()
     executor = PaymentOperationExecutor(
         uow=PassThroughUnitOfWork(),
@@ -392,14 +394,19 @@ def create_default_handlers() -> PaymentsHandlers:
 
 
 def create_default_worker(
-    address: tuple[str, int], identity: IdentitySettings | None = None
+    address: tuple[str, int],
+    identity: IdentitySettings | None = None,
+    spicedb: SpiceDBSettings | None = None,
 ) -> GrpcWorker:
     """Composition root of the gRPC worker.
 
     Without identity settings, or while issuer, audience or JWKS are not configured,
     every call is rejected ``UNAUTHENTICATED``. An invalid JWKS raises before any port opens.
+    Without ``SPICEDB__ENDPOINT`` every permission is denied; otherwise each protected use
+    case checks SpiceDB and fails closed (``UNAVAILABLE``) on error or timeout.
     """
     subjects = (
         create_subject_resolver(identity) if identity is not None else RejectingSubjectResolver()
     )
-    return GrpcWorker(address, create_default_handlers(), subjects)
+    permissions = create_permission_checker(spicedb)
+    return GrpcWorker(address, create_default_handlers(permissions), subjects)

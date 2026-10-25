@@ -75,7 +75,60 @@ Python.
 
 `PaymentOperation.status`: `SUCCEEDED`, `DECLINED` (бизнес-отказ провайдера — обычный ответ, не gRPC-ошибка) или `PENDING` (провайдер ответит асинхронно; повторять с тем же `idempotency_key`). Provider references не раскрываются.
 
-Transport adapter уже маппит application errors в gRPC status codes; добавление структурированных `google.rpc.ErrorInfo` с domain `nomnom.payments.v1` остаётся частью расширения error contract. Политика контрактов, генерации и совместимости описана в [ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). `GetPaymentStatus` и командные RPC подключены к application handlers через grpcio adapter; `entrypoints.payments.main` запускает gRPC-сервер и завершает его через общий lifecycle. До появления проверяющего JWT/mTLS adapter'а production `SubjectResolver` отклоняет вызовы без доверенной identity.
+Transport adapter уже маппит application errors в gRPC status codes; добавление структурированных `google.rpc.ErrorInfo` с domain `nomnom.payments.v1` остаётся частью расширения error contract. Политика контрактов, генерации и совместимости описана в [ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). `GetPaymentStatus` и командные RPC подключены к application handlers через grpcio adapter; `entrypoints.payments.main` запускает gRPC-сервер и завершает его через общий lifecycle. Subject вызывающего определяется проверкой service identity (см. [Service identity](#service-identity)).
+
+## Service identity
+
+Синхронные вызовы других контекстов (Activities Order Fulfillment Workflow `orders-worker`) аутентифицируются Kubernetes projected ServiceAccount token по [ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md) (FR-431, FR-432). `ServiceTokenSubjectResolver` (`infrastructure/grpc/identity.py`) реализует порт `SubjectResolver` и проверяет каждый вызов по общему контракту [design](../../openspec/changes/add-service-identity/design.md):
+
+| Проверка | Отказ |
+| --- | --- |
+| metadata `authorization: Bearer <jwt>` (ровно одно значение) | нет metadata или другой scheme |
+| header `alg` ∈ {`RS256`, `ES256`}, `kid` есть в JWKS и совпадает по алгоритму | `none`, `HS*`, прочие алгоритмы, нет или неизвестный `kid` |
+| подпись ключом JWKS (PyJWT с явным списком алгоритмов) | неверная подпись |
+| `iss` == `IDENTITY__ISSUER` | иначе |
+| `aud` (строка или массив) содержит `IDENTITY__AUDIENCE` | token другого контекста (AC-460) |
+| `exp` > now − 30 s, `nbf` ≤ now + 30 s | просрочен / ещё не действителен |
+| `sub` = `system:serviceaccount:<ns>:<sa>` есть в `IDENTITY__SERVICE_ACCOUNTS` | неизвестный ServiceAccount |
+
+Результат — `Subject(service, <service-name>)` из allowlist; что разрешено этой identity, решает authorization в use case. Любой отказ — `UNAUTHENTICATED` с сообщением `invalid caller identity`; конкретная причина пишется в log (`WARNING`), сам token не логируется.
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `IDENTITY__ISSUER` | пусто | Issuer токенов кластера (`/.well-known/openid-configuration`). |
+| `IDENTITY__AUDIENCE` | пусто | Audience контекста; в кластере `nomnom.payments`. |
+| `IDENTITY__JWKS_FILE` | пусто | Путь к JWKS кластера (`/openid/v1/jwks`); в Helm chart — `/etc/nomnom/identity/jwks.json`. |
+| `IDENTITY__SERVICE_ACCOUNTS` | пусто | Allowlist через запятую: `namespace/serviceaccount=service-name`, например `nomnom/orders-worker=orders-worker`. |
+
+Fail closed: если `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` или `IDENTITY__JWKS_FILE` пусты, composition root (`create_default_worker`) оставляет `RejectingSubjectResolver` и пишет предупреждение при старте — все вызовы отклоняются `UNAUTHENTICATED` (AC-462). Ошибки startup (процесс завершается до открытия портов): нечитаемый или невалидный JWKS либо JWKS без ключей `RS256`/`ES256` с `kid`, пустой allowlist при заданном issuer, неверный формат или дубликаты allowlist. JWKS читается один раз при старте: после ротации signing key кластера нужен restart pod.
+
+Совместимость с реализациями других контекстов закреплена общими векторами `tests/identity/fixtures`: `tests/test_service_identity.py` принимает только `valid` и `valid_string_aud` (AC-461) и проверяет вызов по gRPC до handler (AC-459). Время проверки `exp`/`nbf` инжектируется (`clock`) для тестов допуска. Helm values `identity.*` описаны в [ops/README.md](ops/README.md#service-identity).
+
+## Authorization
+
+Порт `PaymentPermissionChecker` (`slices/payment/applications/ports.py`) реализует `SpiceDBPermissionChecker` (`infrastructure/authorization/spicedb.py`) на официальном клиенте `authzed` по [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md) и нормативной таблице [design](../../openspec/changes/add-spicedb-authorization/design.md) (FR-435). Schema и grants развёртывания — `authorization/schema.zed` и `authorization/bootstrap.yaml`.
+
+| `PaymentPermission` | SpiceDB `CheckPermission` |
+| --- | --- |
+| `create`, `authorize`, `capture`, `cancel_authorization`, `refund` | `platform:nomnom#manage_payments` |
+| `view`, `view_operations` | `platform:nomnom#view_payments` |
+
+Subject: `user` → `user:<id>`, `service` → `service:<id>`. Consistency `minimize_latency`. Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional permission — отказ (`PermissionDenied` → `PERMISSION_DENIED`). Любая ошибка gRPC, неверный ключ, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationUnavailable` → `UNAVAILABLE` (fail closed, AC-466); причина пишется в log (`WARNING`).
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `SPICEDB__ENDPOINT` | пусто | gRPC endpoint `host:port`. Обязателен: пусто — ошибка startup. |
+| `SPICEDB__PRESHARED_KEY` | пусто | Bearer preshared key; обязателен при заданном endpoint (иначе ошибка startup). В Helm — из Secret. |
+| `SPICEDB__INSECURE` | `false` | Plaintext gRPC без TLS — только kind и локальный запуск. |
+| `SPICEDB__TIMEOUT` | `2s` | Deadline одного `CheckPermission`, `<int>(ms|s|m)`, `> 0`. |
+
+Unit-тесты маппинга и fail-closed поведения с fake клиентом — `tests/test_spicedb_authorization.py`. Integration-тесты `tests/test_spicedb_integration.py` пропускаются без `SPICEDB_ENDPOINT`; против SpiceDB с `authorization/bootstrap.yaml` (plaintext, ключ `devkey`) они проверяют, что `service:orders-worker` имеет все payment permissions (AC-465), `service:bff` — ни одного, а недоступный endpoint даёт `AuthorizationUnavailable`:
+
+```bash
+SPICEDB_ENDPOINT=localhost:50051 uv run python -m unittest tests.test_spicedb_integration
+```
+
+Helm values `spicedb.*` описаны в [ops/README.md](ops/README.md#authorization-spicedb).
 
 ## Минимальная доменная модель
 
@@ -159,7 +212,7 @@ Unit of Work охватывает только локальные изменен
 
 Длительности задаются как `<int>(ms|s|m)`: `SHUTDOWN__READINESS_DELAY` (по умолчанию `5s`, `>= 0`) и `SHUTDOWN__DRAIN_TIMEOUT` (по умолчанию `20s`, `> 0`).
 
-Не реализованы: provider client, проверка подписи webhooks, постоянное хранилище, production JWT/mTLS `SubjectResolver`, Outbox publisher, Kafka, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения хранилища, провайдера и SpiceDB composition root (`create_default_worker`) собран fail closed: `RejectingSubjectResolver`, запрет всех permissions, отказ записи в хранилище. Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+Не реализованы: provider client, проверка подписи webhooks, постоянное хранилище, user identity через BFF, Outbox publisher, Kafka, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения хранилища и провайдера composition root (`create_default_worker`) собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)), отказ записи в хранилище. Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
 
 ## Запуск
 

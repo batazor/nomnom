@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Payments bounded context for nomnom"
 requires-python = ">=3.10"
 dependencies = [
+    "authzed>=1.25.0",
     "grpcio>=1.84.1",
     "protobuf>=7.36.2",
     "pydantic-settings>=2.11.0",

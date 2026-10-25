@@ -10,7 +10,9 @@ def run() -> None:
     # Невалидная конфигурация завершает процесс до открытия портов.
     settings = load_settings()
 
-    worker = create_default_worker(("0.0.0.0", settings.server.port), settings.identity)
+    worker = create_default_worker(
+        ("0.0.0.0", settings.server.port), settings.identity, settings.spicedb
+    )
     Lifecycle(
         LifecycleConfig(
             management_port=settings.management.port,

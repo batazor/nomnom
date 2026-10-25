@@ -138,6 +138,47 @@ Chart реализует [runtime contract](../../../docs/cloud-native-runtime.m
 
 Поля probes, кроме `enabled`, передаются в Kubernetes как есть. Приложение без HTTP-стека использует `grpc: { port: <номер технического порта>, service: <startup|liveness|readiness> }` вместо `httpGet`; `grpc` probe Kubernetes принимает только числовой порт.
 
+## Service identity
+
+Проверка projected ServiceAccount token ([ADR 27](../../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md), см. раздел «Service identity» в [README](../README.md#service-identity)) включается заданием `identity.jwksConfigMap`. Тогда ConfigMap монтируется read-only каталогом `/etc/nomnom/identity` (только ключ `jwks.json`), а контейнер получает `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE=/etc/nomnom/identity/jwks.json` и `IDENTITY__SERVICE_ACCOUNTS`. Без `jwksConfigMap` переменные не задаются и приложение отклоняет все вызовы (fail closed).
+
+| Параметр | По умолчанию | Назначение |
+| --- | --- | --- |
+| `identity.issuer` | `""` | Issuer токенов кластера; обязателен при `jwksConfigMap`. |
+| `identity.audience` | `nomnom.payments` | Audience контекста. |
+| `identity.serviceAccounts` | `""` | Allowlist `namespace/serviceaccount=service-name` через запятую; обязателен при `jwksConfigMap`. |
+| `identity.jwksConfigMap` | `""` | ConfigMap с ключом `jwks.json` (JWKS кластера); создаётся развёртыванием, не chart. |
+
+При `jwksConfigMap` без `issuer`, `audience` или `serviceAccounts` `helm template` завершается ошибкой.
+
+```bash
+helm template payments ops/helm \
+  --set identity.jwksConfigMap=cluster-jwks \
+  --set identity.issuer=https://kubernetes.default.svc.cluster.local \
+  --set identity.serviceAccounts=nomnom/orders-worker=orders-worker
+```
+
+## Authorization (SpiceDB)
+
+Проверка permissions в SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-authorization.md), см. раздел «Authorization» в [README](../README.md#authorization)) включается заданием `spicedb.endpoint`. Тогда контейнер получает `SPICEDB__ENDPOINT`, `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` и `SPICEDB__PRESHARED_KEY` из `secretKeyRef` на `spicedb.presharedKeySecret`. Без `endpoint` переменные не задаются, и приложение не стартует: `SPICEDB__ENDPOINT` обязателен.
+
+| Параметр | По умолчанию | Назначение |
+| --- | --- | --- |
+| `spicedb.endpoint` | `""` | gRPC endpoint SpiceDB `host:port`. |
+| `spicedb.insecure` | `false` | Plaintext gRPC без TLS; только kind и локальные окружения. |
+| `spicedb.timeout` | `2s` | Deadline одного `CheckPermission`, `<int>(ms|s|m)`. |
+| `spicedb.presharedKeySecret.name` | `""` | Secret с preshared key; обязателен при `endpoint`, создаётся развёртыванием, не chart. |
+| `spicedb.presharedKeySecret.key` | `preshared-key` | Ключ в Secret. |
+
+При `endpoint` без `presharedKeySecret.name`/`key` или с невалидным `timeout` `helm template` завершается ошибкой.
+
+```bash
+helm template payments ops/helm \
+  --set spicedb.endpoint=spicedb.nomnom-authz.svc.cluster.local:50051 \
+  --set spicedb.insecure=true \
+  --set spicedb.presharedKeySecret.name=spicedb-preshared-key
+```
+
 ## Ресурсы
 
 `resources.requests` и `resources.limits` не заданы: профиль потребления ещё не измерен.
