@@ -1,9 +1,11 @@
 """Business counters of Payment Operations: recorded only after the outer commit."""
 
 import unittest
+from collections.abc import Sequence
+from typing import cast
 
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
@@ -23,6 +25,7 @@ from slices.payment.domains.payment import (
     OrderId,
     PaymentAuthorizationCancelled,
     PaymentAuthorized,
+    PaymentDomainEvent,
     PaymentFailed,
     PaymentId,
     PaymentOperationDeclined,
@@ -45,9 +48,9 @@ class DomainMetricsTest(unittest.TestCase):
         self.uow = ObservedUnitOfWork(self.kit.uow, self.metrics)
         self.outbox = ObservedOutbox(self.kit.outbox, self.metrics)
 
-    def counts(self) -> dict[str, dict[str, int]]:
+    def counts(self) -> dict[str, dict[str, float]]:
         """Counter name → ``nomnom.outcome`` → value; only series that exist."""
-        result: dict[str, dict[str, int]] = {}
+        result: dict[str, dict[str, float]] = {}
         data = self.reader.get_metrics_data()
         if data is None:
             return result
@@ -55,8 +58,10 @@ class DomainMetricsTest(unittest.TestCase):
             for sm in rm.scope_metrics:
                 for metric in sm.metrics:
                     for point in metric.data.data_points:
-                        self.assertEqual(set(point.attributes), {"nomnom.outcome"})
-                        outcome = str(point.attributes["nomnom.outcome"])
+                        assert isinstance(point, NumberDataPoint)
+                        attributes = dict(point.attributes or {})
+                        self.assertEqual(set(attributes), {"nomnom.outcome"})
+                        outcome = str(attributes["nomnom.outcome"])
                         result.setdefault(metric.name, {})[outcome] = point.value
         return result
 
@@ -127,14 +132,14 @@ class DomainMetricsTest(unittest.TestCase):
 
     def test_unknown_values_create_no_series(self) -> None:
         payment, order = PaymentId("payment-0"), OrderId("order-1")
-        events = [
+        events: Sequence[PaymentDomainEvent] = [
             PaymentFailed(payment, order, "card_declined"),
             PaymentAuthorizationCancelled(payment, order, Money.parse("1", "EUR")),
             PaymentOperationDeclined(
                 OperationId("op-1"), payment, OperationKind.CANCEL_AUTHORIZATION, "x"
             ),
-            PaymentOperationDeclined(OperationId("op-2"), payment, "bogus", "x"),  # type: ignore[arg-type]
-            object(),  # type: ignore[list-item]
+            PaymentOperationDeclined(OperationId("op-2"), payment, cast(OperationKind, "x"), "x"),
+            cast(PaymentFailed, object()),
         ]
 
         self.uow.run(lambda: self.outbox.add(AGGREGATE, events))
@@ -182,8 +187,6 @@ class DomainMetricsTest(unittest.TestCase):
             self.counts(),
             {CAPTURES: {"captured": 1, "failed": 1}, REFUNDS: {"refunded": 1}},
         )
-
-
 
 
 if __name__ == "__main__":

@@ -28,6 +28,7 @@ from entrypoints.payments_relay import main as relay_main
 from infrastructure.authorization import SpiceDBPermissionChecker
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
 from infrastructure.messaging import OutboxRelay, PaymentEventsMapper, RelayWorker
+from infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
 from infrastructure.postgres import PostgresPaymentOutbox
 from infrastructure.provider import (
     SIGNATURE_HEADER,
@@ -75,7 +76,10 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertIsInstance(container.handlers(), PaymentsHandlers)
         self.assertIsInstance(container.permissions(), SpiceDBPermissionChecker)
         self.assertIsInstance(container.provider(), FakePaymentProvider)
-        self.assertIsInstance(container.outbox(), PostgresPaymentOutbox)
+        # Business counters wrap the Outbox and the Unit of Work (ops/semconv domain.yaml).
+        self.assertIsInstance(container.outbox(), ObservedOutbox)
+        self.assertIsInstance(container.outbox()._inner, PostgresPaymentOutbox)
+        self.assertIsInstance(container.uow(), ObservedUnitOfWork)
         self.assertIsInstance(container.outbox_mapper(), PaymentEventsMapper)
         # Process-wide singletons: one sandbox provider dedupes by idempotency key.
         self.assertIs(container.handlers(), container.handlers())
