@@ -5,6 +5,7 @@
 ```text
 slices/fulfillment/
   domains/fulfillment/        Process, Policy, Stage, Outcome, Fact, Step, Effect
+  applications/neighbours/    client-порты payments, restaurants, delivery, их DTO и построение запросов из Order
   infrastructure/temporal/    workflow, signals, activities, client, search attribute
   infrastructure/neighbours/  client-адаптеры payments, restaurants, delivery для Activities
   di/                         WorkerSet: адаптеры соседей и Activities orders-worker
@@ -29,6 +30,6 @@ slices/fulfillment/
 
 ## Зависимости
 
-`infrastructure` → `domains/fulfillment`, порт `slices/order/applications/fulfillment` (его реализует `Client`) и use cases `order/applications/{completeorder,failorcancelorder}` (их вызывают Activities). `di` объявляет роль хранилища Activities (`Store`: Unit of Work, repository, Outbox) и использует телеметрию слайса `order`; composition root связывает роль с `ProcessStore` слайса `order`. Слайс `order` не импортирует `fulfillment`.
+`infrastructure` → `domains/fulfillment`, `applications/neighbours` (порты соседей: Activities их вызывают, `infrastructure/neighbours` и `grpcclient` реализуют, не завися от `temporal`), порт `slices/order/applications/fulfillment` (его реализует `Client`) и use cases `order/applications/{completeorder,failorcancelorder}` (их вызывают Activities). `di` объявляет роль хранилища Activities (`Store`: Unit of Work, repository, Outbox) и использует телеметрию слайса `order`; composition root связывает роль с `ProcessStore` слайса `order`. Слайс `order` не импортирует `fulfillment`.
 
 Temporal-адаптер и его внешние имена описаны в [`infrastructure/temporal`](infrastructure/temporal/README.md).

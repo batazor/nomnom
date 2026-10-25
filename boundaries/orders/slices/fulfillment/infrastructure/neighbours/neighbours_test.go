@@ -3,6 +3,7 @@ package neighbours_test
 import (
 	"context"
 	"errors"
+	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -53,18 +54,18 @@ func TestSimulatedApprovesEveryCall(t *testing.T) {
 	ctx := context.Background()
 	s := neighbours.Simulated{}
 
-	authorized, err := s.Authorize(ctx, temporal.PaymentRequest{})
+	authorized, err := s.Authorize(ctx, ports.PaymentRequest{})
 	require.NoError(t, err)
-	captured, err := s.Capture(ctx, temporal.PaymentRequest{})
+	captured, err := s.Capture(ctx, ports.PaymentRequest{})
 	require.NoError(t, err)
 
 	assert.True(t, authorized.Approved)
 	assert.True(t, captured.Approved)
-	require.NoError(t, s.CancelAuthorization(ctx, temporal.PaymentRequest{}))
-	require.NoError(t, s.Refund(ctx, temporal.PaymentRequest{}))
-	require.NoError(t, s.RequestOrder(ctx, temporal.RestaurantOrderRequest{}))
-	require.NoError(t, s.CancelOrder(ctx, temporal.RestaurantOrderRequest{}))
-	require.NoError(t, s.Create(ctx, temporal.DeliveryRequest{}))
-	require.NoError(t, s.Replan(ctx, temporal.DeliveryRequest{}))
-	require.NoError(t, s.Cancel(ctx, temporal.DeliveryRequest{}))
+	require.NoError(t, s.CancelAuthorization(ctx, ports.PaymentRequest{}))
+	require.NoError(t, s.Refund(ctx, ports.PaymentRequest{}))
+	require.NoError(t, s.RequestOrder(ctx, ports.RestaurantOrderRequest{}))
+	require.NoError(t, s.CancelOrder(ctx, ports.RestaurantOrderRequest{}))
+	require.NoError(t, s.Create(ctx, ports.DeliveryRequest{}))
+	require.NoError(t, s.Replan(ctx, ports.DeliveryRequest{}))
+	require.NoError(t, s.Cancel(ctx, ports.DeliveryRequest{}))
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"nomnom/orders/pkg/application"
 	gatewayclient "nomnom/orders/pkg/gateway"
+	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 
 	"github.com/google/wire"
 
@@ -36,9 +37,9 @@ type Store interface {
 // Neighbours — адаптеры payments, restaurants и delivery для Activities
 // fulfillment.
 type Neighbours struct {
-	Payments    fulfillmenttemporal.Payments
-	Restaurants fulfillmenttemporal.Restaurants
-	Delivery    fulfillmenttemporal.Delivery
+	Payments    ports.Payments
+	Restaurants ports.Restaurants
+	Delivery    ports.Delivery
 }
 
 // NewNeighbours выбирает адаптеры соседних контекстов по fulfillment.neighbours;

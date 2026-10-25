@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"nomnom/orders/slices/fulfillment/applications/neighbours"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -18,14 +19,13 @@ import (
 	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
 	paymentsv1 "nomnom/orders/pkg/gateway/gen/nomnom/payments/v1"
 	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
-	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 )
 
 // ErrOperationPending is retryable: the Activity repeats the same idempotency key
 // until the provider answers.
 var ErrOperationPending = errors.New("payment operation is pending")
 
-// Payments implements temporal.Payments. Every operation first resolves the
+// Payments implements neighbours.Payments. Every operation first resolves the
 // Payment of the Order by the idempotent CreatePayment.
 type Payments struct {
 	client paymentsv1.PaymentsServiceClient
@@ -35,35 +35,35 @@ func NewPayments(conn grpc.ClientConnInterface) *Payments {
 	return &Payments{client: paymentsv1.NewPaymentsServiceClient(conn)}
 }
 
-var _ temporal.Payments = (*Payments)(nil)
+var _ neighbours.Payments = (*Payments)(nil)
 
-func (p *Payments) Authorize(ctx context.Context, r temporal.PaymentRequest) (temporal.PaymentDecision, error) {
+func (p *Payments) Authorize(ctx context.Context, r neighbours.PaymentRequest) (neighbours.PaymentDecision, error) {
 	id, err := p.payment(ctx, r)
 	if err != nil {
-		return temporal.PaymentDecision{}, err
+		return neighbours.PaymentDecision{}, err
 	}
 	resp, err := p.client.AuthorizePayment(ctx, &paymentsv1.AuthorizePaymentRequest{PaymentId: id, IdempotencyKey: r.IdempotencyKey})
 	if err != nil {
-		return temporal.PaymentDecision{}, mapError("payments.AuthorizePayment", err)
+		return neighbours.PaymentDecision{}, mapError("payments.AuthorizePayment", err)
 	}
 	return decision("payments.AuthorizePayment", resp.GetOperation())
 }
 
-func (p *Payments) Capture(ctx context.Context, r temporal.PaymentRequest) (temporal.PaymentDecision, error) {
+func (p *Payments) Capture(ctx context.Context, r neighbours.PaymentRequest) (neighbours.PaymentDecision, error) {
 	id, err := p.payment(ctx, r)
 	if err != nil {
-		return temporal.PaymentDecision{}, err
+		return neighbours.PaymentDecision{}, err
 	}
 	resp, err := p.client.CapturePayment(ctx, &paymentsv1.CapturePaymentRequest{PaymentId: id, IdempotencyKey: r.IdempotencyKey})
 	if err != nil {
-		return temporal.PaymentDecision{}, mapError("payments.CapturePayment", err)
+		return neighbours.PaymentDecision{}, mapError("payments.CapturePayment", err)
 	}
 	return decision("payments.CapturePayment", resp.GetOperation())
 }
 
 // CancelAuthorization and Refund are compensations: a decline is not a branch
 // of the Saga, so it stays a retryable error visible to operators.
-func (p *Payments) CancelAuthorization(ctx context.Context, r temporal.PaymentRequest) error {
+func (p *Payments) CancelAuthorization(ctx context.Context, r neighbours.PaymentRequest) error {
 	id, err := p.payment(ctx, r)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func (p *Payments) CancelAuthorization(ctx context.Context, r temporal.PaymentRe
 	return compensated("payments.CancelAuthorization", resp.GetOperation())
 }
 
-func (p *Payments) Refund(ctx context.Context, r temporal.PaymentRequest) error {
+func (p *Payments) Refund(ctx context.Context, r neighbours.PaymentRequest) error {
 	id, err := p.payment(ctx, r)
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func (p *Payments) Refund(ctx context.Context, r temporal.PaymentRequest) error 
 	return compensated("payments.RefundPayment", resp.GetOperation())
 }
 
-func (p *Payments) payment(ctx context.Context, r temporal.PaymentRequest) (string, error) {
+func (p *Payments) payment(ctx context.Context, r neighbours.PaymentRequest) (string, error) {
 	resp, err := p.client.CreatePayment(ctx, &paymentsv1.CreatePaymentRequest{
 		OrderId: r.OrderID,
 		Amount:  &paymentsv1.Money{Amount: r.Amount, Currency: r.Currency},
@@ -98,16 +98,16 @@ func (p *Payments) payment(ctx context.Context, r temporal.PaymentRequest) (stri
 	return resp.GetPaymentId(), nil
 }
 
-func decision(call string, op *paymentsv1.PaymentOperation) (temporal.PaymentDecision, error) {
+func decision(call string, op *paymentsv1.PaymentOperation) (neighbours.PaymentDecision, error) {
 	switch op.GetStatus() {
 	case paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED:
-		return temporal.PaymentDecision{Approved: true}, nil
+		return neighbours.PaymentDecision{Approved: true}, nil
 	case paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED:
-		return temporal.PaymentDecision{Reason: op.GetDeclineReason()}, nil
+		return neighbours.PaymentDecision{Reason: op.GetDeclineReason()}, nil
 	case paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_PENDING:
-		return temporal.PaymentDecision{}, fmt.Errorf("%s: %w", call, ErrOperationPending)
+		return neighbours.PaymentDecision{}, fmt.Errorf("%s: %w", call, ErrOperationPending)
 	default:
-		return temporal.PaymentDecision{}, fmt.Errorf("%s: unexpected operation status %s", call, op.GetStatus())
+		return neighbours.PaymentDecision{}, fmt.Errorf("%s: unexpected operation status %s", call, op.GetStatus())
 	}
 }
 
@@ -122,7 +122,7 @@ func compensated(call string, op *paymentsv1.PaymentOperation) error {
 	return nil
 }
 
-// Restaurants implements temporal.Restaurants.
+// Restaurants implements neighbours.Restaurants.
 type Restaurants struct {
 	client restaurantsv1.RestaurantsServiceClient
 }
@@ -131,9 +131,9 @@ func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
 	return &Restaurants{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
 }
 
-var _ temporal.Restaurants = (*Restaurants)(nil)
+var _ neighbours.Restaurants = (*Restaurants)(nil)
 
-func (r *Restaurants) RequestOrder(ctx context.Context, request temporal.RestaurantOrderRequest) error {
+func (r *Restaurants) RequestOrder(ctx context.Context, request neighbours.RestaurantOrderRequest) error {
 	items := make([]*restaurantsv1.OrderRequestItem, 0, len(request.Items))
 	for _, item := range request.Items {
 		items = append(items, &restaurantsv1.OrderRequestItem{MenuItemId: item.MenuItemID, Quantity: int32(item.Quantity)}) //nolint:gosec // quantities are small positive values validated by the Order.
@@ -148,7 +148,7 @@ func (r *Restaurants) RequestOrder(ctx context.Context, request temporal.Restaur
 
 // CancelOrder treats a rejection by stage as done: the owner has already closed
 // the Restaurant Order, so there is nothing left to compensate.
-func (r *Restaurants) CancelOrder(ctx context.Context, request temporal.RestaurantOrderRequest) error {
+func (r *Restaurants) CancelOrder(ctx context.Context, request neighbours.RestaurantOrderRequest) error {
 	resp, err := r.client.CancelRestaurantOrder(ctx, &restaurantsv1.CancelRestaurantOrderRequest{
 		RestaurantId: request.RestaurantID,
 		OrderId:      request.OrderID,
@@ -162,7 +162,7 @@ func (r *Restaurants) CancelOrder(ctx context.Context, request temporal.Restaura
 	return nil
 }
 
-// Delivery implements temporal.Delivery; the pickup address is the address
+// Delivery implements neighbours.Delivery; the pickup address is the address
 // of the restaurant read from restaurants.
 type Delivery struct {
 	client      deliveryv1.DeliveryServiceClient
@@ -176,9 +176,9 @@ func NewDelivery(conn grpc.ClientConnInterface) *Delivery {
 	}
 }
 
-var _ temporal.Delivery = (*Delivery)(nil)
+var _ neighbours.Delivery = (*Delivery)(nil)
 
-func (d *Delivery) Create(ctx context.Context, request temporal.DeliveryRequest) error {
+func (d *Delivery) Create(ctx context.Context, request neighbours.DeliveryRequest) error {
 	restaurant, err := d.restaurants.GetRestaurant(ctx, &restaurantsv1.GetRestaurantRequest{RestaurantId: request.RestaurantID})
 	if err != nil {
 		return mapError("restaurants.GetRestaurant", err)
@@ -199,7 +199,7 @@ func (d *Delivery) Create(ctx context.Context, request temporal.DeliveryRequest)
 // Replan is best effort: a state precondition (a candidate became busy, the
 // courier was assigned meanwhile) is logged, and the next assignment deadline
 // of the workflow replans again instead of failing the Order.
-func (d *Delivery) Replan(ctx context.Context, request temporal.DeliveryRequest) error {
+func (d *Delivery) Replan(ctx context.Context, request neighbours.DeliveryRequest) error {
 	resp, err := d.client.ReplanDelivery(ctx, &deliveryv1.ReplanDeliveryRequest{OrderId: request.OrderID})
 	if status.Code(err) == codes.FailedPrecondition {
 		log.Printf("replan of delivery for %s skipped: %v", request.OrderID, err)
@@ -215,7 +215,7 @@ func (d *Delivery) Replan(ctx context.Context, request temporal.DeliveryRequest)
 }
 
 // Cancel treats a rejection by state as done, like CancelOrder.
-func (d *Delivery) Cancel(ctx context.Context, request temporal.DeliveryRequest) error {
+func (d *Delivery) Cancel(ctx context.Context, request neighbours.DeliveryRequest) error {
 	resp, err := d.client.CancelDelivery(ctx, &deliveryv1.CancelDeliveryRequest{OrderId: request.OrderID})
 	if err != nil {
 		return mapError("delivery.CancelDelivery", err)

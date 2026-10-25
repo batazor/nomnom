@@ -3,6 +3,7 @@ package temporal_test
 import (
 	"context"
 	"errors"
+	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 	"testing"
 	"time"
 
@@ -21,54 +22,54 @@ import (
 )
 
 type fakeNeighbours struct {
-	payments    []temporal.PaymentRequest
-	restaurants []temporal.RestaurantOrderRequest
-	deliveries  []temporal.DeliveryRequest
-	decision    temporal.PaymentDecision
+	payments    []ports.PaymentRequest
+	restaurants []ports.RestaurantOrderRequest
+	deliveries  []ports.DeliveryRequest
+	decision    ports.PaymentDecision
 	err         error
 }
 
-func (f *fakeNeighbours) Authorize(_ context.Context, r temporal.PaymentRequest) (temporal.PaymentDecision, error) {
+func (f *fakeNeighbours) Authorize(_ context.Context, r ports.PaymentRequest) (ports.PaymentDecision, error) {
 	f.payments = append(f.payments, r)
 	return f.decision, f.err
 }
 
-func (f *fakeNeighbours) Capture(_ context.Context, r temporal.PaymentRequest) (temporal.PaymentDecision, error) {
+func (f *fakeNeighbours) Capture(_ context.Context, r ports.PaymentRequest) (ports.PaymentDecision, error) {
 	f.payments = append(f.payments, r)
 	return f.decision, f.err
 }
 
-func (f *fakeNeighbours) CancelAuthorization(_ context.Context, r temporal.PaymentRequest) error {
+func (f *fakeNeighbours) CancelAuthorization(_ context.Context, r ports.PaymentRequest) error {
 	f.payments = append(f.payments, r)
 	return f.err
 }
 
-func (f *fakeNeighbours) Refund(_ context.Context, r temporal.PaymentRequest) error {
+func (f *fakeNeighbours) Refund(_ context.Context, r ports.PaymentRequest) error {
 	f.payments = append(f.payments, r)
 	return f.err
 }
 
-func (f *fakeNeighbours) RequestOrder(_ context.Context, r temporal.RestaurantOrderRequest) error {
+func (f *fakeNeighbours) RequestOrder(_ context.Context, r ports.RestaurantOrderRequest) error {
 	f.restaurants = append(f.restaurants, r)
 	return f.err
 }
 
-func (f *fakeNeighbours) CancelOrder(_ context.Context, r temporal.RestaurantOrderRequest) error {
+func (f *fakeNeighbours) CancelOrder(_ context.Context, r ports.RestaurantOrderRequest) error {
 	f.restaurants = append(f.restaurants, r)
 	return f.err
 }
 
-func (f *fakeNeighbours) Create(_ context.Context, r temporal.DeliveryRequest) error {
+func (f *fakeNeighbours) Create(_ context.Context, r ports.DeliveryRequest) error {
 	f.deliveries = append(f.deliveries, r)
 	return f.err
 }
 
-func (f *fakeNeighbours) Replan(_ context.Context, r temporal.DeliveryRequest) error {
+func (f *fakeNeighbours) Replan(_ context.Context, r ports.DeliveryRequest) error {
 	f.deliveries = append(f.deliveries, r)
 	return f.err
 }
 
-func (f *fakeNeighbours) Cancel(_ context.Context, r temporal.DeliveryRequest) error {
+func (f *fakeNeighbours) Cancel(_ context.Context, r ports.DeliveryRequest) error {
 	f.deliveries = append(f.deliveries, r)
 	return f.err
 }
@@ -77,7 +78,7 @@ func activities(t *testing.T, state order.State) (*temporal.Activities, *fakeNei
 	t.Helper()
 	store := memory.NewStore()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, orderID, ordertest.WithState(state))))
-	neighbours := &fakeNeighbours{decision: temporal.PaymentDecision{Approved: true}}
+	neighbours := &fakeNeighbours{decision: ports.PaymentDecision{Approved: true}}
 	return &temporal.Activities{
 		Orders:      store,
 		Payments:    neighbours,
@@ -98,13 +99,13 @@ var completeStep = temporal.StepInput{
 
 func TestPaymentActivitiesUseOrderSnapshotAndStableKey(t *testing.T) {
 	a, neighbours, _ := activities(t, order.StatePlaced)
-	neighbours.decision = temporal.PaymentDecision{Reason: "card_declined"}
+	neighbours.decision = ports.PaymentDecision{Reason: "card_declined"}
 
 	decision, err := a.AuthorizePayment(context.Background(), step)
 
 	require.NoError(t, err, "a decline is a business result, not an error")
-	assert.Equal(t, temporal.PaymentDecision{Reason: "card_declined"}, decision)
-	assert.Equal(t, []temporal.PaymentRequest{{
+	assert.Equal(t, ports.PaymentDecision{Reason: "card_declined"}, decision)
+	assert.Equal(t, []ports.PaymentRequest{{
 		OrderID:        orderID,
 		CustomerID:     "customer-1",
 		Amount:         "20",
@@ -120,13 +121,13 @@ func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
 	require.NoError(t, a.RequestRestaurantOrder(ctx, step))
 	require.NoError(t, a.CreateDelivery(ctx, step))
 
-	assert.Equal(t, []temporal.RestaurantOrderRequest{{
+	assert.Equal(t, []ports.RestaurantOrderRequest{{
 		OrderID:        orderID,
 		RestaurantID:   "restaurant-1",
-		Items:          []temporal.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
+		Items:          []ports.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
 		IdempotencyKey: step.IdempotencyKey,
 	}}, neighbours.restaurants)
-	assert.Equal(t, []temporal.DeliveryRequest{{
+	assert.Equal(t, []ports.DeliveryRequest{{
 		OrderID:         orderID,
 		RestaurantID:    "restaurant-1",
 		DeliveryAddress: "Main street 1",
