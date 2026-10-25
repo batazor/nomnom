@@ -1,0 +1,43 @@
+# Политики fixtures проверок поверх app-baseline.yaml. e2e-driver (manifests/fixtures/net-probe.yaml)
+# получает от базовых политик nomnom-bff только DNS, internal gateway и telemetry; здесь
+# добавляется единственный путь сверх них — GraphQL Service bff, как у клиента BFF.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: e2e-driver-egress-to-bff
+  namespace: nomnom-bff
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: e2e-driver
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bff
+              app.kubernetes.io/instance: bff
+      ports:
+        - protocol: TCP
+          port: 3010
+---
+# BFF принимает GraphQL только от e2e-driver: наружу он в kind не опубликован.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bff-ingress-from-e2e-driver
+  namespace: nomnom-bff
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bff
+      app.kubernetes.io/instance: bff
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: e2e-driver
+      ports:
+        - protocol: TCP
+          port: http

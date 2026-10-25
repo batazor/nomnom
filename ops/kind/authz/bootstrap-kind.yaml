@@ -1,0 +1,9 @@
+# Grants SpiceDB только тестового kind-окружения (ADR 18). Общий authorization/bootstrap.yaml
+# содержит лишь grants, которыми владеет развёртывание; grant конкретного человека туда не
+# входит. scripts/authz.sh дописывает relationships этого файла в блок relationships общего
+# bootstrap — SpiceDB загружает один файл.
+#
+# kind-operator — оператор платформы в e2e пути заказа (e2e/order-lifecycle): регистрирует
+# ресторан и курьера через fixture e2e-driver.
+relationships: |-
+  platform:nomnom#operator@user:kind-operator

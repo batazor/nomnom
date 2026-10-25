@@ -151,9 +151,7 @@ spec:
           namespace: nomnom-restaurants
           port: 8082
 ---
-# Команды restaurants, которые вызывает Order Fulfillment (orders-worker). Команды кухни
-# и администрирования (RegisterRestaurant, AssignStaff, RevokeStaff) не опубликованы: у них
-# ещё нет вызывающих, gateway отвечает UNIMPLEMENTED.
+# Команды restaurants, которые вызывает Order Fulfillment (orders-worker).
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -220,6 +218,108 @@ spec:
           namespace: nomnom-restaurants
           port: 8082
 ---
+# Команды кухни от имени сотрудника ресторана (restaurant#operate_kitchen). Клиента кухни
+# ещё нет: в kind их вызывает fixture e2e-driver (manifests/fixtures/net-probe.yaml).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: restaurants-v1-kitchen
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: AcceptRestaurantOrder
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: RejectRestaurantOrder
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: StartPreparation
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: MarkRestaurantOrderAssembled
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: MarkRestaurantOrderReady
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ReportPreparationDelay
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ReportPreparationFailure
+      backendRefs:
+        - name: restaurants
+          namespace: nomnom-restaurants
+          port: 8082
+---
+# Чтения кухни (restaurant#operate_kitchen): идемпотентны, повторяются политикой reads.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: restaurants-v1-kitchen-reads
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: GetKitchenQueue
+        # Новые заказы (RECEIVED): Kitchen Queue показывает только принятые (QUEUED).
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ListIncomingOrders
+      backendRefs:
+        - name: restaurants
+          namespace: nomnom-restaurants
+          port: 8082
+---
+# Администрирование ресторанов: регистрация оператором платформы
+# (platform#register_restaurant), персонал — владельцем (restaurant#manage).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: restaurants-v1-administration
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: RegisterRestaurant
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: AssignStaff
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: RevokeStaff
+      backendRefs:
+        - name: restaurants
+          namespace: nomnom-restaurants
+          port: 8082
+---
 # Команды delivery, которые вызывает Order Fulfillment (orders-worker).
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
@@ -244,6 +344,94 @@ spec:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
             method: CancelDelivery
+      backendRefs:
+        - name: delivery
+          namespace: nomnom-delivery
+          port: 8083
+---
+# Команды курьера (courier#act) и Report Delivery Failure (курьер или диспетчер,
+# platform#dispatch_delivery). Клиента курьера ещё нет: в kind их вызывает fixture e2e-driver.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: delivery-v1-courier
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: UpdateCourierLocation
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: SetCourierAvailability
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: AcceptDeliveryOffer
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: RejectDeliveryOffer
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: ConfirmPickup
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: ConfirmDelivery
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: ReportDeliveryFailure
+      backendRefs:
+        - name: delivery
+          namespace: nomnom-delivery
+          port: 8083
+---
+# Чтения курьера (courier#act): идемпотентны, повторяются политикой reads.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: delivery-v1-courier-reads
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: ListAvailableDeliveryOffers
+      backendRefs:
+        - name: delivery
+          namespace: nomnom-delivery
+          port: 8083
+---
+# Администрирование курьеров: регистрация оператором платформы (platform#register_courier).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: delivery-v1-administration
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: RegisterCourier
       backendRefs:
         - name: delivery
           namespace: nomnom-delivery
@@ -303,6 +491,12 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: restaurants-v1-reads
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: restaurants-v1-kitchen-reads
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: delivery-v1-courier-reads
   timeout:
     http:
       requestTimeout: 300s
@@ -338,7 +532,19 @@ spec:
       name: restaurants-v1-management
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
+      name: restaurants-v1-kitchen
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: restaurants-v1-administration
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
       name: delivery-v1-commands
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: delivery-v1-courier
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: delivery-v1-administration
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: payments-v1-commands

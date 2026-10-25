@@ -17,12 +17,15 @@ env:
 identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  serviceAccounts: nomnom-orders/orders-worker=orders-worker
+  # e2e-driver — fixture e2e пути заказа (manifests/fixtures/net-probe.yaml): играет оператора
+  # и курьера, клиентов которых ещё нет. Только в kind: chart-default его не содержит (AC-741).
+  serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-bff/e2e-driver=e2e-driver
   # ADR 32: user assertions BFF (ConfigMap bff-jwks создаёт scripts/bff-identity.sh);
-  # передавать user subject может только service bff.
+  # передавать user subject могут service bff и, только в kind, e2e-driver — его assertion
+  # тест подписывает тем же kind-ключом BFF.
   userJwksConfigMap: bff-jwks
   userIssuer: nomnom-bff
-  userDelegates: bff
+  userDelegates: bff,e2e-driver
 
 # ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт scripts/authz.sh.
 spicedb:
