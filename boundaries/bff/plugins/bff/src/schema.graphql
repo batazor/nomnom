@@ -362,6 +362,10 @@ type Query {
   Orders of the current customer, newest first
   """
   customerOrders(first: Int!, after: String): OrderConnection!
+  """
+  Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+  """
+  myRestaurants(first: Int!, after: String): RestaurantConnection!
 }
 
 input OrderLineInput {

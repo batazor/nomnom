@@ -19,6 +19,8 @@ service BffService {
   rpc QueryBffInfo(QueryBffInfoRequest) returns (QueryBffInfoResponse) {}
   // Orders of the current customer, newest first
   rpc QueryCustomerOrders(QueryCustomerOrdersRequest) returns (QueryCustomerOrdersResponse) {}
+  // Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+  rpc QueryMyRestaurants(QueryMyRestaurantsRequest) returns (QueryMyRestaurantsResponse) {}
   // Order of the current customer, null if it does not exist or belongs to someone else
   rpc QueryOrder(QueryOrderRequest) returns (QueryOrderResponse) {}
   // Restaurant by identifier, null if it does not exist
@@ -72,6 +74,16 @@ message QueryCustomerOrdersRequest {
 message QueryCustomerOrdersResponse {
   // Orders of the current customer, newest first
   OrderConnection customer_orders = 1;
+}
+// Request message for myRestaurants operation: Restaurants the current user owns, open and closed, ordered by identifier; menu is null.
+message QueryMyRestaurantsRequest {
+  int32 first = 1;
+  google.protobuf.StringValue after = 2;
+}
+// Response message for myRestaurants operation: Restaurants the current user owns, open and closed, ordered by identifier; menu is null.
+message QueryMyRestaurantsResponse {
+  // Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+  RestaurantConnection my_restaurants = 1;
 }
 // Request message for placeOrder operation: Place an order for the current customer.
 message MutationPlaceOrderRequest {

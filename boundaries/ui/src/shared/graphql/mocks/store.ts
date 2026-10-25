@@ -6,9 +6,9 @@ import {
   deliveryAddressFixture,
   liveOrderAt,
   liveOrderId,
-  managedRestaurantIds,
   type MockOrder,
   type MockRestaurant,
+  managedRestaurantIds,
   orderLine,
   orderTotal,
   restaurantFixtures,
@@ -240,6 +240,14 @@ export function createMockStore({
       if (id === liveOrderId && !state.liveCancelled) state.liveStep += 1;
       return order;
     },
+    // Like ListOwnedRestaurants: open and closed restaurants of the mock user.
+    myRestaurants: (args: PageArgs) =>
+      paginate(
+        currentRestaurants()
+          .filter((restaurant) => managedRestaurantIds.has(restaurant.id))
+          .map((restaurant) => ({ ...restaurant, menu: null })),
+        args,
+      ),
     customerOrders: (args: PageArgs) =>
       paginate(
         [...state.orders.values(), liveOrder()].sort((a, b) =>

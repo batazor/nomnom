@@ -30,3 +30,16 @@ mutation CloseRestaurant($restaurantId: ID!) {
     }
   }
 }
+
+query MyRestaurants($first: Int!) {
+  myRestaurants(first: $first) {
+    edges {
+      node {
+        id
+        name
+        address
+        acceptingOrders
+      }
+    }
+  }
+}

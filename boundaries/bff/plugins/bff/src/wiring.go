@@ -85,8 +85,9 @@ type checkout struct {
 
 // restaurantManagement holds the scenarios of the restaurant owner screen.
 type restaurantManagement struct {
-	openRestaurant  openingHandler
-	closeRestaurant openingHandler
+	openRestaurant       openingHandler
+	closeRestaurant      openingHandler
+	listOwnedRestaurants ownedRestaurantsHandler
 }
 
 // newBffService assembles BFF from cfg. A partial identity configuration is an
@@ -147,7 +148,8 @@ func newCheckout(orders grpc.ClientConnInterface, views checkoutapp.OrderViews) 
 func newRestaurantManagement(restaurants grpc.ClientConnInterface) *restaurantManagement {
 	restaurantsAPI := managementinfra.NewRestaurants(restaurants)
 	return &restaurantManagement{
-		openRestaurant:  managementapp.NewOpenRestaurant(restaurantsAPI),
-		closeRestaurant: managementapp.NewCloseRestaurant(restaurantsAPI),
+		openRestaurant:       managementapp.NewOpenRestaurant(restaurantsAPI),
+		closeRestaurant:      managementapp.NewCloseRestaurant(restaurantsAPI),
+		listOwnedRestaurants: managementapp.NewListOwnedRestaurants(restaurantsAPI),
 	}
 }

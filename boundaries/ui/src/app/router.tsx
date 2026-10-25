@@ -4,12 +4,12 @@ import {
   createMemoryRouter,
   RouterProvider,
 } from "react-router-dom";
-
-import { AppLayout } from "./layout";
 import { BrowseRestaurantsPage } from "../features/browse-restaurants/browse-restaurants-page";
 import { ManageRestaurantPage } from "../features/manage-restaurant/manage-restaurant-page";
+import { MyRestaurantsPage } from "../features/manage-restaurant/my-restaurants-page";
 import { ViewOrderPage } from "../features/view-order/view-order-page";
 import { ViewRestaurantPage } from "../features/view-restaurant/view-restaurant-page";
+import { AppLayout } from "./layout";
 
 export const routes = [
   {
@@ -19,6 +19,7 @@ export const routes = [
       { index: true, element: <BrowseRestaurantsPage /> },
       { path: "restaurants/:restaurantId", element: <ViewRestaurantPage /> },
       { path: "orders/:orderId", element: <ViewOrderPage /> },
+      { path: "manage/restaurants", element: <MyRestaurantsPage /> },
       {
         path: "manage/restaurants/:restaurantId",
         element: <ManageRestaurantPage />,

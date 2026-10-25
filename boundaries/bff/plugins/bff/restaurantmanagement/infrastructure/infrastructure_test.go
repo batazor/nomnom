@@ -60,6 +60,18 @@ func (s *restaurantsServer) CloseRestaurant(ctx context.Context, request *restau
 	return &restaurantsv1.CloseRestaurantResponse{Restaurant: s.restaurant(), Version: 3, Changed: changed}, nil
 }
 
+func (s *restaurantsServer) ListOwnedRestaurants(ctx context.Context, request *restaurantsv1.ListOwnedRestaurantsRequest) (*restaurantsv1.ListOwnedRestaurantsResponse, error) {
+	s.seenMD, _ = metadata.FromIncomingContext(ctx)
+	s.got = request.GetPageToken()
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &restaurantsv1.ListOwnedRestaurantsResponse{
+		Restaurants:   []*restaurantsv1.Restaurant{{RestaurantId: "restaurant-2", Name: "Пельменная", Address: "ул. Садовая, 9"}},
+		NextPageToken: "restaurant-2",
+	}, nil
+}
+
 func connect(t *testing.T, server *restaurantsServer) *Restaurants {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
@@ -148,4 +160,24 @@ func TestOpeningNamesRefusals(t *testing.T) {
 		assert.False(t, errors.Is(err, refusal))
 	}
 	assert.Equal(t, codes.Unavailable, status.Code(err), "the cause is kept for the log")
+}
+
+// The list goes to restaurants on behalf of the user, who decides what it owns.
+func TestListOwnedCarriesUserAssertion(t *testing.T) {
+	server := &restaurantsServer{}
+	restaurants := connect(t, server)
+
+	page, err := restaurants.ListOwned(ownerContext(), 1, "restaurant-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "restaurant-1", server.got)
+	assert.Equal(t, applications.OwnedPage{
+		Restaurants: []applications.Restaurant{{ID: "restaurant-2", Name: "Пельменная", Address: "ул. Садовая, 9"}},
+		NextCursor:  "restaurant-2",
+	}, page)
+	assert.Len(t, server.seenMD.Get(identity.AssertionMetadata), 1)
+
+	server.err = status.Error(codes.Unavailable, "down")
+	_, err = restaurants.ListOwned(ownerContext(), 1, "")
+	assert.Equal(t, codes.Unavailable, status.Code(errors.Unwrap(err)))
 }

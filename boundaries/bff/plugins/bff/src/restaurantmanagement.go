@@ -18,6 +18,30 @@ type openingHandler interface {
 	Handle(ctx context.Context, restaurantID string) (applications.OpeningResult, error)
 }
 
+type ownedRestaurantsHandler interface {
+	Handle(ctx context.Context, first int, after string) (applications.RestaurantPage, error)
+}
+
+// QueryMyRestaurants lists the restaurants of the verified user; restaurants
+// filters them by owner, so a user without restaurants gets an empty page.
+func (s *BffService) QueryMyRestaurants(ctx context.Context, request *service.QueryMyRestaurantsRequest) (*service.QueryMyRestaurantsResponse, error) {
+	ctx, err := s.requireCustomer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireSlice(restaurantManagementSlice, s.management != nil); err != nil {
+		return nil, err
+	}
+	page, err := s.management.listOwnedRestaurants.Handle(ctx, int(request.GetFirst()), request.GetAfter().GetValue())
+	if errors.Is(err, applications.ErrInvalidPageSize) {
+		return nil, status.Error(codes.InvalidArgument, "first must be between 1 and 100")
+	}
+	if err != nil {
+		return nil, internalError("myRestaurants", err)
+	}
+	return &service.QueryMyRestaurantsResponse{MyRestaurants: ownedRestaurantConnection(page)}, nil
+}
+
 // MutationOpenRestaurant opens the restaurant on behalf of the verified user;
 // restaurants decides whether the user may manage it (FR-601).
 func (s *BffService) MutationOpenRestaurant(ctx context.Context, request *service.MutationOpenRestaurantRequest) (*service.MutationOpenRestaurantResponse, error) {

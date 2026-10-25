@@ -1,5 +1,5 @@
-import { Card as AstraCard } from "@astra-rn/react/card";
 import type { CardProps as AstraCardProps } from "@astra-rn/react/card";
+import { Card as AstraCard } from "@astra-rn/react/card";
 
 export type CardProps = Omit<AstraCardProps, "className"> & {
   className?: string;

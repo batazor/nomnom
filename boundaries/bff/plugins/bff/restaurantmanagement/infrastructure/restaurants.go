@@ -1,5 +1,5 @@
-// Package infrastructure adapts the restaurant management port to the
-// OpenRestaurant and CloseRestaurant commands of
+// Package infrastructure adapts the restaurant management ports to the
+// OpenRestaurant, CloseRestaurant and ListOwnedRestaurants RPCs of
 // restaurants.v1.RestaurantsService, called through the internal gateway with
 // the service token of BFF and the user assertion of the verified user
 // (ADR 32). restaurants authorizes restaurant#manage itself.
@@ -26,7 +26,30 @@ func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
 	return &Restaurants{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
 }
 
-var _ applications.RestaurantOpener = (*Restaurants)(nil)
+var (
+	_ applications.RestaurantOpener      = (*Restaurants)(nil)
+	_ applications.OwnedRestaurantLister = (*Restaurants)(nil)
+)
+
+// ListOwned keeps the user of ctx: restaurants lists only that user's
+// restaurants, so the size is already bounded by the scenario.
+func (r *Restaurants) ListOwned(ctx context.Context, size int, cursor string) (applications.OwnedPage, error) {
+	response, err := r.client.ListOwnedRestaurants(ctx, &restaurantsv1.ListOwnedRestaurantsRequest{
+		PageSize:  int32(size),
+		PageToken: cursor,
+	})
+	if err != nil {
+		return applications.OwnedPage{}, fmt.Errorf("list owned restaurants: %w", err)
+	}
+	page := applications.OwnedPage{
+		Restaurants: make([]applications.Restaurant, 0, len(response.GetRestaurants())),
+		NextCursor:  response.GetNextPageToken(),
+	}
+	for _, restaurant := range response.GetRestaurants() {
+		page.Restaurants = append(page.Restaurants, restaurantOf(restaurant))
+	}
+	return page, nil
+}
 
 // Open keeps the user of ctx: the interceptor turns it into the user assertion.
 func (r *Restaurants) Open(ctx context.Context, restaurantID string) (applications.OpeningResult, error) {
@@ -60,13 +83,14 @@ func openingError(operation string, err error) error {
 }
 
 func openingResult(restaurant *restaurantsv1.Restaurant, changed bool) applications.OpeningResult {
-	return applications.OpeningResult{
-		Restaurant: applications.Restaurant{
-			ID:      restaurant.GetRestaurantId(),
-			Name:    restaurant.GetName(),
-			Address: restaurant.GetAddress(),
-			IsOpen:  restaurant.GetIsOpen(),
-		},
-		Changed: changed,
+	return applications.OpeningResult{Restaurant: restaurantOf(restaurant), Changed: changed}
+}
+
+func restaurantOf(restaurant *restaurantsv1.Restaurant) applications.Restaurant {
+	return applications.Restaurant{
+		ID:      restaurant.GetRestaurantId(),
+		Name:    restaurant.GetName(),
+		Address: restaurant.GetAddress(),
+		IsOpen:  restaurant.GetIsOpen(),
 	}
 }

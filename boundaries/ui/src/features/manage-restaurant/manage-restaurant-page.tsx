@@ -108,8 +108,11 @@ function RestaurantOpening({ restaurant }: { restaurant: ManagedRestaurant }) {
   return (
     <article aria-labelledby="manage-title" className="manage-page">
       <header className="manage-header">
+        <Link className="manage-back" to="/manage/restaurants">
+          <span aria-hidden="true">←</span> {t("myRestaurants.title")}
+        </Link>
         <Link className="manage-back" to={`/restaurants/${restaurant.id}`}>
-          <span aria-hidden="true">←</span> {t("manage.viewAsCustomer")}
+          {t("manage.viewAsCustomer")}
         </Link>
         <p className="manage-eyebrow">{t("manage.eyebrow")}</p>
         <h1 id="manage-title">{restaurant.name}</h1>

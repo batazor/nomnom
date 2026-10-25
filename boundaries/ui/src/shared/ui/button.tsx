@@ -1,5 +1,5 @@
-import { Button as AstraButton } from "@astra-rn/react/button";
 import type { ButtonProps as AstraButtonProps } from "@astra-rn/react/button";
+import { Button as AstraButton } from "@astra-rn/react/button";
 
 export type ButtonProps = Omit<AstraButtonProps, "className"> & {
   className?: string;

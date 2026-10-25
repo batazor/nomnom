@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
@@ -130,4 +131,67 @@ func TestOpeningMapsRefusalsToErrors(t *testing.T) {
 		_, err = svc.MutationCloseRestaurant(ctx, &service.MutationCloseRestaurantRequest{RestaurantId: nightBakery.ID})
 		assert.Equal(t, want, status.Code(err), refusal)
 	}
+}
+
+type fakeOwned struct {
+	page    applications.RestaurantPage
+	err     error
+	first   int
+	after   string
+	hasUser bool
+}
+
+func (f *fakeOwned) Handle(ctx context.Context, first int, after string) (applications.RestaurantPage, error) {
+	f.first, f.after = first, after
+	_, f.hasUser = identity.UserFrom(ctx)
+	return f.page, f.err
+}
+
+func TestMyRestaurantsListsRestaurantsOfTheUser(t *testing.T) {
+	owned := &fakeOwned{page: applications.RestaurantPage{
+		Edges:       []applications.RestaurantEdge{{Cursor: nightBakery.ID, Restaurant: nightBakery}},
+		HasNextPage: true,
+		EndCursor:   nightBakery.ID,
+	}}
+	svc, ctx := managementService(t, &fakeOpening{}, &fakeOpening{})
+	svc.management.listOwnedRestaurants = owned
+
+	response, err := svc.QueryMyRestaurants(ctx, &service.QueryMyRestaurantsRequest{First: 10, After: wrapperspb.String("restaurant-0")})
+
+	require.NoError(t, err)
+	assert.Equal(t, 10, owned.first)
+	assert.Equal(t, "restaurant-0", owned.after)
+	assert.True(t, owned.hasUser, "the user reaches restaurants as a user assertion")
+	connection := response.GetMyRestaurants()
+	require.Len(t, connection.GetEdges(), 1)
+	node := connection.GetEdges()[0].GetNode()
+	assert.Equal(t, nightBakery.ID, node.GetId())
+	assert.False(t, node.GetAcceptingOrders())
+	assert.Nil(t, node.GetMenu())
+	assert.True(t, connection.GetPageInfo().GetHasNextPage())
+	assert.Equal(t, nightBakery.ID, connection.GetPageInfo().GetEndCursor().GetValue())
+}
+
+func TestMyRestaurantsRequiresAccessToken(t *testing.T) {
+	owned := &fakeOwned{}
+	svc, _ := managementService(t, &fakeOpening{}, &fakeOpening{})
+	svc.management.listOwnedRestaurants = owned
+
+	_, err := svc.QueryMyRestaurants(context.Background(), &service.QueryMyRestaurantsRequest{First: 10})
+
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+	assert.Zero(t, owned.first)
+}
+
+func TestMyRestaurantsMapsErrors(t *testing.T) {
+	svc, ctx := managementService(t, &fakeOpening{}, &fakeOpening{})
+
+	svc.management.listOwnedRestaurants = &fakeOwned{err: applications.ErrInvalidPageSize}
+	_, err := svc.QueryMyRestaurants(ctx, &service.QueryMyRestaurantsRequest{First: 101})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	svc.management.listOwnedRestaurants = &fakeOwned{err: errors.New("restaurants is down")}
+	_, err = svc.QueryMyRestaurants(ctx, &service.QueryMyRestaurantsRequest{First: 10})
+	assert.Equal(t, codes.Unavailable, status.Code(err))
+	assert.NotContains(t, err.Error(), "restaurants is down")
 }

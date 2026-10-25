@@ -25,6 +25,7 @@ const (
 	BffService_MutationRequestOrderCancellation_FullMethodName = "/service.BffService/MutationRequestOrderCancellation"
 	BffService_QueryBffInfo_FullMethodName                     = "/service.BffService/QueryBffInfo"
 	BffService_QueryCustomerOrders_FullMethodName              = "/service.BffService/QueryCustomerOrders"
+	BffService_QueryMyRestaurants_FullMethodName               = "/service.BffService/QueryMyRestaurants"
 	BffService_QueryOrder_FullMethodName                       = "/service.BffService/QueryOrder"
 	BffService_QueryRestaurant_FullMethodName                  = "/service.BffService/QueryRestaurant"
 	BffService_QueryRestaurants_FullMethodName                 = "/service.BffService/QueryRestaurants"
@@ -48,6 +49,8 @@ type BffServiceClient interface {
 	QueryBffInfo(ctx context.Context, in *QueryBffInfoRequest, opts ...grpc.CallOption) (*QueryBffInfoResponse, error)
 	// Orders of the current customer, newest first
 	QueryCustomerOrders(ctx context.Context, in *QueryCustomerOrdersRequest, opts ...grpc.CallOption) (*QueryCustomerOrdersResponse, error)
+	// Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+	QueryMyRestaurants(ctx context.Context, in *QueryMyRestaurantsRequest, opts ...grpc.CallOption) (*QueryMyRestaurantsResponse, error)
 	// Order of the current customer, null if it does not exist or belongs to someone else
 	QueryOrder(ctx context.Context, in *QueryOrderRequest, opts ...grpc.CallOption) (*QueryOrderResponse, error)
 	// Restaurant by identifier, null if it does not exist
@@ -124,6 +127,16 @@ func (c *bffServiceClient) QueryCustomerOrders(ctx context.Context, in *QueryCus
 	return out, nil
 }
 
+func (c *bffServiceClient) QueryMyRestaurants(ctx context.Context, in *QueryMyRestaurantsRequest, opts ...grpc.CallOption) (*QueryMyRestaurantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryMyRestaurantsResponse)
+	err := c.cc.Invoke(ctx, BffService_QueryMyRestaurants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bffServiceClient) QueryOrder(ctx context.Context, in *QueryOrderRequest, opts ...grpc.CallOption) (*QueryOrderResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryOrderResponse)
@@ -172,6 +185,8 @@ type BffServiceServer interface {
 	QueryBffInfo(context.Context, *QueryBffInfoRequest) (*QueryBffInfoResponse, error)
 	// Orders of the current customer, newest first
 	QueryCustomerOrders(context.Context, *QueryCustomerOrdersRequest) (*QueryCustomerOrdersResponse, error)
+	// Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+	QueryMyRestaurants(context.Context, *QueryMyRestaurantsRequest) (*QueryMyRestaurantsResponse, error)
 	// Order of the current customer, null if it does not exist or belongs to someone else
 	QueryOrder(context.Context, *QueryOrderRequest) (*QueryOrderResponse, error)
 	// Restaurant by identifier, null if it does not exist
@@ -205,6 +220,9 @@ func (UnimplementedBffServiceServer) QueryBffInfo(context.Context, *QueryBffInfo
 }
 func (UnimplementedBffServiceServer) QueryCustomerOrders(context.Context, *QueryCustomerOrdersRequest) (*QueryCustomerOrdersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryCustomerOrders not implemented")
+}
+func (UnimplementedBffServiceServer) QueryMyRestaurants(context.Context, *QueryMyRestaurantsRequest) (*QueryMyRestaurantsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryMyRestaurants not implemented")
 }
 func (UnimplementedBffServiceServer) QueryOrder(context.Context, *QueryOrderRequest) (*QueryOrderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryOrder not implemented")
@@ -344,6 +362,24 @@ func _BffService_QueryCustomerOrders_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_QueryMyRestaurants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryMyRestaurantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).QueryMyRestaurants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_QueryMyRestaurants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).QueryMyRestaurants(ctx, req.(*QueryMyRestaurantsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BffService_QueryOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryOrderRequest)
 	if err := dec(in); err != nil {
@@ -428,6 +464,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryCustomerOrders",
 			Handler:    _BffService_QueryCustomerOrders_Handler,
+		},
+		{
+			MethodName: "QueryMyRestaurants",
+			Handler:    _BffService_QueryMyRestaurants_Handler,
 		},
 		{
 			MethodName: "QueryOrder",

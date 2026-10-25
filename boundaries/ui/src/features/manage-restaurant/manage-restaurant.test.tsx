@@ -1,6 +1,6 @@
-import axe from "axe-core";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axe from "axe-core";
 import { HttpResponse } from "msw";
 import { graphql } from "msw/graphql";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";

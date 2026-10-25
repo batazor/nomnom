@@ -146,3 +146,28 @@
     opacity: 0.55;
   }
 }
+
+.my-restaurants {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.my-restaurant {
+  gap: var(--space-1);
+  color: inherit;
+  text-decoration: none;
+}
+
+.my-restaurant:hover,
+.my-restaurant:focus-visible {
+  border-color: var(--color-foreground);
+}
+
+.my-restaurant-name {
+  color: var(--color-foreground);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

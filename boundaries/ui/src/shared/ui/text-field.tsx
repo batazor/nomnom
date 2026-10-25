@@ -2,8 +2,8 @@ import { Description } from "@astra-rn/react/description";
 import { FieldError } from "@astra-rn/react/field-error";
 import { Input } from "@astra-rn/react/input";
 import { Label } from "@astra-rn/react/label";
-import { TextField as AstraTextField } from "@astra-rn/react/textfield";
 import type { TextFieldProps as AstraTextFieldProps } from "@astra-rn/react/textfield";
+import { TextField as AstraTextField } from "@astra-rn/react/textfield";
 import type { Ref } from "react";
 
 export type TextFieldProps = Omit<

@@ -38,6 +38,13 @@
       "response": "QueryCustomerOrdersResponse"
     },
     {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "myRestaurants",
+      "mapped": "QueryMyRestaurants",
+      "request": "QueryMyRestaurantsRequest",
+      "response": "QueryMyRestaurantsResponse"
+    },
+    {
       "type": "OPERATION_TYPE_MUTATION",
       "original": "placeOrder",
       "mapped": "MutationPlaceOrder",
@@ -111,6 +118,20 @@
         {
           "original": "customerOrders",
           "mapped": "customer_orders",
+          "argumentMappings": [
+            {
+              "original": "first",
+              "mapped": "first"
+            },
+            {
+              "original": "after",
+              "mapped": "after"
+            }
+          ]
+        },
+        {
+          "original": "myRestaurants",
+          "mapped": "my_restaurants",
           "argumentMappings": [
             {
               "original": "first",

@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 
 import type { SupportedLocale } from "../config/runtime-config";
-import { messages, type MessageKey } from "./messages";
+import { type MessageKey, messages } from "./messages";
 
 type Variables = Readonly<Record<string, string | number>>;
 

@@ -46,6 +46,7 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   ManageRestaurant: { id: nightBakery.id },
   OpenRestaurant: { restaurantId: nightBakery.id },
   CloseRestaurant: { restaurantId: kitchenEight.id },
+  MyRestaurants: { first: 10 },
   PlaceOrder: {
     input: {
       restaurantId: kitchenEight.id,
