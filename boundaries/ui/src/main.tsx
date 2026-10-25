@@ -4,10 +4,12 @@ import { createRoot } from "react-dom/client";
 import { AppProviders } from "./app/providers";
 import { AppRouter } from "./app/router";
 import { getRuntimeConfig } from "./shared/config/runtime-config";
+import { initTelemetry } from "./shared/telemetry/faro";
 import "./styles.css";
 
 async function bootstrap() {
   const config = getRuntimeConfig();
+  const faro = initTelemetry(config);
 
   if (config.enableMocks) {
     const { mockWorker } = await import("./shared/graphql/mocks/browser");
@@ -19,7 +21,7 @@ async function bootstrap() {
 
   createRoot(root).render(
     <StrictMode>
-      <AppProviders config={config}>
+      <AppProviders config={config} faro={faro}>
         <AppRouter />
       </AppProviders>
     </StrictMode>,

@@ -1,4 +1,6 @@
-# Public gateway: входящие вызовы внешних систем (webhooks платёжного провайдера).
+# Public gateway: входящие вызовы внешних систем (webhooks платёжного провайдера) и
+# browser telemetry customer UI (telemetry.nomnom.localhost, route в
+# manifests/observability/faro-route.yaml — только с profile grafana-cloud).
 # Отдельный от internal gateway data plane: внешний трафик не попадает на listener
 # service-to-service вызовов. Публикуется только явно перечисленные HTTP-пути.
 #
@@ -58,6 +60,21 @@ spec:
       protocol: HTTPS
       port: 8443
       hostname: webhooks.nomnom.localhost
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: public-gateway-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
+    # Тот же сертификат: cert-manager собирает dnsNames всех listeners с этим Secret.
+    - name: telemetry
+      protocol: HTTPS
+      port: 8443
+      hostname: telemetry.nomnom.localhost
       tls:
         mode: Terminate
         certificateRefs:

@@ -80,9 +80,9 @@ Checkout attempt создаёт `idempotencyKey` (`PlaceOrderInput`) один р
 
 ## Observability
 
-GraphQL transport может передавать разрешённый W3C `traceparent` и читать безопасный correlation/request id. Browser error reporter и web performance telemetry подключаются отдельным решением в соответствии с [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md) и [observability conventions](observability.md).
+Browser telemetry — Grafana Faro Web SDK (`boundaries/ui/src/shared/telemetry/faro.ts`) по [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md) и [observability conventions](observability.md): ошибки, Web Vitals, views по route pattern React Router, события `graphql_error` (вид операции, вид ошибки, request id) и fetch spans. Tracing добавляет W3C `traceparent` только к запросам на origin BFF, поэтому trace продолжается в Cosmo Router (`cors.allow_headers` BFF разрешает `traceparent`/`tracestate`). Приёмник — `faro.receiver` Alloy (`VITE_FARO_URL`); без URL и с MSW-моками SDK не инициализируется. Resource `service.name=customer-ui`, `service.namespace=nomnom`, `deployment.environment.name` из `VITE_DEPLOYMENT_ENVIRONMENT`.
 
-Telemetry не содержит PII, payment details, auth secrets, полные GraphQL variables и high-cardinality resource identifiers. Пользовательский error UI не раскрывает внутреннюю topology.
+Telemetry не содержит PII, payment details, auth secrets, полные GraphQL variables и high-cardinality resource identifiers: `beforeSend` заменяет id в URL страницы на шаблон route (`/orders/:orderId`) и отбрасывает query, console capture выключен, source maps Alloy не скачивает. Пользовательский error UI не раскрывает внутреннюю topology.
 
 ## Testing
 

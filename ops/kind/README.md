@@ -217,6 +217,16 @@ curl --cacert "$(make -s kind-local-ca)" --resolve webhooks.nomnom.localhost:180
 На кластере, созданном из текущего `cluster.yaml`, port-forward не нужен: NodePort 30085
 проброшен на `127.0.0.1:${WEBHOOKS_HOST_PORT}` (18085).
 
+### Browser telemetry (Faro)
+
+С profile `grafana-cloud` тот же gateway публикует на listener `telemetry.nomnom.localhost`
+`POST /collect` → `faro.receiver` Alloy (`manifests/observability/faro-route.yaml`). CORS
+разрешён только для `http://localhost:4173` (Vite dev server customer UI), rate limit 50 rps.
+Traces браузера идут через тот же фильтр `service.namespace=nomnom`, логи и события Faro —
+в Loki с `service_name=customer-ui`. Для UI:
+`VITE_FARO_URL=https://telemetry.nomnom.localhost:18085/collect`; браузер должен доверять
+корню из `make kind-local-ca`.
+
 ## Проверки
 
 `make kind-test` запускает тесты Kyverno Chainsaw из `e2e/`

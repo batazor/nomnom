@@ -26,6 +26,50 @@ data:
       }
     }
 
+    // Browser telemetry customer UI (Faro Web SDK, boundaries/ui/src/shared/telemetry):
+    // публикуется public gateway на telemetry.nomnom.localhost (faro-route.yaml). Traces
+    // идут через тот же фильтр nomnom (app.namespace = nomnom), логи и события — в Loki-путь.
+    // Source maps не скачиваются: Alloy не ходит к origin браузера.
+    faro.receiver "browser" {
+      extra_log_labels = {
+        service_name      = "customer-ui",
+        service_namespace = "nomnom",
+      }
+      server {
+        listen_address           = "0.0.0.0"
+        listen_port              = 12347
+        // Vite dev server customer UI (boundaries/ui, npm run dev).
+        cors_allowed_origins     = ["http://localhost:4173"]
+        max_allowed_payload_size = "1MiB"
+        rate_limiting {
+          rate       = 50
+          burst_size = 100
+        }
+      }
+      sourcemaps {
+        download = false
+      }
+      output {
+        logs   = [loki.process.browser_logs.receiver]
+        traces = [otelcol.processor.memory_limiter.default.input]
+      }
+    }
+
+    // Строка Faro — logfmt с полями app_*, page_url (уже без id, beforeSend SDK), session_id.
+    loki.process "browser_logs" {
+      stage.logfmt {
+        mapping = {
+          environment = "app_environment",
+        }
+      }
+      stage.labels {
+        values = {
+          environment = "",
+        }
+      }
+      forward_to = [otelcol.receiver.loki.app_logs.receiver]
+    }
+
     otelcol.processor.memory_limiter "default" {
       check_interval = "1s"
       limit          = "200MiB"
@@ -477,6 +521,8 @@ spec:
               containerPort: 4318
             - name: http
               containerPort: 12345
+            - name: faro
+              containerPort: 12347
           readinessProbe:
             httpGet:
               path: /-/ready
@@ -515,6 +561,9 @@ spec:
     - name: otlp-http
       port: 4318
       targetPort: otlp-http
+    - name: faro
+      port: 12347
+      targetPort: faro
 ---
 # kube-state-metrics: только pods прикладных неймспейсов и три метрики (restarts,
 # readiness, причина ожидания); остальное не генерируется и не расходует квоту.

@@ -13,6 +13,7 @@ const config = {
   publicGraphqlUrl: "https://public.example.test/graphql",
   locale: "ru" as const,
   enableMocks: true,
+  environment: "test",
 };
 
 const kitchen = "restaurant-kitchen-8";

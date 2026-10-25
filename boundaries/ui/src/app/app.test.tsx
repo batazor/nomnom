@@ -12,6 +12,7 @@ const config = {
   publicGraphqlUrl: "https://public.example.test/graphql",
   locale: "ru" as const,
   enableMocks: true,
+  environment: "test",
 };
 
 beforeAll(() => mockServer.listen({ onUnhandledFrame: "error" }));
