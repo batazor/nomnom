@@ -6,6 +6,8 @@ use std::sync::Arc;
 
 use crate::infrastructure::memory::MemoryStore;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
+#[cfg(doc)]
+use crate::slices::delivery::domains::delivery::Delivery;
 
 /// Business state read and revision writes of reconciliation. Reads see only
 /// committed state; revision writes are single-statement transactions that
@@ -17,15 +19,17 @@ pub trait ReconciliationStore: Send + Sync {
     /// Which of `ids` are registered couriers.
     fn registered_couriers(&self, ids: &[String]) -> Result<Vec<String>, RepositoryError>;
 
-    /// `(delivery_id, courier_id)` of assigned deliveries after `after`,
-    /// ordered by delivery id.
+    /// `(delivery_id, courier_id)` of active assignments
+    /// ([`Delivery::active_courier`]) after `after`, ordered by delivery id.
+    /// A delivered or failed delivery keeps `courier_id` but is not listed.
     fn assignment_page(
         &self,
         after: &str,
         limit: usize,
     ) -> Result<Vec<(String, String)>, RepositoryError>;
 
-    /// `(delivery_id, courier_id)` for those of `ids` with an assigned courier.
+    /// `(delivery_id, courier_id)` for those of `ids` with an active
+    /// assignment ([`Delivery::active_courier`]).
     fn assigned_couriers(&self, ids: &[String]) -> Result<Vec<(String, String)>, RepositoryError>;
 
     /// Stores the revision on a registered courier; `false` — not registered.
@@ -35,7 +39,8 @@ pub trait ReconciliationStore: Send + Sync {
         revision: AuthorizationRevision,
     ) -> Result<bool, RepositoryError>;
 
-    /// Stores the revision on a delivery still assigned to `courier_id`.
+    /// Stores the revision on a delivery whose active assignment is still
+    /// `courier_id`.
     fn record_assignment_revision(
         &self,
         delivery_id: &str,
@@ -134,7 +139,9 @@ impl RelationSource for RegisteredCouriers {
     }
 }
 
-/// `delivery#courier`: deliveries with `courier_id` set.
+/// `delivery#courier`: active assignments (FR-444, FR-563). The relationship
+/// of a delivered or failed delivery is stale and removed after grace; a
+/// missing one is never restored (AC-693).
 pub struct AssignedDeliveries(pub Arc<dyn ReconciliationStore>);
 
 impl RelationSource for AssignedDeliveries {

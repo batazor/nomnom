@@ -294,6 +294,17 @@ impl Delivery {
         self.courier_id.as_ref()
     }
 
+    /// Courier of the active Courier Assignment: `courier_id` while the
+    /// delivery is assigned or picked up. A delivered or failed delivery
+    /// keeps `courier_id` as the fact of who carried it, but the assignment
+    /// and the access it grants are over (FR-444).
+    #[must_use]
+    pub fn active_courier(&self) -> Option<&CourierId> {
+        self.courier_id
+            .as_ref()
+            .filter(|_| self.state.has_active_assignment())
+    }
+
     #[must_use]
     pub fn id(&self) -> &DeliveryId {
         &self.id

@@ -1,11 +1,15 @@
 //! Offer Delivery: the assignment process offers a waiting Delivery to an
 //! available courier for a limited time. No Courier Assignment is created.
+//!
+//! [`make_offer`] is the application service without authorization; Replan
+//! Delivery reuses it under its own check and Unit of Work.
 
 use crate::pkg::application::{Clock, IdGenerator, Subject};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
-    DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository,
+    Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
+    DeliveryRepository,
 };
 
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
@@ -54,28 +58,50 @@ impl Handler<'_> {
         )?;
 
         let delivery = load_delivery(self.deliveries, &delivery_id)?;
-        delivery.ensure_assignable()?;
-        self.couriers.ensure_available(&courier_id)?;
-
-        let now = self.clock.now_epoch_seconds();
-        let offers = self.offers.list_for_delivery(&delivery_id)?;
-        if let Some(open) = offers
-            .iter()
-            .find(|offer| offer.courier_id() == &courier_id && offer.is_open_at(now))
-        {
-            return Ok(output(open, false));
-        }
-
-        let offer = DeliveryOffer::new(
-            DeliveryOfferId::new(self.ids.next_id()),
-            delivery_id,
+        make_offer(
+            &delivery,
             courier_id,
-            now,
-            now.saturating_add(self.policy.offer_ttl_seconds),
-        )?;
-        self.offers.add(&offer)?;
-        Ok(output(&offer, true))
+            self.couriers,
+            self.offers,
+            self.ids,
+            self.clock,
+            self.policy,
+        )
     }
+}
+
+/// Offers an assignable delivery to an available courier; an open offer for
+/// the same pair is returned instead of a new one.
+pub fn make_offer(
+    delivery: &Delivery,
+    courier_id: CourierId,
+    couriers: &dyn CourierAssignment,
+    offers: &dyn DeliveryOfferRepository,
+    ids: &dyn IdGenerator,
+    clock: &dyn Clock,
+    policy: AssignmentPolicy,
+) -> Result<Output, DeliveryApplicationError> {
+    delivery.ensure_assignable()?;
+    couriers.ensure_available(&courier_id)?;
+
+    let now = clock.now_epoch_seconds();
+    let existing = offers.list_for_delivery(delivery.id())?;
+    if let Some(open) = existing
+        .iter()
+        .find(|offer| offer.courier_id() == &courier_id && offer.is_open_at(now))
+    {
+        return Ok(output(open, false));
+    }
+
+    let offer = DeliveryOffer::new(
+        DeliveryOfferId::new(ids.next_id()),
+        delivery.id().clone(),
+        courier_id,
+        now,
+        now.saturating_add(policy.offer_ttl_seconds),
+    )?;
+    offers.add(&offer)?;
+    Ok(output(&offer, true))
 }
 
 fn output(offer: &DeliveryOffer, created: bool) -> Output {

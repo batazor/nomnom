@@ -3,7 +3,7 @@ use std::sync::PoisonError;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::CourierId;
 
-use super::{MemoryStore, StoreState};
+use super::{DeliveryRecord, MemoryStore, StoreState};
 
 /// Business side of relationship reconciliation. Reads wait for the running
 /// Unit of Work and see only committed state, so a relationship deleted
@@ -55,8 +55,7 @@ impl MemoryStore {
                 .range::<str, _>((std::ops::Bound::Excluded(after), std::ops::Bound::Unbounded))
                 .filter_map(|(id, record)| {
                     record
-                        .courier_id
-                        .as_ref()
+                        .active_courier()
                         .map(|courier| (id.clone(), courier.as_str().to_owned()))
                 })
                 .take(limit)
@@ -100,7 +99,7 @@ impl MemoryStore {
         let Some(record) = state.deliveries.get_mut(delivery_id) else {
             return Ok(false);
         };
-        if record.courier_id.as_ref().map(CourierId::as_str) != Some(courier_id) {
+        if record.active_courier().as_ref().map(CourierId::as_str) != Some(courier_id) {
             return Ok(false);
         }
         record.authorization_revision = Some(revision);
@@ -108,7 +107,7 @@ impl MemoryStore {
         Ok(true)
     }
 
-    /// `(delivery_id, courier_id)` for those of `ids` with an assigned courier.
+    /// `(delivery_id, courier_id)` for those of `ids` with an active assignment.
     pub fn assigned_couriers(
         &self,
         ids: &[String],
@@ -116,10 +115,18 @@ impl MemoryStore {
         self.committed(|state| {
             ids.iter()
                 .filter_map(|id| {
-                    let courier = state.deliveries.get(id.as_str())?.courier_id.as_ref()?;
+                    let courier = state.deliveries.get(id.as_str())?.active_courier()?;
                     Some((id.clone(), courier.as_str().to_owned()))
                 })
                 .collect()
         })
+    }
+}
+
+impl DeliveryRecord {
+    /// Courier of the active assignment, decided by the aggregate
+    /// ([`Delivery::active_courier`](crate::slices::delivery::domains::delivery::Delivery::active_courier)).
+    fn active_courier(&self) -> Option<CourierId> {
+        self.to_domain().ok()?.active_courier().cloned()
     }
 }

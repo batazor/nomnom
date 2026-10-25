@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use delivery::infrastructure::locator::CourierPositions;
 use delivery::infrastructure::postgres::{
     OutboxMapper, OutboxRecord, PostgresStore, event_id, migrate,
 };
@@ -439,6 +440,73 @@ fn offers_locations_and_reconciliation_reads() {
         ),
         Ok(false)
     );
+}
+
+/// FR-563, AC-693: a delivered delivery keeps `courier_id` but is not an
+/// active assignment for reconciliation.
+#[test]
+fn reconciliation_reads_only_active_assignments() {
+    let Some(store) = store() else { return };
+    let courier = unique("courier");
+    let courier_id = CourierId::new(&courier);
+    let delivery = new_delivery(&unique("delivery"));
+    DeliveryRepository::add(&store, &delivery).expect("delivery");
+    DeliveryRepository::save(&store, &assigned(&delivery, &courier)).expect("assign");
+    let id = delivery.id().as_str().to_owned();
+    assert_eq!(
+        store.assigned_couriers(std::slice::from_ref(&id)),
+        Ok(vec![(id.clone(), courier.clone())])
+    );
+
+    let mut closed = DeliveryRepository::get(&store, delivery.id())
+        .expect("get")
+        .expect("delivery");
+    closed.confirm_pickup(&courier_id).expect("pickup");
+    closed.complete(&courier_id).expect("complete");
+    DeliveryRepository::save(&store, &closed).expect("deliver");
+
+    assert_eq!(
+        store.assigned_couriers(std::slice::from_ref(&id)),
+        Ok(vec![])
+    );
+    assert!(
+        store
+            .assignment_page("", 10_000)
+            .expect("page")
+            .iter()
+            .all(|(delivery_id, _)| delivery_id != &id)
+    );
+    assert_eq!(
+        store.record_assignment_revision(&id, &courier, AuthorizationRevision::new("zed-c")),
+        Ok(false)
+    );
+}
+
+/// FR-542: the locator reads latest positions of available couriers only.
+#[test]
+fn available_positions_are_positions_of_available_couriers() {
+    let Some(store) = store() else { return };
+    let available = CourierId::new(unique("available"));
+    let busy = CourierId::new(unique("busy"));
+    CourierRepository::add(
+        &store,
+        &Courier::restore(available.clone(), CourierStatus::Available),
+    )
+    .expect("available courier");
+    CourierRepository::add(&store, &Courier::restore(busy.clone(), CourierStatus::Busy))
+        .expect("busy courier");
+    let position = |courier_id: &CourierId| CourierPosition {
+        courier_id: courier_id.clone(),
+        location: Location::new(52.37, 4.89).expect("location"),
+        recorded_at_epoch_seconds: 7,
+    };
+    store.record(&position(&available)).expect("record");
+    store.record(&position(&busy)).expect("record");
+
+    let positions = store.available_positions().expect("positions");
+
+    assert!(positions.contains(&position(&available)));
+    assert!(positions.iter().all(|position| position.courier_id != busy));
 }
 
 #[tokio::test(flavor = "multi_thread")]

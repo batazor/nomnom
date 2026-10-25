@@ -14,6 +14,19 @@ pub enum State {
     Cancelled,
 }
 
+impl State {
+    /// States of an active Courier Assignment: the courier acts on the
+    /// delivery and sees its order (FR-444). Storage adapters filter by this
+    /// set; [`Delivery::active_courier`](super::Delivery::active_courier) is
+    /// the rule for a loaded aggregate.
+    pub const WITH_ACTIVE_ASSIGNMENT: [Self; 2] = [Self::Assigned, Self::PickedUp];
+
+    #[must_use]
+    pub fn has_active_assignment(self) -> bool {
+        Self::WITH_ACTIVE_ASSIGNMENT.contains(&self)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Trigger {
     Assign,

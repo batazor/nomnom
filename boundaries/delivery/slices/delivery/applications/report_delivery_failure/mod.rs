@@ -2,6 +2,11 @@
 //! records that an assigned or picked up Delivery cannot be completed. The
 //! reason is stored and published as is; whether it is retryable is decided
 //! outside `delivery`.
+//!
+//! The assignment is over, so `delivery:<id>#courier@user:<courier_id>` is
+//! deleted before commit (AC-691); a failed delete rolls the failure back.
+//! The dispatcher is authorized by the platform right `dispatch_delivery`
+//! (AC-694), mapped from the `Delivery(id)` resource.
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
@@ -10,9 +15,11 @@ use crate::slices::delivery::domains::delivery::{
     DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter,
 };
 
+use super::assignment::release_assignment;
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
+use super::relationships::DeliveryRelationshipWriter;
 use super::{courier_id, delivery_id, load_delivery};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -42,6 +49,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
+    pub relationships: &'a dyn DeliveryRelationshipWriter,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -77,7 +85,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
             let released_courier_id = delivery.courier_id().cloned().ok_or_else(|| {
                 DeliveryApplicationError::Internal("failed delivery had no courier".to_owned())
             })?;
-            self.couriers.release(&released_courier_id)?;
+            release_assignment(
+                &mut delivery,
+                &released_courier_id,
+                self.couriers,
+                self.relationships,
+            )?;
 
             self.deliveries.save(&delivery)?;
             publish(self.outbox, delivery.pull_events())?;
@@ -93,7 +106,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::{
+        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+    };
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
@@ -110,6 +125,7 @@ mod tests {
             deliveries: &world.store,
             couriers: &world.store,
             outbox: &world.store,
+            relationships: &world.relationships,
         }
     }
 
@@ -162,6 +178,62 @@ mod tests {
             world.authorization.delivery_checks()[0].2,
             DeliveryResource::Courier(CourierId::new("courier-1"))
         );
+    }
+
+    /// AC-691: courier and dispatcher reports both revoke the courier's
+    /// access; the revision of the DELETE is stored.
+    #[test]
+    fn failure_report_revokes_courier_relationship() {
+        for (subject_id, reporter) in [
+            ("courier-1", Reporter::Courier("courier-1".to_owned())),
+            ("dispatcher-1", Reporter::Dispatcher),
+        ] {
+            let world = World::new();
+            world.picked_up_delivery("delivery-1", "courier-1");
+
+            handler(&world)
+                .execute(
+                    &subject(subject_id),
+                    input(reporter, "customer unreachable"),
+                )
+                .expect("failure reported");
+
+            assert_eq!(
+                world.relationships.writes(),
+                vec![RelationshipWrite::UnassignCourier(
+                    DeliveryId::new("delivery-1"),
+                    CourierId::new("courier-1")
+                )],
+                "{subject_id}"
+            );
+            let delivery = world.delivery("delivery-1");
+            assert_eq!(delivery.active_courier(), None);
+            assert_eq!(
+                delivery.authorization_revision(),
+                Some(&RecordingRelationships::revision(1))
+            );
+        }
+    }
+
+    /// A failed DELETE rolls the failure report back (fail closed).
+    #[test]
+    fn failed_relationship_delete_rolls_failure_back() {
+        let world = World {
+            relationships: RecordingRelationships::failing("spicedb offline"),
+            ..World::new()
+        };
+        world.picked_up_delivery("delivery-1", "courier-1");
+
+        assert!(matches!(
+            handler(&world).execute(
+                &subject("courier-1"),
+                input(Reporter::Courier("courier-1".to_owned()), "lost")
+            ),
+            Err(DeliveryApplicationError::DependencyUnavailable(_))
+        ));
+        assert_eq!(world.delivery_state("delivery-1"), State::PickedUp);
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
+        assert!(world.store.outbox_messages().is_empty());
     }
 
     /// AC-341

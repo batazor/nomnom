@@ -1,5 +1,5 @@
 //! Integration-тесты записи relationships и reconciliation (FR-444, FR-445,
-//! AC-477) против SpiceDB с `authorization/schema.zed`. Запускаются только при
+//! AC-477, AC-690, AC-691) против SpiceDB с `authorization/schema.zed`. Запускаются только при
 //! заданном `SPICEDB_ENDPOINT` (ключ `devkey` или `SPICEDB_PRESHARED_KEY`,
 //! plaintext):
 //!
@@ -37,7 +37,8 @@ use delivery::slices::delivery::applications::authorization::{
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::applications::{
-    accept_delivery_offer, cancel_delivery, reassign_courier,
+    accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, reassign_courier,
+    report_delivery_failure,
 };
 use delivery::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
@@ -326,6 +327,114 @@ fn cancelled_delivery_courier_loses_act_as_courier() {
     .expect("cancelled");
 
     acts_as_courier(&world, &client, false);
+}
+
+fn pick_up(world: &Assigned) {
+    confirm_pickup::Handler {
+        authorization: &StaticAuthorization::allow_all(),
+        unit_of_work: &*world.store,
+        deliveries: &*world.store,
+        outbox: &*world.store,
+    }
+    .execute(
+        &user(&world.courier),
+        confirm_pickup::Input {
+            delivery_id: world.delivery.clone(),
+            courier_id: world.courier.clone(),
+        },
+    )
+    .expect("picked up");
+}
+
+/// AC-690: denied right after Confirm Delivery; `courier_id` stays.
+#[test]
+fn delivered_courier_loses_act_as_courier() {
+    let Some(client) = live() else { return };
+    let world = assigned(&client, "t");
+    pick_up(&world);
+    acts_as_courier(&world, &client, true);
+
+    confirm_delivery::Handler {
+        authorization: &StaticAuthorization::allow_all(),
+        unit_of_work: &*world.store,
+        deliveries: &*world.store,
+        couriers: &*world.store,
+        outbox: &*world.store,
+        relationships: &world.writer,
+    }
+    .execute(
+        &user(&world.courier),
+        confirm_delivery::Input {
+            delivery_id: world.delivery.clone(),
+            courier_id: world.courier.clone(),
+        },
+    )
+    .expect("delivered");
+
+    acts_as_courier(&world, &client, false);
+    let delivery =
+        DeliveryRepository::get(&*world.store, &DeliveryId::new(world.delivery.as_str()))
+            .expect("read delivery")
+            .expect("delivery");
+    assert_eq!(
+        delivery.courier_id(),
+        Some(&CourierId::new(world.courier.as_str()))
+    );
+}
+
+/// AC-691: denied right after a dispatcher reports the failure.
+#[test]
+fn failed_delivery_courier_loses_act_as_courier() {
+    let Some(client) = live() else { return };
+    let world = assigned(&client, "t");
+    acts_as_courier(&world, &client, true);
+
+    report_delivery_failure::Handler {
+        authorization: &StaticAuthorization::allow_all(),
+        unit_of_work: &*world.store,
+        deliveries: &*world.store,
+        couriers: &*world.store,
+        outbox: &*world.store,
+        relationships: &world.writer,
+    }
+    .execute(
+        &user("dispatcher-1"),
+        report_delivery_failure::Input {
+            delivery_id: world.delivery.clone(),
+            reporter: report_delivery_failure::Reporter::Dispatcher,
+            reason: "customer unreachable".to_owned(),
+        },
+    )
+    .expect("failed");
+
+    acts_as_courier(&world, &client, false);
+}
+
+/// AC-694: the platform operator reports the failure of a delivery it is
+/// not assigned to; a user without `operator` is denied.
+#[test]
+fn operator_dispatches_delivery_failure() {
+    let Some(client) = live() else { return };
+    let operator = unique("operator");
+    client
+        .write(
+            RelationshipOperation::Touch,
+            &Relationship::new("platform", "nomnom", "operator", "user", &operator),
+        )
+        .expect("grant operator");
+    let authorization = adapter(&client, &Arc::new(MemoryStore::new()));
+    let report = |subject: &str| {
+        DeliveryAuthorization::check(
+            &authorization,
+            &user(subject),
+            DeliveryPermission::ReportDeliveryFailure,
+            &DeliveryResource::Delivery(DeliveryId::new(unique("delivery"))),
+        )
+    };
+
+    // `platform:nomnom` has no stored revision: minimize_latency.
+    eventually(true, || report(&operator));
+    immediately(false, report(&unique("stranger")));
 }
 
 /// Graph limited to relationships created by this test: the shared SpiceDB

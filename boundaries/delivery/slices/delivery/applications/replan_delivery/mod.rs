@@ -1,9 +1,15 @@
 //! Replan Delivery: the fulfillment process of `orders` asks `delivery` to
 //! plan the Delivery of an order again. If a courier is assigned, the Courier
-//! Assignment is ended (Reassign Courier); then the nearest eligible courier
-//! is selected (Find Courier) and receives a Delivery Offer (Offer Delivery).
-//! No candidate is a success without an offer. The selection algorithm stays
-//! inside `delivery`; this use case only composes the existing handlers.
+//! Assignment is ended; then the nearest eligible courier is selected and
+//! receives a Delivery Offer. No candidate is a success without an offer.
+//!
+//! The permission is checked once (`ReplanDelivery` on the order, AC-633);
+//! the steps run as the application services of Reassign Courier
+//! ([`end_assignment`]), Find Courier ([`select_candidate`]) and Offer
+//! Delivery ([`make_offer`]) in one Unit of Work, so a failed step leaves
+//! the assignment in place. The relationship DELETE is not transactional: if
+//! a later step fails, reconciliation restores the missing relationship
+//! (FR-445).
 
 use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
@@ -15,10 +21,13 @@ use crate::slices::delivery::domains::delivery::{
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::courier_locator::CourierLocator;
 use super::error::DeliveryApplicationError;
+use super::find_courier::{Outcome, select_candidate};
+use super::offer_delivery::{self, make_offer};
 use super::outbox::DeliveryOutbox;
 use super::policy::AssignmentPolicy;
+use super::reassign_courier::end_assignment;
 use super::relationships::DeliveryRelationshipWriter;
-use super::{find_courier, load_delivery_by_order, offer_delivery, order_id, reassign_courier};
+use super::{load_delivery_by_order, order_id};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
@@ -61,70 +70,45 @@ impl<U: UnitOfWork> Handler<'_, U> {
             &DeliveryResource::Order(order_id.clone()),
         )?;
 
-        let delivery = load_delivery_by_order(self.deliveries, &order_id)?;
-        let delivery_id = delivery.id().clone();
+        self.unit_of_work.run(|| {
+            let mut delivery = load_delivery_by_order(self.deliveries, &order_id)?;
+            let released_courier_id = if delivery.courier_id().is_some() {
+                Some(end_assignment(
+                    &mut delivery,
+                    self.deliveries,
+                    self.couriers,
+                    self.outbox,
+                    self.relationships,
+                )?)
+            } else {
+                None
+            };
 
-        let released_courier_id = if delivery.courier_id().is_some() {
-            let reassigned = reassign_courier::Handler {
-                authorization: self.authorization,
-                unit_of_work: self.unit_of_work,
-                deliveries: self.deliveries,
-                couriers: self.couriers,
-                outbox: self.outbox,
-                relationships: self.relationships,
-            }
-            .execute(
-                subject,
-                reassign_courier::Input {
-                    delivery_id: delivery_id.as_str().to_owned(),
-                },
+            let selection = select_candidate(
+                &delivery,
+                self.offers,
+                self.couriers,
+                self.locator,
+                self.policy,
             )?;
-            Some(reassigned.released_courier_id)
-        } else {
-            None
-        };
+            let offer = match selection.outcome {
+                Outcome::CandidateFound { courier_id, .. } => Some(make_offer(
+                    &delivery,
+                    courier_id,
+                    self.couriers,
+                    self.offers,
+                    self.ids,
+                    self.clock,
+                    self.policy,
+                )?),
+                Outcome::NoCandidate => None,
+            };
 
-        let search = find_courier::Handler {
-            authorization: self.authorization,
-            deliveries: self.deliveries,
-            couriers: self.couriers,
-            offers: self.offers,
-            locator: self.locator,
-            policy: self.policy,
-        }
-        .execute(
-            subject,
-            find_courier::Input {
-                delivery_id: delivery_id.as_str().to_owned(),
-            },
-        )?;
-
-        let offer = match search.outcome {
-            find_courier::Outcome::CandidateFound { courier_id, .. } => Some(
-                offer_delivery::Handler {
-                    authorization: self.authorization,
-                    deliveries: self.deliveries,
-                    couriers: self.couriers,
-                    offers: self.offers,
-                    ids: self.ids,
-                    clock: self.clock,
-                    policy: self.policy,
-                }
-                .execute(
-                    subject,
-                    offer_delivery::Input {
-                        delivery_id: delivery_id.as_str().to_owned(),
-                        courier_id: courier_id.as_str().to_owned(),
-                    },
-                )?,
-            ),
-            find_courier::Outcome::NoCandidate => None,
-        };
-
-        Ok(Output {
-            delivery_id,
-            released_courier_id,
-            offer,
+            Ok(Output {
+                delivery_id: delivery.id().clone(),
+                released_courier_id,
+                offer,
+            })
         })
     }
 }
@@ -223,6 +207,56 @@ mod tests {
         assert_eq!(
             delivery.authorization_revision(),
             Some(&RecordingRelationships::revision(1))
+        );
+    }
+
+    /// AC-633: one permission check and one Unit of Work for all steps.
+    #[test]
+    fn replan_checks_permission_once_in_one_unit_of_work() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+        world.courier("courier-2", CourierStatus::Available);
+        world
+            .locator
+            .set_candidates(vec![candidate("courier-2", 500)]);
+
+        handler(&world)
+            .execute(&service(), input())
+            .expect("replanned");
+
+        assert_eq!(
+            world.authorization.delivery_checks(),
+            vec![(
+                service(),
+                DeliveryPermission::ReplanDelivery,
+                DeliveryResource::Order(OrderId::new("order-of-delivery-1"))
+            )]
+        );
+        assert_eq!(world.store.commits(), 1);
+    }
+
+    /// AC-633: a failed search rolls the ended assignment back.
+    #[test]
+    fn failed_search_keeps_the_assignment() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+        world.locator.set_unavailable(true);
+
+        assert!(matches!(
+            handler(&world).execute(&service(), input()),
+            Err(DeliveryApplicationError::DependencyUnavailable(_))
+        ));
+        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
+        assert!(world.store.outbox_messages().is_empty());
+        // SpiceDB is outside the transaction: the DELETE written before the
+        // failure leaves a missing relationship for reconciliation (FR-445).
+        assert_eq!(
+            world.relationships.writes(),
+            vec![RelationshipWrite::UnassignCourier(
+                DeliveryId::new("delivery-1"),
+                CourierId::new("courier-1")
+            )]
         );
     }
 

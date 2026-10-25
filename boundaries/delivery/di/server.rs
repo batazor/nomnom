@@ -21,19 +21,22 @@ use std::time::{Duration, Instant};
 use shaku::{Component, HasComponent, HasProvider, Interface, Module, Provider, module};
 
 use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver};
-use crate::infrastructure::memory::StaticCourierLocator;
+use crate::infrastructure::ids::UuidIdGenerator;
+use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
 use crate::infrastructure::postgres::PostgresStore;
-use crate::infrastructure::reconcile::{Reconciler, Schedule};
+use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
 use crate::infrastructure::spicedb::{
     RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization, SpiceDbClient,
     SpiceDbConfigError, SpiceDbRelationships,
 };
 use crate::pkg::config::{AppConfig, DatabaseConfig, SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
 use crate::pkg::telemetry::{self, Telemetry};
+use crate::slices::courier::domains::courier::CourierRepository;
+use crate::slices::delivery::domains::delivery::DeliveryRepository;
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 
 use super::ReconcilingWorker;
-use super::infrastructure::{InfrastructureModule, ProcessStore, SharedStore, infrastructure};
+use super::infrastructure::{ProcessIds, ProcessLocator, ProcessStores, infrastructure};
 use super::service::{ServiceModule, service};
 
 /// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
@@ -63,13 +66,27 @@ pub fn postgres(config: &DatabaseConfig) -> Result<PostgresStore, String> {
 
 /// SpiceDB-авторизация процесса: checks `courier:<id>` и `delivery:<id>`
 /// видят собственные записи relationships по revision из `store` (FR-447).
+/// Хранилище видно только через роль [`RevisionReader`].
 #[must_use]
-pub fn spicedb_authorization(
-    client: SpiceDbClient,
-    store: Arc<dyn ProcessStore>,
-) -> SpiceDbAuthorization {
+pub fn spicedb_authorization<S>(client: SpiceDbClient, store: Arc<S>) -> SpiceDbAuthorization
+where
+    S: ?Sized + CourierRepository + DeliveryRepository + Send + Sync + 'static,
+{
     SpiceDbAuthorization::new(Box::new(client))
         .with_revisions(Arc::new(RepositoryRevisions(store)) as Arc<dyn RevisionReader>)
+}
+
+/// Идентификаторы и локатор курьеров процесса: UUIDv7, уникальный между
+/// перезапусками и репликами (FR-541), и кандидаты из сохранённых позиций
+/// доступных курьеров (FR-542).
+#[must_use]
+pub fn assignment_adapters(
+    positions: Arc<dyn CourierPositions>,
+) -> (Box<dyn ProcessIds>, Box<dyn ProcessLocator>) {
+    (
+        Box::new(UuidIdGenerator),
+        Box::new(StoredCourierLocator::new(positions)),
+    )
 }
 
 /// gRPC-транспорт процесса: use cases, проверка вызывающего и бизнес-порт.
@@ -112,9 +129,8 @@ pub trait RelationshipReconciliation: Interface {
 #[derive(Component)]
 #[shaku(interface = RelationshipReconciliation)]
 pub struct SpiceDbReconciliation {
-    /// То же хранилище, что у портов слайсов.
-    #[shaku(inject)]
-    store: Arc<dyn SharedStore>,
+    /// То же хранилище, что у портов слайсов, в роли reconciliation.
+    store: Arc<dyn ReconciliationStore>,
     graph: Arc<dyn RelationshipGraph>,
     grace: Duration,
     page_size: u32,
@@ -126,14 +142,14 @@ impl RelationshipReconciliation for SpiceDbReconciliation {
         vec![
             Reconciler::couriers(
                 Arc::clone(&self.graph),
-                self.store.shared() as _,
+                Arc::clone(&self.store),
                 self.grace,
                 self.page_size,
                 Arc::new(Instant::now),
             ),
             Reconciler::deliveries(
                 Arc::clone(&self.graph),
-                self.store.shared() as _,
+                Arc::clone(&self.store),
                 self.grace,
                 self.page_size,
                 Arc::new(Instant::now),
@@ -204,12 +220,7 @@ impl ServerTelemetry for OtlpServerTelemetry {
 module! {
     pub ServerModule {
         components = [TonicTransport, SpiceDbReconciliation, OtlpServerTelemetry],
-        providers = [DeliveryWorkerProvider],
-
-        use InfrastructureModule {
-            components = [dyn SharedStore],
-            providers = []
-        }
+        providers = [DeliveryWorkerProvider]
     }
 }
 
@@ -238,24 +249,28 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // PostgreSQL обязателен: пустой DATABASE__URL или недоступная база
     // прерывают startup. Revisions записей relationships хранятся с Courier и
     // Delivery; checks читают их из того же хранилища (FR-447).
-    let store: Arc<dyn ProcessStore> = Arc::new(postgres(&config.database)?);
+    // Каждая роль хранилища разрешается отдельно над одним `PostgresStore`.
+    let store = Arc::new(postgres(&config.database)?);
     // Instruments берутся у глобального MeterProvider при сборке портов,
     // поэтому pipeline запускается до них.
     let telemetry = telemetry::start(SERVICE_NAME)?;
+    let (ids, locator) = assignment_adapters(Arc::clone(&store) as _);
     let infrastructure = infrastructure(
-        Arc::clone(&store),
-        StaticCourierLocator::new(Vec::new()),
-        Box::new(spicedb_authorization(spicedb, store)),
+        ProcessStores::over(&store),
+        ids,
+        locator,
+        Box::new(spicedb_authorization(spicedb, Arc::clone(&store))),
         Box::new(SpiceDbRelationships::new(Arc::clone(&graph))),
     );
     let use_cases = Arc::new(service(Arc::clone(&infrastructure)));
-    Ok(ServerModule::builder(infrastructure)
+    Ok(ServerModule::builder()
         .with_component_parameters::<TonicTransport>(TonicTransportParameters {
             use_cases,
             subjects,
             port: config.server.port,
         })
         .with_component_parameters::<SpiceDbReconciliation>(SpiceDbReconciliationParameters {
+            store,
             graph,
             grace: config.reconciler.grace,
             page_size: config.reconciler.page_size,
@@ -270,6 +285,110 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::infrastructure::memory::{MemoryStore, RecordingRelationships};
+    use crate::pkg::application::Subject;
+    use crate::slices::courier::applications::{
+        register_courier, set_courier_availability, update_courier_location,
+    };
+    use crate::slices::delivery::applications::{create_delivery, find_courier};
+
+    use super::super::infrastructure::local_authorization;
+    use super::super::service::ServiceModule;
+
+    fn operator() -> Subject {
+        Subject::User("operator-1".to_owned())
+    }
+
+    /// Граф use cases с адаптерами процесса над in-memory хранилищем вместо
+    /// PostgreSQL; новый граф над тем же хранилищем — перезапуск процесса.
+    fn process(store: &Arc<MemoryStore>) -> ServiceModule {
+        let (ids, locator) = assignment_adapters(Arc::clone(store) as _);
+        service(infrastructure(
+            ProcessStores::over(store),
+            ids,
+            locator,
+            Box::new(local_authorization()),
+            Box::new(RecordingRelationships::new()),
+        ))
+    }
+
+    fn create(process: &ServiceModule, order: &str) -> create_delivery::Output {
+        process
+            .deliveries()
+            .create_delivery(
+                &operator(),
+                create_delivery::Input {
+                    order_id: order.to_owned(),
+                    pickup_address: "Pickup street 1".to_owned(),
+                    dropoff_address: "Dropoff street 2".to_owned(),
+                },
+            )
+            .expect("delivery created")
+    }
+
+    /// AC-631
+    #[test]
+    fn delivery_ids_do_not_repeat_after_restart() {
+        let store = Arc::new(MemoryStore::new());
+        let before = create(&process(&store), "order-1");
+
+        let after = create(&process(&store), "order-2");
+
+        assert!(after.created);
+        assert_ne!(after.delivery_id, before.delivery_id);
+    }
+
+    /// AC-632
+    #[test]
+    fn find_courier_returns_available_courier_with_stored_position() {
+        let store = Arc::new(MemoryStore::new());
+        let process = process(&store);
+        let couriers = process.couriers();
+        couriers
+            .register_courier(
+                &operator(),
+                register_courier::Input {
+                    courier_id: "courier-1".to_owned(),
+                },
+            )
+            .expect("courier registered");
+        couriers
+            .set_courier_availability(
+                &operator(),
+                set_courier_availability::Input {
+                    courier_id: "courier-1".to_owned(),
+                    availability: set_courier_availability::Availability::Available,
+                },
+            )
+            .expect("courier available");
+        couriers
+            .update_courier_location(
+                &operator(),
+                update_courier_location::Input {
+                    courier_id: "courier-1".to_owned(),
+                    latitude: 52.37,
+                    longitude: 4.89,
+                },
+            )
+            .expect("position recorded");
+        let created = create(&process, "order-1");
+
+        let found = process
+            .deliveries()
+            .find_courier(
+                &operator(),
+                find_courier::Input {
+                    delivery_id: created.delivery_id.as_str().to_owned(),
+                },
+            )
+            .expect("search");
+
+        assert!(matches!(
+            found.outcome,
+            find_courier::Outcome::CandidateFound { courier_id, .. }
+                if courier_id.as_str() == "courier-1"
+        ));
+    }
 
     #[test]
     fn empty_spicedb_endpoint_fails_startup() {

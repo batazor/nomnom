@@ -1,7 +1,10 @@
-//! Query read models of [`MemoryStore`].
+//! Query read models and the courier positions of the locator of
+//! [`MemoryStore`].
 
+use crate::infrastructure::locator::CourierPositions;
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::applications::update_courier_location::CourierPosition;
+use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
@@ -59,6 +62,23 @@ impl PendingDeliveryOffersReadModel for MemoryStore {
                         expires_at_epoch_seconds: offer.expires_at_epoch_seconds(),
                     })
             })
+            .collect())
+    }
+}
+
+impl CourierPositions for MemoryStore {
+    fn available_positions(&self) -> Result<Vec<CourierPosition>, RepositoryError> {
+        let state = self.available()?;
+        Ok(state
+            .positions
+            .values()
+            .filter(|position| {
+                state
+                    .couriers
+                    .get(position.courier_id.as_str())
+                    .is_some_and(|courier| courier.status() == CourierStatus::Available)
+            })
+            .cloned()
             .collect())
     }
 }

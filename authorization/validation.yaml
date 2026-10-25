@@ -4,13 +4,15 @@ schemaFile: schema.zed
 relationships: |-
   order:example-order#customer@user:example-customer
   order:example-order#restaurant@restaurant:example-restaurant
-  order:example-order#courier@user:example-courier
   order:example-order#delivery@delivery:example-delivery
   customer:example-customer#self@user:example-customer
   restaurant:example-restaurant#owner@user:example-owner
   restaurant:example-restaurant#staff@user:example-cook
   courier:example-courier#self@user:example-courier
   delivery:example-delivery#courier@user:example-courier
+  order:example-closed-order#customer@user:example-customer
+  order:example-closed-order#delivery@delivery:example-closed-delivery
+  platform:nomnom#operator@user:example-operator
 assertions:
   assertTrue:
     - order:example-order#view@user:example-customer
@@ -25,6 +27,8 @@ assertions:
     - restaurant:example-restaurant#manage_menu@user:example-cook
     - courier:example-courier#act@user:example-courier
     - delivery:example-delivery#act_as_courier@user:example-courier
+    # AC-695: the platform operator dispatches deliveries.
+    - platform:nomnom#dispatch_delivery@user:example-operator
   assertFalse:
     - order:example-order#view@user:example-stranger
     - order:example-order#cancel@user:example-owner
@@ -32,3 +36,10 @@ assertions:
     - restaurant:example-restaurant#manage@user:example-cook
     - delivery:example-delivery#act_as_courier@user:example-owner
     - courier:example-courier#act@user:example-cook
+    # AC-517: a courier without delivery#courier of the order's delivery
+    # (closed or never assigned) does not see the order.
+    - order:example-closed-order#view@user:example-courier
+    - order:example-closed-order#view@user:example-operator
+    # AC-695: neither a courier nor a stranger dispatches deliveries.
+    - platform:nomnom#dispatch_delivery@user:example-courier
+    - platform:nomnom#dispatch_delivery@user:example-stranger

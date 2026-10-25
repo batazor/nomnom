@@ -286,3 +286,48 @@ fn restore_validates_courier_and_failure_reason() {
     assert!(restore(None, State::Cancelled, None).is_ok());
     assert!(restore(Some("c"), State::Failed, Some(reason())).is_ok());
 }
+
+/// FR-444: only an assigned or picked up delivery has an active courier.
+#[test]
+fn active_courier_exists_only_while_assigned_or_picked_up() {
+    let courier = CourierId::new("courier-1");
+    let restore = |courier_id: Option<CourierId>, state, reason| {
+        Delivery::restore(
+            DeliveryId::new("delivery-1"),
+            OrderId::new("order-1"),
+            courier_id,
+            Address::new("a").expect("address"),
+            Address::new("b").expect("address"),
+            state,
+            reason,
+        )
+        .expect("valid snapshot")
+    };
+    let cases = [
+        (restore(None, State::Waiting, None), None),
+        (
+            restore(Some(courier.clone()), State::Assigned, None),
+            Some(&courier),
+        ),
+        (
+            restore(Some(courier.clone()), State::PickedUp, None),
+            Some(&courier),
+        ),
+        (restore(Some(courier.clone()), State::Delivered, None), None),
+        (
+            restore(Some(courier.clone()), State::Failed, Some(reason())),
+            None,
+        ),
+        (restore(None, State::Cancelled, None), None),
+    ];
+    for (delivery, expected) in &cases {
+        assert_eq!(
+            delivery.active_courier(),
+            *expected,
+            "{:?}",
+            delivery.state()
+        );
+    }
+    // A closed delivery keeps the fact of who carried it.
+    assert_eq!(cases[3].0.courier_id(), Some(&courier));
+}

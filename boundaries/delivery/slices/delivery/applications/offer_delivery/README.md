@@ -15,7 +15,7 @@
 
 ## Реализация
 
-- **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-308.
+- **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-308. Без авторизации шаг выполняет сервис `make_offer`, его же вызывает Replan Delivery.
 - **Порты:** `DeliveryAuthorization` (`OfferDelivery` над `Delivery(id)`), `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `IdGenerator`, `Clock`, `AssignmentPolicy`.
 - **Транзакция:** Без UoW: одиночная вставка offer; открытый offer той же пары возвращается вместо нового.
 - **Допущение:** Срок offer — `AssignmentPolicy::offer_ttl_seconds`; несколько курьеров могут одновременно иметь pending offers одной доставки.

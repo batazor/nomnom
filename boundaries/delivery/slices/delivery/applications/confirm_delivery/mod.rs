@@ -1,6 +1,9 @@
 //! Confirm Delivery: the assigned courier confirms the handover to the
 //! customer. The delivery becomes delivered, the courier available again and
 //! the Delivery Completion fact is written to the Outbox in one Unit of Work.
+//! The assignment is over, so `delivery:<id>#courier@user:<courier_id>` is
+//! deleted before commit (AC-690); `Delivery.courier_id` stays as the fact of
+//! who carried it. A failed delete rolls the completion back (AC-692).
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
@@ -8,9 +11,11 @@ use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };
 
+use super::assignment::release_assignment;
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
+use super::relationships::DeliveryRelationshipWriter;
 use super::{courier_id, delivery_id, load_delivery};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -33,6 +38,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
+    pub relationships: &'a dyn DeliveryRelationshipWriter,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -64,7 +70,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 }
                 Err(error) => return Err(error.into()),
             }
-            self.couriers.release(&courier_id)?;
+            release_assignment(
+                &mut delivery,
+                &courier_id,
+                self.couriers,
+                self.relationships,
+            )?;
 
             self.deliveries.save(&delivery)?;
             publish(self.outbox, delivery.pull_events())?;
@@ -80,7 +91,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::{
+        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+    };
     use crate::pkg::application::UnitOfWorkError;
     use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
     use crate::slices::delivery::applications::outbox::OutboxMessage;
@@ -94,6 +107,7 @@ mod tests {
             deliveries: &world.store,
             couriers: &world.store,
             outbox: &world.store,
+            relationships: &world.relationships,
         }
     }
 
@@ -126,6 +140,51 @@ mod tests {
                 created_at_epoch_seconds: None,
             })]
         );
+    }
+
+    /// AC-690: the courier loses access, the delivery keeps who carried it.
+    #[test]
+    fn completion_revokes_courier_relationship() {
+        let world = World::new();
+        world.picked_up_delivery("delivery-1", "courier-1");
+
+        handler(&world)
+            .execute(&subject("courier-1"), input("courier-1"))
+            .expect("delivery confirmed");
+
+        assert_eq!(
+            world.relationships.writes(),
+            vec![RelationshipWrite::UnassignCourier(
+                DeliveryId::new("delivery-1"),
+                CourierId::new("courier-1")
+            )]
+        );
+        let delivery = world.delivery("delivery-1");
+        assert_eq!(delivery.courier_id(), Some(&CourierId::new("courier-1")));
+        assert_eq!(delivery.active_courier(), None);
+        // FR-447: the revision of the DELETE is stored with the delivery.
+        assert_eq!(
+            delivery.authorization_revision(),
+            Some(&RecordingRelationships::revision(1))
+        );
+    }
+
+    /// AC-692: a failed DELETE rolls the completion back.
+    #[test]
+    fn failed_relationship_delete_rolls_completion_back() {
+        let world = World {
+            relationships: RecordingRelationships::failing("spicedb offline"),
+            ..World::new()
+        };
+        world.picked_up_delivery("delivery-1", "courier-1");
+
+        assert!(matches!(
+            handler(&world).execute(&subject("courier-1"), input("courier-1")),
+            Err(DeliveryApplicationError::DependencyUnavailable(_))
+        ));
+        assert_eq!(world.delivery_state("delivery-1"), State::PickedUp);
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
+        assert!(world.store.outbox_messages().is_empty());
     }
 
     /// AC-339
@@ -181,6 +240,8 @@ mod tests {
             .expect("repeat");
         assert!(!repeat.changed);
         assert_eq!(world.store.outbox_messages().len(), 1);
+        // The repeat writes nothing: the relationship was deleted once.
+        assert_eq!(world.relationships.writes().len(), 1);
     }
 
     #[test]
