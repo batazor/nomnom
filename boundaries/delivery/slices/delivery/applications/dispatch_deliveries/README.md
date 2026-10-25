@@ -40,13 +40,13 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input { batch_size, after }`, `Output { offered, without_candidate, skipped, next }`, `Handler::execute(input)`; требование FR-582. Subject и проверки прав нет — задачу запускает сам процесс.
-- **Порты:** `UnitOfWork`, `WaitingDeliveries` (порт рядом с use case, `list_waiting_without_pending_offer`: `waiting` без pending offer, по `(created_at, id)` после `after` (`DeliveryPosition`), не больше `limit`; `Delivery` без `created_at` считается созданной в `0`; реализует только `PostgresStore`, in-memory варианта нет), `DeliveryRepository`, `CourierAssignment`, `DeliveryOfferRepository`, `DeliveryOutbox`, `CourierLocator`, `IdGenerator`, `Clock`, `AssignmentPolicy`.
+- **Порты:** `UnitOfWork`, `WaitingDeliveries` (порт рядом с use case, `list_waiting_without_pending_offer`: `waiting` без pending offer, по `(created_at, id)` после `after` (`DeliveryPosition`), не больше `limit`; `Delivery` без `created_at` считается созданной в `0`; реализует `PostgresStore`), `DeliveryRepository`, `CourierAssignment`, `DeliveryOfferRepository`, `OffersOfDelivery`, `DeliveryOutbox`, `CourierLocator`, `IdGenerator`, `Clock`, `AssignmentPolicy`.
 - **Транзакция:** UoW на каждую доставку: `Delivery` сохраняется с версией из пачки до создания offer, поэтому конкурентное изменение — другой dispatcher, принятое предложение, Replan или Cancel — optimistic-concurrency конфликт и пропуск, не ошибка. Курьер, переставший быть доступным после выбора, — тоже пропуск. Ошибка зависимости (locator, хранилище) прерывает пачку.
 - **Расписание:** `DispatchWorker` (`di/dispatch_worker.rs`) каждые `OFFERS__DISPATCH_INTERVAL` (по умолчанию `2s`) проходит все ожидающие доставки пачками по `OFFERS__DISPATCH_BATCH` (по умолчанию `100`), продолжая с `next` предыдущей пачки, поэтому доставки без кандидата не загораживают следующие; останавливается по сигналу shutdown основного worker.
 - **Допущение:** Курьер выбирается правилом Find Courier над текущим locator (сохранённые позиции, без расстояния). Когда всем доступным курьерам доставку уже предлагали, она ждёт Replan Delivery.
 
 ## Acceptance
 
-AC-734 (предложение после создания), AC-735 (повтор после отказа или истечения), AC-736 (нет свободных курьеров) — `tests.rs`, порт `WaitingDeliveries` там — scripted fake. SQL выборки (фильтр, порядок, пагинация) — `tests/postgres_store.rs`, конкурентные dispatcher'ы — `tests/postgres_assignment.rs`; оба набора идут против PostgreSQL при заданном `DATABASE_URL`.
+AC-734 (предложение после создания), AC-735 (повтор после отказа или истечения), AC-736 (нет свободных курьеров) — `tests.rs`, порт `WaitingDeliveries` там — scripted fake. SQL выборки (фильтр, порядок, пагинация) — `tests/postgres_store.rs`, конкурентные dispatcher'ы — `tests/postgres_assignment.rs`; оба набора идут против PostgreSQL из testcontainers.
 
 Общий каталог: [Delivery use cases](../../../../README.md#use-cases).

@@ -9,6 +9,7 @@ fn concurrent_modification_maps_to_aborted() {
 use super::super::v1::delivery_service_client::DeliveryServiceClient;
 use super::*;
 use crate::infrastructure::memory::StaticCourierLocator;
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::slices::courier::applications::{register_courier, set_courier_availability};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::courier_locator::CourierCandidate;
@@ -29,7 +30,10 @@ impl SubjectResolver for StaticSubjectResolver {
 async fn serves_the_application_query_and_maps_not_found() {
     let worker = GrpcWorker::bind(
         ([127, 0, 0, 1], 0).into(),
-        Arc::new(crate::di::build()),
+        Arc::new(crate::di::build_with_locator(
+            &Arc::new(TestStore::new()),
+            StaticCourierLocator::new(Vec::new()),
+        )),
         Arc::new(StaticSubjectResolver),
     )
     .expect("bind");
@@ -77,14 +81,15 @@ impl Running {
 
 /// Serves a process graph whose locator sees one available courier.
 async fn start_with_courier(courier: &str) -> Running {
-    let module = Arc::new(crate::di::build_with_locator(StaticCourierLocator::new(
-        vec![CourierCandidate {
+    let module = Arc::new(crate::di::build_with_locator(
+        &Arc::new(TestStore::new()),
+        StaticCourierLocator::new(vec![CourierCandidate {
             courier_id: CourierId::new(courier),
             within_delivery_zone: true,
             distance_to_pickup_meters: 500,
             active_assignments: 0,
-        }],
-    )));
+        }]),
+    ));
     let couriers = module.couriers();
     couriers
         .register_courier(
@@ -376,7 +381,10 @@ async fn service_token_reaches_the_handler_as_service_subject() {
     });
     let worker = GrpcWorker::bind(
         ([127, 0, 0, 1], 0).into(),
-        Arc::new(crate::di::build()),
+        Arc::new(crate::di::build_with_locator(
+            &Arc::new(TestStore::new()),
+            StaticCourierLocator::new(Vec::new()),
+        )),
         resolver.clone(),
     )
     .expect("bind");
@@ -419,7 +427,10 @@ async fn service_token_reaches_the_handler_as_service_subject() {
 async fn rejects_unverified_callers_by_default() {
     let worker = GrpcWorker::bind(
         ([127, 0, 0, 1], 0).into(),
-        Arc::new(crate::di::build()),
+        Arc::new(crate::di::build_with_locator(
+            &Arc::new(TestStore::new()),
+            StaticCourierLocator::new(Vec::new()),
+        )),
         Arc::new(RejectingSubjectResolver),
     )
     .expect("bind");

@@ -1,11 +1,8 @@
 //! Integration-тест Outbox → `delivery-relay` → Kafka (ADR 13, ADR 31) против
-//! настоящих PostgreSQL и Kafka. Запускается только при заданных
-//! `DATABASE_URL` и `KAFKA_BROKERS`:
-//!
-//! `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres KAFKA_BROKERS=localhost:9092 cargo test --test outbox_relay`
-//!
-//! Без переменных тесты завершаются сразу. Идентификаторы уникальны, поэтому
-//! база и topic могут быть общими.
+//! настоящих PostgreSQL и Kafka из testcontainers. Идентификаторы уникальны,
+//! поэтому база и topic общие.
+
+mod support;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -20,7 +17,7 @@ use tokio::sync::watch;
 use delivery::di;
 use delivery::infrastructure::grpc::v1;
 use delivery::infrastructure::outbox::{PgOutbox, WATERMILL_UUID_HEADER};
-use delivery::infrastructure::postgres::{OUTBOX_TOPIC, event_id, migrate};
+use delivery::infrastructure::postgres::{OUTBOX_TOPIC, event_id};
 use delivery::pkg::config::{DatabaseConfig, KafkaConfig, OutboxConfig};
 use delivery::pkg::lifecycle::Worker as _;
 use delivery::slices::courier::domains::courier::CourierId;
@@ -28,6 +25,9 @@ use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMes
 use delivery::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryId, DeliveryRepository, DomainEvent, OrderId, State,
 };
+use testcontainers_modules::kafka::apache::{KAFKA_PORT, Kafka};
+use testcontainers_modules::testcontainers::ImageExt;
+use testcontainers_modules::testcontainers::runners::SyncRunner;
 
 const TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
 
@@ -36,24 +36,37 @@ struct Env {
     kafka: KafkaConfig,
 }
 
-fn env() -> Option<Env> {
-    let url = std::env::var("DATABASE_URL")
-        .ok()
-        .filter(|v| !v.is_empty())?;
-    let brokers = std::env::var("KAFKA_BROKERS")
-        .ok()
-        .filter(|v| !v.is_empty())?;
-    Some(Env {
-        database: DatabaseConfig {
-            url,
-            max_conns: 4,
-            ..DatabaseConfig::default()
-        },
+/// Image of the platform Kafka (ops).
+const KAFKA_TAG: &str = "4.4.0";
+
+/// Kafka broker of the test binary.
+fn brokers() -> &'static str {
+    static BROKERS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    BROKERS.get_or_init(|| {
+        support::off_runtime(|| {
+            let container = Kafka::default()
+                .with_jvm_image()
+                .with_tag(KAFKA_TAG)
+                .start()
+                .expect("start kafka container");
+            let port = container
+                .get_host_port_ipv4(KAFKA_PORT)
+                .expect("container port");
+            support::keep(container);
+            // The module advertises the IPv4 loopback.
+            format!("127.0.0.1:{port}")
+        })
+    })
+}
+
+fn env() -> Env {
+    Env {
+        database: support::database(),
         kafka: KafkaConfig {
-            brokers,
+            brokers: brokers().to_owned(),
             client_id: "delivery-relay-test".to_owned(),
         },
-    })
+    }
 }
 
 /// Tests share the Outbox table and the relay lock: run them one at a time.
@@ -74,9 +87,8 @@ async fn pool(config: &DatabaseConfig) -> sqlx::PgPool {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn relay_publishes_outbox_rows_with_envelope_headers() {
-    let Some(env) = env() else { return };
+    let env = env();
     let _serial = SERIAL.lock().await;
-    migrate(&env.database).expect("migrate");
     let db = pool(&env.database).await;
 
     // Main process write path: aggregate + mapped Integration Event.
@@ -270,7 +282,7 @@ async fn relay_publishes_outbox_rows_with_envelope_headers() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn only_one_relay_holds_the_lock() {
-    let Some(env) = env() else { return };
+    let env = env();
     let _serial = SERIAL.lock().await;
     let first = PgOutbox::connect(&env.database).await.expect("first");
     let second = PgOutbox::connect(&env.database).await.expect("second");
@@ -291,9 +303,8 @@ async fn only_one_relay_holds_the_lock() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn retention_deletes_only_old_published_rows() {
-    let Some(env) = env() else { return };
+    let env = env();
     let _serial = SERIAL.lock().await;
-    migrate(&env.database).expect("migrate");
     let db = pool(&env.database).await;
     let aggregate_id = unique("retention");
     // (aggregate_version, published days ago).

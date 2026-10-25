@@ -71,8 +71,9 @@ impl Handler<'_> {
 mod tests {
     use super::*;
     use crate::infrastructure::memory::{
-        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+        RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::pkg::application::RelationshipWriteError;
     use crate::pkg::persistence::AuthorizationRevision;
     use crate::slices::courier::applications::error::InvalidCourierRequest;
@@ -90,7 +91,7 @@ mod tests {
     /// AC-302
     #[test]
     fn registers_available_courier() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
         let relationships = RecordingRelationships::new();
         let handler = Handler {
@@ -126,7 +127,7 @@ mod tests {
 
     /// Writer that observes whether the courier was already persisted.
     struct ObservingWriter<'a> {
-        store: &'a MemoryStore,
+        store: &'a TestStore,
         persisted_at_write: std::cell::Cell<Option<bool>>,
     }
 
@@ -144,7 +145,7 @@ mod tests {
     /// FR-444: the relationship is written before the courier is persisted.
     #[test]
     fn relationship_is_written_before_courier_is_persisted() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
         let writer = ObservingWriter {
             store: &store,
@@ -172,7 +173,7 @@ mod tests {
     /// FR-444: a failed write aborts the registration (fail closed).
     #[test]
     fn failed_relationship_write_persists_nothing() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
         let relationships = RecordingRelationships::failing("spicedb offline");
         let handler = Handler {
@@ -191,7 +192,7 @@ mod tests {
     /// AC-303
     #[test]
     fn repeated_registration_is_rejected_without_changes() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let existing = Courier::restore(CourierId::new("courier-1"), CourierStatus::Busy);
         store.add(&existing).expect("seed courier");
         let authorization = StaticAuthorization::allow_all();
@@ -215,7 +216,7 @@ mod tests {
     /// AC-301
     #[test]
     fn denied_or_unavailable_authorization_fails_closed() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let relationships = RecordingRelationships::new();
         for (authorization, expected) in [
             (
@@ -243,7 +244,7 @@ mod tests {
 
     #[test]
     fn blank_courier_id_is_invalid() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
         let relationships = RecordingRelationships::new();
         let handler = Handler {
@@ -261,7 +262,7 @@ mod tests {
 
     #[test]
     fn storage_outage_is_dependency_unavailable() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         store.set_unavailable(true);
         let authorization = StaticAuthorization::allow_all();
         let relationships = RecordingRelationships::new();

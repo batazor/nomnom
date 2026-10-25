@@ -111,8 +111,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
 mod tests {
     use super::*;
     use crate::infrastructure::memory::{
-        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+        RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
@@ -122,7 +123,7 @@ mod tests {
         Trigger,
     };
 
-    fn handler(world: &World) -> Handler<'_, MemoryStore> {
+    fn handler(world: &World) -> Handler<'_, TestStore> {
         Handler {
             authorization: &world.authorization,
             unit_of_work: &world.store,

@@ -1,9 +1,10 @@
 //! Trace context of a gRPC command reaches its Outbox row (ADR 13): the
 //! `delivery` server span continues the incoming `traceparent`, and the
 //! Integration Event written in the same Unit of Work stores the server
-//! span's `traceparent` in `metadata`. Runs only with `DATABASE_URL`:
-//!
-//! `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo test --test outbox_tracing`
+//! span's `traceparent` in `metadata`. PostgreSQL comes from testcontainers
+//! (`tests/support`).
+
+mod support;
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -19,9 +20,7 @@ use delivery::infrastructure::grpc::v1::delivery_service_client::DeliveryService
 use delivery::infrastructure::grpc::v1::{CancelDeliveryRequest, CreateDeliveryRequest};
 use delivery::infrastructure::grpc::{GrpcTraceLayer, GrpcWorker, SubjectResolver};
 use delivery::infrastructure::memory::StaticAuthorization;
-use delivery::infrastructure::postgres::migrate;
 use delivery::pkg::application::Subject;
-use delivery::pkg::config::DatabaseConfig;
 use delivery::pkg::lifecycle::Worker as _;
 
 const TRACE_ID: &str = "0af7651916cd43dd8448eb211c80319c";
@@ -45,15 +44,7 @@ fn traced<T>(message: T) -> tonic::Request<T> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn command_with_traceparent_writes_it_to_the_outbox_row() {
-    let Some(url) = std::env::var("DATABASE_URL").ok().filter(|v| !v.is_empty()) else {
-        return;
-    };
-    let config = DatabaseConfig {
-        url,
-        max_conns: 4,
-        ..DatabaseConfig::default()
-    };
-    migrate(&config).expect("migrate");
+    let config = support::database();
     let store = Arc::new(di::postgres(&config).expect("store"));
     let module = Arc::new(di::build_over(
         di::ProcessStores::over(&store),

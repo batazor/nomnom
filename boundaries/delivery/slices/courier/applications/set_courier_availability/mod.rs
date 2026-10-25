@@ -76,7 +76,8 @@ impl Handler<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::applications::update_courier_location::{
         CourierLocationStore, CourierPosition,
     };
@@ -86,8 +87,8 @@ mod tests {
         Subject::User("courier-1".to_owned())
     }
 
-    fn seeded(status: CourierStatus) -> MemoryStore {
-        let store = MemoryStore::new();
+    fn seeded(status: CourierStatus) -> TestStore {
+        let store = TestStore::new();
         store
             .add(&Courier::restore(CourierId::new("courier-1"), status))
             .expect("seed courier");
@@ -101,7 +102,7 @@ mod tests {
         }
     }
 
-    fn status(store: &MemoryStore) -> CourierStatus {
+    fn status(store: &TestStore) -> CourierStatus {
         store
             .get(&CourierId::new("courier-1"))
             .expect("read courier")
@@ -226,7 +227,7 @@ mod tests {
 
     #[test]
     fn unknown_courier_is_not_found() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
         let handler = Handler {
             authorization: &authorization,

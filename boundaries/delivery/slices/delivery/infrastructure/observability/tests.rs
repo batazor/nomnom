@@ -5,9 +5,8 @@ use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData, ResourceMe
 use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
 
 use super::*;
-use crate::infrastructure::memory::{
-    ManualClock, MemoryStore, SequentialIdGenerator, StaticAuthorization,
-};
+use crate::infrastructure::memory::{ManualClock, SequentialIdGenerator, StaticAuthorization};
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::pkg::application::{ScopedUnitOfWork, Subject, UnitOfWork};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::create_delivery;
@@ -195,7 +194,7 @@ fn offer_expired() -> DomainEvent {
 #[test]
 fn committed_events_are_counted_by_metric() {
     let harness = Harness::new();
-    let store = MemoryStore::new();
+    let store = TestStore::new();
     let events = [
         created(),
         assigned(Some(NOW - 90)),
@@ -254,7 +253,7 @@ fn committed_events_are_counted_by_metric() {
 #[test]
 fn rolled_back_or_failed_commit_records_nothing() {
     let harness = Harness::new();
-    let store = MemoryStore::new();
+    let store = TestStore::new();
 
     harness
         .unit_of_work(&store, &store, &[created()], false)
@@ -278,7 +277,7 @@ fn rolled_back_or_failed_commit_records_nothing() {
 /// Unit of Work that supports nesting: the work joins the running scope.
 #[derive(Default)]
 struct NestingScope {
-    store: MemoryStore,
+    store: TestStore,
 }
 
 impl TransactionScope for NestingScope {
@@ -316,7 +315,7 @@ fn nested_unit_of_work_is_recorded_once_at_the_outer_commit() {
 
 /// Ports of a use case whose Unit of Work and Outbox are decorated.
 struct ObservedPorts<'a> {
-    store: &'a MemoryStore,
+    store: &'a TestStore,
     observed: &'a ObservedOutbox,
 }
 
@@ -335,7 +334,7 @@ impl DeliveryOutbox for ObservedPorts<'_> {
 #[test]
 fn idempotent_repeat_is_recorded_once() {
     let harness = Harness::new();
-    let store = MemoryStore::new();
+    let store = TestStore::new();
     let ports = ObservedPorts {
         store: &store,
         observed: &harness.observed,
@@ -368,7 +367,7 @@ fn idempotent_repeat_is_recorded_once() {
 #[test]
 fn failure_reason_outside_the_closed_set_is_recorded_as_other() {
     let harness = Harness::with_reasons(&["customer_unreachable"]);
-    let store = MemoryStore::new();
+    let store = TestStore::new();
 
     harness
         .unit_of_work(
@@ -397,7 +396,7 @@ fn failure_reason_outside_the_closed_set_is_recorded_as_other() {
 #[test]
 fn failure_reason_codes_of_the_catalog_are_recorded_as_is() {
     let harness = Harness::with_reasons(&DeliveryFailureCode::CODES);
-    let store = MemoryStore::new();
+    let store = TestStore::new();
     let events: Vec<DomainEvent> = DeliveryFailureCode::CODES
         .iter()
         .map(|code| failed(code))
@@ -441,7 +440,7 @@ fn failure_reason_codes_of_the_catalog_are_recorded_as_is() {
 #[test]
 fn durations_are_measured_from_creation_at_commit() {
     let harness = Harness::new();
-    let store = MemoryStore::new();
+    let store = TestStore::new();
     harness.now.store(NOW + 120, Ordering::SeqCst);
 
     harness
@@ -469,7 +468,7 @@ fn durations_are_measured_from_creation_at_commit() {
 #[test]
 fn outbox_write_outside_a_unit_of_work_is_recorded_at_once() {
     let harness = Harness::new();
-    let store = MemoryStore::new();
+    let store = TestStore::new();
 
     harness
         .observed
@@ -482,7 +481,7 @@ fn outbox_write_outside_a_unit_of_work_is_recorded_at_once() {
 #[test]
 fn failed_outbox_write_records_nothing() {
     let harness = Harness::new();
-    let store = MemoryStore::new();
+    let store = TestStore::new();
     store.set_unavailable(true);
 
     assert!(
@@ -498,7 +497,7 @@ fn failed_outbox_write_records_nothing() {
 #[test]
 fn unit_of_work_trait_runs_through_the_decorator() {
     let harness = Harness::new();
-    let store = MemoryStore::new();
+    let store = TestStore::new();
     let ports = ObservedPorts {
         store: &store,
         observed: &harness.observed,
@@ -529,7 +528,7 @@ fn committed_failure_is_logged_once_and_rolled_back_failure_is_not() {
         Arc::new(|| NOW),
     ))
     .with_failure_log(FailureLog);
-    let store = MemoryStore::new();
+    let store = TestStore::new();
     let run = |commit: bool| {
         observed
             .run_scoped(&store, &mut || {

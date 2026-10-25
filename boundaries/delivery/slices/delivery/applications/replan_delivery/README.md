@@ -43,7 +43,7 @@ sequenceDiagram
 
 - **Handler:** `mod.rs` — `Input { order_id }`, `Output { delivery_id, released_courier_id, offer }`.
 - **Сервисы:** `reassign_courier::end_assignment`, `find_courier::select_candidate`, `offer_delivery::make_offer` — те же, что вызывают handlers Reassign Courier, Find Courier и Offer Delivery после собственной авторизации.
-- **Порты:** `DeliveryAuthorization` (одна проверка `ReplanDelivery` над `Order(order_id)`, AC-633), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `DeliveryOutbox`, `CourierLocator`, `IdGenerator`, `Clock`, `AssignmentPolicy`, `DeliveryRelationshipWriter`.
+- **Порты:** `DeliveryAuthorization` (одна проверка `ReplanDelivery` над `Order(order_id)`, AC-633), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `OffersOfDelivery` (id offers доставки, каждый загружается через репозиторий), `DeliveryOutbox`, `CourierLocator`, `IdGenerator`, `Clock`, `AssignmentPolicy`, `DeliveryRelationshipWriter`.
 - **Транзакция:** снятие назначения, выбор кандидата и offer — одна UoW (AC-633): ошибка поиска или offer откатывает снятие. DELETE relationship в SpiceDB не транзакционен: после отката недостающую связь восстанавливает reconciliation (FR-445). Offer идемпотентен по открытому offer той же пары.
 - **Ошибки:** после Pickup или в финальном состоянии — `DeliveryPrecondition` (`FAILED_PRECONDITION`); неизвестный `order_id` — `DeliveryForOrderNotFound`.
 - **Допущение:** курьеры, уже получавшие offer этой доставки, повторно не выбираются (правило Find Courier); поэтому повтор Replan может вернуть пустой `offered_courier_id`.

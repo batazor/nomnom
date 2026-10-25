@@ -74,7 +74,8 @@ impl<U: UnitOfWork> Handler<'_, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
@@ -89,7 +90,7 @@ mod tests {
         })
     }
 
-    fn handler(world: &World) -> Handler<'_, MemoryStore> {
+    fn handler(world: &World) -> Handler<'_, TestStore> {
         Handler {
             authorization: &world.authorization,
             unit_of_work: &world.store,

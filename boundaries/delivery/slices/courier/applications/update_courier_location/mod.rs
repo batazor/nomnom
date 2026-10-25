@@ -78,7 +78,8 @@ impl Handler<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{ManualClock, MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::{ManualClock, StaticAuthorization};
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::{Courier, CourierStatus, LocationError};
 
     fn subject() -> Subject {
@@ -93,8 +94,8 @@ mod tests {
         }
     }
 
-    fn seeded() -> MemoryStore {
-        let store = MemoryStore::new();
+    fn seeded() -> TestStore {
+        let store = TestStore::new();
         store
             .add(&Courier::restore(
                 CourierId::new("courier-1"),
@@ -175,7 +176,7 @@ mod tests {
     /// AC-309
     #[test]
     fn unknown_courier_is_not_found() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
         let clock = ManualClock::new(1_000);
         let handler = Handler {

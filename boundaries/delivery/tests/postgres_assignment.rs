@@ -2,12 +2,10 @@
 //! настоящего PostgreSQL: Accept Delivery Offer занимает курьера через порт
 //! слайса `courier` в той же транзакции, что offer, `Delivery` и Outbox;
 //! конкурентные Dispatch Deliveries предлагают доставку один раз (FR-582).
-//! Запускаются только при заданном `DATABASE_URL`:
-//!
-//! `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo test --test postgres_assignment`
-//!
-//! Без переменной тесты завершаются сразу. Идентификаторы уникальны, поэтому
-//! база может быть общей.
+//! PostgreSQL из testcontainers (`tests/support`); идентификаторы уникальны,
+//! поэтому база общая.
+
+mod support;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
@@ -17,9 +15,8 @@ use delivery::infrastructure::memory::{
     ManualClock, RecordingRelationships, SequentialIdGenerator, StaticAuthorization,
     StaticCourierLocator,
 };
-use delivery::infrastructure::postgres::{PostgresStore, migrate};
+use delivery::infrastructure::postgres::PostgresStore;
 use delivery::pkg::application::Subject;
-use delivery::pkg::config::DatabaseConfig;
 use delivery::pkg::persistence::RepositoryError;
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierRepository, CourierStatus,
@@ -30,6 +27,7 @@ use delivery::slices::delivery::applications::dispatch_deliveries::{
     self, DeliveryPosition, WaitingDeliveries,
 };
 use delivery::slices::delivery::applications::error::DeliveryApplicationError;
+use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
@@ -39,26 +37,11 @@ use delivery::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 
 const NOW: i64 = 1_000;
 
-fn config() -> Option<DatabaseConfig> {
-    let dsn = std::env::var("DATABASE_URL")
-        .ok()
-        .filter(|dsn| !dsn.is_empty())?;
-    Some(DatabaseConfig {
-        url: dsn,
-        max_conns: 4,
-        ..DatabaseConfig::default()
-    })
-}
-
-/// Migrated store, or `None` when `DATABASE_URL` is unset (test skipped).
-fn store() -> Option<PostgresStore> {
-    let config = config()?;
-    migrate(&config).expect("migrate");
-    Some(
-        PostgresStore::connect(&config)
-            .expect("connect")
-            .with_outbox_mapper(Arc::new(DeliveryIntegrationEvents)),
-    )
+/// Store over the migrated test database.
+fn store() -> PostgresStore {
+    PostgresStore::connect(&support::database())
+        .expect("connect")
+        .with_outbox_mapper(Arc::new(DeliveryIntegrationEvents))
 }
 
 fn unique(prefix: &str) -> String {
@@ -123,6 +106,7 @@ fn accept(
         authorization: &authorization,
         unit_of_work: store,
         offers: store,
+        offers_of: store,
         deliveries: store,
         couriers: store,
         outbox: store,
@@ -170,7 +154,7 @@ fn offer_state(store: &PostgresStore, seed: &Seed) -> OfferState {
 /// committed together with the offer and the delivery.
 #[test]
 fn acceptance_commits_offer_delivery_and_courier_together() {
-    let Some(store) = store() else { return };
+    let store = store();
     let seed = seed(&store);
 
     accept(&store, &seed, &RecordingRelationships::new()).expect("offer accepted");
@@ -184,7 +168,7 @@ fn acceptance_commits_offer_delivery_and_courier_together() {
 /// offer pending and the delivery waiting.
 #[test]
 fn failed_acceptance_rolls_courier_back_with_offer_and_delivery() {
-    let Some(store) = store() else { return };
+    let store = store();
     let seed = seed(&store);
 
     assert!(matches!(
@@ -226,7 +210,7 @@ impl WaitingDeliveries for SameBatch {
 /// skips it.
 #[test]
 fn concurrent_dispatchers_offer_the_delivery_once() {
-    let Some(store) = store() else { return };
+    let store = store();
     let store = Arc::new(store);
     let courier_id = CourierId::new(unique("courier"));
     CourierRepository::add(&*store, &Courier::new(courier_id.clone())).expect("courier");
@@ -274,6 +258,7 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
                     deliveries: &*store,
                     couriers: &*store,
                     offers: &*store,
+                    offers_of: &*store,
                     outbox: &*store,
                     locator: &locator,
                     ids: &SequentialIdGenerator::new(unique(&format!("offer-{dispatcher}"))),
@@ -310,8 +295,11 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
             .count(),
         1
     );
-    let offers = DeliveryOfferRepository::list_for_delivery(&*store, delivery.id()).expect("read");
-    assert_eq!(offers.len(), 1);
-    assert_eq!(offers[0].courier_id(), &courier_id);
-    assert_eq!(offers[0].state(), OfferState::Pending);
+    let ids = store.offer_ids_of(delivery.id()).expect("read");
+    assert_eq!(ids.len(), 1);
+    let offer = DeliveryOfferRepository::get(&*store, &ids[0])
+        .expect("read offer")
+        .expect("offer");
+    assert_eq!(offer.courier_id(), &courier_id);
+    assert_eq!(offer.state(), OfferState::Pending);
 }

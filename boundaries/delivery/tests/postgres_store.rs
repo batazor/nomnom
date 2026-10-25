@@ -1,10 +1,8 @@
 //! Integration-тесты PostgreSQL-хранилища (ADR 0001 контекста) против
-//! настоящего PostgreSQL. Запускаются только при заданном `DATABASE_URL`:
-//!
-//! `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo test --test postgres_store`
-//!
-//! Без переменной тесты завершаются сразу. Каждый тест использует уникальные
-//! идентификаторы, поэтому база может быть общей.
+//! настоящего PostgreSQL из testcontainers (`tests/support`). Каждый тест
+//! использует уникальные идентификаторы, поэтому база общая.
+
+mod support;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
@@ -27,8 +25,10 @@ use delivery::slices::courier::domains::courier::{
 use delivery::slices::delivery::applications::dispatch_deliveries::{
     DeliveryPosition, WaitingDeliveries,
 };
+use delivery::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
 use delivery::slices::delivery::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use delivery::slices::delivery::applications::list_available_delivery_offers::PendingDeliveryOffersReadModel;
+use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use delivery::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
@@ -36,26 +36,15 @@ use delivery::slices::delivery::domains::delivery::{
     OfferState, OrderId, State,
 };
 
-const DSN_ENV: &str = "DATABASE_URL";
-
-fn config() -> Option<DatabaseConfig> {
-    let dsn = std::env::var(DSN_ENV).ok().filter(|dsn| !dsn.is_empty())?;
-    Some(DatabaseConfig {
-        url: dsn,
-        max_conns: 4,
-        ..DatabaseConfig::default()
-    })
+fn config() -> DatabaseConfig {
+    support::database()
 }
 
-/// Migrated store, or `None` when `DATABASE_URL` is unset (test skipped).
-fn store() -> Option<PostgresStore> {
-    let config = config()?;
-    migrate(&config).expect("migrate");
-    Some(
-        PostgresStore::connect(&config)
-            .expect("connect")
-            .with_outbox_mapper(Arc::new(TestMapper)),
-    )
+/// Store over the migrated test database.
+fn store() -> PostgresStore {
+    PostgresStore::connect(&config())
+        .expect("connect")
+        .with_outbox_mapper(Arc::new(TestMapper))
 }
 
 /// Publishes only CourierAssignedToDelivery; the payload is the courier id.
@@ -111,7 +100,7 @@ fn assigned(delivery: &Delivery, courier: &str) -> Delivery {
 type OutboxRow = (String, String, i64, Vec<u8>, String);
 
 fn outbox_rows(aggregate_id: &str) -> Vec<OutboxRow> {
-    let config = config().expect("url");
+    let config = config();
     let id = aggregate_id.to_owned();
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -134,7 +123,7 @@ fn outbox_rows(aggregate_id: &str) -> Vec<OutboxRow> {
 
 /// Runs one statement with a single text parameter (raw writes of old rows).
 fn execute(statement: &'static str, parameter: &str) {
-    let config = config().expect("url");
+    let config = config();
     let parameter = parameter.to_owned();
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -173,7 +162,7 @@ impl From<RepositoryError> for TestError {
 
 #[test]
 fn migrations_are_idempotent() {
-    let Some(config) = config() else { return };
+    let config = config();
     migrate(&config).expect("first run");
     assert_eq!(migrate(&config).expect("second run"), Vec::<i64>::new());
 }
@@ -188,7 +177,7 @@ fn empty_dsn_fails_fast() {
 
 #[test]
 fn courier_round_trip_with_optimistic_versions() {
-    let Some(store) = store() else { return };
+    let store = store();
     let id = unique("courier");
     let mut courier = Courier::new(CourierId::new(&id));
     courier.record_authorization_revision(AuthorizationRevision::new("zed-1"));
@@ -231,7 +220,7 @@ fn courier_round_trip_with_optimistic_versions() {
 
 #[test]
 fn delivery_round_trip_keeps_revision_and_order_uniqueness() {
-    let Some(store) = store() else { return };
+    let store = store();
     let mut delivery = new_delivery(&unique("delivery"));
     delivery.record_authorization_revision(AuthorizationRevision::new("zed-d"));
     DeliveryRepository::add(&store, &delivery).expect("add");
@@ -268,7 +257,7 @@ fn delivery_round_trip_keeps_revision_and_order_uniqueness() {
 
 #[test]
 fn concurrent_updates_conflict_and_only_one_wins() {
-    let Some(store) = store() else { return };
+    let store = store();
     let store = Arc::new(store);
     let delivery = new_delivery(&unique("delivery"));
     DeliveryRepository::add(&*store, &delivery).expect("add");
@@ -340,7 +329,7 @@ fn concurrent_updates_conflict_and_only_one_wins() {
 
 #[test]
 fn unit_of_work_commits_or_rolls_back_aggregate_and_outbox_together() {
-    let Some(store) = store() else { return };
+    let store = store();
     let delivery = new_delivery(&unique("delivery"));
     let event = DomainEvent::CourierAssignedToDelivery {
         delivery_id: delivery.id().clone(),
@@ -385,7 +374,7 @@ fn unit_of_work_commits_or_rolls_back_aggregate_and_outbox_together() {
 
 #[test]
 fn offers_locations_and_reconciliation_reads() {
-    let Some(store) = store() else { return };
+    let store = store();
     let courier = unique("courier");
     let courier_id = CourierId::new(&courier);
     CourierRepository::add(&store, &Courier::new(courier_id.clone())).expect("courier");
@@ -419,9 +408,15 @@ fn offers_locations_and_reconciliation_reads() {
         DeliveryOfferRepository::save(&store, &rejected),
         Err(RepositoryError::ConcurrentModification)
     );
-    let offers = store.list_for_delivery(delivery.id()).expect("offers");
-    assert_eq!(offers.len(), 1);
-    assert_eq!(offers[0].state(), OfferState::Rejected);
+    let ids = store.offer_ids_of(delivery.id()).expect("offers");
+    assert_eq!(ids, vec![offer.id().clone()]);
+    assert_eq!(
+        DeliveryOfferRepository::get(&store, &ids[0])
+            .expect("get")
+            .expect("offer")
+            .state(),
+        OfferState::Rejected
+    );
     assert!(
         store
             .pending_offers_for(&courier_id)
@@ -471,7 +466,7 @@ fn offers_locations_and_reconciliation_reads() {
 /// active assignment for reconciliation.
 #[test]
 fn reconciliation_reads_only_active_assignments() {
-    let Some(store) = store() else { return };
+    let store = store();
     let courier = unique("courier");
     let courier_id = CourierId::new(&courier);
     let delivery = new_delivery(&unique("delivery"));
@@ -526,7 +521,7 @@ fn reconciliation_reads_only_active_assignments() {
 /// FR-542: the locator reads latest positions of available couriers only.
 #[test]
 fn available_positions_are_positions_of_available_couriers() {
-    let Some(store) = store() else { return };
+    let store = store();
     let available = CourierId::new(unique("available"));
     let busy = CourierId::new(unique("busy"));
     CourierRepository::add(
@@ -552,7 +547,7 @@ fn available_positions_are_positions_of_available_couriers() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn works_inside_a_multi_thread_runtime() {
-    let Some(store) = store() else { return };
+    let store = store();
     let id = CourierId::new(unique("courier"));
     CourierRepository::add(&store, &Courier::new(id.clone())).expect("add");
     assert!(CourierRepository::get(&store, &id).expect("get").is_some());
@@ -560,7 +555,7 @@ async fn works_inside_a_multi_thread_runtime() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn works_inside_a_current_thread_runtime() {
-    let Some(store) = store() else { return };
+    let store = store();
     let id = CourierId::new(unique("courier"));
     let result: Result<(), TestError> = store.run(|| {
         CourierRepository::add(&store, &Courier::new(id.clone()))?;
@@ -572,7 +567,7 @@ async fn works_inside_a_current_thread_runtime() {
 
 #[test]
 fn expired_pending_offers_are_listed_by_deadline_and_stored_as_expired() {
-    let Some(store) = store() else { return };
+    let store = store();
     let courier_id = CourierId::new(unique("courier"));
     let delivery = new_delivery(&unique("delivery"));
     DeliveryRepository::add(&store, &delivery).expect("delivery");
@@ -593,19 +588,23 @@ fn expired_pending_offers_are_listed_by_deadline_and_stored_as_expired() {
     let later = offer(base + 20);
     let earlier = offer(base + 10);
     let open = offer(base + 30);
-    let ours = |offers: Vec<DeliveryOffer>| -> Vec<DeliveryOfferId> {
-        offers
-            .into_iter()
-            .filter(|offer| offer.delivery_id() == delivery.id())
-            .map(|offer| offer.id().clone())
-            .collect()
+    let mine = [earlier.id().clone(), later.id().clone(), open.id().clone()];
+    let ours = |ids: Vec<DeliveryOfferId>| -> Vec<DeliveryOfferId> {
+        ids.into_iter().filter(|id| mine.contains(id)).collect()
     };
 
     // The deadline itself is not past: `open` (base + 30) is not listed.
-    let listed = store.list_expired_pending(base + 30, 1000).expect("list");
+    let listed = store
+        .expired_pending_offer_ids(base + 30, 1000)
+        .expect("list");
     assert_eq!(ours(listed), vec![earlier.id().clone(), later.id().clone()]);
     assert_eq!(
-        ours(store.list_expired_pending(base + 30, 1).expect("limit")).len(),
+        ours(
+            store
+                .expired_pending_offer_ids(base + 30, 1)
+                .expect("limit")
+        )
+        .len(),
         1
     );
 
@@ -620,7 +619,11 @@ fn expired_pending_offers_are_listed_by_deadline_and_stored_as_expired() {
         OfferState::Expired
     );
     assert_eq!(
-        ours(store.list_expired_pending(base + 30, 1000).expect("list")),
+        ours(
+            store
+                .expired_pending_offer_ids(base + 30, 1000)
+                .expect("list")
+        ),
         vec![later.id().clone()]
     );
     assert!(open.is_open_at(base + 30));
@@ -628,7 +631,7 @@ fn expired_pending_offers_are_listed_by_deadline_and_stored_as_expired() {
 
 #[test]
 fn failure_reason_code_and_detail_round_trip_and_legacy_text_reads_as_other() {
-    let Some(store) = store() else { return };
+    let store = store();
     let courier = unique("courier");
     let mut delivery = new_delivery(&unique("delivery"));
     delivery.assign(CourierId::new(&courier)).expect("assign");
@@ -662,7 +665,7 @@ fn failure_reason_code_and_detail_round_trip_and_legacy_text_reads_as_other() {
 
 #[test]
 fn waiting_deliveries_without_pending_offer_page_in_creation_order() {
-    let Some(store) = store() else { return };
+    let store = store();
     // A creation time far in the past, unique per run, keeps the rows of
     // other tests of a shared database before or after ours.
     let nanos = SystemTime::now()

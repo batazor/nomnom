@@ -1,27 +1,27 @@
 //! Граф use cases: [`InfrastructureModule`] → модули слайсов →
 //! [`ServiceModule`]. Его собирают composition root `cmd/delivery`
-//! ([`super::server`]) и тестовые графы [`build`] над in-memory адаптерами.
+//! ([`super::server`]), integration-тесты ([`build_over`]) и тестовые графы
+//! над тестовым PostgreSQL.
 
 use std::sync::Arc;
 
 use shaku::{HasComponent, module};
 
-use crate::infrastructure::memory::{
-    MemoryStore, RecordingRelationships, SequentialIdGenerator, StaticCourierLocator,
-};
-use crate::pkg::persistence::RepositoryError;
+#[cfg(test)]
+use crate::infrastructure::memory::SequentialIdGenerator;
+use crate::infrastructure::memory::{RecordingRelationships, StaticCourierLocator};
+#[cfg(test)]
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;
-use crate::slices::delivery::applications::dispatch_deliveries::{
-    DeliveryPosition, WaitingDeliveries,
-};
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
-use crate::slices::delivery::domains::delivery::Delivery;
 use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
 
+#[cfg(test)]
+use super::infrastructure::local_authorization;
 use super::infrastructure::{
-    InfrastructureModule, ProcessAuthorization, ProcessStores, infrastructure, local_authorization,
+    InfrastructureModule, ProcessAuthorization, ProcessStores, infrastructure,
 };
 
 module! {
@@ -77,47 +77,6 @@ pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModul
     }
 }
 
-/// Выборка Dispatch Deliveries тестовых графов над in-memory хранилищем:
-/// она есть только в PostgreSQL, поэтому Dispatch здесь — ошибка
-/// зависимости. Тесты Dispatch передают свою подделку порта.
-struct PostgresOnlyWaitingDeliveries;
-
-impl WaitingDeliveries for PostgresOnlyWaitingDeliveries {
-    fn list_waiting_without_pending_offer(
-        &self,
-        _after: Option<&DeliveryPosition>,
-        _limit: usize,
-    ) -> Result<Vec<Delivery>, RepositoryError> {
-        Err(RepositoryError::Unavailable(
-            "waiting deliveries are queried only in PostgreSQL".to_owned(),
-        ))
-    }
-}
-
-/// Роли in-memory хранилища тестового графа.
-fn memory_stores(store: &Arc<MemoryStore>) -> ProcessStores {
-    ProcessStores::with_waiting(store, Arc::new(PostgresOnlyWaitingDeliveries))
-}
-
-/// Собирает тестовый граф с локальной авторизацией.
-#[must_use]
-pub fn build() -> ServiceModule {
-    build_with_authorization(Box::new(local_authorization()))
-}
-
-/// Собирает тестовый граф над in-memory хранилищем с выбранной авторизацией:
-/// последовательные id и пустой статический locator — только для тестов.
-#[must_use]
-pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) -> ServiceModule {
-    service(infrastructure(
-        memory_stores(&Arc::new(MemoryStore::new())),
-        Box::new(SequentialIdGenerator::new("delivery")),
-        Box::new(StaticCourierLocator::new(Vec::new())),
-        authorization,
-        Box::new(RecordingRelationships::new()),
-    ))
-}
-
 /// Тестовый граф над заданными хранилищами (PostgreSQL в integration-тестах)
 /// с UUID id, пустым locator и выбранной авторизацией.
 #[must_use]
@@ -134,11 +93,15 @@ pub fn build_over(
     ))
 }
 
-/// Граф с заданными кандидатами locator — для транспортных тестов.
+/// Граф над тестовым PostgreSQL с заданными кандидатами locator, локальной
+/// авторизацией и последовательными id — для транспортных тестов.
 #[cfg(test)]
-pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule {
+pub(crate) fn build_with_locator(
+    store: &Arc<TestStore>,
+    locator: StaticCourierLocator,
+) -> ServiceModule {
     service(infrastructure(
-        memory_stores(&Arc::new(MemoryStore::new())),
+        ProcessStores::over(store),
         Box::new(SequentialIdGenerator::new("delivery")),
         Box::new(locator),
         Box::new(local_authorization()),
@@ -146,17 +109,17 @@ pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule
     ))
 }
 
-/// Граф над данным in-memory хранилищем с locator процесса (сохранённые
-/// позиции курьеров) и выбранными авторизацией и relationships — для
-/// транспортных тестов, которые проверяют состояние хранилища.
+/// Граф над тестовым PostgreSQL с locator процесса (сохранённые позиции
+/// курьеров) и выбранными авторизацией и relationships — для тестов, которые
+/// проверяют состояние хранилища.
 #[cfg(test)]
-pub(crate) fn build_over_memory(
-    store: &Arc<MemoryStore>,
+pub(crate) fn build_over_store(
+    store: &Arc<TestStore>,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn super::ProcessRelationships>,
 ) -> ServiceModule {
     service(infrastructure(
-        memory_stores(store),
+        ProcessStores::over(store),
         Box::new(SequentialIdGenerator::new("delivery")),
         Box::new(crate::infrastructure::locator::StoredCourierLocator::new(
             Arc::clone(store) as _,
@@ -179,9 +142,17 @@ mod tests {
         Subject::User("operator-1".to_owned())
     }
 
+    fn graph(authorization: Box<dyn ProcessAuthorization>) -> ServiceModule {
+        build_over_store(
+            &Arc::new(TestStore::new()),
+            authorization,
+            Box::new(RecordingRelationships::new()),
+        )
+    }
+
     #[test]
     fn slices_share_one_store() {
-        let module = build();
+        let module = graph(Box::new(local_authorization()));
         let couriers = module.couriers();
         let deliveries = module.deliveries();
 
@@ -219,7 +190,7 @@ mod tests {
 
     #[test]
     fn selected_authorization_closes_both_slices() {
-        let module = build_with_authorization(Box::new(StaticAuthorization::unavailable()));
+        let module = graph(Box::new(StaticAuthorization::unavailable()));
 
         assert!(
             module

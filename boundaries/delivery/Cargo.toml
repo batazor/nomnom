@@ -43,6 +43,8 @@ uuid = { version = "1.29.0", default-features = false, features = ["std", "v5", 
 
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics", "trace", "testing"] }
+libc = "0.2.191"
+testcontainers-modules = { version = "0.15.0", features = ["postgres", "kafka", "blocking"] }
 
 [lints.clippy]
 all = "deny"

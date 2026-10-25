@@ -2,7 +2,7 @@
 //! портов, собирают shaku-модули слайсов и итоговые модули процессов.
 //!
 //! - [`infrastructure`] — порты слайсов и их реализации ([`InfrastructureModule`]);
-//! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы [`build`];
+//! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы;
 //! - [`server`] — `cmd/delivery`: gRPC, reconciliation, истечение Delivery
 //!   Offers и Dispatch Deliveries ([`server::ServerModule`]);
 //! - [`relay`] — `cmd/delivery-relay`: Outbox → Kafka ([`relay::RelayModule`]);
@@ -11,8 +11,9 @@
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
 //! PostgreSQL (`infrastructure::postgres`, ADR 0001 контекста), идентификаторы —
 //! UUIDv7 (`infrastructure::ids`), locator — сохранённые позиции курьеров
-//! (`infrastructure::locator`). Только тестовый граф [`build`] закрывается
-//! in-memory адаптерами из `infrastructure::memory`.
+//! (`infrastructure::locator`). Тестовые графы идут в тестовый PostgreSQL
+//! (`infrastructure::postgres::test_support`); статическая авторизация,
+//! locator и запись relationships для них — `infrastructure::memory`.
 
 mod dispatch_worker;
 mod http_worker;
@@ -32,7 +33,7 @@ pub use infrastructure::{
 pub use offer_expiry_worker::{ExpireOffers, ExpirySchedule, OfferExpiryWorker};
 pub use reconciling_worker::ReconcilingWorker;
 pub use server::{postgres, spicedb, spicedb_authorization};
-pub use service::{ServiceModule, build, build_over, build_with_authorization};
+pub use service::{ServiceModule, build_over};
 
 #[cfg(test)]
-pub(crate) use service::{build_over_memory, build_with_locator};
+pub(crate) use service::{build_over_store, build_with_locator};

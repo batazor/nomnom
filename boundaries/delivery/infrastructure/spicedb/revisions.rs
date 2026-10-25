@@ -50,13 +50,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::MemoryStore;
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::Courier;
     use crate::slices::delivery::domains::delivery::{Address, Delivery, OrderId};
 
     #[test]
     fn reads_revisions_stored_with_courier_and_delivery() {
-        let store = Arc::new(MemoryStore::new());
+        let store = Arc::new(TestStore::new());
         let mut courier = Courier::new(CourierId::new("courier-1"));
         courier.record_authorization_revision(AuthorizationRevision::new("zed-c"));
         CourierRepository::add(&*store, &courier).expect("courier");

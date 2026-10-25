@@ -204,44 +204,6 @@ impl DeliveryOfferRepository for PostgresStore {
         .transpose()
     }
 
-    fn list_for_delivery(
-        &self,
-        delivery_id: &DeliveryId,
-    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
-        let statement = format!(
-            "SELECT {OFFER_COLUMNS} FROM delivery_offers WHERE delivery_id = $1 ORDER BY position"
-        );
-        sql!(self, "SELECT", |connection| sqlx::query(
-            sqlx::AssertSqlSafe(statement)
-        )
-        .bind(delivery_id.as_str())
-        .fetch_all(connection))?
-        .iter()
-        .map(offer_from_row)
-        .collect()
-    }
-
-    fn list_expired_pending(
-        &self,
-        now_epoch_seconds: i64,
-        limit: usize,
-    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
-        let statement = format!(
-            "SELECT {OFFER_COLUMNS} FROM delivery_offers
-             WHERE state = 'pending' AND expires_at < $1
-             ORDER BY expires_at, position LIMIT $2"
-        );
-        sql!(self, "INSERT", |connection| sqlx::query(
-            sqlx::AssertSqlSafe(statement)
-        )
-        .bind(now_epoch_seconds)
-        .bind(super::limit(limit))
-        .fetch_all(connection))?
-        .iter()
-        .map(offer_from_row)
-        .collect()
-    }
-
     fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
         let version = db_version(offer.version())?;
         let inserted = sql!(self, "INSERT", |connection| sqlx::query(

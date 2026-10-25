@@ -79,7 +79,7 @@ fn unavailable(error: RepositoryError) -> LocatorError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::MemoryStore;
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::{
         Courier, CourierRepository, CourierStatus, Location,
     };
@@ -88,7 +88,7 @@ mod tests {
         Address::new("Restaurant street 1").expect("pickup")
     }
 
-    fn courier(store: &MemoryStore, id: &str, status: CourierStatus, positioned: bool) {
+    fn courier(store: &TestStore, id: &str, status: CourierStatus, positioned: bool) {
         CourierRepository::add(store, &Courier::restore(CourierId::new(id), status))
             .expect("courier");
         if positioned {
@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn candidates_are_available_couriers_with_a_position() {
-        let store = Arc::new(MemoryStore::new());
+        let store = Arc::new(TestStore::new());
         courier(&store, "courier-2", CourierStatus::Available, true);
         courier(&store, "courier-1", CourierStatus::Available, true);
         courier(&store, "busy", CourierStatus::Busy, true);
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn storage_outage_is_locator_unavailable() {
-        let store = Arc::new(MemoryStore::new());
+        let store = Arc::new(TestStore::new());
         store.set_unavailable(true);
         let locator = StoredCourierLocator::new(store);
 

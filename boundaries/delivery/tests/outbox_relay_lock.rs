@@ -1,10 +1,10 @@
 //! Integration tests of the `delivery-relay` lock session (FR-537, AC-615)
-//! against a real PostgreSQL. Run only with `DATABASE_URL`:
-//!
-//! `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo test --test outbox_relay_lock`
+//! against a real PostgreSQL from testcontainers (`tests/support`).
 //!
 //! Liveness is an ownership check in `pg_locks`, so these tests cover the
 //! held, terminated, released and half-open cases.
+
+mod support;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,15 +20,8 @@ use delivery::infrastructure::outbox::{
 };
 use delivery::pkg::config::DatabaseConfig;
 
-fn database() -> Option<DatabaseConfig> {
-    let url = std::env::var("DATABASE_URL")
-        .ok()
-        .filter(|v| !v.is_empty())?;
-    Some(DatabaseConfig {
-        url,
-        max_conns: 4,
-        ..DatabaseConfig::default()
-    })
+fn database() -> DatabaseConfig {
+    support::database()
 }
 
 /// The tests share the relay lock key: run them one at a time.
@@ -65,7 +58,7 @@ async fn terminate_lock_holders(url: &str) -> i64 {
 /// a lock held by another session is `false`, including negative keys.
 #[tokio::test(flavor = "multi_thread")]
 async fn ownership_check_sees_only_this_session() {
-    let Some(database) = database() else { return };
+    let database = database();
     let _serial = SERIAL.lock().await;
     let key = -0x0123_4567_89ab_cdef_i64;
     let mut owner = PgConnection::connect(&database.url).await.expect("owner");
@@ -101,7 +94,7 @@ async fn ownership_check_sees_only_this_session() {
 /// Held → `true`; a standby without the lock is `false`.
 #[tokio::test(flavor = "multi_thread")]
 async fn held_lock_is_alive_and_standby_is_not() {
-    let Some(database) = database() else { return };
+    let database = database();
     let _serial = SERIAL.lock().await;
     let active = PgOutbox::connect(&database).await.expect("active");
     let standby = PgOutbox::connect(&database).await.expect("standby");
@@ -118,7 +111,7 @@ async fn held_lock_is_alive_and_standby_is_not() {
 /// and the standby takes the lock over.
 #[tokio::test(flavor = "multi_thread")]
 async fn terminated_lock_session_is_detected_quickly() {
-    let Some(database) = database() else { return };
+    let database = database();
     let _serial = SERIAL.lock().await;
     let active = PgOutbox::connect(&database).await.expect("active");
     let standby = PgOutbox::connect(&database).await.expect("standby");
@@ -147,7 +140,7 @@ async fn terminated_lock_session_is_detected_quickly() {
 /// Released → `false`; the lock is free for the standby.
 #[tokio::test(flavor = "multi_thread")]
 async fn released_lock_is_not_alive() {
-    let Some(database) = database() else { return };
+    let database = database();
     let _serial = SERIAL.lock().await;
     let active = PgOutbox::connect(&database).await.expect("active");
     let standby = PgOutbox::connect(&database).await.expect("standby");
@@ -233,7 +226,7 @@ fn through(url: &str, addr: std::net::SocketAddr) -> (String, String) {
 /// `LOCK_CHECK_TIMEOUT` and the lock counts as lost.
 #[tokio::test(flavor = "multi_thread")]
 async fn half_open_lock_connection_does_not_hang_the_check() {
-    let Some(database) = database() else { return };
+    let database = database();
     let _serial = SERIAL.lock().await;
     let (_, upstream) = through(&database.url, "127.0.0.1:1".parse().expect("addr"));
     let upstream = upstream.replace("localhost", "127.0.0.1");

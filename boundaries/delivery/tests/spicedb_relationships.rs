@@ -12,12 +12,13 @@
 //! остаётся только для relationships без revision (orphan, записанные мимо
 //! use case), которые проверяются с `minimize_latency` (FR-448).
 
+mod support;
+
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use delivery::infrastructure::memory::{
-    ManualClock, MemoryStore, StaticAuthorization, StaticCourierLocator,
-};
+use delivery::infrastructure::memory::{ManualClock, StaticAuthorization, StaticCourierLocator};
+use delivery::infrastructure::postgres::PostgresStore;
 use delivery::infrastructure::reconcile::Reconciler;
 use delivery::infrastructure::spicedb::{
     Relationship, RelationshipGraph, RelationshipOperation, RelationshipPage, RepositoryRevisions,
@@ -82,7 +83,7 @@ fn user(id: &str) -> Subject {
 
 /// Адаптер с revisions из `store`: checks ресурсов с revision —
 /// `at_least_as_fresh`, остальные — `minimize_latency`.
-fn adapter(client: &SpiceDbClient, store: &Arc<MemoryStore>) -> SpiceDbAuthorization {
+fn adapter(client: &SpiceDbClient, store: &Arc<PostgresStore>) -> SpiceDbAuthorization {
     SpiceDbAuthorization::new(Box::new(client.clone()))
         .with_revisions(Arc::new(RepositoryRevisions(Arc::clone(store))))
 }
@@ -157,7 +158,7 @@ fn acts_as_courier(world: &Assigned, client: &SpiceDbClient, allowed: bool) {
 
 /// Хранилище с курьером и доставкой, принятой им через Accept Delivery Offer.
 struct Assigned {
-    store: Arc<MemoryStore>,
+    store: Arc<PostgresStore>,
     writer: SpiceDbRelationships,
     delivery: String,
     order: String,
@@ -165,7 +166,7 @@ struct Assigned {
 }
 
 fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
-    let store = Arc::new(MemoryStore::new());
+    let store = Arc::new(PostgresStore::connect(&support::database()).expect("connect"));
     let writer = SpiceDbRelationships::new(Arc::new(client.clone()));
     let courier = unique(&format!("{tag}-courier"));
     let delivery = unique(&format!("{tag}-delivery"));
@@ -206,6 +207,7 @@ fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
         authorization: &authorization,
         unit_of_work: &*store,
         offers: &*store,
+        offers_of: &*store,
         deliveries: &*store,
         couriers: &*store,
         outbox: &*store,
@@ -239,7 +241,7 @@ fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
 #[test]
 fn registered_courier_acts_for_itself() {
     let Some(client) = live() else { return };
-    let store = Arc::new(MemoryStore::new());
+    let store = Arc::new(PostgresStore::connect(&support::database()).expect("connect"));
     let writer = SpiceDbRelationships::new(Arc::new(client.clone()));
     let courier = unique("courier");
 
@@ -423,7 +425,10 @@ fn operator_dispatches_delivery_failure() {
             &Relationship::new("platform", "nomnom", "operator", "user", &operator),
         )
         .expect("grant operator");
-    let authorization = adapter(&client, &Arc::new(MemoryStore::new()));
+    let authorization = adapter(
+        &client,
+        &Arc::new(PostgresStore::connect(&support::database()).expect("connect")),
+    );
     let report = |subject: &str| {
         DeliveryAuthorization::check(
             &authorization,

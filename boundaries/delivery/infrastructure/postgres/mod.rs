@@ -21,6 +21,8 @@
 
 mod migrate;
 mod pool;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 use std::future::Future;
 use std::sync::Arc;

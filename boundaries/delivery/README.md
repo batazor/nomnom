@@ -272,12 +272,10 @@ make test-spicedb   # SPICEDB_ENDPOINT=localhost:50051, оба integration-на�
 
 При одной реплике каждого release (`replicaCount: 1`) это 13 server-соединений плюс одно на время миграций в каждом стартующем pod `delivery`. Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`; `db.client.connection.pool.name=delivery`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
 
-Integration-тесты (`tests/postgres_store.rs`: CRUD, конфликт двух конкурентных `save`, атомарность агрегата и Outbox, read models, reconciliation, оба вида runtime) выполняются только при заданном `DATABASE_URL`:
+Тесты хранилища идут в настоящий PostgreSQL: каждый тестовый бинарь поднимает свой контейнер через testcontainers (`postgres:18.6-alpine3.24`, как в ops) и удаляет его при выходе; нужен только запущенный Docker. Unit-тесты use cases работают через `TestStore` (`infrastructure/postgres/test_support.rs`) — `PostgresStore` над отдельной базой на тест (копия мигрированной template-базы) с тестовыми хуками: отключение хранилища, сбой commit, счётчики Unit of Work и закоммиченные Outbox-сообщения. In-memory варианта хранилища нет. Integration-тесты (`tests/postgres_store.rs`: CRUD, конфликт двух конкурентных `save`, атомарность агрегата и Outbox, read models, reconciliation, оба вида runtime) используют общую мигрированную базу контейнера (`tests/support`), идентификаторы уникальны:
 
 ```bash
-docker run -d --rm --name delivery-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18
-DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres cargo test --test postgres_store
-docker stop delivery-pg
+DOCKER_CONFIG=$(mktemp -d) cargo test --test postgres_store
 ```
 
 ## Минимальная доменная модель
@@ -334,7 +332,7 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 - `slices/<slice>/di` — shaku-модуль слайса: интерфейс внешних портов (`CourierPorts`, `DeliveryPorts`; хранилище `DeliveryPorts` видно только ролями `TransactionalStore` — Unit of Work, репозитории, занятость курьера, Outbox — и `DeliveryReadModels`), интерфейс use cases (`CourierUseCases`, `DeliveryUseCases`) и их реализация, которая собирает handler на каждый вызов. Порты слайс получает через submodule (`CourierDependencies`, `DeliveryDependencies`).
 - `di` — корневой composition root, по модулю на процесс:
   - `di::infrastructure` — `InfrastructureModule`: реализации портов обоих слайсов (роли одного хранилища `ProcessStores`: `CourierStore`, `TransactionalStore`, `DeliveryReadModels`; генератор id, locator курьеров, одна авторизация, один writer relationships, `SystemClock`, `AssignmentPolicy`); реализации приходят параметрами компонентов, memory-адаптеры — только в тестовом графе;
-  - `di::service` — модули слайсов над `InfrastructureModule` и итоговый `ServiceModule` (use cases); `di::build()` — тестовый граф над in-memory адаптерами `infrastructure::memory`. Транспорт получает use cases через `ServiceModule::couriers()` / `deliveries()` и shaku не импортирует;
+  - `di::service` — модули слайсов над `InfrastructureModule` и итоговый `ServiceModule` (use cases); `di::build_over` и тестовые графы — над PostgreSQL (в unit-тестах `TestStore`) с тестовыми адаптерами `infrastructure::memory`. Транспорт получает use cases через `ServiceModule::couriers()` / `deliveries()` и shaku не импортирует;
   - `di::server` — `ServerModule` процесса `delivery`: `compose` выбирает `SpiceDbAuthorization` с revisions из хранилища (роль `RevisionReader`), `SpiceDbRelationships`, `PostgresStore` с mapper Integration Events, `UuidIdGenerator` (UUIDv7, FR-541), `StoredCourierLocator` (последние позиции доступных курьеров, FR-542) и resolver service identity; каждая роль хранилища разрешается отдельно над одним `Arc<PostgresStore>`; компоненты `TonicTransport` (use cases, identity, бизнес-порт), `SpiceDbReconciliation` (граф SpiceDB и то же хранилище в роли `ReconciliationStore`), `UseCaseOfferExpiry` и `UseCaseDeliveryDispatch` (фоновые задачи над тем же графом use cases), provider `DeliveryWorkerProvider` — gRPC worker с reconciliation, истечением offers и Dispatch Deliveries;
   - `di::relay` — `RelayModule` процесса `delivery-relay`: компоненты `PostgresRelayOutbox` (`PgOutbox`), `KafkaRelayPublisher`, `OtlpTelemetry`, `OutboxSettings`, provider `RelayWorkerProvider`; `RelayModule::shutdown` после drain дожидается Kafka и выгружает метрики;
   - `di::migrate` — `MigrateModule` процесса `delivery-migrate` с компонентом `PostgresMigration`.
@@ -415,22 +413,10 @@ Relay также требует `DATABASE__URL`. Метрики (ADR 13, [инв
 Классификация use cases: `rejected` — `permission_denied`, `invalid_argument`, `not_found`, `already_exists`, `failed_precondition`; `error` — `concurrent_modification`, `unavailable`, `transaction`, `internal`. `Telemetry::shutdown` выгружает spans и точки после drain.
 
 
-Integration-тест `tests/outbox_relay.rs` (запись основного процесса → relay → настоящий Kafka, проверка key, headers и payload; advisory lock; retention) выполняется при заданных `DATABASE_URL` и `KAFKA_BROKERS`; `tests/outbox_relay_lock.rs` (проверка видит только lock своей сессии; `pg_terminate_backend` и half-open lock-соединение замечаются за `LOCK_CHECK_TIMEOUT` до следующей записи, standby захватывает lock) и `tests/outbox_tracing.rs` (`traceparent` gRPC-команды в `metadata` строки Outbox) — при `DATABASE_URL`:
+Integration-тест `tests/outbox_relay.rs` (запись основного процесса → relay → настоящий Kafka, проверка key, headers и payload; advisory lock; retention) поднимает PostgreSQL и Kafka (`apache/kafka:4.4.0`, как в ops) через testcontainers; `tests/outbox_relay_lock.rs` (проверка видит только lock своей сессии; `pg_terminate_backend` и half-open lock-соединение замечаются за `LOCK_CHECK_TIMEOUT` до следующей записи, standby захватывает lock) и `tests/outbox_tracing.rs` (`traceparent` gRPC-команды в `metadata` строки Outbox) — PostgreSQL:
 
 ```bash
-docker run -d --rm --name delivery-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18
-docker run -d --rm --name delivery-kafka -p 59092:9092 \
-  -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller \
-  -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
-  -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:59092 \
-  -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
-  -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
-  -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
-  -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
-  -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 apache/kafka:4.1.0
-DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres KAFKA_BROKERS=localhost:59092 \
-  cargo test --test outbox_relay --test outbox_relay_lock
-docker stop delivery-pg delivery-kafka
+DOCKER_CONFIG=$(mktemp -d) cargo test --test outbox_relay --test outbox_relay_lock
 ``` Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 ## Observability
@@ -450,7 +436,7 @@ docker stop delivery-pg delivery-kafka
 - публикация Integration Events: mapper `DeliveryIntegrationEvents` (4 события `events.proto`) и процесс `delivery-relay` (`infrastructure/outbox`: advisory lock, head-of-line, retention, `rdkafka`, OTLP-метрики ADR 13);
 - `UuidIdGenerator` (`infrastructure/ids.rs`): UUIDv7-идентификаторы `Delivery` и offer, уникальные между перезапусками и репликами (FR-541);
 - `StoredCourierLocator` (`infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Pickup не геокодируется, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;
-- in-memory адаптеры всех портов в `infrastructure/memory` (транзакционный store с rollback и инъекцией сбоя commit, статическая authorization, управляемые clock и id generator, статический locator) — только для тестов.
+- тестовые адаптеры не-storage портов в `infrastructure/memory` (статическая authorization, запись relationships, управляемые clock и id generator, статический locator) — только для тестов; хранилище в тестах — PostgreSQL (testcontainers, `TestStore`).
 
 Не реализованы: Kafka consumers и Inbox, расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы все use cases, кроме Find Courier, Offer Delivery и Reassign Courier (шаги процесса назначения) и фоновых Expire Delivery Offers и Dispatch Deliveries.
 

@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::*;
-use crate::infrastructure::memory::MemoryStore;
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::infrastructure::spicedb::{FakeGraph, courier_self, delivery_courier};
 use crate::pkg::persistence::AuthorizationRevision;
 
@@ -361,7 +361,7 @@ fn object_id_grammar() {
 #[test]
 fn courier_reconciler_reads_registered_couriers() {
     use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository};
-    let store = Arc::new(MemoryStore::new());
+    let store = Arc::new(TestStore::new());
     CourierRepository::add(&*store, &Courier::new(CourierId::new("courier-1"))).expect("add");
     let graph = Arc::new(FakeGraph::with([courier_self("courier-ghost")]));
     let mut reconciler = Reconciler::couriers(
@@ -394,7 +394,7 @@ fn delivery_reconciler_stores_revision_of_restored_assignment() {
     use crate::slices::delivery::domains::delivery::{
         Address, Delivery, DeliveryId, DeliveryRepository, OrderId,
     };
-    let store = Arc::new(MemoryStore::new());
+    let store = Arc::new(TestStore::new());
     let mut delivery = Delivery::new(
         DeliveryId::new("delivery-1"),
         OrderId::new("order-1"),
@@ -457,7 +457,7 @@ fn closed_delivery_relationship_is_stale_and_never_restored() {
         Address, Delivery, DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter,
         OrderId,
     };
-    let store = Arc::new(MemoryStore::new());
+    let store = Arc::new(TestStore::new());
     let delivery = |id: &str, courier: &str| {
         let mut delivery = Delivery::new(
             DeliveryId::new(id),

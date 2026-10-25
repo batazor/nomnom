@@ -13,6 +13,7 @@ pub mod find_courier;
 pub mod get_courier_current_delivery;
 pub mod list_available_delivery_offers;
 pub mod offer_delivery;
+pub mod offers_of_delivery;
 pub mod outbox;
 pub mod policy;
 pub mod reassign_courier;

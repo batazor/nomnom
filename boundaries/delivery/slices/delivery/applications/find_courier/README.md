@@ -16,7 +16,7 @@
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-307. Без авторизации выбор выполняет сервис `select_candidate`, его же вызывает Replan Delivery.
-- **Порты:** `DeliveryAuthorization` (`FindCourier` над `Delivery(id)`), `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `CourierLocator`, `AssignmentPolicy`.
+- **Порты:** `DeliveryAuthorization` (`FindCourier` над `Delivery(id)`), `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `OffersOfDelivery` (id offers доставки, каждый загружается через репозиторий), `CourierLocator`, `AssignmentPolicy`.
 - **Транзакция:** Только чтение: результат возвращается вызывающему процессу и не сохраняется.
 - **Допущение:** Выбирается минимальное расстояние до pickup, при равенстве — меньший `CourierId`; курьеры, уже получавшие offer этой доставки, исключаются.
 

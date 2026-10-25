@@ -1,7 +1,7 @@
 //! Pool limits and `db.client.connection.*` metrics against a real
-//! PostgreSQL. Run only with `DATABASE_URL`:
-//!
-//! `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo test --test postgres_pool`
+//! PostgreSQL from testcontainers (`tests/support`).
+
+mod support;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -14,16 +14,12 @@ use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMete
 use delivery::infrastructure::postgres::{PoolMetrics, pool_options};
 use delivery::pkg::config::DatabaseConfig;
 
-fn config() -> Option<DatabaseConfig> {
-    let url = std::env::var("DATABASE_URL")
-        .ok()
-        .filter(|v| !v.is_empty())?;
-    Some(DatabaseConfig {
-        url,
+fn config() -> DatabaseConfig {
+    DatabaseConfig {
         max_conns: 1,
         acquire_timeout: Duration::from_millis(300),
-        ..DatabaseConfig::default()
-    })
+        ..support::database()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -76,7 +72,7 @@ fn export(provider: &SdkMeterProvider, exporter: &InMemoryMetricExporter) -> Exp
 /// the timeout; gauges show the used connection; wait and use times record.
 #[tokio::test(flavor = "multi_thread")]
 async fn saturated_pool_times_out_and_is_observed() {
-    let Some(config) = config() else { return };
+    let config = config();
     let exporter = InMemoryMetricExporter::default();
     let provider = SdkMeterProvider::builder()
         .with_reader(PeriodicReader::builder(exporter.clone()).build())

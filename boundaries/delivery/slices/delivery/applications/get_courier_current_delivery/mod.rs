@@ -76,7 +76,8 @@ impl Handler<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::{Courier, CourierRepository, CourierStatus};
     use crate::slices::delivery::domains::delivery::{Delivery, DeliveryRepository};
 
@@ -99,8 +100,8 @@ mod tests {
         )
     }
 
-    fn store_with_courier() -> MemoryStore {
-        let store = MemoryStore::new();
+    fn store_with_courier() -> TestStore {
+        let store = TestStore::new();
         CourierRepository::add(
             &store,
             &Courier::restore(CourierId::new("courier-1"), CourierStatus::Busy),
@@ -183,7 +184,7 @@ mod tests {
 
     #[test]
     fn unknown_courier_is_not_found() {
-        let store = MemoryStore::new();
+        let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
         let handler = Handler {
             authorization: &authorization,

@@ -14,6 +14,7 @@
 use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferRepository, DeliveryRepository,
 };
@@ -49,6 +50,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
+    pub offers_of: &'a dyn OffersOfDelivery,
     pub outbox: &'a dyn DeliveryOutbox,
     pub locator: &'a dyn CourierLocator,
     pub ids: &'a dyn IdGenerator,
@@ -86,6 +88,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
 
             let selection = select_candidate(
                 &delivery,
+                self.offers_of,
                 self.offers,
                 self.couriers,
                 self.locator,
@@ -98,6 +101,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
                     &OfferPorts {
                         couriers: self.couriers,
                         offers: self.offers,
+                        offers_of: self.offers_of,
                         outbox: self.outbox,
                         ids: self.ids,
                         clock: self.clock,
@@ -120,21 +124,23 @@ impl<U: UnitOfWork> Handler<'_, U> {
 mod tests {
     use super::*;
     use crate::infrastructure::memory::{
-        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+        RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::test_support::{World, candidate, service};
     use crate::slices::delivery::domains::delivery::{
         DeliveryError, DeliveryOfferId, OfferState, OrderId, State, TransitionError, Trigger,
     };
 
-    fn handler(world: &World) -> Handler<'_, MemoryStore> {
+    fn handler(world: &World) -> Handler<'_, TestStore> {
         Handler {
             authorization: &world.authorization,
             unit_of_work: &world.store,
             deliveries: &world.store,
             couriers: &world.store,
             offers: &world.store,
+            offers_of: &world.store,
             outbox: &world.store,
             locator: &world.locator,
             ids: &world.ids,

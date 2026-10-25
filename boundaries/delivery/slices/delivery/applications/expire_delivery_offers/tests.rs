@@ -1,14 +1,15 @@
 use super::*;
-use crate::infrastructure::memory::MemoryStore;
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
 use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::applications::test_support::{NOW, OFFER_TTL, World};
 use crate::slices::delivery::domains::delivery::{DeliveryId, DomainEvent, OfferState};
 
-fn handler(world: &World) -> Handler<'_, MemoryStore> {
+fn handler(world: &World) -> Handler<'_, TestStore> {
     Handler {
         unit_of_work: &world.store,
+        expired: &world.store,
         offers: &world.store,
         outbox: &world.store,
         clock: &world.clock,
@@ -109,40 +110,29 @@ fn batches_are_limited_and_oldest_first() {
     assert_eq!(world.offer_state("offer-2"), OfferState::Expired);
 }
 
-/// Offers repository whose batch is read before a concurrent writer rejects
-/// the first offer, so the expiry save hits a version conflict.
+/// Offers repository whose first read returns the snapshot taken before a
+/// concurrent writer rejected the offer, so the expiry save hits a version
+/// conflict.
 struct ConcurrentRejection<'a> {
-    store: &'a MemoryStore,
+    store: &'a TestStore,
+    rejected: std::cell::Cell<bool>,
 }
 
 impl DeliveryOfferRepository for ConcurrentRejection<'_> {
     fn get(&self, id: &DeliveryOfferId) -> Result<Option<DeliveryOffer>, RepositoryError> {
-        DeliveryOfferRepository::get(self.store, id)
-    }
-
-    fn list_for_delivery(
-        &self,
-        delivery_id: &DeliveryId,
-    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
-        self.store.list_for_delivery(delivery_id)
-    }
-
-    fn list_expired_pending(
-        &self,
-        now_epoch_seconds: i64,
-        limit: usize,
-    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
-        let batch = self.store.list_expired_pending(now_epoch_seconds, limit)?;
-        let mut concurrent = batch[0].clone();
-        // The addressee rejected right at the deadline, before the job saved.
-        concurrent
-            .reject(
-                &concurrent.courier_id().clone(),
-                concurrent.expires_at_epoch_seconds(),
-            )
-            .expect("concurrent reject");
-        DeliveryOfferRepository::save(self.store, &concurrent)?;
-        Ok(batch)
+        let snapshot = DeliveryOfferRepository::get(self.store, id)?;
+        if let Some(offer) = snapshot.as_ref().filter(|_| !self.rejected.replace(true)) {
+            let mut concurrent = offer.clone();
+            // The addressee rejected right at the deadline, before the job saved.
+            concurrent
+                .reject(
+                    &concurrent.courier_id().clone(),
+                    concurrent.expires_at_epoch_seconds(),
+                )
+                .expect("concurrent reject");
+            DeliveryOfferRepository::save(self.store, &concurrent)?;
+        }
+        Ok(snapshot)
     }
 
     fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
@@ -162,10 +152,12 @@ fn concurrently_closed_offer_is_skipped() {
     world.clock.set(NOW + OFFER_TTL + 1);
     let offers = ConcurrentRejection {
         store: &world.store,
+        rejected: std::cell::Cell::new(false),
     };
 
     let output = Handler {
         unit_of_work: &world.store,
+        expired: &world.store,
         offers: &offers,
         outbox: &world.store,
         clock: &world.clock,

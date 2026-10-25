@@ -13,6 +13,7 @@ use crate::slices::courier::domains::courier::{
     CourierEligibilityContext, CourierEligibilityReason, CourierError, CourierId,
     courier_eligible_for_delivery,
 };
+use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOfferRepository, DeliveryRepository,
 };
@@ -73,6 +74,7 @@ pub struct Handler<'a> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
+    pub offers_of: &'a dyn OffersOfDelivery,
     pub locator: &'a dyn CourierLocator,
     pub policy: AssignmentPolicy,
 }
@@ -96,6 +98,7 @@ impl Handler<'_> {
             rejections,
         } = select_candidate(
             &delivery,
+            self.offers_of,
             self.offers,
             self.couriers,
             self.locator,
@@ -113,14 +116,14 @@ impl Handler<'_> {
 /// delivery; ties are broken by courier id. Changes no state.
 pub fn select_candidate(
     delivery: &Delivery,
+    offers_of: &dyn OffersOfDelivery,
     offers: &dyn DeliveryOfferRepository,
     couriers: &dyn CourierAssignment,
     locator: &dyn CourierLocator,
     policy: AssignmentPolicy,
 ) -> Result<Selection, DeliveryApplicationError> {
     delivery.ensure_assignable()?;
-    let offered: HashSet<CourierId> = offers
-        .list_for_delivery(delivery.id())?
+    let offered: HashSet<CourierId> = load_offers_of(offers_of, offers, delivery.id())?
         .into_iter()
         .map(|offer| offer.courier_id().clone())
         .collect();

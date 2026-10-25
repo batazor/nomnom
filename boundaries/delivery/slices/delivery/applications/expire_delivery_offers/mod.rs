@@ -11,6 +11,7 @@
 //! subject and no permission check.
 
 use crate::pkg::application::{Clock, UnitOfWork};
+use crate::pkg::persistence::RepositoryError;
 use crate::slices::delivery::domains::delivery::{
     DeliveryOffer, DeliveryOfferError, DeliveryOfferId, DeliveryOfferRepository,
 };
@@ -34,8 +35,21 @@ pub struct Output {
     pub more: bool,
 }
 
+/// Query port of the job: which offers to expire. The handler loads each
+/// through [`DeliveryOfferRepository::get`] and saves it there.
+pub trait ExpiredDeliveryOffers {
+    /// Ids of pending offers whose deadline has passed (`expires_at < now`),
+    /// oldest deadline first, at most `limit`.
+    fn expired_pending_offer_ids(
+        &self,
+        now_epoch_seconds: i64,
+        limit: usize,
+    ) -> Result<Vec<DeliveryOfferId>, RepositoryError>;
+}
+
 pub struct Handler<'a, U: UnitOfWork> {
     pub unit_of_work: &'a U,
+    pub expired: &'a dyn ExpiredDeliveryOffers,
     pub offers: &'a dyn DeliveryOfferRepository,
     pub outbox: &'a dyn DeliveryOutbox,
     pub clock: &'a dyn Clock,
@@ -48,10 +62,16 @@ impl<U: UnitOfWork> Handler<'_, U> {
             return Ok(output);
         }
         let now = self.clock.now_epoch_seconds();
-        let batch = self.offers.list_expired_pending(now, input.batch_size)?;
+        let batch = self
+            .expired
+            .expired_pending_offer_ids(now, input.batch_size)?;
         output.more = batch.len() >= input.batch_size;
-        for offer in batch {
-            let id = offer.id().clone();
+        for id in batch {
+            // An offer removed after the batch was read has nothing to expire.
+            let Some(offer) = self.offers.get(&id)? else {
+                output.skipped.push(id);
+                continue;
+            };
             if self.expire(offer, now)? {
                 output.expired.push(id);
             } else {

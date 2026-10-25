@@ -10,6 +10,7 @@ fn handler(world: &World) -> Handler<'_> {
         deliveries: &world.store,
         couriers: &world.store,
         offers: &world.store,
+        offers_of: &world.store,
         locator: &world.locator,
         policy: world.policy,
     }

@@ -14,12 +14,14 @@ use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
 use crate::slices::delivery::applications::dispatch_deliveries::WaitingDeliveries;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
+use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     self, CourierCurrentDeliveryReadModel,
 };
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     self, PendingDeliveryOffersReadModel,
 };
+use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
@@ -37,6 +39,8 @@ pub trait TransactionalStore:
     TransactionScope
     + DeliveryRepository
     + DeliveryOfferRepository
+    + OffersOfDelivery
+    + ExpiredDeliveryOffers
     + CourierAssignment
     + DeliveryOutbox
     + Send
@@ -48,6 +52,8 @@ impl<T> TransactionalStore for T where
     T: TransactionScope
         + DeliveryRepository
         + DeliveryOfferRepository
+        + OffersOfDelivery
+        + ExpiredDeliveryOffers
         + CourierAssignment
         + DeliveryOutbox
         + Send
@@ -231,6 +237,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             offers: self.ports.store(),
+            offers_of: self.ports.store(),
             locator: self.ports.locator(),
             policy: self.settings.assignment_policy(),
         }
@@ -248,6 +255,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             offers: self.ports.store(),
+            offers_of: self.ports.store(),
             outbox: self.ports.store(),
             ids: self.ports.ids(),
             clock: self.ports.clock(),
@@ -291,6 +299,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             offers: self.ports.store(),
+            offers_of: self.ports.store(),
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             outbox: self.ports.store(),
@@ -406,6 +415,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             offers: self.ports.store(),
+            offers_of: self.ports.store(),
             outbox: self.ports.store(),
             locator: self.ports.locator(),
             ids: self.ports.ids(),
@@ -423,6 +433,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
         expire_delivery_offers::Handler {
             unit_of_work: &self.unit_of_work(),
             offers: self.ports.store(),
+            expired: self.ports.store(),
             outbox: self.ports.store(),
             clock: self.ports.clock(),
         }
@@ -439,6 +450,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             offers: self.ports.store(),
+            offers_of: self.ports.store(),
             outbox: self.ports.store(),
             locator: self.ports.locator(),
             ids: self.ports.ids(),

@@ -374,19 +374,15 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, RecordingRelationships};
+    use crate::infrastructure::memory::RecordingRelationships;
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::pkg::application::Subject;
-    use crate::pkg::persistence::RepositoryError;
     use crate::slices::courier::applications::{
         register_courier, set_courier_availability, update_courier_location,
-    };
-    use crate::slices::delivery::applications::dispatch_deliveries::{
-        DeliveryPosition, WaitingDeliveries,
     };
     use crate::slices::delivery::applications::{
         create_delivery, dispatch_deliveries, find_courier,
     };
-    use crate::slices::delivery::domains::delivery::{Delivery, DeliveryId};
 
     use super::super::infrastructure::local_authorization;
     use super::super::service::ServiceModule;
@@ -395,39 +391,12 @@ mod tests {
         Subject::User("operator-1".to_owned())
     }
 
-    /// Waiting Deliveries query that answers with the deliveries the test
-    /// lists, read from the store; the SQL query is covered by the
-    /// PostgreSQL tests.
-    #[derive(Default)]
-    struct ListedWaiting {
-        store: Arc<MemoryStore>,
-        ids: Mutex<Vec<DeliveryId>>,
-    }
-
-    impl WaitingDeliveries for ListedWaiting {
-        fn list_waiting_without_pending_offer(
-            &self,
-            _after: Option<&DeliveryPosition>,
-            limit: usize,
-        ) -> Result<Vec<Delivery>, RepositoryError> {
-            let ids = self.ids.lock().expect("ids").clone();
-            ids.iter()
-                .take(limit)
-                .filter_map(|id| DeliveryRepository::get(&*self.store, id).transpose())
-                .collect()
-        }
-    }
-
-    /// Граф use cases с адаптерами процесса над in-memory хранилищем вместо
-    /// PostgreSQL; новый граф над тем же хранилищем — перезапуск процесса.
-    fn process(store: &Arc<MemoryStore>) -> ServiceModule {
-        process_with(store, Arc::new(ListedWaiting::default()))
-    }
-
-    fn process_with(store: &Arc<MemoryStore>, waiting: Arc<ListedWaiting>) -> ServiceModule {
+    /// Граф use cases с адаптерами процесса над тестовым PostgreSQL; новый
+    /// граф над тем же хранилищем — перезапуск процесса.
+    fn process(store: &Arc<TestStore>) -> ServiceModule {
         let (ids, locator) = assignment_adapters(Arc::clone(store) as _);
         service(infrastructure(
-            ProcessStores::with_waiting(store, waiting),
+            ProcessStores::over(store),
             ids,
             locator,
             Box::new(local_authorization()),
@@ -452,7 +421,7 @@ mod tests {
     /// AC-631
     #[test]
     fn delivery_ids_do_not_repeat_after_restart() {
-        let store = Arc::new(MemoryStore::new());
+        let store = Arc::new(TestStore::new());
         let before = create(&process(&store), "order-1");
 
         let after = create(&process(&store), "order-2");
@@ -464,7 +433,7 @@ mod tests {
     /// AC-632
     #[test]
     fn find_courier_returns_available_courier_with_stored_position() {
-        let store = Arc::new(MemoryStore::new());
+        let store = Arc::new(TestStore::new());
         let process = process(&store);
         let couriers = process.couriers();
         couriers
@@ -517,12 +486,8 @@ mod tests {
     /// dispatch pass of the process, over the stored courier positions.
     #[test]
     fn dispatch_offers_a_created_delivery_to_a_courier_on_line() {
-        let store = Arc::new(MemoryStore::new());
-        let waiting = Arc::new(ListedWaiting {
-            store: Arc::clone(&store),
-            ..ListedWaiting::default()
-        });
-        let process = process_with(&store, Arc::clone(&waiting));
+        let store = Arc::new(TestStore::new());
+        let process = process(&store);
         let couriers = process.couriers();
         couriers
             .register_courier(
@@ -543,11 +508,6 @@ mod tests {
             )
             .expect("position recorded");
         let created = create(&process, "order-1");
-        waiting
-            .ids
-            .lock()
-            .expect("ids")
-            .push(created.delivery_id.clone());
 
         let output = process
             .deliveries()

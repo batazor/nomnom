@@ -1,11 +1,12 @@
 //! Fixtures shared by the `delivery` slice handler tests.
 
 use crate::infrastructure::memory::{
-    ManualClock, MemoryStore, RecordingRelationships, RelationshipWrite, SequentialIdGenerator,
+    ManualClock, RecordingRelationships, RelationshipWrite, SequentialIdGenerator,
     StaticAuthorization, StaticCourierLocator,
 };
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::pkg::application::{RelationshipWriteError, Subject};
-use crate::pkg::persistence::AuthorizationRevision;
+use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{
     Courier, CourierId, CourierRepository, CourierStatus,
 };
@@ -15,6 +16,7 @@ use crate::slices::delivery::domains::delivery::{
 };
 
 use super::courier_locator::CourierCandidate;
+use super::offers_of_delivery::load_offers_of;
 use super::policy::AssignmentPolicy;
 use super::relationships::DeliveryRelationshipWriter;
 
@@ -22,7 +24,7 @@ pub const NOW: i64 = 1_000;
 pub const OFFER_TTL: i64 = 60;
 
 pub struct World {
-    pub store: MemoryStore,
+    pub store: TestStore,
     pub authorization: StaticAuthorization,
     pub clock: ManualClock,
     pub ids: SequentialIdGenerator,
@@ -38,7 +40,7 @@ impl World {
 
     pub fn with_authorization(authorization: StaticAuthorization) -> Self {
         Self {
-            store: MemoryStore::new(),
+            store: TestStore::new(),
             authorization,
             clock: ManualClock::new(NOW),
             ids: SequentialIdGenerator::new("generated"),
@@ -116,6 +118,11 @@ impl World {
             .expect("offer exists")
     }
 
+    /// Offers of the delivery, in creation order.
+    pub fn offers_of(&self, delivery_id: &str) -> Result<Vec<DeliveryOffer>, RepositoryError> {
+        load_offers_of(&self.store, &self.store, &DeliveryId::new(delivery_id))
+    }
+
     pub fn offer_state(&self, id: &str) -> OfferState {
         self.store_offer(id).state()
     }
@@ -151,12 +158,12 @@ pub fn candidate(courier: &str, distance_to_pickup_meters: u32) -> CourierCandid
 /// delivery as persisted at the moment of the write. It proves that writers
 /// run before the use case saves the delivery.
 pub struct ObservingRelationships<'a> {
-    pub store: &'a MemoryStore,
+    pub store: &'a TestStore,
     pub observed: std::cell::RefCell<Vec<(RelationshipWrite, Option<CourierId>)>>,
 }
 
 impl<'a> ObservingRelationships<'a> {
-    pub fn new(store: &'a MemoryStore) -> Self {
+    pub fn new(store: &'a TestStore) -> Self {
         Self {
             store,
             observed: std::cell::RefCell::new(Vec::new()),

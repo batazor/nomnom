@@ -8,6 +8,7 @@
 use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository,
@@ -41,6 +42,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
+    pub offers_of: &'a dyn OffersOfDelivery,
     pub outbox: &'a dyn DeliveryOutbox,
     pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
@@ -69,6 +71,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 &OfferPorts {
                     couriers: self.couriers,
                     offers: self.offers,
+                    offers_of: self.offers_of,
                     outbox: self.outbox,
                     ids: self.ids,
                     clock: self.clock,
@@ -84,6 +87,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
 pub struct OfferPorts<'a> {
     pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
+    pub offers_of: &'a dyn OffersOfDelivery,
     pub outbox: &'a dyn DeliveryOutbox,
     pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
@@ -102,7 +106,7 @@ pub fn make_offer(
     ports.couriers.ensure_available(&courier_id)?;
 
     let now = ports.clock.now_epoch_seconds();
-    let existing = ports.offers.list_for_delivery(delivery.id())?;
+    let existing = load_offers_of(ports.offers_of, ports.offers, delivery.id())?;
     if let Some(open) = existing
         .iter()
         .find(|offer| offer.courier_id() == &courier_id && offer.is_open_at(now))
@@ -135,7 +139,8 @@ fn output(offer: &DeliveryOffer, created: bool) -> Output {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::{CourierError, CourierStatus};
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{NOW, OFFER_TTL, World, service};
@@ -143,13 +148,14 @@ mod tests {
         DeliveryError, DomainEvent, OfferState, State, TransitionError,
     };
 
-    fn handler(world: &World) -> Handler<'_, MemoryStore> {
+    fn handler(world: &World) -> Handler<'_, TestStore> {
         Handler {
             authorization: &world.authorization,
             unit_of_work: &world.store,
             deliveries: &world.store,
             couriers: &world.store,
             offers: &world.store,
+            offers_of: &world.store,
             outbox: &world.store,
             ids: &world.ids,
             clock: &world.clock,
@@ -217,15 +223,7 @@ mod tests {
 
         assert_eq!(repeat.offer_id, DeliveryOfferId::new("generated-1"));
         assert!(!repeat.created);
-        assert_eq!(
-            DeliveryOfferRepository::list_for_delivery(
-                &world.store,
-                &DeliveryId::new("delivery-1")
-            )
-            .expect("read")
-            .len(),
-            1
-        );
+        assert_eq!(world.offers_of("delivery-1").expect("read").len(), 1);
     }
 
     #[test]
@@ -265,14 +263,7 @@ mod tests {
                 CourierError::Unavailable
             ))
         );
-        assert!(
-            DeliveryOfferRepository::list_for_delivery(
-                &world.store,
-                &DeliveryId::new("delivery-1")
-            )
-            .expect("read")
-            .is_empty()
-        );
+        assert!(world.offers_of("delivery-1").expect("read").is_empty());
     }
 
     #[test]

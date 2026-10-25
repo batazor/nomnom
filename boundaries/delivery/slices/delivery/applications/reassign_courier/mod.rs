@@ -97,8 +97,9 @@ pub fn end_assignment(
 mod tests {
     use super::*;
     use crate::infrastructure::memory::{
-        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+        RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{
@@ -108,7 +109,7 @@ mod tests {
         DeliveryError, DomainEvent, OrderId, State, TransitionError, Trigger,
     };
 
-    fn handler(world: &World) -> Handler<'_, MemoryStore> {
+    fn handler(world: &World) -> Handler<'_, TestStore> {
         Handler {
             authorization: &world.authorization,
             unit_of_work: &world.store,

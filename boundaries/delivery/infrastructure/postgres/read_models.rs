@@ -9,12 +9,14 @@ use crate::slices::courier::domains::courier::{CourierId, CourierStatus, Locatio
 use crate::slices::delivery::applications::dispatch_deliveries::{
     DeliveryPosition, WaitingDeliveries,
 };
+use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
+use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOfferId, OfferState, OrderId, State,
 };
@@ -78,6 +80,43 @@ impl WaitingDeliveries for PostgresStore {
         .iter()
         .map(delivery_from_row)
         .collect()
+    }
+}
+
+impl OffersOfDelivery for PostgresStore {
+    fn offer_ids_of(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Vec<DeliveryOfferId>, RepositoryError> {
+        sql!(self, "SELECT", |connection| {
+            sqlx::query_scalar::<_, String>(
+                "SELECT id FROM delivery_offers WHERE delivery_id = $1 ORDER BY position",
+            )
+            .bind(delivery_id.as_str())
+            .fetch_all(connection)
+        })
+        .map(|ids| ids.into_iter().map(DeliveryOfferId::new).collect())
+    }
+}
+
+impl ExpiredDeliveryOffers for PostgresStore {
+    fn expired_pending_offer_ids(
+        &self,
+        now_epoch_seconds: i64,
+        limit: usize,
+    ) -> Result<Vec<DeliveryOfferId>, RepositoryError> {
+        sql!(self, "SELECT", |connection| {
+            sqlx::query_scalar::<_, String>(
+                "SELECT id FROM delivery_offers
+             WHERE state = $1 AND expires_at < $2
+             ORDER BY expires_at, position LIMIT $3",
+            )
+            .bind(offer_state(OfferState::Pending))
+            .bind(now_epoch_seconds)
+            .bind(super::limit(limit))
+            .fetch_all(connection)
+        })
+        .map(|ids| ids.into_iter().map(DeliveryOfferId::new).collect())
     }
 }
 

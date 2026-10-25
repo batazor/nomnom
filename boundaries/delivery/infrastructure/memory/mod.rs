@@ -1,15 +1,14 @@
-//! In-memory adapters of every `delivery` port. They serve application unit
-//! tests and local wiring until the storage, SpiceDB and locator adapters are
-//! chosen; they are not production implementations.
+//! Test doubles of the non-storage ports of `delivery`: a static
+//! authorization, a recording relationship writer, a manual clock with
+//! sequential ids and a static courier locator. Storage has no in-memory
+//! variant: tests run against PostgreSQL (`infrastructure::postgres::test_support`).
 
 mod authorization;
 mod clock;
 mod locator;
 mod relationships;
-mod store;
 
 pub use authorization::StaticAuthorization;
 pub use clock::{ManualClock, SequentialIdGenerator};
 pub use locator::StaticCourierLocator;
 pub use relationships::{RecordingRelationships, RelationshipWrite};
-pub use store::MemoryStore;

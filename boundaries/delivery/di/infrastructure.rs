@@ -4,7 +4,7 @@
 //! процесс.
 //!
 //! Реализации выбирает composition root процесса ([`super::server`]) или
-//! тестовый граф ([`super::build`]) и передаёт их параметрами компонентов.
+//! тестовые графы [`super::service`] и передаёт их параметрами компонентов.
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -23,6 +23,8 @@ use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
 use crate::slices::delivery::applications::dispatch_deliveries::WaitingDeliveries;
+use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
+use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
@@ -51,9 +53,8 @@ pub trait CourierStore: CourierRepository + CourierLocationStore + Send + Sync {
 impl<T: CourierRepository + CourierLocationStore + Send + Sync> CourierStore for T {}
 
 /// Роли хранилища процесса над одним адаптером
-/// ([`PostgresStore`](crate::infrastructure::postgres::PostgresStore) в
-/// процессе, [`MemoryStore`](crate::infrastructure::memory::MemoryStore) в
-/// тестах), поэтому Unit of Work охватывает записи обоих слайсов и Outbox.
+/// ([`PostgresStore`](crate::infrastructure::postgres::PostgresStore); в
+/// тестах — он же за тестовыми хуками `TestStore`), поэтому Unit of Work охватывает записи обоих слайсов и Outbox.
 /// Каждый потребитель получает только свою роль; reconciliation и revisions
 /// авторизации composition root разрешает над тем же `Arc` отдельно.
 pub struct ProcessStores {
@@ -75,22 +76,11 @@ impl ProcessStores {
             + WaitingDeliveriesQuery
             + 'static,
     {
-        Self::with_waiting(store, Arc::clone(store) as _)
-    }
-
-    /// Роли слайсов над одним хранилищем и отдельная выборка Dispatch
-    /// Deliveries: тестовые графы над in-memory хранилищем, у которого этой
-    /// выборки нет.
-    #[must_use]
-    pub fn with_waiting<S>(store: &Arc<S>, waiting: Arc<dyn WaitingDeliveriesQuery>) -> Self
-    where
-        S: CourierStore + TransactionalStore + DeliveryReadModels + 'static,
-    {
         Self {
             couriers: Arc::clone(store) as _,
             transactional: Arc::clone(store) as _,
             read_models: Arc::clone(store) as _,
-            waiting,
+            waiting: Arc::clone(store) as _,
         }
     }
 }
@@ -100,7 +90,7 @@ pub trait ProcessAuthorization: CourierAuthorization + DeliveryAuthorization + S
 
 impl<T: CourierAuthorization + DeliveryAuthorization + Send + Sync> ProcessAuthorization for T {}
 
-/// Разрешающая авторизация тестового графа [`super::build`]; процесс без
+/// Разрешающая авторизация тестовых графов [`super::service`]; процесс без
 /// SpiceDB не стартует (см. [`super::server::spicedb`]).
 pub(super) fn local_authorization() -> StaticAuthorization {
     StaticAuthorization::allow_all()
@@ -306,27 +296,32 @@ impl DeliveryOfferRepository for ObservedStore {
         DeliveryOfferRepository::get(&*self.inner, id)
     }
 
-    fn list_for_delivery(
-        &self,
-        delivery_id: &DeliveryId,
-    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
-        self.inner.list_for_delivery(delivery_id)
-    }
-
-    fn list_expired_pending(
-        &self,
-        now_epoch_seconds: i64,
-        limit: usize,
-    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
-        self.inner.list_expired_pending(now_epoch_seconds, limit)
-    }
-
     fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
         DeliveryOfferRepository::add(&*self.inner, offer)
     }
 
     fn save(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
         DeliveryOfferRepository::save(&*self.inner, offer)
+    }
+}
+
+impl OffersOfDelivery for ObservedStore {
+    fn offer_ids_of(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Vec<DeliveryOfferId>, RepositoryError> {
+        self.inner.offer_ids_of(delivery_id)
+    }
+}
+
+impl ExpiredDeliveryOffers for ObservedStore {
+    fn expired_pending_offer_ids(
+        &self,
+        now_epoch_seconds: i64,
+        limit: usize,
+    ) -> Result<Vec<DeliveryOfferId>, RepositoryError> {
+        self.inner
+            .expired_pending_offer_ids(now_epoch_seconds, limit)
     }
 }
 

@@ -1,7 +1,7 @@
 use std::sync::{Mutex, PoisonError};
 
 use super::*;
-use crate::infrastructure::memory::MemoryStore;
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
 use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::applications::test_support::{
@@ -59,13 +59,14 @@ impl WaitingDeliveries for ScriptedWaiting {
     }
 }
 
-fn handler<'a>(world: &'a World, waiting: &'a ScriptedWaiting) -> Handler<'a, MemoryStore> {
+fn handler<'a>(world: &'a World, waiting: &'a ScriptedWaiting) -> Handler<'a, TestStore> {
     Handler {
         unit_of_work: &world.store,
         waiting,
         deliveries: &world.store,
         couriers: &world.store,
         offers: &world.store,
+        offers_of: &world.store,
         outbox: &world.store,
         locator: &world.locator,
         ids: &world.ids,
@@ -227,11 +228,7 @@ fn delivery_waits_until_a_courier_goes_on_line() {
     assert_eq!(output.without_candidate, ids(&["delivery-1"]));
     assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
     assert!(world.store.outbox_messages().is_empty());
-    assert!(
-        DeliveryOfferRepository::list_for_delivery(&world.store, &DeliveryId::new("delivery-1"))
-            .expect("read")
-            .is_empty()
-    );
+    assert!(world.offers_of("delivery-1").expect("read").is_empty());
 
     world.courier("courier-2", CourierStatus::Available);
     world.locator.set_candidates(vec![
@@ -293,11 +290,7 @@ fn concurrently_changed_delivery_is_skipped() {
 
     assert_eq!(output.skipped, ids(&["delivery-1"]));
     assert_eq!(offered_couriers(&output), vec![("delivery-2", "courier-1")]);
-    assert!(
-        DeliveryOfferRepository::list_for_delivery(&world.store, &DeliveryId::new("delivery-1"))
-            .expect("read")
-            .is_empty()
-    );
+    assert!(world.offers_of("delivery-1").expect("read").is_empty());
     assert_eq!(world.store.rollbacks(), 1);
 }
 

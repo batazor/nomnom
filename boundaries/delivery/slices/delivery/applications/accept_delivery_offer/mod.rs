@@ -9,6 +9,7 @@
 use crate::pkg::application::{Clock, Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository,
     OfferAcceptanceConditions, OfferState,
@@ -41,6 +42,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub unit_of_work: &'a U,
     pub offers: &'a dyn DeliveryOfferRepository,
+    pub offers_of: &'a dyn OffersOfDelivery,
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
@@ -110,7 +112,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
             .assign_courier(delivery.id(), courier_id)?;
         delivery.record_authorization_revision(revision);
 
-        for mut other in self.offers.list_for_delivery(delivery.id())? {
+        for mut other in load_offers_of(self.offers_of, self.offers, delivery.id())? {
             if other.id() != offer.id() && other.state() == OfferState::Pending {
                 other.withdraw()?;
                 self.offers.save(&other)?;

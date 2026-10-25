@@ -20,6 +20,7 @@
 use crate::pkg::application::{Clock, IdGenerator, UnitOfWork};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOfferRepository, DeliveryRepository,
 };
@@ -104,6 +105,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
+    pub offers_of: &'a dyn OffersOfDelivery,
     pub outbox: &'a dyn DeliveryOutbox,
     pub locator: &'a dyn CourierLocator,
     pub ids: &'a dyn IdGenerator,
@@ -138,6 +140,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
         let outcome = self.unit_of_work.run(|| {
             let selection = select_candidate(
                 delivery,
+                self.offers_of,
                 self.offers,
                 self.couriers,
                 self.locator,
@@ -154,6 +157,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 &OfferPorts {
                     couriers: self.couriers,
                     offers: self.offers,
+                    offers_of: self.offers_of,
                     outbox: self.outbox,
                     ids: self.ids,
                     clock: self.clock,

@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::infrastructure::memory::MemoryStore;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 #[cfg(doc)]
 use crate::slices::delivery::domains::delivery::Delivery;
@@ -52,49 +51,6 @@ pub trait ReconciliationStore: Send + Sync {
         courier_id: &str,
         revision: AuthorizationRevision,
     ) -> Result<bool, RepositoryError>;
-}
-
-impl ReconciliationStore for MemoryStore {
-    fn courier_page(
-        &self,
-        after: &str,
-        limit: usize,
-    ) -> Result<Vec<(String, u64)>, RepositoryError> {
-        MemoryStore::courier_page(self, after, limit)
-    }
-
-    fn registered_couriers(&self, ids: &[String]) -> Result<Vec<String>, RepositoryError> {
-        MemoryStore::registered_couriers(self, ids)
-    }
-
-    fn assignment_page(
-        &self,
-        after: &str,
-        limit: usize,
-    ) -> Result<Vec<(String, String, u64)>, RepositoryError> {
-        MemoryStore::assignment_page(self, after, limit)
-    }
-
-    fn assigned_couriers(&self, ids: &[String]) -> Result<Vec<(String, String)>, RepositoryError> {
-        MemoryStore::assigned_couriers(self, ids)
-    }
-
-    fn record_courier_revision(
-        &self,
-        courier_id: &str,
-        revision: AuthorizationRevision,
-    ) -> Result<bool, RepositoryError> {
-        MemoryStore::record_courier_revision(self, courier_id, revision)
-    }
-
-    fn record_assignment_revision(
-        &self,
-        delivery_id: &str,
-        courier_id: &str,
-        revision: AuthorizationRevision,
-    ) -> Result<bool, RepositoryError> {
-        MemoryStore::record_assignment_revision(self, delivery_id, courier_id, revision)
-    }
 }
 
 /// `(resource_id, subject_id, version)`: a business row and the version of

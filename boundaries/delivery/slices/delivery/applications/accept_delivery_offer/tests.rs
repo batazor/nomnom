@@ -2,7 +2,8 @@ use std::cell::RefCell;
 
 use super::*;
 use crate::infrastructure::memory::StaticAuthorization;
-use crate::infrastructure::memory::{MemoryStore, RecordingRelationships, RelationshipWrite};
+use crate::infrastructure::memory::{RecordingRelationships, RelationshipWrite};
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::pkg::application::UnitOfWorkError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
 use crate::slices::courier::domains::courier::CourierStatus;
@@ -16,11 +17,12 @@ use crate::slices::delivery::domains::delivery::{
     State, TransitionError,
 };
 
-fn handler(world: &World) -> Handler<'_, MemoryStore> {
+fn handler(world: &World) -> Handler<'_, TestStore> {
     Handler {
         authorization: &world.authorization,
         unit_of_work: &world.store,
         offers: &world.store,
+        offers_of: &world.store,
         deliveries: &world.store,
         couriers: &world.store,
         outbox: &world.store,
@@ -289,12 +291,12 @@ fn failed_commit_persists_nothing() {
 /// Courier busyness port that records every call and delegates to the
 /// store, proving the use case changes the courier only through the port.
 struct RecordingAssignment<'a> {
-    store: &'a MemoryStore,
+    store: &'a TestStore,
     calls: RefCell<Vec<(&'static str, CourierId)>>,
 }
 
 impl<'a> RecordingAssignment<'a> {
-    fn new(store: &'a MemoryStore) -> Self {
+    fn new(store: &'a TestStore) -> Self {
         Self {
             store,
             calls: RefCell::new(Vec::new()),

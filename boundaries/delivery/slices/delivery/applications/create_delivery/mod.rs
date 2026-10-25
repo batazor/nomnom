@@ -137,7 +137,8 @@ fn replay(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{NOW, World, service};
@@ -151,7 +152,7 @@ mod tests {
         }
     }
 
-    fn handler(world: &World) -> Handler<'_, MemoryStore> {
+    fn handler(world: &World) -> Handler<'_, TestStore> {
         Handler {
             authorization: &world.authorization,
             unit_of_work: &world.store,

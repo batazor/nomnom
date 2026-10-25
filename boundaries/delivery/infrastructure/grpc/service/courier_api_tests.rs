@@ -6,8 +6,9 @@
 use super::super::v1::delivery_service_client::DeliveryServiceClient;
 use super::*;
 use crate::infrastructure::memory::{
-    MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+    RecordingRelationships, RelationshipWrite, StaticAuthorization,
 };
+use crate::infrastructure::postgres::test_support::TestStore;
 use crate::pkg::application::RelationshipWriteError;
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::applications::authorization::{CourierPermission, CourierResource};
@@ -147,7 +148,7 @@ fn authorization(couriers: &[&str], orders: &[&str]) -> StaticAuthorization {
 
 struct Api {
     client: DeliveryServiceClient<tonic::transport::Channel>,
-    store: Arc<MemoryStore>,
+    store: Arc<TestStore>,
     relationships: Arc<RecordingRelationships>,
     stop: watch::Sender<bool>,
     handle: tokio::task::JoinHandle<io::Result<()>>,
@@ -155,9 +156,9 @@ struct Api {
 
 impl Api {
     async fn start(authorization: StaticAuthorization) -> Self {
-        let store = Arc::new(MemoryStore::new());
+        let store = Arc::new(TestStore::new());
         let relationships = Arc::new(RecordingRelationships::new());
-        let module = crate::di::build_over_memory(
+        let module = crate::di::build_over_store(
             &store,
             Box::new(authorization),
             Box::new(SharedRelationships(Arc::clone(&relationships))),
@@ -293,7 +294,7 @@ impl Api {
 }
 
 /// Published facts of the assignment lifecycle in Outbox order.
-fn lifecycle_facts(store: &MemoryStore) -> Vec<&'static str> {
+fn lifecycle_facts(store: &TestStore) -> Vec<&'static str> {
     store
         .outbox_messages()
         .into_iter()
@@ -594,8 +595,8 @@ async fn invalid_courier_requests_are_invalid_arguments() {
 async fn user_assertion_reaches_the_courier_handler_as_user_subject() {
     let vectors = super::super::identity::fixtures::user_vectors();
     let user = vectors.expected_subject.clone();
-    let store = Arc::new(MemoryStore::new());
-    let module = crate::di::build_over_memory(
+    let store = Arc::new(TestStore::new());
+    let module = crate::di::build_over_store(
         &store,
         Box::new(authorization(&[user.as_str()], &[])),
         Box::new(RecordingRelationships::new()),
