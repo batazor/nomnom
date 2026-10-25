@@ -15,7 +15,6 @@ from dataclasses import dataclass
 
 from pkg.application import Clock, Subject, UnitOfWork
 from slices.payment.domains.payment import (
-    PAYMENT_TRIGGER_OF,
     AlreadyInStateError,
     DuplicateIdempotencyKeyError,
     InvalidTransitionError,
@@ -27,6 +26,7 @@ from slices.payment.domains.payment import (
     PaymentOperationRepository,
     PaymentRepository,
     PaymentState,
+    rules_of,
 )
 
 from .access import require_permission
@@ -42,7 +42,6 @@ from .operation_result import PAYMENT_AGGREGATE, OperationStatus, PaymentOperati
 from .ports import (
     PaymentIdentifiers,
     PaymentOutbox,
-    PaymentPermission,
     PaymentPermissionChecker,
     PaymentProviderGateway,
     PaymentResource,
@@ -68,13 +67,6 @@ __all__ = [
     "ProviderResultStatus",
     "to_domain_outcome",
 ]
-
-_PERMISSION_OF: dict[OperationKind, PaymentPermission] = {
-    OperationKind.AUTHORIZE: PaymentPermission.AUTHORIZE,
-    OperationKind.CAPTURE: PaymentPermission.CAPTURE,
-    OperationKind.CANCEL_AUTHORIZATION: PaymentPermission.CANCEL_AUTHORIZATION,
-    OperationKind.REFUND: PaymentPermission.REFUND,
-}
 
 
 @dataclass(frozen=True)
@@ -134,9 +126,8 @@ class PaymentOperationExecutor:
         if not payment_id.strip():
             raise InvalidPaymentRequestError("payment id is required")
         target = PaymentId(payment_id)
-        require_permission(
-            self._permissions, subject, _PERMISSION_OF[kind], PaymentResource(target)
-        )
+        rules = rules_of(kind)
+        require_permission(self._permissions, subject, rules.permission, PaymentResource(target))
 
         reservation = self._reserve(target, key, kind)
         operation = reservation.operation
@@ -175,7 +166,7 @@ class PaymentOperationExecutor:
                     raise IdempotencyKeyConflictError(key)
                 return _Reservation(existing, payment.state, payment.provider_reference)
             try:
-                payment.ensure_can(PAYMENT_TRIGGER_OF[kind])
+                payment.ensure_can(rules_of(kind).trigger)
             except (InvalidTransitionError, AlreadyInStateError) as error:
                 raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
             if self._operations.find_pending(payment_id) is not None:

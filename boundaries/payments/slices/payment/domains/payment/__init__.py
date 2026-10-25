@@ -1,5 +1,6 @@
 """Pure payments domain model."""
 
+from .completion import complete_operation
 from .events import (
     PaymentAuthorizationCancelled,
     PaymentAuthorized,
@@ -20,7 +21,6 @@ from .fsm import (
 )
 from .ids import OperationId, OperationKind, OrderId, PaymentId
 from .operation import (
-    PAYMENT_TRIGGER_OF,
     InvalidOperationTransitionError,
     OperationAlreadyCompletedError,
     OperationMismatchError,
@@ -28,9 +28,15 @@ from .operation import (
     OperationState,
     OperationTrigger,
     PaymentOperation,
-    complete_operation,
+)
+from .operation_kinds import (
+    OPERATION_KINDS,
+    OperationKindRules,
+    UnknownOperationKindError,
+    rules_of,
 )
 from .payment import Payment
+from .permissions import PaymentPermission
 from .repository import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,
@@ -49,7 +55,7 @@ from .specifications import (
 from .vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
 __all__ = [
-    "PAYMENT_TRIGGER_OF",
+    "OPERATION_KINDS",
     "AlreadyInStateError",
     "CurrencyMismatchError",
     "DuplicateIdempotencyKeyError",
@@ -63,6 +69,7 @@ __all__ = [
     "OperationAlreadyPendingError",
     "OperationId",
     "OperationKind",
+    "OperationKindRules",
     "OperationMismatchError",
     "OperationOutcome",
     "OperationState",
@@ -81,6 +88,7 @@ __all__ = [
     "PaymentOperation",
     "PaymentOperationDeclined",
     "PaymentOperationRepository",
+    "PaymentPermission",
     "PaymentPolicyReason",
     "PaymentRefundContext",
     "PaymentRefundable",
@@ -90,5 +98,7 @@ __all__ = [
     "PaymentTrigger",
     "SpecificationResult",
     "TransitionResult",
+    "UnknownOperationKindError",
     "complete_operation",
+    "rules_of",
 ]

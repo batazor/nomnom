@@ -21,10 +21,11 @@ from opentelemetry import metrics
 from pkg.application import AggregateRef, UnitOfWork
 from slices.payment.applications.ports import PaymentOutbox
 from slices.payment.domains.payment import (
-    OperationKind,
+    OPERATION_KINDS,
     PaymentAuthorized,
     PaymentCaptured,
     PaymentDomainEvent,
+    PaymentEvent,
     PaymentOperationDeclined,
     PaymentRefunded,
 )
@@ -57,33 +58,35 @@ _DESCRIPTIONS = {
     _Counter.REFUNDS: "Payment refunds: refunded, declined, failed.",
 }
 
-# Provider decline of a Payment Operation, by kind: a business result (``declined``),
-# not a technical failure (``failed``), for every financial operation. Cancel
-# Authorization has no business counter.
-_DECLINES = {
-    OperationKind.AUTHORIZE: (_Counter.AUTHORIZATIONS, Outcome.DECLINED),
-    OperationKind.CAPTURE: (_Counter.CAPTURES, Outcome.DECLINED),
-    OperationKind.REFUND: (_Counter.REFUNDS, Outcome.DECLINED),
+# Business counter of each successful Payment transition, by the Domain Event it records.
+# Cancel Authorization has no business counter.
+_SUCCESSES: dict[type[PaymentEvent], tuple[_Counter, Outcome]] = {
+    PaymentAuthorized: (_Counter.AUTHORIZATIONS, Outcome.AUTHORIZED),
+    PaymentCaptured: (_Counter.CAPTURES, Outcome.CAPTURED),
+    PaymentRefunded: (_Counter.REFUNDS, Outcome.REFUNDED),
 }
 
 
 def classify(event: PaymentDomainEvent) -> tuple[_Counter, Outcome] | None:
     """Business counter and outcome of a committed Domain Event; ``None`` when not counted.
 
+    A Provider decline of a Payment Operation is a business result (``declined``), not a
+    technical failure (``failed``): it is counted on the counter of the kind's success
+    event, taken from the domain rule table ``OPERATION_KINDS``. A kind without a rule
+    is not counted: metrics never fail a committed Unit of Work.
+
     ``PaymentFailed`` is not counted: it follows a declined Authorization, which is
     already counted as ``declined``. A technical failure (Provider unavailable) leaves
     the operation pending and writes no event, so ``failed`` of Authorizations has no
     source event yet.
     """
-    if isinstance(event, PaymentAuthorized):
-        return _Counter.AUTHORIZATIONS, Outcome.AUTHORIZED
-    if isinstance(event, PaymentCaptured):
-        return _Counter.CAPTURES, Outcome.CAPTURED
-    if isinstance(event, PaymentRefunded):
-        return _Counter.REFUNDS, Outcome.REFUNDED
-    if isinstance(event, PaymentOperationDeclined):
-        return _DECLINES.get(event.kind)
-    return None
+    match event:
+        case PaymentOperationDeclined(kind=kind):
+            rules = OPERATION_KINDS.get(kind)
+            counted = None if rules is None else _SUCCESSES.get(rules.success_event)
+            return None if counted is None else (counted[0], Outcome.DECLINED)
+        case _:
+            return _SUCCESSES.get(type(event))
 
 
 _collector: ContextVar[list[PaymentDomainEvent] | None] = ContextVar(

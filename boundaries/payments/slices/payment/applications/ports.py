@@ -13,19 +13,22 @@ from slices.payment.domains.payment import (
     OrderId,
     PaymentDomainEvent,
     PaymentId,
+    PaymentPermission,
 )
 
-
-class PaymentPermission(StrEnum):
-    """Permissions on a Payment checked in the authorization graph."""
-
-    CREATE = "create"
-    AUTHORIZE = "authorize"
-    CAPTURE = "capture"
-    CANCEL_AUTHORIZATION = "cancel_authorization"
-    REFUND = "refund"
-    VIEW = "view"
-    VIEW_OPERATIONS = "view_operations"
+__all__ = [
+    "PaymentIdentifiers",
+    "PaymentOutbox",
+    "PaymentPermission",
+    "PaymentPermissionChecker",
+    "PaymentProviderGateway",
+    "PaymentResource",
+    "ProviderMessageInbox",
+    "ProviderOperationOutcome",
+    "ProviderOperationRequest",
+    "ProviderOperationStatus",
+    "ProviderUnavailableError",
+]
 
 
 @dataclass(frozen=True)

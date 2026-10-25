@@ -1,7 +1,9 @@
 import unittest
 from datetime import UTC, datetime
+from unittest import mock
 
 from slices.payment.domains.payment import (
+    OPERATION_KINDS,
     AlreadyInStateError,
     GuardFailedError,
     InvalidOperationTransitionError,
@@ -25,6 +27,7 @@ from slices.payment.domains.payment import (
     PaymentOperationDeclined,
     PaymentRefunded,
     PaymentState,
+    UnknownOperationKindError,
     complete_operation,
 )
 from slices.payment.domains.payment.operation import OPERATION_TRANSITIONS
@@ -225,6 +228,28 @@ class CompleteOperationTest(unittest.TestCase):
 
         with self.assertRaises(OperationAlreadyCompletedError):
             complete_operation(payment, operation, OperationOutcome.success(), NOW)
+
+
+class OperationKindRulesTest(unittest.TestCase):
+    def test_every_kind_has_a_rule(self) -> None:
+        self.assertEqual(set(OPERATION_KINDS), set(OperationKind))
+
+    def test_kind_without_rule_fails_and_changes_nothing(self) -> None:
+        for outcome in (OperationOutcome.success("ref-1"), OperationOutcome.declined("no")):
+            with self.subTest(succeeded=outcome.succeeded):
+                payment = make_payment(PaymentState.CAPTURED)
+                operation = make_operation(OperationKind.REFUND)
+
+                with (
+                    mock.patch.dict(OPERATION_KINDS, clear=True),
+                    self.assertRaises(UnknownOperationKindError),
+                ):
+                    complete_operation(payment, operation, outcome, NOW)
+
+                self.assertEqual(payment.state, PaymentState.CAPTURED)
+                self.assertEqual(payment.pull_events(), [])
+                self.assertEqual(operation.state, OperationState.PENDING)
+                self.assertEqual(operation.pull_events(), [])
 
 
 if __name__ == "__main__":
