@@ -24,7 +24,7 @@ var appNamespaces = []string{"nomnom-orders", "nomnom-payments", "nomnom-deliver
 func PlatformOverview() (Dashboard, error) {
 	g := &generator{opts: Options{Context: "platform", Title: "Platform"}}
 	g.dash = dashboard.NewDashboardBuilder("Platform / Overview").
-		Description("Серверная сторона SpiceDB и PostgreSQL, pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.").
+		Description("Серверная сторона SpiceDB, PostgreSQL и CDC Outbox (Kafka Connect, Debezium), pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.").
 		Tags([]string{"nomnom", "platform", "overview", "generated"}).
 		Editable(false).
 		CursorSync(dashboard.DashboardCursorSyncCrosshair).
@@ -35,11 +35,13 @@ func PlatformOverview() (Dashboard, error) {
 	postgres := Scope{Services: []string{inventory.PostgreSQLServer}, Job: "infra/postgresql", Matchers: []string{`owner=~"$owner"`}}
 	pods := Scope{Services: inventory.AllServices, Job: jobKubernetes, Matchers: []string{`namespace=~"$namespace"`}}
 	certs := Scope{Services: []string{inventory.CertManager}, Job: jobCertManager}
+	cdc := Scope{Services: []string{inventory.KafkaConnect}, Job: jobKafkaConnect}
 
 	layout := dashboard.Rows()
 	for _, r := range []row{
 		{title: "SpiceDB", scope: spicedb, panels: spicedbPanels(spicedb)},
-		{title: "PostgreSQL", scope: postgres, panels: postgresPanels(postgres)},
+		{title: "PostgreSQL", scope: postgres, panels: append(postgresPanels(postgres), slotPanels(postgres)...)},
+		{title: "CDC (Debezium)", scope: cdc, panels: cdcPanels(cdc)},
 		{title: "Pods", scope: pods, panels: platformPods(pods)},
 		{title: "Certificates", scope: certs, panels: certificates(certs)},
 	} {
@@ -146,5 +148,40 @@ func certificates(sc Scope) []Panel {
 			Description: "Отрицательное значение — продление просрочено: issuer не выпускает сертификат."},
 		{Title: "Ready", Unit: "short", Queries: []Query{{Min("namespace, name", sc.Gauge("certmanager_certificate_ready_status", certReady)), "{{namespace}}/{{name}}"}},
 			Description: "0 — Certificate не Ready: сертификат не выпущен, просрочен или не совпадает со spec."},
+	}
+}
+
+// jobKafkaConnect — Alloy scrape JMX exporter Kafka Connect (ADR 37).
+const jobKafkaConnect = "infra/kafka-connect"
+
+// slotLag — WAL, который слот Debezium держит на диске: от текущей позиции WAL до
+// подтверждённой коннектором.
+func slotLag(sc Scope) string {
+	return "max by (owner, slot_name) (" + sc.Gauge("pg_replication_slot_slot_current_wal_lsn") + " - " +
+		sc.Gauge("pg_replication_slot_slot_confirmed_flush_lsn") + ")"
+}
+
+// cdcPanels — доставка Outbox всех контекстов (ADR 37): коннекторы, поток и отставание
+// Debezium; слоты репликации — row PostgreSQL (slotPanels).
+func cdcPanels(sc Scope) []Panel {
+	return []Panel{
+		{Title: "Connector tasks by status", Unit: "short", Queries: []Query{{Sum("connector, status", sc.Gauge("kafka_connect_connector_task_status")), "{{connector}} {{status}}"}},
+			Description: "Задача `failed` — Outbox контекста не доставляется: `GET /connectors/<name>/status`, после исправления — restart задачи."},
+		{Title: "Events published", Unit: "ops", Queries: []Query{{Sum("name", sc.Rate("debezium_metrics_TotalNumberOfEventsSeen")), "{{name}}"}},
+			Description: "Записи Outbox, прочитанные из журнала базы и отправленные в Kafka."},
+		{Title: "Lag behind source", Unit: "ms", Queries: []Query{{Max("name", sc.Gauge("debezium_metrics_MilliSecondsBehindSource")), "{{name}}"}},
+			Description: "От commit записи Outbox до её обработки коннектором; −1 до первого события задачи."},
+		{Title: "Queue fill", Unit: "percentunit", Queries: []Query{{
+			"1 - " + Max("name", sc.Gauge("debezium_metrics_QueueRemainingCapacity")) + " / " + Max("name", sc.Gauge("debezium_metrics_QueueTotalCapacity")), "{{name}}"}},
+			Description: "Заполнение очереди коннектора: близко к 100% — Kafka не успевает принимать события."},
+	}
+}
+
+// slotPanels — слоты Debezium <owner>_outbox (ADR 37) на серверах владельцев.
+func slotPanels(slots Scope) []Panel {
+	return []Panel{
+		{Title: "Replication slot lag", Unit: "bytes", Queries: []Query{{slotLag(slots), "{{owner}} {{slot_name}}"}},
+			Description: "WAL, который слот держит на диске. Растёт, если коннектор остановлен или отстаёт."},
+		{Title: "Replication slot active", Unit: "short", Queries: []Query{{Min("owner, slot_name", slots.Gauge("pg_replication_slot_slot_is_active")), "{{owner}} {{slot_name}}"}}},
 	}
 }

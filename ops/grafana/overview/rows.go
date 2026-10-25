@@ -1,6 +1,10 @@
 package overview
 
-import "fmt"
+import (
+	"fmt"
+
+	"nomnom/ops/grafana/inventory"
+)
 
 // gRPC status codes по классам ошибки (rpc_response_status_code — имя кода):
 // transport/availability — сеть, deadline, перегрузка, недоступность зависимости;
@@ -188,9 +192,11 @@ func (g *generator) kafka(sc Scope) []Panel {
 	k := g.opts.Kafka
 	lag := Sum("topic", `kafka_consumergroup_lag{consumergroup="`+k.ConsumerGroup+`"}`)
 	// Outbox публикует Debezium (ADR 37): метрики коннектора контекста из Kafka Connect.
-	connector := `{name="` + k.Connector + `"}`
-	produced := []Query{{Sum("", "rate(debezium_metrics_TotalNumberOfEventsSeen"+connector+"[$__rate_interval])"), "events"}}
-	cdcLag := []Query{{Max("", "debezium_metrics_MilliSecondsBehindSource"+connector) + " / 1000", "behind source"}}
+	cdc := Scope{Services: []string{inventory.KafkaConnect}, Job: jobKafkaConnect}
+	connector := `name="` + k.Connector + `"`
+	produced := []Query{{Sum("", cdc.Rate("debezium_metrics_TotalNumberOfEventsSeen", connector)), "events"}}
+	cdcLag := []Query{{Max("", cdc.Gauge("debezium_metrics_MilliSecondsBehindSource", connector)) + " / 1000", "behind source"}}
+	cdcTasks := []Query{{Sum("status", cdc.Gauge("kafka_connect_connector_task_status", `connector="`+k.Connector+`"`)), "{{status}}"}}
 	var consumed, failures []Query
 	var processed Query
 	if k.Watermill {
@@ -221,6 +227,8 @@ func (g *generator) kafka(sc Scope) []Panel {
 			Description: "Duplicate = конфликт уникальности `(consumer, event_id)` в Inbox; failures — панель Processing failures."},
 		{Title: "Outbox CDC lag", Unit: "s", Queries: cdcLag,
 			Description: "Отставание коннектора `" + k.Connector + "` от журнала базы: время от commit записи Outbox до её чтения."},
+		{Title: "Outbox connector tasks", Unit: "short", Queries: cdcTasks,
+			Description: "Состояние задачи коннектора `" + k.Connector + "`: `failed` — Outbox не доставляется."},
 	}
 }
 

@@ -1,0 +1,5 @@
+# Образ собирает Skaffold (artifact nomnom/kafka-connect) и задаёт setValueTemplates.
+image:
+  repository: nomnom/kafka-connect
+  tag: ""
+  pullPolicy: Never

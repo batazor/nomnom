@@ -83,14 +83,15 @@ JSON — артефакт генератора: правки вносятся в
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
 | Consumed | live | — |
-| Produced (Outbox, Debezium) | TODO | [`debezium_metrics_TotalNumberOfEventsSeen`](../../../../docs/observability/metric-inventory.md#cdc) |
+| Produced (Outbox, Debezium) | live | — |
 | Processing failures | live | — |
 | Consumer lag | TODO | [`kafka_consumergroup_lag`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Retries and poison (DLQ) | live | — |
 | Processing duration p95 by event_type | live | — |
 | Message age at processing p95 | live | — |
 | Inbox: processed / duplicates | live | — |
-| Outbox CDC lag | TODO | [`debezium_metrics_MilliSecondsBehindSource`](../../../../docs/observability/metric-inventory.md#cdc) |
+| Outbox CDC lag | live | — |
+| Outbox connector tasks | live | — |
 
 ### Use cases
 
@@ -148,7 +149,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 38 из 60. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 41 из 61. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 

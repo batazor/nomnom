@@ -48,6 +48,17 @@ Environment и version не фильтруются: у Prometheus-метрик �
 | Deadlocks and conflicts | live | — |
 | Temp files written | live | — |
 | Database size | live | — |
+| Replication slot lag | live | — |
+| Replication slot active | live | — |
+
+### CDC (Debezium)
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Connector tasks by status | live | — |
+| Events published | live | — |
+| Lag behind source | live | — |
+| Queue fill | live | — |
 
 ### Pods
 
@@ -68,7 +79,7 @@ Environment и version не фильтруются: у Prometheus-метрик �
 | Time to scheduled renewal | live | — |
 | Ready | live | — |
 
-Живых панелей: 24 из 24. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 30 из 30. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
@@ -80,6 +91,11 @@ Rule group `platform` в folder `nomnom` ([`../alerts/platform.json`](../alerts/
 | SpiceDB: p95 latency | warning | активно | — |
 | PostgreSQL: down | critical | активно | — |
 | PostgreSQL: deadlocks | warning | активно | — |
+| CDC: connector task failed | critical | активно | — |
+| CDC: connector task not running | warning | активно | — |
+| CDC: lag behind source | warning | активно | — |
+| PostgreSQL: replication slot inactive | critical | активно | — |
+| PostgreSQL: replication slot retains WAL | warning | активно | — |
 | Pods: crash looping | critical | активно | — |
 | Pods: restarting | warning | активно | — |
 | Pods: not ready | warning | активно | — |

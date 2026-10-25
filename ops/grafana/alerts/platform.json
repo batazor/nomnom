@@ -197,6 +197,246 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Задача коннектора Debezium в FAILED: Outbox контекста не доставляется в Kafka (ADR 37). GET /connectors/<name>/status, после исправления — restart задачи."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (connector) (kafka_connect_connector_task_status{job=\"infra/kafka-connect\", status=\"failed\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "5m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "CDC: connector task failed",
+      "uid": "nomnom-cdc-task-failed"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Задача коннектора Debezium дольше 15 минут не RUNNING (paused, unassigned, restarting): события Outbox ждут."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (connector) (kafka_connect_connector_task_status{job=\"infra/kafka-connect\", status!=\"running\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "15m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "CDC: connector task not running",
+      "uid": "nomnom-cdc-task-not-running"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Коннектор обрабатывает записи Outbox больше чем через минуту после commit: подписки и интеграция видят изменения с задержкой."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "max by (name) (debezium_metrics_MilliSecondsBehindSource{job=\"infra/kafka-connect\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 60000",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "CDC: lag behind source",
+      "uid": "nomnom-cdc-lag"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Слот Debezium не читается: Outbox владельца не доставляется, WAL копится на диске."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "min by (owner, slot_name) (pg_replication_slot_slot_is_active{job=\"infra/postgresql\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003c 1",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "PostgreSQL: replication slot inactive",
+      "uid": "nomnom-replication-slot-inactive"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
+        "summary": "Слот Debezium держит больше 1 GiB WAL: коннектор отстаёт или остановлен, диск базы заполняется."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "max by (owner, slot_name) (pg_replication_slot_slot_current_wal_lsn{job=\"infra/postgresql\"} - pg_replication_slot_slot_confirmed_flush_lsn{job=\"infra/postgresql\"})",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 1.073741824e+09",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "15m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-platform-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "platform",
+      "title": "PostgreSQL: replication slot retains WAL",
+      "uid": "nomnom-replication-slot-lag"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-platform-overview",
         "summary": "Контейнер в CrashLoopBackOff или ImagePullBackOff."
       },
       "condition": "C",

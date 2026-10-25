@@ -1044,22 +1044,54 @@
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum(rate(debezium_metrics_TotalNumberOfEventsSeen{job=\"infra/kafka-connect\", name=\"payments-outbox\"}[$__rate_interval]))",
+                        "legendFormat": "events",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `payments` |\n| --- | --- |\n| [`debezium_metrics_TotalNumberOfEventsSeen`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#cdc) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(rate(debezium_metrics_TotalNumberOfEventsSeen{name=\"payments-outbox\"}[$__rate_interval]))\n```\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
                 "overrides": []
               }
             }
@@ -1343,22 +1375,54 @@
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "max(debezium_metrics_MilliSecondsBehindSource{job=\"infra/kafka-connect\", name=\"payments-outbox\"}) / 1000",
+                        "legendFormat": "behind source",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `payments` |\n| --- | --- |\n| [`debezium_metrics_MilliSecondsBehindSource`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#cdc) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax(debezium_metrics_MilliSecondsBehindSource{name=\"payments-outbox\"}) / 1000\n```\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "s",
+                  "custom": {}
+                },
                 "overrides": []
               }
             }
@@ -1369,6 +1433,70 @@
         "kind": "Panel",
         "spec": {
           "id": 34,
+          "title": "Outbox connector tasks",
+          "description": "Состояние задачи коннектора `payments-outbox`: `failed` — Outbox не доставляется.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (status) (kafka_connect_connector_task_status{job=\"infra/kafka-connect\", connector=\"payments-outbox\"})",
+                        "legendFormat": "{{status}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-35": {
+        "kind": "Panel",
+        "spec": {
+          "id": 35,
           "title": "Transactions by outcome",
           "description": "committed, rolled_back и commit_failed Unit of Work.",
           "links": [],
@@ -1397,10 +1525,10 @@
           }
         }
       },
-      "panel-35": {
+      "panel-36": {
         "kind": "Panel",
         "spec": {
-          "id": 35,
+          "id": 36,
           "title": "Transaction duration",
           "description": "Метрики: `nomnom_uow_duration_seconds`.",
           "links": [],
@@ -1429,10 +1557,10 @@
           }
         }
       },
-      "panel-36": {
+      "panel-37": {
         "kind": "Panel",
         "spec": {
-          "id": 36,
+          "id": 37,
           "title": "Retries by conflict",
           "description": "serialization, deadlock, write_conflict — классы retry Unit of Work.",
           "links": [],
@@ -1461,10 +1589,10 @@
           }
         }
       },
-      "panel-37": {
+      "panel-38": {
         "kind": "Panel",
         "spec": {
-          "id": 37,
+          "id": 38,
           "title": "Transitions",
           "description": "Метрики: `nomnom_fsm_transitions_total`.",
           "links": [],
@@ -1493,10 +1621,10 @@
           }
         }
       },
-      "panel-38": {
+      "panel-39": {
         "kind": "Panel",
         "spec": {
-          "id": 38,
+          "id": 39,
           "title": "Invalid transitions",
           "description": "Метрики: `nomnom_fsm_transitions_total`.",
           "links": [],
@@ -1516,38 +1644,6 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `payments` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_from_state, nomnom_fsm_trigger) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"rejected\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-39": {
-        "kind": "Panel",
-        "spec": {
-          "id": 39,
-          "title": "Terminal transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `payments` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\", nomnom_fsm_terminal=\"true\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1676,6 +1772,38 @@
         "kind": "Panel",
         "spec": {
           "id": 40,
+          "title": "Terminal transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `payments` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\", nomnom_fsm_terminal=\"true\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-41": {
+        "kind": "Panel",
+        "spec": {
+          "id": 41,
           "title": "Authorizations",
           "description": "Attempts = сумма outcomes. `declined` (PaymentDeclined) — бизнес-результат, не техническая ошибка.",
           "links": [],
@@ -1704,10 +1832,10 @@
           }
         }
       },
-      "panel-41": {
+      "panel-42": {
         "kind": "Panel",
         "spec": {
-          "id": 41,
+          "id": 42,
           "title": "Captures and refunds",
           "description": "Метрики: `nomnom_payments_captures_total`, `nomnom_payments_refunds_total`.",
           "links": [],
@@ -1736,10 +1864,10 @@
           }
         }
       },
-      "panel-42": {
+      "panel-43": {
         "kind": "Panel",
         "spec": {
-          "id": 42,
+          "id": 43,
           "title": "Failed payment operations",
           "description": "Технические сбои операций; declined сюда не входит. Provider latency — row Dependencies.",
           "links": [
@@ -1779,10 +1907,10 @@
           }
         }
       },
-      "panel-43": {
+      "panel-44": {
         "kind": "Panel",
         "spec": {
-          "id": 43,
+          "id": 44,
           "title": "Checks by result",
           "description": "Метрики: `nomnom_authz_checks_total`.",
           "links": [],
@@ -1811,10 +1939,10 @@
           }
         }
       },
-      "panel-44": {
+      "panel-45": {
         "kind": "Panel",
         "spec": {
-          "id": 44,
+          "id": 45,
           "title": "Denied by permission",
           "description": "DENIED — решение политики, не сбой SpiceDB.",
           "links": [],
@@ -1843,10 +1971,10 @@
           }
         }
       },
-      "panel-45": {
+      "panel-46": {
         "kind": "Panel",
         "spec": {
-          "id": 45,
+          "id": 46,
           "title": "Errors and timeouts",
           "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
           "links": [
@@ -1886,10 +2014,10 @@
           }
         }
       },
-      "panel-46": {
+      "panel-47": {
         "kind": "Panel",
         "spec": {
-          "id": 46,
+          "id": 47,
           "title": "Check latency",
           "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
           "links": [],
@@ -2672,6 +2800,19 @@
                           "name": "panel-33"
                         }
                       }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 24,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-34"
+                        }
+                      }
                     }
                   ]
                 }
@@ -2696,7 +2837,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-34"
+                          "name": "panel-35"
                         }
                       }
                     },
@@ -2709,7 +2850,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-35"
+                          "name": "panel-36"
                         }
                       }
                     },
@@ -2722,7 +2863,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-36"
+                          "name": "panel-37"
                         }
                       }
                     }
@@ -2749,7 +2890,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-37"
+                          "name": "panel-38"
                         }
                       }
                     },
@@ -2762,7 +2903,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-38"
+                          "name": "panel-39"
                         }
                       }
                     },
@@ -2775,7 +2916,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-39"
+                          "name": "panel-40"
                         }
                       }
                     }
@@ -2802,7 +2943,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-40"
+                          "name": "panel-41"
                         }
                       }
                     },
@@ -2815,7 +2956,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-41"
+                          "name": "panel-42"
                         }
                       }
                     },
@@ -2828,7 +2969,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-42"
+                          "name": "panel-43"
                         }
                       }
                     }
@@ -2855,7 +2996,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-43"
+                          "name": "panel-44"
                         }
                       }
                     },
@@ -2868,7 +3009,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-44"
+                          "name": "panel-45"
                         }
                       }
                     },
@@ -2881,7 +3022,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-45"
+                          "name": "panel-46"
                         }
                       }
                     },
@@ -2894,7 +3035,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-46"
+                          "name": "panel-47"
                         }
                       }
                     }

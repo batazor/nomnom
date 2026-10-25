@@ -50,9 +50,13 @@ const (
 	SpiceDB          = "spicedb"
 	PostgreSQLServer = "postgresql"
 	CertManager      = "cert-manager"
+	KafkaConnect     = "kafka-connect"
 )
 
-var InfraTargets = []string{SpiceDB, PostgreSQLServer, CertManager}
+var InfraTargets = []string{SpiceDB, PostgreSQLServer, CertManager, KafkaConnect}
+
+// cdcScrape — источник имён и labels метрик CDC: scrape экспортеров на стенде, не Mimir.
+const cdcScrape = "Имена и labels сняты scrape экспортера на стенде 2026-10-26 (Debezium 3.7.0.Final, JMX exporter 1.7.0, Alloy 1.21.2)."
 
 // Bounded contexts с ролями на технологиях, а не на имени.
 var (
@@ -119,7 +123,7 @@ var Sections = []Section{
 	{"watermill", "Kafka: встроенные метрики Watermill", "`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`). Экспорт через OTel Prometheus bridge (`orders/pkg/telemetry`) в общий OTLP pipeline; имена Prometheus сохраняются без изменений. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся."},
 	{"messaging-otel", "Kafka: semconv messaging (не-Go контексты)", "Kafka-клиенты: kafkajs (`restaurants`), confluent-kafka (`payments`), rdkafka (`delivery`). Trace context: Outbox хранит `traceparent` span, в котором событие записано; Debezium отдаёт его header `traceparent` без изменений (ADR 37); consumer — CONSUMER span `process <topic>` дочерним. Метрики semconv messaging не инвентаризированы."},
 	{"messaging", "Kafka: собственный OTel middleware и consumer lag", "Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Attributes только `nomnom.messaging.handler`, `nomnom.event.type`, `messaging.destination.name`, `nomnom.error.class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill."},
-	{"cdc", "Outbox CDC (Debezium)", "Outbox публикует Debezium в Kafka Connect (ADR 37). Метрики коннектора — JMX MBeans `debezium.<plugin>:type=connector-metrics,context=streaming,server=<topic.prefix>`; Prometheus JMX exporter в Kafka Connect ещё не подключён."},
+	{"cdc", "Outbox CDC (Kafka Connect, Debezium)", "Outbox публикует Debezium в Kafka Connect (ADR 37). Prometheus JMX exporter образа `ops/kind/kafka-connect` (правила `metrics.yaml`), Alloy scrape `:9404`, `job=\"infra/kafka-connect\"`. Состояние коннектора и задачи — gauge 1 с label `status` (running, paused, failed, unassigned, restarting); `name` метрик Debezium — `topic.prefix` коннектора (`<context>-outbox`). Отставание слота репликации — раздел [PostgreSQL](#postgresql). Platform / Overview и row Kafka сервисов."},
 	{"usecase", "Application use cases", "Декоратор application handlers в composition root (docs/observability.md#use-cases). Один histogram на все use cases; `outcome`: success | rejected | error — бизнес-отказ отделён от технического сбоя. `error_type` — закрытый набор slice, пуст при success. Без ID, subject и payload."},
 	{"uow", "Unit of Work", "Декоратор Unit of Work (ADR 20). Deadlock/serialization — классы retry, а не SQL-панели поверх DB instrumentation."},
 	{"fsm", "Domain Lifecycle (FSM)", "Декоратор применения FSM-перехода (ADR 21). Labels допустимы только с закрытым набором значений из FSM-таблицы."},
@@ -193,9 +197,15 @@ var Metrics = []Metric{
 	{Name: "nomnom_inbox_duplicates_total", Section: "messaging", Type: Counter, Source: "OTel middleware / Inbox adapter", Labels: []string{"nomnom_messaging_handler", "nomnom_event_type", "messaging_destination_name"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Outcome duplicate Inbox (`(consumer, event_id)` уже обработан)."},
 	{Name: "kafka_consumergroup_lag", Section: "messaging", Type: Gauge, Source: "Alloy `prometheus.exporter.kafka`", Labels: []string{"consumergroup", "topic", "partition"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join."},
 
-	// cdc
-	{Name: "debezium_metrics_TotalNumberOfEventsSeen", Section: "cdc", Type: Counter, Source: "Debezium streaming metrics (JMX)", Labels: []string{"name", "context", "plugin"}, Status: expected(contextServices...), Note: "`name` — коннектор контекста (`<context>-outbox`)."},
-	{Name: "debezium_metrics_MilliSecondsBehindSource", Section: "cdc", Type: Gauge, Source: "Debezium streaming metrics (JMX)", Labels: []string{"name", "context", "plugin"}, Status: expected(contextServices...), Note: "Отставание от commit в базе, мс."},
+	// cdc (Alloy scrape :9404, job infra/kafka-connect)
+	{Name: "kafka_connect_connector_status", Section: "cdc", Type: Gauge, Source: "Kafka Connect `connector-metrics` (JMX exporter)", Labels: []string{"connector", "status"}, Status: verified([]string{KafkaConnect}), Note: cdcScrape},
+	{Name: "kafka_connect_connector_task_status", Section: "cdc", Type: Gauge, Source: "Kafka Connect `connector-task-metrics` (JMX exporter)", Labels: []string{"connector", "task", "status"}, Status: verified([]string{KafkaConnect}), Note: "Задача `failed` — доставка Outbox контекста остановлена."},
+	{Name: "debezium_metrics_TotalNumberOfEventsSeen", Section: "cdc", Type: Counter, Source: "Debezium streaming metrics (JMX exporter)", Labels: []string{"name", "plugin"}, Status: verified([]string{KafkaConnect}), Note: "Счётчик с начала задачи; без суффикса `_total`."},
+	{Name: "debezium_metrics_MilliSecondsBehindSource", Section: "cdc", Type: Gauge, Source: "Debezium streaming metrics (JMX exporter)", Labels: []string{"name", "plugin"}, Status: verified([]string{KafkaConnect}), Note: "От commit в базе до обработки последнего события, мс; −1 до первого события."},
+	{Name: "debezium_metrics_MilliSecondsSinceLastEvent", Section: "cdc", Type: Gauge, Source: "Debezium streaming metrics (JMX exporter)", Labels: []string{"name", "plugin"}, Status: verified([]string{KafkaConnect}), Note: "Тишина — норма при отсутствии записей Outbox, сама по себе не сбой."},
+	{Name: "debezium_metrics_QueueRemainingCapacity", Section: "cdc", Type: Gauge, Source: "Debezium streaming metrics (JMX exporter)", Labels: []string{"name", "plugin"}, Status: verified([]string{KafkaConnect})},
+	{Name: "debezium_metrics_QueueTotalCapacity", Section: "cdc", Type: Gauge, Source: "Debezium streaming metrics (JMX exporter)", Labels: []string{"name", "plugin"}, Status: verified([]string{KafkaConnect})},
+	{Name: "debezium_metrics_Connected", Section: "cdc", Type: Gauge, Source: "Debezium streaming metrics (JMX exporter)", Labels: []string{"name", "plugin"}, Status: verified([]string{KafkaConnect}), Note: "1 — коннектор подключён к журналу базы."},
 
 	// usecase
 	{Name: "nomnom_usecase_duration_seconds", Section: "usecase", Type: Histogram, Source: "Use case decorator (`pkg/telemetry`)", Labels: []string{"nomnom_usecase_name", "nomnom_usecase_kind", "nomnom_outcome", "error_type"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}), Note: "`kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`."},
@@ -283,6 +293,9 @@ var Metrics = []Metric{
 
 	// postgresql (Alloy prometheus.exporter.postgres, job infra/postgresql)
 	{Name: "pg_up", Section: "postgresql", Type: Gauge, Source: "postgres_exporter", Labels: []string{"owner"}, Status: verified([]string{PostgreSQLServer})},
+	{Name: "pg_replication_slot_slot_current_wal_lsn", Section: "postgresql", Type: Gauge, Source: "postgres_exporter `replication_slot`", Labels: []string{"owner", "slot_name", "slot_type"}, Status: verified([]string{PostgreSQLServer}), Note: cdcScrape},
+	{Name: "pg_replication_slot_slot_confirmed_flush_lsn", Section: "postgresql", Type: Gauge, Source: "postgres_exporter `replication_slot`", Labels: []string{"owner", "slot_name", "slot_type"}, Status: verified([]string{PostgreSQLServer}), Note: "current − confirmed_flush — WAL, который слот Debezium держит на диске (ADR 37)."},
+	{Name: "pg_replication_slot_slot_is_active", Section: "postgresql", Type: Gauge, Source: "postgres_exporter `replication_slot`", Labels: []string{"owner", "slot_name", "slot_type"}, Status: verified([]string{PostgreSQLServer}), Note: "0 — коннектор не читает слот, WAL копится."},
 	{Name: "pg_stat_database_numbackends", Section: "postgresql", Type: Gauge, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
 	{Name: "pg_stat_database_xact_commit", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer}), Note: "Counter без `_total` (имя postgres_exporter)."},
 	{Name: "pg_stat_database_xact_rollback", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},

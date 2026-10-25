@@ -18,7 +18,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 118; пар «метрика × сервис» со статусом «есть»: 129.
+Метрик в инвентаре: 127; пар «метрика × сервис» со статусом «есть»: 140.
 
 Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`): 2026-10-25 подтверждены rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -142,14 +142,20 @@ Middleware в composition root поверх Watermill (и эквивалент �
 
 <a id="cdc"></a>
 
-## Outbox CDC (Debezium)
+## Outbox CDC (Kafka Connect, Debezium)
 
-Outbox публикует Debezium в Kafka Connect (ADR 37). Метрики коннектора — JMX MBeans `debezium.<plugin>:type=connector-metrics,context=streaming,server=<topic.prefix>`; Prometheus JMX exporter в Kafka Connect ещё не подключён.
+Outbox публикует Debezium в Kafka Connect (ADR 37). Prometheus JMX exporter образа `ops/kind/kafka-connect` (правила `metrics.yaml`), Alloy scrape `:9404`, `job="infra/kafka-connect"`. Состояние коннектора и задачи — gauge 1 с label `status` (running, paused, failed, unassigned, restarting); `name` метрик Debezium — `topic.prefix` коннектора (`<context>-outbox`). Отставание слота репликации — раздел [PostgreSQL](#postgresql). Platform / Overview и row Kafka сервисов.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `debezium_metrics_TotalNumberOfEventsSeen` | Debezium streaming metrics (JMX) | counter | `name`, `context`, `plugin` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `name` — коннектор контекста (`<context>-outbox`). |
-| `debezium_metrics_MilliSecondsBehindSource` | Debezium streaming metrics (JMX) | gauge | `name`, `context`, `plugin` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Отставание от commit в базе, мс. |
+| `kafka_connect_connector_status` | Kafka Connect `connector-metrics` (JMX exporter) | gauge | `connector`, `status` | `kafka-connect`: есть | Имена и labels сняты scrape экспортера на стенде 2026-10-26 (Debezium 3.7.0.Final, JMX exporter 1.7.0, Alloy 1.21.2). |
+| `kafka_connect_connector_task_status` | Kafka Connect `connector-task-metrics` (JMX exporter) | gauge | `connector`, `task`, `status` | `kafka-connect`: есть | Задача `failed` — доставка Outbox контекста остановлена. |
+| `debezium_metrics_TotalNumberOfEventsSeen` | Debezium streaming metrics (JMX exporter) | counter | `name`, `plugin` | `kafka-connect`: есть | Счётчик с начала задачи; без суффикса `_total`. |
+| `debezium_metrics_MilliSecondsBehindSource` | Debezium streaming metrics (JMX exporter) | gauge | `name`, `plugin` | `kafka-connect`: есть | От commit в базе до обработки последнего события, мс; −1 до первого события. |
+| `debezium_metrics_MilliSecondsSinceLastEvent` | Debezium streaming metrics (JMX exporter) | gauge | `name`, `plugin` | `kafka-connect`: есть | Тишина — норма при отсутствии записей Outbox, сама по себе не сбой. |
+| `debezium_metrics_QueueRemainingCapacity` | Debezium streaming metrics (JMX exporter) | gauge | `name`, `plugin` | `kafka-connect`: есть | — |
+| `debezium_metrics_QueueTotalCapacity` | Debezium streaming metrics (JMX exporter) | gauge | `name`, `plugin` | `kafka-connect`: есть | — |
+| `debezium_metrics_Connected` | Debezium streaming metrics (JMX exporter) | gauge | `name`, `plugin` | `kafka-connect`: есть | 1 — коннектор подключён к журналу базы. |
 
 <a id="usecase"></a>
 
@@ -311,6 +317,9 @@ Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job="infr
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `pg_up` | postgres_exporter | gauge | `owner` | `postgresql`: есть | — |
+| `pg_replication_slot_slot_current_wal_lsn` | postgres_exporter `replication_slot` | gauge | `owner`, `slot_name`, `slot_type` | `postgresql`: есть | Имена и labels сняты scrape экспортера на стенде 2026-10-26 (Debezium 3.7.0.Final, JMX exporter 1.7.0, Alloy 1.21.2). |
+| `pg_replication_slot_slot_confirmed_flush_lsn` | postgres_exporter `replication_slot` | gauge | `owner`, `slot_name`, `slot_type` | `postgresql`: есть | current − confirmed_flush — WAL, который слот Debezium держит на диске (ADR 37). |
+| `pg_replication_slot_slot_is_active` | postgres_exporter `replication_slot` | gauge | `owner`, `slot_name`, `slot_type` | `postgresql`: есть | 0 — коннектор не читает слот, WAL копится. |
 | `pg_stat_database_numbackends` | postgres_exporter `stat_database` | gauge | `owner`, `datname` | `postgresql`: есть | — |
 | `pg_stat_database_xact_commit` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | Counter без `_total` (имя postgres_exporter). |
 | `pg_stat_database_xact_rollback` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | — |

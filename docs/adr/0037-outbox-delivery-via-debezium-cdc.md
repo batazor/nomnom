@@ -41,7 +41,7 @@ Debezium Server не подходит: заголовки он пишет тол
 
 ### Kafka Connect + Debezium
 
-Один Kafka Connect кластер (`quay.io/debezium/connect`, 3.7.0.Final) в `nomnom-infra`. Его
+Один Kafka Connect кластер (`quay.io/debezium/connect`, 3.7.0.Final, образ `ops/kind/kafka-connect` с JMX exporter) в `nomnom-infra`. Его
 config, offsets и status хранятся в топиках брокера, поэтому сам Connect stateless. На каждый
 контекст свой коннектор:
 
@@ -103,9 +103,14 @@ release контекста регистрирует её через REST Connect
   коннектор (head-of-line, как у relay). Видно в `GET /connectors/<name>/status`; после
   исправления — `POST /connectors/<name>/restart?includeTasks=true`.
 - Слот репликации держит WAL, пока коннектор не прочитал его. Остановленный надолго коннектор
-  растит WAL: нужен alert на `pg_replication_slots` (лаг слота) и состояние коннекторов.
+  растит WAL: alerts Platform / Overview `replication-slot-inactive` и `replication-slot-lag`
+  (postgres_exporter `replication_slot`, разница `current_wal_lsn − confirmed_flush_lsn`).
 - Connect — новая инфраструктура (JVM, около 512 MiB) вместо четырёх процессов relay.
 - В production пользователю CDC нужны `REPLICATION` и `SELECT` на таблице Outbox. В kind
   коннектор работает под владельцем базы.
-- Метрики relay (`nomnom.outbox.*`) исчезают. Их место занимают метрики Connect и Debezium
-  (JMX: `MilliSecondsBehindSource`, `QueueRemainingCapacity`, состояние задач).
+- Метрики relay (`nomnom.outbox.*`) исчезают. Их место занимают метрики Connect и Debezium:
+  образ `ops/kind/kafka-connect` добавляет Prometheus JMX exporter (`:9404`, правила
+  `metrics.yaml`), Alloy скрейпит его как `job="infra/kafka-connect"`. Состояние задач
+  (`kafka_connect_connector_task_status`), поток (`debezium_metrics_TotalNumberOfEventsSeen`),
+  отставание (`debezium_metrics_MilliSecondsBehindSource`) и очередь — row CDC в Platform /
+  Overview и row Kafka сервисов; alerts `cdc-task-failed`, `cdc-task-not-running`, `cdc-lag`.

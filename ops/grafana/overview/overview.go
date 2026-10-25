@@ -305,6 +305,10 @@ func (g *generator) check(panel string, q Query, sc Scope) (bool, []string) {
 		if m.Name == "kafka_consumergroup_lag" && g.opts.Kafka != nil {
 			services = g.opts.Kafka.Consumers
 		}
+		// Outbox сервиса публикует Kafka Connect (ADR 37): метрики CDC — его, не сервиса.
+		if m.Section == "cdc" {
+			services = []string{inventory.KafkaConnect}
+		}
 		if !inventory.Ready(m.Name, services) {
 			ready = false
 			missing = append(missing, m.Name)

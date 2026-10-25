@@ -1,6 +1,6 @@
 # Messaging и orchestration тестового окружения: single-node Kafka API (Redpanda) для integration
-# events (ADR 4, ADR 28), Kafka Connect с Debezium для Outbox (ADR 37) и Temporal dev server для
-# orders-consumer (ADR orders 2).
+# events (ADR 4, ADR 28) и Temporal dev server для orders-consumer (ADR orders 2). Kafka Connect
+# с Debezium (ADR 37) — release kafka-connect (../../kafka-connect/chart).
 # Данные хранятся в emptyDir и теряются при рестарте pod. Egress к ним из прикладных
 # неймспейсов разрешает manifests/netpol/app-infrastructure.yaml (tier infra, порты 9092, 7233).
 apiVersion: v1
@@ -99,107 +99,6 @@ spec:
     - name: kafka
       port: 9092
       targetPort: kafka
----
-# Kafka Connect с Debezium (ADR 37): доставляет Outbox контекстов в брокер из журналов баз
-# (PostgreSQL WAL через pgoutput, MongoDB change streams) — без опроса таблиц. Config, offsets и
-# status хранятся в топиках брокера, сам Connect stateless. Коннекторы регистрируют charts
-# контекстов (cdc.*, hook Job), пароли читаются DirectoryConfigProvider из Secret
-# cdc-credentials (chart ../bootstrap): ${dir:/etc/nomnom/cdc:<ключ>}.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kafka-connect
-  namespace: nomnom-infra
-  labels:
-    app.kubernetes.io/name: kafka-connect
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: kafka-connect
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: kafka-connect
-    spec:
-      automountServiceAccountToken: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: kafka-connect
-          # Debezium 3.7.0.Final — последний стабильный релиз на 2026-10-25.
-          image: quay.io/debezium/connect:3.7.0.Final@sha256:19e5f6f86255473ee7f813280fe5ce3d0d987b83dfce590b77c31a7564533e13
-          env:
-            - name: BOOTSTRAP_SERVERS
-              value: kafka.nomnom-infra.svc.cluster.local:9092
-            - name: GROUP_ID
-              value: nomnom-cdc
-            - name: CONFIG_STORAGE_TOPIC
-              value: nomnom-cdc-configs
-            - name: OFFSET_STORAGE_TOPIC
-              value: nomnom-cdc-offsets
-            - name: STATUS_STORAGE_TOPIC
-              value: nomnom-cdc-status
-            - name: CONFIG_STORAGE_REPLICATION_FACTOR
-              value: "1"
-            - name: OFFSET_STORAGE_REPLICATION_FACTOR
-              value: "1"
-            - name: STATUS_STORAGE_REPLICATION_FACTOR
-              value: "1"
-            - name: CONNECT_CONFIG_PROVIDERS
-              value: dir
-            - name: CONNECT_CONFIG_PROVIDERS_DIR_CLASS
-              value: org.apache.kafka.common.config.provider.DirectoryConfigProvider
-            - name: CONNECT_CONFIG_PROVIDERS_DIR_PARAM_ALLOWED_PATHS
-              value: /etc/nomnom/cdc
-            - name: HEAP_OPTS
-              value: -Xms128m -Xmx384m
-          ports:
-            - name: http
-              containerPort: 8083
-          readinessProbe:
-            httpGet:
-              path: /connectors
-              port: http
-            periodSeconds: 5
-            failureThreshold: 60
-          resources:
-            requests:
-              memory: 384Mi
-            limits:
-              memory: 768Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
-          volumeMounts:
-            - name: cdc-credentials
-              mountPath: /etc/nomnom/cdc
-              readOnly: true
-      volumes:
-        - name: cdc-credentials
-          secret:
-            secretName: cdc-credentials
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka-connect
-  namespace: nomnom-infra
-  labels:
-    app.kubernetes.io/name: kafka-connect
-spec:
-  selector:
-    app.kubernetes.io/name: kafka-connect
-  ports:
-    - name: http
-      port: 8083
-      targetPort: http
 ---
 # Temporal dev server (тот же образ, что make temporal-dev в boundaries/orders).
 apiVersion: apps/v1

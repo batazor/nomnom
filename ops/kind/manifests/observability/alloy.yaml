@@ -277,10 +277,11 @@ data:
     }
 
     // PostgreSQL: по экспортеру на владельца (ADR 8); DSN из Secret alloy-postgres
-    // (chart ops/kind/bootstrap). Только своя база владельца, без pg_settings.
+    // (chart ops/kind/bootstrap). Только своя база владельца, без pg_settings. replication_slot —
+    // слот Debezium <owner>_outbox (ADR 37): отставание CDC от WAL и активность слота.
     prometheus.exporter.postgres "orders" {
       data_source_names  = [sys.env("POSTGRES_ORDERS_DSN")]
-      enabled_collectors = ["database", "stat_database"]
+      enabled_collectors = ["database", "stat_database", "replication_slot"]
       autodiscovery {
         enabled = false
       }
@@ -288,7 +289,7 @@ data:
 
     prometheus.exporter.postgres "payments" {
       data_source_names  = [sys.env("POSTGRES_PAYMENTS_DSN")]
-      enabled_collectors = ["database", "stat_database"]
+      enabled_collectors = ["database", "stat_database", "replication_slot"]
       autodiscovery {
         enabled = false
       }
@@ -296,7 +297,7 @@ data:
 
     prometheus.exporter.postgres "delivery" {
       data_source_names  = [sys.env("POSTGRES_DELIVERY_DSN")]
-      enabled_collectors = ["database", "stat_database"]
+      enabled_collectors = ["database", "stat_database", "replication_slot"]
       autodiscovery {
         enabled = false
       }
@@ -335,14 +336,56 @@ data:
     prometheus.relabel "postgres" {
       rule {
         source_labels = ["__name__"]
-        regex         = "pg_up|pg_database_size_bytes|pg_stat_database_(numbackends|xact_commit|xact_rollback|deadlocks|blks_hit|blks_read|conflicts|temp_bytes)"
+        regex         = "pg_up|pg_database_size_bytes|pg_stat_database_(numbackends|xact_commit|xact_rollback|deadlocks|blks_hit|blks_read|conflicts|temp_bytes)|pg_replication_slot_slot_(current_wal_lsn|confirmed_flush_lsn|is_active)"
         action        = "keep"
       }
       // stat_database и размер есть у каждой базы сервера: только база владельца
-      // (datname == owner); pg_up без datname проходит всегда.
+      // (datname == owner); pg_up и слоты (без datname, сервер — владельца) проходят всегда.
       rule {
         source_labels = ["__name__", "datname", "owner"]
-        regex         = "pg_up;.*;.*|pg_(database_size_bytes|stat_database_.+);(orders;orders|payments;payments|delivery;delivery)"
+        regex         = "pg_up;.*;.*|pg_replication_slot_.+;.*;.*|pg_(database_size_bytes|stat_database_.+);(orders;orders|payments;payments|delivery;delivery)"
+        action        = "keep"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
+    // Kafka Connect с Debezium (ADR 37): JMX exporter :9404 (ops/kind/kafka-connect/metrics.yaml
+    // уже ограничивает MBeans) — состояние коннекторов и задач, поток и отставание Debezium.
+    discovery.kubernetes "kafka_connect" {
+      role = "pod"
+      namespaces {
+        names = ["nomnom-infra"]
+      }
+      selectors {
+        role  = "pod"
+        label = "app.kubernetes.io/name=kafka-connect"
+      }
+    }
+
+    discovery.relabel "kafka_connect" {
+      targets = discovery.kubernetes.kafka_connect.targets
+      rule {
+        source_labels = ["__meta_kubernetes_pod_ip"]
+        target_label  = "__address__"
+        replacement   = "$1:9404"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+    }
+
+    prometheus.scrape "kafka_connect" {
+      targets         = discovery.relabel.kafka_connect.output
+      job_name        = "infra/kafka-connect"
+      scrape_interval = "60s"
+      forward_to      = [prometheus.relabel.kafka_connect.receiver]
+    }
+
+    prometheus.relabel "kafka_connect" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "kafka_connect_(connector_status|connector_task_status|worker_.+)|debezium_metrics_(MilliSecondsBehindSource|TotalNumberOfEventsSeen|QueueRemainingCapacity|QueueTotalCapacity|Connected|MilliSecondsSinceLastEvent)"
         action        = "keep"
       }
       forward_to = [otelcol.receiver.prometheus.infra.receiver]

@@ -1440,22 +1440,54 @@
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum(rate(debezium_metrics_TotalNumberOfEventsSeen{job=\"infra/kafka-connect\", name=\"orders-outbox\"}[$__rate_interval]))",
+                        "legendFormat": "events",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`debezium_metrics_TotalNumberOfEventsSeen`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#cdc) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(rate(debezium_metrics_TotalNumberOfEventsSeen{name=\"orders-outbox\"}[$__rate_interval]))\n```\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
                 "overrides": []
               }
             }
@@ -1979,22 +2011,54 @@
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "max(debezium_metrics_MilliSecondsBehindSource{job=\"infra/kafka-connect\", name=\"orders-outbox\"}) / 1000",
+                        "legendFormat": "behind source",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`debezium_metrics_MilliSecondsBehindSource`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#cdc) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax(debezium_metrics_MilliSecondsBehindSource{name=\"orders-outbox\"}) / 1000\n```\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "s",
+                  "custom": {}
+                },
                 "overrides": []
               }
             }
@@ -2005,6 +2069,70 @@
         "kind": "Panel",
         "spec": {
           "id": 35,
+          "title": "Outbox connector tasks",
+          "description": "Состояние задачи коннектора `orders-outbox`: `failed` — Outbox не доставляется.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (status) (kafka_connect_connector_task_status{job=\"infra/kafka-connect\", connector=\"orders-outbox\"})",
+                        "legendFormat": "{{status}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-36": {
+        "kind": "Panel",
+        "spec": {
+          "id": 36,
           "title": "Calls by outcome",
           "description": "success, rejected (отказ по правилам use case) и error (технический сбой).",
           "links": [],
@@ -2065,10 +2193,10 @@
           }
         }
       },
-      "panel-36": {
+      "panel-37": {
         "kind": "Panel",
         "spec": {
-          "id": 36,
+          "id": 37,
           "title": "Rejections by use case",
           "description": "Метрики: `nomnom_usecase_duration_seconds`.",
           "links": [],
@@ -2129,10 +2257,10 @@
           }
         }
       },
-      "panel-37": {
+      "panel-38": {
         "kind": "Panel",
         "spec": {
-          "id": 37,
+          "id": 38,
           "title": "Errors by use case",
           "description": "Метрики: `nomnom_usecase_duration_seconds`.",
           "links": [],
@@ -2193,10 +2321,10 @@
           }
         }
       },
-      "panel-38": {
+      "panel-39": {
         "kind": "Panel",
         "spec": {
-          "id": 38,
+          "id": 39,
           "title": "Duration p95 by use case",
           "description": "Метрики: `nomnom_usecase_duration_seconds`.",
           "links": [],
@@ -2251,38 +2379,6 @@
                   "unit": "s",
                   "custom": {}
                 },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-39": {
-        "kind": "Panel",
-        "spec": {
-          "id": 39,
-          "title": "Transactions by outcome",
-          "description": "committed, rolled_back и commit_failed Unit of Work.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_uow_transactions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_outcome) (rate(nomnom_uow_transactions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
                 "overrides": []
               }
             }
@@ -2408,6 +2504,38 @@
         "kind": "Panel",
         "spec": {
           "id": 40,
+          "title": "Transactions by outcome",
+          "description": "committed, rolled_back и commit_failed Unit of Work.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_uow_transactions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_outcome) (rate(nomnom_uow_transactions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-41": {
+        "kind": "Panel",
+        "spec": {
+          "id": 41,
           "title": "Transaction duration",
           "description": "Метрики: `nomnom_uow_duration_seconds`.",
           "links": [],
@@ -2436,10 +2564,10 @@
           }
         }
       },
-      "panel-41": {
+      "panel-42": {
         "kind": "Panel",
         "spec": {
-          "id": 41,
+          "id": 42,
           "title": "Retries by conflict",
           "description": "serialization, deadlock, write_conflict — классы retry Unit of Work.",
           "links": [],
@@ -2468,10 +2596,10 @@
           }
         }
       },
-      "panel-42": {
+      "panel-43": {
         "kind": "Panel",
         "spec": {
-          "id": 42,
+          "id": 43,
           "title": "Transitions",
           "description": "Метрики: `nomnom_fsm_transitions_total`.",
           "links": [],
@@ -2500,10 +2628,10 @@
           }
         }
       },
-      "panel-43": {
+      "panel-44": {
         "kind": "Panel",
         "spec": {
-          "id": 43,
+          "id": 44,
           "title": "Invalid transitions",
           "description": "Метрики: `nomnom_fsm_transitions_total`.",
           "links": [],
@@ -2532,10 +2660,10 @@
           }
         }
       },
-      "panel-44": {
+      "panel-45": {
         "kind": "Panel",
         "spec": {
-          "id": 44,
+          "id": 45,
           "title": "Terminal transitions",
           "description": "Метрики: `nomnom_fsm_transitions_total`.",
           "links": [],
@@ -2564,10 +2692,10 @@
           }
         }
       },
-      "panel-45": {
+      "panel-46": {
         "kind": "Panel",
         "spec": {
-          "id": 45,
+          "id": 46,
           "title": "Orders: placed / completed / cancelled / failed",
           "description": "Метрики: `nomnom_orders_placed_total`, `nomnom_orders_completed_total`, `nomnom_orders_cancelled_total`, `nomnom_orders_failed_total`.",
           "links": [],
@@ -2596,10 +2724,10 @@
           }
         }
       },
-      "panel-46": {
+      "panel-47": {
         "kind": "Panel",
         "spec": {
-          "id": 46,
+          "id": 47,
           "title": "Cancellation requests",
           "description": "Метрики: `nomnom_orders_cancellation_requests_total`.",
           "links": [],
@@ -2628,10 +2756,10 @@
           }
         }
       },
-      "panel-47": {
+      "panel-48": {
         "kind": "Panel",
         "spec": {
-          "id": 47,
+          "id": 48,
           "title": "Fulfillment duration",
           "description": "Метрики: `nomnom_orders_fulfillment_duration_seconds`.",
           "links": [],
@@ -2660,10 +2788,10 @@
           }
         }
       },
-      "panel-48": {
+      "panel-49": {
         "kind": "Panel",
         "spec": {
-          "id": 48,
+          "id": 49,
           "title": "Orders currently in state",
           "description": "Требует projection/polling; из counters не выводится.",
           "links": [],
@@ -2686,70 +2814,6 @@
               },
               "fieldConfig": {
                 "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-49": {
-        "kind": "Panel",
-        "spec": {
-          "id": 49,
-          "title": "Workflows started",
-          "description": "Клиентский StartWorkflowExecution (`$service`).",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum(rate(temporal_request_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", operation=\"StartWorkflowExecution\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "started",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "ops",
-                  "custom": {}
-                },
                 "overrides": []
               }
             }
@@ -2824,6 +2888,70 @@
         "kind": "Panel",
         "spec": {
           "id": 50,
+          "title": "Workflows started",
+          "description": "Клиентский StartWorkflowExecution (`$service`).",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum(rate(temporal_request_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", operation=\"StartWorkflowExecution\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "started",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-51": {
+        "kind": "Panel",
+        "spec": {
+          "id": 51,
           "title": "Workflows completed / failed",
           "description": "Метрики: `temporal_workflow_completed_total`, `temporal_workflow_failed_total`.",
           "links": [],
@@ -2904,10 +3032,10 @@
           }
         }
       },
-      "panel-51": {
+      "panel-52": {
         "kind": "Panel",
         "spec": {
-          "id": 51,
+          "id": 52,
           "title": "Workflow end-to-end latency p95",
           "description": "Метрики: `temporal_workflow_endtoend_latency_seconds`.",
           "links": [],
@@ -2968,10 +3096,10 @@
           }
         }
       },
-      "panel-52": {
+      "panel-53": {
         "kind": "Panel",
         "spec": {
-          "id": 52,
+          "id": 53,
           "title": "Oldest running fulfillment",
           "description": "Возраст старейшего выполняющегося workflow: polling Visibility, SDK метрики не даёт.",
           "links": [],
@@ -3000,10 +3128,10 @@
           }
         }
       },
-      "panel-53": {
+      "panel-54": {
         "kind": "Panel",
         "spec": {
-          "id": 53,
+          "id": 54,
           "title": "Activities executed / failed attempts",
           "description": "Каждая неуспешная попытка, кроме последней, ведёт к retry по Retry Policy.",
           "links": [
@@ -3095,10 +3223,10 @@
           }
         }
       },
-      "panel-54": {
+      "panel-55": {
         "kind": "Panel",
         "spec": {
-          "id": 54,
+          "id": 55,
           "title": "Activity latency p95",
           "description": "Метрики: `temporal_activity_execution_latency_seconds`.",
           "links": [],
@@ -3159,10 +3287,10 @@
           }
         }
       },
-      "panel-55": {
+      "panel-56": {
         "kind": "Panel",
         "spec": {
-          "id": 55,
+          "id": 56,
           "title": "Worker task slots",
           "description": "Метрики: `temporal_worker_task_slots_used`, `temporal_worker_task_slots_available`.",
           "links": [],
@@ -3243,10 +3371,10 @@
           }
         }
       },
-      "panel-56": {
+      "panel-57": {
         "kind": "Panel",
         "spec": {
-          "id": 56,
+          "id": 57,
           "title": "Compensations",
           "description": "Метрики: `nomnom_orders_compensations_total`.",
           "links": [],
@@ -3275,10 +3403,10 @@
           }
         }
       },
-      "panel-57": {
+      "panel-58": {
         "kind": "Panel",
         "spec": {
-          "id": 57,
+          "id": 58,
           "title": "Checks by result",
           "description": "Метрики: `nomnom_authz_checks_total`.",
           "links": [],
@@ -3307,10 +3435,10 @@
           }
         }
       },
-      "panel-58": {
+      "panel-59": {
         "kind": "Panel",
         "spec": {
-          "id": 58,
+          "id": 59,
           "title": "Denied by permission",
           "description": "DENIED — решение политики, не сбой SpiceDB.",
           "links": [],
@@ -3330,49 +3458,6 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-59": {
-        "kind": "Panel",
-        "spec": {
-          "id": 59,
-          "title": "Errors and timeouts",
-          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
-          "links": [
-            {
-              "title": "Traces: ошибки сервиса в интервале",
-              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-              "targetBlank": true
-            },
-            {
-              "title": "Traces: медленные (\u003e 1s)",
-              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+duration+%3E+1s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-              "targetBlank": true
-            }
-          ],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -3450,6 +3535,49 @@
         "kind": "Panel",
         "spec": {
           "id": 60,
+          "title": "Errors and timeouts",
+          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
+          "links": [
+            {
+              "title": "Traces: ошибки сервиса в интервале",
+              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+              "targetBlank": true
+            },
+            {
+              "title": "Traces: медленные (\u003e 1s)",
+              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+duration+%3E+1s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+              "targetBlank": true
+            }
+          ],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-61": {
+        "kind": "Panel",
+        "spec": {
+          "id": 61,
           "title": "Check latency",
           "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
           "links": [],
@@ -4201,6 +4329,19 @@
                           "name": "panel-34"
                         }
                       }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 24,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-35"
+                        }
+                      }
                     }
                   ]
                 }
@@ -4225,7 +4366,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-35"
+                          "name": "panel-36"
                         }
                       }
                     },
@@ -4238,7 +4379,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-36"
+                          "name": "panel-37"
                         }
                       }
                     },
@@ -4251,7 +4392,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-37"
+                          "name": "panel-38"
                         }
                       }
                     },
@@ -4264,7 +4405,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-38"
+                          "name": "panel-39"
                         }
                       }
                     }
@@ -4291,7 +4432,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-39"
+                          "name": "panel-40"
                         }
                       }
                     },
@@ -4304,7 +4445,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-40"
+                          "name": "panel-41"
                         }
                       }
                     },
@@ -4317,7 +4458,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-41"
+                          "name": "panel-42"
                         }
                       }
                     }
@@ -4344,7 +4485,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-42"
+                          "name": "panel-43"
                         }
                       }
                     },
@@ -4357,7 +4498,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-43"
+                          "name": "panel-44"
                         }
                       }
                     },
@@ -4370,7 +4511,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-44"
+                          "name": "panel-45"
                         }
                       }
                     }
@@ -4397,7 +4538,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-45"
+                          "name": "panel-46"
                         }
                       }
                     },
@@ -4410,7 +4551,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-46"
+                          "name": "panel-47"
                         }
                       }
                     },
@@ -4423,7 +4564,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-47"
+                          "name": "panel-48"
                         }
                       }
                     },
@@ -4436,7 +4577,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-48"
+                          "name": "panel-49"
                         }
                       }
                     }
@@ -4463,19 +4604,6 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-49"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
                           "name": "panel-50"
                         }
                       }
@@ -4483,7 +4611,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
+                        "x": 8,
                         "y": 0,
                         "width": 8,
                         "height": 8,
@@ -4496,8 +4624,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 0,
-                        "y": 8,
+                        "x": 16,
+                        "y": 0,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -4509,7 +4637,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 8,
+                        "x": 0,
                         "y": 8,
                         "width": 8,
                         "height": 8,
@@ -4522,7 +4650,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
+                        "x": 8,
                         "y": 8,
                         "width": 8,
                         "height": 8,
@@ -4535,13 +4663,26 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
+                        "x": 16,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-55"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
                         "x": 0,
                         "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-55"
+                          "name": "panel-56"
                         }
                       }
                     },
@@ -4554,7 +4695,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-56"
+                          "name": "panel-57"
                         }
                       }
                     }
@@ -4606,7 +4747,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-57"
+                          "name": "panel-58"
                         }
                       }
                     },
@@ -4619,7 +4760,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-58"
+                          "name": "panel-59"
                         }
                       }
                     },
@@ -4632,7 +4773,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-59"
+                          "name": "panel-60"
                         }
                       }
                     },
@@ -4645,7 +4786,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-60"
+                          "name": "panel-61"
                         }
                       }
                     }

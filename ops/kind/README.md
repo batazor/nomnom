@@ -72,7 +72,12 @@ make kind-down
   из change streams. Процессов relay нет. Коннектор `<context>-outbox` регистрирует hook Job
   основного release контекста (`cdc.enabled` в `values/<context>.yaml`) через REST Connect;
   пароли Connect читает из Secret `cdc-credentials` (chart [`bootstrap`](#bootstrap)).
-  Состояние: `kubectl -n nomnom-infra exec deploy/kafka-connect -- curl -s localhost:8083/connectors?expand=status`.
+  Connect — release `kafka-connect` (chart [`kafka-connect/chart`](kafka-connect/chart), образ
+  [`kafka-connect/Dockerfile`](kafka-connect/Dockerfile): Debezium и Prometheus JMX exporter `:9404`);
+  releases контекстов ставятся после него (`dependsOn`, `wait`). Метрики коннекторов и слотов
+  репликации собирает Alloy (row CDC и PostgreSQL в Platform / Overview, alerts `cdc-*` и
+  `replication-slot-*`). Состояние:
+  `kubectl -n nomnom-infra exec deploy/kafka-connect -- curl -s localhost:8083/connectors?expand=status`.
   Topics создаются при первой публикации.
 - `restaurants-consumer` ([ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md),
   [ADR 28](../../docs/adr/0028-selective-use-of-watermill-cqrs.md)) — release chart `restaurants` с
@@ -185,7 +190,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | Alloy — только с `GRAFANA_CLOUD=1` |
-| `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`), Kafka Connect с Debezium для Outbox (Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера |
+| `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`), Kafka Connect с Debezium для Outbox (release `kafka-connect`, Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера |
 
 ## Internal gateway
 

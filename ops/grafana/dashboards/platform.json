@@ -7,7 +7,7 @@
   "spec": {
     "annotations": [],
     "cursorSync": "Crosshair",
-    "description": "Серверная сторона SpiceDB и PostgreSQL, pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.",
+    "description": "Серверная сторона SpiceDB, PostgreSQL и CDC Outbox (Kafka Connect, Debezium), pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.",
     "editable": false,
     "elements": {
       "panel-1": {
@@ -502,6 +502,454 @@
         "kind": "Panel",
         "spec": {
           "id": 16,
+          "title": "Replication slot lag",
+          "description": "WAL, который слот держит на диске. Растёт, если коннектор остановлен или отстаёт.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "max by (owner, slot_name) (pg_replication_slot_slot_current_wal_lsn{job=\"infra/postgresql\", owner=~\"$owner\"} - pg_replication_slot_slot_confirmed_flush_lsn{job=\"infra/postgresql\", owner=~\"$owner\"})",
+                        "legendFormat": "{{owner}} {{slot_name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "bytes",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-17": {
+        "kind": "Panel",
+        "spec": {
+          "id": 17,
+          "title": "Replication slot active",
+          "description": "Метрики: `pg_replication_slot_slot_is_active`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "min by (owner, slot_name) (pg_replication_slot_slot_is_active{job=\"infra/postgresql\", owner=~\"$owner\"})",
+                        "legendFormat": "{{owner}} {{slot_name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-18": {
+        "kind": "Panel",
+        "spec": {
+          "id": 18,
+          "title": "Connector tasks by status",
+          "description": "Задача `failed` — Outbox контекста не доставляется: `GET /connectors/\u003cname\u003e/status`, после исправления — restart задачи.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (connector, status) (kafka_connect_connector_task_status{job=\"infra/kafka-connect\"})",
+                        "legendFormat": "{{connector}} {{status}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-19": {
+        "kind": "Panel",
+        "spec": {
+          "id": 19,
+          "title": "Events published",
+          "description": "Записи Outbox, прочитанные из журнала базы и отправленные в Kafka.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (name) (rate(debezium_metrics_TotalNumberOfEventsSeen{job=\"infra/kafka-connect\"}[$__rate_interval]))",
+                        "legendFormat": "{{name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-2": {
+        "kind": "Panel",
+        "spec": {
+          "id": 2,
+          "title": "Errors by method and code",
+          "description": "Ответы SpiceDB не OK. Клиенты fail-closed: такие ответы становятся отказом в доступе.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"infra/spicedb\", grpc_service=~\"authzed\\\\.api\\\\.v1\\\\..+\", grpc_code!=\"OK\"}[$__rate_interval]))",
+                        "legendFormat": "{{grpc_method}} {{grpc_code}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-20": {
+        "kind": "Panel",
+        "spec": {
+          "id": 20,
+          "title": "Lag behind source",
+          "description": "От commit записи Outbox до её обработки коннектором; −1 до первого события задачи.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "max by (name) (debezium_metrics_MilliSecondsBehindSource{job=\"infra/kafka-connect\"})",
+                        "legendFormat": "{{name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ms",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-21": {
+        "kind": "Panel",
+        "spec": {
+          "id": 21,
+          "title": "Queue fill",
+          "description": "Заполнение очереди коннектора: близко к 100% — Kafka не успевает принимать события.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "1 - max by (name) (debezium_metrics_QueueRemainingCapacity{job=\"infra/kafka-connect\"}) / max by (name) (debezium_metrics_QueueTotalCapacity{job=\"infra/kafka-connect\"})",
+                        "legendFormat": "{{name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percentunit",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-22": {
+        "kind": "Panel",
+        "spec": {
+          "id": 22,
           "title": "Ready / total pods by namespace",
           "description": "Метрики: `kube_pod_status_ready`.",
           "links": [],
@@ -582,10 +1030,10 @@
           }
         }
       },
-      "panel-17": {
+      "panel-23": {
         "kind": "Panel",
         "spec": {
-          "id": 17,
+          "id": 23,
           "title": "Restarts by pod",
           "description": "Метрики: `kube_pod_container_status_restarts_total`.",
           "links": [],
@@ -646,10 +1094,10 @@
           }
         }
       },
-      "panel-18": {
+      "panel-24": {
         "kind": "Panel",
         "spec": {
-          "id": 18,
+          "id": 24,
           "title": "Waiting containers by reason",
           "description": "Метрики: `kube_pod_container_status_waiting_reason`.",
           "links": [],
@@ -710,10 +1158,10 @@
           }
         }
       },
-      "panel-19": {
+      "panel-25": {
         "kind": "Panel",
         "spec": {
-          "id": 19,
+          "id": 25,
           "title": "CPU by namespace",
           "description": "Метрики: `container_cpu_usage_seconds_total`.",
           "links": [],
@@ -774,74 +1222,10 @@
           }
         }
       },
-      "panel-2": {
+      "panel-26": {
         "kind": "Panel",
         "spec": {
-          "id": 2,
-          "title": "Errors by method and code",
-          "description": "Ответы SpiceDB не OK. Клиенты fail-closed: такие ответы становятся отказом в доступе.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"infra/spicedb\", grpc_service=~\"authzed\\\\.api\\\\.v1\\\\..+\", grpc_code!=\"OK\"}[$__rate_interval]))",
-                        "legendFormat": "{{grpc_method}} {{grpc_code}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "ops",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-20": {
-        "kind": "Panel",
-        "spec": {
-          "id": 20,
+          "id": 26,
           "title": "Memory working set by namespace",
           "description": "Метрики: `container_memory_working_set_bytes`.",
           "links": [],
@@ -902,10 +1286,10 @@
           }
         }
       },
-      "panel-21": {
+      "panel-27": {
         "kind": "Panel",
         "spec": {
-          "id": 21,
+          "id": 27,
           "title": "Network by namespace",
           "description": "Метрики: `container_network_receive_bytes_total`, `container_network_transmit_bytes_total`.",
           "links": [],
@@ -986,10 +1370,10 @@
           }
         }
       },
-      "panel-22": {
+      "panel-28": {
         "kind": "Panel",
         "spec": {
-          "id": 22,
+          "id": 28,
           "title": "Time to expiry",
           "description": "До NotAfter. cert-manager продлевает заранее (renewBefore), срок не должен приближаться к нулю.",
           "links": [],
@@ -1050,10 +1434,10 @@
           }
         }
       },
-      "panel-23": {
+      "panel-29": {
         "kind": "Panel",
         "spec": {
-          "id": 23,
+          "id": 29,
           "title": "Time to scheduled renewal",
           "description": "Отрицательное значение — продление просрочено: issuer не выпускает сертификат.",
           "links": [],
@@ -1106,70 +1490,6 @@
               "fieldConfig": {
                 "defaults": {
                   "unit": "s",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-24": {
-        "kind": "Panel",
-        "spec": {
-          "id": 24,
-          "title": "Ready",
-          "description": "0 — Certificate не Ready: сертификат не выпущен, просрочен или не совпадает со spec.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "min by (namespace, name) (certmanager_certificate_ready_status{job=\"infra/cert-manager\", condition=\"True\"})",
-                        "legendFormat": "{{namespace}}/{{name}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "short",
                   "custom": {}
                 },
                 "overrides": []
@@ -1234,6 +1554,70 @@
               "fieldConfig": {
                 "defaults": {
                   "unit": "s",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-30": {
+        "kind": "Panel",
+        "spec": {
+          "id": 30,
+          "title": "Ready",
+          "description": "0 — Certificate не Ready: сертификат не выпущен, просрочен или не совпадает со spec.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "min by (namespace, name) (certmanager_certificate_ready_status{job=\"infra/cert-manager\", condition=\"True\"})",
+                        "legendFormat": "{{namespace}}/{{name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
                   "custom": {}
                 },
                 "overrides": []
@@ -1848,6 +2232,32 @@
                           "name": "panel-15"
                         }
                       }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 16,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-16"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 16,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-17"
+                        }
+                      }
                     }
                   ]
                 }
@@ -1857,7 +2267,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Pods",
+              "title": "CDC (Debezium)",
               "collapse": false,
               "layout": {
                 "kind": "GridLayout",
@@ -1872,7 +2282,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-16"
+                          "name": "panel-18"
                         }
                       }
                     },
@@ -1881,32 +2291,6 @@
                       "spec": {
                         "x": 8,
                         "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-17"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 16,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-18"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 8,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -1918,8 +2302,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 8,
-                        "y": 8,
+                        "x": 16,
+                        "y": 0,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -1931,7 +2315,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
+                        "x": 0,
                         "y": 8,
                         "width": 8,
                         "height": 8,
@@ -1949,7 +2333,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Certificates",
+              "title": "Pods",
               "collapse": false,
               "layout": {
                 "kind": "GridLayout",
@@ -1991,6 +2375,98 @@
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-24"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-25"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-26"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-27"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Certificates",
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-28"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-29"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-30"
                         }
                       }
                     }

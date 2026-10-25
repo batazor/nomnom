@@ -107,6 +107,9 @@ build:
       context: ../../../boundaries/payments
       docker:
         target: runtime
+    # Kafka Connect с Debezium и JMX exporter (ADR 37).
+    - image: nomnom/kafka-connect
+      context: ../kafka-connect
     # BFF (ADR 10): Cosmo Router с закреплённым SHA-256, router plugin и execution config.
     - image: nomnom/bff
       context: ../../../boundaries/bff
@@ -196,8 +199,7 @@ deploy:
                   --set-file authz.kindBootstrap=../authz/bootstrap-kind.yaml \
                   --set-file identity.idpJwks=../../../tests/identity/fixtures/idp-jwks.json
         # Kafka и Temporal dev server для orders-consumer (ADR 28) нужны до установки charts:
-        # consumer подключается к ним при startup. Kafka Connect (ADR 37) — до hook Jobs
-        # charts, которые регистрируют коннекторы Outbox.
+        # consumer подключается к ним при startup.
         - host:
             command:
               - sh
@@ -206,12 +208,13 @@ deploy:
                 set -eu
                 k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
                 k apply -f ../manifests/messaging/infrastructure.yaml
-                k -n nomnom-infra wait deployment/kafka deployment/temporal deployment/kafka-connect --for=condition=Available --timeout=300s
+                k -n nomnom-infra wait deployment/kafka deployment/temporal --for=condition=Available --timeout=300s
     releases:
       - name: orders
         chartPath: ../../../boundaries/orders/ops/helm
         namespace: nomnom-orders
         createNamespace: true
+        dependsOn: [kafka-connect]
         valuesFiles: [../values/orders.yaml]
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
@@ -220,6 +223,7 @@ deploy:
         chartPath: ../../../boundaries/restaurants/ops/helm
         namespace: nomnom-restaurants
         createNamespace: true
+        dependsOn: [kafka-connect]
         valuesFiles: [../values/restaurants.yaml]
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
@@ -228,6 +232,7 @@ deploy:
         chartPath: ../../../boundaries/delivery/ops/helm
         namespace: nomnom-delivery
         createNamespace: true
+        dependsOn: [kafka-connect]
         valuesFiles: [../values/delivery.yaml]
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_delivery}}"
@@ -236,6 +241,7 @@ deploy:
         chartPath: ../../../boundaries/payments/ops/helm
         namespace: nomnom-payments
         createNamespace: true
+        dependsOn: [kafka-connect]
         valuesFiles: [../values/payments.yaml]
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_payments}}"
@@ -308,6 +314,16 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_demo_seed}}"
           image.tag: "{{.IMAGE_TAG_nomnom_demo_seed}}"
+      # Kafka Connect с Debezium (ADR 37): доставляет Outbox контекстов. wait — releases
+      # контекстов (dependsOn) регистрируют коннекторы hook Jobs, когда Connect уже готов.
+      - name: kafka-connect
+        chartPath: ../kafka-connect/chart
+        namespace: nomnom-infra
+        createNamespace: true
+        wait: true
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_kafka_connect}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_kafka_connect}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
   # (без release e2e и образа e2e-probe) — make kind-test на нём не проходит.
