@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package nomnom.payments.v1;
+
+enum PaymentState {
+  PAYMENT_STATE_UNSPECIFIED = 0;
+  PAYMENT_STATE_CREATED = 1;
+  PAYMENT_STATE_AUTHORIZED = 2;
+  PAYMENT_STATE_CAPTURED = 3;
+  PAYMENT_STATE_CANCELLED = 4;
+  PAYMENT_STATE_REFUNDED = 5;
+  PAYMENT_STATE_FAILED = 6;
+}
+
+message Money {
+  string amount = 1;
+  string currency = 2;
+}
+
+message Payment {
+  string payment_id = 1;
+  string order_id = 2;
+  Money amount = 3;
+  PaymentState state = 4;
+}
+
+enum PaymentOperationStatus {
+  PAYMENT_OPERATION_STATUS_UNSPECIFIED = 0;
+  PAYMENT_OPERATION_STATUS_SUCCEEDED = 1;
+  // A business decline of the provider; not a transport error.
+  PAYMENT_OPERATION_STATUS_DECLINED = 2;
+  // The provider has not answered yet; repeat with the same idempotency_key.
+  PAYMENT_OPERATION_STATUS_PENDING = 3;
+}
+
+// Result of a financial operation; provider references are not exposed.
+message PaymentOperation {
+  string payment_id = 1;
+  string operation_id = 2;
+  PaymentOperationStatus status = 3;
+  PaymentState payment_state = 4;
+  string decline_reason = 5;
+  // true when the idempotency_key repeated an earlier operation.
+  bool replayed = 6;
+}

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: payments
+description: "Payments bounded context (Python): авторизация, списание, возвраты и результаты платёжных операций."
+type: application
+# Версия chart. appVersion намеренно не задаётся: версия сборки приложения ещё не определена,
+# и образ полностью описывается через image.repository / image.tag в values.
+version: 0.2.0
+dependencies:
+  # Library chart: имена, labels, образ, рендер values и совместимость securityContext.
+  - name: common
+    version: 2.41.0
+    repository: oci://registry-1.docker.io/bitnamicharts
+    tags:
+      - bitnami-common

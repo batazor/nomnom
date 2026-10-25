@@ -1,0 +1,32 @@
+"""Authorize Payment: reserve the full Payment amount for a later Capture.
+
+A declined Authorization fails the Payment. When Authorization happens is decided by
+the fulfillment process of ``orders``, not by ``payments``.
+"""
+
+from dataclasses import dataclass
+
+from pkg.application import Subject
+from slices.payment.domains.payment import OperationKind
+
+from ..operation_flow import PaymentOperationExecutor, PaymentOperationResult
+
+
+@dataclass(frozen=True)
+class AuthorizePaymentInput:
+    subject: Subject
+    payment_id: str
+    idempotency_key: str
+
+
+AuthorizePaymentResult = PaymentOperationResult
+
+
+class AuthorizePaymentHandler:
+    def __init__(self, executor: PaymentOperationExecutor) -> None:
+        self._executor = executor
+
+    def handle(self, command: AuthorizePaymentInput) -> AuthorizePaymentResult:
+        return self._executor.execute(
+            command.subject, command.payment_id, command.idempotency_key, OperationKind.AUTHORIZE
+        )

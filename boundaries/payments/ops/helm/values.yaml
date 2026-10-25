@@ -1,0 +1,161 @@
+# Default values for payments.
+# Базовый chart не содержит значений конкретного окружения: registry, tag, ресурсы,
+# адреса внешних систем и kind-specific настройки задаются отдельными values-файлами
+# или флагами --set при установке.
+
+replicaCount: 1
+
+image:
+  # Имя образа из документации локальной сборки (docker build -t nomnom/<service>:local).
+  # Registry и publishing pipeline ещё не определены и задаются values окружения.
+  # Registry задаётся окружением или global.imageRegistry.
+  registry: ""
+  repository: nomnom/payments
+  # Tag образа задаётся окружением. Пустое значение означает "latest" — для реальных
+  # окружений всегда задавайте tag явно.
+  tag: ""
+  # IfNotPresent позволяет использовать образ, загруженный в kind через kind load docker-image.
+  pullPolicy: IfNotPresent
+  # Digest имеет приоритет над tag.
+  digest: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+# Namespace ресурсов; по умолчанию — namespace release (common.names.namespace).
+namespaceOverride: ""
+# Labels, добавляемые ко всем ресурсам chart.
+commonLabels: {}
+
+# Глобальные параметры library chart bitnami/common: global.imageRegistry,
+# global.compatibility.openshift.adaptSecurityContext и т. п.
+global: {}
+
+# Label app.kubernetes.io/component.
+component: api
+
+serviceAccount:
+  create: true
+  # Имя ServiceAccount. Пустое значение — <fullname>.
+  name: ""
+  annotations: {}
+  # Доступ к Kubernetes API приложению не нужен. Включение token automount —
+  # отдельное явное решение.
+  automount: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  # Runtime-образ: python:3.15-slim-bookworm, пользователь app (10001) из Dockerfile. Числовой UID нужен для проверки runAsNonRoot.
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  privileged: false
+  readOnlyRootFilesystem: false
+
+service:
+  type: ClusterIP
+  # Порт Service и порт приложения. Приложение слушает 8084 по умолчанию
+  # (переменная SERVER__PORT или PORT); targetPort должен совпадать с портом,
+  # на котором фактически запускается процесс.
+  port: 8084
+  targetPort: 8084
+  # Имя порта. Сейчас приложение отвечает по HTTP; при переходе на gRPC
+  # Бизнес-порт обслуживает nomnom.payments.v1 по gRPC/HTTP2.
+  portName: grpc
+  appProtocol: kubernetes.io/h2c
+  annotations: {}
+
+# Requests/limits не задаются: профиль потребления приложения ещё не измерен.
+resources:
+  requests: {}
+  limits: {}
+
+# Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
+# Пример:
+# env:
+#   OTEL_SERVICE_NAME: payments
+#   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
+#   OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+env: {}
+
+# Дополнительные источники переменных окружения, в том числе внешние Secret:
+# envFrom:
+#   - secretRef:
+#       name: payments-secrets
+envFrom: []
+
+# Отдельные переменные окружения, включая valueFrom из внешних Secret:
+# extraEnv:
+#   - name: DATABASE_PASSWORD
+#     valueFrom:
+#       secretKeyRef:
+#         name: payments-database
+#         key: password
+extraEnv: []
+
+# Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
+# Имя порта metrics задано моделью NetworkPolicy (ADR 16) и не меняется; номер передаётся
+# приложению через MANAGEMENT__PORT. Порт не входит в Service и не публикуется через gateway.
+management:
+  port: 9084
+
+# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY и
+# SHUTDOWN__DRAIN_TIMEOUT. readinessDelaySeconds должен превышать время, за которое
+# readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс распространение
+# EndpointSlice и конфигурации internal gateway.
+shutdown:
+  readinessDelaySeconds: 5
+  drainTimeoutSeconds: 20
+
+# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds с запасом на выход процесса;
+# chart отказывается рендериться при нарушении.
+terminationGracePeriodSeconds: 30
+
+# Probes используют health contract на техническом порту. Поля, кроме enabled, передаются
+# в Kubernetes как есть.
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /health/startup
+    port: metrics
+  periodSeconds: 2
+  timeoutSeconds: 1
+  failureThreshold: 30
+
+# Liveness не зависит от внешних систем и остаётся успешной во время shutdown.
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health/live
+    port: metrics
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+
+# После SIGTERM readiness сразу отвечает 503; один провал исключает pod из endpoints.
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health/ready
+    port: metrics
+  periodSeconds: 2
+  timeoutSeconds: 1
+  failureThreshold: 1
+
+volumes: []
+volumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

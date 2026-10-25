@@ -1,0 +1,78 @@
+import dataclasses
+import unittest
+from datetime import timedelta
+
+from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
+
+from pkg.application import PermissionDenied
+from slices.payment.applications.authorize_payment import (
+    AuthorizePaymentHandler,
+    AuthorizePaymentInput,
+)
+from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
+from slices.payment.applications.errors import PaymentNotFound
+from slices.payment.applications.list_payment_operations import (
+    ListPaymentOperationsHandler,
+    ListPaymentOperationsInput,
+    PaymentOperationView,
+)
+from slices.payment.applications.ports import PaymentPermission, ProviderOperationOutcome
+from slices.payment.domains.payment import OperationKind, OperationState
+
+
+class ListPaymentOperationsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.kit = PaymentsTestKit()
+        self.payment_id = self.kit.given_payment()
+        self.handler = ListPaymentOperationsHandler(
+            self.kit.payments, self.kit.operations, self.kit.permissions
+        )
+
+    def test_ac_430_returns_history_in_start_order_without_provider_data(self) -> None:
+        executor = self.kit.executor()
+        AuthorizePaymentHandler(executor).handle(
+            AuthorizePaymentInput(ORCHESTRATOR, self.payment_id, "order-1:authorize")
+        )
+        self.kit.clock.advance(timedelta(minutes=5))
+        self.kit.provider.respond(
+            OperationKind.CAPTURE, ProviderOperationOutcome.declined("authorization_expired")
+        )
+        CapturePaymentHandler(executor).handle(
+            CapturePaymentInput(ORCHESTRATOR, self.payment_id, "order-1:capture")
+        )
+        before = self.kit.store.snapshot()
+
+        result = self.handler.handle(ListPaymentOperationsInput(OPERATOR, self.payment_id))
+
+        self.assertEqual(
+            [(op.kind, op.state, op.decline_reason) for op in result.operations],
+            [
+                (OperationKind.AUTHORIZE, OperationState.SUCCEEDED, None),
+                (OperationKind.CAPTURE, OperationState.DECLINED, "authorization_expired"),
+            ],
+        )
+        first, second = result.operations
+        self.assertLess(first.requested_at, second.requested_at)
+        self.assertEqual(second.completed_at, self.kit.clock.now())
+        fields = {field.name for field in dataclasses.fields(PaymentOperationView)}
+        self.assertNotIn("provider_reference", fields)
+        self.assertEqual(self.kit.store, before)
+
+    def test_ac_431_subject_without_permission_is_rejected(self) -> None:
+        self.kit.permissions.denied.add(PaymentPermission.VIEW_OPERATIONS)
+
+        with self.assertRaises(PermissionDenied):
+            self.handler.handle(ListPaymentOperationsInput(OPERATOR, self.payment_id))
+
+    def test_unknown_payment_is_not_found(self) -> None:
+        with self.assertRaises(PaymentNotFound):
+            self.handler.handle(ListPaymentOperationsInput(OPERATOR, "missing"))
+
+    def test_payment_without_operations_has_empty_history(self) -> None:
+        result = self.handler.handle(ListPaymentOperationsInput(OPERATOR, self.payment_id))
+
+        self.assertEqual(result.operations, ())
+
+
+if __name__ == "__main__":
+    unittest.main()

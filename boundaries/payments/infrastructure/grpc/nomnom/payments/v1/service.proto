@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package nomnom.payments.v1;
+
+import "nomnom/payments/v1/payments.proto";
+
+service PaymentsService {
+  rpc GetPaymentStatus(GetPaymentStatusRequest) returns (GetPaymentStatusResponse);
+
+  // Command RPCs of the Order Fulfillment Workflow of orders. Each call is
+  // idempotent: CreatePayment by order_id, operations by idempotency_key.
+  rpc CreatePayment(CreatePaymentRequest) returns (CreatePaymentResponse);
+  rpc AuthorizePayment(AuthorizePaymentRequest) returns (AuthorizePaymentResponse);
+  rpc CapturePayment(CapturePaymentRequest) returns (CapturePaymentResponse);
+  rpc CancelAuthorization(CancelAuthorizationRequest) returns (CancelAuthorizationResponse);
+  rpc RefundPayment(RefundPaymentRequest) returns (RefundPaymentResponse);
+}
+
+message GetPaymentStatusRequest {
+  string payment_id = 1;
+}
+
+message GetPaymentStatusResponse {
+  Payment payment = 1;
+}
+
+message CreatePaymentRequest {
+  string order_id = 1;
+  Money amount = 2;
+}
+
+message CreatePaymentResponse {
+  string payment_id = 1;
+  PaymentState state = 2;
+  // false when a Payment of this Order already existed with the same terms.
+  bool created = 3;
+}
+
+message AuthorizePaymentRequest {
+  string payment_id = 1;
+  string idempotency_key = 2;
+}
+
+message AuthorizePaymentResponse {
+  PaymentOperation operation = 1;
+}
+
+message CapturePaymentRequest {
+  string payment_id = 1;
+  string idempotency_key = 2;
+}
+
+message CapturePaymentResponse {
+  PaymentOperation operation = 1;
+}
+
+message CancelAuthorizationRequest {
+  string payment_id = 1;
+  string idempotency_key = 2;
+}
+
+message CancelAuthorizationResponse {
+  PaymentOperation operation = 1;
+}
+
+message RefundPaymentRequest {
+  string payment_id = 1;
+  string idempotency_key = 2;
+}
+
+message RefundPaymentResponse {
+  PaymentOperation operation = 1;
+}
