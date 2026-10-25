@@ -60,3 +60,11 @@ Patch-версии base images и сборочных инструментов т
 manifest/lockfile и повторной проверкой сборки, запуска, пользователя и обработки SIGTERM.
 Docker Compose, Kubernetes manifests и CI/CD остаются отдельными решениями. Для BFF до
 pinning router artifact контейнеризация остаётся неполной.
+
+## Примечание (2026-10-25)
+
+Условие для BFF выполнено: [`boundaries/bff/Dockerfile`](../../boundaries/bff/Dockerfile) закрепляет
+Cosmo Router `router@0.363.0` и SHA-256 его release-архивов для `linux/amd64` и `linux/arm64`;
+при несовпадении checksum сборка падает. Stage `plugin` собирает plugin, `config` — `config.json`
+закреплённым `wgc`, runtime — distroless static nonroot с router, plugin, `config.json` и
+production `config.yaml`. Образ разворачивается в kind (OpenSpec change `deploy-bff-in-kind`).

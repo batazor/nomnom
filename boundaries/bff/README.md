@@ -50,7 +50,7 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order
 | `RequestOrderCancellation`: `NOT_FOUND`, `PERMISSION_DENIED` | error `NOT_FOUND` |
 | остальные сбои | error `UNAVAILABLE` без внутренних деталей |
 
-Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE`/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway ждёт развёртывания BFF в kind.
+Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE`/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — раздел 7 `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
 
 Правила контракта:
 
@@ -136,6 +136,8 @@ BFF проверяет клиентский GraphQL-запрос и access token
 boundaries/bff/
   config.yaml                 # runtime-конфигурация Cosmo Router
   config.json                 # generated execution config
+  config.production.yaml      # конфигурация Router в образе
+  Dockerfile                  # образ BFF: Router + plugin + config.json
   graph.yaml                  # локальная композиция graph/plugin
   package.json                # закреплённый wgc и команды проекта
   plugins/bff/
@@ -200,22 +202,29 @@ query BffInfo {
 
 ## Статус контейнеризации
 
-Выбранный runtime — WunderGraph Cosmo Router с существующим Go-плагином. Воспроизводимый
-образ всего приложения пока намеренно не определяется: `wgc router download-binary`
-загружает последний release Router, а его версия и checksum в репозитории не закреплены.
-Существующий `plugins/bff/Dockerfile` собирает только исполняемый файл плагина и не является
-запускаемым образом BFF.
+Образ BFF собирает [`Dockerfile`](Dockerfile) ([ADR 10](../../docs/adr/0010-использовать-multi-stage-container-builds.md)), build context — `boundaries/bff`:
 
-Перед добавлением `boundaries/bff/Dockerfile` нужно закрепить release и checksum Cosmo Router. Build
-stages должны собрать плагин и `config.json`, а в непривилегированный runtime следует
-перенести только router binary, plugin, `config.json` и production `config.yaml`. Токены
-для удалённой композиции графа должны передаваться через BuildKit secrets, а не через
-`ARG`, `ENV` или слои образа.
+| Stage | Что делает |
+| --- | --- |
+| `router` | скачивает release Cosmo Router `router@0.363.0` (`router-router@<version>-linux-<arch>.tar.gz`) и сверяет SHA-256, закреплённый для `linux/amd64` и `linux/arm64` (`ARG ROUTER_SHA256_*`); при несовпадении сборка падает |
+| `plugin` | `go build` плагина в `plugins/bff/bin/<os>_<arch>` — путь, по которому Router ищет plugin |
+| `config` | `config.json` командой `wgc router compose` закреплённого `wgc` из `package-lock.json` (локальная композиция, без сети и токенов) |
+| `runtime` | `gcr.io/distroless/static-debian13:nonroot` (UID 65532): `/app/router`, plugin, `config.json` и [`config.production.yaml`](config.production.yaml) как `/app/config.yaml` |
+
+Production config отличается от [`config.yaml`](config.yaml) для локального запуска: `listen_addr: 0.0.0.0:3010`, без `dev_mode`, Playground и introspection, без экспорта telemetry и usage metrics в Cosmo Cloud; правило `headers.all.request: propagate Authorization` то же. Router — PID 1: он сам обрабатывает `SIGTERM` (drain, остановка plugin, exit 0). Plugin получает окружение Router, в том числе переменные [identity](#identity-покупателя).
+
+```bash
+docker build --target runtime -t nomnom/bff:local boundaries/bff
+docker run --rm -p 3010:3010 nomnom/bff:local   # /health/live, /health/ready, POST /graphql
+```
+
+Проверено на 0.363.0 для `linux/arm64` и `linux/amd64`: оба образа отвечают на `bffInfo` и health; сборка с неверным `--build-arg ROUTER_SHA256_ARM64` падает на `sha256sum -c` (AC-574). Обновление Router: новая версия и оба checksum вместе (SHA-256 архивов совпадает с digest assets на странице release), затем сборка и `make kind-test`. `plugins/bff/Dockerfile` — шаблон `wgc` для публикации plugin, а не образ BFF.
 
 ## Развёртывание
 
-Базовый Helm chart и команды его проверки описаны в [ops/README.md](ops/README.md).
-Установка в кластер станет возможной после определения образа BFF (см. выше).
+Helm chart и команды его проверки описаны в [ops/README.md](ops/README.md). Probes — штатные `/health/live` и `/health/ready` Router на порту `http`: отдельного технического порта для health у Router нет (исключение из ADR 17).
+
+В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders` и `nomnom.restaurants`. Ключ подписи user assertions создаётся один раз на кластер (`ops/kind/scripts/bff-identity.sh`, Secret `bff-assertion-key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Наружу BFF не опубликован: проверки обращаются к нему через `kubectl port-forward`.
 
 ## Следующие шаги
 
