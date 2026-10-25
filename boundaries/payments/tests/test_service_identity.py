@@ -12,10 +12,9 @@ import grpc
 import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
 from jwt.algorithms import ECAlgorithm
-from payment_fakes import PaymentsTestKit, unreachable_database
+from payment_fakes import PaymentsTestKit, close_container, payments_container
 from pydantic import ValidationError
 
-from di.payments import create_grpc_worker
 from infrastructure.grpc import identity
 from infrastructure.grpc.identity import (
     IdentityConfigError,
@@ -334,11 +333,13 @@ class IdentityConfigTest(unittest.TestCase):
                         create_subject_resolver(_vector_settings(IDENTITY__JWKS_FILE=str(path)))
 
     def test_default_worker_fails_before_listening_on_invalid_jwks(self) -> None:
-        settings = _vector_settings(IDENTITY__JWKS_FILE="/nonexistent/jwks.json")
-        database = unreachable_database()
-        self.addCleanup(database.close)
+        container = payments_container()
+        self.addCleanup(close_container, container)
+        container.config.identity.from_value(
+            _vector_settings(IDENTITY__JWKS_FILE="/nonexistent/jwks.json")
+        )
         with self.assertRaises(IdentityConfigError):
-            create_grpc_worker(("127.0.0.1", 0), settings, database=database)
+            container.grpc_worker()
 
 
 def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:

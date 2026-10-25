@@ -3,9 +3,10 @@ import unittest
 from typing import cast
 
 import grpc
-from payment_fakes import PaymentsTestKit, unreachable_database
+from dependency_injector import providers
+from payment_fakes import PaymentsTestKit, close_container, payments_container
 
-from di.payments import create_grpc_worker
+from infrastructure.authorization import DenyAllPermissions
 from infrastructure.grpc.service import (
     GrpcWorker,
     PaymentsHandlers,
@@ -232,9 +233,10 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
 
 class DefaultWorkerTest(unittest.TestCase):
     def test_default_worker_rejects_calls_without_verified_identity(self) -> None:
-        database = unreachable_database()
-        self.addCleanup(database.close)
-        worker = create_grpc_worker(("127.0.0.1", 0), database=database)
+        container = payments_container()
+        self.addCleanup(close_container, container)
+        container.permissions.override(providers.Object(DenyAllPermissions()))
+        worker = container.grpc_worker()
         worker.start()
         channel = grpc.insecure_channel(f"127.0.0.1:{worker.port}")
         try:

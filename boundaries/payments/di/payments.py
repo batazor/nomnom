@@ -1,44 +1,58 @@
-"""Composition root of the ``payments`` process: gRPC API and provider webhooks.
+"""Container of the ``payments`` process: gRPC API and provider webhooks (ADR 5).
 
 The only place that selects implementations of the application ports for this process:
-authorization (SpiceDB), payment provider, caller identity, PostgreSQL storage and the
-published Integration Events. Handlers are created per process and receive their
-dependencies explicitly; ``slices`` never see this module.
+caller identity, authorization (SpiceDB), payment provider, PostgreSQL storage and the
+published Integration Events. Handlers receive their dependencies explicitly through
+constructors; ``slices`` never see the container and nothing is wired.
 """
 
-from di import resources
-from di.webhooks import create_webhook_worker
+from collections.abc import Iterator
+
+from dependency_injector import containers, providers
+
+from di.resources import (
+    ProcessResource,
+    TelemetryResource,
+    create_lifecycle,
+    listen_all,
+    postgres_database,
+    telemetry_providers,
+)
 from infrastructure.authorization import (
     DenyAllPermissions,
+    PermissionsClient,
     SpiceDBPermissionChecker,
     create_spicedb_client,
 )
-from infrastructure.grpc.identity import (
-    RejectingSubjectResolver,
-    SubjectResolver,
-    create_subject_resolver,
-)
+from infrastructure.grpc.identity import SubjectResolver, create_subject_resolver
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers, UuidIdentifiers
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.postgres import (
-    NoPublishedContracts,
-    OutboxEventMapper,
-    PostgresDatabase,
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
     PostgresPaymentRepository,
+    PostgresProviderMessageInbox,
     PostgresUnitOfWork,
 )
-from infrastructure.provider import FakePaymentProvider, UnconfiguredProvider
+from infrastructure.provider import (
+    FakePaymentProvider,
+    UnconfiguredProvider,
+    WebhookVerifier,
+    create_webhook_handler,
+)
 from pkg.application.clock import SystemClock
-from pkg.config import IdentitySettings, ProviderSettings, Settings, SpiceDBSettings, load_settings
-from pkg.lifecycle import WorkerGroup
+from pkg.config import ProviderSettings, SpiceDBSettings
+from pkg.lifecycle import HttpWorker, WorkerGroup
+from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler
 from slices.payment.applications.capture_payment import CapturePaymentHandler
 from slices.payment.applications.create_payment import CreatePaymentHandler
 from slices.payment.applications.get_payment_status import GetPaymentStatusHandler
-from slices.payment.applications.operation_flow import PaymentOperationExecutor
+from slices.payment.applications.operation_flow import (
+    PaymentOperationExecutor,
+    ProviderResultApplier,
+)
 from slices.payment.applications.ports import PaymentPermissionChecker, PaymentProviderGateway
 from slices.payment.applications.refund_payment import RefundPaymentHandler
 
@@ -47,7 +61,18 @@ class SpiceDBConfigurationError(RuntimeError):
     """The process checks permissions but SpiceDB is not configured."""
 
 
-def create_permission_checker(settings: SpiceDBSettings | None) -> PaymentPermissionChecker:
+def spicedb_client(settings: SpiceDBSettings) -> Iterator[PermissionsClient | None]:
+    """authzed client of the process; ``None`` while ``SPICEDB__ENDPOINT`` is empty.
+
+    Channels connect lazily on the first check. The authzed client keeps no handle on
+    its channel, so there is nothing to release before the process exits.
+    """
+    yield create_spicedb_client(settings) if settings.enabled else None
+
+
+def create_permission_checker(
+    settings: SpiceDBSettings | None, client: PermissionsClient | None = None
+) -> PaymentPermissionChecker:
     """Authorization port.
 
     ``None`` is the test composition without SpiceDB and denies everything. A
@@ -61,7 +86,8 @@ def create_permission_checker(settings: SpiceDBSettings | None) -> PaymentPermis
             "SPICEDB__ENDPOINT is required: payments checks permissions in SpiceDB"
         )
     return SpiceDBPermissionChecker(
-        create_spicedb_client(settings), settings.timeout.total_seconds()
+        client if client is not None else create_spicedb_client(settings),
+        settings.timeout.total_seconds(),
     )
 
 
@@ -72,101 +98,93 @@ def create_provider(settings: ProviderSettings | None) -> PaymentProviderGateway
     return UnconfiguredProvider()
 
 
-def create_subject_resolver_or_reject(identity: IdentitySettings | None) -> SubjectResolver:
-    """Caller identity; without settings every call is rejected ``UNAUTHENTICATED``."""
-    if identity is None:
-        return RejectingSubjectResolver()
-    return create_subject_resolver(identity)
+def create_grpc_worker(
+    address: tuple[str, int], subjects: SubjectResolver, handlers: PaymentsHandlers
+) -> GrpcWorker:
+    """Arguments resolve in order: identity (and JWKS) fails before authorization."""
+    return GrpcWorker(address, handlers, subjects)
 
 
-def create_handlers(
-    database: PostgresDatabase,
-    permissions: PaymentPermissionChecker | None = None,
-    provider: PaymentProviderGateway | None = None,
-    outbox_mapper: OutboxEventMapper | None = None,
-) -> PaymentsHandlers:
-    """Handlers over PostgreSQL storage: one local transaction per Unit of Work.
+class PaymentsContainer(containers.DeclarativeContainer):
+    """One instance per ``payments`` process; ``config`` holds ``pkg.config.Settings``.
 
-    Without a permission checker every permission is denied (SpiceDB not configured).
-    Without a provider every financial operation is ``UNAVAILABLE``.
-    Without an Outbox mapper no Domain Event has a published contract (ADR 31), so
-    nothing is written to the Outbox.
+    Without ``IDENTITY__ISSUER``, ``IDENTITY__AUDIENCE`` or ``IDENTITY__JWKS_FILE`` every
+    call is rejected ``UNAUTHENTICATED``; an invalid JWKS raises before any port opens.
+    An empty ``SPICEDB__ENDPOINT`` stops the process; otherwise each protected use case
+    checks SpiceDB and fails closed (``UNAVAILABLE``). Without ``PROVIDER__KIND=fake``
+    every financial operation is ``UNAVAILABLE``. Without ``PROVIDER__WEBHOOK_SECRET``
+    the webhook port opens but every webhook is 400.
     """
-    payments = PostgresPaymentRepository(database)
-    if permissions is None:
-        permissions = create_permission_checker(None)
-    ids = UuidIdentifiers()
-    executor = PaymentOperationExecutor(
-        uow=PostgresUnitOfWork(database),
+
+    # Sections are typed ``pkg.config`` settings, keyed as ``di.resources.sections``.
+    config = providers.Configuration(strict=True)
+
+    telemetry = TelemetryResource(
+        telemetry_providers, config.shutdown.provided.telemetry_flush_timeout
+    )
+    database = ProcessResource(postgres_database, config.database)
+    spicedb = ProcessResource(spicedb_client, config.spicedb)
+
+    # Ports of the application layer.
+    subjects = providers.Singleton(create_subject_resolver, config.identity)
+    permissions = providers.Singleton(create_permission_checker, config.spicedb, spicedb)
+    provider = providers.Singleton(create_provider, config.payment_provider)
+    # Integration Events payments.v1.payment-events (ADR 31); publishes payments-relay.
+    outbox_mapper = providers.Singleton(PaymentEventsMapper)
+    clock = providers.Singleton(SystemClock)
+    ids = providers.Singleton(UuidIdentifiers)
+    uow = providers.Singleton(PostgresUnitOfWork, database)
+    payments = providers.Singleton(PostgresPaymentRepository, database)
+    operations = providers.Singleton(PostgresPaymentOperationRepository, database)
+    outbox = providers.Singleton(PostgresPaymentOutbox, database, outbox_mapper)
+    inbox = providers.Singleton(PostgresProviderMessageInbox, database)
+
+    # Use cases: one local transaction per Unit of Work.
+    executor = providers.Singleton(
+        PaymentOperationExecutor,
+        uow=uow,
         payments=payments,
-        operations=PostgresPaymentOperationRepository(database),
-        outbox=PostgresPaymentOutbox(database, outbox_mapper or NoPublishedContracts()),
-        provider=provider if provider is not None else create_provider(None),
+        operations=operations,
+        outbox=outbox,
+        provider=provider,
         permissions=permissions,
-        clock=SystemClock(),
+        clock=clock,
         ids=ids,
     )
-    return PaymentsHandlers(
-        get_payment_status=GetPaymentStatusHandler(payments, permissions),
-        create_payment=CreatePaymentHandler(payments, permissions, ids),
-        authorize_payment=AuthorizePaymentHandler(executor),
-        capture_payment=CapturePaymentHandler(executor),
-        cancel_authorization=CancelAuthorizationHandler(executor),
-        refund_payment=RefundPaymentHandler(executor),
+    handlers = providers.Singleton(
+        PaymentsHandlers,
+        get_payment_status=providers.Factory(GetPaymentStatusHandler, payments, permissions),
+        create_payment=providers.Factory(CreatePaymentHandler, payments, permissions, ids),
+        authorize_payment=providers.Factory(AuthorizePaymentHandler, executor),
+        capture_payment=providers.Factory(CapturePaymentHandler, executor),
+        cancel_authorization=providers.Factory(CancelAuthorizationHandler, executor),
+        refund_payment=providers.Factory(RefundPaymentHandler, executor),
+    )
+    callbacks = providers.Singleton(
+        ApplyProviderCallbackHandler,
+        uow,
+        inbox,
+        providers.Factory(ProviderResultApplier, payments, operations, outbox, clock),
     )
 
-
-def create_grpc_worker(
-    address: tuple[str, int],
-    identity: IdentitySettings | None = None,
-    spicedb: SpiceDBSettings | None = None,
-    provider: ProviderSettings | None = None,
-    *,
-    database: PostgresDatabase,
-    outbox_mapper: OutboxEventMapper | None = None,
-) -> GrpcWorker:
-    """gRPC worker of ``PaymentsService``.
-
-    Without identity settings, or while issuer, audience or JWKS are not configured,
-    every call is rejected ``UNAUTHENTICATED``. An invalid JWKS raises before any port opens.
-    Without ``SPICEDB__ENDPOINT`` every permission is denied; otherwise each protected use
-    case checks SpiceDB and fails closed (``UNAVAILABLE``) on error or timeout.
-    Without ``PROVIDER__KIND=fake`` every financial operation is ``UNAVAILABLE``.
-    Storage is the PostgreSQL ``database`` owned (opened, checked, closed) by the caller.
-    ``outbox_mapper`` selects the published Integration Events (none by default).
-    """
-    subjects = create_subject_resolver_or_reject(identity)
-    permissions = create_permission_checker(spicedb)
-    return GrpcWorker(
-        address,
-        create_handlers(database, permissions, create_provider(provider), outbox_mapper),
-        subjects,
+    # Workers.
+    grpc_address = providers.Callable(listen_all, config.server.provided.port)
+    grpc_worker = providers.Singleton(create_grpc_worker, grpc_address, subjects, handlers)
+    webhook_address = providers.Callable(listen_all, config.payment_provider.provided.webhook_port)
+    webhook_worker = providers.Singleton(
+        HttpWorker,
+        webhook_address,
+        providers.Callable(
+            create_webhook_handler,
+            providers.Factory(
+                WebhookVerifier,
+                config.payment_provider.provided.webhook_secret,
+                config.payment_provider.provided.webhook_tolerance,
+            ),
+            callbacks,
+            clock.provided.now,
+        ),
+        name="provider webhooks",
     )
-
-
-def serve(settings: Settings) -> None:
-    """Own the database for the lifetime of both workers; run them until shutdown."""
-    with resources.postgres_database(settings.database) as database:
-        # Integration Events payments.v1.payment-events (ADR 31); publishes payments-relay.
-        mapper = PaymentEventsMapper()
-        worker = create_grpc_worker(
-            ("0.0.0.0", settings.server.port),
-            settings.identity,
-            settings.spicedb,
-            settings.provider,
-            database=database,
-            outbox_mapper=mapper,
-        )
-        webhooks = create_webhook_worker(
-            ("0.0.0.0", settings.provider.webhook_port), settings.provider, database, mapper
-        )
-        resources.lifecycle(settings.management, settings.shutdown).run(
-            WorkerGroup(worker, webhooks)
-        )
-
-
-def run() -> None:
-    # Невалидная конфигурация завершает процесс до открытия портов.
-    settings = load_settings()
-    with resources.telemetry_providers(settings.shutdown.telemetry_flush_timeout):
-        serve(settings)
+    workers = providers.Singleton(WorkerGroup, grpc_worker, webhook_worker)
+    lifecycle = providers.Singleton(create_lifecycle, config.management, config.shutdown)

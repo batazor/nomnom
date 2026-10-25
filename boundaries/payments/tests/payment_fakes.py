@@ -6,11 +6,17 @@ snapshot/rollback Unit of Work, optimistic concurrency by ``version``, unique
 provider deduplication by idempotency key.
 """
 
-from collections.abc import Sequence
+import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, TypeVar
+from unittest.mock import patch
 
+from dependency_injector import providers
+
+from di.payments import PaymentsContainer
+from di.resources import sections
 from infrastructure.postgres import PostgresDatabase, create_database
 from pkg.application import (
     AggregateRef,
@@ -19,7 +25,7 @@ from pkg.application import (
     Subject,
     SubjectKind,
 )
-from pkg.config import DatabaseSettings
+from pkg.config import DatabaseSettings, load_settings
 from slices.payment.applications.operation_flow import (
     PaymentOperationExecutor,
     ProviderResultApplier,
@@ -458,4 +464,28 @@ _STATES_WITH_REFERENCE = {PaymentState.AUTHORIZED, PaymentState.CAPTURED, Paymen
 
 def unreachable_database() -> PostgresDatabase:
     """Pool that never connects: for composition tests that stop before storage."""
-    return create_database(DatabaseSettings(DATABASE__URL="postgresql://payments@127.0.0.1:1/x"))
+    return create_database(DatabaseSettings(DATABASE__URL=UNREACHABLE_DATABASE_URL))
+
+
+UNREACHABLE_DATABASE_URL = "postgresql://payments@127.0.0.1:1/x"
+
+
+def payments_container(environment: Optional[Mapping[str, str]] = None) -> PaymentsContainer:
+    """``PaymentsContainer`` over settings from ``environment``.
+
+    The database is an unreachable pool (closed by ``close_container``) and both workers
+    listen on ephemeral loopback ports.
+    """
+    env = {"DATABASE__URL": UNREACHABLE_DATABASE_URL, **(environment or {})}
+    with patch.dict(os.environ, env, clear=True):
+        settings = load_settings()
+    container = PaymentsContainer()
+    container.config.from_dict(sections(settings))
+    container.database.override(providers.Object(unreachable_database()))
+    container.grpc_address.override(providers.Object(("127.0.0.1", 0)))
+    container.webhook_address.override(providers.Object(("127.0.0.1", 0)))
+    return container
+
+
+def close_container(container: PaymentsContainer) -> None:
+    container.database().close()
