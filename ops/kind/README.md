@@ -118,6 +118,25 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 
 Retries сейчас не включены ни для одного метода.
 
+## Public gateway и TLS
+
+Входящие вызовы внешних систем идут через отдельный Envoy gateway `public`
+(`manifests/gateway/public-gateway.yaml`). Он публикует только `POST /webhooks/provider`
+на порт `webhooks` payments и принимает только HTTPS на `webhooks.nomnom.localhost`.
+
+Сертификат выпускает cert-manager (platform-модуль) по аннотации Gateway от локального CA
+(`manifests/certs/issuers.yaml`: самоподписанный bootstrap → корень `nomnom-local-ca`) и
+продлевает сам. Корень для клиентов сохраняет `scripts/local-ca.sh`.
+
+```bash
+kubectl -n envoy-gateway-system port-forward svc/public-gateway 18085:8443
+curl --cacert "$(ops/kind/scripts/local-ca.sh)" --resolve webhooks.nomnom.localhost:18085:127.0.0.1 \
+  https://webhooks.nomnom.localhost:18085/webhooks/provider -X POST --data '{}'
+```
+
+На кластере, созданном из текущего `cluster.yaml`, port-forward не нужен: NodePort 30085
+проброшен на `127.0.0.1:${WEBHOOKS_HOST_PORT}` (18085).
+
 ## Проверки
 
 `make kind-test` выполняет:

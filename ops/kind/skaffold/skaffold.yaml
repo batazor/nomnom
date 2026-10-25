@@ -3,7 +3,8 @@
 # Версии charts закреплены здесь: Skaffold не подставляет environment в remoteChart/version.
 # Остальные версии (kind, node image, Skaffold, Gateway API CRD, образы) — в ../versions.env.
 #
-#   platform — CNI (Cilium + Hubble) и controller internal gateway (Envoy Gateway + Gateway API CRD);
+#   platform — CNI (Cilium + Hubble), controller gateways (Envoy Gateway + Gateway API CRD) и
+#              cert-manager;
 #   apps     — образы bounded contexts, их Helm charts, internal gateway и pod проверок.
 apiVersion: skaffold/v4beta14
 kind: Config
@@ -32,6 +33,19 @@ deploy:
         namespace: envoy-gateway-system
         createNamespace: true
         wait: true
+      # После Envoy Gateway: поддержка Gateway API включается, только если CRD уже есть.
+      # Выпускает сертификаты public gateway от локального CA (manifests/certs/issuers.yaml).
+      - name: cert-manager
+        remoteChart: oci://quay.io/jetstack/charts/cert-manager
+        version: v1.21.3
+        namespace: cert-manager
+        createNamespace: true
+        wait: true
+        setValues:
+          crds.enabled: true
+          config.apiVersion: controller.config.cert-manager.io/v1alpha1
+          config.kind: ControllerConfiguration
+          config.enableGatewayAPI: true
     hooks:
       after:
         # Установленные chart Envoy Gateway CRD должны совпадать с закреплённой версией Gateway API.
@@ -92,6 +106,7 @@ manifests:
     - ../manifests/data/postgres-delivery.yaml
     - ../manifests/data/mongodb-restaurants.yaml
     - ../manifests/gateway/gateway.yaml
+    - ../manifests/certs/issuers.yaml
     - ../manifests/gateway/public-gateway.yaml
     - ../manifests/fixtures/net-probe.yaml
     - ../manifests/observability/trace-capture.yaml

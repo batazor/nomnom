@@ -1,4 +1,4 @@
-# Политики Envoy Proxy public gateway: ingress из любого источника на HTTP listener,
+# Политики Envoy Proxy public gateway: ingress из любого источника на HTTPS listener,
 # egress только к портам webhooks прикладных pod, DNS и xDS controller.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -26,7 +26,7 @@ spec:
   ingress:
     - ports:
         - protocol: TCP
-          port: 8080
+          port: 8443
     - from:
         - namespaceSelector:
             matchLabels:
