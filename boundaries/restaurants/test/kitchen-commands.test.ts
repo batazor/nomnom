@@ -39,6 +39,7 @@ test("AC-246 accept queues the order and publishes only RestaurantOrderAccepted"
   );
   assert.equal(result.state, "QUEUED");
   assert.deepEqual(result.timeline, {
+    receivedAt: now,
     acceptedAt: now,
     queuedAt: now,
     expectedReadyAt,

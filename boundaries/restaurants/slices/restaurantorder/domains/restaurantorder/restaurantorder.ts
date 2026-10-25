@@ -48,6 +48,8 @@ export {
 export type { PreparationItem, PreparationItemInput } from "./items.ts";
 
 export type RestaurantOrderTimeline = Readonly<{
+  /** Unset on orders received before the timeline recorded it. */
+  receivedAt?: Date;
   acceptedAt?: Date;
   queuedAt?: Date;
   preparationStartedAt?: Date;
@@ -231,7 +233,7 @@ export class RestaurantOrder {
         orderId: input.orderId,
         restaurantId: input.restaurantId,
         state: RestaurantOrderState.Received,
-        timeline: {},
+        timeline: { receivedAt: input.receivedAt },
       },
       toPreparationItems(input.items),
       0,

@@ -9,8 +9,8 @@
 
 ## 2. restaurants
 
-- [ ] 2.1 proto и gRPC `GetKitchenQueue` поверх существующего query; тесты AC-737, AC-738.
-- [ ] 2.2 Query List Incoming Orders (memory и MongoDB) и gRPC `ListIncomingOrders`; тесты AC-742, AC-743.
+- [x] 2.1 proto и gRPC `GetKitchenQueue` поверх существующего query; тесты AC-737, AC-738.
+- [x] 2.2 Query List Incoming Orders (memory и MongoDB) и gRPC `ListIncomingOrders`; тесты AC-742, AC-743.
 
 ## 3. kind
 

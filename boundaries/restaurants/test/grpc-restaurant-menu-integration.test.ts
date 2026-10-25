@@ -158,6 +158,8 @@ describe("restaurant and menu command RPCs over MongoDB", { skip }, () => {
       markRestaurantOrderReady: unused,
       reportPreparationDelay: unused,
       reportPreparationFailure: unused,
+      getKitchenQueue: unused,
+      listIncomingOrders: unused,
       registerRestaurant: unused,
       assignStaff: unused,
       revokeStaff: unused,

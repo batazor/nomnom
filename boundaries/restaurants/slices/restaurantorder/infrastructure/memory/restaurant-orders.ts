@@ -14,7 +14,6 @@ import type {
 } from "../../applications/access-control.ts";
 import type {
   KitchenQueueEntry,
-  KitchenQueueOrdering,
   KitchenQueueReader,
 } from "../../applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { RestaurantOrderReader } from "../../applications/get-restaurant-order/get-restaurant-order.ts";
@@ -22,6 +21,10 @@ import type {
   ActivePreparation,
   ActivePreparationsReader,
 } from "../../applications/list-active-preparations/list-active-preparations.ts";
+import type {
+  IncomingOrder,
+  IncomingOrdersReader,
+} from "../../applications/list-incoming-orders/list-incoming-orders.ts";
 import type {
   ReadyOrder,
   ReadyOrdersReader,
@@ -108,6 +111,7 @@ const boardItems = (snapshot: RestaurantOrderSnapshot) =>
 export class InMemoryKitchenBoard
   implements
     RestaurantOrderReader,
+    IncomingOrdersReader,
     KitchenQueueReader,
     ActivePreparationsReader,
     ReadyOrdersReader
@@ -128,17 +132,31 @@ export class InMemoryKitchenBoard
       : snapshotToView(stored.document, stored.version);
   }
 
+  async listIncoming(restaurantId: string): Promise<readonly IncomingOrder[]> {
+    return this.#inStates(restaurantId, [RestaurantOrderState.Received])
+      .sort(byTime((document) => document.timeline.receivedAt))
+      .map(({ document, version }) => ({
+        restaurantOrderId: document.id,
+        orderId: document.orderId,
+        items: boardItems(document),
+        receivedAt: document.timeline.receivedAt,
+        version,
+      }));
+  }
+
   async listQueued(
     restaurantId: string,
   ): Promise<readonly KitchenQueueEntry[]> {
     return this.#inStates(restaurantId, [RestaurantOrderState.Queued]).map(
-      ({ document }) => ({
+      ({ document, version }) => ({
         restaurantOrderId: document.id,
         orderId: document.orderId,
+        state: document.state,
         items: boardItems(document),
         acceptedAt: document.timeline.acceptedAt,
         queuedAt: document.timeline.queuedAt,
         expectedReadyAt: document.timeline.expectedReadyAt,
+        version,
       }),
     );
   }
@@ -182,21 +200,6 @@ export class InMemoryKitchenBoard
           document.restaurantId === restaurantId &&
           states.includes(document.state),
       );
-  }
-}
-
-/**
- * Test-only queue policy: FIFO by `accepted_at`, then by id. It is not a
- * product decision about the Kitchen Queue order.
- */
-export class FifoKitchenQueueOrdering implements KitchenQueueOrdering {
-  order(entries: readonly KitchenQueueEntry[]): readonly KitchenQueueEntry[] {
-    return [...entries].sort(
-      (left, right) =>
-        (left.acceptedAt?.getTime() ?? 0) -
-          (right.acceptedAt?.getTime() ?? 0) ||
-        (left.restaurantOrderId < right.restaurantOrderId ? -1 : 1),
-    );
   }
 }
 

@@ -68,6 +68,8 @@ const startServer = async () => {
     markRestaurantOrderReady: unused,
     reportPreparationDelay: unused,
     reportPreparationFailure: unused,
+    getKitchenQueue: unused,
+    listIncomingOrders: unused,
     registerRestaurant: unused,
     assignStaff: unused,
     revokeStaff: unused,

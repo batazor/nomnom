@@ -31,6 +31,8 @@ export const createWorld = (
     markRestaurantOrderReady: world.markReady,
     reportPreparationDelay: world.reportDelay,
     reportPreparationFailure: world.reportFailure,
+    getKitchenQueue: world.getKitchenQueue,
+    listIncomingOrders: world.listIncomingOrders,
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,

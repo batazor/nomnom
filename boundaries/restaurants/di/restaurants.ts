@@ -247,6 +247,8 @@ const processRegistrations = (
       markRestaurantOrderReady: cradle.markRestaurantOrderReady,
       reportPreparationDelay: cradle.reportPreparationDelay,
       reportPreparationFailure: cradle.reportPreparationFailure,
+      getKitchenQueue: cradle.getKitchenQueue,
+      listIncomingOrders: cradle.listIncomingOrders,
       registerRestaurant: cradle.registerRestaurant,
       assignStaff: cradle.assignStaff,
       revokeStaff: cradle.revokeStaff,

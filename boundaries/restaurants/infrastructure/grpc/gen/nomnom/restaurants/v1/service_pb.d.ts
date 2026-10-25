@@ -256,7 +256,7 @@ export declare type CancelRestaurantOrderResponse = Message<"nomnom.restaurants.
 export declare const CancelRestaurantOrderResponseSchema: GenMessage<CancelRestaurantOrderResponse>;
 
 /**
- * Restaurant Order after a kitchen command.
+ * Restaurant Order after a kitchen command or in the Kitchen Queue.
  *
  * @generated from message nomnom.restaurants.v1.RestaurantOrder
  */
@@ -586,6 +586,160 @@ export declare type ReportPreparationFailureResponse = Message<"nomnom.restauran
  * Use `create(ReportPreparationFailureResponseSchema)` to create a new message.
  */
 export declare const ReportPreparationFailureResponseSchema: GenMessage<ReportPreparationFailureResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.GetKitchenQueueRequest
+ */
+export declare type GetKitchenQueueRequest = Message<"nomnom.restaurants.v1.GetKitchenQueueRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.GetKitchenQueueRequest.
+ * Use `create(GetKitchenQueueRequestSchema)` to create a new message.
+ */
+export declare const GetKitchenQueueRequestSchema: GenMessage<GetKitchenQueueRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.KitchenQueueEntry
+ */
+export declare type KitchenQueueEntry = Message<"nomnom.restaurants.v1.KitchenQueueEntry"> & {
+  /**
+   * State QUEUED, expected_ready_at and version of the order.
+   *
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp accepted_at = 2;
+   */
+  acceptedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp queued_at = 3;
+   */
+  queuedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.KitchenQueueEntry.
+ * Use `create(KitchenQueueEntrySchema)` to create a new message.
+ */
+export declare const KitchenQueueEntrySchema: GenMessage<KitchenQueueEntry>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.GetKitchenQueueResponse
+ */
+export declare type GetKitchenQueueResponse = Message<"nomnom.restaurants.v1.GetKitchenQueueResponse"> & {
+  /**
+   * In the recommended order; empty when nothing is queued.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.KitchenQueueEntry entries = 1;
+   */
+  entries: KitchenQueueEntry[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.GetKitchenQueueResponse.
+ * Use `create(GetKitchenQueueResponseSchema)` to create a new message.
+ */
+export declare const GetKitchenQueueResponseSchema: GenMessage<GetKitchenQueueResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListIncomingOrdersRequest
+ */
+export declare type ListIncomingOrdersRequest = Message<"nomnom.restaurants.v1.ListIncomingOrdersRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListIncomingOrdersRequest.
+ * Use `create(ListIncomingOrdersRequestSchema)` to create a new message.
+ */
+export declare const ListIncomingOrdersRequestSchema: GenMessage<ListIncomingOrdersRequest>;
+
+/**
+ * Line of a Restaurant Order as the kitchen prepares it.
+ *
+ * @generated from message nomnom.restaurants.v1.RestaurantOrderItem
+ */
+export declare type RestaurantOrderItem = Message<"nomnom.restaurants.v1.RestaurantOrderItem"> & {
+  /**
+   * @generated from field: string menu_item_id = 1;
+   */
+  menuItemId: string;
+
+  /**
+   * @generated from field: int32 quantity = 2;
+   */
+  quantity: number;
+
+  /**
+   * @generated from field: repeated string options = 3;
+   */
+  options: string[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RestaurantOrderItem.
+ * Use `create(RestaurantOrderItemSchema)` to create a new message.
+ */
+export declare const RestaurantOrderItemSchema: GenMessage<RestaurantOrderItem>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.IncomingOrder
+ */
+export declare type IncomingOrder = Message<"nomnom.restaurants.v1.IncomingOrder"> & {
+  /**
+   * State RECEIVED and version of the order; expected_ready_at is unset.
+   *
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.RestaurantOrderItem items = 2;
+   */
+  items: RestaurantOrderItem[];
+
+  /**
+   * Unset only on orders received before the time was recorded.
+   *
+   * @generated from field: google.protobuf.Timestamp received_at = 3;
+   */
+  receivedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.IncomingOrder.
+ * Use `create(IncomingOrderSchema)` to create a new message.
+ */
+export declare const IncomingOrderSchema: GenMessage<IncomingOrder>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListIncomingOrdersResponse
+ */
+export declare type ListIncomingOrdersResponse = Message<"nomnom.restaurants.v1.ListIncomingOrdersResponse"> & {
+  /**
+   * By ascending received_at; empty when nothing awaits a decision.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.IncomingOrder orders = 1;
+   */
+  orders: IncomingOrder[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListIncomingOrdersResponse.
+ * Use `create(ListIncomingOrdersResponseSchema)` to create a new message.
+ */
+export declare const ListIncomingOrdersResponseSchema: GenMessage<ListIncomingOrdersResponse>;
 
 /**
  * @generated from message nomnom.restaurants.v1.RegisterRestaurantRequest
@@ -1249,6 +1403,31 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof ReportPreparationFailureRequestSchema;
     output: typeof ReportPreparationFailureResponseSchema;
+  },
+  /**
+   * Kitchen Queue of a restaurant (FR-583): Restaurant Orders in QUEUED in the
+   * order recommended by the Kitchen Queue policy. Requires
+   * restaurant#operate_kitchen. Orders in RECEIVED awaiting Acceptance are not
+   * in the queue.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.GetKitchenQueue
+   */
+  getKitchenQueue: {
+    methodKind: "unary";
+    input: typeof GetKitchenQueueRequestSchema;
+    output: typeof GetKitchenQueueResponseSchema;
+  },
+  /**
+   * Incoming orders of a restaurant (FR-586): Restaurant Orders in RECEIVED
+   * awaiting Accept or Reject, by ascending received_at, then by id. Requires
+   * restaurant#operate_kitchen. An accepted order leaves this list.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ListIncomingOrders
+   */
+  listIncomingOrders: {
+    methodKind: "unary";
+    input: typeof ListIncomingOrdersRequestSchema;
+    output: typeof ListIncomingOrdersResponseSchema;
   },
   /**
    * Restaurant administration. RegisterRestaurant requires platform#register_restaurant

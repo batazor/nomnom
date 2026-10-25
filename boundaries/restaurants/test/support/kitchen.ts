@@ -8,6 +8,7 @@ import { GetKitchenQueueHandler } from "../../slices/restaurantorder/application
 import { GetRestaurantOrderHandler } from "../../slices/restaurantorder/applications/get-restaurant-order/get-restaurant-order.ts";
 import type { RepeatPolicy } from "../../slices/restaurantorder/applications/kitchen-command.ts";
 import { ListActivePreparationsHandler } from "../../slices/restaurantorder/applications/list-active-preparations/list-active-preparations.ts";
+import { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import { ListReadyOrdersHandler } from "../../slices/restaurantorder/applications/list-ready-orders/list-ready-orders.ts";
 import { MarkAssembledHandler } from "../../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
@@ -18,9 +19,9 @@ import { ReportPreparationDelayHandler } from "../../slices/restaurantorder/appl
 import { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
 import type { CancellationPolicy } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import { FifoKitchenQueueOrdering } from "../../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
 import {
   createRestaurantOrderStore,
-  FifoKitchenQueueOrdering,
   FixedDurationReadyTimeEstimator,
   InMemoryKitchenAccessControl,
   InMemoryKitchenBoard,
@@ -117,6 +118,10 @@ export const createKitchenWorld = (
       accessControl,
       reader: board,
       ordering: new FifoKitchenQueueOrdering(),
+    }),
+    listIncomingOrders: new ListIncomingOrdersHandler({
+      accessControl,
+      reader: board,
     }),
     listActivePreparations: new ListActivePreparationsHandler({
       accessControl,
