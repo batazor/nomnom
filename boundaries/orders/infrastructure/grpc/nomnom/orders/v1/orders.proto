@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package nomnom.orders.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum OrderState {
+  ORDER_STATE_UNSPECIFIED = 0;
+  ORDER_STATE_PLACED = 1;
+  ORDER_STATE_CONFIRMED = 2;
+  ORDER_STATE_CANCELLED = 3;
+  ORDER_STATE_COMPLETED = 4;
+}
+
+message Money {
+  string amount = 1;
+  string currency = 2;
+}
+
+message OrderItem {
+  string menu_item_id = 1;
+  int32 quantity = 2;
+  Money unit_price = 3;
+}
+
+message FulfillmentFact {
+  string kind = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  string reason = 3;
+}
+
+message Cancellation {
+  string outcome = 1;
+  string reason_code = 2;
+  google.protobuf.Timestamp cancelled_at = 3;
+}
+
+message Order {
+  string order_id = 1;
+  string customer_id = 2;
+  string restaurant_id = 3;
+  repeated OrderItem items = 4;
+  string delivery_address = 5;
+  Money total = 6;
+  OrderState state = 7;
+  google.protobuf.Timestamp placed_at = 8;
+  repeated FulfillmentFact fulfillment_facts = 9;
+  Cancellation cancellation = 10;
+}
+
+message OrderSummary {
+  string order_id = 1;
+  string restaurant_id = 2;
+  OrderState state = 3;
+  Money total = 4;
+  google.protobuf.Timestamp placed_at = 5;
+}

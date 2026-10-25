@@ -1,0 +1,35 @@
+server:
+  port: 8081
+management:
+  port: 9081
+shutdown:
+  readiness_delay: 5s
+  drain_timeout: 20s
+kafka:
+  brokers:
+    - localhost:9092
+  client_id: orders
+  consumer_group: orders
+temporal:
+  host_port: localhost:7233
+  namespace: default
+  connect_timeout: 10s
+  # Создание Search Attribute требует прав оператора namespace; включать локально.
+  register_search_attributes: false
+# Policy Order Fulfillment Workflow. Значения — placeholders, не продуктовые сроки.
+fulfillment:
+  acceptance_timeout: 10m
+  assignment_timeout: 15m
+  max_replans: 2
+  operator_decision_timeout: 30m
+  preparation_timeout: 90m
+  max_preparation_extension: 60m
+  pickup_timeout: 60m
+  delivery_timeout: 120m
+  publish_stage: true
+  # unavailable | simulated | grpc (simulated — только локальная проверка маршрута;
+  # grpc вызывает командные API соседей через internal gateway).
+  neighbours: unavailable
+# Адрес internal gateway (env INTERNAL_GATEWAY_ADDR); обязателен при neighbours: grpc.
+internal_gateway:
+  address: ""

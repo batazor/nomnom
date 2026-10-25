@@ -1,0 +1,22 @@
+# Go-клиенты командных API соседних контекстов для портов fulfillorder.
+# До публикации модулей в BSR код генерируется из workspace (ADR 7 — после публикации
+# переход на закреплённый BSR commit). Запуск: make proto-generate в boundaries/orders.
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: nomnom/orders/slices/order/infrastructure/neighbours/grpcclient/gen
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.36.12
+    out: gen
+    opt:
+      - paths=source_relative
+  - remote: buf.build/grpc/go:v1.6.2
+    out: gen
+    opt:
+      - paths=source_relative
+inputs:
+  - directory: ../../../../../../payments/infrastructure/grpc
+  - directory: ../../../../../../restaurants/infrastructure/grpc
+  - directory: ../../../../../../delivery/infrastructure/grpc

@@ -1,0 +1,153 @@
+//go:build integration
+
+package di
+
+import (
+	"context"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
+
+	"nomnom/orders/pkg/config"
+	"nomnom/orders/slices/order/applications/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillment"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
+	"nomnom/orders/slices/order/applications/recordorderready"
+	"nomnom/orders/slices/order/applications/recordpickup"
+	"nomnom/orders/slices/order/domains/order"
+	"nomnom/orders/slices/order/domains/order/ordertest"
+	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
+)
+
+// AC-446: the worker runs the Order Fulfillment Workflow end to end against a
+// real Temporal Server; inbound facts go through the application handlers.
+// Run with `make test-integration` or TEMPORAL_ADDRESS=host:port.
+func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
+	address := os.Getenv("TEMPORAL_ADDRESS")
+	if address == "" {
+		t.Skip("TEMPORAL_ADDRESS is not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	cfg := config.Config{
+		Temporal: config.TemporalConfig{
+			HostPort:                 address,
+			Namespace:                "default",
+			ConnectTimeout:           10 * time.Second,
+			RegisterSearchAttributes: true,
+		},
+		Fulfillment: config.FulfillmentConfig{
+			AcceptanceTimeout:       time.Minute,
+			AssignmentTimeout:       time.Minute,
+			MaxReplans:              1,
+			OperatorDecisionTimeout: time.Minute,
+			PreparationTimeout:      time.Minute,
+			PickupTimeout:           time.Minute,
+			DeliveryTimeout:         time.Minute,
+			PublishStage:            true,
+			Neighbours:              config.NeighboursSimulated,
+		},
+		Shutdown: config.ShutdownConfig{DrainTimeout: 5 * time.Second},
+	}
+
+	orderID := order.ID("order-" + time.Now().UTC().Format("20060102T150405.000000000"))
+	store := memory.NewStore()
+	require.NoError(t, store.Add(ctx, ordertest.New(t, orderID)))
+
+	activities, cleanup, err := NewActivities(store, cfg)
+	require.NoError(t, err)
+	defer cleanup()
+	worker := NewTemporalWorker(cfg, activities)
+	require.NoError(t, worker.Start(ctx))
+	runErr := make(chan error, 1)
+	go func() { runErr <- worker.Run() }()
+	defer func() {
+		require.NoError(t, worker.Shutdown(context.Background()))
+		require.NoError(t, <-runErr)
+	}()
+
+	temporalClient, err := client.DialContext(ctx, client.Options{HostPort: address, Namespace: "default"})
+	require.NoError(t, err)
+	defer temporalClient.Close()
+	port := fulfillorder.NewClient(temporalClient, NewFulfillmentPolicy(cfg.Fulfillment))
+	workflowID := fulfillorder.WorkflowID(string(orderID))
+
+	waitActivity := func(name string) {
+		require.Eventually(t, func() bool { return activityCompleted(ctx, t, temporalClient, workflowID, name) },
+			20*time.Second, 100*time.Millisecond, "activity %s did not complete", name)
+	}
+	type fact func(ctx context.Context, eventID string) error
+	confirm := confirmorder.NewHandler(store, store, store, port)
+	assign := recordcourierassignment.NewHandler(store, store, store, port)
+	ready := recordorderready.NewHandler(store, store, store, port)
+	pickup := recordpickup.NewHandler(store, store, store, port)
+	complete := recorddeliverycompletion.NewHandler(store, store, store, port)
+	send := func(eventID string, f fact) { require.NoError(t, f(ctx, eventID)) }
+	now := time.Now().UTC()
+
+	require.NoError(t, port.Start(ctx, fulfillment.StartRequest{OrderID: orderID}))
+	waitActivity(fulfillorder.ActivityRequestRestaurantOrder)
+	send("accepted", func(ctx context.Context, id string) error {
+		_, err := confirm.Handle(ctx, confirmorder.Input{EventID: id, OrderID: orderID, OccurredAt: now})
+		return err
+	})
+	waitActivity(fulfillorder.ActivityCreateDelivery)
+	send("assigned", func(ctx context.Context, id string) error {
+		_, err := assign.Handle(ctx, recordcourierassignment.Input{EventID: id, OrderID: orderID, OccurredAt: now})
+		return err
+	})
+	send("ready", func(ctx context.Context, id string) error {
+		_, err := ready.Handle(ctx, recordorderready.Input{EventID: id, OrderID: orderID, OccurredAt: now})
+		return err
+	})
+	send("picked-up", func(ctx context.Context, id string) error {
+		_, err := pickup.Handle(ctx, recordpickup.Input{EventID: id, OrderID: orderID, OccurredAt: now})
+		return err
+	})
+	waitActivity(fulfillorder.ActivityCapturePayment)
+	send("delivered", func(ctx context.Context, id string) error {
+		_, err := complete.Handle(ctx, recorddeliverycompletion.Input{EventID: id, OrderID: orderID, OccurredAt: now})
+		return err
+	})
+
+	var result fulfillorder.Result
+	require.NoError(t, temporalClient.GetWorkflow(ctx, workflowID, "").Get(ctx, &result))
+	assert.Equal(t, fulfillorder.Result{Outcome: fulfillorder.OutcomeCompleted}, result)
+
+	snapshot, _ := store.Snapshot(orderID)
+	assert.Equal(t, order.StateCompleted, snapshot.State)
+
+	description, err := temporalClient.DescribeWorkflow(ctx, workflowID, "")
+	require.NoError(t, err)
+	stage, ok := description.TypedSearchAttributes.GetKeyword(fulfillorder.StageSearchAttribute)
+	assert.True(t, ok)
+	assert.Equal(t, string(fulfillorder.StageCompleted), stage)
+}
+
+// activityCompleted reports whether an Activity of the given type completed in
+// the workflow history.
+func activityCompleted(ctx context.Context, t *testing.T, c client.Client, workflowID, name string) bool {
+	t.Helper()
+	scheduled := map[int64]string{}
+	history := c.GetWorkflowHistory(ctx, workflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for history.HasNext() {
+		event, err := history.Next()
+		require.NoError(t, err)
+		if attributes := event.GetActivityTaskScheduledEventAttributes(); attributes != nil {
+			scheduled[event.GetEventId()] = attributes.GetActivityType().GetName()
+		}
+		if attributes := event.GetActivityTaskCompletedEventAttributes(); attributes != nil &&
+			scheduled[attributes.GetScheduledEventId()] == name {
+			return true
+		}
+	}
+	return false
+}

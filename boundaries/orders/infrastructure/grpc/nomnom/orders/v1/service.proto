@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package nomnom.orders.v1;
+
+import "nomnom/orders/v1/orders.proto";
+
+service OrdersService {
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+  rpc ListCustomerOrders(ListCustomerOrdersRequest) returns (ListCustomerOrdersResponse);
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message GetOrderResponse {
+  Order order = 1;
+}
+
+message ListCustomerOrdersRequest {
+  string customer_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListCustomerOrdersResponse {
+  repeated OrderSummary orders = 1;
+  string next_page_token = 2;
+}
