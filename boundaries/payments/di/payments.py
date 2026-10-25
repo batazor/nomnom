@@ -25,7 +25,9 @@ from infrastructure.authorization import (
     create_spicedb_client,
 )
 from infrastructure.grpc.identity import SubjectResolver, create_subject_resolver
-from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers, UuidIdentifiers
+from infrastructure.grpc.servicer import PaymentsHandlers
+from infrastructure.grpc.worker import GrpcWorker
+from infrastructure.ids import UuidIdentifiers
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
 from infrastructure.postgres import (
@@ -150,6 +152,8 @@ class PaymentsContainer(containers.DeclarativeContainer):
         domain_metrics,
     )
     inbox = providers.Singleton(PostgresProviderMessageInbox, database)
+    # One applier of final Provider results for synchronous answers and callbacks.
+    applier = providers.Singleton(ProviderResultApplier, payments, operations, outbox, clock)
 
     # Use cases: one local transaction per Unit of Work.
     executor = providers.Singleton(
@@ -157,11 +161,11 @@ class PaymentsContainer(containers.DeclarativeContainer):
         uow=uow,
         payments=payments,
         operations=operations,
-        outbox=outbox,
         provider=provider,
         permissions=permissions,
         clock=clock,
-        ids=ids,
+        operation_ids=ids,
+        applier=applier,
     )
     handlers = providers.Singleton(
         PaymentsHandlers,
@@ -176,7 +180,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
         ApplyProviderCallbackHandler,
         uow,
         inbox,
-        providers.Factory(ProviderResultApplier, payments, operations, outbox, clock),
+        applier,
     )
 
     # Workers.

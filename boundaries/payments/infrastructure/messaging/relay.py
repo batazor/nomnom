@@ -24,7 +24,11 @@ from .kafka_publisher import DEFAULT_DELIVERY_TIMEOUT, KafkaPublisher
 from .outbox import (
     WATERMILL_UUID_HEADER,
     FatalPublishError,
+    OutboxBacklog,
+    OutboxLease,
+    OutboxQueue,
     OutboxRecord,
+    OutboxRetention,
     OutboxStore,
     Publisher,
     PublishError,
@@ -44,8 +48,12 @@ __all__ = [
     "CycleResult",
     "FatalPublishError",
     "KafkaPublisher",
+    "OutboxBacklog",
+    "OutboxLease",
+    "OutboxQueue",
     "OutboxRecord",
     "OutboxRelay",
+    "OutboxRetention",
     "OutboxStore",
     "PostgresOutboxStore",
     "PublishError",
@@ -179,14 +187,14 @@ class RelayWorker:
     def __init__(
         self,
         relay: OutboxRelay,
-        store: OutboxStore,
+        lease: OutboxLease,
         publisher: Publisher,
         *,
         batch_size: int,
         poll_interval: float,
     ) -> None:
         self._relay = relay
-        self._store = store
+        self._lease = lease
         self._publisher = publisher
         self._batch_size = batch_size
         self._poll_interval = poll_interval
@@ -218,7 +226,7 @@ class RelayWorker:
                     # Restart is the only recovery: the process exits non-zero (runtime
                     # contract) and Kubernetes restarts it; the lock goes to a standby now.
                     logger.exception("outbox relay stopped: kafka producer is unusable")
-                    self._store.unlock()
+                    self._lease.unlock()
                     raise
                 except Exception:
                     logger.exception("outbox relay cycle failed")
@@ -241,6 +249,6 @@ class RelayWorker:
         finally:
             # A cycle still running owns the lock session; process exit releases it.
             if stopped:
-                self._store.unlock()
+                self._lease.unlock()
         if not stopped:
             raise TimeoutError("outbox relay cycle did not finish before the drain deadline")

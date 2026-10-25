@@ -390,11 +390,11 @@ class PaymentsTestKit:
             uow=self.uow,
             payments=self.payments,
             operations=self.operations,
-            outbox=self.outbox,
             provider=self.provider,
             permissions=self.permissions,
             clock=self.clock,
-            ids=self.ids,
+            operation_ids=self.ids,
+            applier=self.applier(),
         )
 
     def applier(self) -> ProviderResultApplier:

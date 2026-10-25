@@ -28,7 +28,7 @@ from .errors import (
     PaymentStateConflictError,
     ProviderResultConflictError,
 )
-from .operation_result import _STATUS_OF, PAYMENT_AGGREGATE, OperationStatus
+from .operation_result import PAYMENT_AGGREGATE, STATUS_OF, OperationStatus
 from .ports import PaymentOutbox, ProviderOperationOutcome, ProviderOperationStatus
 
 
@@ -157,6 +157,6 @@ class ProviderResultApplication:
                 else ProviderResultStatus.ALREADY_APPLIED
             ),
             operation_id=applied.operation.id,
-            operation_status=_STATUS_OF[applied.operation.state],
+            operation_status=STATUS_OF[applied.operation.state],
             payment_state=applied.payment_state,
         )

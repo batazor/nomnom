@@ -43,7 +43,10 @@ from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
-from slices.payment.applications.operation_flow import PaymentOperationExecutor
+from slices.payment.applications.operation_flow import (
+    PaymentOperationExecutor,
+    ProviderResultApplier,
+)
 from slices.payment.domains.payment import Money, OperationId, OrderId, Payment, PaymentId
 
 DSN = os.environ.get("DATABASE_URL", "").strip()
@@ -222,15 +225,17 @@ class KafkaRelayIntegrationTest(_DatabaseCase):
         order = OrderId(f"order-{uuid.uuid4()}")
         payment = Payment(PaymentId(f"payment-{uuid.uuid4()}"), order, Money.parse("25.50", "EUR"))
         payments.add(payment)
+        operations = PostgresPaymentOperationRepository(self.database)
+        outbox = PostgresPaymentOutbox(self.database, PaymentEventsMapper())
         executor = PaymentOperationExecutor(
             uow=PostgresUnitOfWork(self.database),
             payments=payments,
-            operations=PostgresPaymentOperationRepository(self.database),
-            outbox=PostgresPaymentOutbox(self.database, PaymentEventsMapper()),
+            operations=operations,
             provider=FakePaymentProvider(),
             permissions=FakePermissions(),
             clock=_Clock(),
-            ids=_Ids(),
+            operation_ids=_Ids(),
+            applier=ProviderResultApplier(payments, operations, outbox, _Clock()),
         )
         AuthorizePaymentHandler(executor).handle(
             AuthorizePaymentInput(

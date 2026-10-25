@@ -13,19 +13,23 @@ from slices.payment.domains.payment import (
     OrderId,
     PaymentDomainEvent,
     PaymentId,
+    PaymentPermission,
 )
 
-
-class PaymentPermission(StrEnum):
-    """Permissions on a Payment checked in the authorization graph."""
-
-    CREATE = "create"
-    AUTHORIZE = "authorize"
-    CAPTURE = "capture"
-    CANCEL_AUTHORIZATION = "cancel_authorization"
-    REFUND = "refund"
-    VIEW = "view"
-    VIEW_OPERATIONS = "view_operations"
+__all__ = [
+    "PaymentIdSource",
+    "PaymentOperationIdSource",
+    "PaymentOutbox",
+    "PaymentPermission",
+    "PaymentPermissionChecker",
+    "PaymentProviderGateway",
+    "PaymentResource",
+    "ProviderMessageInbox",
+    "ProviderOperationOutcome",
+    "ProviderOperationRequest",
+    "ProviderOperationStatus",
+    "ProviderUnavailableError",
+]
 
 
 @dataclass(frozen=True)
@@ -128,12 +132,16 @@ class ProviderMessageInbox(Protocol):
         ...
 
 
-class PaymentIdentifiers(Protocol):
-    """Source of new identifiers, so that use cases stay deterministic in tests."""
+class PaymentIdSource(Protocol):
+    """Source of new Payment identifiers, so that use cases stay deterministic in tests."""
 
     def new_payment_id(self) -> PaymentId:
         """Return a new unique Payment identifier."""
         ...
+
+
+class PaymentOperationIdSource(Protocol):
+    """Source of new Payment Operation identifiers, deterministic in tests."""
 
     def new_operation_id(self) -> OperationId:
         """Return a new unique Payment Operation identifier."""

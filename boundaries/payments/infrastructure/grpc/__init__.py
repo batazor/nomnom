@@ -4,17 +4,19 @@ from .identity import (
     IdentityConfigError,
     RejectingSubjectResolver,
     ServiceTokenSubjectResolver,
+    ServiceTokenVerifier,
     SubjectResolver,
     UserAssertionVerifier,
     create_subject_resolver,
 )
-from .service import GrpcWorker
+from .worker import GrpcWorker
 
 __all__ = [
     "GrpcWorker",
     "IdentityConfigError",
     "RejectingSubjectResolver",
     "ServiceTokenSubjectResolver",
+    "ServiceTokenVerifier",
     "SubjectResolver",
     "UserAssertionVerifier",
     "create_subject_resolver",

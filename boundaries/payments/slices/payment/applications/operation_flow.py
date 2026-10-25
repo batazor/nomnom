@@ -15,7 +15,6 @@ from dataclasses import dataclass
 
 from pkg.application import Clock, Subject, UnitOfWork
 from slices.payment.domains.payment import (
-    PAYMENT_TRIGGER_OF,
     AlreadyInStateError,
     DuplicateIdempotencyKeyError,
     InvalidTransitionError,
@@ -27,6 +26,7 @@ from slices.payment.domains.payment import (
     PaymentOperationRepository,
     PaymentRepository,
     PaymentState,
+    rules_of,
 )
 
 from .access import require_permission
@@ -40,9 +40,7 @@ from .errors import (
 )
 from .operation_result import PAYMENT_AGGREGATE, OperationStatus, PaymentOperationResult
 from .ports import (
-    PaymentIdentifiers,
-    PaymentOutbox,
-    PaymentPermission,
+    PaymentOperationIdSource,
     PaymentPermissionChecker,
     PaymentProviderGateway,
     PaymentResource,
@@ -69,13 +67,6 @@ __all__ = [
     "to_domain_outcome",
 ]
 
-_PERMISSION_OF: dict[OperationKind, PaymentPermission] = {
-    OperationKind.AUTHORIZE: PaymentPermission.AUTHORIZE,
-    OperationKind.CAPTURE: PaymentPermission.CAPTURE,
-    OperationKind.CANCEL_AUTHORIZATION: PaymentPermission.CANCEL_AUTHORIZATION,
-    OperationKind.REFUND: PaymentPermission.REFUND,
-}
-
 
 @dataclass(frozen=True)
 class _Reservation:
@@ -96,11 +87,11 @@ class PaymentOperationExecutor:
         uow: UnitOfWork,
         payments: PaymentRepository,
         operations: PaymentOperationRepository,
-        outbox: PaymentOutbox,
         provider: PaymentProviderGateway,
         permissions: PaymentPermissionChecker,
         clock: Clock,
-        ids: PaymentIdentifiers,
+        operation_ids: PaymentOperationIdSource,
+        applier: ProviderResultApplier,
     ) -> None:
         self._uow = uow
         self._payments = payments
@@ -108,8 +99,8 @@ class PaymentOperationExecutor:
         self._provider = provider
         self._permissions = permissions
         self._clock = clock
-        self._ids = ids
-        self._applier = ProviderResultApplier(payments, operations, outbox, clock)
+        self._operation_ids = operation_ids
+        self._applier = applier
 
     def execute(
         self, subject: Subject, payment_id: str, idempotency_key: str, kind: OperationKind
@@ -134,9 +125,8 @@ class PaymentOperationExecutor:
         if not payment_id.strip():
             raise InvalidPaymentRequestError("payment id is required")
         target = PaymentId(payment_id)
-        require_permission(
-            self._permissions, subject, _PERMISSION_OF[kind], PaymentResource(target)
-        )
+        rules = rules_of(kind)
+        require_permission(self._permissions, subject, rules.permission, PaymentResource(target))
 
         reservation = self._reserve(target, key, kind)
         operation = reservation.operation
@@ -162,7 +152,7 @@ class PaymentOperationExecutor:
         )
 
     def _reserve(self, payment_id: PaymentId, key: str, kind: OperationKind) -> _Reservation:
-        operation_id = self._ids.new_operation_id()
+        operation_id = self._operation_ids.new_operation_id()
         requested_at = self._clock.now()
 
         def reserve() -> _Reservation:
@@ -175,7 +165,7 @@ class PaymentOperationExecutor:
                     raise IdempotencyKeyConflictError(key)
                 return _Reservation(existing, payment.state, payment.provider_reference)
             try:
-                payment.ensure_can(PAYMENT_TRIGGER_OF[kind])
+                payment.ensure_can(rules_of(kind).trigger)
             except (InvalidTransitionError, AlreadyInStateError) as error:
                 raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
             if self._operations.find_pending(payment_id) is not None:

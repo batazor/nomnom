@@ -10,32 +10,28 @@ The verification contract is shared by every context and pinned by the vectors i
 
 import logging
 import time
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection
 from typing import NoReturn, Protocol
 
 import grpc
 import jwt
-from jwt import PyJWK
 
 from pkg.application import Subject, SubjectKind
 from pkg.config import IdentitySettings
 
 from .identity_tokens import (
-    _REJECTED,
-    _REQUIRED_CLAIMS,
     ALLOWED_ALGORITHMS,
     LEEWAY_SECONDS,
     USER_ASSERTION_ALGORITHM,
     USER_ASSERTION_MAX_TTL_SECONDS,
     USER_ASSERTION_METADATA,
     IdentityConfigError,
-    _bearer_token,
-    _numeric_claim,
-    _TokenRejectedError,
-    _unverified_jti,
+    TokenRejectedError,
     load_jwks,
     load_user_jwks,
+    unverified_jti,
 )
+from .service_token import ServiceTokenVerifier
 from .user_assertion import UserAssertionVerifier
 
 __all__ = [
@@ -47,6 +43,7 @@ __all__ = [
     "IdentityConfigError",
     "RejectingSubjectResolver",
     "ServiceTokenSubjectResolver",
+    "ServiceTokenVerifier",
     "SubjectResolver",
     "UserAssertionVerifier",
     "create_subject_resolver",
@@ -56,6 +53,8 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+_REJECTED = "invalid caller identity"
 
 
 class SubjectResolver(Protocol):
@@ -75,35 +74,23 @@ class RejectingSubjectResolver:
 
 
 class ServiceTokenSubjectResolver:
-    """Resolve ``Subject(service, name)`` from ``authorization: Bearer <jwt>`` metadata.
+    """Resolve the caller ``Subject`` from gRPC metadata.
 
-    With ``x-nomnom-user-assertion`` the authenticated service must be a user delegate and
-    the assertion must verify; the result is ``Subject(user, sub)`` with the delegate kept.
-    Without ``user_assertions`` every call carrying an assertion is rejected.
+    Reads ``authorization: Bearer <jwt>`` and ``x-nomnom-user-assertion`` and composes the
+    transport-free verifiers: the service token yields ``Subject(service, name)``; with an
+    assertion the authenticated service must be a user delegate and the assertion must
+    verify, and the result is ``Subject(user, sub)`` with the delegate kept. Without
+    ``user_assertions`` every call carrying an assertion is rejected.
     """
 
     def __init__(
         self,
+        service_tokens: ServiceTokenVerifier,
         *,
-        issuer: str,
-        audience: str,
-        keys: Mapping[str, PyJWK],
-        service_accounts: Mapping[str, str],
-        clock: Callable[[], float] = time.time,
         user_assertions: UserAssertionVerifier | None = None,
         user_delegates: Collection[str] = (),
     ) -> None:
-        if not issuer or not audience:
-            raise IdentityConfigError("identity issuer and audience must not be empty")
-        if not keys:
-            raise IdentityConfigError("identity JWKS must contain signing keys")
-        if not service_accounts:
-            raise IdentityConfigError("identity service account allowlist must not be empty")
-        self._issuer = issuer
-        self._audience = audience
-        self._keys = dict(keys)
-        self._service_accounts = dict(service_accounts)
-        self._clock = clock
+        self._service_tokens = service_tokens
         self._user_assertions = user_assertions
         self._user_delegates = frozenset(user_delegates)
 
@@ -114,8 +101,8 @@ class ServiceTokenSubjectResolver:
         message; the reason is logged only.
         """
         try:
-            service = self._verify(_bearer_token(context))
-        except _TokenRejectedError as error:
+            service = self._service_tokens.verify(_bearer_token(context))
+        except TokenRejectedError as error:
             reason = str(error)
         except jwt.PyJWTError as error:
             reason = f"{type(error).__name__}: {error}"
@@ -135,17 +122,17 @@ class ServiceTokenSubjectResolver:
         jti: object = None
         try:
             if len(values) > 1:
-                raise _TokenRejectedError(f"multiple {USER_ASSERTION_METADATA} metadata values")
+                raise TokenRejectedError(f"multiple {USER_ASSERTION_METADATA} metadata values")
             token = values[0]
             if isinstance(token, bytes) or not token.strip():
-                raise _TokenRejectedError(f"{USER_ASSERTION_METADATA} metadata is empty or binary")
-            jti = _unverified_jti(token)
+                raise TokenRejectedError(f"{USER_ASSERTION_METADATA} metadata is empty or binary")
+            jti = unverified_jti(token)
             if self._user_assertions is None:
-                raise _TokenRejectedError("user assertions are not configured")
+                raise TokenRejectedError("user assertions are not configured")
             if service.id not in self._user_delegates:
-                raise _TokenRejectedError(f"service {service.id!r} is not a user delegate")
+                raise TokenRejectedError(f"service {service.id!r} is not a user delegate")
             user, jti = self._user_assertions.verify(token.strip())
-        except _TokenRejectedError as error:
+        except TokenRejectedError as error:
             reason = str(error)
         except jwt.PyJWTError as error:
             reason = f"{type(error).__name__}: {error}"
@@ -160,46 +147,24 @@ class ServiceTokenSubjectResolver:
         context.abort(grpc.StatusCode.UNAUTHENTICATED, _REJECTED)
         raise AssertionError("context.abort must raise")  # pragma: no cover
 
-    def _verify(self, token: str) -> Subject:
-        header = jwt.get_unverified_header(token)
-        algorithm = header.get("alg")
-        if algorithm not in ALLOWED_ALGORITHMS:
-            raise _TokenRejectedError(f"algorithm {algorithm!r} is not allowed")
-        kid = header.get("kid")
-        if not isinstance(kid, str) or not kid:
-            raise _TokenRejectedError("token has no kid")
-        key = self._keys.get(kid)
-        if key is None:
-            raise _TokenRejectedError(f"unknown kid {kid!r}")
-        if key.algorithm_name != algorithm:
-            raise _TokenRejectedError(f"algorithm {algorithm!r} does not match key {kid!r}")
 
-        # exp/nbf are checked below against the injectable clock.
-        claims = jwt.decode(
-            token,
-            key=key.key,
-            algorithms=[algorithm],
-            audience=self._audience,
-            issuer=self._issuer,
-            options={
-                "require": _REQUIRED_CLAIMS,
-                "verify_exp": False,
-                "verify_nbf": False,
-                "verify_iat": False,
-            },
-        )
-        now = self._clock()
-        expires_at = _numeric_claim(claims, "exp")
-        if expires_at <= now - LEEWAY_SECONDS:
-            raise _TokenRejectedError("token is expired")
-        if "nbf" in claims and _numeric_claim(claims, "nbf") > now + LEEWAY_SECONDS:
-            raise _TokenRejectedError("token is not yet valid")
-
-        subject = claims.get("sub")
-        service = self._service_accounts.get(subject) if isinstance(subject, str) else None
-        if service is None:
-            raise _TokenRejectedError(f"service account {subject!r} is not allowed")
-        return Subject(SubjectKind.SERVICE, service)
+def _bearer_token(context: grpc.ServicerContext) -> str:
+    values = [
+        value
+        for key, value in (context.invocation_metadata() or ())
+        if key.lower() == "authorization"
+    ]
+    if not values:
+        raise TokenRejectedError("authorization metadata is missing")
+    if len(values) > 1:
+        raise TokenRejectedError("multiple authorization metadata values")
+    value = values[0]
+    if isinstance(value, bytes):
+        raise TokenRejectedError("authorization metadata is binary")
+    scheme, _, token = value.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise TokenRejectedError("authorization scheme is not Bearer")
+    return token.strip()
 
 
 def create_subject_resolver(
@@ -214,11 +179,13 @@ def create_subject_resolver(
         )
         return RejectingSubjectResolver()
     return ServiceTokenSubjectResolver(
-        issuer=settings.issuer,
-        audience=settings.audience,
-        keys=load_jwks(settings.jwks_file),
-        service_accounts=settings.service_account_map,
-        clock=clock,
+        ServiceTokenVerifier(
+            issuer=settings.issuer,
+            audience=settings.audience,
+            keys=load_jwks(settings.jwks_file),
+            service_accounts=settings.service_account_map,
+            clock=clock,
+        ),
         user_assertions=create_user_assertion_verifier(settings, clock),
         user_delegates=settings.user_delegate_set,
     )

@@ -1,5 +1,7 @@
 """Token building blocks of caller identity: constants, JWKS loading and claim checks.
 
+Transport-free: nothing here reads gRPC metadata.
+
 Shared by service tokens (ADR 27) and BFF user assertions (ADR 32).
 """
 
@@ -7,26 +9,24 @@ import json
 from collections.abc import Collection, Mapping
 from pathlib import Path
 
-import grpc
 import jwt
 from jwt import PyJWK, PyJWKSet
 
 ALLOWED_ALGORITHMS = frozenset({"RS256", "ES256"})
 LEEWAY_SECONDS = 30
-_REQUIRED_CLAIMS = ["exp", "iss", "aud", "sub"]
-_REJECTED = "invalid caller identity"
+SERVICE_TOKEN_REQUIRED_CLAIMS = ["exp", "iss", "aud", "sub"]
 
 USER_ASSERTION_METADATA = "x-nomnom-user-assertion"
 USER_ASSERTION_ALGORITHM = "ES256"
 USER_ASSERTION_MAX_TTL_SECONDS = 60
-_USER_REQUIRED_CLAIMS = ["exp", "iat", "iss", "aud", "sub", "jti"]
+USER_ASSERTION_REQUIRED_CLAIMS = ["exp", "iat", "iss", "aud", "sub", "jti"]
 
 
 class IdentityConfigError(ValueError):
     """Identity configuration that must stop the process at startup."""
 
 
-class _TokenRejectedError(Exception):
+class TokenRejectedError(Exception):
     """Specific rejection reason; logged, never returned to the caller."""
 
 
@@ -71,26 +71,7 @@ def load_user_jwks(path: str | Path) -> dict[str, PyJWK]:
     return keys
 
 
-def _bearer_token(context: grpc.ServicerContext) -> str:
-    values = [
-        value
-        for key, value in (context.invocation_metadata() or ())
-        if key.lower() == "authorization"
-    ]
-    if not values:
-        raise _TokenRejectedError("authorization metadata is missing")
-    if len(values) > 1:
-        raise _TokenRejectedError("multiple authorization metadata values")
-    value = values[0]
-    if isinstance(value, bytes):
-        raise _TokenRejectedError("authorization metadata is binary")
-    scheme, _, token = value.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        raise _TokenRejectedError("authorization scheme is not Bearer")
-    return token.strip()
-
-
-def _unverified_jti(token: str) -> object:
+def unverified_jti(token: str) -> object:
     """``jti`` for correlating a rejection in logs; the claim is not trusted."""
     try:
         claims = jwt.decode(token.strip(), options={"verify_signature": False})
@@ -100,8 +81,9 @@ def _unverified_jti(token: str) -> object:
     return jti[:128] if isinstance(jti, str) else None
 
 
-def _numeric_claim(claims: Mapping[str, object], name: str) -> float:
+def numeric_claim(claims: Mapping[str, object], name: str) -> float:
+    """Numeric value of a time claim such as ``exp``; anything else is a rejection."""
     value = claims.get(name)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise _TokenRejectedError(f"claim {name} is not a number")
+        raise TokenRejectedError(f"claim {name} is not a number")
     return float(value)

@@ -5,10 +5,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import override
 
-from .events import PaymentDomainEvent, PaymentOperationDeclined
-from .fsm import PaymentTrigger
+from .events import PaymentOperationDeclined
 from .ids import OperationId, OperationKind, PaymentId
-from .payment import Payment
 from .vo.money import Money
 
 
@@ -79,13 +77,6 @@ OPERATION_TRANSITIONS: dict[tuple[OperationState, OperationTrigger], OperationSt
 _TARGET_OF = {
     OperationTrigger.SUCCEED: OperationState.SUCCEEDED,
     OperationTrigger.DECLINE: OperationState.DECLINED,
-}
-
-PAYMENT_TRIGGER_OF: dict[OperationKind, PaymentTrigger] = {
-    OperationKind.AUTHORIZE: PaymentTrigger.AUTHORIZE,
-    OperationKind.CAPTURE: PaymentTrigger.CAPTURE,
-    OperationKind.CANCEL_AUTHORIZATION: PaymentTrigger.CANCEL_AUTHORIZATION,
-    OperationKind.REFUND: PaymentTrigger.REFUND,
 }
 
 
@@ -283,49 +274,3 @@ class OperationOutcome:
     def declined(cls, reason: str) -> OperationOutcome:
         """Build a declined outcome with the Provider's reason."""
         return cls(False, decline_reason=reason)
-
-
-def complete_operation(
-    payment: Payment,
-    operation: PaymentOperation,
-    outcome: OperationOutcome,
-    completed_at: datetime,
-) -> list[PaymentDomainEvent]:
-    """Apply a final provider result to the operation and the payment it belongs to.
-
-    A successful operation performs the matching Payment transition. A declined
-    Authorization fails the Payment, because several payment attempts per Order are
-    not modelled; other declines keep the Payment state so that the caller can decide
-    what to do next (for example release the Authorization after a declined Capture).
-    Returns the domain events recorded by both objects, operation events first.
-    """
-    if operation.payment_id != payment.id:
-        raise OperationMismatchError(operation.id, payment.id)
-    if operation.is_completed:
-        raise OperationAlreadyCompletedError(operation.state)
-    if outcome.succeeded:
-        _apply_success(payment, operation.kind, outcome.provider_reference)
-        operation.succeed(outcome.provider_reference, completed_at)
-    else:
-        reason = (outcome.decline_reason or "").strip()
-        if not reason:
-            raise ValueError("decline reason must not be empty")
-        payment.ensure_can(PAYMENT_TRIGGER_OF[operation.kind])
-        if operation.kind is OperationKind.AUTHORIZE:
-            payment.fail(reason)
-        operation.decline(reason, completed_at)
-    events: list[PaymentDomainEvent] = []
-    events.extend(operation.pull_events())
-    events.extend(payment.pull_events())
-    return events
-
-
-def _apply_success(payment: Payment, kind: OperationKind, provider_reference: str | None) -> None:
-    if kind is OperationKind.AUTHORIZE:
-        payment.authorize(provider_reference or "")
-    elif kind is OperationKind.CAPTURE:
-        payment.capture()
-    elif kind is OperationKind.CANCEL_AUTHORIZATION:
-        payment.cancel_authorization()
-    else:
-        payment.refund()
