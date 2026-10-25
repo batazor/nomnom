@@ -33,7 +33,7 @@ func TestOrderLifecycleUsesStrictTypedOutcomes(t *testing.T) {
 	require.True(t, errors.As(err, &already))
 	assert.Equal(t, StateConfirmed, already.State)
 
-	completed, err := order.Complete()
+	completed, err := order.Complete(testNow)
 	require.NoError(t, err)
 	assert.Equal(t, StateCompleted, completed.To)
 

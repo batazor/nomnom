@@ -3,6 +3,7 @@ package di_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestObservedStoreCountsRetriedCompletionOnce(t *testing.T) {
 	handler := completeorder.NewHandler(store, store, store)
 
 	for range 2 {
-		_, err := handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1"})
+		_, err := handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1", CompletedAt: ordertest.PlacedAt.Add(time.Hour)})
 		require.NoError(t, err)
 	}
 

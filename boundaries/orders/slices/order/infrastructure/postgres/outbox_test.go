@@ -17,6 +17,7 @@ import (
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
+	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 )
 
@@ -31,14 +32,14 @@ func TestOutboxForwarderPublishesOrderPlaced(t *testing.T) {
 		if err := store.Add(ctx, placed); err != nil {
 			return err
 		}
-		return store.Append(ctx, id, 1, []order.DomainEvent{order.OrderPlaced{
+		return outbound.NewOutbox(store).Append(ctx, id, 1, []order.DomainEvent{order.OrderPlaced{
 			OrderID: id, CustomerID: placed.CustomerID(), RestaurantID: placed.RestaurantID(),
 			Total: placed.Total(), PlacedAt: placed.PlacedAt(), Items: placed.Items(),
 		}})
 	}))
 
 	kafka := gochannel.NewGoChannel(gochannel.Config{}, watermill.NopLogger{})
-	messages, err := kafka.Subscribe(ctx, postgres.OrderEventsTopic)
+	messages, err := kafka.Subscribe(ctx, outbound.OrderEventsTopic)
 	require.NoError(t, err)
 	fwd, err := postgres.NewForwarder(store, kafka, watermill.NopLogger{})
 	require.NoError(t, err)

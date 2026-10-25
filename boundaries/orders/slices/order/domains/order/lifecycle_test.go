@@ -92,12 +92,23 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 func TestCompleteRecordsOrderCompletedOnce(t *testing.T) {
 	order := orderInState(t, StateConfirmed)
 
-	_, err := order.Complete()
+	completedAt := testNow.Add(time.Hour)
+	_, err := order.Complete(completedAt)
 	require.NoError(t, err)
-	assert.Equal(t, []DomainEvent{OrderCompleted{OrderID: "order-1", PlacedAt: testNow}}, order.PullEvents())
+	assert.Equal(t, []DomainEvent{OrderCompleted{OrderID: "order-1", PlacedAt: testNow, CompletedAt: completedAt}}, order.PullEvents())
 
-	_, err = order.Complete()
+	_, err = order.Complete(completedAt.Add(time.Minute))
 	var already AlreadyInState
 	require.True(t, errors.As(err, &already))
+	assert.Empty(t, order.PullEvents())
+}
+
+func TestCompleteRequiresCompletedAt(t *testing.T) {
+	order := orderInState(t, StateConfirmed)
+
+	_, err := order.Complete(time.Time{})
+	var guard GuardFailed
+	require.True(t, errors.As(err, &guard))
+	assert.Equal(t, StateConfirmed, order.State())
 	assert.Empty(t, order.PullEvents())
 }

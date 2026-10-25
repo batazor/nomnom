@@ -5,13 +5,18 @@ package completeorder
 import (
 	"context"
 	"errors"
+	"time"
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/domains/order"
 )
 
+// Input carries the completion moment chosen by the fulfillment workflow. It
+// is the same on every Activity attempt, so OrderCompleted keeps one time
+// whichever attempt commits.
 type Input struct {
-	OrderID order.ID
+	OrderID     order.ID
+	CompletedAt time.Time
 }
 
 type Outcome string
@@ -41,8 +46,11 @@ func NewHandler(uow application.UnitOfWork, orders order.Repository, outbox Outb
 }
 
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
-	if in.OrderID == "" {
+	switch {
+	case in.OrderID == "":
 		return Result{}, application.InvalidInput("order_id", "is required")
+	case in.CompletedAt.IsZero():
+		return Result{}, application.InvalidInput("completed_at", "is required")
 	}
 
 	var result Result
@@ -52,7 +60,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 			return err
 		}
 		var already order.AlreadyInState
-		switch _, err := current.Complete(); {
+		switch _, err := current.Complete(in.CompletedAt); {
 		case errors.As(err, &already):
 			result = Result{Outcome: OutcomeAlreadyCompleted}
 			return nil

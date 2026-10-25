@@ -32,8 +32,8 @@ sequenceDiagram
 
 Handler: [`completeorder.go`](completeorder.go), unit-тесты: [`completeorder_test.go`](completeorder_test.go).
 
-- **Вход:** `Input{OrderID}` от Activity (`service` identity внутри `orders`, отдельной authorization нет).
-- **Порядок:** `UnitOfWork { Orders.Get → Order.Complete → Save → Outbox.Append(OrderCompleted) }`.
+- **Вход:** `Input{OrderID, CompletedAt}` от Activity (`service` identity внутри `orders`, отдельной authorization нет). `CompletedAt` — время Workflow (`workflow.Now`) в `StepInput.DecidedAt`: оно одинаково во всех попытках Activity; Activity, запланированная до появления поля, берёт время своего планирования.
+- **Порядок:** `UnitOfWork { Orders.Get → Order.Complete(CompletedAt) → Save → Outbox.Append(OrderCompleted) }`. `OrderCompleted` несёт `CompletedAt`, Integration Event публикуется с ним как `occurred_at` (FR-544), а не со временем записи в Outbox.
 - **Результат:** `completed` или `already_completed` (повтор Activity без второй записи Outbox); `placed`/`cancelled` — `InvalidTransition`.
 - **Требования:** FR-113, FR-117; AC-120…AC-122 в OpenSpec change `implement-orders-application-layer`.
 

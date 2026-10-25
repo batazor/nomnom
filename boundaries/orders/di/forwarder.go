@@ -12,6 +12,7 @@ import (
 
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 )
 
@@ -53,7 +54,7 @@ func (f *OutboxForwarder) Start(context.Context) error {
 		return err
 	}
 	f.publisher, f.forwarder = publisher, fwd
-	log.Printf("orders-forwarder: %s → kafka %s", postgres.OutboxTopic, postgres.OrderEventsTopic)
+	log.Printf("orders-forwarder: %s → kafka %s", postgres.OutboxTopic, outbound.OrderEventsTopic)
 	return nil
 }
 

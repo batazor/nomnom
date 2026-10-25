@@ -23,6 +23,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/catalog"
+	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"nomnom/orders/slices/order/infrastructure/neighbours"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres"
@@ -76,9 +77,16 @@ type ObservedStore struct {
 	Metrics *observability.DomainMetrics
 }
 
+// postgresStore — PostgreSQL store с портом Outbox из messaging/outbound:
+// mapping Domain Events — в outbound, хранилище только сохраняет сообщения.
+type postgresStore struct {
+	*postgres.Store
+	outbound.Outbox
+}
+
 // NewObservedStore — Store процессов поверх PostgreSQL.
 func NewObservedStore(store *postgres.Store, metrics *observability.DomainMetrics) Store {
-	return ObservedStore{Store: store, Metrics: metrics}
+	return ObservedStore{Store: postgresStore{Store: store, Outbox: outbound.NewOutbox(store)}, Metrics: metrics}
 }
 
 func (s ObservedStore) Do(ctx context.Context, fn func(ctx context.Context) error) error {

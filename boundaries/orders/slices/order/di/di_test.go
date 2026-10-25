@@ -7,12 +7,11 @@ import (
 
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/slices/order/infrastructure/memory"
-	"nomnom/orders/slices/order/infrastructure/postgres"
 )
 
 var (
 	_ Store = (*memory.Store)(nil)
-	_ Store = (*postgres.Store)(nil)
+	_ Store = postgresStore{}
 )
 
 func TestNewAuthorizerRequiresEndpoint(t *testing.T) {

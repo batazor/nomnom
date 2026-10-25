@@ -117,7 +117,7 @@ var transitionTable = map[transitionKey]transitionDefinition{
 	{StatePlaced, TriggerRecordFact}:    {outcome: transitionAllowed, to: StatePlaced, guard: occurredAtIsPresent},
 	{StateConfirmed, TriggerConfirm}:    {outcome: transitionAlreadyApplied, to: StateConfirmed},
 	{StateConfirmed, TriggerCancel}:     {outcome: transitionAllowed, to: StateCancelled, guard: requestedAtIsPresent},
-	{StateConfirmed, TriggerComplete}:   {outcome: transitionAllowed, to: StateCompleted},
+	{StateConfirmed, TriggerComplete}:   {outcome: transitionAllowed, to: StateCompleted, guard: occurredAtIsPresent},
 	{StateConfirmed, TriggerRecordFact}: {outcome: transitionAllowed, to: StateConfirmed, guard: occurredAtIsPresent},
 	{StateCancelled, TriggerConfirm}:    {outcome: transitionInvalid},
 	{StateCancelled, TriggerCancel}:     {outcome: transitionAlreadyApplied, to: StateCancelled},

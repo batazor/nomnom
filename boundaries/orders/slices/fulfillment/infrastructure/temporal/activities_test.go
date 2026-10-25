@@ -8,7 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/activity"
 	sdktemporal "go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/testsuite"
 
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/completeorder"
@@ -88,6 +90,12 @@ func activities(t *testing.T, state order.State) (*temporal.Activities, *fakeNei
 
 var step = temporal.StepInput{OrderID: orderID, IdempotencyKey: "order:order-1:authorize_payment"}
 
+var completeStep = temporal.StepInput{
+	OrderID:        orderID,
+	IdempotencyKey: "order:order-1:complete_order",
+	DecidedAt:      ordertest.PlacedAt.Add(time.Hour),
+}
+
 func TestPaymentActivitiesUseOrderSnapshotAndStableKey(t *testing.T) {
 	a, neighbours, _ := activities(t, order.StatePlaced)
 	neighbours.decision = temporal.PaymentDecision{Reason: "card_declined"}
@@ -160,7 +168,7 @@ func TestActivitiesDoNotRetryPermanentErrors(t *testing.T) {
 		},
 		{
 			name:     "completion of a placed order",
-			run:      func() error { return a.CompleteOrder(ctx, step) },
+			run:      func() error { return a.CompleteOrder(ctx, completeStep) },
 			wantType: temporal.ErrTypeInvalidTransition,
 		},
 	}
@@ -177,12 +185,32 @@ func TestActivitiesDoNotRetryPermanentErrors(t *testing.T) {
 func TestCompleteOrderActivityIsIdempotent(t *testing.T) {
 	a, _, store := activities(t, order.StateConfirmed)
 
-	require.NoError(t, a.CompleteOrder(context.Background(), step))
-	require.NoError(t, a.CompleteOrder(context.Background(), step))
+	require.NoError(t, a.CompleteOrder(context.Background(), completeStep))
+	require.NoError(t, a.CompleteOrder(context.Background(), completeStep))
 
 	snapshot, _ := store.Snapshot(orderID)
 	assert.Equal(t, order.StateCompleted, snapshot.State)
-	assert.Len(t, store.OutboxRecords(), 1)
+	require.Len(t, store.OutboxRecords(), 1)
+	// AC-634: the event time is the completion moment decided by the workflow.
+	completed, ok := store.OutboxRecords()[0].Event.(order.OrderCompleted)
+	require.True(t, ok)
+	assert.Equal(t, completeStep.DecidedAt, completed.CompletedAt)
+}
+
+// An Activity scheduled before StepInput carried DecidedAt completes the
+// Order at the time it was scheduled.
+func TestCompleteOrderActivityFallsBackToScheduledTime(t *testing.T) {
+	a, _, store := activities(t, order.StateConfirmed)
+	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env.RegisterActivityWithOptions(a.CompleteOrder, activity.RegisterOptions{Name: temporal.ActivityCompleteOrder})
+
+	_, err := env.ExecuteActivity(temporal.ActivityCompleteOrder, temporal.StepInput{OrderID: orderID, IdempotencyKey: "k"})
+
+	require.NoError(t, err)
+	require.Len(t, store.OutboxRecords(), 1)
+	completed, ok := store.OutboxRecords()[0].Event.(order.OrderCompleted)
+	require.True(t, ok)
+	assert.False(t, completed.CompletedAt.IsZero())
 }
 
 func TestFailOrCancelOrderActivityMapsOutcome(t *testing.T) {

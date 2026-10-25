@@ -153,6 +153,10 @@ type Result struct {
 type StepInput struct {
 	OrderID        string
 	IdempotencyKey string
+	// DecidedAt is the workflow time the step was decided at, set for
+	// CompleteOrder: the completion moment of the Order, the same on every
+	// Activity attempt.
+	DecidedAt time.Time `json:",omitzero"`
 }
 
 // PaymentDecision is the business result of a financial operation; a decline

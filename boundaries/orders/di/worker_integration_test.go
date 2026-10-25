@@ -23,6 +23,7 @@ import (
 	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/recordorderready"
 	"nomnom/orders/slices/order/applications/recordpickup"
+	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/memory"
@@ -80,7 +81,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	neighbours, cleanup, err := fulfillmentdi.NewNeighbours(cfg.Fulfillment, cfg.InternalGateway, cfg.Identity)
 	require.NoError(t, err)
 	defer cleanup()
-	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(store, neighbours, observability.UseCases()))
+	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewObservedStore(store, nil), neighbours, observability.UseCases()))
 	require.NoError(t, worker.Start(ctx))
 	runErr := make(chan error, 1)
 	go func() { runErr <- worker.Run() }()
