@@ -13,6 +13,17 @@ export const IDENTITY_ISSUER_ENV = "IDENTITY__ISSUER";
 export const IDENTITY_AUDIENCE_ENV = "IDENTITY__AUDIENCE";
 export const IDENTITY_JWKS_FILE_ENV = "IDENTITY__JWKS_FILE";
 export const IDENTITY_SERVICE_ACCOUNTS_ENV = "IDENTITY__SERVICE_ACCOUNTS";
+export const SPICEDB_ENDPOINT_ENV = "SPICEDB__ENDPOINT";
+export const SPICEDB_PRESHARED_KEY_ENV = "SPICEDB__PRESHARED_KEY";
+export const SPICEDB_INSECURE_ENV = "SPICEDB__INSECURE";
+export const SPICEDB_TIMEOUT_ENV = "SPICEDB__TIMEOUT";
+export const DEFAULT_SPICEDB_TIMEOUT = "2s";
+export const RECONCILER_INTERVAL_ENV = "RECONCILER__INTERVAL";
+export const DEFAULT_RECONCILER_INTERVAL = "5m";
+export const RECONCILER_GRACE_ENV = "RECONCILER__GRACE";
+export const DEFAULT_RECONCILER_GRACE = "10m";
+export const RECONCILER_PAGE_SIZE_ENV = "RECONCILER__PAGE_SIZE";
+export const DEFAULT_RECONCILER_PAGE_SIZE = 500;
 
 const portSchema = z.coerce.number().int().min(1).max(65535);
 
@@ -59,11 +70,44 @@ export type IdentityConfig =
       serviceAccounts: ReadonlyMap<string, string>;
     }>;
 
+/** Подключение к SpiceDB (ADR 18), когда задан `SPICEDB__ENDPOINT`. */
+export type SpiceDbEnabledConfig = Readonly<{
+  enabled: true;
+  /** `host:port` gRPC API SpiceDB. */
+  endpoint: string;
+  /** Bearer preshared key; приходит из Secret, не из values. */
+  presharedKey: string;
+  /** Plaintext gRPC — только kind и локальный запуск. */
+  insecure: boolean;
+  /** Deadline одной проверки permission. */
+  timeoutMs: number;
+}>;
+
+/**
+ * `enabled: false` при пустом `SPICEDB__ENDPOINT`: авторизация остаётся на
+ * in-memory адаптерах без grants (deny-all).
+ */
+export type SpiceDbConfig = Readonly<{ enabled: false }> | SpiceDbEnabledConfig;
+
+/**
+ * Background reconciliation of `restaurant#owner`/`staff` with the in-memory
+ * restaurants (FR-445); runs inside the main process while storage is in memory.
+ */
+export interface ReconcilerConfig {
+  readonly intervalMs: number;
+  /** An orphan relationship is deleted only after staying orphan this long. */
+  readonly graceMs: number;
+  /** ReadRelationships page size. */
+  readonly pageSize: number;
+}
+
 export interface AppConfig {
   readonly server: ServerConfig;
   readonly management: ManagementConfig;
   readonly shutdown: ShutdownConfig;
   readonly identity: IdentityConfig;
+  readonly spicedb: SpiceDbConfig;
+  readonly reconciler: ReconcilerConfig;
 }
 
 export function loadLocalEnv(path = ".env"): void {
@@ -97,7 +141,68 @@ export function loadConfig(
     management,
     shutdown: loadShutdownConfig(environment),
     identity: loadIdentityConfig(environment),
+    spicedb: loadSpiceDbConfig(environment),
+    reconciler: loadReconcilerConfig(environment),
   });
+}
+
+const booleanSchema = z
+  .enum(["true", "false"], { error: "expected true or false" })
+  .transform((value) => value === "true");
+
+export function loadSpiceDbConfig(
+  environment: Record<string, string | undefined>,
+): SpiceDbConfig {
+  const endpoint = environment[SPICEDB_ENDPOINT_ENV]?.trim() ?? "";
+  if (endpoint === "") {
+    return Object.freeze({ enabled: false });
+  }
+  const presharedKey = environment[SPICEDB_PRESHARED_KEY_ENV]?.trim() ?? "";
+  if (presharedKey === "") {
+    throw new Error(
+      `${SPICEDB_PRESHARED_KEY_ENV} must not be empty when ${SPICEDB_ENDPOINT_ENV} is set`,
+    );
+  }
+  const insecure = booleanSchema.parse(
+    environment[SPICEDB_INSECURE_ENV]?.trim() || "false",
+  );
+  const timeoutMs = durationSchema
+    .refine((value) => value > 0, "SpiceDB timeout must be positive")
+    .parse(environment[SPICEDB_TIMEOUT_ENV]?.trim() || DEFAULT_SPICEDB_TIMEOUT);
+  return Object.freeze({
+    enabled: true,
+    endpoint,
+    presharedKey,
+    insecure,
+    timeoutMs,
+  });
+}
+
+export function loadReconcilerConfig(
+  environment: Record<string, string | undefined>,
+): ReconcilerConfig {
+  const intervalMs = durationSchema
+    .refine((value) => value > 0, "reconciler interval must be positive")
+    .parse(
+      environment[RECONCILER_INTERVAL_ENV]?.trim() ||
+        DEFAULT_RECONCILER_INTERVAL,
+    );
+  const graceMs = durationSchema
+    .refine((value) => value > 0, "reconciler grace must be positive")
+    .parse(
+      environment[RECONCILER_GRACE_ENV]?.trim() || DEFAULT_RECONCILER_GRACE,
+    );
+  // SpiceDB caps ReadRelationships at 1000 relationships per page by default.
+  const pageSize = z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .parse(
+      environment[RECONCILER_PAGE_SIZE_ENV]?.trim() ||
+        DEFAULT_RECONCILER_PAGE_SIZE,
+    );
+  return Object.freeze({ intervalMs, graceMs, pageSize });
 }
 
 /** Сегмент namespace / ServiceAccount: DNS-1123 subdomain. */

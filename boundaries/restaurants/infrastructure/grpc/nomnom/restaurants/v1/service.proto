@@ -10,6 +10,13 @@ service RestaurantsService {
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc ReceiveOrderRequest(ReceiveOrderRequestRequest) returns (ReceiveOrderRequestResponse);
   rpc CancelRestaurantOrder(CancelRestaurantOrderRequest) returns (CancelRestaurantOrderResponse);
+
+  // Restaurant administration. RegisterRestaurant requires platform#register_restaurant
+  // and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
+  // and write restaurant#staff before saving. Staff commands are idempotent.
+  rpc RegisterRestaurant(RegisterRestaurantRequest) returns (RegisterRestaurantResponse);
+  rpc AssignStaff(AssignStaffRequest) returns (AssignStaffResponse);
+  rpc RevokeStaff(RevokeStaffRequest) returns (RevokeStaffResponse);
 }
 
 message GetRestaurantRequest {
@@ -49,4 +56,40 @@ message CancelRestaurantOrderResponse {
   bool cancelled = 2;
   // Business reason when cancellation is rejected by stage, for example already_ready.
   string rejection_reason = 3;
+}
+
+message RegisterRestaurantRequest {
+  string name = 1;
+  string owner_id = 2;
+  string address = 3;
+}
+
+message RegisterRestaurantResponse {
+  Restaurant restaurant = 1;
+  int64 version = 2;
+}
+
+message AssignStaffRequest {
+  string restaurant_id = 1;
+  string user_id = 2;
+}
+
+message AssignStaffResponse {
+  string restaurant_id = 1;
+  // User ids of the staff after the command, sorted.
+  repeated string staff = 2;
+  // false when the user was already staff.
+  bool changed = 3;
+}
+
+message RevokeStaffRequest {
+  string restaurant_id = 1;
+  string user_id = 2;
+}
+
+message RevokeStaffResponse {
+  string restaurant_id = 1;
+  repeated string staff = 2;
+  // false when the user was not staff.
+  bool changed = 3;
 }

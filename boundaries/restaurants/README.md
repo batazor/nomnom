@@ -30,6 +30,8 @@ TypeScript.
 | **Update Restaurant** | Авторизованный управляющий ресторана | Изменить основные данные ресторана | Разрешённые данные `Restaurant` обновлены | Authoritative authorization в `restaurants` |
 | **Open Restaurant** | Авторизованный управляющий ресторана | Разрешить приём новых заказов | `Restaurant` открыт для новых `Restaurant Order` | Может опубликовать бизнес-факт через Outbox |
 | **Close Restaurant** | Авторизованный управляющий ресторана | Прекратить приём новых заказов | `Restaurant` закрыт для новых `Restaurant Order`; уже принятые заказы не отменяются автоматически | Может опубликовать бизнес-факт через Outbox |
+| **Assign Staff** | Пользователь с `restaurant#manage` (владелец) | Дать пользователю доступ персонала | User id добавлен в `Restaurant.staff`; `TOUCH restaurant#staff` до сохранения | Повтор — no-op без записи; см. [Relationships](#relationships-и-reconciliation) |
+| **Revoke Staff** | Пользователь с `restaurant#manage` (владелец) | Отозвать доступ персонала | User id удалён из `Restaurant.staff`; `DELETE restaurant#staff` до сохранения | Повтор — no-op без записи; см. [Relationships](#relationships-и-reconciliation) |
 | **Create Menu** | Авторизованный управляющий ресторана | Создать меню ресторана | Создано принадлежащее ресторану меню | Authoritative authorization в `restaurants` |
 | **Add Menu Item** | Авторизованный управляющий ресторана | Добавить блюдо в меню | Создан новый `Menu Item` с исходными данными, ценой и доступностью | Authoritative authorization в `restaurants` |
 | **Update Menu Item** | Авторизованный управляющий ресторана | Изменить название, описание, цену, доступность, options/modifiers или иные основные данные блюда | `Menu Item` обновлён в пределах инвариантов меню | Не изменяет snapshot уже оформленного `Order` |
@@ -93,8 +95,90 @@ RPC, подключённые в `cmd/restaurants` (native gRPC/HTTP2 на би�
 | `GetRestaurant` | `get-restaurant` | Публичные данные и pickup `address`; без identity |
 | `ReceiveOrderRequest` | `receive-order-request` | `restaurant_order_id`, `created = false` при повторе по `order_id` |
 | `CancelRestaurantOrder` | `cancel-restaurant-order` | `cancelled = true` (включая повтор) или `cancelled = false` + `rejection_reason` |
+| `RegisterRestaurant` | `register-restaurant` | `Restaurant` (с `address`) и `version`; требует `platform#register_restaurant`, пишет `restaurant#owner`; не идемпотентен |
+| `AssignStaff` | `assign-staff` | `restaurant_id`, отсортированный `staff`, `changed = false` при повторе; требует `restaurant#manage`, пишет `restaurant#staff` |
+| `RevokeStaff` | `revoke-staff` | `restaurant_id`, отсортированный `staff`, `changed = false` при повторе; требует `restaurant#manage`, удаляет `restaurant#staff` |
 
-Командные RPC ([FR-428](../../openspec/changes/add-fulfillment-command-rpcs/)) получают `Subject` через `SubjectResolver` (`infrastructure/grpc/subject.ts`). По умолчанию используется `RejectingSubjectResolver`, который отвечает `UNAUTHENTICATED`, пока verified internal identity не спроектирована; тесты подставляют resolver с `service` identity `orders-worker`. Отказ отмены по стадии — бизнес-ответ, а не gRPC-ошибка.
+Командные RPC ([FR-428](../../openspec/changes/add-fulfillment-command-rpcs/), [FR-446](../../openspec/changes/add-restaurant-admin-rpcs/)) получают `Subject` через `SubjectResolver` (`infrastructure/grpc/subject.ts`). Без конфигурации identity используется `RejectingSubjectResolver`, который отвечает `UNAUTHENTICATED`; с конфигурацией — `ServiceTokenSubjectResolver` (см. [Service identity](#service-identity)). Отказ отмены по стадии — бизнес-ответ, а не gRPC-ошибка.
+
+### Service identity
+
+Вызывающий сервис доказывает `service` identity projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md), [FR-431, FR-432](../../openspec/changes/add-service-identity/specs/service-identity/spec.md)). `ServiceTokenSubjectResolver` (`jose`) проверяет:
+
+- metadata `authorization: Bearer <jwt>`;
+- header: `alg` только `RS256` или `ES256`, `kid` обязателен и есть в JWKS (`alg: none`, HMAC и неизвестный `kid` отклоняются);
+- подпись по локальному JWKS из `IDENTITY__JWKS_FILE` — Kubernetes API при проверке не используется;
+- `iss` равен `IDENTITY__ISSUER`, `aud` (строка или массив) содержит `IDENTITY__AUDIENCE`;
+- `exp`/`nbf` с допуском 30 s;
+- `sub` `system:serviceaccount:<namespace>:<name>` есть в allowlist `IDENTITY__SERVICE_ACCOUNTS` → `Subject{type: "service", id: <service-name>}`.
+
+Любой отказ — `UNAUTHENTICATED` с общим сообщением; причина пишется только в log. Что разрешено identity, решают authorization ports use case, а не resolver.
+
+| Переменная | Значение | По умолчанию |
+| --- | --- | --- |
+| `IDENTITY__ISSUER` | Issuer токенов кластера, например `https://kubernetes.default.svc.cluster.local` | пусто |
+| `IDENTITY__AUDIENCE` | Audience этого контекста, в кластере `nomnom.restaurants` | пусто |
+| `IDENTITY__JWKS_FILE` | Путь к JWKS кластера (`/openid/v1/jwks`); в chart — `/etc/nomnom/identity/jwks.json` | пусто |
+| `IDENTITY__SERVICE_ACCOUNTS` | Allowlist через запятую: `namespace/serviceaccount=service-name`, например `nomnom/orders-worker=orders-worker` | пусто |
+
+Если `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` или `IDENTITY__JWKS_FILE` пусты, сервер стартует с `RejectingSubjectResolver` и пишет предупреждение (fail closed). Нечитаемый или невалидный JWKS, пустой allowlist при заданном issuer и неверный формат allowlist — ошибка startup. Тесты (`test/identity.test.ts`) проходят по общим векторам `tests/identity/fixtures` с audience векторов `nomnom.payments`.
+
+### Authorization: SpiceDB
+
+Authorization ports слайсов (`applications/access-control.ts`) реализует `SpiceDbAccessControl` (`infrastructure/spicedb/access-control.ts`, `@authzed/authzed-node`) по нормативной таблице [design.md](../../openspec/changes/add-spicedb-authorization/design.md) и schema [`authorization/schema.zed`](../../authorization/schema.zed) ([FR-435](../../openspec/changes/add-spicedb-authorization/specs/spicedb-authorization/spec.md)):
+
+| Порт | SpiceDB check |
+| --- | --- |
+| `canRegisterRestaurant` | `platform:nomnom#register_restaurant` |
+| `canManageRestaurant(id)` | `restaurant:<id>#manage` |
+| `canManageMenu(id)` | `restaurant:<id>#manage_menu` |
+| `canOperateKitchen(id)` | `restaurant:<id>#operate_kitchen` |
+| `canCoordinateFulfillment(id)` | `platform:nomnom#coordinate_fulfillment` (platform capability, `id` не участвует) |
+| `canViewRestaurantOrders(id)` | `restaurant:<id>#view_orders` |
+
+Subject `user` → `user:<id>`, `service` → `service:<id>`. Consistency `minimize_latency`. Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional — отказ (`PERMISSION_DENIED`). Ошибка, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationUnavailableError` (fail closed, gRPC `UNAVAILABLE`, AC-466). Grants `service` identities (`platform:nomnom#fulfillment@service:orders-worker`) принадлежат развёртыванию (`authorization/bootstrap.yaml`), а не коду; связи `restaurant#owner`/`staff` пишут use cases ресторана (см. [Relationships и reconciliation](#relationships-и-reconciliation)).
+
+| Переменная | Значение | По умолчанию |
+| --- | --- | --- |
+| `SPICEDB__ENDPOINT` | gRPC endpoint `host:port`, например `spicedb.nomnom-authz.svc.cluster.local:50051` | пусто |
+| `SPICEDB__PRESHARED_KEY` | Preshared key (bearer); в кластере — из Secret | пусто |
+| `SPICEDB__INSECURE` | `true` — plaintext gRPC без TLS, только kind и локально | `false` |
+| `SPICEDB__TIMEOUT` | Deadline одной проверки (`500ms`, `2s`, `1m`) | `2s` |
+
+Пустой `SPICEDB__ENDPOINT` — ошибка startup: процесс без SpiceDB не стартует. Endpoint без preshared key, неверный `SPICEDB__INSECURE` или `SPICEDB__TIMEOUT` — ошибка startup.
+
+Unit-тесты маппинга и fail closed — `test/spicedb-access-control.test.ts` (fake клиент). Integration-тесты `test/spicedb-integration.test.ts` пропускаются без `SPICEDB_ENDPOINT`; против SpiceDB с `authorization/bootstrap.yaml` (ключ `devkey`, plaintext):
+
+```bash
+SPICEDB_ENDPOINT=localhost:50051 node --test test/spicedb-integration.test.ts
+```
+
+### Relationships и reconciliation
+
+Change [`add-restaurant-delivery-relationships`](../../openspec/changes/add-restaurant-delivery-relationships/) (FR-443, FR-445). Источник истины — `Restaurant` в хранилище `restaurants`; SpiceDB — производный граф.
+
+| Relation | Источник истины | Запись |
+| --- | --- | --- |
+| `restaurant:<id>#owner@user:<ownerId>` | `Restaurant.ownerId` | Register Restaurant: `TOUCH` до сохранения |
+| `restaurant:<id>#staff@user:<userId>` | `Restaurant.staff` (множество user id) | Assign Staff: `TOUCH`, Revoke Staff: `DELETE` — до сохранения |
+
+Writer — `SpiceDbRelationshipWriter` (`infrastructure/spicedb/relationships.ts`), реализует порты `OwnerRelationshipWriter` и `StaffRelationshipWriter` слайса `restaurant`. Запись синхронная, с deadline `SPICEDB__TIMEOUT`; ошибка или timeout — `AuthorizationUnavailableError`, команда отменяется без сохранения (fail closed). Assign/Revoke Staff требуют `restaurant#manage`; повтор — no-op без записи. `cmd/restaurants` собирает Register Restaurant, Assign Staff и Revoke Staff с `SpiceDbAccessControl` и этим writer над одним SpiceDB-клиентом и тем же in-memory хранилищем, что читает reconciler.
+
+`RelationshipReconciler` (`slices/restaurant/infrastructure/reconcile`) повторяет алгоритм `orders`: graph → business — постраничный `ReadRelationships` (`fully_consistent`) по `restaurant#owner` и `restaurant#staff` с проверкой по хранилищу; business → graph — по всем ресторанам. Orphan или stale связь удаляется только если она была сиротой на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` сразу; id, не подходящие под SpiceDB object id `^[a-zA-Z0-9/_|\-=+]+$`, пропускаются и считаются `unrepairable`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`, `missing_repaired`, `unrepairable`.
+
+Хранилище пока в памяти процесса, поэтому reconciler — фоновый цикл (`PeriodicLoop`, `pkg/lifecycle/periodic.ts`) внутри основного процесса: первый проход через `min(10s, RECONCILER__INTERVAL)` после старта, следующие — через интервал после окончания предыдущего; ошибка прохода пишется в log, цикл продолжается. При shutdown цикл останавливается (текущий проход прерывается между вызовами SpiceDB) до drain gRPC. Следствие in-memory хранилища: после рестарта процесса ресторанов нет, и их связи удаляются как сироты через grace.
+
+| Переменная | Значение | По умолчанию |
+| --- | --- | --- |
+| `RECONCILER__INTERVAL` | Пауза между проходами (`30s`, `5m`) | `5m` |
+| `RECONCILER__GRACE` | Минимальное время, которое связь остаётся сиротой до удаления | `10m` |
+| `RECONCILER__PAGE_SIZE` | Размер страницы `ReadRelationships` и хранилища, 1…1000 | `500` |
+
+Unit-тесты: `test/staff-applications.test.ts`, `test/spicedb-relationships.test.ts`, `test/reconcile.test.ts` (fake клиент), `test/periodic.test.ts`. Integration-тесты `test/spicedb-relationships-integration.test.ts` (AC-476, AC-478) используют уникальный префикс id и ограничивают reconciler им, чтобы не трогать чужие связи общего SpiceDB:
+
+```bash
+SPICEDB_ENDPOINT=localhost:50051 node --test test/spicedb-integration.test.ts test/spicedb-relationships-integration.test.ts
+```
 
 TypeScript-код генерируется в `infrastructure/grpc/gen` командой `npm run generate:proto` (`buf generate` по `infrastructure/grpc/buf.gen.yaml`, плагин `buf.build/bufbuild/es`).
 
@@ -104,7 +188,7 @@ TypeScript-код генерируется в `infrastructure/grpc/gen` кома
 
 | Тип                                               | Минимальные поля                             | Назначение                                             |
 | ------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------ |
-| `Restaurant` — aggregate root (slice `restaurant`) | `id`, `name`, `ownerId`, `isOpen`, `address` | Управляет данными, pickup-адресом и открытостью ресторана |
+| `Restaurant` — aggregate root (slice `restaurant`) | `id`, `name`, `ownerId`, `isOpen`, `address`, `staff` | Управляет данными, pickup-адресом, открытостью ресторана и множеством персонала |
 | `Menu` — aggregate root (slice `menu`)            | `id`, `restaurantId`, `items`                | Одно меню на ресторан; управляет позициями меню        |
 | `MenuItem` — entity внутри `Menu`                 | `id`, `name`, `description`, `price`, `isAvailable` | Описывает блюдо, его текущую цену и доступность  |
 | `Money` — value object `Menu`                     | `amount` (decimal-строка), `currency`        | Неотрицательная цена `MenuItem` без потери точности    |
@@ -183,9 +267,9 @@ Inbox-адаптер находится в `infrastructure/`, а транзак�
 Реализованы доменная модель и application-слой по change [`implement-restaurants-application-layer`](../../openspec/changes/implement-restaurants-application-layer/) (требования `FR-200`…`FR-243`, acceptance criteria `AC-200`…`AC-283`; решения и допущения — в [design.md](../../openspec/changes/implement-restaurants-application-layer/design.md)).
 
 - **Domain:** aggregate `Restaurant`; aggregate `Menu` с entity `MenuItem` и VO `Money` на `decimal.js` (меню — отдельный aggregate slice `menu`, одно на ресторан); aggregate `RestaurantOrder` с чистой FSM в виде transition table, VO `Quantity`, domain service `evaluateOrderAcceptance` поверх `RestaurantAcceptingOrders` и `MenuItemAvailable`, Domain Events с `pullEvents()`; контракты repositories в `domains/`.
-- **Application:** по одному handler на use case в `slices/<slice>/applications/<usecase>/`: Register/Update/Open/Close Restaurant, Get/List Restaurants; Create Menu, Add/Update Menu Item, Set Menu Item Availability, Get Menu; Receive Order Request, Accept Order (с Queue в одной UoW), Reject Order, Queue Restaurant Order, Start Preparation, Mark Assembled, Mark Ready for Pickup, Report Preparation Delay/Failure, Cancel Restaurant Order, Get Restaurant Order, Get Kitchen Queue, List Active Preparations, List Ready Orders.
+- **Application:** по одному handler на use case в `slices/<slice>/applications/<usecase>/`: Register/Update/Open/Close Restaurant, Assign/Revoke Staff, Get/List Restaurants; Create Menu, Add/Update Menu Item, Set Menu Item Availability, Get Menu; Receive Order Request, Accept Order (с Queue в одной UoW), Reject Order, Queue Restaurant Order, Start Preparation, Mark Assembled, Mark Ready for Pickup, Report Preparation Delay/Failure, Cancel Restaurant Order, Get Restaurant Order, Get Kitchen Queue, List Active Preparations, List Ready Orders.
 - **Порты:** `UnitOfWork`, `Outbox`, `Clock`, `IdGenerator`, `Subject` и application errors в `pkg/application`; узкие authorization ports в `applications/access-control.ts` каждого слайса и `OwnerRelationshipWriter`; query/read-model ports рядом с queries; ports открытых решений — `AcceptanceConditionsProvider`, `ReadyTimeEstimator`, `KitchenQueueOrdering`. Политика повтора Start Preparation/Mark Ready и политика отмены во время Preparation — обязательные параметры handlers без значения по умолчанию.
-- **Адаптеры:** только in-memory (`pkg/infrastructure/memory`, `slices/*/infrastructure/memory`) с откатом UoW, optimistic concurrency по `version` и уникальностью `orderId`; MongoDB, SpiceDB, Kafka/Outbox publisher и Integration Event mappers не реализованы. `GetRestaurant`, `ReceiveOrderRequest` и `CancelRestaurantOrder` подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `RejectingSubjectResolver` по умолчанию), остальные handlers к transport пока не подключены.
+- **Адаптеры:** только in-memory (`pkg/infrastructure/memory`, `slices/*/infrastructure/memory`) с откатом UoW, optimistic concurrency по `version` и уникальностью `orderId`; SpiceDB adapter authorization ports подключается при заданном `SPICEDB__ENDPOINT` (см. [Authorization: SpiceDB](#authorization-spicedb)); writer relationships `restaurant#owner`/`staff` и фоновый reconciler (см. [Relationships и reconciliation](#relationships-и-reconciliation)); MongoDB, Kafka/Outbox publisher и Integration Event mappers не реализованы. `GetRestaurant`, `ReceiveOrderRequest`, `CancelRestaurantOrder`, `RegisterRestaurant`, `AssignStaff` и `RevokeStaff` подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `ServiceTokenSubjectResolver` при заданной конфигурации identity, иначе с `RejectingSubjectResolver`), остальные handlers к transport пока не подключены.
 - **Не реализованы:** Start / Complete Preparation Item (item-level model не входит в MVP) и Reject After Acceptance (не разрешён до продуктового решения); courier projection в List Ready Orders; BDD `.feature`.
 
 ## Запуск

@@ -153,6 +153,37 @@ readinessProbe:
   timeoutSeconds: 1
   failureThreshold: 1
 
+# Service identity по projected ServiceAccount token (ADR 27). Пока jwksConfigMap пуст,
+# переменные IDENTITY__* не задаются и приложение отклоняет вызовы с subject
+# (RejectingSubjectResolver). Если jwksConfigMap задан, его ключ jwks.json монтируется
+# read-only в /etc/nomnom/identity/jwks.json, а issuer и serviceAccounts обязательны.
+identity:
+  # Issuer токенов кластера (/.well-known/openid-configuration), например
+  # https://kubernetes.default.svc.cluster.local.
+  issuer: ""
+  # Audience, которую вызывающие указывают в projected token для этого контекста.
+  audience: "nomnom.restaurants"
+  # Allowlist через запятую: namespace/serviceaccount=service-name,
+  # например nomnom/orders-worker=orders-worker.
+  serviceAccounts: ""
+  # ConfigMap с ключом jwks.json — публичные ключи кластера (/openid/v1/jwks).
+  jwksConfigMap: ""
+
+# Authorization через SpiceDB (ADR 18). Пока endpoint пуст, переменные SPICEDB__* не задаются
+# и приложение остаётся на in-memory адаптере без grants (deny-all, предупреждение в логе).
+# Если endpoint задан, preshared key берётся только из Secret presharedKeySecret.
+spicedb:
+  # gRPC endpoint host:port, например spicedb.nomnom-authz.svc.cluster.local:50051.
+  endpoint: ""
+  # Plaintext gRPC без TLS — только kind и локальный запуск.
+  insecure: false
+  # Deadline одной проверки; ошибка или timeout — отказ UNAVAILABLE (fail closed).
+  timeout: "2s"
+  presharedKeySecret:
+    # Существующий Secret с preshared key SpiceDB; обязателен при заданном endpoint.
+    name: ""
+    key: "preshared-key"
+
 volumes: []
 volumeMounts: []
 

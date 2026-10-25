@@ -4,9 +4,11 @@ import { FixedClock } from "../../pkg/infrastructure/memory/clock.ts";
 import { SequentialIdGenerator } from "../../pkg/infrastructure/memory/id-generator.ts";
 import { InMemoryOutbox } from "../../pkg/infrastructure/memory/outbox.ts";
 import { InMemoryUnitOfWork } from "../../pkg/infrastructure/memory/unit-of-work.ts";
+import { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { CloseRestaurantHandler } from "../../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
 import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
+import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import {
   createRestaurantStore,
   InMemoryRestaurantAuthorization,
@@ -61,6 +63,13 @@ export const createRestaurantWorld = (
   });
   const open = new OpenRestaurantHandler(changeOpening);
   const close = new CloseRestaurantHandler(changeOpening);
+  const changeStaff = {
+    accessControl: authorization,
+    staffRelationships: authorization,
+    restaurants,
+  };
+  const assignStaff = new AssignStaffHandler(changeStaff);
+  const revokeStaff = new RevokeStaffHandler(changeStaff);
 
   /** Registers a restaurant owned by {@link owner}, optionally opened. */
   const givenRestaurant = async (
@@ -89,6 +98,8 @@ export const createRestaurantWorld = (
     register,
     open,
     close,
+    assignStaff,
+    revokeStaff,
     givenRestaurant,
   };
 };

@@ -24,6 +24,22 @@ chart сейчас не используется. Решение зафикси�
 | `ServiceAccount` | Отдельный аккаунт с `automountServiceAccountToken: false`. |
 | `ConfigMap` | Несекретная конфигурация из `env`; создаётся только если `env` не пуст. |
 
+Service identity ([ADR 27](../../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)) задаётся
+`identity.issuer`, `identity.audience` (по умолчанию `nomnom.restaurants`), `identity.serviceAccounts`
+и `identity.jwksConfigMap`. Пока `identity.jwksConfigMap` пуст, переменные `IDENTITY__*` не задаются и
+приложение отклоняет командные RPC. Если он задан, ключ `jwks.json` этого ConfigMap (chart его не
+создаёт) монтируется read-only в `/etc/nomnom/identity/jwks.json`, а `identity.issuer` и
+`identity.serviceAccounts` обязательны — иначе chart не рендерится.
+
+Authorization через SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-authorization.md)) задаётся `spicedb.endpoint`,
+`spicedb.insecure`, `spicedb.timeout` (по умолчанию `2s`) и `spicedb.presharedKeySecret`
+(`name`, `key` — по умолчанию `preshared-key`). Пока `spicedb.endpoint` пуст, переменные
+`SPICEDB__*` не задаются и приложение не стартует: `SPICEDB__ENDPOINT` обязателен. Если endpoint задан,
+рендерятся `SPICEDB__ENDPOINT`, `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` и
+`SPICEDB__PRESHARED_KEY` из `secretKeyRef` (Secret chart не создаёт); без
+`spicedb.presharedKeySecret.name` или с неверным `spicedb.timeout` chart не рендерится.
+`spicedb.insecure: true` — только для kind.
+
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
 к `Service` напрямую и проходят через internal gateway. Ingress, `HTTPRoute`/`GRPCRoute`,
 базы данных, Kafka, Temporal, service mesh и observability collector в chart не входят.

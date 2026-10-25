@@ -64,3 +64,36 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- fail "management.port must differ from service.targetPort" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Service identity (ADR 27): с JWKS приложению нужны issuer, audience и allowlist,
+иначе оно не стартует или остаётся fail closed.
+*/}}
+{{- define "restaurants.validateIdentity" -}}
+{{- with .Values.identity -}}
+{{- if .jwksConfigMap -}}
+{{- range $key := list "issuer" "audience" "serviceAccounts" -}}
+{{- if not (get $.Values.identity $key) -}}
+{{- fail (printf "identity.%s is required when identity.jwksConfigMap is set" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+SpiceDB (ADR 18): с endpoint приложению нужен preshared key из Secret, иначе оно
+не стартует; timeout в формате приложения (500ms, 2s, 1m).
+*/}}
+{{- define "restaurants.validateSpiceDb" -}}
+{{- with .Values.spicedb -}}
+{{- if .endpoint -}}
+{{- if not (and .presharedKeySecret.name .presharedKeySecret.key) -}}
+{{- fail "spicedb.presharedKeySecret.name and spicedb.presharedKeySecret.key are required when spicedb.endpoint is set" -}}
+{{- end -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .timeout)) -}}
+{{- fail (printf "spicedb.timeout must be a positive duration like 500ms, 2s or 1m, got %q" (toString .timeout)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

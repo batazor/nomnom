@@ -57,10 +57,12 @@ export class RegisterRestaurantHandler {
       address: command.address,
       registeredAt: this.#clock.now(),
     });
-    await this.#ownerRelationships.touchOwner({
+    const revision = await this.#ownerRelationships.touchOwner({
       restaurantId: restaurant.id,
       ownerId: restaurant.ownerId,
     });
+    // The owner can manage the restaurant right after registration (FR-447).
+    restaurant.recordAuthorizationRevision(revision);
     const version = await this.#restaurants.save(restaurant);
     restaurant.pullEvents();
     return { ...toRestaurantView(restaurant), version };

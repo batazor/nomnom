@@ -37,6 +37,9 @@ const createWorld = (options: { subjects?: SubjectResolver | null } = {}) => {
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     receiveOrderRequest: world.receive,
     cancelRestaurantOrder: world.cancel,
+    registerRestaurant: world.register,
+    assignStaff: world.assignStaff,
+    revokeStaff: world.revokeStaff,
     subjects:
       options.subjects === null
         ? undefined
@@ -198,6 +201,9 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
       },
     },
     cancelRestaurantOrder: world.cancel,
+    registerRestaurant: world.register,
+    assignStaff: world.assignStaff,
+    revokeStaff: world.revokeStaff,
     subjects: resolverOf(ordersService),
   });
   await assert.rejects(

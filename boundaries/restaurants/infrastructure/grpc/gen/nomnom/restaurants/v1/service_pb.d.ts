@@ -170,6 +170,153 @@ export declare type CancelRestaurantOrderResponse = Message<"nomnom.restaurants.
 export declare const CancelRestaurantOrderResponseSchema: GenMessage<CancelRestaurantOrderResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.RegisterRestaurantRequest
+ */
+export declare type RegisterRestaurantRequest = Message<"nomnom.restaurants.v1.RegisterRestaurantRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string owner_id = 2;
+   */
+  ownerId: string;
+
+  /**
+   * @generated from field: string address = 3;
+   */
+  address: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RegisterRestaurantRequest.
+ * Use `create(RegisterRestaurantRequestSchema)` to create a new message.
+ */
+export declare const RegisterRestaurantRequestSchema: GenMessage<RegisterRestaurantRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.RegisterRestaurantResponse
+ */
+export declare type RegisterRestaurantResponse = Message<"nomnom.restaurants.v1.RegisterRestaurantResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Restaurant restaurant = 1;
+   */
+  restaurant?: Restaurant | undefined;
+
+  /**
+   * @generated from field: int64 version = 2;
+   */
+  version: bigint;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RegisterRestaurantResponse.
+ * Use `create(RegisterRestaurantResponseSchema)` to create a new message.
+ */
+export declare const RegisterRestaurantResponseSchema: GenMessage<RegisterRestaurantResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.AssignStaffRequest
+ */
+export declare type AssignStaffRequest = Message<"nomnom.restaurants.v1.AssignStaffRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.AssignStaffRequest.
+ * Use `create(AssignStaffRequestSchema)` to create a new message.
+ */
+export declare const AssignStaffRequestSchema: GenMessage<AssignStaffRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.AssignStaffResponse
+ */
+export declare type AssignStaffResponse = Message<"nomnom.restaurants.v1.AssignStaffResponse"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * User ids of the staff after the command, sorted.
+   *
+   * @generated from field: repeated string staff = 2;
+   */
+  staff: string[];
+
+  /**
+   * false when the user was already staff.
+   *
+   * @generated from field: bool changed = 3;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.AssignStaffResponse.
+ * Use `create(AssignStaffResponseSchema)` to create a new message.
+ */
+export declare const AssignStaffResponseSchema: GenMessage<AssignStaffResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.RevokeStaffRequest
+ */
+export declare type RevokeStaffRequest = Message<"nomnom.restaurants.v1.RevokeStaffRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RevokeStaffRequest.
+ * Use `create(RevokeStaffRequestSchema)` to create a new message.
+ */
+export declare const RevokeStaffRequestSchema: GenMessage<RevokeStaffRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.RevokeStaffResponse
+ */
+export declare type RevokeStaffResponse = Message<"nomnom.restaurants.v1.RevokeStaffResponse"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: repeated string staff = 2;
+   */
+  staff: string[];
+
+  /**
+   * false when the user was not staff.
+   *
+   * @generated from field: bool changed = 3;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RevokeStaffResponse.
+ * Use `create(RevokeStaffResponseSchema)` to create a new message.
+ */
+export declare const RevokeStaffResponseSchema: GenMessage<RevokeStaffResponse>;
+
+/**
  * @generated from service nomnom.restaurants.v1.RestaurantsService
  */
 export declare const RestaurantsService: GenService<{
@@ -198,6 +345,34 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof CancelRestaurantOrderRequestSchema;
     output: typeof CancelRestaurantOrderResponseSchema;
+  },
+  /**
+   * Restaurant administration. RegisterRestaurant requires platform#register_restaurant
+   * and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
+   * and write restaurant#staff before saving. Staff commands are idempotent.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.RegisterRestaurant
+   */
+  registerRestaurant: {
+    methodKind: "unary";
+    input: typeof RegisterRestaurantRequestSchema;
+    output: typeof RegisterRestaurantResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.AssignStaff
+   */
+  assignStaff: {
+    methodKind: "unary";
+    input: typeof AssignStaffRequestSchema;
+    output: typeof AssignStaffResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.RevokeStaff
+   */
+  revokeStaff: {
+    methodKind: "unary";
+    input: typeof RevokeStaffRequestSchema;
+    output: typeof RevokeStaffResponseSchema;
   },
 }>;
 

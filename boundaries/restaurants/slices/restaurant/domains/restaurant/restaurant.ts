@@ -45,14 +45,26 @@ export type RestaurantSnapshot = Readonly<{
   isOpen: boolean;
   /** Pickup address of Restaurant Orders; empty only for legacy restaurants. */
   address: string;
+  /** User ids of the restaurant staff, sorted; source of `restaurant#staff`. */
+  staff: readonly string[];
+  /**
+   * Technical: ZedToken of the last relationship write of this restaurant,
+   * opaque to the domain. Absent until the first write is recorded.
+   */
+  authorizationRevision?: string;
 }>;
 
 /**
  * Persisted form of {@link RestaurantSnapshot}. Restaurants stored before the
- * address became required have none and are restored with an empty address.
+ * address became required have none and are restored with an empty address;
+ * restaurants stored before staff existed are restored without staff;
+ * snapshots without an authorization revision are restored without one.
  */
-export type StoredRestaurantSnapshot = Omit<RestaurantSnapshot, "address"> &
-  Readonly<{ address?: string }>;
+export type StoredRestaurantSnapshot = Omit<
+  RestaurantSnapshot,
+  "address" | "staff"
+> &
+  Readonly<{ address?: string; staff?: readonly string[] }>;
 
 type RestaurantEventBase = Readonly<{
   restaurantId: string;
@@ -86,6 +98,7 @@ export const InvalidRestaurantReason = {
   EmptyName: "empty_name",
   EmptyOwner: "empty_owner",
   EmptyAddress: "empty_address",
+  EmptyStaff: "empty_staff",
 } as const;
 
 export type InvalidRestaurantReason =
@@ -119,6 +132,15 @@ const restaurantAddress = (address: string): string => {
   return normalized;
 };
 
+/** Staff member: a non-empty trimmed user id. */
+const staffMember = (userId: string): string => {
+  const normalized = userId.trim();
+  if (normalized.length === 0) {
+    throw new InvalidRestaurantError(InvalidRestaurantReason.EmptyStaff);
+  }
+  return normalized;
+};
+
 /**
  * Aggregate root of a restaurant as a managed resource. A newly registered
  * restaurant is closed for new Restaurant Orders until it is opened.
@@ -130,6 +152,8 @@ export class Restaurant {
   #name: string;
   #isOpen: boolean;
   #address: string;
+  readonly #staff: Set<string>;
+  #authorizationRevision: string | undefined;
   #events: RestaurantEvent[] = [];
 
   private constructor(snapshot: StoredRestaurantSnapshot, version: number) {
@@ -138,6 +162,8 @@ export class Restaurant {
     this.#ownerId = snapshot.ownerId;
     this.#isOpen = snapshot.isOpen;
     this.#address = snapshot.address ?? "";
+    this.#staff = new Set(snapshot.staff ?? []);
+    this.#authorizationRevision = snapshot.authorizationRevision;
     this.#version = version;
   }
 
@@ -159,6 +185,7 @@ export class Restaurant {
         ownerId,
         isOpen: false,
         address: restaurantAddress(input.address),
+        staff: [],
       },
       0,
     );
@@ -199,6 +226,27 @@ export class Restaurant {
   /** Pickup address; empty for a restaurant registered before it was required. */
   get address(): string {
     return this.#address;
+  }
+
+  /** User ids of the staff, sorted. */
+  get staff(): readonly string[] {
+    return [...this.#staff].sort();
+  }
+
+  /** ZedToken of the last recorded relationship write, if any. */
+  get authorizationRevision(): string | undefined {
+    return this.#authorizationRevision;
+  }
+
+  /**
+   * Records the revision (ZedToken) of a relationship write of this
+   * restaurant. Technical state: no domain event, opaque to the aggregate.
+   */
+  recordAuthorizationRevision(revision: string): void {
+    if (revision.length === 0) {
+      throw new Error("authorization revision must not be empty");
+    }
+    this.#authorizationRevision = revision;
   }
 
   /** Version loaded from storage; `0` for a restaurant that was never saved. */
@@ -269,6 +317,24 @@ export class Restaurant {
     return true;
   }
 
+  /**
+   * Adds the user to the staff. Staff is an idempotent set: returns `false`
+   * when the user is already staff.
+   */
+  assignStaff(userId: string): boolean {
+    const member = staffMember(userId);
+    if (this.#staff.has(member)) {
+      return false;
+    }
+    this.#staff.add(member);
+    return true;
+  }
+
+  /** Removes the user from the staff; returns `false` when the user is not staff. */
+  revokeStaff(userId: string): boolean {
+    return this.#staff.delete(staffMember(userId));
+  }
+
   toSnapshot(): RestaurantSnapshot {
     return {
       id: this.#id,
@@ -276,6 +342,10 @@ export class Restaurant {
       ownerId: this.#ownerId,
       isOpen: this.#isOpen,
       address: this.#address,
+      staff: this.staff,
+      ...(this.#authorizationRevision === undefined
+        ? {}
+        : { authorizationRevision: this.#authorizationRevision }),
     };
   }
 

@@ -3,6 +3,7 @@ import { InMemoryDocumentStore } from "../../../../pkg/infrastructure/memory/doc
 import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
+  StaffRelationshipWriter,
 } from "../../applications/access-control.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
@@ -12,6 +13,10 @@ import {
   type RestaurantRepository,
   type StoredRestaurantSnapshot,
 } from "../../domains/restaurant/restaurant.ts";
+import type {
+  RestaurantMembers,
+  RestaurantMemberships,
+} from "../reconcile/reconcile.ts";
 
 export const createRestaurantStore =
   (): InMemoryDocumentStore<StoredRestaurantSnapshot> =>
@@ -39,6 +44,48 @@ export class InMemoryRestaurantRepository implements RestaurantRepository {
     );
   }
 }
+
+/**
+ * Business side of the relationship reconciliation over the same in-memory
+ * documents: owner and staff of every stored restaurant.
+ */
+export class InMemoryRestaurantMemberships implements RestaurantMemberships {
+  readonly #store: InMemoryDocumentStore<StoredRestaurantSnapshot>;
+
+  constructor(store: InMemoryDocumentStore<StoredRestaurantSnapshot>) {
+    this.#store = store;
+  }
+
+  async membersOf(
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, RestaurantMembers>> {
+    const members = new Map<string, RestaurantMembers>();
+    for (const id of new Set(ids)) {
+      const stored = this.#store.get(id);
+      if (stored !== undefined) members.set(id, toMembers(stored.document));
+    }
+    return members;
+  }
+
+  async page(
+    after: string | undefined,
+    limit: number,
+  ): Promise<readonly RestaurantMembers[]> {
+    return this.#store
+      .all()
+      .map((stored) => stored.document)
+      .filter((restaurant) => after === undefined || restaurant.id > after)
+      .sort((left, right) => (left.id < right.id ? -1 : 1))
+      .slice(0, limit)
+      .map(toMembers);
+  }
+}
+
+const toMembers = (snapshot: StoredRestaurantSnapshot): RestaurantMembers => ({
+  restaurantId: snapshot.id,
+  ownerId: snapshot.ownerId,
+  staff: snapshot.staff ?? [],
+});
 
 const toView = (snapshot: StoredRestaurantSnapshot): RestaurantView => ({
   restaurantId: snapshot.id,
@@ -86,14 +133,21 @@ const subjectKey = (subject: Subject): string =>
 
 /**
  * Test authorization graph: explicit registrars and managers; the owner
- * written through {@link OwnerRelationshipWriter} can manage the restaurant.
+ * written through {@link OwnerRelationshipWriter} can manage the restaurant;
+ * staff written through {@link StaffRelationshipWriter} is recorded.
  */
 export class InMemoryRestaurantAuthorization
-  implements RestaurantAccessControl, OwnerRelationshipWriter
+  implements
+    RestaurantAccessControl,
+    OwnerRelationshipWriter,
+    StaffRelationshipWriter
 {
   readonly #registrars = new Set<string>();
   readonly #managers = new Set<string>();
   readonly #owners: Array<{ restaurantId: string; ownerId: string }> = [];
+  readonly #staff = new Set<string>();
+  /** Every staff write in order, `touch:<restaurantId>:<userId>` or `delete:…`. */
+  readonly staffWrites: string[] = [];
 
   allowRegistration(subject: Subject): this {
     this.#registrars.add(subjectKey(subject));
@@ -107,6 +161,26 @@ export class InMemoryRestaurantAuthorization
 
   get owners(): ReadonlyArray<{ restaurantId: string; ownerId: string }> {
     return this.#owners;
+  }
+
+  isStaff(restaurantId: string, userId: string): boolean {
+    return this.#staff.has(`${restaurantId}:${userId}`);
+  }
+
+  async touchStaff(input: {
+    restaurantId: string;
+    userId: string;
+  }): Promise<void> {
+    this.staffWrites.push(`touch:${input.restaurantId}:${input.userId}`);
+    this.#staff.add(`${input.restaurantId}:${input.userId}`);
+  }
+
+  async deleteStaff(input: {
+    restaurantId: string;
+    userId: string;
+  }): Promise<void> {
+    this.staffWrites.push(`delete:${input.restaurantId}:${input.userId}`);
+    this.#staff.delete(`${input.restaurantId}:${input.userId}`);
   }
 
   async canRegisterRestaurant(subject: Subject): Promise<boolean> {

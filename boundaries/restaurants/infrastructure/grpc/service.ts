@@ -2,13 +2,21 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import type { CancelRestaurantOrderHandler } from "../../slices/kitchenorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import type { ReceiveOrderRequestHandler } from "../../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
+import type { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
+import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import type { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
+import type { RestaurantView } from "../../slices/restaurant/applications/restaurant-view.ts";
+import type { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import { RestaurantSchema } from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
+  AssignStaffResponseSchema,
   CancelRestaurantOrderResponseSchema,
   GetRestaurantResponseSchema,
   ReceiveOrderRequestResponseSchema,
+  RegisterRestaurantResponseSchema,
   type RestaurantsService,
+  RevokeStaffResponseSchema,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import { RejectingSubjectResolver, type SubjectResolver } from "./subject.ts";
 
@@ -16,6 +24,9 @@ export type RestaurantsServiceDependencies = Readonly<{
   getRestaurant: Pick<GetRestaurantHandler, "execute">;
   receiveOrderRequest: Pick<ReceiveOrderRequestHandler, "execute">;
   cancelRestaurantOrder: Pick<CancelRestaurantOrderHandler, "execute">;
+  registerRestaurant: Pick<RegisterRestaurantHandler, "execute">;
+  assignStaff: Pick<AssignStaffHandler, "execute">;
+  revokeStaff: Pick<RevokeStaffHandler, "execute">;
   /** Defaults to {@link RejectingSubjectResolver}: commands fail UNAUTHENTICATED. */
   subjects?: SubjectResolver;
 }>;
@@ -32,12 +43,7 @@ export const createRestaurantsService = (
           restaurantId: request.restaurantId,
         });
         return create(GetRestaurantResponseSchema, {
-          restaurant: create(RestaurantSchema, {
-            restaurantId: view.restaurantId,
-            name: view.name,
-            isOpen: view.isOpen,
-            address: view.address,
-          }),
+          restaurant: toRestaurantMessage(view),
         });
       } catch (error) {
         throw transportError(error);
@@ -93,8 +99,75 @@ export const createRestaurantsService = (
         throw transportError(error);
       }
     },
+
+    async registerRestaurant(request, context) {
+      try {
+        const subject = await subjects.resolve(context);
+        requireField("name", request.name);
+        requireField("owner_id", request.ownerId);
+        requireField("address", request.address);
+        const result = await dependencies.registerRestaurant.execute({
+          subject,
+          name: request.name,
+          ownerId: request.ownerId,
+          address: request.address,
+        });
+        return create(RegisterRestaurantResponseSchema, {
+          restaurant: toRestaurantMessage(result),
+          version: BigInt(result.version),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async assignStaff(request, context) {
+      try {
+        const subject = await subjects.resolve(context);
+        requireField("restaurant_id", request.restaurantId);
+        requireField("user_id", request.userId);
+        const result = await dependencies.assignStaff.execute({
+          subject,
+          restaurantId: request.restaurantId,
+          userId: request.userId,
+        });
+        return create(AssignStaffResponseSchema, toStaffMessage(result));
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async revokeStaff(request, context) {
+      try {
+        const subject = await subjects.resolve(context);
+        requireField("restaurant_id", request.restaurantId);
+        requireField("user_id", request.userId);
+        const result = await dependencies.revokeStaff.execute({
+          subject,
+          restaurantId: request.restaurantId,
+          userId: request.userId,
+        });
+        return create(RevokeStaffResponseSchema, toStaffMessage(result));
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
   };
 };
+
+const toRestaurantMessage = (view: RestaurantView) =>
+  create(RestaurantSchema, {
+    restaurantId: view.restaurantId,
+    name: view.name,
+    isOpen: view.isOpen,
+    address: view.address,
+  });
+
+const toStaffMessage = (result: StaffChangeResult) => ({
+  restaurantId: result.restaurantId,
+  staff: [...result.staff],
+  changed: result.changed,
+});
 
 function requireField(name: string, value: string): void {
   if (value.trim().length === 0) {
