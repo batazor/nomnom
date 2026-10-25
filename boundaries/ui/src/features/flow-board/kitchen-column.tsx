@@ -47,8 +47,8 @@ const nextAction: Record<
   READY: null,
 };
 
-// Kitchen of one restaurant: the owner picks the restaurant and opens it, the
-// kitchen staff moves its orders.
+// Kitchen of the restaurant the board looks at (the owner's first one until
+// then): the owner opens it, the kitchen staff moves its orders.
 export function KitchenColumn({
   demoRestaurants,
   preferredRestaurantId,
@@ -61,21 +61,12 @@ export function KitchenColumn({
   onSelectOrder: (orderId: string) => void;
 }) {
   const { t } = useI18n();
-  const [chosenId, setChosenId] = useState<string | null>(null);
-  // A new preferred restaurant replaces the one chosen by hand.
-  const [seenPreferredId, setSeenPreferredId] = useState(preferredRestaurantId);
-  if (preferredRestaurantId !== seenPreferredId) {
-    setSeenPreferredId(preferredRestaurantId);
-    setChosenId(null);
-  }
-
   return (
     <AsRole as="owner">
       <OwnedRestaurants demoRestaurants={demoRestaurants}>
         {(restaurants) => {
           const ids = restaurants.map((restaurant) => restaurant.id);
           const restaurantId =
-            (chosenId && ids.includes(chosenId) && chosenId) ||
             (preferredRestaurantId &&
               ids.includes(preferredRestaurantId) &&
               preferredRestaurantId) ||
@@ -87,19 +78,6 @@ export function KitchenColumn({
           }
           return (
             <>
-              <label className="board-select">
-                <span>{t("board.kitchen.restaurant")}</span>
-                <select
-                  onChange={(event) => setChosenId(event.target.value)}
-                  value={restaurantId}
-                >
-                  {restaurants.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
               {restaurant.acceptingOrders === undefined ? null : (
                 <RestaurantOpening
                   key={restaurantId}

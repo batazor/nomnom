@@ -95,29 +95,13 @@ describe("flow board", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Курьер" }),
     ).toBeInTheDocument();
+    expect(await within(column("Кухня")).findByText("Открыт")).toBeVisible();
     expect(
-      await within(column("Кухня")).findByRole("combobox", {
-        name: "Ресторан",
-      }),
-    ).toHaveValue("restaurant-kitchen-8");
+      within(column("Кухня")).queryByRole("combobox"),
+    ).not.toBeInTheDocument();
     expect(
       await within(column("Курьер")).findByText("Не на линии"),
     ).toBeVisible();
-  });
-
-  it("shows the kitchen of the restaurant the customer picks", async () => {
-    const user = userEvent.setup();
-    renderBoard();
-
-    const kitchen = await within(column("Кухня")).findByRole("combobox", {
-      name: "Ресторан",
-    });
-    await user.selectOptions(kitchen, "restaurant-night-bakery");
-    expect(kitchen).toHaveValue("restaurant-night-bakery");
-
-    // Picking a restaurant as the customer replaces the kitchen's own choice.
-    await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
-    await waitFor(() => expect(kitchen).toHaveValue("restaurant-kitchen-8"));
   });
 
   it("carries one order from the cart to the door", async () => {
