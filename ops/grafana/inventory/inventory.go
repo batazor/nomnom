@@ -15,7 +15,8 @@ import (
 type Status string
 
 const (
-	// Present — метрика экспортируется сервисом и доставляется в Mimir.
+	// Present — метрика экспортируется сервисом по OTLP, а имена и labels
+	// подтверждены приёмом через Alloy в Mimir (см. VerifiedPipeline).
 	Present Status = "есть"
 	// Expected — метрика принята в архитектуре, но не экспортируется или не доставляется.
 	Expected Status = "ожидается"
@@ -75,9 +76,21 @@ const RepoURL = "https://github.com/batazor/nomnom/blob/main/"
 
 const DocPath = "docs/observability/metric-inventory.md"
 
+// VerifiedPipeline — где подтверждены метрики со статусом Present.
+const VerifiedPipeline = "2026-10-25: orders-consumer → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker). В kind Alloy и Mimir пока не развёрнуты."
+
 // Exemplars включаются в запросах только когда это подтверждено end-to-end:
 // SDK histograms с exemplars, Alloy и Mimir (-ingester.max-global-exemplars-per-user).
 const ExemplarsEnabled = false
+
+// verified — статусы, где часть сервисов подтверждена в Mimir (present), остальные ожидаются.
+func verified(present []string, others ...string) map[string]Status {
+	m := expected(others...)
+	for _, s := range present {
+		m[s] = Present
+	}
+	return m
+}
 
 func expected(services ...string) map[string]Status {
 	m := make(map[string]Status, len(services))
@@ -93,7 +106,7 @@ var Sections = []Section{
 	{"graphql", "GraphQL / HTTP (BFF, Cosmo Router)", "Встроенная telemetry Cosmo Router. Router экспортирует метрики по умолчанию, но OTLP exporter к Alloy в `config.yaml` не настроен и Alloy не развёрнут — метрики не доставляются."},
 	{"runtime", "Runtime", "Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). Node.js: `@opentelemetry/instrumentation-runtime-node`. Python: `opentelemetry-instrumentation-system-metrics`. Rust: semconv process metrics; метрики tokio runtime не имеют semconv и не инвентаризированы."},
 	{"db", "Database client (PostgreSQL, MongoDB)", "Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL/MongoDB — отдельные community dashboards, не overview."},
-	{"watermill", "Kafka: встроенные метрики Watermill", "`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`). Экспорт через OTel Prometheus bridge в общий OTLP pipeline. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся."},
+	{"watermill", "Kafka: встроенные метрики Watermill", "`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`). Экспорт через OTel Prometheus bridge (`orders/pkg/telemetry`) в общий OTLP pipeline; имена Prometheus сохраняются без изменений. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся."},
 	{"messaging-otel", "Kafka: semconv messaging (не-Go контексты)", "Kafka-клиенты TypeScript, Rust и Python не выбраны; при выборе используется OTel messaging semconv."},
 	{"messaging", "Kafka: собственный OTel middleware и consumer lag", "Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Labels только `handler_name`, `event_type`, `stream`, `error_class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill."},
 	{"outbox", "Outbox", "SQL-метрики Forwarder-роли (опрос таблицы Outbox), не publish-декоратор."},
@@ -108,7 +121,7 @@ var Sections = []Section{
 
 var Metrics = []Metric{
 	// resource
-	{Name: "target_info", Section: "resource", Type: Gauge, Source: "OTel resource → Mimir OTLP", Labels: []string{"job", "instance", "deployment_environment_name", "service_version"}, Status: expected(AllServices...), Note: "Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations."},
+	{Name: "target_info", Section: "resource", Type: Gauge, Source: "OTel resource → Mimir OTLP", Labels: []string{"job", "instance", "deployment_environment_name", "service_version"}, Status: verified([]string{OrdersConsumer}, Orders, OrdersWorker, Restaurants, Delivery, Payments, BFF), Note: "Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations."},
 
 	// rpc
 	{Name: "rpc_server_duration_milliseconds", Section: "rpc", Type: Histogram, Source: "`rpc.server.duration`", Labels: []string{"rpc_system", "rpc_service", "rpc_method", "rpc_grpc_status_code"}, Status: expected(grpcServers...)},
@@ -141,10 +154,10 @@ var Metrics = []Metric{
 	{Name: "db_client_connection_wait_time_seconds", Section: "db", Type: Histogram, Source: "`db.client.connection.wait_time`", Labels: []string{"db_client_connection_pool_name"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants)},
 
 	// watermill (built-in)
-	{Name: "watermill_consumer_subscriber_messages_received_total", Section: "watermill", Type: Counter, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"acked", "handler_name", "subscriber_name"}, Status: expected(OrdersConsumer), Note: "Решение принято; builder в `orders-consumer` ещё не подключён (`pkg/messaging/consumer.go`)."},
-	{Name: "watermill_consumer_handler_execution_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"handler_name", "success"}, Status: expected(OrdersConsumer), Note: "Как выше."},
-	{Name: "watermill_consumer_publish_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"success", "handler_name", "publisher_name"}, Status: expected(OrdersConsumer), Note: "Publisher consumer-роли — PoisonQueue в `<stream>.dlq`."},
-	{Name: "watermill_outbox_forwarder_publish_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `outbox_forwarder`", Labels: []string{"success", "handler_name", "publisher_name"}, Status: expected(goServices...), Note: "Forwarder-роль `orders` ещё не выделена; метрика привязана к service.name процесса, где он запущен."},
+	{Name: "watermill_consumer_subscriber_messages_received_total", Section: "watermill", Type: Counter, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"acked", "handler_name", "subscriber_name"}, Status: verified([]string{OrdersConsumer}), Note: "`acked`: acked | nacked. Через OTel Prometheus bridge (`pkg/telemetry`)."},
+	{Name: "watermill_consumer_handler_execution_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"handler_name", "success"}, Status: verified([]string{OrdersConsumer}), Note: "Снаружи DLQ: `success=\"false\"` — только исчерпанный transient (nack); permanent уходит в DLQ и считается успехом."},
+	{Name: "watermill_consumer_publish_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"success", "handler_name", "publisher_name"}, Status: verified([]string{OrdersConsumer}), Note: "Publisher consumer-роли — dead letters в `<stream>.dlq`."},
+	{Name: "watermill_outbox_forwarder_publish_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `outbox_forwarder`", Labels: []string{"success", "handler_name", "publisher_name"}, Status: expected(goServices...), Note: "Handler `orders-outbox-forwarder` (`cmd/orders-forwarder`); telemetry bootstrap forwarder-роли ещё не подключён."},
 
 	// messaging-otel
 	{Name: "messaging_client_consumed_messages_total", Section: "messaging-otel", Type: Counter, Source: "`messaging.client.consumed.messages`", Labels: []string{"messaging_system", "messaging_destination_name", "messaging_consumer_group_name", "error_type"}, Status: expected(otelConsumers...)},
@@ -152,11 +165,11 @@ var Metrics = []Metric{
 	{Name: "messaging_client_operation_duration_seconds", Section: "messaging-otel", Type: Histogram, Source: "`messaging.client.operation.duration`", Labels: []string{"messaging_system", "messaging_operation_name", "messaging_destination_name", "error_type"}, Status: expected(otelConsumers...)},
 
 	// messaging (custom middleware + lag)
-	{Name: "nomnom_messaging_process_duration_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Длительность обработки по `event_type`; `error_class` пуст при успехе."},
-	{Name: "nomnom_messaging_retry_attempts_total", Section: "messaging", Type: Counter, Source: "OTel middleware", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Только transient: business errors не ретраятся."},
-	{Name: "nomnom_messaging_poison_messages_total", Section: "messaging", Type: Counter, Source: "OTel middleware вокруг PoisonQueue", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Сообщения, отправленные в `<stream>.dlq`."},
-	{Name: "nomnom_messaging_message_age_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware", Labels: []string{"handler_name", "event_type", "stream"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "`now − occurred_at` в момент обработки."},
-	{Name: "nomnom_inbox_duplicates_total", Section: "messaging", Type: Counter, Source: "OTel middleware / Inbox adapter", Labels: []string{"handler_name", "event_type", "stream"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Конфликт уникальности `(consumer, event_id)` = duplicate."},
+	{Name: "nomnom_messaging_process_duration_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware `nomnom.messaging.process.duration`", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "`error_class` только при неуспехе: permanent | deserialization | business | transient; успешный retry — без класса. `handler_name` — handler group."},
+	{Name: "nomnom_messaging_retry_attempts_total", Section: "messaging", Type: Counter, Source: "OTel middleware `nomnom.messaging.retry.attempts`", Labels: []string{"handler_name", "event_type", "stream"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Ретраится только класс transient, поэтому `error_class` не пишется."},
+	{Name: "nomnom_messaging_poison_messages_total", Section: "messaging", Type: Counter, Source: "OTel middleware вокруг PoisonQueue", Labels: []string{"handler_name", "event_type", "stream", "error_class"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Сообщения, отправленные в `<stream>.dlq`; `error_class`: permanent | deserialization."},
+	{Name: "nomnom_messaging_message_age_seconds", Section: "messaging", Type: Histogram, Source: "OTel middleware", Labels: []string{"handler_name", "event_type", "stream"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "`now − occurred_at` в момент обработки."},
+	{Name: "nomnom_inbox_duplicates_total", Section: "messaging", Type: Counter, Source: "OTel middleware / Inbox adapter", Labels: []string{"handler_name", "event_type", "stream"}, Status: verified([]string{OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Outcome duplicate Inbox (`(consumer, event_id)` уже обработан)."},
 	{Name: "kafka_consumergroup_lag", Section: "messaging", Type: Gauge, Source: "Alloy `prometheus.exporter.kafka`", Labels: []string{"consumergroup", "topic", "partition"}, Status: expected(OrdersConsumer, Restaurants, Delivery, Payments), Note: "Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join."},
 
 	// outbox

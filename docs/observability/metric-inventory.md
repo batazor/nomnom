@@ -8,21 +8,23 @@
 
 | Статус | Значение |
 | --- | --- |
-| есть | Метрика экспортируется сервисом **и** доставляется в Mimir существующим pipeline. |
+| есть | Метрика экспортируется сервисом по OTLP, а имя и labels подтверждены приёмом через Alloy в Mimir. |
 | ожидается | Метрика принята архитектурой (semconv, ADR, решение по Watermill), но не экспортируется или не доставляется. |
 
 Имена приведены в виде Mimir после OTLP-трансляции (точки → подчёркивания, unit suffix, `_total` для
-монотонных counters). Для histogram указано базовое имя; запросы используют `_bucket`/`_count`/`_sum`.
+монотонных counters). Mimir 3.2.3 по умолчанию suffixes **не добавляет**: нужен
+`-distributor.otel-metric-suffixes-enabled=true` (`distributor.otel_metric_suffixes_enabled`), иначе имена OTel-instruments
+придут без `_seconds`/`_total` и панели не найдут серий. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя; запросы используют `_bucket`/`_count`/`_sum`.
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 84; пар «метрика × сервис» со статусом «есть»: 0.
+Метрик в инвентаре: 84; пар «метрика × сервис» со статусом «есть»: 9.
 
-Ни один backend-сервис пока не подключает OpenTelemetry SDK: OTel-пакеты в `orders` и BFF — только
-транзитивные зависимости, технический порт `metrics` отдаёт health, Helm values содержат `OTEL_*` лишь в
-комментариях, а Alloy, Mimir и Grafana в репозитории не развёрнуты. Поэтому все панели overview сейчас — TODO.
-Встроенные метрики Watermill приняты как базовый слой, но `PrometheusMetricsBuilder` в `orders-consumer` не
-подключён — статус «ожидается» до появления wiring.
+Подтверждение статуса «есть»: 2026-10-25: orders-consumer → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker). В kind Alloy и Mimir пока не развёрнуты.
+
+Метрики подключены только в `orders-consumer`: telemetry bootstrap (`orders/pkg/telemetry`), встроенные метрики
+Watermill и OTel middleware `pkg/messaging`. Остальные процессы OpenTelemetry SDK пока не подключают, поэтому их
+панели — TODO.
 
 <a id="resource"></a>
 
@@ -32,7 +34,7 @@ OTel resource в Mimir: `job="nomnom/<service.name>"`, `instance=<service.instan
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `target_info` | OTel resource → Mimir OTLP | gauge | `job`, `instance`, `deployment_environment_name`, `service_version` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается<br>`bff`: ожидается | Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations. |
+| `target_info` | OTel resource → Mimir OTLP | gauge | `job`, `instance`, `deployment_environment_name`, `service_version` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается<br>`bff`: ожидается | Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations. |
 
 <a id="rpc"></a>
 
@@ -96,14 +98,14 @@ Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instr
 
 ## Kafka: встроенные метрики Watermill
 
-`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`). Экспорт через OTel Prometheus bridge в общий OTLP pipeline. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся.
+`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`). Экспорт через OTel Prometheus bridge (`orders/pkg/telemetry`) в общий OTLP pipeline; имена Prometheus сохраняются без изменений. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `watermill_consumer_subscriber_messages_received_total` | `PrometheusMetricsBuilder` subsystem `consumer` | counter | `acked`, `handler_name`, `subscriber_name` | `orders-consumer`: ожидается | Решение принято; builder в `orders-consumer` ещё не подключён (`pkg/messaging/consumer.go`). |
-| `watermill_consumer_handler_execution_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | histogram | `handler_name`, `success` | `orders-consumer`: ожидается | Как выше. |
-| `watermill_consumer_publish_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | histogram | `success`, `handler_name`, `publisher_name` | `orders-consumer`: ожидается | Publisher consumer-роли — PoisonQueue в `<stream>.dlq`. |
-| `watermill_outbox_forwarder_publish_time_seconds` | `PrometheusMetricsBuilder` subsystem `outbox_forwarder` | histogram | `success`, `handler_name`, `publisher_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | Forwarder-роль `orders` ещё не выделена; метрика привязана к service.name процесса, где он запущен. |
+| `watermill_consumer_subscriber_messages_received_total` | `PrometheusMetricsBuilder` subsystem `consumer` | counter | `acked`, `handler_name`, `subscriber_name` | `orders-consumer`: есть | `acked`: acked | nacked. Через OTel Prometheus bridge (`pkg/telemetry`). |
+| `watermill_consumer_handler_execution_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | histogram | `handler_name`, `success` | `orders-consumer`: есть | Снаружи DLQ: `success="false"` — только исчерпанный transient (nack); permanent уходит в DLQ и считается успехом. |
+| `watermill_consumer_publish_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | histogram | `success`, `handler_name`, `publisher_name` | `orders-consumer`: есть | Publisher consumer-роли — dead letters в `<stream>.dlq`. |
+| `watermill_outbox_forwarder_publish_time_seconds` | `PrometheusMetricsBuilder` subsystem `outbox_forwarder` | histogram | `success`, `handler_name`, `publisher_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | Handler `orders-outbox-forwarder` (`cmd/orders-forwarder`); telemetry bootstrap forwarder-роли ещё не подключён. |
 
 <a id="messaging-otel"></a>
 
@@ -125,11 +127,11 @@ Middleware в composition root поверх Watermill (и эквивалент �
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_messaging_process_duration_seconds` | OTel middleware | histogram | `handler_name`, `event_type`, `stream`, `error_class` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Длительность обработки по `event_type`; `error_class` пуст при успехе. |
-| `nomnom_messaging_retry_attempts_total` | OTel middleware | counter | `handler_name`, `event_type`, `stream`, `error_class` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Только transient: business errors не ретраятся. |
-| `nomnom_messaging_poison_messages_total` | OTel middleware вокруг PoisonQueue | counter | `handler_name`, `event_type`, `stream`, `error_class` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Сообщения, отправленные в `<stream>.dlq`. |
-| `nomnom_messaging_message_age_seconds` | OTel middleware | histogram | `handler_name`, `event_type`, `stream` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `now − occurred_at` в момент обработки. |
-| `nomnom_inbox_duplicates_total` | OTel middleware / Inbox adapter | counter | `handler_name`, `event_type`, `stream` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Конфликт уникальности `(consumer, event_id)` = duplicate. |
+| `nomnom_messaging_process_duration_seconds` | OTel middleware `nomnom.messaging.process.duration` | histogram | `handler_name`, `event_type`, `stream`, `error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `error_class` только при неуспехе: permanent | deserialization | business | transient; успешный retry — без класса. `handler_name` — handler group. |
+| `nomnom_messaging_retry_attempts_total` | OTel middleware `nomnom.messaging.retry.attempts` | counter | `handler_name`, `event_type`, `stream` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Ретраится только класс transient, поэтому `error_class` не пишется. |
+| `nomnom_messaging_poison_messages_total` | OTel middleware вокруг PoisonQueue | counter | `handler_name`, `event_type`, `stream`, `error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Сообщения, отправленные в `<stream>.dlq`; `error_class`: permanent | deserialization. |
+| `nomnom_messaging_message_age_seconds` | OTel middleware | histogram | `handler_name`, `event_type`, `stream` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `now − occurred_at` в момент обработки. |
+| `nomnom_inbox_duplicates_total` | OTel middleware / Inbox adapter | counter | `handler_name`, `event_type`, `stream` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Outcome duplicate Inbox (`(consumer, event_id)` уже обработан). |
 | `kafka_consumergroup_lag` | Alloy `prometheus.exporter.kafka` | gauge | `consumergroup`, `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join. |
 
 <a id="outbox"></a>

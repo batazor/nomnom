@@ -13,6 +13,7 @@ import (
 
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
@@ -38,8 +39,10 @@ type KafkaConsumer struct {
 	dial          func(ctx context.Context, options client.Options) (client.Client, error)
 	newSubscriber func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error)
 	newPoison     func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Publisher, error)
+	newMetrics    func(ctx context.Context, serviceName string) (*telemetry.Metrics, error)
 	logger        watermill.LoggerAdapter
 
+	metrics    *telemetry.Metrics
 	temporal   client.Client
 	subscriber message.Subscriber
 	poison     message.Publisher
@@ -59,6 +62,7 @@ func NewKafkaConsumer(cfg config.Config, store orderdi.Store) *KafkaConsumer {
 		newPoison: func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
 			return messaging.NewDeadLetterPublisher(cfg, logger)
 		},
+		newMetrics: telemetry.Start,
 		// slog.Default writes through the standard log package, as the process does.
 		logger: watermill.NewSlogLogger(slog.Default()),
 		done:   make(chan error, 1),
@@ -80,7 +84,16 @@ func ConsumerHandlers(store orderdi.Store, workflow fulfillment.Notifier) orderm
 	}
 }
 
+// ConsumerServiceName — service.name процесса по умолчанию; OTEL_SERVICE_NAME переопределяет.
+const ConsumerServiceName = "orders-consumer"
+
 func (c *KafkaConsumer) Start(ctx context.Context) error {
+	metrics, err := c.newMetrics(ctx, ConsumerServiceName)
+	if err != nil {
+		return fmt.Errorf("start telemetry: %w", err)
+	}
+	c.metrics = metrics
+
 	dialCtx, cancel := context.WithTimeout(ctx, c.cfg.Temporal.ConnectTimeout)
 	defer cancel()
 	temporal, err := c.dial(dialCtx, client.Options{HostPort: c.cfg.Temporal.HostPort, Namespace: c.cfg.Temporal.Namespace})
@@ -102,6 +115,7 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 		ConsumerGroup: c.cfg.Kafka.ConsumerGroup,
 		Retry:         messaging.DefaultRetryPolicy,
 		CloseTimeout:  c.cfg.Shutdown.DrainTimeout,
+		Prometheus:    c.metrics.Registry,
 	}, c.subscriber, c.poison, streams, c.logger)
 	if err != nil {
 		return errors.Join(err, c.closeResources())
@@ -131,13 +145,21 @@ func (c *KafkaConsumer) Run() error {
 // offsets подтверждаются только для сообщений, обработанных до commit.
 func (c *KafkaConsumer) Shutdown(ctx context.Context) error {
 	stopped := make(chan error, 1)
-	go func() { stopped <- errors.Join(c.router.Close(), c.closeResources()) }()
+	go func() { stopped <- errors.Join(c.router.Close(), c.closeResources(), c.flushMetrics(ctx)) }()
 	select {
 	case err := <-stopped:
 		return err
 	case <-ctx.Done():
 		return fmt.Errorf("stop kafka consumer: %w", ctx.Err())
 	}
+}
+
+// flushMetrics выполняет финальный export метрик после drain Router.
+func (c *KafkaConsumer) flushMetrics(ctx context.Context) error {
+	if c.metrics == nil {
+		return nil
+	}
+	return c.metrics.Shutdown(ctx)
 }
 
 func (c *KafkaConsumer) closeResources() error {

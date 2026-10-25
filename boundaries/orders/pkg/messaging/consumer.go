@@ -6,8 +6,10 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
+	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Stream is one stream topic of a source aggregate and the handler group that
@@ -49,13 +51,23 @@ type ConsumerConfig struct {
 	ConsumerGroup string
 	Retry         RetryPolicy
 	CloseTimeout  time.Duration
+	// Prometheus принимает встроенные метрики Watermill (namespace watermill,
+	// subsystem consumer); они уходят в OTLP через Prometheus bridge. nil — без них.
+	Prometheus prometheus.Registerer
 }
+
+// Namespace и subsystem встроенных метрик Watermill consumer-роли: имена
+// watermill_consumer_* не пересекаются с ролью outbox_forwarder.
+const (
+	WatermillMetricsNamespace = "watermill"
+	ConsumerMetricsSubsystem  = "consumer"
+)
 
 // NewConsumerRouter builds the Watermill router of the consumer process: one
 // EventGroupProcessor handler group per stream and the middleware chain of
 // ADR 28, outermost first:
 //
-//	Recoverer → OpenTelemetry/metrics → deserialization guard → Retry → dead letter → unknown event_type → handler
+//	Recoverer → OpenTelemetry/metrics → Watermill metrics → deserialization guard → Retry → dead letter → unknown event_type → handler
 //
 //	deserialization error, permanent, unknown → <stream>.dlq + ack
 //	transient → Retry with backoff; exhausted → nack, the partition waits and Kafka redelivers
@@ -79,6 +91,16 @@ func NewConsumerRouter(
 	router, err := message.NewRouter(message.RouterConfig{CloseTimeout: cfg.CloseTimeout}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create router: %w", err)
+	}
+
+	middlewares := []message.HandlerMiddleware{middleware.Recoverer, tel.middleware}
+	if cfg.Prometheus != nil {
+		builtin := metrics.NewPrometheusMetricsBuilder(cfg.Prometheus, WatermillMetricsNamespace, ConsumerMetricsSubsystem)
+		router.AddSubscriberDecorators(builtin.DecorateSubscriber)
+		if deadLetters, err = builtin.DecoratePublisher(deadLetters); err != nil {
+			return nil, fmt.Errorf("decorate dead letter publisher: %w", err)
+		}
+		middlewares = append(middlewares, builtin.NewRouterMiddleware().Middleware)
 	}
 
 	dlq := deadLetterQueue{publisher: deadLetters, group: cfg.ConsumerGroup, telemetry: tel, logger: logger}
@@ -106,15 +128,13 @@ func NewConsumerRouter(
 	}
 
 	// The first middleware is the outermost one.
-	router.AddMiddleware(
-		middleware.Recoverer,
-		tel.middleware,
+	router.AddMiddleware(append(middlewares,
 		dlq.guard,
 		retry.Middleware,
 		tel.countAttempts,
 		dlq.permanent,
 		rejectUnknownEvents(known),
-	)
+	)...)
 
 	processor, err := cqrs.NewEventGroupProcessorWithConfig(router, cqrs.EventGroupProcessorConfig{
 		GenerateSubscribeTopic: func(params cqrs.EventGroupProcessorGenerateSubscribeTopicParams) (string, error) {

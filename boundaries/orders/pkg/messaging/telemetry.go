@@ -30,15 +30,24 @@ type telemetry struct {
 	duplicates metric.Int64Counter
 }
 
+// Границы histograms в секундах: дефолтные границы OTel SDK (0, 5, 10, … 10000)
+// рассчитаны на миллисекунды и сводят обработку за миллисекунды в первый bucket.
+var (
+	processDurationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
+	messageAgeBuckets      = []float64{0.1, 0.5, 1, 5, 15, 30, 60, 300, 900, 3600}
+)
+
 func newTelemetry() (*telemetry, error) {
 	meter := otel.Meter(instrumentationName)
 	duration, err := meter.Float64Histogram("nomnom.messaging.process.duration",
-		metric.WithUnit("s"), metric.WithDescription("Duration of processing one inbound Integration Event, retries included."))
+		metric.WithUnit("s"), metric.WithDescription("Duration of processing one inbound Integration Event, retries included."),
+		metric.WithExplicitBucketBoundaries(processDurationBuckets...))
 	if err != nil {
 		return nil, err
 	}
 	age, err := meter.Float64Histogram("nomnom.messaging.message.age",
-		metric.WithUnit("s"), metric.WithDescription("now − occurred_at when the consumer receives the event."))
+		metric.WithUnit("s"), metric.WithDescription("now − occurred_at when the consumer receives the event."),
+		metric.WithExplicitBucketBoundaries(messageAgeBuckets...))
 	if err != nil {
 		return nil, err
 	}

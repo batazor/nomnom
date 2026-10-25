@@ -18,11 +18,13 @@ func Markdown() string {
 
 | Статус | Значение |
 | --- | --- |
-| есть | Метрика экспортируется сервисом **и** доставляется в Mimir существующим pipeline. |
+| есть | Метрика экспортируется сервисом по OTLP, а имя и labels подтверждены приёмом через Alloy в Mimir. |
 | ожидается | Метрика принята архитектурой (semconv, ADR, решение по Watermill), но не экспортируется или не доставляется. |
 
 Имена приведены в виде Mimir после OTLP-трансляции (точки → подчёркивания, unit suffix, ` + "`_total`" + ` для
-монотонных counters). Для histogram указано базовое имя; запросы используют ` + "`_bucket`/`_count`/`_sum`" + `.
+монотонных counters). Mimir 3.2.3 по умолчанию suffixes **не добавляет**: нужен
+` + "`-distributor.otel-metric-suffixes-enabled=true`" + ` (` + "`distributor.otel_metric_suffixes_enabled`" + `), иначе имена OTel-instruments
+придут без ` + "`_seconds`/`_total`" + ` и панели не найдут серий. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя; запросы используют ` + "`_bucket`/`_count`/`_sum`" + `.
 
 ## Состояние на дату генерации
 
@@ -36,13 +38,10 @@ func Markdown() string {
 		}
 	}
 	fmt.Fprintf(&b, "Метрик в инвентаре: %d; пар «метрика × сервис» со статусом «есть»: %d.\n\n", len(Metrics), present)
-	b.WriteString(`Ни один backend-сервис пока не подключает OpenTelemetry SDK: OTel-пакеты в ` + "`orders`" + ` и BFF — только
-транзитивные зависимости, технический порт ` + "`metrics`" + ` отдаёт health, Helm values содержат ` + "`OTEL_*`" + ` лишь в
-комментариях, а Alloy, Mimir и Grafana в репозитории не развёрнуты. Поэтому все панели overview сейчас — TODO.
-Встроенные метрики Watermill приняты как базовый слой, но ` + "`PrometheusMetricsBuilder`" + ` в ` + "`orders-consumer`" + ` не
-подключён — статус «ожидается» до появления wiring.
-
-`)
+	b.WriteString("Подтверждение статуса «есть»: " + VerifiedPipeline + "\n\n")
+	b.WriteString("Метрики подключены только в `orders-consumer`: telemetry bootstrap (`orders/pkg/telemetry`), встроенные метрики\n" +
+		"Watermill и OTel middleware `pkg/messaging`. Остальные процессы OpenTelemetry SDK пока не подключают, поэтому их\n" +
+		"панели — TODO.\n\n")
 	for _, s := range Sections {
 		fmt.Fprintf(&b, "<a id=%q></a>\n\n## %s\n\n%s\n\n", s.ID, s.Title, s.Intro)
 		b.WriteString("| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |\n| --- | --- | --- | --- | --- | --- |\n")

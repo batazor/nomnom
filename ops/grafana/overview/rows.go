@@ -46,13 +46,17 @@ func (g *generator) health(sc Scope) []Panel {
 	if o.Kafka != nil {
 		if o.Kafka.Watermill {
 			rate = append(rate, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count")), "Kafka processing"})
-			errs = append(errs, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "Kafka handler failure"})
+			errs = append(errs, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "Kafka nack (retries exhausted)"})
 			ratio = append(ratio, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)) + " / " + Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count")), "Kafka"})
 		} else {
 			rate = append(rate, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka processing"})
-			errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class!=""`)), "Kafka handler failure"})
+			errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class!~"|business"`)), "Kafka technical failure"})
 			ratio = append(ratio, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class!=""`)) + " / " + Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka"})
 		}
+	}
+	if o.Kafka != nil {
+		errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_poison_messages_total")), "Kafka dead letter"},
+			Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class="business"`)), "Kafka business rejection"})
 	}
 	if o.Temporal != nil {
 		rate = append(rate, Query{Sum("", sc.Rate("temporal_activity_execution_latency_seconds_count")), "Temporal activities"})
@@ -173,23 +177,23 @@ func (g *generator) kafka(sc Scope) []Panel {
 		consumed = []Query{{Sum("handler_name, acked", sc.Rate("watermill_consumer_subscriber_messages_received_total")), "{{handler_name}} acked={{acked}}"}}
 		produced = []Query{{Sum("publisher_name, success", sc.Rate("watermill_outbox_forwarder_publish_time_seconds_count")), "{{publisher_name}} success={{success}}"}}
 		failures = []Query{{Sum("handler_name", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "{{handler_name}}"}}
-		processed = Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="true"`)), "processed"}
+		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class=~"|business"`)), "processed"}
 	} else {
 		consumed = []Query{{Sum("messaging_destination_name", sc.Rate("messaging_client_consumed_messages_total")), "{{messaging_destination_name}}"}}
 		produced = []Query{{Sum("messaging_destination_name", sc.Rate("messaging_client_sent_messages_total")), "{{messaging_destination_name}}"}}
-		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class=""`)), "processed"}
+		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class=~"|business"`)), "processed"}
 	}
-	failures = append(failures, Query{Sum("error_class", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class!=""`)), "{{error_class}}"})
+	failures = append(failures, Query{Sum("error_class", sc.Rate("nomnom_messaging_process_duration_seconds_count", `error_class!~"|business"`)), "{{error_class}}"})
 	return []Panel{
 		{Title: "Consumed", Unit: "ops", Queries: consumed},
 		{Title: "Produced (Outbox Forwarder)", Unit: "ops", Queries: produced},
 		{Title: "Processing failures", Unit: "ops", Queries: failures, Traces: true,
-			Description: "Ошибки handler по `error_class`; business errors подтверждаются (ack) и сюда не попадают."},
+			Description: "Технические сбои обработки по `error_class` (permanent, deserialization, transient); business rejections подтверждаются (ack) и показаны в Service health отдельно."},
 		{Title: "Consumer lag", Unit: "short", Queries: []Query{{lag, "{{topic}}"}},
 			Description: "Lag consumer group `" + k.ConsumerGroup + "` из Alloy Kafka exporter; не путать с очередями предметной области."},
 		{Title: "Retries and poison (DLQ)", Unit: "ops", Queries: []Query{
-			{Sum("error_class", sc.Rate("nomnom_messaging_retry_attempts_total")), "retry {{error_class}}"},
-			{Sum("stream", sc.Rate("nomnom_messaging_poison_messages_total")), "poison → {{stream}}.dlq"},
+			{Sum("event_type", sc.Rate("nomnom_messaging_retry_attempts_total")), "retry {{event_type}}"},
+			{Sum("stream, error_class", sc.Rate("nomnom_messaging_poison_messages_total")), "{{stream}}.dlq {{error_class}}"},
 		}},
 		{Title: "Processing duration p95 by event_type", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "event_type", "nomnom_messaging_process_duration_seconds"), "{{event_type}}"}}},
 		{Title: "Message age at processing p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "event_type", "nomnom_messaging_message_age_seconds"), "{{event_type}}"}},

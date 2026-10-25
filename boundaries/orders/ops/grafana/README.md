@@ -37,74 +37,74 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Request rate by entry | TODO | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`temporal_activity_execution_latency_seconds`](../../../../docs/observability/metric-inventory.md#temporal), [`watermill_consumer_handler_execution_time_seconds`](../../../../docs/observability/metric-inventory.md#watermill) |
-| Errors by class | TODO | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`temporal_activity_execution_failed_total`](../../../../docs/observability/metric-inventory.md#temporal), [`watermill_consumer_handler_execution_time_seconds`](../../../../docs/observability/metric-inventory.md#watermill) |
-| Technical error ratio | TODO | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`watermill_consumer_handler_execution_time_seconds`](../../../../docs/observability/metric-inventory.md#watermill) |
-| Latency p50 / p95 / p99 | TODO | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| CPU | TODO | [`process_cpu_time_seconds_total`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Memory | TODO | [`go_memory_used_bytes`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Request rate by entry | live | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`temporal_activity_execution_latency_seconds`](../../../../docs/observability/metric-inventory.md#temporal) |
+| Errors by class | live | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`temporal_activity_execution_failed_total`](../../../../docs/observability/metric-inventory.md#temporal) |
+| Technical error ratio | live | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| Latency p50 / p95 / p99 | TODO | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| CPU | TODO | [`process_cpu_time_seconds_total`](../../../../docs/observability/metric-inventory.md#runtime) |
+| Memory | TODO | [`go_memory_used_bytes`](../../../../docs/observability/metric-inventory.md#runtime) |
 
 ### Runtime
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Heap and runtime memory | TODO | [`go_memory_gc_goal_bytes`](../../../../docs/observability/metric-inventory.md#runtime), [`go_memory_used_bytes`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Allocation rate | TODO | [`go_memory_allocated_bytes_total`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Goroutines | TODO | [`go_goroutine_count`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| GOMAXPROCS | TODO | [`go_processor_limit`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Heap and runtime memory | TODO | [`go_memory_gc_goal_bytes`](../../../../docs/observability/metric-inventory.md#runtime), [`go_memory_used_bytes`](../../../../docs/observability/metric-inventory.md#runtime) |
+| Allocation rate | TODO | [`go_memory_allocated_bytes_total`](../../../../docs/observability/metric-inventory.md#runtime) |
+| Goroutines | TODO | [`go_goroutine_count`](../../../../docs/observability/metric-inventory.md#runtime) |
+| GOMAXPROCS | TODO | [`go_processor_limit`](../../../../docs/observability/metric-inventory.md#runtime) |
 
 ### Dependencies
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| gRPC via internal gateway: rate | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| gRPC via internal gateway: technical errors | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| gRPC via internal gateway: p95 | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| postgresql: operations | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| postgresql: p95 by operation | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| postgresql: pool | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| postgresql: pool wait p95 | TODO | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| gRPC via internal gateway: rate | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| gRPC via internal gateway: technical errors | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| gRPC via internal gateway: p95 | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| postgresql: operations | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db) |
+| postgresql: p95 by operation | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db) |
+| postgresql: pool | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| postgresql: pool wait p95 | TODO | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
 
 ### Kafka
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Consumed | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`watermill_consumer_subscriber_messages_received_total`](../../../../docs/observability/metric-inventory.md#watermill) |
-| Produced (Outbox Forwarder) | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`watermill_outbox_forwarder_publish_time_seconds`](../../../../docs/observability/metric-inventory.md#watermill) |
-| Processing failures | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`watermill_consumer_handler_execution_time_seconds`](../../../../docs/observability/metric-inventory.md#watermill) |
+| Consumed | live | — |
+| Produced (Outbox Forwarder) | TODO | [`watermill_outbox_forwarder_publish_time_seconds`](../../../../docs/observability/metric-inventory.md#watermill) |
+| Processing failures | live | — |
 | Consumer lag | TODO | [`kafka_consumergroup_lag`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Retries and poison (DLQ) | TODO | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_retry_attempts_total`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Processing duration p95 by event_type | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Message age at processing p95 | TODO | [`nomnom_messaging_message_age_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Inbox: processed / duplicates | TODO | [`nomnom_inbox_duplicates_total`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`watermill_consumer_handler_execution_time_seconds`](../../../../docs/observability/metric-inventory.md#watermill) |
-| Outbox pending | TODO | [`nomnom_outbox_pending_messages`](../../../../docs/observability/metric-inventory.md#outbox), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Outbox oldest pending age | TODO | [`nomnom_outbox_oldest_pending_age_seconds`](../../../../docs/observability/metric-inventory.md#outbox), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Outbox publish retries | TODO | [`nomnom_outbox_publish_retries_total`](../../../../docs/observability/metric-inventory.md#outbox), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Retries and poison (DLQ) | live | — |
+| Processing duration p95 by event_type | live | — |
+| Message age at processing p95 | live | — |
+| Inbox: processed / duplicates | live | — |
+| Outbox pending | TODO | [`nomnom_outbox_pending_messages`](../../../../docs/observability/metric-inventory.md#outbox) |
+| Outbox oldest pending age | TODO | [`nomnom_outbox_oldest_pending_age_seconds`](../../../../docs/observability/metric-inventory.md#outbox) |
+| Outbox publish retries | TODO | [`nomnom_outbox_publish_retries_total`](../../../../docs/observability/metric-inventory.md#outbox) |
 
 ### Transactions
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Transactions by outcome | TODO | [`nomnom_uow_transactions_total`](../../../../docs/observability/metric-inventory.md#uow), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Transaction duration | TODO | [`nomnom_uow_duration_seconds`](../../../../docs/observability/metric-inventory.md#uow), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Retries by conflict | TODO | [`nomnom_uow_retries_total`](../../../../docs/observability/metric-inventory.md#uow), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Transactions by outcome | TODO | [`nomnom_uow_transactions_total`](../../../../docs/observability/metric-inventory.md#uow) |
+| Transaction duration | TODO | [`nomnom_uow_duration_seconds`](../../../../docs/observability/metric-inventory.md#uow) |
+| Retries by conflict | TODO | [`nomnom_uow_retries_total`](../../../../docs/observability/metric-inventory.md#uow) |
 
 ### Domain Lifecycle
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Invalid transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Terminal transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm) |
+| Invalid transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm) |
+| Terminal transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm) |
 
 ### Domain metrics
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Orders: placed / completed / cancelled / failed | TODO | [`nomnom_orders_cancelled_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_orders_completed_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_orders_failed_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_orders_placed_total`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Cancellation requests | TODO | [`nomnom_orders_cancellation_requests_total`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Fulfillment duration | TODO | [`nomnom_orders_fulfillment_duration_seconds`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Orders currently in state | TODO | [`nomnom_orders_in_state`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Orders: placed / completed / cancelled / failed | TODO | [`nomnom_orders_cancelled_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_orders_completed_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_orders_failed_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_orders_placed_total`](../../../../docs/observability/metric-inventory.md#domain) |
+| Cancellation requests | TODO | [`nomnom_orders_cancellation_requests_total`](../../../../docs/observability/metric-inventory.md#domain) |
+| Fulfillment duration | TODO | [`nomnom_orders_fulfillment_duration_seconds`](../../../../docs/observability/metric-inventory.md#domain) |
+| Orders currently in state | TODO | [`nomnom_orders_in_state`](../../../../docs/observability/metric-inventory.md#domain) |
 
 ### Temporal
 
@@ -123,12 +123,12 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Checks by result | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Denied by permission | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Checks by result | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
+| Denied by permission | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
+| Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
+| Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 0 из 50. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 9 из 50. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Переходы
 

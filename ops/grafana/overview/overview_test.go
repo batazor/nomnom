@@ -12,12 +12,18 @@ import (
 // withAllPresent проверяет живой путь генератора: все метрики в статусе «есть».
 func withAllPresent(t *testing.T) {
 	t.Helper()
+	withStatus(t, inventory.Present)
+}
+
+// withStatus временно выставляет всем метрикам один статус.
+func withStatus(t *testing.T, status inventory.Status) {
+	t.Helper()
 	saved := make([]map[string]inventory.Status, len(inventory.Metrics))
 	for i, m := range inventory.Metrics {
 		saved[i] = m.Status
 		live := map[string]inventory.Status{}
 		for s := range m.Status {
-			live[s] = inventory.Present
+			live[s] = status
 		}
 		inventory.Metrics[i].Status = live
 	}
@@ -71,6 +77,7 @@ func TestRowOrderIsShared(t *testing.T) {
 }
 
 func TestNoPanelIsLiveWithoutPresentMetrics(t *testing.T) {
+	withStatus(t, inventory.Expected)
 	for ctx, d := range render(t) {
 		for _, r := range d.Rows {
 			for _, p := range r.Panels {
