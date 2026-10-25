@@ -16,3 +16,13 @@ env:
 postgres:
   dsnSecret:
     name: orders-postgres
+
+# Burstable без CPU limit: request — доля CPU под конкуренцией, limit троттлит и при
+# свободной ноде. Memory request — steady state в kind, limit — пик e2e (Chainsaw, 54 теста)
+# с запасом не меньше 3× (замер kubelet stats/summary 2026-10-25). Go: GOMEMLIMIT = 90% limit (automemlimit).
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    memory: 256Mi
