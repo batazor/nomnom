@@ -152,6 +152,8 @@ class PaymentsContainer(containers.DeclarativeContainer):
         domain_metrics,
     )
     inbox = providers.Singleton(PostgresProviderMessageInbox, database)
+    # One applier of final Provider results for synchronous answers and callbacks.
+    applier = providers.Singleton(ProviderResultApplier, payments, operations, outbox, clock)
 
     # Use cases: one local transaction per Unit of Work.
     executor = providers.Singleton(
@@ -159,11 +161,11 @@ class PaymentsContainer(containers.DeclarativeContainer):
         uow=uow,
         payments=payments,
         operations=operations,
-        outbox=outbox,
         provider=provider,
         permissions=permissions,
         clock=clock,
-        ids=ids,
+        operation_ids=ids,
+        applier=applier,
     )
     handlers = providers.Singleton(
         PaymentsHandlers,
@@ -178,7 +180,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
         ApplyProviderCallbackHandler,
         uow,
         inbox,
-        providers.Factory(ProviderResultApplier, payments, operations, outbox, clock),
+        applier,
     )
 
     # Workers.

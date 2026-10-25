@@ -40,8 +40,7 @@ from .errors import (
 )
 from .operation_result import PAYMENT_AGGREGATE, OperationStatus, PaymentOperationResult
 from .ports import (
-    PaymentIdentifiers,
-    PaymentOutbox,
+    PaymentOperationIdSource,
     PaymentPermissionChecker,
     PaymentProviderGateway,
     PaymentResource,
@@ -88,11 +87,11 @@ class PaymentOperationExecutor:
         uow: UnitOfWork,
         payments: PaymentRepository,
         operations: PaymentOperationRepository,
-        outbox: PaymentOutbox,
         provider: PaymentProviderGateway,
         permissions: PaymentPermissionChecker,
         clock: Clock,
-        ids: PaymentIdentifiers,
+        operation_ids: PaymentOperationIdSource,
+        applier: ProviderResultApplier,
     ) -> None:
         self._uow = uow
         self._payments = payments
@@ -100,8 +99,8 @@ class PaymentOperationExecutor:
         self._provider = provider
         self._permissions = permissions
         self._clock = clock
-        self._ids = ids
-        self._applier = ProviderResultApplier(payments, operations, outbox, clock)
+        self._operation_ids = operation_ids
+        self._applier = applier
 
     def execute(
         self, subject: Subject, payment_id: str, idempotency_key: str, kind: OperationKind
@@ -153,7 +152,7 @@ class PaymentOperationExecutor:
         )
 
     def _reserve(self, payment_id: PaymentId, key: str, kind: OperationKind) -> _Reservation:
-        operation_id = self._ids.new_operation_id()
+        operation_id = self._operation_ids.new_operation_id()
         requested_at = self._clock.now()
 
         def reserve() -> _Reservation:

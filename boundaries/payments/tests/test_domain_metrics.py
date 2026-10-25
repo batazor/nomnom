@@ -15,7 +15,10 @@ from slices.payment.applications.authorize_payment import (
     AuthorizePaymentInput,
 )
 from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
-from slices.payment.applications.operation_flow import PaymentOperationExecutor
+from slices.payment.applications.operation_flow import (
+    PaymentOperationExecutor,
+    ProviderResultApplier,
+)
 from slices.payment.applications.ports import ProviderOperationOutcome
 from slices.payment.applications.refund_payment import RefundPaymentHandler, RefundPaymentInput
 from slices.payment.domains.payment import (
@@ -71,11 +74,13 @@ class DomainMetricsTest(unittest.TestCase):
             uow=self.uow,
             payments=self.kit.payments,
             operations=self.kit.operations,
-            outbox=self.outbox,
             provider=self.kit.provider,
             permissions=self.kit.permissions,
             clock=self.kit.clock,
-            ids=self.kit.ids,
+            operation_ids=self.kit.ids,
+            applier=ProviderResultApplier(
+                self.kit.payments, self.kit.operations, self.outbox, self.kit.clock
+            ),
         )
 
     def test_commit_records_events(self) -> None:

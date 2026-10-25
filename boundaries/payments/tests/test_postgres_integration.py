@@ -36,7 +36,10 @@ from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
-from slices.payment.applications.operation_flow import PaymentOperationExecutor
+from slices.payment.applications.operation_flow import (
+    PaymentOperationExecutor,
+    ProviderResultApplier,
+)
 from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,
@@ -295,11 +298,11 @@ class PostgresIntegrationTest(unittest.TestCase):
             uow=self.uow,
             payments=self.payments,
             operations=self.operations,
-            outbox=self.outbox,
             provider=provider,
             permissions=FakePermissions(),
             clock=_Clock(),
-            ids=_Ids(),
+            operation_ids=_Ids(),
+            applier=ProviderResultApplier(self.payments, self.operations, self.outbox, _Clock()),
         )
         handler = AuthorizePaymentHandler(executor)
         command = AuthorizePaymentInput(

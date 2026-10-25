@@ -16,7 +16,7 @@ from slices.payment.domains.payment import (
 
 from ..access import require_permission
 from ..errors import InvalidPaymentRequestError, PaymentAlreadyExistsError
-from ..ports import PaymentIdentifiers, PaymentPermission, PaymentPermissionChecker, PaymentResource
+from ..ports import PaymentIdSource, PaymentPermission, PaymentPermissionChecker, PaymentResource
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ class CreatePaymentHandler:
         self,
         payments: PaymentRepository,
         permissions: PaymentPermissionChecker,
-        ids: PaymentIdentifiers,
+        ids: PaymentIdSource,
     ) -> None:
         self._payments = payments
         self._permissions = permissions
