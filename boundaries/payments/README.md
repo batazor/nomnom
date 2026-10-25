@@ -244,6 +244,24 @@ docker stop payments-kafka
 
 Инструментирование Python транспорта, PostgreSQL, Kafka и платёжного провайдера размещается в `infrastructure/`; токены, платёжные реквизиты и payload провайдера исключаются из telemetry. OpenTelemetry и Pyroscope зависимости должны отдельно подтвердить поддержку целевого Python 3.14. Общие потоки и правила описаны в [документации observability](../../docs/observability.md).
 
+Pipeline процесса — `pkg/telemetry` (контракт [docs/observability.md](../../docs/observability.md)); его поднимает `TelemetryResource` первым и сбрасывает последним.
+
+| Сигнал | Что пишется | Где |
+| --- | --- | --- |
+| Resource | `service.namespace=nomnom`, `service.name` процесса (`payments`, `payments-relay`, `payments-migrate`; `OTEL_SERVICE_NAME` переопределяет), `OTEL_RESOURCE_ATTRIBUTES` (`service.version`, `service.instance.id`, `deployment.environment.name`). Один resource для traces и metrics, те же поля в логах. | `pkg/telemetry/resource.py` |
+| Propagation | W3C `traceparent`/`tracestate`; baggage — только ключи `BAGGAGE_ALLOWLIST` (сейчас пусто). Некорректный `traceparent` отбрасывается, начинается новый trace. | `pkg/telemetry/propagation.py` |
+| Traces | `TracerProvider` + OTLP gRPC, `BatchSpanProcessor` (очередь 2048, batch 512, export timeout 3s) — только при `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`. Sampler `ParentBased(SkipOrphanClientSpans)`: client span без родителя (проверка пула, опрос lock relay) не пишется. | `pkg/telemetry/__init__.py` |
+| gRPC | Server и client interceptors (`pkg/telemetry/rpc.py`): span `Service/Method`, `rpc.system.name`, `rpc.method`, `rpc.response.status_code` (имя кода); `rpc.server.call.duration` / `rpc.client.call.duration` (s). Client interceptor стоит на канале SpiceDB (`server.address`/`server.port`). `opentelemetry-instrumentation-grpc` не используется: у него нет RPC-метрик и старые attributes. | `infrastructure/grpc/worker.py`, `infrastructure/authorization/spicedb.py` |
+| PostgreSQL | `opentelemetry-instrumentation-psycopg` без bind parameters и sqlcommenter; statement — статический SQL с плейсхолдерами. | `pkg/telemetry/__init__.py` |
+| Webhook | Server span `POST /webhooks/provider` (`http.route`, `http.response.status_code`); trace context провайдера не продолжается. | `infrastructure/provider/http.py` |
+| Kafka | Outbox сохраняет `traceparent`/`tracestate` контекста записи события; relay передаёт их в Kafka headers без изменений и пишет span `send <topic>` (PRODUCER) — потомок этого контекста. Payments не потребляет Kafka. | `infrastructure/postgres/outbox.py`, `infrastructure/messaging/tracing.py` |
+| Use cases | Декоратор `Handler` в DI: span `usecase <name>` и `nomnom.usecase.duration` (`nomnom.usecase.name`, `nomnom.usecase.kind`, `nomnom.outcome`, `error.type`); классификация ошибок — `infrastructure/observability/usecases.py`. | `pkg/telemetry/usecase.py`, `di/payments.py` |
+| Provider | `nomnom.payments.provider.request.duration` (`nomnom.payment.operation`: authorize \| capture \| refund \| cancel; `nomnom.outcome`: success \| declined \| error \| timeout) и client span `payments.provider <operation>`. | `infrastructure/observability/provider.py` |
+| Runtime | `process.cpu.time` (`cpu.mode`), `process.memory.usage`, `process.thread.count`, `cpython.gc.collections` (`cpython.gc.generation`) — только при `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`. Свои callbacks вместо `opentelemetry-instrumentation-system-metrics`: тот пишет устаревшие `type`/`generation`. | `pkg/telemetry/runtime.py` |
+| Logs | Одна JSON-строка на запись в stdout для всех loggers (gRPC, librdkafka через `logger`, lifecycle, SDK): `timestamp` (UTC), `severity` (`DEBUG`/`INFO`/`WARN`/`ERROR`/`FATAL`), `message`, `service.*`, `deployment.environment.name`, `logger`, `trace_id`/`span_id` только внутри span, поля операции из allowlist `extra`, `exception` (`type`, `message`, `stacktrace`). Bearer/JWT, пароли в DSN, `password=`/`secret=`/`token=` и номера карт (Luhn) заменяются на `[REDACTED]`. | `pkg/telemetry/logs.py` |
+
+Histograms в секундах получают явные границы `SECONDS_BUCKETS` (как `orders`). Сбой или недоступность collector не влияет на запросы: export асинхронный, очередь ограничена, export timeout 3s укладывается в `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`.
+
 ## Статус реализации
 
 Реализован in-memory агрегат `Payment`: точный `Money`, чистая табличная FSM, типизированные ошибки переходов, восстановление из persisted state и забор domain events (`PaymentAuthorized`, `PaymentCaptured`, `PaymentAuthorizationCancelled`, `PaymentRefunded`, `PaymentFailed`). Также реализованы policies `PaymentRefundable` и `PaymentCapturable` с типизированными reasons и unit tests.
@@ -262,7 +280,7 @@ docker stop payments-kafka
 - Технический порт `management.port` (`MANAGEMENT__PORT`, по умолчанию `9084`, отличается от бизнес-порта): `GET /health/startup`, `/health/live`, `/health/ready` с JSON `{"status":"ok"}` или `{"status":"unavailable","reason":"initializing|shutting_down"}`; liveness остаётся `200` во время shutdown, probes не логируются. Внешние зависимости в readiness не входят.
 - `HttpWorker` — бизнес-порт на `http.server`: при shutdown прекращает приём, закрывает idle keep-alive соединения, дожидается начатых запросов до deadline и сообщает об ошибке, если они не завершились.
 
-Длительности задаются как `<int>(ms|s|m)`: `SHUTDOWN__READINESS_DELAY` (по умолчанию `5s`, `>= 0`), `SHUTDOWN__DRAIN_TIMEOUT` (по умолчанию `20s`, `> 0`) и `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT` (по умолчанию `5s`, `> 0`). Traces и metrics экспортируются через OTLP, только если задан `OTEL_EXPORTER_OTLP_ENDPOINT`; после drain providers сбрасываются не дольше `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`.
+Длительности задаются как `<int>(ms|s|m)`: `SHUTDOWN__READINESS_DELAY` (по умолчанию `5s`, `>= 0`), `SHUTDOWN__DRAIN_TIMEOUT` (по умолчанию `20s`, `> 0`) и `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT` (по умолчанию `5s`, `> 0`). Traces экспортируются через OTLP gRPC, только если задан `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`, metrics — `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`; после drain providers сбрасываются не дольше `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`.
 
 Реализовано хранилище PostgreSQL в `infrastructure/postgres` (psycopg 3, пул `psycopg_pool`):
 
@@ -270,7 +288,7 @@ docker stop payments-kafka
 - `PostgresUnitOfWork` — одна локальная транзакция; repositories, Outbox и Inbox внутри `run` используют её соединение (context variable), вложенный `run` присоединяется. Вне Unit of Work каждый вызов берёт своё соединение из пула.
 - Outbox по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md): `seq`, `event_id` (UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`), `event_type` (полное имя Protobuf-сообщения), `topic`, `payload` (Protobuf, `BYTEA`), `metadata` (`traceparent`), `published_at`, `attempts`, `last_error`. Какие Domain Events публикуются, решает внедряемый `OutboxEventMapper` (`infrastructure/postgres/outbox.py`); событие без контракта (mapper вернул `None`) в Outbox не пишется. `NoPublishedContracts` — mapper без опубликованных контрактов для тестовых сборок; контейнер `di/payments.py` передаёт `PaymentEventsMapper` — см. [Публикация Integration Events](#публикация-integration-events).
 - Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePaymentError`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKeyError`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPendingError`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflictError`.
-- `DATABASE__URL` обязателен: пустое значение завершает процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). `DATABASE__MAX_CONNS` — размер пула (по умолчанию `10`).
+- `DATABASE__URL` обязателен: пустое значение завершает процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). Лимиты пула — `DATABASE__MAX_CONNS` (`10`), `DATABASE__MIN_CONNS` (`0`, допустимо 0–1), `DATABASE__MAX_CONN_LIFETIME` (`30m`, psycopg_pool закрывает соединение на 0–5% раньше — jitter), `DATABASE__MAX_CONN_IDLE_TIME` (`5m`), `DATABASE__CONNECT_TIMEOUT` (`5s`, `connect_timeout` libpq в целых секундах), `DATABASE__ACQUIRE_TIMEOUT` (`5s`, ожидание соединения пула, затем `PoolTimeout`); недопустимое значение — ошибка startup. См. [Пулер PostgreSQL](#пулер-postgresql).
 - Integration-тесты `tests/test_postgres_integration.py` запускаются при заданном `DATABASE_URL`:
 
 ```bash
@@ -280,7 +298,21 @@ DATABASE_URL=postgresql://payments:payments@localhost:55432/payments make test
 docker stop payments-pg
 ```
 
-Не реализованы: provider client, проверка подписи webhooks, Kafka consumers (Inbox для integration events), Helm-развёртывание `payments-relay`, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения провайдера контейнер `di/payments.py` собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+### Пулер PostgreSQL
+
+Перед базой стоит пулер соединений, и он обязан работать в **session mode**: payments опирается на состояние server-сессии. Relay держит session-level `pg_try_advisory_lock` на выделенном соединении вне пула и проверяет владение по `pg_locks` своего `pg_backend_pid()`, там же `set_config('statement_timeout', …, false)` на сессию; `payments-migrate` берёт `pg_advisory_lock` на единственном соединении; psycopg автоматически готовит prepared statements после `prepare_threshold` выполнений. Transaction mode ломает всё это: lock, настройка и prepared statements окажутся на чужом server-соединении. Unit of Work, savepoints и запросы Outbox живут внутри транзакции и от режима не зависят; `LISTEN/NOTIFY` и временные таблицы не используются. Lock-соединение relay живёт всё время активности реплики, поэтому `client_idle_timeout` пулера не должен быть короче интервала опроса Outbox.
+
+Каждый процесс держит собственный пул (`DATABASE__*`), в session mode каждое его соединение занимает server-соединение пулера. Сумма Σ(replicas × maxConns) всех release плюс по одному lock-соединению на реплику relay должна помещаться в `pool_size` пулера для базы payments:
+
+| Процесс | values | maxConns | minConns |
+| --- | --- | --- | --- |
+| payments (gRPC + webhooks) | `values.yaml` | 10 | 1 |
+| payments-relay | `values-relay.yaml` | 2 (+1 lock-соединение вне пула) | 1 |
+| init container migrate | — | 1 (одно соединение под advisory lock) | 0 |
+
+При одной реплике каждого release это 13 server-соединений плюс одно на время миграций. Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`; `db.client.connection.pool.name=payments`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
+
+Не реализованы: provider client, проверка подписи webhooks, Kafka consumers (Inbox для integration events), Helm-развёртывание `payments-relay` и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения провайдера контейнер `di/payments.py` собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
 
 ## Запуск
 

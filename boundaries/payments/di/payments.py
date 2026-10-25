@@ -29,7 +29,14 @@ from infrastructure.grpc.servicer import PaymentsHandlers
 from infrastructure.grpc.worker import GrpcWorker
 from infrastructure.ids import UuidIdentifiers
 from infrastructure.messaging import PaymentEventsMapper
-from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
+from infrastructure.observability import (
+    DomainMetrics,
+    ObservedOutbox,
+    ObservedProvider,
+    ObservedUnitOfWork,
+    classify_payment_error,
+)
+from infrastructure.observability import usecases as names
 from infrastructure.postgres import (
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
@@ -43,9 +50,11 @@ from infrastructure.provider import (
     WebhookVerifier,
     create_webhook_handler,
 )
+from pkg.application import Handler
 from pkg.application.clock import SystemClock
 from pkg.config import ProviderSettings, SpiceDBSettings
 from pkg.lifecycle import HttpWorker, WorkerGroup
+from pkg.telemetry.usecase import UseCase, UseCases
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler
@@ -101,6 +110,13 @@ def create_provider(settings: ProviderSettings | None) -> PaymentProviderGateway
     return UnconfiguredProvider()
 
 
+def instrument[In, Out](
+    use_cases: UseCases, use_case: UseCase, handler: Handler[In, Out]
+) -> Handler[In, Out]:
+    """Use case handler decorated with its span and ``nomnom.usecase.duration``."""
+    return use_cases.instrument(use_case, handler)
+
+
 def create_grpc_worker(
     address: tuple[str, int], subjects: SubjectResolver, handlers: PaymentsHandlers
 ) -> GrpcWorker:
@@ -131,7 +147,10 @@ class PaymentsContainer(containers.DeclarativeContainer):
     # Ports of the application layer.
     subjects = providers.Singleton(create_subject_resolver, config.identity)
     permissions = providers.Singleton(create_permission_checker, config.spicedb, spicedb)
-    provider = providers.Singleton(create_provider, config.payment_provider)
+    # Provider client: span and nomnom.payments.provider.request.duration per request.
+    provider = providers.Singleton(
+        ObservedProvider, providers.Singleton(create_provider, config.payment_provider)
+    )
     # Integration Events payments.v1.payment-events (ADR 31); publishes payments-relay.
     outbox_mapper = providers.Singleton(PaymentEventsMapper)
     clock = providers.Singleton(SystemClock)
@@ -167,20 +186,53 @@ class PaymentsContainer(containers.DeclarativeContainer):
         operation_ids=ids,
         applier=applier,
     )
+    # Every use case is decorated in the composition root: span "usecase <name>" and
+    # nomnom.usecase.duration (docs/observability.md#use-cases).
+    use_cases = providers.Singleton(UseCases, classify_payment_error)
     handlers = providers.Singleton(
         PaymentsHandlers,
-        get_payment_status=providers.Factory(GetPaymentStatusHandler, payments, permissions),
-        create_payment=providers.Factory(CreatePaymentHandler, payments, permissions, ids),
-        authorize_payment=providers.Factory(AuthorizePaymentHandler, executor),
-        capture_payment=providers.Factory(CapturePaymentHandler, executor),
-        cancel_authorization=providers.Factory(CancelAuthorizationHandler, executor),
-        refund_payment=providers.Factory(RefundPaymentHandler, executor),
+        get_payment_status=providers.Factory(
+            instrument,
+            use_cases,
+            names.GET_PAYMENT_STATUS,
+            providers.Factory(GetPaymentStatusHandler, payments, permissions),
+        ),
+        create_payment=providers.Factory(
+            instrument,
+            use_cases,
+            names.CREATE_PAYMENT,
+            providers.Factory(CreatePaymentHandler, payments, permissions, ids),
+        ),
+        authorize_payment=providers.Factory(
+            instrument,
+            use_cases,
+            names.AUTHORIZE_PAYMENT,
+            providers.Factory(AuthorizePaymentHandler, executor),
+        ),
+        capture_payment=providers.Factory(
+            instrument,
+            use_cases,
+            names.CAPTURE_PAYMENT,
+            providers.Factory(CapturePaymentHandler, executor),
+        ),
+        cancel_authorization=providers.Factory(
+            instrument,
+            use_cases,
+            names.CANCEL_AUTHORIZATION,
+            providers.Factory(CancelAuthorizationHandler, executor),
+        ),
+        refund_payment=providers.Factory(
+            instrument,
+            use_cases,
+            names.REFUND_PAYMENT,
+            providers.Factory(RefundPaymentHandler, executor),
+        ),
     )
     callbacks = providers.Singleton(
-        ApplyProviderCallbackHandler,
-        uow,
-        inbox,
-        applier,
+        instrument,
+        use_cases,
+        names.APPLY_PROVIDER_CALLBACK,
+        providers.Singleton(ApplyProviderCallbackHandler, uow, inbox, applier),
     )
 
     # Workers.

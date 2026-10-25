@@ -61,9 +61,14 @@ def sections(settings: Settings | RelaySettings) -> dict[str, Any]:
     }
 
 
-def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetry]:
-    """Global tracer and meter providers; flushed within ``flush_timeout`` on shutdown."""
-    owner = telemetry.setup()
+def telemetry_providers(
+    flush_timeout: timedelta, service_name: str = "payments"
+) -> Iterator[telemetry.Telemetry]:
+    """Global tracer and meter providers; flushed within ``flush_timeout`` on shutdown.
+
+    ``service_name`` is the default ``service.name``; ``OTEL_SERVICE_NAME`` overrides it.
+    """
+    owner = telemetry.setup(service_name)
     try:
         yield owner
     finally:

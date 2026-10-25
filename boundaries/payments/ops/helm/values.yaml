@@ -87,12 +87,28 @@ resources:
   limits: {}
 
 # Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
-# Пример:
+# OTEL_RESOURCE_ATTRIBUTES здесь не задаётся: chart задаёт её явно (telemetry ниже), а явная
+# env перекрывает envFrom. Пример:
 # env:
-#   OTEL_SERVICE_NAME: payments
-#   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-#   OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+#   PROVIDER__KIND: fake
 env: {}
+
+# ADR 9, docs/observability.md: OpenTelemetry процесса. service.namespace=nomnom задаёт код,
+# service.name по умолчанию — имя процесса (payments, payments-relay, payments-migrate).
+# Chart всегда передаёт OTEL_RESOURCE_ATTRIBUTES: service.instance.id — имя pod (downward
+# API), service.version — image.tag (или "unknown"), плюс resourceAttributes, например
+# deployment.environment.name.
+telemetry:
+  # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT), например
+  # http://alloy.nomnom-observability.svc.cluster.local:4317. Пусто — chart переменную не
+  # задаёт (её можно передать через env); без endpoint traces и metrics не экспортируются,
+  # JSON-логи в stdout пишутся всегда.
+  endpoint: ""
+  # OTEL_SERVICE_NAME; пусто — имя процесса из кода. Init container migrate его не получает.
+  serviceName: ""
+  # Дополнительные resource attributes: ключ → значение.
+  resourceAttributes: {}
+  #   deployment.environment.name: local
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
 # envFrom:
@@ -217,10 +233,21 @@ database:
   urlSecret:
     name: ""
     key: "dsn"
-  # Размер пула соединений процесса (DATABASE__MAX_CONNS).
+  # Пул процесса (DATABASE__*). За пулером PostgreSQL в session mode каждое соединение
+  # держит server-соединение: Σ(replicas × maxConns) всех release (плюс одно lock-соединение
+  # relay) должна помещаться в pool_size пулера (README, «Пулер PostgreSQL»). maxConns — по
+  # конкурентности процесса: API с webhooks 10, relay 2 (values-relay.yaml).
   maxConns: 10
+  # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
+  minConns: 1
+  # psycopg_pool сам закрывает соединение на 0-5% раньше lifetime (jitter).
+  maxConnLifetime: "30m"
+  maxConnIdleTime: "5m"
+  # connect_timeout libpq (целые секунды) и ожидание свободного соединения пула.
+  connectTimeout: "5s"
+  acquireTimeout: "5s"
   # Init container `python -m entrypoints.payments_migrate.main` перед процессом;
-  # advisory lock сериализует параллельные запуски реплик.
+  # advisory lock сериализует параллельные запуски реплик; одно соединение (пул 1).
   migrate: true
 
 volumes: []

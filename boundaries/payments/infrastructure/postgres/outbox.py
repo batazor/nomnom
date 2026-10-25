@@ -10,9 +10,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
-from opentelemetry import propagate
-
 from pkg.application import AggregateRef
+from pkg.telemetry import inject_trace_context
 from slices.payment.domains.payment import PaymentDomainEvent
 
 # ADR 31: namespace of deterministic Outbox event ids.
@@ -60,7 +59,9 @@ def outbox_event_id(aggregate: AggregateRef, event_type: str) -> uuid.UUID:
 
 
 def outbox_metadata() -> dict[str, str]:
-    """``traceparent`` of the current span, when there is one."""
-    carrier: dict[str, str] = {}
-    propagate.inject(carrier)
-    return {k: v for k, v in carrier.items() if k == "traceparent"}
+    """W3C ``traceparent``/``tracestate`` of the current span, when there is one.
+
+    Stored with the record, so the relay publishes the context in which the event was
+    written, not the relay's own. Baggage is not stored.
+    """
+    return inject_trace_context()

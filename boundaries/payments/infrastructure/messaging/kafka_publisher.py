@@ -5,6 +5,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from opentelemetry import trace
+
 from .outbox import (
     FatalPublishError,
     OutboxRecord,
@@ -12,6 +14,7 @@ from .outbox import (
     PublishInterruptedError,
     kafka_headers,
 )
+from .tracing import INSTRUMENTATION, publish_span
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +44,11 @@ class KafkaPublisher:
         client_id: str,
         delivery_timeout: float = DEFAULT_DELIVERY_TIMEOUT,
         extra_config: dict[str, Any] | None = None,
+        tracer_provider: trace.TracerProvider | None = None,
     ) -> None:
         from confluent_kafka import Producer
 
+        self._tracer = trace.get_tracer(INSTRUMENTATION, tracer_provider=tracer_provider)
         self._delivery_timeout = delivery_timeout
         self._fatal: str | None = None
         config: dict[str, Any] = {
@@ -54,6 +59,8 @@ class KafkaPublisher:
             # The delivery report arrives (success or error) before the wait bound.
             "delivery.timeout.ms": int(delivery_timeout * 1000),
             "error_cb": self._on_error,
+            # Логи librdkafka идут через logging процесса (JSON в stdout), а не в stderr.
+            "logger": logging.getLogger("confluent_kafka"),
         }
         config.update(extra_config or {})
         self._producer = Producer(config)
@@ -71,9 +78,13 @@ class KafkaPublisher:
             PublishInterruptedError: ``should_stop`` turned true before the report; the
                 message may still be delivered while the producer is closed.
         """
+        self._raise_if_fatal()
+        with publish_span(record, self._tracer):
+            self._publish(record, should_stop)
+
+    def _publish(self, record: OutboxRecord, should_stop: Callable[[], bool]) -> None:
         from confluent_kafka import KafkaException
 
-        self._raise_if_fatal()
         report: dict[str, Any] = {}
 
         def on_delivery(error: Any, _message: Any) -> None:

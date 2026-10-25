@@ -89,13 +89,27 @@ helm upgrade --install payments ops/helm --set image.tag=local
 
 ```yaml
 env:
-  OTEL_SERVICE_NAME: payments
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-  OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+  PROVIDER__KIND: fake
 ```
 
-Адрес Alloy и другие значения OpenTelemetry задаются окружением и не хардкодятся в chart;
-Alloy sidecar не добавляется — collector разворачивается отдельно.
+OpenTelemetry ([ADR 9](../../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md))
+задаётся блоком `telemetry`, а не `env`:
+
+```yaml
+telemetry:
+  endpoint: http://alloy.nomnom-observability.svc.cluster.local:4317  # OTEL_EXPORTER_OTLP_ENDPOINT
+  serviceName: ""        # OTEL_SERVICE_NAME; пусто — имя процесса (payments, payments-relay)
+  resourceAttributes:
+    deployment.environment.name: local
+```
+
+Chart всегда передаёт `OTEL_RESOURCE_ATTRIBUTES` с `service.instance.id=$(POD_NAME)`
+(downward API), `service.version=<image.tag>` (`unknown` без tag) и `resourceAttributes`;
+явная env перекрывает `envFrom`, поэтому `OTEL_RESOURCE_ATTRIBUTES` в `env` не задаётся.
+Init container migrate получает только resource attributes (JSON-логи `payments-migrate`).
+Без `endpoint` (или `OTEL_EXPORTER_OTLP_*ENDPOINT` в `env`) traces и metrics не
+экспортируются; JSON-логи в stdout пишутся всегда. Alloy sidecar не добавляется — collector
+разворачивается отдельно.
 
 Секреты (пароли, API tokens, credentials БД и Kafka, BSR tokens) не помещаются в
 `values.yaml` и `ConfigMap`. Они подключаются из внешних Kubernetes `Secret`:
@@ -186,11 +200,18 @@ helm template payments ops/helm \
 
 Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). DSN передаётся из внешнего Secret `database.urlSecret.name`/`key` (env `DATABASE__URL`); без него переменная не задаётся и процесс не стартует. При `database.migrate: true` Pod получает init container `python -m entrypoints.payments_migrate.main` (forward-only SQL-миграции под advisory lock).
 
+Пулер перед базой — только session mode; Σ(replicas × maxConns) всех release плюс lock-соединение relay должна помещаться в `pool_size` пулера ([README](../README.md#пулер-postgresql)). Длительности — `<int>(ms|s|m)`, chart отклоняет другой формат и `minConns` вне 0–1.
+
 | Значение | По умолчанию | Назначение |
 | --- | --- | --- |
 | `database.urlSecret.name` | `""` | Secret с DSN; создаётся развёртыванием, не chart. |
 | `database.urlSecret.key` | `dsn` | Ключ в Secret. |
-| `database.maxConns` | `10` | Размер пула соединений (`DATABASE__MAX_CONNS`). |
+| `database.maxConns` | `10` | Размер пула процесса (`DATABASE__MAX_CONNS`); relay — `2` в `values-relay.yaml`, init container migrate — `1`. |
+| `database.minConns` | `1` | Минимум соединений пула, 0 или 1 (`DATABASE__MIN_CONNS`); migrate — `0`. |
+| `database.maxConnLifetime` | `30m` | Lifetime соединения (`DATABASE__MAX_CONN_LIFETIME`), jitter 0–5% добавляет psycopg_pool. |
+| `database.maxConnIdleTime` | `5m` | Закрытие простаивающего соединения (`DATABASE__MAX_CONN_IDLE_TIME`). |
+| `database.connectTimeout` | `5s` | `connect_timeout` libpq (`DATABASE__CONNECT_TIMEOUT`). |
+| `database.acquireTimeout` | `5s` | Ожидание соединения пула (`DATABASE__ACQUIRE_TIMEOUT`). |
 | `database.migrate` | `true` | Init container с миграциями перед процессом. |
 
 Роль базы должна владеть схемой (создаёт таблицы и `schema_migrations`). Пример для kind:

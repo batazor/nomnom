@@ -107,3 +107,50 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(settings.url, REQUIRED_ENV["DATABASE__URL"])
         self.assertEqual(settings.max_conns, 4)
         self.assertNotIn("payments@localhost", repr(settings))
+
+    def test_uses_database_pool_defaults(self) -> None:
+        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
+            settings = load_settings().database
+        self.assertEqual(settings.max_conns, 10)
+        self.assertEqual(settings.min_conns, 0)
+        self.assertEqual(settings.max_conn_lifetime, timedelta(minutes=30))
+        self.assertEqual(settings.max_conn_idle_time, timedelta(minutes=5))
+        self.assertEqual(settings.connect_timeout, timedelta(seconds=5))
+        self.assertEqual(settings.acquire_timeout, timedelta(seconds=5))
+
+    def test_reads_database_pool_settings(self) -> None:
+        environment = {
+            **REQUIRED_ENV,
+            "DATABASE__MAX_CONNS": "2",
+            "DATABASE__MIN_CONNS": "1",
+            "DATABASE__MAX_CONN_LIFETIME": "20m",
+            "DATABASE__MAX_CONN_IDLE_TIME": "90s",
+            "DATABASE__CONNECT_TIMEOUT": "2500ms",
+            "DATABASE__ACQUIRE_TIMEOUT": "3s",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            settings = load_settings().database
+        self.assertEqual(settings.max_conns, 2)
+        self.assertEqual(settings.min_conns, 1)
+        self.assertEqual(settings.max_conn_lifetime, timedelta(minutes=20))
+        self.assertEqual(settings.max_conn_idle_time, timedelta(seconds=90))
+        self.assertEqual(settings.connect_timeout, timedelta(milliseconds=2500))
+        self.assertEqual(settings.acquire_timeout, timedelta(seconds=3))
+
+    def test_rejects_invalid_database_pool_settings(self) -> None:
+        for name, value in (
+            ("DATABASE__MAX_CONNS", "0"),
+            ("DATABASE__MIN_CONNS", "-1"),
+            ("DATABASE__MIN_CONNS", "2"),
+            ("DATABASE__MAX_CONN_LIFETIME", "0s"),
+            ("DATABASE__MAX_CONN_IDLE_TIME", "0m"),
+            ("DATABASE__CONNECT_TIMEOUT", "0ms"),
+            ("DATABASE__ACQUIRE_TIMEOUT", "5"),
+            ("DATABASE__ACQUIRE_TIMEOUT", "1h"),
+        ):
+            with (
+                self.subTest(name=name, value=value),
+                patch.dict(os.environ, {**REQUIRED_ENV, name: value}, clear=True),
+                self.assertRaisesRegex(ValidationError, name),
+            ):
+                load_settings()

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from opentelemetry import metrics
 
 from infrastructure.postgres.outbox import PAYMENT_EVENTS_TOPIC
+from pkg.telemetry import SECONDS_BUCKETS
 
 from .outbox import OutboxRecord, TopicBacklog
 
@@ -65,11 +66,13 @@ class RelayMetrics:
             "nomnom.outbox.publish.duration",
             unit="s",
             description="Produce until broker delivery report of one Outbox record.",
+            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
         )
         self._lag = meter.create_histogram(
             "nomnom.outbox.publish.lag",
             unit="s",
             description="occurred_at until broker confirmation of an Outbox record.",
+            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
         )
 
     def set_backlog(self, backlog: Sequence[TopicBacklog]) -> None:

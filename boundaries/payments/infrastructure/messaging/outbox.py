@@ -55,9 +55,11 @@ def kafka_headers(record: OutboxRecord) -> list[tuple[str, bytes]]:
         ("aggregate_id", record.aggregate_id),
         ("aggregate_version", str(record.aggregate_version)),
     ]
-    traceparent = record.metadata.get("traceparent")
-    if traceparent:
-        headers.append(("traceparent", traceparent))
+    # W3C Trace Context, captured when the event was written to the Outbox.
+    for name in ("traceparent", "tracestate"):
+        value = record.metadata.get(name)
+        if value:
+            headers.append((name, value))
     return [(name, value.encode()) for name, value in headers]
 
 

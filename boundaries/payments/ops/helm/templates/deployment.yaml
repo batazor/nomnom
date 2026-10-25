@@ -50,7 +50,8 @@ spec:
             {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
           {{- end }}
           env:
-            {{- include "payments.databaseEnv" . | nindent 12 }}
+            {{- include "payments.databaseEnv" (dict "context" . "migrate" true) | nindent 12 }}
+            {{- include "payments.otelEnv" (dict "context" . "migrate" true) | nindent 12 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -130,7 +131,8 @@ spec:
                   name: {{ .Values.spicedb.presharedKeySecret.name | quote }}
                   key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
             {{- end }}
-            {{- include "payments.databaseEnv" . | nindent 12 }}
+            {{- include "payments.databaseEnv" (dict "context" . "migrate" false) | nindent 12 }}
+            {{- include "payments.otelEnv" (dict "context" . "migrate" false) | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}

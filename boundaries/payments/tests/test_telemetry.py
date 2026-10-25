@@ -7,7 +7,7 @@ from pkg import telemetry
 
 class TelemetryTest(unittest.TestCase):
     def test_disabled_without_endpoint(self) -> None:
-        providers = telemetry.setup({})
+        providers = telemetry.setup(environ={})
         self.assertFalse(providers.enabled)
         self.assertTrue(providers.shutdown(0.01))
 
@@ -33,7 +33,7 @@ class TelemetryTest(unittest.TestCase):
             release.set()
 
     def test_setup_with_endpoint_registers_providers(self) -> None:
-        providers = telemetry.setup({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:1"})
+        providers = telemetry.setup(environ={"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:1"})
         self.assertTrue(providers.enabled)
         self.assertTrue(providers.shutdown(5.0))
 
