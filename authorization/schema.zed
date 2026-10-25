@@ -1,0 +1,76 @@
+/**
+ * Authorization schema of BiteRoute (ADR 18). Each definition has one owning
+ * bounded context; changes follow the review rules of docs/security.md.
+ */
+
+/** End user authenticated by the BFF identity flow. */
+definition user {}
+
+/** Workload identity (ADR 27): service:<service-name> from the ServiceAccount allowlist. */
+definition service {}
+
+/**
+ * Singleton platform:nomnom. Commands of the Order Fulfillment Workflow create or
+ * address resources by order_id before any resource-level relationship exists,
+ * so they are capabilities granted to the fulfillment service on the platform.
+ * Owner: shared contract; grants are bootstrapped by deployment.
+ */
+definition platform {
+	/** Service running the Order Fulfillment Workflow (orders-worker). */
+	relation fulfillment: service
+	/** Platform operator. */
+	relation operator: user
+
+	/** restaurants: receive and cancel Restaurant Orders of an Order. */
+	permission coordinate_fulfillment = fulfillment
+	/** payments: create, authorize, capture, cancel authorization, refund. */
+	permission manage_payments = fulfillment
+	/** payments: read payment status and operations. */
+	permission view_payments = fulfillment + operator
+	/** delivery: create, find courier, offer, reassign, replan, cancel. */
+	permission coordinate_delivery = fulfillment
+	permission register_restaurant = operator
+	permission register_courier = operator
+}
+
+/** Owner: orders. */
+definition order {
+	/** Written by orders when the Order is placed (creation-time TOUCH). */
+	relation customer: user
+
+	permission view = customer
+	permission cancel = customer
+}
+
+/** Owner: orders; customer:<id> equals user:<id>. */
+definition customer {
+	relation self: user
+
+	permission view_orders = self
+}
+
+/** Owner: restaurants. */
+definition restaurant {
+	relation owner: user
+	relation staff: user
+
+	permission manage = owner
+	permission manage_menu = owner + staff
+	permission operate_kitchen = owner + staff
+	permission view_orders = owner + staff
+}
+
+/** Owner: delivery. */
+definition courier {
+	relation self: user
+
+	permission act = self
+}
+
+/** Owner: delivery. */
+definition delivery {
+	/** Assigned courier; written by the assignment relationship consumer. */
+	relation courier: user
+
+	permission act_as_courier = courier
+}

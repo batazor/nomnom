@@ -1,0 +1,26 @@
+# Assertions of user permission paths over example relationships (zed validate only;
+# never loaded into SpiceDB). Grants of deployment live in bootstrap.yaml.
+schemaFile: schema.zed
+relationships: |-
+  order:example-order#customer@user:example-customer
+  customer:example-customer#self@user:example-customer
+  restaurant:example-restaurant#owner@user:example-owner
+  restaurant:example-restaurant#staff@user:example-cook
+  courier:example-courier#self@user:example-courier
+  delivery:example-delivery#courier@user:example-courier
+assertions:
+  assertTrue:
+    - order:example-order#view@user:example-customer
+    - order:example-order#cancel@user:example-customer
+    - customer:example-customer#view_orders@user:example-customer
+    - restaurant:example-restaurant#manage@user:example-owner
+    - restaurant:example-restaurant#operate_kitchen@user:example-owner
+    - restaurant:example-restaurant#operate_kitchen@user:example-cook
+    - restaurant:example-restaurant#manage_menu@user:example-cook
+    - courier:example-courier#act@user:example-courier
+    - delivery:example-delivery#act_as_courier@user:example-courier
+  assertFalse:
+    - order:example-order#view@user:example-owner
+    - restaurant:example-restaurant#manage@user:example-cook
+    - delivery:example-delivery#act_as_courier@user:example-owner
+    - courier:example-courier#act@user:example-cook

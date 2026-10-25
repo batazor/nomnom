@@ -1,0 +1,16 @@
+# SpiceDB bootstrap and validation file (ADR 18, ADR 27): schema plus grants that
+# deployment owns. Used by --datastore-bootstrap-files in kind and by integration
+# tests; `zed validate authorization/bootstrap.yaml` checks the assertions.
+schemaFile: schema.zed
+relationships: |-
+  platform:nomnom#fulfillment@service:orders-worker
+assertions:
+  assertTrue:
+    - platform:nomnom#coordinate_fulfillment@service:orders-worker
+    - platform:nomnom#manage_payments@service:orders-worker
+    - platform:nomnom#view_payments@service:orders-worker
+    - platform:nomnom#coordinate_delivery@service:orders-worker
+  assertFalse:
+    - platform:nomnom#manage_payments@service:bff
+    - platform:nomnom#register_restaurant@service:orders-worker
+    - platform:nomnom#register_courier@service:orders-worker
