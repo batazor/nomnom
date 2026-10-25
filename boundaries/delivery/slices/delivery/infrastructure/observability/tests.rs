@@ -1,4 +1,6 @@
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::time::SystemTime;
 
 use opentelemetry::metrics::MeterProvider;
 use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData, ResourceMetrics};
@@ -12,7 +14,7 @@ use crate::pkg::application::{ScopedUnitOfWork, Subject, UnitOfWork};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::create_delivery;
 use crate::slices::delivery::domains::delivery::{
-    DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
+    DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
 };
 
 const NOW: i64 = 10_000;
@@ -162,7 +164,7 @@ fn failed(reason: &str) -> DomainEvent {
         delivery_id: delivery_id(),
         order_id: OrderId::new("order-1"),
         courier_id: courier_id(),
-        reason: DeliveryFailureReason::new(reason).expect("reason"),
+        reason: DeliveryFailureReason::new(reason, Some("free text detail")).expect("reason"),
     }
 }
 
@@ -184,6 +186,14 @@ fn offer(accepted: bool) -> DomainEvent {
     }
 }
 
+fn offer_expired() -> DomainEvent {
+    DomainEvent::DeliveryOfferExpired {
+        delivery_id: delivery_id(),
+        offer_id: DeliveryOfferId::new("offer-1"),
+        courier_id: courier_id(),
+    }
+}
+
 #[test]
 fn committed_events_are_counted_by_metric() {
     let harness = Harness::new();
@@ -198,13 +208,14 @@ fn committed_events_are_counted_by_metric() {
         },
         offer(true),
         offer(false),
+        offer_expired(),
         DomainEvent::DeliveryPickedUp {
             delivery_id: delivery_id(),
             order_id: OrderId::new("order-1"),
             courier_id: courier_id(),
         },
         completed(Some(NOW - 1_800)),
-        failed("door closed"),
+        failed("no_access"),
         DomainEvent::DeliveryCancelled {
             delivery_id: delivery_id(),
             order_id: OrderId::new("order-1"),
@@ -232,6 +243,11 @@ fn committed_events_are_counted_by_metric() {
         harness.count("nomnom.delivery.offers", Some((OUTCOME, "rejected"))),
         1
     );
+    assert_eq!(
+        harness.count("nomnom.delivery.offers", Some((OUTCOME, "expired"))),
+        1
+    );
+    assert_eq!(harness.count("nomnom.delivery.offers", None), 3);
     assert_eq!(harness.count("nomnom.delivery.pickups", None), 1);
     assert_eq!(harness.count("nomnom.delivery.completed", None), 1);
     assert_eq!(harness.count("nomnom.delivery.failed", None), 1);
@@ -352,27 +368,76 @@ fn idempotent_repeat_is_recorded_once() {
 }
 
 #[test]
-fn unknown_failure_reason_is_recorded_as_other() {
-    let harness = Harness::with_reasons(&["customer_absent"]);
+fn failure_reason_outside_the_closed_set_is_recorded_as_other() {
+    let harness = Harness::with_reasons(&["customer_unreachable"]);
     let store = MemoryStore::new();
 
     harness
         .unit_of_work(
             &store,
             &store,
-            &[failed("customer_absent"), failed("door closed")],
+            &[failed("customer_unreachable"), failed("no_access")],
             true,
         )
         .expect("committed");
 
     assert_eq!(
-        harness.count("nomnom.delivery.failed", Some((REASON, "customer_absent"))),
+        harness.count(
+            "nomnom.delivery.failed",
+            Some((REASON, "customer_unreachable"))
+        ),
         1
     );
     assert_eq!(
         harness.count("nomnom.delivery.failed", Some((REASON, OTHER_REASON))),
         1
     );
+}
+
+/// With the catalog as the closed set (as in the composition root) every
+/// code is its own `nomnom.reason`; the detail is never an attribute.
+#[test]
+fn failure_reason_codes_of_the_catalog_are_recorded_as_is() {
+    let harness = Harness::with_reasons(&DeliveryFailureCode::CODES);
+    let store = MemoryStore::new();
+    let events: Vec<DomainEvent> = DeliveryFailureCode::CODES
+        .iter()
+        .map(|code| failed(code))
+        .collect();
+
+    harness
+        .unit_of_work(&store, &store, &events, true)
+        .expect("committed");
+
+    for code in DeliveryFailureCode::CODES {
+        assert_eq!(
+            harness.count("nomnom.delivery.failed", Some((REASON, code))),
+            1,
+            "{code}"
+        );
+    }
+    let metrics = harness.collect().expect("metrics");
+    for metric in metrics
+        .scope_metrics()
+        .flat_map(|scope| scope.metrics())
+        .filter(|metric| metric.name() == "nomnom.delivery.failed")
+    {
+        let AggregatedMetrics::U64(MetricData::Sum(sum)) = metric.data() else {
+            panic!("not a counter");
+        };
+        for point in sum.data_points() {
+            let keys: Vec<_> = point
+                .attributes()
+                .map(|kv| kv.key.as_str().to_owned())
+                .collect();
+            assert_eq!(keys, vec![REASON.to_owned()]);
+            assert!(
+                point
+                    .attributes()
+                    .all(|kv| kv.value.as_str() != "free text detail")
+            );
+        }
+    }
 }
 
 #[test]
@@ -450,4 +515,49 @@ fn unit_of_work_trait_runs_through_the_decorator() {
     result.expect("committed");
     assert_eq!(store.commits(), 1);
     assert_eq!(harness.count("nomnom.delivery.created", None), 1);
+}
+
+#[test]
+fn committed_failure_is_logged_once_and_rolled_back_failure_is_not() {
+    use crate::slices::delivery::infrastructure::failure_log::FailureLog;
+
+    let exporter = InMemoryMetricExporter::default();
+    let provider = SdkMeterProvider::builder()
+        .with_reader(PeriodicReader::builder(exporter).build())
+        .build();
+    let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+    let sink = Arc::clone(&lines);
+    let observed = ObservedOutbox::new(DomainMetrics::new(
+        &provider.meter("test"),
+        &DeliveryFailureCode::CODES,
+        Arc::new(|| NOW),
+    ))
+    .with_failure_log(FailureLog::new(
+        "delivery",
+        Arc::new(move |line| sink.lock().expect("lines").push(line.to_owned())),
+        Arc::new(SystemTime::now),
+    ));
+    let store = MemoryStore::new();
+    let run = |commit: bool| {
+        observed
+            .run_scoped(&store, &mut || {
+                observed
+                    .add(&store, OutboxMessage::delivery(failed("other")))
+                    .expect("outbox add");
+                commit
+            })
+            .expect("unit of work");
+    };
+
+    run(false);
+    assert!(lines.lock().expect("lines").is_empty());
+    run(true);
+
+    let lines = lines.lock().expect("lines");
+    assert_eq!(lines.len(), 1);
+    let record: serde_json::Value = serde_json::from_str(&lines[0]).expect("json");
+    assert_eq!(record["reason"], "other");
+    assert_eq!(record["detail"], "free text detail");
+    assert_eq!(record["delivery_id"], "delivery-1");
+    assert_eq!(record["courier_id"], "courier-1");
 }

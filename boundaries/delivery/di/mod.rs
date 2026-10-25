@@ -3,7 +3,8 @@
 //!
 //! - [`infrastructure`] — порты слайсов и их реализации ([`InfrastructureModule`]);
 //! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы [`build`];
-//! - [`server`] — `cmd/delivery`: gRPC и reconciliation ([`server::ServerModule`]);
+//! - [`server`] — `cmd/delivery`: gRPC, reconciliation и истечение Delivery
+//!   Offers ([`server::ServerModule`]);
 //! - [`relay`] — `cmd/delivery-relay`: Outbox → Kafka ([`relay::RelayModule`]);
 //! - [`migrate`] — `cmd/delivery-migrate` ([`migrate::MigrateModule`]).
 //!
@@ -16,6 +17,7 @@
 mod http_worker;
 pub mod infrastructure;
 pub mod migrate;
+mod offer_expiry_worker;
 mod reconciling_worker;
 pub mod relay;
 pub mod server;
@@ -25,6 +27,7 @@ pub use http_worker::HttpWorker;
 pub use infrastructure::{
     CourierStore, InfrastructureModule, ProcessAuthorization, ProcessRelationships, ProcessStores,
 };
+pub use offer_expiry_worker::{ExpireOffers, ExpirySchedule, OfferExpiryWorker};
 pub use reconciling_worker::ReconcilingWorker;
 pub use server::{postgres, spicedb, spicedb_authorization};
 pub use service::{ServiceModule, build, build_with_authorization};

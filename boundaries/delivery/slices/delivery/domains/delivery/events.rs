@@ -64,6 +64,13 @@ pub enum DomainEvent {
         offer_id: DeliveryOfferId,
         courier_id: CourierId,
     },
+    /// A pending Delivery Offer was closed after its deadline without an
+    /// answer (Expire Delivery Offers). Internal: not published.
+    DeliveryOfferExpired {
+        delivery_id: DeliveryId,
+        offer_id: DeliveryOfferId,
+        courier_id: CourierId,
+    },
 }
 
 impl DomainEvent {
@@ -78,7 +85,8 @@ impl DomainEvent {
             | Self::DeliveryFailed { delivery_id, .. }
             | Self::DeliveryCancelled { delivery_id, .. }
             | Self::DeliveryOfferAccepted { delivery_id, .. }
-            | Self::DeliveryOfferRejected { delivery_id, .. } => delivery_id,
+            | Self::DeliveryOfferRejected { delivery_id, .. }
+            | Self::DeliveryOfferExpired { delivery_id, .. } => delivery_id,
         }
     }
 }

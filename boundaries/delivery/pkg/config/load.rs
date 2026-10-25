@@ -10,8 +10,8 @@ use super::{
     AppConfig, CONFIG_KEY_DRAIN_TIMEOUT, CONFIG_KEY_MANAGEMENT_PORT, CONFIG_KEY_PORT,
     CONFIG_KEY_READINESS_DELAY, DATABASE_SETTINGS, DEFAULT_DRAIN_TIMEOUT, DEFAULT_MANAGEMENT_PORT,
     DEFAULT_PORT, DEFAULT_READINESS_DELAY, DRAIN_TIMEOUT_ENV, IDENTITY_SETTINGS, KAFKA_SETTINGS,
-    MANAGEMENT_PORT_ENV, OUTBOX_SETTINGS, PORT_ENV, READINESS_DELAY_ENV, RECONCILER_SETTINGS,
-    SPICEDB_SETTINGS,
+    MANAGEMENT_PORT_ENV, OFFERS_SETTINGS, OUTBOX_SETTINGS, PORT_ENV, READINESS_DELAY_ENV,
+    RECONCILER_SETTINGS, SPICEDB_SETTINGS,
 };
 
 pub fn load() -> Result<AppConfig, ConfigError> {
@@ -32,6 +32,7 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     builder = configure_identity(builder, |name| std::env::var(name).ok())?;
     builder = configure_spicedb(builder, |name| std::env::var(name).ok())?;
     builder = configure_reconciler(builder, |name| std::env::var(name).ok())?;
+    builder = configure_settings(builder, &OFFERS_SETTINGS, |name| std::env::var(name).ok())?;
     builder = configure_database(builder, |name| std::env::var(name).ok())?;
     builder = configure_settings(builder, &KAFKA_SETTINGS, |name| std::env::var(name).ok())?;
     builder = configure_settings(builder, &OUTBOX_SETTINGS, |name| std::env::var(name).ok())?;
@@ -42,6 +43,7 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     config.shutdown.validate()?;
     config.spicedb.validate()?;
     config.reconciler.validate()?;
+    config.offers.validate()?;
     config.database.validate()?;
     config.outbox.validate()?;
 

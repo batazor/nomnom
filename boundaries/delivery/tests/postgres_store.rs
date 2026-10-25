@@ -28,8 +28,9 @@ use delivery::slices::delivery::applications::get_courier_current_delivery::Cour
 use delivery::slices::delivery::applications::list_available_delivery_offers::PendingDeliveryOffersReadModel;
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use delivery::slices::delivery::domains::delivery::{
-    Address, Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryRepository, DomainEvent, OfferState, OrderId, State,
+    Address, Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
+    DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DomainEvent, FailureReporter,
+    OfferState, OrderId, State,
 };
 
 const DSN_ENV: &str = "DATABASE_URL";
@@ -125,6 +126,26 @@ fn outbox_rows(aggregate_id: &str) -> Vec<OutboxRow> {
             .await
             .expect("outbox")
         })
+}
+
+/// Runs one statement with a single text parameter (raw writes of old rows).
+fn execute(statement: &'static str, parameter: &str) {
+    let config = config().expect("url");
+    let parameter = parameter.to_owned();
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime")
+        .block_on(async move {
+            let mut connection = <sqlx::PgConnection as sqlx::Connection>::connect(&config.url)
+                .await
+                .expect("connect");
+            sqlx::query(statement)
+                .bind(parameter)
+                .execute(&mut connection)
+                .await
+                .expect("execute");
+        });
 }
 
 #[derive(Debug, PartialEq)]
@@ -527,4 +548,94 @@ async fn works_inside_a_current_thread_runtime() {
     });
     assert_eq!(result, Ok(()));
     assert!(CourierRepository::get(&store, &id).expect("get").is_some());
+}
+
+#[test]
+fn expired_pending_offers_are_listed_by_deadline_and_stored_as_expired() {
+    let Some(store) = store() else { return };
+    let courier_id = CourierId::new(unique("courier"));
+    let delivery = new_delivery(&unique("delivery"));
+    DeliveryRepository::add(&store, &delivery).expect("delivery");
+    // Deadlines far in the past keep other tests' offers out of the batch.
+    let base = -2_000_000_000;
+    let offer = |deadline: i64| {
+        let offer = DeliveryOffer::new(
+            DeliveryOfferId::new(unique("offer")),
+            delivery.id().clone(),
+            courier_id.clone(),
+            base,
+            deadline,
+        )
+        .expect("offer");
+        DeliveryOfferRepository::add(&store, &offer).expect("add offer");
+        offer
+    };
+    let later = offer(base + 20);
+    let earlier = offer(base + 10);
+    let open = offer(base + 30);
+    let ours = |offers: Vec<DeliveryOffer>| -> Vec<DeliveryOfferId> {
+        offers
+            .into_iter()
+            .filter(|offer| offer.delivery_id() == delivery.id())
+            .map(|offer| offer.id().clone())
+            .collect()
+    };
+
+    // The deadline itself is not past: `open` (base + 30) is not listed.
+    let listed = store.list_expired_pending(base + 30, 1000).expect("list");
+    assert_eq!(ours(listed), vec![earlier.id().clone(), later.id().clone()]);
+    assert_eq!(
+        ours(store.list_expired_pending(base + 30, 1).expect("limit")).len(),
+        1
+    );
+
+    let mut expired = earlier.clone();
+    expired.expire(base + 30).expect("expire");
+    DeliveryOfferRepository::save(&store, &expired).expect("save expired");
+    assert_eq!(
+        DeliveryOfferRepository::get(&store, earlier.id())
+            .expect("get")
+            .expect("offer")
+            .state(),
+        OfferState::Expired
+    );
+    assert_eq!(
+        ours(store.list_expired_pending(base + 30, 1000).expect("list")),
+        vec![later.id().clone()]
+    );
+    assert!(open.is_open_at(base + 30));
+}
+
+#[test]
+fn failure_reason_code_and_detail_round_trip_and_legacy_text_reads_as_other() {
+    let Some(store) = store() else { return };
+    let courier = unique("courier");
+    let mut delivery = new_delivery(&unique("delivery"));
+    delivery.assign(CourierId::new(&courier)).expect("assign");
+    DeliveryRepository::add(&store, &delivery).expect("delivery");
+    let mut failed = DeliveryRepository::get(&store, delivery.id())
+        .expect("get")
+        .expect("delivery");
+    let reason = DeliveryFailureReason::new("no_access", Some("gate locked")).expect("reason");
+    failed
+        .fail(reason.clone(), &FailureReporter::Dispatcher)
+        .expect("fail");
+    DeliveryRepository::save(&store, &failed).expect("save failed");
+    let stored = DeliveryRepository::get(&store, delivery.id())
+        .expect("get")
+        .expect("delivery");
+    assert_eq!(stored.failure_reason(), Some(&reason));
+
+    // A row written before the catalog: free text, no detail.
+    execute(
+        "UPDATE deliveries SET failure_reason = 'customer  absent', failure_detail = NULL
+         WHERE id = $1",
+        delivery.id().as_str(),
+    );
+    let legacy = DeliveryRepository::get(&store, delivery.id())
+        .expect("legacy row does not fail")
+        .expect("delivery");
+    let legacy_reason = legacy.failure_reason().expect("reason");
+    assert_eq!(legacy_reason.code(), DeliveryFailureCode::Other);
+    assert_eq!(legacy_reason.detail(), Some("customer absent"));
 }

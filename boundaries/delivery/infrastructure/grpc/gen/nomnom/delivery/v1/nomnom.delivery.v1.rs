@@ -90,8 +90,18 @@ pub struct DeliveryFailed {
     pub order_id: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
     pub delivery_id: ::prost::alloc::string::String,
+    /// Код каталога Delivery Failure Reason: customer_unreachable,
+    /// address_not_found, no_access, customer_refused, order_damaged,
+    /// courier_incident, other. Набор закрыт и может расширяться новыми кодами;
+    /// потребитель должен трактовать неизвестный код как other. До каталога поле
+    /// содержало свободный текст.
     #[prost(string, tag="3")]
     pub reason: ::prost::alloc::string::String,
+    /// Необязательное пояснение в свободной форме (нормализованные пробелы, не
+    /// длиннее 500 символов); пусто, если не указано. Не метка метрик и не
+    /// основание для бизнес-решений.
+    #[prost(string, tag="4")]
+    pub detail: ::prost::alloc::string::String,
 }
 /// Курьер снят с Delivery без замены (Courier Reassignment); Delivery вернулась
 /// в поиск курьера. Доменной причины снятия нет.

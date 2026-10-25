@@ -27,6 +27,14 @@ pub trait DeliveryOfferRepository {
         delivery_id: &DeliveryId,
     ) -> Result<Vec<DeliveryOffer>, RepositoryError>;
 
+    /// Pending offers whose deadline has passed (`expires_at < now`), oldest
+    /// deadline first, at most `limit`.
+    fn list_expired_pending(
+        &self,
+        now_epoch_seconds: i64,
+        limit: usize,
+    ) -> Result<Vec<DeliveryOffer>, RepositoryError>;
+
     /// Inserts a new offer; an existing id yields [`RepositoryError::Conflict`].
     fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError>;
 

@@ -1,7 +1,8 @@
 //! Report Delivery Failure: the assigned courier or an authorized dispatcher
 //! records that an assigned or picked up Delivery cannot be completed. The
-//! reason is stored and published as is; whether it is retryable is decided
-//! outside `delivery`.
+//! reason is a code of the Delivery Failure Reason catalog plus an optional
+//! free-text detail; an unknown code is invalid input. Whether a code is
+//! retryable is decided outside `delivery`.
 //!
 //! The assignment is over, so `delivery:<id>#courier@user:<courier_id>` is
 //! deleted before commit (AC-691); a failed delete rolls the failure back.
@@ -33,7 +34,10 @@ pub enum Reporter {
 pub struct Input {
     pub delivery_id: String,
     pub reporter: Reporter,
+    /// Code of the Delivery Failure Reason catalog, e.g. `customer_unreachable`.
     pub reason: String,
+    /// Optional free text; blank means no detail.
+    pub detail: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -59,7 +63,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
         input: Input,
     ) -> Result<Output, DeliveryApplicationError> {
         let delivery_id = delivery_id(&input.delivery_id)?;
-        let reason = DeliveryFailureReason::new(&input.reason)?;
+        let reason = DeliveryFailureReason::new(&input.reason, input.detail.as_deref())?;
         let (reporter, resource) = match &input.reporter {
             Reporter::Courier(raw) => {
                 let courier_id = courier_id(raw)?;
@@ -134,11 +138,12 @@ mod tests {
             delivery_id: "delivery-1".to_owned(),
             reporter,
             reason: reason.to_owned(),
+            detail: None,
         }
     }
 
-    fn reason(value: &str) -> DeliveryFailureReason {
-        DeliveryFailureReason::new(value).expect("reason")
+    fn reason(code: &str, detail: Option<&str>) -> DeliveryFailureReason {
+        DeliveryFailureReason::new(code, detail).expect("reason")
     }
 
     /// AC-340
@@ -150,20 +155,21 @@ mod tests {
         let output = handler(&world)
             .execute(
                 &subject("courier-1"),
-                input(
-                    Reporter::Courier("courier-1".to_owned()),
-                    " customer  unreachable ",
-                ),
+                Input {
+                    detail: Some(" rang   twice ".to_owned()),
+                    ..input(
+                        Reporter::Courier("courier-1".to_owned()),
+                        " customer_unreachable ",
+                    )
+                },
             )
             .expect("failure reported");
 
-        assert_eq!(output.reason, reason("customer unreachable"));
+        let expected = reason("customer_unreachable", Some("rang twice"));
+        assert_eq!(output.reason, expected);
         let delivery = world.delivery("delivery-1");
         assert_eq!(delivery.state(), State::Failed);
-        assert_eq!(
-            delivery.failure_reason(),
-            Some(&reason("customer unreachable"))
-        );
+        assert_eq!(delivery.failure_reason(), Some(&expected));
         assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
         assert_eq!(
             world.store.outbox_messages(),
@@ -171,7 +177,7 @@ mod tests {
                 delivery_id: DeliveryId::new("delivery-1"),
                 order_id: OrderId::new("order-of-delivery-1"),
                 courier_id: CourierId::new("courier-1"),
-                reason: reason("customer unreachable"),
+                reason: expected,
             })]
         );
         assert_eq!(
@@ -194,7 +200,7 @@ mod tests {
             handler(&world)
                 .execute(
                     &subject(subject_id),
-                    input(reporter, "customer unreachable"),
+                    input(reporter, "customer_unreachable"),
                 )
                 .expect("failure reported");
 
@@ -227,7 +233,10 @@ mod tests {
         assert!(matches!(
             handler(&world).execute(
                 &subject("courier-1"),
-                input(Reporter::Courier("courier-1".to_owned()), "lost")
+                input(
+                    Reporter::Courier("courier-1".to_owned()),
+                    "customer_unreachable"
+                )
             ),
             Err(DeliveryApplicationError::DependencyUnavailable(_))
         ));
@@ -245,7 +254,7 @@ mod tests {
         let output = handler(&world)
             .execute(
                 &subject("dispatcher-1"),
-                input(Reporter::Dispatcher, "restaurant closed"),
+                input(Reporter::Dispatcher, "no_access"),
             )
             .expect("failure reported");
 
@@ -273,7 +282,7 @@ mod tests {
         assert_eq!(
             handler(&world).execute(
                 &subject("dispatcher-1"),
-                input(Reporter::Dispatcher, "late report")
+                input(Reporter::Dispatcher, "other")
             ),
             Err(DeliveryApplicationError::DeliveryPrecondition(
                 DeliveryError::Transition(TransitionError::InvalidTransition {
@@ -293,7 +302,10 @@ mod tests {
         assert_eq!(
             handler(&world).execute(
                 &subject("courier-2"),
-                input(Reporter::Courier("courier-2".to_owned()), "flat tyre")
+                input(
+                    Reporter::Courier("courier-2".to_owned()),
+                    "courier_incident"
+                )
             ),
             Err(DeliveryApplicationError::DeliveryPrecondition(
                 DeliveryError::CourierNotAssigned
@@ -315,13 +327,54 @@ mod tests {
     }
 
     #[test]
+    fn unknown_code_is_invalid_not_other() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+        assert_eq!(
+            handler(&world).execute(
+                &subject("dispatcher-1"),
+                input(Reporter::Dispatcher, "customer absent")
+            ),
+            Err(DeliveryApplicationError::InvalidRequest(
+                InvalidDeliveryRequest::Validation(DeliveryValidationError::UnknownFailureReason(
+                    "customer absent".to_owned()
+                ))
+            ))
+        );
+        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+        assert!(world.store.outbox_messages().is_empty());
+    }
+
+    #[test]
+    fn too_long_detail_is_invalid() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+        let detail = "x".repeat(DeliveryFailureReason::MAX_DETAIL_CHARS + 1);
+        assert_eq!(
+            handler(&world).execute(
+                &subject("dispatcher-1"),
+                Input {
+                    detail: Some(detail),
+                    ..input(Reporter::Dispatcher, "other")
+                }
+            ),
+            Err(DeliveryApplicationError::InvalidRequest(
+                InvalidDeliveryRequest::Validation(DeliveryValidationError::FailureDetailTooLong {
+                    maximum: DeliveryFailureReason::MAX_DETAIL_CHARS
+                })
+            ))
+        );
+        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+    }
+
+    #[test]
     fn denied_subject_cannot_report_failure() {
         let world = World::with_authorization(StaticAuthorization::deny_all());
         world.assigned_delivery("delivery-1", "courier-1");
         assert_eq!(
             handler(&world).execute(
                 &subject("intruder"),
-                input(Reporter::Dispatcher, "restaurant closed")
+                input(Reporter::Dispatcher, "no_access")
             ),
             Err(DeliveryApplicationError::PermissionDenied)
         );

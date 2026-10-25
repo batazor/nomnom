@@ -180,7 +180,7 @@ fn closed_delivery_is_rejected_as_already_closed() {
     failed.assign(courier).expect("assign");
     failed
         .fail(
-            DeliveryFailureReason::new("door closed").expect("reason"),
+            DeliveryFailureReason::new("no_access", Some("door closed")).expect("reason"),
             &FailureReporter::Dispatcher,
         )
         .expect("fail");

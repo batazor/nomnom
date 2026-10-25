@@ -29,9 +29,10 @@ use crate::slices::delivery::di::{
     DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
 };
 use crate::slices::delivery::domains::delivery::{
-    Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryRepository, OrderId,
+    Delivery, DeliveryFailureCode, DeliveryId, DeliveryOffer, DeliveryOfferId,
+    DeliveryOfferRepository, DeliveryRepository, OrderId,
 };
+use crate::slices::delivery::infrastructure::failure_log::FailureLog;
 use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
 
 /// Локальные значения политики назначения до появления продуктовых настроек.
@@ -224,10 +225,15 @@ pub struct LocalDeliveryPorts {
     ids: Box<dyn ProcessIds>,
 }
 
-/// Closed set of `nomnom.reason` of `nomnom.delivery.failed`. The reason of a
-/// Delivery Failure is free text without a catalog, so every value is recorded
-/// as `other` until `delivery` defines failure reason codes.
-const DELIVERY_FAILURE_REASONS: &[&str] = &[];
+/// Closed set of `nomnom.reason` of `nomnom.delivery.failed`: the codes of the
+/// Delivery Failure Reason catalog (the free-text detail is never recorded).
+const DELIVERY_FAILURE_REASONS: &[&str] = &DeliveryFailureCode::CODES;
+
+/// Business metrics and the Delivery Failure log of the process.
+fn observed_outbox() -> ObservedOutbox {
+    ObservedOutbox::new(DomainMetrics::global(DELIVERY_FAILURE_REASONS))
+        .with_failure_log(FailureLog::stdout(super::server::SERVICE_NAME))
+}
 
 /// [`TransactionalStore`] of the slice whose Unit of Work and Outbox go
 /// through [`ObservedOutbox`]: business metrics are recorded after the
@@ -284,6 +290,14 @@ impl DeliveryOfferRepository for ObservedStore {
         delivery_id: &DeliveryId,
     ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
         self.inner.list_for_delivery(delivery_id)
+    }
+
+    fn list_expired_pending(
+        &self,
+        now_epoch_seconds: i64,
+        limit: usize,
+    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
+        self.inner.list_expired_pending(now_epoch_seconds, limit)
     }
 
     fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
@@ -396,10 +410,7 @@ pub(super) fn infrastructure(
                 store: stores.couriers,
             })
             .with_component_parameters::<LocalDeliveryPorts>(LocalDeliveryPortsParameters {
-                store: ObservedStore::new(
-                    stores.transactional,
-                    ObservedOutbox::new(DomainMetrics::global(DELIVERY_FAILURE_REASONS)),
-                ),
+                store: ObservedStore::new(stores.transactional, observed_outbox()),
                 read_models: stores.read_models,
                 locator,
                 ids,

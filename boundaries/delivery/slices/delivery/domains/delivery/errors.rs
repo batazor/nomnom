@@ -34,6 +34,12 @@ impl From<TransitionError> for DeliveryError {
 pub enum DeliveryValidationError {
     EmptyAddress,
     EmptyFailureReason,
+    /// The failure reason code is not in the Delivery Failure Reason catalog.
+    UnknownFailureReason(String),
+    /// The free-text detail of a failure reason exceeds `maximum` characters.
+    FailureDetailTooLong {
+        maximum: usize,
+    },
     AssignedStateRequiresCourier,
     WaitingStateMustNotHaveCourier,
     CancelledStateMustNotHaveCourier,
@@ -48,6 +54,13 @@ impl Display for DeliveryValidationError {
             Self::EmptyFailureReason => {
                 formatter.write_str("delivery failure reason must not be empty")
             }
+            Self::UnknownFailureReason(code) => {
+                write!(formatter, "unknown delivery failure reason {code:?}")
+            }
+            Self::FailureDetailTooLong { maximum } => write!(
+                formatter,
+                "delivery failure detail must be at most {maximum} characters"
+            ),
             Self::AssignedStateRequiresCourier => {
                 formatter.write_str("assigned delivery requires a courier")
             }

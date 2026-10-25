@@ -110,11 +110,14 @@ impl World {
             .status()
     }
 
-    pub fn offer_state(&self, id: &str) -> OfferState {
+    pub fn store_offer(&self, id: &str) -> DeliveryOffer {
         DeliveryOfferRepository::get(&self.store, &DeliveryOfferId::new(id))
             .expect("read offer")
             .expect("offer exists")
-            .state()
+    }
+
+    pub fn offer_state(&self, id: &str) -> OfferState {
+        self.store_offer(id).state()
     }
 }
 

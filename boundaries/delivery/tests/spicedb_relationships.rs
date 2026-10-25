@@ -402,7 +402,8 @@ fn failed_delivery_courier_loses_act_as_courier() {
         report_delivery_failure::Input {
             delivery_id: world.delivery.clone(),
             reporter: report_delivery_failure::Reporter::Dispatcher,
-            reason: "customer unreachable".to_owned(),
+            reason: "customer_unreachable".to_owned(),
+            detail: None,
         },
     )
     .expect("failed");

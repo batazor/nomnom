@@ -15,16 +15,20 @@
 //!   `nomnom.delivery.assignment.latency` (creation → assignment commit);
 //! - `CourierUnassignedFromDelivery` → `nomnom.delivery.reassignments`; the
 //!   domain has no unassignment reason, so `nomnom.reason` is `other`;
-//! - `DeliveryOfferAccepted` / `DeliveryOfferRejected` →
-//!   `nomnom.delivery.offers` with `nomnom.outcome` accepted / rejected
-//!   (expiry is a function of time, not a transition: `expired` is not
-//!   recorded);
+//! - `DeliveryOfferAccepted` / `DeliveryOfferRejected` /
+//!   `DeliveryOfferExpired` → `nomnom.delivery.offers` with `nomnom.outcome`
+//!   accepted / rejected / expired;
 //! - `DeliveryPickedUp` → `nomnom.delivery.pickups`;
 //! - `DeliveryCompleted` → `nomnom.delivery.completed` and
 //!   `nomnom.delivery.duration` (creation → completion commit);
-//! - `DeliveryFailed` → `nomnom.delivery.failed` with `nomnom.reason` from the
-//!   closed set given by the composition root, otherwise `other`;
+//! - `DeliveryFailed` → `nomnom.delivery.failed` with `nomnom.reason` = the
+//!   code of the Delivery Failure Reason catalog when it is in the closed set
+//!   given by the composition root, otherwise `other`; the free-text detail is
+//!   never an attribute;
 //! - `DeliveryCancelled` → no metric in the registry.
+//!
+//! A committed `DeliveryFailed` is also logged and set on the active span by
+//! [`FailureLog`] when the composition root passes one.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -38,6 +42,8 @@ use crate::pkg::application::{TransactionScope, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::domains::delivery::DomainEvent;
+
+use super::failure_log::{FailureLog, ReportedFailure};
 
 /// Instrumentation scope of the business metrics.
 pub const METER_NAME: &str = "nomnom.delivery.domain";
@@ -175,6 +181,9 @@ impl DomainMetrics {
                 DomainEvent::DeliveryOfferRejected { .. } => {
                     self.offers.add(1, &[KeyValue::new(OUTCOME, "rejected")]);
                 }
+                DomainEvent::DeliveryOfferExpired { .. } => {
+                    self.offers.add(1, &[KeyValue::new(OUTCOME, "expired")]);
+                }
                 DomainEvent::DeliveryPickedUp { .. } => self.pickups.add(1, &[]),
                 DomainEvent::DeliveryCompleted {
                     created_at_epoch_seconds,
@@ -215,6 +224,7 @@ impl DomainMetrics {
 /// synchronously on one thread, so events are collected per thread.
 pub struct ObservedOutbox {
     metrics: DomainMetrics,
+    failure_log: Option<FailureLog>,
     pending: Mutex<HashMap<ThreadId, Vec<DomainEvent>>>,
 }
 
@@ -223,7 +233,39 @@ impl ObservedOutbox {
     pub fn new(metrics: DomainMetrics) -> Self {
         Self {
             metrics,
+            failure_log: None,
             pending: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Also logs every committed `DeliveryFailed` and annotates the active span.
+    #[must_use]
+    pub fn with_failure_log(mut self, log: FailureLog) -> Self {
+        self.failure_log = Some(log);
+        self
+    }
+
+    /// Committed events: metrics, then the failure log.
+    fn observe(&self, events: &[DomainEvent]) {
+        self.metrics.record(events);
+        let Some(log) = &self.failure_log else {
+            return;
+        };
+        for event in events {
+            if let DomainEvent::DeliveryFailed {
+                delivery_id,
+                order_id,
+                courier_id,
+                reason,
+            } = event
+            {
+                log.record(&ReportedFailure {
+                    delivery_id,
+                    order_id,
+                    courier_id: Some(courier_id),
+                    reason,
+                });
+            }
         }
     }
 
@@ -272,7 +314,7 @@ impl ObservedOutbox {
         });
         let events = collector.finish();
         if outcome.is_ok() && committed {
-            self.metrics.record(&events);
+            self.observe(&events);
         }
         outcome
     }
@@ -292,7 +334,7 @@ impl ObservedOutbox {
             events.push(event);
         } else {
             drop(pending);
-            self.metrics.record(&[event]);
+            self.observe(&[event]);
         }
         Ok(())
     }

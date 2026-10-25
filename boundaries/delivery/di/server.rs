@@ -1,5 +1,5 @@
-//! Composition root процесса `delivery` (`cmd/delivery`): gRPC API и фоновый
-//! reconciliation relationships.
+//! Composition root процесса `delivery` (`cmd/delivery`): gRPC API, фоновый
+//! reconciliation relationships и фоновое истечение Delivery Offers.
 //!
 //! [`compose`] выбирает реализации портов и открывает общие клиенты процесса
 //! (fail fast: SpiceDB, PostgreSQL, service identity), собирает граф use cases
@@ -29,15 +29,17 @@ use crate::infrastructure::spicedb::{
     RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization, SpiceDbClient,
     SpiceDbConfigError, SpiceDbRelationships,
 };
-use crate::pkg::config::{AppConfig, DatabaseConfig, SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
+use crate::pkg::config::{
+    AppConfig, DatabaseConfig, OffersConfig, SPICEDB_ENDPOINT_ENV, SpiceDbConfig,
+};
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::delivery::domains::delivery::DeliveryRepository;
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 
-use super::ReconcilingWorker;
 use super::infrastructure::{ProcessIds, ProcessLocator, ProcessStores, infrastructure};
 use super::service::{ServiceModule, service};
+use super::{ExpireOffers, ExpirySchedule, OfferExpiryWorker, ReconcilingWorker};
 
 /// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
 pub const SERVICE_NAME: &str = "delivery";
@@ -165,24 +167,60 @@ impl RelationshipReconciliation for SpiceDbReconciliation {
     }
 }
 
-/// Worker процесса: gRPC и фоновый reconciliation под одним сигналом.
-pub type DeliveryWorker = ReconcilingWorker<GrpcWorker>;
+/// Фоновое истечение Delivery Offers (Expire Delivery Offers) над use cases
+/// процесса.
+pub trait OfferExpiry: Interface {
+    fn expire(&self) -> ExpireOffers;
+    fn schedule(&self) -> ExpirySchedule;
+}
 
-/// Создаёт [`DeliveryWorker`]: открывает бизнес-порт и reconcilers.
+#[derive(Component)]
+#[shaku(interface = OfferExpiry)]
+pub struct UseCaseOfferExpiry {
+    /// Тот же граф use cases, что у gRPC-транспорта.
+    use_cases: Arc<ServiceModule>,
+    config: OffersConfig,
+}
+
+impl OfferExpiry for UseCaseOfferExpiry {
+    fn expire(&self) -> ExpireOffers {
+        let use_cases = Arc::clone(&self.use_cases);
+        Arc::new(move |input| use_cases.deliveries().expire_delivery_offers(input))
+    }
+
+    fn schedule(&self) -> ExpirySchedule {
+        ExpirySchedule {
+            interval: self.config.expiry_interval,
+            batch_size: usize::try_from(self.config.expiry_batch).unwrap_or(usize::MAX),
+        }
+    }
+}
+
+/// Worker процесса: gRPC, фоновый reconciliation и истечение offers под
+/// одним сигналом.
+pub type DeliveryWorker = ReconcilingWorker<OfferExpiryWorker<GrpcWorker>>;
+
+/// Создаёт [`DeliveryWorker`]: открывает бизнес-порт, reconcilers и цикл
+/// истечения offers.
 pub struct DeliveryWorkerProvider;
 
 impl<M> Provider<M> for DeliveryWorkerProvider
 where
-    M: Module + HasComponent<dyn GrpcTransport> + HasComponent<dyn RelationshipReconciliation>,
+    M: Module
+        + HasComponent<dyn GrpcTransport>
+        + HasComponent<dyn RelationshipReconciliation>
+        + HasComponent<dyn OfferExpiry>,
 {
     type Interface = DeliveryWorker;
 
     fn provide(module: &M) -> Result<Box<DeliveryWorker>, Box<dyn Error>> {
         let transport: &dyn GrpcTransport = module.resolve_ref();
         let reconciliation: &dyn RelationshipReconciliation = module.resolve_ref();
+        let expiry: &dyn OfferExpiry = module.resolve_ref();
         let worker = transport
             .bind()
             .map_err(|error| format!("listen :{}: {error}", transport.port()))?;
+        let worker = OfferExpiryWorker::new(worker, expiry.expire(), expiry.schedule());
         Ok(Box::new(ReconcilingWorker::new(
             worker,
             reconciliation.reconcilers(),
@@ -219,7 +257,12 @@ impl ServerTelemetry for OtlpServerTelemetry {
 
 module! {
     pub ServerModule {
-        components = [TonicTransport, SpiceDbReconciliation, OtlpServerTelemetry],
+        components = [
+            TonicTransport,
+            SpiceDbReconciliation,
+            UseCaseOfferExpiry,
+            OtlpServerTelemetry
+        ],
         providers = [DeliveryWorkerProvider]
     }
 }
@@ -264,6 +307,10 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     );
     let use_cases = Arc::new(service(Arc::clone(&infrastructure)));
     Ok(ServerModule::builder()
+        .with_component_parameters::<UseCaseOfferExpiry>(UseCaseOfferExpiryParameters {
+            use_cases: Arc::clone(&use_cases),
+            config: config.offers,
+        })
         .with_component_parameters::<TonicTransport>(TonicTransportParameters {
             use_cases,
             subjects,

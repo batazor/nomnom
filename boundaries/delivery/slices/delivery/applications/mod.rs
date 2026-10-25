@@ -7,6 +7,7 @@ pub mod confirm_pickup;
 pub mod courier_locator;
 pub mod create_delivery;
 pub mod error;
+pub mod expire_delivery_offers;
 pub mod find_courier;
 pub mod get_courier_current_delivery;
 pub mod list_available_delivery_offers;

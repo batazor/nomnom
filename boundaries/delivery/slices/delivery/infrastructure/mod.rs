@@ -1,7 +1,9 @@
 //! Infrastructure of the `delivery` slice: the Domain Event → Integration Event
 //! mapper of the Outbox (ADR 31) and the business metrics decorator of the Unit
-//! of Work and Outbox ports.
+//! of Work and Outbox ports, which also logs and traces committed Delivery
+//! Failures.
 
+pub mod failure_log;
 mod integration_events;
 pub mod observability;
 

@@ -45,6 +45,7 @@ fn closed_offers_reject_other_triggers_and_repeats_are_explicit() {
         (OfferState::Accepted, OfferTrigger::Accept),
         (OfferState::Rejected, OfferTrigger::Reject),
         (OfferState::Withdrawn, OfferTrigger::Withdraw),
+        (OfferState::Expired, OfferTrigger::Expire),
     ] {
         for trigger in ALL_OFFER_TRIGGERS {
             let expected = if trigger == repeated {
@@ -143,4 +144,106 @@ fn offer_must_expire_after_it_is_offered() {
         ),
         Err(DeliveryOfferError::InvalidExpiry)
     );
+}
+
+#[test]
+fn pending_offer_moves_on_every_trigger() {
+    for (trigger, to) in [
+        (OfferTrigger::Accept, OfferState::Accepted),
+        (OfferTrigger::Reject, OfferState::Rejected),
+        (OfferTrigger::Withdraw, OfferState::Withdrawn),
+        (OfferTrigger::Expire, OfferState::Expired),
+    ] {
+        assert_eq!(
+            offer_transition(OfferState::Pending, trigger),
+            Ok(OfferTransitionResult {
+                from: OfferState::Pending,
+                trigger,
+                to,
+            })
+        );
+    }
+}
+
+#[test]
+fn pending_offer_expires_only_after_its_deadline() {
+    let mut offer = offer();
+    assert_eq!(offer.expire(1_060), Err(DeliveryOfferError::NotYetExpired));
+    assert_eq!(offer.state(), OfferState::Pending);
+    assert!(offer.pull_events().is_empty());
+
+    assert_eq!(offer.expire(1_061).expect("expire").to, OfferState::Expired);
+    assert_eq!(offer.state(), OfferState::Expired);
+    assert!(!offer.is_open_at(1_000));
+    assert_eq!(
+        offer.pull_events(),
+        vec![DomainEvent::DeliveryOfferExpired {
+            delivery_id: DeliveryId::new("delivery-1"),
+            offer_id: DeliveryOfferId::new("offer-1"),
+            courier_id: CourierId::new("courier-1"),
+        }]
+    );
+    assert_eq!(
+        offer.expire(1_100),
+        Err(DeliveryOfferError::AlreadyInState {
+            state: OfferState::Expired
+        })
+    );
+    assert!(offer.pull_events().is_empty());
+}
+
+#[test]
+fn expired_offer_cannot_be_accepted_rejected_or_withdrawn() {
+    let mut offer = offer();
+    offer.expire(1_061).expect("expire");
+    // The time guard of acceptance answers first, as for a pending offer.
+    assert_eq!(
+        offer.accept(&CourierId::new("courier-1"), conditions(1_061)),
+        Err(DeliveryOfferError::Unacceptable {
+            reasons: vec![DeliveryOfferReason::Expired]
+        })
+    );
+    assert_eq!(
+        offer.reject(&CourierId::new("courier-1"), 1_061),
+        Err(DeliveryOfferError::InvalidTransition {
+            from: OfferState::Expired,
+            trigger: OfferTrigger::Reject,
+        })
+    );
+    assert_eq!(
+        offer.withdraw(),
+        Err(DeliveryOfferError::InvalidTransition {
+            from: OfferState::Expired,
+            trigger: OfferTrigger::Withdraw,
+        })
+    );
+    assert_eq!(offer.state(), OfferState::Expired);
+}
+
+#[test]
+fn closed_offers_cannot_expire() {
+    for (state, trigger) in [
+        (OfferState::Accepted, OfferTrigger::Accept),
+        (OfferState::Rejected, OfferTrigger::Reject),
+        (OfferState::Withdrawn, OfferTrigger::Withdraw),
+    ] {
+        let mut closed = DeliveryOffer::restore(
+            DeliveryOfferId::new("offer-1"),
+            DeliveryId::new("delivery-1"),
+            CourierId::new("courier-1"),
+            1_000,
+            1_060,
+            state,
+        )
+        .expect("offer");
+        assert_eq!(
+            closed.expire(2_000),
+            Err(DeliveryOfferError::InvalidTransition {
+                from: state,
+                trigger: OfferTrigger::Expire,
+            }),
+            "{state:?} after {trigger:?}"
+        );
+        assert!(closed.pull_events().is_empty());
+    }
 }

@@ -131,8 +131,8 @@ impl DeliveryRepository for PostgresStore {
         let inserted = sql!(self, |connection| sqlx::query(
             "INSERT INTO deliveries (id, order_id, courier_id, pickup_address,
                  dropoff_address, state, failure_reason, authorization_revision, version,
-                 created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING"
+                 created_at, failure_detail)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT DO NOTHING"
         )
         .bind(delivery.id().as_str())
         .bind(delivery.order_id().as_str())
@@ -148,6 +148,11 @@ impl DeliveryRepository for PostgresStore {
         )
         .bind(version)
         .bind(delivery.created_at_epoch_seconds())
+        .bind(
+            delivery
+                .failure_reason()
+                .and_then(DeliveryFailureReason::detail)
+        )
         .execute(connection))?;
         if inserted.rows_affected() == 0 {
             return Err(RepositoryError::Conflict);
@@ -159,7 +164,7 @@ impl DeliveryRepository for PostgresStore {
         let version = db_version(delivery.version())?;
         let updated = sql!(self, |connection| sqlx::query(
             "UPDATE deliveries SET courier_id = $3, state = $4, failure_reason = $5,
-                 authorization_revision = $6, version = version + 1
+                 authorization_revision = $6, failure_detail = $7, version = version + 1
              WHERE id = $1 AND version = $2"
         )
         .bind(delivery.id().as_str())
@@ -171,6 +176,11 @@ impl DeliveryRepository for PostgresStore {
             delivery
                 .authorization_revision()
                 .map(AuthorizationRevision::as_str)
+        )
+        .bind(
+            delivery
+                .failure_reason()
+                .and_then(DeliveryFailureReason::detail)
         )
         .execute(connection))?;
         self.optimistic(
@@ -205,6 +215,27 @@ impl DeliveryOfferRepository for PostgresStore {
             statement
         ))
         .bind(delivery_id.as_str())
+        .fetch_all(connection))?
+        .iter()
+        .map(offer_from_row)
+        .collect()
+    }
+
+    fn list_expired_pending(
+        &self,
+        now_epoch_seconds: i64,
+        limit: usize,
+    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
+        let statement = format!(
+            "SELECT {OFFER_COLUMNS} FROM delivery_offers
+             WHERE state = 'pending' AND expires_at < $1
+             ORDER BY expires_at, position LIMIT $2"
+        );
+        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
+            statement
+        ))
+        .bind(now_epoch_seconds)
+        .bind(super::limit(limit))
         .fetch_all(connection))?
         .iter()
         .map(offer_from_row)

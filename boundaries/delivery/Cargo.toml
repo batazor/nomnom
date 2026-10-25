@@ -22,7 +22,7 @@ path = "cmd/delivery-migrate/main.rs"
 config = { version = "0.15.27", default-features = false, features = ["toml"] }
 humantime-serde = "1.1.1"
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
-opentelemetry = { version = "0.33.1", default-features = false, features = ["metrics"] }
+opentelemetry = { version = "0.33.1", default-features = false, features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["metrics", "grpc-tonic"] }
 opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics"] }
 prost = "0.14.4"
@@ -38,7 +38,7 @@ tonic-prost = "0.14.4"
 uuid = { version = "1.29.0", default-features = false, features = ["std", "v5", "v7"] }
 
 [dev-dependencies]
-opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics", "testing"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics", "trace", "testing"] }
 
 [lints.clippy]
 all = "deny"

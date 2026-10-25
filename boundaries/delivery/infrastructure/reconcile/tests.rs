@@ -447,7 +447,7 @@ fn closed_delivery_relationship_is_stale_and_never_restored() {
     let mut failed = delivery("failed", "courier-2");
     failed
         .fail(
-            DeliveryFailureReason::new("customer unreachable").expect("reason"),
+            DeliveryFailureReason::new("customer_unreachable", None).expect("reason"),
             &FailureReporter::Dispatcher,
         )
         .expect("fail");

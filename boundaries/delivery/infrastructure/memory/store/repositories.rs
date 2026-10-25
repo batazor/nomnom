@@ -8,7 +8,7 @@ use crate::slices::courier::domains::courier::{Courier, CourierId, CourierReposi
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryRepository, OrderId,
+    DeliveryRepository, OfferState, OrderId,
 };
 
 use super::{DeliveryRecord, MemoryStore};
@@ -131,6 +131,27 @@ impl DeliveryOfferRepository for MemoryStore {
             .filter(|offer| offer.delivery_id() == delivery_id)
             .cloned()
             .collect())
+    }
+
+    fn list_expired_pending(
+        &self,
+        now_epoch_seconds: i64,
+        limit: usize,
+    ) -> Result<Vec<DeliveryOffer>, RepositoryError> {
+        let mut expired: Vec<DeliveryOffer> = self
+            .available()?
+            .offers
+            .iter()
+            .filter(|offer| {
+                offer.state() == OfferState::Pending
+                    && offer.expires_at_epoch_seconds() < now_epoch_seconds
+            })
+            .cloned()
+            .collect();
+        // Stable sort keeps insertion order among equal deadlines.
+        expired.sort_by_key(DeliveryOffer::expires_at_epoch_seconds);
+        expired.truncate(limit);
+        Ok(expired)
     }
 
     fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {

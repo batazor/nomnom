@@ -30,7 +30,8 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             // only and are not published.
             DomainEvent::DeliveryCreated { .. }
             | DomainEvent::DeliveryOfferAccepted { .. }
-            | DomainEvent::DeliveryOfferRejected { .. } => return None,
+            | DomainEvent::DeliveryOfferRejected { .. }
+            | DomainEvent::DeliveryOfferExpired { .. } => return None,
             DomainEvent::CourierAssignedToDelivery {
                 delivery_id,
                 order_id,
@@ -80,6 +81,7 @@ impl OutboxMapper for DeliveryIntegrationEvents {
                     order_id: order_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
                     reason: reason.as_str().to_owned(),
+                    detail: reason.detail().unwrap_or_default().to_owned(),
                 }
                 .encode_to_vec(),
             ),

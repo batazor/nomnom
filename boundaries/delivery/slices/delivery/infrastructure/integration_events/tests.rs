@@ -1,7 +1,8 @@
 use super::*;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
-    DeliveryCancellationReason, DeliveryFailureReason, DeliveryId, OrderId,
+    DeliveryCancellationReason, DeliveryFailureCode, DeliveryFailureReason, DeliveryId,
+    DeliveryOfferId, OrderId,
 };
 
 fn ids() -> (DeliveryId, OrderId, CourierId) {
@@ -74,24 +75,59 @@ fn maps_pickup_and_completion() {
 }
 
 #[test]
-fn maps_failure_with_reason() {
-    let (delivery_id, order_id, courier_id) = ids();
-    let record = map(DomainEvent::DeliveryFailed {
-        delivery_id,
-        order_id,
-        courier_id,
-        reason: DeliveryFailureReason::new("customer absent").expect("reason"),
-    })
-    .expect("published");
-    assert_eq!(record.event_type, DELIVERY_FAILED);
+fn maps_failure_with_reason_code_and_detail() {
+    let failed = |reason: DeliveryFailureReason| {
+        let (delivery_id, order_id, courier_id) = ids();
+        let record = map(DomainEvent::DeliveryFailed {
+            delivery_id,
+            order_id,
+            courier_id,
+            reason,
+        })
+        .expect("published");
+        assert_eq!(record.event_type, DELIVERY_FAILED);
+        v1::DeliveryFailed::decode(record.payload.as_slice()).expect("decode")
+    };
     assert_eq!(
-        v1::DeliveryFailed::decode(record.payload.as_slice()).expect("decode"),
+        failed(
+            DeliveryFailureReason::new("customer_unreachable", Some("rang twice")).expect("reason")
+        ),
         v1::DeliveryFailed {
             order_id: "order-1".to_owned(),
             delivery_id: "delivery-1".to_owned(),
-            reason: "customer absent".to_owned(),
+            reason: "customer_unreachable".to_owned(),
+            detail: "rang twice".to_owned(),
         }
     );
+    // Without a detail the field is empty.
+    let without_detail = failed(DeliveryFailureReason::of(DeliveryFailureCode::NoAccess));
+    assert_eq!(without_detail.reason, "no_access");
+    assert_eq!(without_detail.detail, "");
+}
+
+#[test]
+fn offer_facts_are_not_published() {
+    let (delivery_id, _, courier_id) = ids();
+    let offer_id = DeliveryOfferId::new("offer-1");
+    for event in [
+        DomainEvent::DeliveryOfferAccepted {
+            delivery_id: delivery_id.clone(),
+            offer_id: offer_id.clone(),
+            courier_id: courier_id.clone(),
+        },
+        DomainEvent::DeliveryOfferRejected {
+            delivery_id: delivery_id.clone(),
+            offer_id: offer_id.clone(),
+            courier_id: courier_id.clone(),
+        },
+        DomainEvent::DeliveryOfferExpired {
+            delivery_id: delivery_id.clone(),
+            offer_id: offer_id.clone(),
+            courier_id: courier_id.clone(),
+        },
+    ] {
+        assert!(map(event.clone()).is_none(), "{event:?}");
+    }
 }
 
 #[test]

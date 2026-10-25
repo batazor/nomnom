@@ -41,6 +41,8 @@ pub enum DeliveryOfferError {
     NotAddressedToCourier,
     /// The offer is past its `expires_at`.
     Expired,
+    /// `Expire` before the deadline: the deadline itself is still open.
+    NotYetExpired,
     /// `DeliveryOfferAcceptable` is not satisfied.
     Unacceptable {
         reasons: Vec<DeliveryOfferReason>,
@@ -63,6 +65,7 @@ impl Display for DeliveryOfferError {
                 formatter.write_str("delivery offer is addressed to another courier")
             }
             Self::Expired => formatter.write_str("delivery offer has expired"),
+            Self::NotYetExpired => formatter.write_str("delivery offer has not expired yet"),
             Self::Unacceptable { reasons } => {
                 write!(formatter, "delivery offer is not acceptable: {reasons:?}")
             }
@@ -201,6 +204,28 @@ impl DeliveryOffer {
         }
         self.state = result.to;
         self.events.push(DomainEvent::DeliveryOfferRejected {
+            delivery_id: self.delivery_id.clone(),
+            offer_id: self.id.clone(),
+            courier_id: self.courier_id.clone(),
+        });
+        Ok(result)
+    }
+
+    /// Closes a pending offer that nobody answered before its deadline and
+    /// records [`DomainEvent::DeliveryOfferExpired`]. Allowed only when
+    /// `now > expires_at` (the deadline itself is inclusive, as for accept
+    /// and reject); a repeated expiry yields
+    /// [`DeliveryOfferError::AlreadyInState`].
+    pub fn expire(
+        &mut self,
+        now_epoch_seconds: i64,
+    ) -> Result<OfferTransitionResult, DeliveryOfferError> {
+        let result = offer_transition(self.state, OfferTrigger::Expire)?;
+        if now_epoch_seconds <= self.expires_at_epoch_seconds {
+            return Err(DeliveryOfferError::NotYetExpired);
+        }
+        self.state = result.to;
+        self.events.push(DomainEvent::DeliveryOfferExpired {
             delivery_id: self.delivery_id.clone(),
             offer_id: self.id.clone(),
             courier_id: self.courier_id.clone(),

@@ -2,8 +2,9 @@
 
 use super::DeliveryOfferError;
 
-/// Business state of a Delivery Offer. Expiry is a function of time and
-/// `expires_at`, not a stored state.
+/// Business state of a Delivery Offer. A pending offer past its `expires_at`
+/// is already closed for acceptance and rejection; the `Expire` transition
+/// records that closure as the stored state `Expired`.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OfferState {
     Pending,
@@ -11,14 +12,17 @@ pub enum OfferState {
     Rejected,
     /// Closed because the delivery was assigned through another offer.
     Withdrawn,
+    /// Closed because nobody answered before `expires_at`.
+    Expired,
 }
 
 #[cfg(test)]
-pub(super) const ALL_OFFER_STATES: [OfferState; 4] = [
+pub(super) const ALL_OFFER_STATES: [OfferState; 5] = [
     OfferState::Pending,
     OfferState::Accepted,
     OfferState::Rejected,
     OfferState::Withdrawn,
+    OfferState::Expired,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -26,13 +30,17 @@ pub enum OfferTrigger {
     Accept,
     Reject,
     Withdraw,
+    /// Allowed only past `expires_at`; the time guard is checked by
+    /// [`super::DeliveryOffer::expire`].
+    Expire,
 }
 
 #[cfg(test)]
-pub(super) const ALL_OFFER_TRIGGERS: [OfferTrigger; 3] = [
+pub(super) const ALL_OFFER_TRIGGERS: [OfferTrigger; 4] = [
     OfferTrigger::Accept,
     OfferTrigger::Reject,
     OfferTrigger::Withdraw,
+    OfferTrigger::Expire,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56,7 +64,7 @@ pub(super) struct OfferTransitionDefinition {
     outcome: OfferOutcome,
 }
 
-pub(super) const OFFER_TRANSITION_TABLE: [OfferTransitionDefinition; 12] = [
+pub(super) const OFFER_TRANSITION_TABLE: [OfferTransitionDefinition; 20] = [
     offer_definition(
         OfferState::Pending,
         OfferTrigger::Accept,
@@ -73,6 +81,11 @@ pub(super) const OFFER_TRANSITION_TABLE: [OfferTransitionDefinition; 12] = [
         OfferOutcome::Allowed(OfferState::Withdrawn),
     ),
     offer_definition(
+        OfferState::Pending,
+        OfferTrigger::Expire,
+        OfferOutcome::Allowed(OfferState::Expired),
+    ),
+    offer_definition(
         OfferState::Accepted,
         OfferTrigger::Accept,
         OfferOutcome::AlreadyApplied,
@@ -88,6 +101,11 @@ pub(super) const OFFER_TRANSITION_TABLE: [OfferTransitionDefinition; 12] = [
         OfferOutcome::Invalid,
     ),
     offer_definition(
+        OfferState::Accepted,
+        OfferTrigger::Expire,
+        OfferOutcome::Invalid,
+    ),
+    offer_definition(
         OfferState::Rejected,
         OfferTrigger::Accept,
         OfferOutcome::Invalid,
@@ -103,6 +121,11 @@ pub(super) const OFFER_TRANSITION_TABLE: [OfferTransitionDefinition; 12] = [
         OfferOutcome::Invalid,
     ),
     offer_definition(
+        OfferState::Rejected,
+        OfferTrigger::Expire,
+        OfferOutcome::Invalid,
+    ),
+    offer_definition(
         OfferState::Withdrawn,
         OfferTrigger::Accept,
         OfferOutcome::Invalid,
@@ -115,6 +138,31 @@ pub(super) const OFFER_TRANSITION_TABLE: [OfferTransitionDefinition; 12] = [
     offer_definition(
         OfferState::Withdrawn,
         OfferTrigger::Withdraw,
+        OfferOutcome::AlreadyApplied,
+    ),
+    offer_definition(
+        OfferState::Withdrawn,
+        OfferTrigger::Expire,
+        OfferOutcome::Invalid,
+    ),
+    offer_definition(
+        OfferState::Expired,
+        OfferTrigger::Accept,
+        OfferOutcome::Invalid,
+    ),
+    offer_definition(
+        OfferState::Expired,
+        OfferTrigger::Reject,
+        OfferOutcome::Invalid,
+    ),
+    offer_definition(
+        OfferState::Expired,
+        OfferTrigger::Withdraw,
+        OfferOutcome::Invalid,
+    ),
+    offer_definition(
+        OfferState::Expired,
+        OfferTrigger::Expire,
         OfferOutcome::AlreadyApplied,
     ),
 ];

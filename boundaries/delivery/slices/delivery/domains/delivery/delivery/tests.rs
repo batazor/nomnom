@@ -17,7 +17,7 @@ fn assigned(courier: &str) -> Delivery {
 }
 
 fn reason() -> DeliveryFailureReason {
-    DeliveryFailureReason::new("customer unreachable").expect("reason")
+    DeliveryFailureReason::new("customer_unreachable", None).expect("reason")
 }
 
 #[test]

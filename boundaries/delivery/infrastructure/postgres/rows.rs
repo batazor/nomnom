@@ -58,6 +58,7 @@ pub(super) fn offer_state(state: OfferState) -> &'static str {
         OfferState::Accepted => "accepted",
         OfferState::Rejected => "rejected",
         OfferState::Withdrawn => "withdrawn",
+        OfferState::Expired => "expired",
     }
 }
 
@@ -67,6 +68,7 @@ pub(super) fn parse_offer_state(value: &str) -> Result<OfferState, RepositoryErr
         "accepted" => Ok(OfferState::Accepted),
         "rejected" => Ok(OfferState::Rejected),
         "withdrawn" => Ok(OfferState::Withdrawn),
+        "expired" => Ok(OfferState::Expired),
         other => Err(corrupt("offer state", other)),
     }
 }
@@ -95,14 +97,13 @@ pub(super) fn courier_from_row(row: &PgRow) -> Result<Courier, RepositoryError> 
 }
 
 pub(super) const DELIVERY_COLUMNS: &str = "id, order_id, courier_id, pickup_address, dropoff_address, \
-     state, failure_reason, authorization_revision, version, created_at";
+     state, failure_reason, failure_detail, authorization_revision, version, created_at";
 
 pub(super) fn delivery_from_row(row: &PgRow) -> Result<Delivery, RepositoryError> {
+    // A free-text reason stored before the catalog reads back as `other`.
+    let failure_detail: Option<String> = column(row, "failure_detail")?;
     let failure_reason = column::<Option<String>>(row, "failure_reason")?
-        .map(|reason| {
-            DeliveryFailureReason::new(&reason).map_err(|error| corrupt("failure reason", error))
-        })
-        .transpose()?;
+        .map(|reason| DeliveryFailureReason::restore(&reason, failure_detail.as_deref()));
     let revision: Option<String> = column(row, "authorization_revision")?;
     let version = domain_version(column(row, "version")?)?;
     let created_at: Option<i64> = column(row, "created_at")?;

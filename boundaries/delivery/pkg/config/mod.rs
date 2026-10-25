@@ -7,7 +7,7 @@ use config::ConfigError;
 use serde::Deserialize;
 
 pub use infrastructure::{
-    DatabaseConfig, KafkaConfig, OutboxConfig, ReconcilerConfig, SpiceDbConfig,
+    DatabaseConfig, KafkaConfig, OffersConfig, OutboxConfig, ReconcilerConfig, SpiceDbConfig,
 };
 pub use load::load;
 #[cfg(test)]
@@ -78,6 +78,17 @@ pub const RECONCILER_GRACE_ENV: &str = "RECONCILER__GRACE";
 pub const RECONCILER_PAGE_SIZE_ENV: &str = "RECONCILER__PAGE_SIZE";
 /// Максимум `ReadRelationships` limit SpiceDB по умолчанию.
 pub const MAX_RECONCILER_PAGE_SIZE: u32 = 1000;
+
+/// Истечение Delivery Offers (Expire Delivery Offers): ключ, переменная,
+/// значение по умолчанию.
+const OFFERS_SETTINGS: [(&str, &str, &str); 2] = [
+    ("offers.expiry_interval", OFFERS_EXPIRY_INTERVAL_ENV, "15s"),
+    ("offers.expiry_batch", OFFERS_EXPIRY_BATCH_ENV, "100"),
+];
+pub const OFFERS_EXPIRY_INTERVAL_ENV: &str = "OFFERS__EXPIRY_INTERVAL";
+pub const OFFERS_EXPIRY_BATCH_ENV: &str = "OFFERS__EXPIRY_BATCH";
+/// Верхняя граница пачки истечения offers.
+pub const MAX_OFFERS_EXPIRY_BATCH: u32 = 1000;
 
 /// PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста): ключ, переменная, значение по умолчанию.
 const DATABASE_SETTINGS: [(&str, &str, &str); 2] = [
@@ -179,6 +190,7 @@ pub struct AppConfig {
     pub identity: IdentityConfig,
     pub spicedb: SpiceDbConfig,
     pub reconciler: ReconcilerConfig,
+    pub offers: OffersConfig,
     pub database: DatabaseConfig,
     pub kafka: KafkaConfig,
     pub outbox: OutboxConfig,

@@ -30,7 +30,16 @@ message DeliveryCompleted {
 message DeliveryFailed {
   string order_id = 1;
   string delivery_id = 2;
+  // Код каталога Delivery Failure Reason: customer_unreachable,
+  // address_not_found, no_access, customer_refused, order_damaged,
+  // courier_incident, other. Набор закрыт и может расширяться новыми кодами;
+  // потребитель должен трактовать неизвестный код как other. До каталога поле
+  // содержало свободный текст.
   string reason = 3;
+  // Необязательное пояснение в свободной форме (нормализованные пробелы, не
+  // длиннее 500 символов); пусто, если не указано. Не метка метрик и не
+  // основание для бизнес-решений.
+  string detail = 4;
 }
 
 // Курьер снят с Delivery без замены (Courier Reassignment); Delivery вернулась

@@ -1,5 +1,5 @@
 //! Конфигурация инфраструктуры процесса: Kafka, Outbox relay, PostgreSQL,
-//! reconciliation и SpiceDB.
+//! reconciliation, истечение Delivery Offers и SpiceDB.
 
 use std::time::Duration;
 
@@ -7,7 +7,8 @@ use config::ConfigError;
 use serde::Deserialize;
 
 use super::{
-    KAFKA_BROKERS_ENV, KAFKA_CLIENT_ID_ENV, MAX_RECONCILER_PAGE_SIZE, SPICEDB_ENDPOINT_ENV,
+    KAFKA_BROKERS_ENV, KAFKA_CLIENT_ID_ENV, MAX_OFFERS_EXPIRY_BATCH, MAX_RECONCILER_PAGE_SIZE,
+    OFFERS_EXPIRY_BATCH_ENV, OFFERS_EXPIRY_INTERVAL_ENV, SPICEDB_ENDPOINT_ENV,
     SPICEDB_PRESHARED_KEY_ENV,
 };
 
@@ -142,6 +143,44 @@ impl DatabaseConfig {
             return Err(ConfigError::Message(
                 "database max_conns must be positive".to_owned(),
             ));
+        }
+        Ok(())
+    }
+}
+
+/// Фоновое истечение Delivery Offers процесса `delivery` (Expire Delivery
+/// Offers): каждые `expiry_interval` закрываются pending offers с прошедшим
+/// `expires_at`, пачками по `expiry_batch`.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct OffersConfig {
+    /// Интервал между проходами.
+    #[serde(with = "humantime_serde")]
+    pub expiry_interval: Duration,
+    /// Максимум offers одной пачки (одна Unit of Work на offer).
+    pub expiry_batch: u32,
+}
+
+impl Default for OffersConfig {
+    fn default() -> Self {
+        Self {
+            expiry_interval: Duration::from_secs(15),
+            expiry_batch: 100,
+        }
+    }
+}
+
+impl OffersConfig {
+    pub(super) fn validate(&self) -> Result<(), ConfigError> {
+        if self.expiry_interval.is_zero() {
+            return Err(ConfigError::Message(format!(
+                "{OFFERS_EXPIRY_INTERVAL_ENV} must be positive"
+            )));
+        }
+        if self.expiry_batch == 0 || self.expiry_batch > MAX_OFFERS_EXPIRY_BATCH {
+            return Err(ConfigError::Message(format!(
+                "{OFFERS_EXPIRY_BATCH_ENV} must be between 1 and {MAX_OFFERS_EXPIRY_BATCH}"
+            )));
         }
         Ok(())
     }
