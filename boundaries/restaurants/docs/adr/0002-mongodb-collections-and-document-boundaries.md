@@ -26,6 +26,7 @@ Use cases уже работают через порты `RestaurantRepository`, 
 | `outbox` | одно Integration Event ([ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md)) | `payload` — Protobuf-байты контракта (BinData), `metadata` (`traceparent`, `causationId`) | `aggregateType`, `aggregateId`, `aggregateVersion` |
 | `outbox_counters` | счётчик `seq` Outbox | — | — |
 | `outbox_leases` | lease единственного активного relay | — | — |
+| `inbox` | факт обработки Integration Event consumer'ом ([ADR 11](../../../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md)), `_id` — `{consumer}:{eventId}` | — | `eventId`, `aggregateId`, `topic` |
 | `schema_migrations` | применённая миграция документов | — | — |
 
 Restaurant вместе с меню и заказами не объединяется в один документ: заказы растут неограниченно и меняются с другой частотой. Read models kitchen board и каталога пока читаются запросами к документам aggregate по индексам; отдельные проекции — следующий шаг.
@@ -48,6 +49,8 @@ Restaurant вместе с меню и заказами не объединяе�
 | `outbox` | `{ seq: 1 }` unique | монотонный порядок вставки |
 | `outbox` | `{ publishedAt: 1, seq: 1 }` | relay: `{ publishedAt: null }` по `seq` |
 | `outbox_leases` | `{ expiresAt: 1 }` | поиск истёкшего lease |
+| `inbox` | `{ consumer: 1, eventId: 1 }` unique | дедупликация; конфликт откатывает транзакцию и считается duplicate |
+| `inbox` | `{ processedAt: 1 }` TTL 30 дней | retention Inbox |
 
 ### Эволюция схемы
 
@@ -71,4 +74,4 @@ Restaurant вместе с меню и заказами не объединяе�
 
 Окружения обязаны предоставлять replica set; standalone MongoDB не поддерживается. Каждое изменение формата документа требует обновления validator, `schemaVersion` и, при необходимости, миграции документов. In-memory адаптеры остаются только для unit-тестов; поведение MongoDB-адаптеров проверяют интеграционные тесты (`test/mongodb-integration.test.ts`, `MONGODB_URI`).
 
-Relay `restaurants-relay` (polling с lease, ADR 31), Protobuf-mappers, Kafka, Inbox и событийные проекции этим решением не реализуются.
+Relay `restaurants-relay` (polling с lease, ADR 31), Protobuf-mappers, Kafka и событийные проекции этим решением не реализуются; Inbox и consumer `OrderPlaced` добавлены change `add-restaurants-order-placed-consumer`.

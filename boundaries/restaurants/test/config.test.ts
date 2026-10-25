@@ -123,6 +123,44 @@ test("Outbox relay config rejects a lease shorter than the poll interval", () =>
   assert.throws(() => loadConfig({ OUTBOX__BATCH_SIZE: "0" }));
 });
 
+test("the consumer reads its group from the oldest offset with bounded retries by default", () => {
+  assert.deepEqual(loadConfig({}).consumer, {
+    groupId: "restaurants",
+    fromBeginning: true,
+    maxRetries: 5,
+    retryInitialIntervalMs: 100,
+    retryMaxIntervalMs: 5000,
+  });
+  assert.deepEqual(
+    loadConfig({
+      KAFKA__CONSUMER_GROUP: "restaurants-test",
+      KAFKA__INITIAL_OFFSET: "newest",
+      CONSUMER__MAX_RETRIES: "0",
+      CONSUMER__RETRY_INITIAL_INTERVAL: "1s",
+      CONSUMER__RETRY_MAX_INTERVAL: "1m",
+    }).consumer,
+    {
+      groupId: "restaurants-test",
+      fromBeginning: false,
+      maxRetries: 0,
+      retryInitialIntervalMs: 1000,
+      retryMaxIntervalMs: 60_000,
+    },
+  );
+});
+
+test("the consumer config rejects malformed values", () => {
+  assert.throws(() => loadConfig({ KAFKA__CONSUMER_GROUP: "bad group" }));
+  assert.throws(() => loadConfig({ KAFKA__INITIAL_OFFSET: "latest" }));
+  assert.throws(() => loadConfig({ CONSUMER__MAX_RETRIES: "-1" }));
+  assert.throws(() =>
+    loadConfig({
+      CONSUMER__RETRY_INITIAL_INTERVAL: "10s",
+      CONSUMER__RETRY_MAX_INTERVAL: "1s",
+    }),
+  );
+});
+
 test("kitchen tunables default to the MVP decisions", () => {
   assert.deepEqual(loadConfig({}).kitchen, {
     preparationTimeMs: 20 * 60_000,

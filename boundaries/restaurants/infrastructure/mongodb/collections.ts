@@ -5,6 +5,7 @@ import {
   type DocumentMigration,
   migrate,
 } from "../../pkg/infrastructure/mongodb/migrate.ts";
+import { inboxCollectionSpec } from "../../pkg/infrastructure/mongodb/inbox.ts";
 import {
   outboxCollectionSpec,
   outboxCountersCollectionSpec,
@@ -22,6 +23,7 @@ export const COLLECTIONS: readonly CollectionSpec[] = [
   outboxCollectionSpec,
   outboxCountersCollectionSpec,
   outboxLeasesCollectionSpec,
+  inboxCollectionSpec,
 ];
 
 /**

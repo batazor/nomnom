@@ -1,0 +1,2 @@
+# Профиль dev (make kind-dev): образ stage dev запускает TypeScript без сборки dist.
+command: ["/usr/bin/tini", "--", "node", "cmd/restaurants-consumer/main.ts"]

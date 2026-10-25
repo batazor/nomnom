@@ -149,7 +149,7 @@ expect "2.6 restaurants → orders напрямую: silent drop" "28 000" "$(ht
 expect "2.7 outsider → restaurants: ingress backend закрыт" "28 000" "$(http nomnom-outsider "${RESTAURANTS}")"
 expect "2.8 outsider → gateway: ingress gateway только из прикладных неймспейсов" "28 000" \
   "$(grpc_unknown nomnom-outsider)"
-restaurants_ip="$(k -n nomnom-restaurants get pod -l app.kubernetes.io/name=restaurants -o jsonpath='{.items[0].status.podIP}')"
+restaurants_ip="$(k -n nomnom-restaurants get pod -l app.kubernetes.io/name=restaurants,app.kubernetes.io/instance=restaurants -o jsonpath='{.items[0].status.podIP}')"
 for namespace in nomnom-orders nomnom-outsider; do
   source_pod="${namespace}/$(k -n "${namespace}" get pod -l app.kubernetes.io/name=net-probe -o jsonpath='{.items[0].metadata.name}')"
   drops="$(hubble_drops "${source_pod}" "${restaurants_ip}")"

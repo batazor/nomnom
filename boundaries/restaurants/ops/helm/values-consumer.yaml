@@ -1,0 +1,35 @@
+# Kafka consumer restaurants (ADR 11, ADR 28): отдельный release того же chart.
+#   helm upgrade --install restaurants-consumer ops/helm -f ops/helm/values-consumer.yaml
+# Читает orders.v1.order-events и создаёт Restaurant Order по OrderPlaced через Inbox в
+# MongoDB. Brokers (KAFKA__BROKERS) и хранилище (mongodb.uriSecret) задаются values окружения;
+# без них процесс не стартует.
+component: consumer
+
+# Реплики делят одну consumer group; порядок событий одного Order сохраняет partition key.
+replicaCount: 1
+
+command: ["/usr/bin/tini", "--", "node", "dist/cmd/restaurants-consumer/main.js"]
+
+# KAFKA__CLIENT_ID — client id consumer и producer dead letters. Группа restaurants читает
+# стрим с начала: Restaurant Order создаётся и для заказов, оформленных до первого запуска;
+# повтор истории идемпотентен через Inbox.
+env:
+  OTEL_SERVICE_NAME: restaurants-consumer
+  KAFKA__CLIENT_ID: restaurants-consumer
+  KAFKA__CONSUMER_GROUP: restaurants
+  KAFKA__INITIAL_OFFSET: oldest
+
+# Consumer не обслуживает бизнес-API: без Service и бизнес-порта, только metrics и probes.
+service:
+  enabled: false
+
+# Начатое сообщение завершается в пределах drainTimeout; offsets подтверждаются только для
+# обработанных сообщений, остальные доставляются повторно.
+shutdown:
+  readinessDelaySeconds: 2
+  drainTimeoutSeconds: 20
+
+mongodb:
+  # Коллекции, Inbox и индексы создаёт init container release restaurants.
+  migrate:
+    enabled: false

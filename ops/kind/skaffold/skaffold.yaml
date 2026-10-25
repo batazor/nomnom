@@ -262,6 +262,19 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
           image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
+      # Kafka consumer restaurants (ADR 11, ADR 28): тот же образ и chart, OrderPlaced →
+      # Restaurant Order через Inbox. После restaurants: его init container создаёт Inbox.
+      - name: restaurants-consumer
+        chartPath: ../../../boundaries/restaurants/ops/helm
+        namespace: nomnom-restaurants
+        createNamespace: true
+        dependsOn: [restaurants]
+        valuesFiles:
+          - ../../../boundaries/restaurants/ops/helm/values-consumer.yaml
+          - ../values/restaurants-consumer.yaml
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
 profiles:
   # make kind-deploy GRAFANA_CLOUD=1: метрики orders и orders-consumer → Alloy → Grafana Cloud.
   # Индексы releases: 0 — orders, 4 — orders-consumer; при изменении порядка поправить patches.
@@ -313,6 +326,10 @@ profiles:
       - op: add
         path: /deploy/helm/releases/7/valuesFiles/-
         value: ../values/restaurants-relay-dev.yaml
+      # Индекс releases: 8 — restaurants-consumer.
+      - op: add
+        path: /deploy/helm/releases/8/valuesFiles/-
+        value: ../values/restaurants-consumer-dev.yaml
       - op: replace
         path: /build/artifacts/3/docker/target
         value: dev

@@ -51,9 +51,9 @@ export type MongoDbEnabledConfig = Readonly<{
 export type MongoDbConfig = Readonly<{ enabled: false }> | MongoDbEnabledConfig;
 
 /**
- * Kafka брокеры relay (ADR 31). `enabled: false` при пустом `KAFKA__BROKERS`;
- * restaurants-relay в этом случае не стартует, основной процесс к Kafka не
- * подключается.
+ * Kafka брокеры relay (ADR 31) и consumer (ADR 28). `enabled: false` при
+ * пустом `KAFKA__BROKERS`; restaurants-relay и restaurants-consumer в этом
+ * случае не стартуют, основной процесс к Kafka не подключается.
  */
 export type KafkaConfig =
   | Readonly<{ enabled: false }>

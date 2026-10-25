@@ -4,6 +4,7 @@ import { after, before, describe, test } from "node:test";
 
 import { MongoClient } from "mongodb";
 
+import { createConsumerContainer } from "../di/consumer.ts";
 import { createMigrateContainer } from "../di/migrate.ts";
 import { createRelayContainer } from "../di/relay.ts";
 import {
@@ -122,6 +123,47 @@ test("the relay and migrate containers resolve every registration", async () => 
   } finally {
     await relay.dispose();
     await migrate.dispose();
+    await mongo.close();
+  }
+});
+
+test("the consumer container resolves every registration", async () => {
+  const mongo = offlineMongo();
+  const container = createConsumerContainer({
+    consumer: loadConfig({}).consumer,
+    mongo,
+    kafkaConsumer: {
+      connect: async () => {},
+      subscribe: async () => {},
+      run: async () => {},
+      disconnect: async () => {},
+    },
+    deadLetters: { publish: async () => {} },
+    log: () => {},
+  });
+  try {
+    for (const name of Object.keys(container.registrations)) {
+      assert.notEqual(container.resolve(name), undefined, name);
+    }
+    const { cradle } = container;
+    assert.equal(cradle.worker, cradle.worker, "worker is a singleton");
+    // Receive Order Request is authorized only for the orders event stream.
+    assert.equal(
+      await cradle.kitchenAccessControl.canCoordinateFulfillment(
+        { type: "service", id: "orders" },
+        "any",
+      ),
+      true,
+    );
+    assert.equal(
+      await cradle.kitchenAccessControl.canOperateKitchen(
+        { type: "user", id: "cook" },
+        "any",
+      ),
+      false,
+    );
+  } finally {
+    await container.dispose();
     await mongo.close();
   }
 });

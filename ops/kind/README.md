@@ -56,6 +56,14 @@ make kind-down
   releases charts контекстов с `values-relay.yaml` и `values/<context>-relay.yaml`: тот же образ,
   своя `command`, без Service и миграций (их выполняет основной release), один экземпляр.
   Публикуют Outbox в Kafka `nomnom-infra`; topics создаются при первой публикации.
+- `restaurants-consumer` ([ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md),
+  [ADR 28](../../docs/adr/0028-selective-use-of-watermill-cqrs.md)) — release chart `restaurants` с
+  `values-consumer.yaml` и [`values/restaurants-consumer.yaml`](values/restaurants-consumer.yaml): тот же
+  образ, `node dist/cmd/restaurants-consumer/main.js`, без Service и миграций (Inbox создаёт init
+  container release `restaurants`, отсюда `dependsOn`). Группа `restaurants` читает
+  `orders.v1.order-events` с начала и по `OrderPlaced` создаёт Restaurant Order в MongoDB; poison —
+  в `orders.v1.order-events.dlq`. Egress к Kafka и MongoDB уже разрешён
+  `manifests/netpol/app-infrastructure.yaml` для всех pod `nomnom-restaurants`.
 - Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) применяет `before`-hook helm-деплоера
   до charts: SpiceDB в `nomnom-authz`, PostgreSQL `orders`, `payments`, `delivery` и MongoDB

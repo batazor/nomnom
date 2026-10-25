@@ -21,6 +21,13 @@ export class KafkaPublisher implements MessagePublisher {
 
   static async connect(
     config: Extract<KafkaConfig, { enabled: true }>,
+    options: {
+      /**
+       * Разрешить брокеру создать topic при первой публикации, если это
+       * допускает его политика: dead letters `<stream>.dlq` consumer'а.
+       */
+      allowAutoTopicCreation?: boolean;
+    } = {},
   ): Promise<KafkaPublisher> {
     const client = new kafka.KafkaJS.Kafka({
       kafkaJS: {
@@ -30,7 +37,11 @@ export class KafkaPublisher implements MessagePublisher {
       },
     });
     const producer = client.producer({
-      kafkaJS: { idempotent: true, acks: -1, allowAutoTopicCreation: false },
+      kafkaJS: {
+        idempotent: true,
+        acks: -1,
+        allowAutoTopicCreation: options.allowAutoTopicCreation ?? false,
+      },
     });
     await producer.connect();
     return new KafkaPublisher(producer);

@@ -87,6 +87,23 @@ helm uninstall restaurants
 
 Из корня репозитория путь к chart — `boundaries/restaurants/ops/helm`.
 
+### Процессы того же образа
+
+Фоновые процессы ставятся отдельными releases того же chart с собственным values-файлом: своя
+`command`, `component`, без `Service` и без init container `migrate` (коллекции создаёт release
+`restaurants`, поэтому он ставится первым). Brokers (`env.KAFKA__BROKERS`) и `mongodb.uriSecret`
+задаёт окружение; без них процесс не стартует.
+
+| Release | Values | Процесс |
+| --- | --- | --- |
+| `restaurants-relay` | `values-relay.yaml` | Outbox → Kafka, один активный экземпляр по lease (ADR 31) |
+| `restaurants-consumer` | `values-consumer.yaml` | `orders.v1.order-events` → Inbox → Restaurant Order по `OrderPlaced` (ADR 11, ADR 28); реплики делят consumer group `restaurants` |
+
+```bash
+helm upgrade --install restaurants-consumer ops/helm -f ops/helm/values-consumer.yaml \
+  --set env.KAFKA__BROKERS=kafka:9092 --set mongodb.uriSecret.name=restaurants-mongodb
+```
+
 ## Образ
 
 Runtime-образ полностью задаётся через values и не содержит реального registry по умолчанию:

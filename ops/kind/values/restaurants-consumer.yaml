@@ -1,0 +1,14 @@
+# Values тестового kind-окружения для release restaurants-consumer chart
+# boundaries/restaurants/ops/helm поверх values-consumer.yaml (ADR 11, ADR 28).
+# image задаёт Skaffold (setValueTemplates).
+image:
+  pullPolicy: Never
+
+env:
+  KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
+
+# ADR 8, ADR 31: Inbox и Restaurant Orders — в MongoDB restaurants; Secret restaurants-mongodb
+# создаёт scripts/mongodb.sh, коллекции — init container release restaurants.
+mongodb:
+  uriSecret:
+    name: restaurants-mongodb

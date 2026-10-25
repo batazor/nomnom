@@ -9,3 +9,10 @@ plugins:
       - import_extension=js
 inputs:
   - directory: .
+  # Integration Events стрима orders.v1.order-events для consumer OrderPlaced. До
+  # публикации модуля orders в BSR код генерируется из workspace (ADR 7), как клиенты
+  # соседей в orders.
+  - directory: ../../../orders/infrastructure/grpc
+    paths:
+      - ../../../orders/infrastructure/grpc/nomnom/orders/v1/events.proto
+      - ../../../orders/infrastructure/grpc/nomnom/orders/v1/orders.proto
