@@ -1,0 +1,148 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+# Семантика вызова через internal gateway (ADR 15): metadata, status, trace context,
+# deadlines и retries. Вызывающий — grpc-caller (nomnom-bff) с service identity.
+#
+# Server span orders в приёмнике trace-capture (manifests/observability/trace-capture.yaml,
+# debug exporter) ищется по случайному span id вызывающего: он встречается в логе только
+# как Parent ID server span. Лог делится на spans по «Trace ID»; BatchSpanProcessor orders
+# отправляет spans раз в 5 секунд.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: gateway-call-metadata
+spec:
+  description: >
+    Authorization metadata доходит до backend'а (PERMISSION_DENIED от SpiceDB: status и message
+    backend'а доходят до вызывающего); traceparent вызывающего продолжен server span orders.
+  bindings:
+    - name: trace_id
+      value: (random('[0-9a-f]{32}'))
+    - name: parent_id
+      value: (random('[0-9a-f]{16}'))
+  steps:
+    - name: 4.1 authorization metadata reaches orders
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: method, value: nomnom.orders.v1.OrdersService/ListCustomerOrders}
+            - {name: request, value: '{"customer_id": "c1"}'}
+            - {name: authorize, value: true}
+            - {name: code, value: 7}
+            - {name: message, value: 'permission denied: service:grpc-caller view_orders on customer:c1'}
+            - {name: reason, value: OPERATION_NOT_ALLOWED}
+    - name: 4.2 call with caller traceparent
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: method, value: nomnom.orders.v1.OrdersService/ListCustomerOrders}
+            - {name: request, value: '{"customer_id": "c1"}'}
+            - {name: authorize, value: true}
+            - name: header
+              value: "(join('', ['traceparent: 00-', $trace_id, '-', $parent_id, '-01']))"
+            - {name: code, value: 7}
+            - {name: message, value: 'permission denied: service:grpc-caller view_orders on customer:c1'}
+    - name: 4.2 orders server span continues caller trace
+      try:
+        - sleep:
+            duration: 7s
+        - script:
+            content: kubectl -n nomnom-observability logs deploy/trace-capture --since=1m
+            check:
+              ($error): ~
+              (split($stdout, 'Trace ID')[?contains(@, $trace_id) && contains(@, $parent_id) && contains(@, 'OrdersService/ListCustomerOrders')] | length(@)): 1
+  catch:
+    - podLogs:
+        namespace: nomnom-orders
+        selector: app.kubernetes.io/name=orders
+        tail: 30
+    - podLogs:
+        namespace: envoy-gateway-system
+        selector: gateway.envoyproxy.io/owning-gateway-name=internal
+        tail: 30
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: gateway-retries-and-deadlines
+spec:
+  description: >
+    При недоступном SpiceDB (Cilium deny orders → SpiceDB) идемпотентное чтение повторяется
+    gateway ровно 2 раза, команда — ни разу (ADR 15); deadline вызывающего (grpc-timeout)
+    соблюдает backend: его server span заканчивается по deadline, а не по таймауту SpiceDB.
+  # Счётчики retries Envoy общие для route, а deny ломает orders для всех вызывающих.
+  concurrent: false
+  bindings:
+    - name: trace_id
+      value: (random('[0-9a-f]{32}'))
+    - name: parent_id
+      value: (random('[0-9a-f]{16}'))
+  steps:
+    - name: SpiceDB unreachable from orders
+      try:
+        # Chainsaw удаляет fixture в конце теста.
+        - apply:
+            file: ../../manifests/fixtures/deny-orders-spicedb.yaml
+        - sleep:
+            duration: 3s
+    - name: 5a.1-5a.2 read retried exactly twice
+      use:
+        template: ../templates/gateway-retries.yaml
+        with:
+          bindings:
+            - {name: route, value: orders-v1-reads}
+            - {name: method, value: nomnom.orders.v1.OrdersService/ListCustomerOrders}
+            - {name: request, value: '{"customer_id": "c1"}'}
+            - {name: code, value: 14}
+            - {name: message, value: dependency unavailable}
+            - {name: retries, value: 2}
+    - name: 5a.3-5a.4 command not retried
+      use:
+        template: ../templates/gateway-retries.yaml
+        with:
+          bindings:
+            - {name: route, value: orders-v1}
+            - {name: method, value: nomnom.orders.v1.OrdersService/RequestOrderCancellation}
+            - {name: request, value: '{"order_id": "o1", "request_id": "r1"}'}
+            - {name: code, value: 14}
+            - {name: message, value: dependency unavailable}
+            - {name: retries, value: 0}
+    # Deadline 1 s короче таймаута клиента SpiceDB в orders (2 s). grpcurl сам соблюдает
+    # deadline и чаще всего отвечает DEADLINE_EXCEEDED раньше backend'а; RST_STREAM backend'а
+    # до headers Envoy отдаёт как UNAVAILABLE (remote reset). Поэтому ответ лишь допускается,
+    # а соблюдение deadline backend'ом доказывает длительность его server span.
+    - name: 5.1 caller deadline
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: method, value: nomnom.orders.v1.OrdersService/ListCustomerOrders}
+            - {name: request, value: '{"customer_id": "c1"}'}
+            - {name: authorize, value: true}
+            - name: header
+              value: "(join('', ['traceparent: 00-', $trace_id, '-', $parent_id, '-01']))"
+            - {name: max_time, value: '1'}
+            - name: code
+              value: [4, 14]
+            - name: message
+              value:
+                - context deadline exceeded
+                - 'upstream connect error or disconnect/reset before headers. reset reason: remote reset'
+    - name: 5.1 orders ends the call at the caller deadline
+      try:
+        - sleep:
+            duration: 7s
+        - script:
+            content: kubectl -n nomnom-observability logs deploy/trace-capture --since=1m
+            # Время в RFC 3339 до секунд: span длиной < 2 s (deadline 1 s) даёт разницу 0–1 s,
+            # span до таймаута SpiceDB (≥ 2 s) — не меньше 2 s.
+            check:
+              ($error): ~
+              (split($stdout, 'Trace ID')[?contains(@, $parent_id)] | length(@)): 1
+              (split($stdout, 'Trace ID')[?contains(@, $parent_id)] | [0] | time_before(time_parse('2006-01-02 15:04:05', regex_replace_all('(?s).*End time\s+:\s(\S+\s\S+).*', @, '$1')), time_add(time_parse('2006-01-02 15:04:05', regex_replace_all('(?s).*Start time\s+:\s(\S+\s\S+).*', @, '$1')), '2s'))): true
+  catch:
+    - podLogs:
+        namespace: nomnom-orders
+        selector: app.kubernetes.io/name=orders
+        tail: 30

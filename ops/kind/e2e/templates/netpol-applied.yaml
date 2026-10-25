@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+# Фаза B: все NetworkPolicy окружения (manifests/netpol, kustomization) применены и действуют.
+# Политики остаются после теста. Базовые политики не содержат namespace и размножаются по
+# неймспейсам приложений overlays kustomize: Chainsaw apply помещает такие ресурсы только в
+# неймспейс теста, поэтому применение — kubectl apply -k, а состояние проверяет assert.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: netpol-applied
+spec:
+  try:
+    - script:
+        content: kubectl apply -k ../../manifests/netpol
+        check:
+          ($error): ~
+    - assert:
+        resource:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: default-deny-all
+            namespace: nomnom-orders
+    - assert:
+        resource:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: internal-gateway-default-deny
+            namespace: envoy-gateway-system
+    # Cilium применяет политики к endpoints за доли секунды; запас на регенерацию endpoints.
+    - sleep:
+        duration: 2s

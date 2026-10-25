@@ -1,6 +1,6 @@
-# Временный отказ зависимости для проверки retries (verify.sh 5a): orders не достаёт до
-# SpiceDB и отвечает UNAVAILABLE (DEPENDENCY_UNAVAILABLE) после таймаута клиента SpiceDB.
-# Применяется и удаляется самой проверкой; deny в Cilium приоритетнее любых allow.
+# Временный отказ зависимости для проверок retries и deadline (ops/kind/e2e/calls): orders не
+# достаёт до SpiceDB и отвечает UNAVAILABLE (DEPENDENCY_UNAVAILABLE) после таймаута клиента
+# SpiceDB. Применяется и удаляется самим тестом; deny в Cilium приоритетнее любых allow.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

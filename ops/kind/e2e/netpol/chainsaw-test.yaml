@@ -1,0 +1,200 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+# Схема «синхронные вызовы бизнес-API только через internal gateway» (ADR 15, ADR 16):
+# фаза A без NetworkPolicy — прямые вызовы проходят, фаза B с ними — блокируются.
+#
+# Фаза A меняет состояние всего кластера, поэтому не concurrent: Chainsaw выполняет такие
+# тесты по одному до concurrent-тестов, и остальные тесты не видят кластер без политик.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: netpol-without-policies
+spec:
+  description: Без NetworkPolicy прямые вызовы backend'ов в обход gateway проходят (фаза A).
+  concurrent: false
+  steps:
+    - name: policies deleted
+      try:
+        - script:
+            content: kubectl delete -k ../../manifests/netpol --ignore-not-found
+            check:
+              ($error): ~
+        - error:
+            resource:
+              apiVersion: networking.k8s.io/v1
+              kind: NetworkPolicy
+              metadata:
+                name: default-deny-all
+                namespace: nomnom-orders
+        - sleep:
+            duration: 2s
+      # Фаза B восстанавливается и при провале теста: политики остаются после прогона.
+      cleanup:
+        - script:
+            content: kubectl apply -k ../../manifests/netpol
+            check:
+              ($error): ~
+        - sleep:
+            duration: 2s
+    - name: A1 orders → restaurants directly
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-orders}
+            - {name: from, value: net-probe}
+            - {name: address, value: 'restaurants.nomnom-restaurants.svc.cluster.local:8082'}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/GetRestaurant}
+            - {name: authorize, value: false}
+            - {name: code, value: 5}
+            - {name: message, value: Restaurant  was not found}
+    - name: A2 outsider → restaurants directly
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-outsider}
+            - {name: from, value: net-probe}
+            - {name: address, value: 'restaurants.nomnom-restaurants.svc.cluster.local:8082'}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/GetRestaurant}
+            - {name: authorize, value: false}
+            - {name: code, value: 5}
+            - {name: message, value: Restaurant  was not found}
+    - name: A3 orders → gateway
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-orders}
+            - {name: from, value: net-probe}
+            - {name: method, value: nomnom.unknown.v1.UnknownService/Call}
+            - {name: authorize, value: false}
+            - {name: code, value: 12}
+            - {name: message, value: ''}
+  catch:
+    - script:
+        content: kubectl get networkpolicy -A
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: netpol-blocks-direct-calls
+spec:
+  description: >
+    С NetworkPolicy прямые вызовы между контекстами получают silent drop при выполненных
+    условиях (backend Available, имя резолвится, gateway доступен и Orders RPC через него
+    проходит); Hubble фиксирует DROPPED; nomnom-outsider не достаёт ни backend, ни gateway.
+  bindings:
+    - name: restaurants_ip
+      value: (x_k8s_list($client, 'v1', 'Pod', 'nomnom-restaurants').items[?metadata.labels."app.kubernetes.io/name" == 'restaurants' && metadata.labels."app.kubernetes.io/instance" == 'restaurants'] | [0].status.podIP)
+  steps:
+    - name: policies applied
+      use:
+        template: ../templates/netpol-applied.yaml
+    - name: 2.1 restaurants Available
+      try:
+        - assert:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: restaurants
+                namespace: nomnom-restaurants
+              status:
+                (conditions[?type == 'Available'].status): ['True']
+    - name: 2.2 restaurants resolves from orders
+      use:
+        template: ../templates/dns-lookup.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-orders}
+            - {name: host, value: restaurants.nomnom-restaurants.svc.cluster.local}
+    - name: 2.3 gateway reachable from orders
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-orders}
+            - {name: from, value: net-probe}
+            - {name: method, value: nomnom.unknown.v1.UnknownService/Call}
+            - {name: authorize, value: false}
+            - {name: code, value: 12}
+            - {name: message, value: ''}
+    - name: 2.4 Orders RPC through gateway under policies
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-restaurants}
+            - {name: from, value: net-probe}
+            - {name: method, value: nomnom.orders.v1.OrdersService/ListCustomerOrders}
+            - {name: authorize, value: false}
+            - {name: code, value: 16}
+            - {name: message, value: caller identity is not authenticated}
+    - name: 2.5 orders → restaurants directly is dropped
+      use:
+        template: ../templates/tcp-connect.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-orders}
+            - {name: from, value: net-probe}
+            - {name: host, value: restaurants.nomnom-restaurants.svc.cluster.local}
+            - {name: port, value: 8082}
+            - {name: expect, value: dropped}
+    - name: 2.6 restaurants → orders directly is dropped
+      use:
+        template: ../templates/tcp-connect.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-restaurants}
+            - {name: from, value: net-probe}
+            - {name: host, value: orders.nomnom-orders.svc.cluster.local}
+            - {name: port, value: 8081}
+            - {name: expect, value: dropped}
+    - name: 2.7 outsider → restaurants is dropped by backend ingress
+      use:
+        template: ../templates/tcp-connect.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-outsider}
+            - {name: from, value: net-probe}
+            - {name: host, value: restaurants.nomnom-restaurants.svc.cluster.local}
+            - {name: port, value: 8082}
+            - {name: expect, value: dropped}
+    - name: 2.8 outsider → gateway is dropped by gateway ingress
+      use:
+        template: ../templates/tcp-connect.yaml
+        with:
+          bindings:
+            - {name: from_namespace, value: nomnom-outsider}
+            - {name: from, value: net-probe}
+            - {name: host, value: internal-gateway.envoy-gateway-system.svc.cluster.local}
+            - {name: port, value: 8080}
+            - {name: expect, value: dropped}
+    - name: 2.9 Hubble records DROPPED flows to restaurants
+      try:
+        # Кластер одноузловой: все flows видит единственный cilium-agent.
+        - script:
+            env:
+              - name: FROM_POD
+                value: (join('/', ['nomnom-orders', x_k8s_list($client, 'v1', 'Pod', 'nomnom-orders').items[?metadata.labels."app.kubernetes.io/name" == 'net-probe'] | [0].metadata.name]))
+              - name: TO_IP
+                value: ($restaurants_ip)
+            content: kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble observe --verdict DROPPED --since 5m --from-pod "$FROM_POD" --to-ip "$TO_IP" -o jsonpb
+            check:
+              ($error): ~
+              (trim_space($stdout) != ''): true
+        - script:
+            env:
+              - name: FROM_POD
+                value: (join('/', ['nomnom-outsider', x_k8s_list($client, 'v1', 'Pod', 'nomnom-outsider').items[?metadata.labels."app.kubernetes.io/name" == 'net-probe'] | [0].metadata.name]))
+              - name: TO_IP
+                value: ($restaurants_ip)
+            content: kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble observe --verdict DROPPED --since 5m --from-pod "$FROM_POD" --to-ip "$TO_IP" -o jsonpb
+            check:
+              ($error): ~
+              (trim_space($stdout) != ''): true
+  catch:
+    - script:
+        content: kubectl get networkpolicy -A
+    - script:
+        content: kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble observe --verdict DROPPED --last 50

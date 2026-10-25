@@ -29,14 +29,14 @@ kind-deploy: ## Skaffold: собрать образы, загрузить в kin
 	@$(SKAFFOLD) run $(SKAFFOLD_APP_FLAGS) --status-check=true
 kind-dev: ## Skaffold dev loop: пересборка и передеплой приложений при изменении исходников
 	@$(SKAFFOLD) dev $(SKAFFOLD_APP_FLAGS)
-kind-test: ## проверки окружения: verify.sh (NetworkPolicy A/B и др.) и Chainsaw (ops/kind/e2e)
-	@$(KIND_SCRIPTS)/verify.sh
+kind-test: ## проверки окружения: тесты Chainsaw (ops/kind/e2e); NetworkPolicy A/B применяются внутри
+	@mkdir -p ops/kind/.artifacts
 	@cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$(CHAINSAW_VERSION) test \
 	  --kube-context kind-$(KIND_CLUSTER_NAME) --config .chainsaw.yaml --test-dir .
-kind-policies: ## применить NetworkPolicy
-	@$(KIND_SCRIPTS)/policies.sh apply
+kind-policies: ## применить NetworkPolicy (ops/kind/manifests/netpol, kustomization)
+	@kubectl --context kind-$(KIND_CLUSTER_NAME) apply -k ops/kind/manifests/netpol
 kind-policies-delete: ## удалить NetworkPolicy
-	@$(KIND_SCRIPTS)/policies.sh delete
+	@kubectl --context kind-$(KIND_CLUSTER_NAME) delete -k ops/kind/manifests/netpol --ignore-not-found
 kind-diagnostics: ## сохранить logs, events, Gateway API и Cilium/Hubble в ops/kind/.artifacts
 	@$(KIND_SCRIPTS)/diagnostics.sh
 kind-down: ## удалить тестовый кластер

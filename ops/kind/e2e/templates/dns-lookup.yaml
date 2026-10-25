@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+# Имя резолвится из pod net-probe неймспейса from_namespace (nslookup) под его NetworkPolicy.
+# Bindings: from_namespace, host.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: dns-lookup
+spec:
+  try:
+    - script:
+        env:
+          - name: FROM_NAMESPACE
+            value: ($from_namespace)
+          - name: HOST
+            value: ($host)
+        content: kubectl -n "$FROM_NAMESPACE" exec deploy/net-probe -- nslookup "$HOST"
+        check:
+          ($error): ~
