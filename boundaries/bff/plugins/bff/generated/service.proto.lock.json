@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "messages": {
+    "Query": {
+      "fields": {
+        "bffInfo": 2
+      },
+      "reservedNumbers": [
+        1
+      ]
+    },
+    "QueryHelloRequest": {
+      "fields": {
+        "name": 1
+      }
+    },
+    "QueryHello": {
+      "fields": {
+        "name": 1
+      }
+    },
+    "QueryHelloResponse": {
+      "fields": {
+        "hello": 1
+      }
+    },
+    "World": {
+      "fields": {
+        "id": 1,
+        "name": 2
+      }
+    },
+    "QueryBffInfoRequest": {
+      "fields": {}
+    },
+    "QueryBffInfoResponse": {
+      "fields": {
+        "bff_info": 1
+      }
+    },
+    "BffInfo": {
+      "fields": {
+        "name": 1,
+        "version": 2
+      }
+    }
+  },
+  "enums": {}
+}

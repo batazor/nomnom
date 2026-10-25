@@ -1,0 +1,111 @@
+# Default values for bff.
+# Базовый chart не содержит значений конкретного окружения: registry, tag, ресурсы,
+# адреса внешних систем и kind-specific настройки задаются отдельными values-файлами
+# или флагами --set при установке.
+
+replicaCount: 1
+
+image:
+  # Образ всего BFF (Cosmo Router + plugin + config) ещё не определён: по ADR 10 его Dockerfile
+  # отложен до pinning версии и checksum Cosmo Router. Пустое значение — Deployment не запустится.
+  repository: ""
+  # Tag образа задаётся окружением. Пустое значение означает "latest" — для реальных
+  # окружений всегда задавайте tag явно.
+  tag: ""
+  # IfNotPresent позволяет использовать образ, загруженный в kind через kind load docker-image.
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Label app.kubernetes.io/component.
+component: router
+
+serviceAccount:
+  create: true
+  # Имя ServiceAccount. Пустое значение — <fullname>.
+  name: ""
+  annotations: {}
+  # Доступ к Kubernetes API приложению не нужен. Включение token automount —
+  # отдельное явное решение.
+  automount: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  # Runtime-образ BFF ещё не определён (см. ADR 10): UID неизвестен.
+  # runAsUser / runAsGroup не задаются: UID runtime-образа ещё неизвестен (см. ops/README.md).
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  privileged: false
+  readOnlyRootFilesystem: false
+
+service:
+  type: ClusterIP
+  # Порт Service и порт Cosmo Router. В boundaries/bff/config.yaml задан listen_addr: localhost:3010;
+  # для контейнера router должен слушать 0.0.0.0:3010 (config.yaml окружения или env LISTEN_ADDR).
+  # targetPort должен совпадать с портом, на котором фактически запускается router.
+  port: 3010
+  targetPort: 3010
+  # Имя порта: Cosmo Router публикует GraphQL по HTTP.
+  portName: http
+  appProtocol: ""
+  annotations: {}
+
+# Requests/limits не задаются: профиль потребления приложения ещё не измерен.
+resources:
+  requests: {}
+  limits: {}
+
+# Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
+# Пример:
+# env:
+#   OTEL_SERVICE_NAME: bff
+#   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
+#   OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+env: {}
+
+# Дополнительные источники переменных окружения, в том числе внешние Secret:
+# envFrom:
+#   - secretRef:
+#       name: bff-secrets
+envFrom: []
+
+# Отдельные переменные окружения, включая valueFrom из внешних Secret:
+# extraEnv:
+#   - name: DATABASE_PASSWORD
+#     valueFrom:
+#       secretKeyRef:
+#         name: bff-database
+#         key: password
+extraEnv: []
+
+# Probes отключены: у приложения ещё нет health contract. После его появления
+# задайте тип probe (httpGet / grpc / tcpSocket) и включите:
+# livenessProbe:
+#   enabled: true
+#   httpGet:
+#     path: /healthz
+#     port: http
+livenessProbe:
+  enabled: false
+
+readinessProbe:
+  enabled: false
+
+volumes: []
+volumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

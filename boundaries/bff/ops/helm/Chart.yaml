@@ -1,0 +1,7 @@
+apiVersion: v2
+name: bff
+description: "BFF: WunderGraph Cosmo Router с router plugin, единая точка входа клиентского GraphQL API."
+type: application
+# Версия chart. appVersion намеренно не задаётся: версия сборки приложения ещё не определена,
+# и образ полностью описывается через image.repository / image.tag в values.
+version: 0.1.0

@@ -1,0 +1,17 @@
+type BffInfo {
+  """
+  Service name
+  """
+  name: String!
+  """
+  Service version
+  """
+  version: String!
+}
+
+type Query {
+  """
+  Metadata for the client BFF
+  """
+  bffInfo: BffInfo!
+}

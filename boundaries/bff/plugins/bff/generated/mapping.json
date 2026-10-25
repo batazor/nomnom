@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "service": "BffService",
+  "operationMappings": [
+    {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "bffInfo",
+      "mapped": "QueryBffInfo",
+      "request": "QueryBffInfoRequest",
+      "response": "QueryBffInfoResponse"
+    }
+  ],
+  "typeFieldMappings": [
+    {
+      "type": "Query",
+      "fieldMappings": [
+        {
+          "original": "bffInfo",
+          "mapped": "bff_info"
+        }
+      ]
+    },
+    {
+      "type": "BffInfo",
+      "fieldMappings": [
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "version",
+          "mapped": "version"
+        }
+      ]
+    }
+  ]
+}

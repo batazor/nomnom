@@ -1,0 +1,26 @@
+syntax = "proto3";
+package service;
+
+option go_package = "github.com/wundergraph/cosmo/plugin";
+
+// Service definition for BffService
+service BffService {
+  // Metadata for the client BFF
+  rpc QueryBffInfo(QueryBffInfoRequest) returns (QueryBffInfoResponse) {}
+}
+
+// Request message for bffInfo operation: Metadata for the client BFF.
+message QueryBffInfoRequest {
+}
+// Response message for bffInfo operation: Metadata for the client BFF.
+message QueryBffInfoResponse {
+  // Metadata for the client BFF
+  BffInfo bff_info = 1;
+}
+
+message BffInfo {
+  // Service name
+  string name = 1;
+  // Service version
+  string version = 2;
+}

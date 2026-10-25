@@ -1,0 +1,26 @@
+{{ .Chart.Name }}: release "{{ .Release.Name }}" установлен в namespace "{{ .Release.Namespace }}".
+
+Deployment: {{ include "bff.fullname" . }}
+Service:    {{ include "bff.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+Image:      {{ include "bff.image" . | default "<не задан>" }}
+{{- if not .Values.image.repository }}
+
+ВНИМАНИЕ: image.repository пуст. Deployment не запустится, пока образ приложения не задан через values.
+{{- else if not .Values.image.tag }}
+
+ВНИМАНИЕ: image.tag пуст, Kubernetes использует tag "latest". Задайте image.tag явно для окружения.
+{{- end }}
+
+Состояние pod'ов:
+  kubectl --namespace {{ .Release.Namespace }} get pods \
+    -l "app.kubernetes.io/name={{ include "bff.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+Service предназначен для internal gateway и технических механизмов Kubernetes; бизнес-вызовы
+между сервисами идут через gateway, а не напрямую в Service. Для локальной отладки:
+  kubectl --namespace {{ .Release.Namespace }} port-forward \
+    svc/{{ include "bff.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+{{- if not (or .Values.livenessProbe.enabled .Values.readinessProbe.enabled) }}
+
+Liveness/readiness probes отключены: у приложения ещё нет health contract. Включите их в values,
+как только появится документированный health endpoint или gRPC health service.
+{{- end }}
