@@ -200,7 +200,7 @@ describe("flow board", () => {
     expect(within(courier).getByText("На доставке")).toBeVisible();
   });
 
-  it("opens the order details in a side panel", async () => {
+  it("grows the order details out of the timeline", async () => {
     const user = userEvent.setup();
     renderBoard();
     await placeOrder(user);

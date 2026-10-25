@@ -1,3 +1,4 @@
+import { m } from "motion/react";
 import { useEffect, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
@@ -6,11 +7,11 @@ import { useRestaurantPages } from "./use-restaurant-pages";
 import "./browse-restaurants.css";
 
 // Open restaurants page by page; choosing one hands its id to the caller.
+// Each card carries layoutId restaurant-<id>, so the caller can grow the
+// chosen card into the restaurant.
 export function RestaurantPicker({
-  selectedId,
   onSelect,
 }: {
-  selectedId: string | null;
   onSelect: (restaurantId: string) => void;
 }) {
   const { t } = useI18n();
@@ -53,19 +54,25 @@ export function RestaurantPicker({
       <ul aria-label={t("restaurants.title")} className="catalog-list">
         {pages.restaurants.map((restaurant, index) => (
           <li key={restaurant.id}>
-            <button
-              aria-pressed={restaurant.id === selectedId}
+            <m.button
               className="catalog-card"
+              layoutId={`restaurant-${restaurant.id}`}
               onClick={() => onSelect(restaurant.id)}
               ref={(element) => {
                 if (element) buttons.current.set(index, element);
                 else buttons.current.delete(index);
               }}
+              style={{ borderRadius: "var(--radius-control)" }}
+              transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
               type="button"
             >
-              <span className="catalog-name">{restaurant.name}</span>
-              <span className="catalog-address">{restaurant.address}</span>
-            </button>
+              <m.span className="catalog-name" layout="position">
+                {restaurant.name}
+              </m.span>
+              <m.span className="catalog-address" layout="position">
+                {restaurant.address}
+              </m.span>
+            </m.button>
           </li>
         ))}
       </ul>

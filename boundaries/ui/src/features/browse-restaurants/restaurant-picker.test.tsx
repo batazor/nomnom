@@ -35,11 +35,11 @@ afterEach(() => {
 });
 afterAll(() => mockServer.close());
 
-function renderPicker(onSelect = vi.fn(), selectedId: string | null = null) {
+function renderPicker(onSelect = vi.fn()) {
   const { container } = render(
     <AppProviders config={config}>
       <main>
-        <RestaurantPicker onSelect={onSelect} selectedId={selectedId} />
+        <RestaurantPicker onSelect={onSelect} />
       </main>
     </AppProviders>,
   );
@@ -75,12 +75,11 @@ describe("restaurant picker", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("hands the chosen restaurant to the board and marks it", async () => {
+  it("hands the chosen restaurant to the board", async () => {
     const user = userEvent.setup();
-    const { onSelect } = renderPicker(vi.fn(), "restaurant-kitchen-8");
+    const { onSelect } = renderPicker();
 
-    const kitchen = await screen.findByRole("button", { name: /Кухня №8/ });
-    expect(kitchen).toHaveAttribute("aria-pressed", "true");
+    await screen.findByRole("button", { name: /Кухня №8/ });
     await user.click(screen.getByRole("button", { name: /Пельменная/ }));
     expect(onSelect).toHaveBeenCalledWith("restaurant-north-dumplings");
   });

@@ -292,50 +292,48 @@ a,
 
   .nomnom-switch-control,
   .nomnom-switch-thumb {
-    transition: transform var(--motion-fast) var(--motion-easing),
-      background var(--motion-fast) var(--motion-easing);
-  }
-
-  .nomnom-side-panel,
-  .nomnom-side-panel-backdrop {
     transition:
-      transform var(--motion-standard) var(--motion-easing),
-      opacity var(--motion-standard) var(--motion-easing);
+      transform var(--motion-fast) var(--motion-easing),
+      background var(--motion-fast) var(--motion-easing);
   }
 }
 
-.nomnom-side-panel-root {
+.nomnom-expanded-root {
   position: relative;
   z-index: 50;
 }
 
-.nomnom-side-panel-backdrop {
+.nomnom-expanded-backdrop {
   position: fixed;
   inset: 0;
   background: rgb(0 0 0 / 40%);
 }
 
-.nomnom-side-panel-backdrop[data-closed] {
-  opacity: 0;
+.nomnom-expanded-frame {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  pointer-events: none;
 }
 
-.nomnom-side-panel {
-  position: fixed;
-  inset-block: 0;
-  right: 0;
-  display: flex;
-  width: min(100vw, 40rem);
-  max-width: 100vw;
-  flex-direction: column;
+.nomnom-expanded {
+  width: min(100%, 44rem);
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow: hidden;
   background: var(--color-surface);
   box-shadow: var(--shadow-floating);
+  pointer-events: auto;
 }
 
-.nomnom-side-panel[data-closed] {
-  transform: translateX(100%);
+.nomnom-expanded-content {
+  display: flex;
+  max-height: inherit;
+  flex-direction: column;
 }
 
-.nomnom-side-panel-header {
+.nomnom-expanded-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -344,12 +342,12 @@ a,
   border-bottom: 1px solid var(--color-border);
 }
 
-.nomnom-side-panel-title {
+.nomnom-expanded-title {
   margin: 0;
   font-size: var(--font-size-md);
 }
 
-.nomnom-side-panel-close {
+.nomnom-expanded-close {
   width: 2.25rem;
   height: 2.25rem;
   border: 0;
@@ -360,7 +358,11 @@ a,
   cursor: pointer;
 }
 
-.nomnom-side-panel-body {
+.nomnom-expanded-close:hover {
+  background: var(--color-surface-muted);
+}
+
+.nomnom-expanded-body {
   overflow-y: auto;
   padding: var(--space-5);
 }

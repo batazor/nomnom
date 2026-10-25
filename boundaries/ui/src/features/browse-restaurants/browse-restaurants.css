@@ -61,11 +61,6 @@
   background: var(--color-surface-muted);
 }
 
-.catalog-card[aria-pressed="true"] {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-}
-
 .catalog-name {
   overflow: hidden;
   font-weight: 650;

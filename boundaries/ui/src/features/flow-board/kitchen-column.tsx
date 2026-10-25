@@ -17,6 +17,7 @@ import { AsRole } from "../../shared/session/roles";
 import { Button } from "../../shared/ui";
 import { RestaurantOpening } from "../manage-restaurant";
 import { useDragSource } from "./board-dnd";
+import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
 
 type KitchenOrder = NonNullable<BoardKitchenQuery["kitchen"]>["orders"][number];
@@ -52,11 +53,11 @@ const nextAction: Record<
 export function KitchenColumn({
   preferredRestaurantId,
   selectedOrderId,
-  onSelectOrder,
+  onOpenOrder,
 }: {
   preferredRestaurantId: string | null;
   selectedOrderId: string | null;
-  onSelectOrder: (orderId: string) => void;
+  onOpenOrder: (orderId: string) => void;
 }) {
   const { t } = useI18n();
   return (
@@ -83,7 +84,7 @@ export function KitchenColumn({
               <RestaurantOpening key={restaurantId} restaurant={restaurant} />
               <AsRole as="kitchen">
                 <KitchenOrders
-                  onSelectOrder={onSelectOrder}
+                  onOpenOrder={onOpenOrder}
                   restaurantId={restaurantId}
                   selectedOrderId={selectedOrderId}
                 />
@@ -139,11 +140,11 @@ function OwnedRestaurants({
 function KitchenOrders({
   restaurantId,
   selectedOrderId,
-  onSelectOrder,
+  onOpenOrder,
 }: {
   restaurantId: string;
   selectedOrderId: string | null;
-  onSelectOrder: (orderId: string) => void;
+  onOpenOrder: (orderId: string) => void;
 }) {
   const { t } = useI18n();
   const [{ data, error }] = useQuery({
@@ -183,10 +184,11 @@ function KitchenOrders({
             exit={{ opacity: 0, scale: 0.96 }}
             initial={{ opacity: 0, y: -8 }}
             layout
+            layoutId={orderCardId("kitchen", order.orderId)}
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
             <KitchenOrderCard
-              onSelect={() => onSelectOrder(order.orderId)}
+              onOpen={() => onOpenOrder(order.orderId)}
               order={order}
               restaurantId={restaurantId}
               selected={order.orderId === selectedOrderId}
@@ -202,12 +204,12 @@ function KitchenOrderCard({
   order,
   restaurantId,
   selected,
-  onSelect,
+  onOpen,
 }: {
   order: KitchenOrder;
   restaurantId: string;
   selected: boolean;
-  onSelect: () => void;
+  onOpen: () => void;
 }) {
   const { t, formatters } = useI18n();
   const [{ fetching }, apply] = useMutation(ApplyKitchenActionDocument);
@@ -238,7 +240,7 @@ function KitchenOrderCard({
       data-stage={order.stage}
       {...drag}
     >
-      <button className="board-card-head" onClick={onSelect} type="button">
+      <button className="board-card-head" onClick={onOpen} type="button">
         <span className="board-card-title">
           {t("board.kitchen.order", {
             time: formatters.time.format(Date.parse(order.receivedAt)),

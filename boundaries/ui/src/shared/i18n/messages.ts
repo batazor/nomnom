@@ -205,6 +205,7 @@ export const messages = {
     "board.done": "Заказ доставлен.",
     "board.details": "Подробнее о заказе",
     "board.close": "Закрыть",
+    "board.customer.back": "← Все рестораны",
     "board.loading": "Загружаем…",
     "board.actionFailed":
       "Не получилось. Проверьте соединение и попробуйте ещё раз.",
@@ -472,6 +473,7 @@ export const messages = {
     "board.done": "The order is delivered.",
     "board.details": "Order details",
     "board.close": "Close",
+    "board.customer.back": "← All restaurants",
     "board.loading": "Loading…",
     "board.actionFailed":
       "That did not work. Check your connection and try again.",

@@ -15,6 +15,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { Button, Illustration } from "../../shared/ui";
 import { useDropTarget } from "./board-dnd";
+import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
 
 const availabilityLabel: Record<CourierAvailability, MessageKey> = {
@@ -36,10 +37,10 @@ type Outcome = Readonly<{
 // Work of the demo courier: going online, offers and the current delivery.
 export function CourierColumn({
   selectedOrderId,
-  onSelectOrder,
+  onOpenOrder,
 }: {
   selectedOrderId: string | null;
-  onSelectOrder: (orderId: string) => void;
+  onOpenOrder: (orderId: string) => void;
 }) {
   const { t } = useI18n();
   const [{ data, error }] = useQuery({
@@ -154,14 +155,15 @@ export function CourierColumn({
       </div>
 
       {delivery ? (
-        <article
+        <m.article
           className="board-card"
           data-selected={delivery.orderId === selectedOrderId}
           data-stage={delivery.stage}
+          layoutId={orderCardId("courier", delivery.orderId)}
         >
           <button
             className="board-card-head"
-            onClick={() => onSelectOrder(delivery.orderId)}
+            onClick={() => onOpenOrder(delivery.orderId)}
             type="button"
           >
             <span className="board-card-title">
@@ -199,7 +201,7 @@ export function CourierColumn({
                 : t("board.courier.confirmDelivery")}
             </Button>
           </div>
-        </article>
+        </m.article>
       ) : null}
 
       {courier.offers.length > 0 ? (

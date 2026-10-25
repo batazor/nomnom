@@ -1,10 +1,10 @@
 export type { ButtonProps } from "./button";
 export { Button } from "./button";
-export type { TextFieldProps } from "./text-field";
-export { TextField } from "./text-field";
-export type { SidePanelProps } from "./side-panel";
-export { SidePanel } from "./side-panel";
 export type { IllustrationName, IllustrationProps } from "./illustration";
 export { Illustration } from "./illustration";
+export type { ExpandedCardProps } from "./expanded-card";
+export { ExpandedCard } from "./expanded-card";
 export type { SwitchProps } from "./switch";
 export { Switch } from "./switch";
+export type { TextFieldProps } from "./text-field";
+export { TextField } from "./text-field";

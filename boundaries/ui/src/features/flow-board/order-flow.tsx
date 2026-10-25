@@ -1,3 +1,4 @@
+import { m } from "motion/react";
 import { useEffect, useState } from "react";
 import { useQuery, useSubscription } from "urql";
 
@@ -9,6 +10,7 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { Button } from "../../shared/ui";
+import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
 
 // Steps of a successful order and the column whose action leads to each.
@@ -127,6 +129,15 @@ function OrderChip({
       onClick={() => onSelect(orderId)}
       type="button"
     >
+      {/* The highlight slides from the old chip to the new one. */}
+      {selected ? (
+        <m.span
+          aria-hidden="true"
+          className="board-chip-selected"
+          layoutId="board-chip-selected"
+          transition={{ type: "spring", bounce: 0.2, duration: 0.35 }}
+        />
+      ) : null}
       <span className="board-chip-name">
         {order?.restaurant.name ?? t("board.orders.loading")}
       </span>
@@ -165,7 +176,13 @@ export function OrderTimeline({
   const next = reached >= 0 ? flowSteps[reached + 1] : undefined;
 
   return (
-    <section aria-label={t("board.timeline.title")} className="board-timeline">
+    <m.section
+      animate={{ opacity: 1, y: 0 }}
+      aria-label={t("board.timeline.title")}
+      className="board-timeline"
+      initial={{ opacity: 0, y: -6 }}
+      layoutId={orderCardId("timeline", orderId)}
+    >
       <ol className="board-steps">
         {flowSteps.map((step, index) => (
           <li
@@ -198,6 +215,6 @@ export function OrderTimeline({
           {t("board.details")}
         </Button>
       </div>
-    </section>
+    </m.section>
   );
 }

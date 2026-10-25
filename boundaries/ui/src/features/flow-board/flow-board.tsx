@@ -1,3 +1,4 @@
+import { LayoutGroup, m } from "motion/react";
 import { type ReactNode, useCallback, useState } from "react";
 import { useQuery } from "urql";
 import {
@@ -9,7 +10,7 @@ import { BoardOrderStatusDocument } from "../../shared/graphql/generated/graphql
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { AsRole, useCanAct } from "../../shared/session/roles";
-import { Illustration, SidePanel } from "../../shared/ui";
+import { Button, ExpandedCard, Illustration } from "../../shared/ui";
 import { RestaurantPicker } from "../browse-restaurants";
 import { OrderDetails } from "../view-order";
 import { RestaurantOrdering } from "../view-restaurant";
@@ -17,6 +18,7 @@ import { BoardDragProvider, useDragSource, useDropTarget } from "./board-dnd";
 import { useBoardOrders } from "./board-orders";
 import { CourierColumn } from "./courier-column";
 import { KitchenColumn } from "./kitchen-column";
+import { type DetailsSource, orderCardId } from "./order-card-id";
 import { OrderStrip, OrderTimeline } from "./order-flow";
 import "./flow-board.css";
 
@@ -29,8 +31,9 @@ const columnTitle: Record<Column, MessageKey> = {
 };
 
 // The whole order flow on one screen: the customer orders, the kitchen cooks,
-// the courier delivers, each column as its own user. Order details open in a
-// side panel. The three columns stay side by side on any screen.
+// the courier delivers, each column as its own user. Order details grow out of
+// the card they were opened from. The three columns stay side by side on any
+// screen.
 export function FlowBoard() {
   return (
     <BoardDragProvider>
@@ -48,7 +51,10 @@ function Board() {
   const [customerRestaurantId, setCustomerRestaurantId] = useState<
     string | null
   >(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [details, setDetails] = useState<{
+    orderId: string;
+    from: DetailsSource;
+  } | null>(null);
   const selectedRestaurantId = useOrderRestaurant(selectedOrderId);
   // The kitchen follows the latest restaurant the board looked at: the one
   // the customer picked or the one of the opened order.
@@ -71,6 +77,11 @@ function Board() {
     [remove],
   );
 
+  function openDetails(orderId: string, from: DetailsSource) {
+    setSelectedOrderId(orderId);
+    setDetails({ orderId, from });
+  }
+
   function placed(orderId: string) {
     orders.add(orderId);
     setSelectedOrderId(orderId);
@@ -87,89 +98,119 @@ function Board() {
         </div>
       ) : null}
 
-      <section aria-labelledby="board-orders-title" className="board-top">
-        <h2 className="board-top-title" id="board-orders-title">
-          {t("board.orders.title")}
-        </h2>
-        <OrderStrip
-          onMissing={forget}
-          onSelect={setSelectedOrderId}
-          orderIds={orders.ids}
-          selectedId={selectedOrderId}
-        />
-        {selectedOrderId ? (
-          <OrderTimeline
-            key={selectedOrderId}
-            onDetails={() => setDetailsOpen(true)}
-            orderId={selectedOrderId}
+      <LayoutGroup>
+        <m.section
+          aria-labelledby="board-orders-title"
+          className="board-top"
+          layout
+        >
+          <h2 className="board-top-title" id="board-orders-title">
+            {t("board.orders.title")}
+          </h2>
+          <OrderStrip
+            onMissing={forget}
+            onSelect={setSelectedOrderId}
+            orderIds={orders.ids}
+            selectedId={selectedOrderId}
           />
-        ) : null}
-      </section>
-
-      <div className="board-columns">
-        <BoardColumn column="customer">
-          <RestaurantPicker
-            onSelect={(restaurantId) => {
-              setCustomerRestaurantId(restaurantId);
-              setKitchenRestaurantId(restaurantId);
-            }}
-            selectedId={customerRestaurantId}
-          />
-          {customerRestaurantId ? (
-            <RestaurantOrdering
-              key={customerRestaurantId}
-              onPlaced={placed}
-              restaurantId={customerRestaurantId}
-              ticket={(submit) => <OrderTicket submit={submit} />}
+          {selectedOrderId ? (
+            <OrderTimeline
+              key={selectedOrderId}
+              onDetails={() => openDetails(selectedOrderId, "timeline")}
+              orderId={selectedOrderId}
             />
-          ) : (
-            <div className="board-empty-state">
-              <Illustration name="order-food" size="sm" />
-              <p className="board-empty">{t("board.customer.pick")}</p>
-            </div>
-          )}
-        </BoardColumn>
+          ) : null}
+        </m.section>
 
-        <KitchenDropColumn>
-          {canAct ? (
-            <KitchenColumn
-              onSelectOrder={setSelectedOrderId}
-              preferredRestaurantId={kitchenRestaurantId}
-              selectedOrderId={selectedOrderId}
-            />
-          ) : (
-            <div className="board-empty-state">
-              <Illustration name="take-out-boxes" size="sm" />
-              <p className="board-empty">{t("board.session.neededSignIn")}</p>
-            </div>
-          )}
-        </KitchenDropColumn>
+        <m.div className="board-columns" layout="position">
+          <BoardColumn column="customer">
+            {/* The chosen restaurant card grows into its menu, and going back
+              folds the menu into the card again. */}
+            {customerRestaurantId ? (
+              <m.div
+                className="board-restaurant"
+                key={customerRestaurantId}
+                layoutId={`restaurant-${customerRestaurantId}`}
+                style={{ borderRadius: "var(--radius-card)" }}
+                transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
+              >
+                <m.div
+                  animate={{ opacity: 1, transition: { delay: 0.15 } }}
+                  className="board-restaurant-content"
+                  initial={{ opacity: 0 }}
+                >
+                  <Button
+                    className="board-restaurant-back"
+                    onClick={() => setCustomerRestaurantId(null)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {t("board.customer.back")}
+                  </Button>
+                  <RestaurantOrdering
+                    onPlaced={placed}
+                    restaurantId={customerRestaurantId}
+                    ticket={(submit) => <OrderTicket submit={submit} />}
+                  />
+                </m.div>
+              </m.div>
+            ) : (
+              <>
+                <RestaurantPicker
+                  onSelect={(restaurantId) => {
+                    setCustomerRestaurantId(restaurantId);
+                    setKitchenRestaurantId(restaurantId);
+                  }}
+                />
+                <div className="board-empty-state">
+                  <Illustration name="order-food" size="sm" />
+                  <p className="board-empty">{t("board.customer.pick")}</p>
+                </div>
+              </>
+            )}
+          </BoardColumn>
 
-        <BoardColumn column="courier">
-          {canAct ? (
-            <AsRole as="courier">
-              <CourierColumn
-                onSelectOrder={setSelectedOrderId}
+          <KitchenDropColumn>
+            {canAct ? (
+              <KitchenColumn
+                onOpenOrder={(orderId) => openDetails(orderId, "kitchen")}
+                preferredRestaurantId={kitchenRestaurantId}
                 selectedOrderId={selectedOrderId}
               />
-            </AsRole>
-          ) : (
-            <div className="board-empty-state">
-              <Illustration name="delivery-truck" size="sm" />
-              <p className="board-empty">{t("board.session.neededSignIn")}</p>
-            </div>
-          )}
-        </BoardColumn>
-      </div>
+            ) : (
+              <div className="board-empty-state">
+                <Illustration name="take-out-boxes" size="sm" />
+                <p className="board-empty">{t("board.session.neededSignIn")}</p>
+              </div>
+            )}
+          </KitchenDropColumn>
 
-      <SidePanel
-        closeLabel={t("board.close")}
-        isOpen={detailsOpen && selectedOrderId !== null}
-        onClose={() => setDetailsOpen(false)}
-        title={t("board.details")}
-      >
-        {selectedOrderId ? <OrderDetails orderId={selectedOrderId} /> : null}
-      </SidePanel>
+          <BoardColumn column="courier">
+            {canAct ? (
+              <AsRole as="courier">
+                <CourierColumn
+                  onOpenOrder={(orderId) => openDetails(orderId, "courier")}
+                  selectedOrderId={selectedOrderId}
+                />
+              </AsRole>
+            ) : (
+              <div className="board-empty-state">
+                <Illustration name="delivery-truck" size="sm" />
+                <p className="board-empty">{t("board.session.neededSignIn")}</p>
+              </div>
+            )}
+          </BoardColumn>
+        </m.div>
+
+        <ExpandedCard
+          closeLabel={t("board.close")}
+          layoutId={details ? orderCardId(details.from, details.orderId) : null}
+          onClose={() => setDetails(null)}
+          title={t("board.details")}
+        >
+          {details ? <OrderDetails orderId={details.orderId} /> : null}
+        </ExpandedCard>
+      </LayoutGroup>
     </div>
   );
 }
