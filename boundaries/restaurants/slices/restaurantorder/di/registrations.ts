@@ -39,6 +39,11 @@ import {
   createRestaurantOrderCollection,
   MongoRestaurantOrderRepository,
 } from "../infrastructure/mongodb/restaurant-orders.ts";
+import {
+  observeReceiveOrderRequest,
+  type ReceiveOrderRequestPort,
+  type RestaurantOrderDomainMetrics,
+} from "../infrastructure/observability/domain-metrics.ts";
 
 /** Application-scope dependencies the slice takes from the process. */
 export interface RestaurantOrderDependencies {
@@ -51,6 +56,8 @@ export interface RestaurantOrderDependencies {
   readonly restaurants: RestaurantRepository;
   readonly menus: MenuRepository;
   readonly kitchenConfig: KitchenConfig;
+  /** Business metrics; the process also decorates its Unit of Work and Outbox. */
+  readonly domainMetrics: RestaurantOrderDomainMetrics;
 }
 
 /** What the slice provides to the process. */
@@ -58,12 +65,13 @@ export interface RestaurantOrderCradle {
   /**
    * Only Kitchen Order facts with a contract in events.proto are written to
    * the Outbox (explicit allowlist); restaurants-relay publishes them (ADR 31).
+   * Composed by `aggregate_type` with the other slices in di/restaurants.ts.
    */
-  readonly outboxEventMapper: OutboxEventMapper;
+  readonly restaurantOrderOutboxEventMapper: OutboxEventMapper;
   readonly restaurantOrders: RestaurantOrderRepository;
   readonly acceptanceConditions: AcceptanceConditionsProvider;
   readonly readyTimeEstimator: ReadyTimeEstimator;
-  readonly receiveOrderRequest: ReceiveOrderRequestHandler;
+  readonly receiveOrderRequest: ReceiveOrderRequestPort;
   readonly cancelRestaurantOrder: CancelRestaurantOrderHandler;
   readonly acceptRestaurantOrder: AcceptOrderHandler;
   readonly rejectRestaurantOrder: RejectOrderHandler;
@@ -95,7 +103,7 @@ export const registerRestaurantOrder = (
   container: AwilixContainer<Cradle>,
 ): void => {
   const registrations: Registrations<RestaurantOrderCradle> = {
-    outboxEventMapper: asValue(restaurantOrderEventMapper),
+    restaurantOrderOutboxEventMapper: asValue(restaurantOrderEventMapper),
     restaurantOrders: asFunction(
       ({ db, unitOfWork }: Cradle) =>
         new MongoRestaurantOrderRepository(
@@ -116,14 +124,18 @@ export const registerRestaurantOrder = (
         restaurantOrders,
         ids,
         clock,
+        domainMetrics,
       }: Cradle) =>
-        new ReceiveOrderRequestHandler({
-          accessControl: kitchenAccessControl,
-          restaurants,
-          restaurantOrders,
-          ids,
-          clock,
-        }),
+        observeReceiveOrderRequest(
+          new ReceiveOrderRequestHandler({
+            accessControl: kitchenAccessControl,
+            restaurants,
+            restaurantOrders,
+            ids,
+            clock,
+          }),
+          domainMetrics,
+        ),
     ).singleton(),
     cancelRestaurantOrder: asFunction(
       (cradle: Cradle) =>

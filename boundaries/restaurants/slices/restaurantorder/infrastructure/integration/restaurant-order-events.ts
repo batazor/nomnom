@@ -2,12 +2,6 @@
 // ADR 31). Only the allowlisted facts below have a contract in
 // nomnom/restaurants/v1/events.proto; every other Domain Event (local facts,
 // Restaurant and Menu events) is skipped and never reaches the Outbox.
-import {
-  create,
-  type DescMessage,
-  type MessageInitShape,
-  toBinary,
-} from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -19,35 +13,22 @@ import {
   RestaurantOrderReadySchema,
   RestaurantOrderRejectedSchema,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import type {
-  AggregateRef,
-  PublishableEvent,
-} from "../../../../pkg/application/outbox.ts";
-import type {
-  OutboxEventMapper,
-  OutboxIntegrationEvent,
-} from "../../../../pkg/infrastructure/mongodb/outbox.ts";
+import type { OutboxEventMapper } from "../../../../pkg/infrastructure/mongodb/outbox.ts";
+import {
+  allowlistMapper,
+  type EventAllowlist,
+  protobufIntegrationEvents,
+} from "../../../../pkg/infrastructure/outbox/integration-event.ts";
 import type { RestaurantOrderEvent } from "../../domains/restaurantorder/restaurantorder.ts";
 
 export const RESTAURANT_ORDER_EVENTS_TOPIC =
   "restaurants.v1.restaurant-order-events";
 export const RESTAURANT_ORDER_AGGREGATE_TYPE = "RestaurantOrder";
 
-const integration = <Desc extends DescMessage>(
-  schema: Desc,
-  message: MessageInitShape<Desc>,
-): OutboxIntegrationEvent => ({
-  eventType: schema.typeName,
-  topic: RESTAURANT_ORDER_EVENTS_TOPIC,
-  payload: toBinary(schema, create(schema, message)),
-});
+const integration = protobufIntegrationEvents(RESTAURANT_ORDER_EVENTS_TOPIC);
 
 /** Explicit allowlist: Domain Event type → Integration Event. */
-const MAPPERS: {
-  readonly [T in RestaurantOrderEvent["type"]]?: (
-    event: Extract<RestaurantOrderEvent, { type: T }>,
-  ) => OutboxIntegrationEvent;
-} = {
+const MAPPERS: EventAllowlist<RestaurantOrderEvent> = {
   RestaurantOrderAccepted: (event) =>
     integration(RestaurantOrderAcceptedSchema, { orderId: event.orderId }),
   RestaurantOrderRejected: (event) =>
@@ -88,14 +69,7 @@ export const PUBLISHED_RESTAURANT_ORDER_EVENT_TYPES: readonly string[] = [
   RestaurantOrderCancelledSchema.typeName,
 ];
 
-export const restaurantOrderEventMapper: OutboxEventMapper = (
-  aggregate: AggregateRef,
-  event: PublishableEvent,
-) => {
-  if (aggregate.type !== RESTAURANT_ORDER_AGGREGATE_TYPE) return undefined;
-  if (!Object.hasOwn(MAPPERS, event.type)) return undefined;
-  const map = MAPPERS[event.type as RestaurantOrderEvent["type"]] as
-    | ((event: RestaurantOrderEvent) => OutboxIntegrationEvent)
-    | undefined;
-  return map?.(event as RestaurantOrderEvent);
-};
+export const restaurantOrderEventMapper: OutboxEventMapper = allowlistMapper(
+  RESTAURANT_ORDER_AGGREGATE_TYPE,
+  MAPPERS,
+);

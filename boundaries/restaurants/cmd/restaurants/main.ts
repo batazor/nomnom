@@ -7,6 +7,7 @@ import { createSubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
+import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 
 loadLocalEnv();
 const config = loadConfig();
@@ -33,6 +34,9 @@ const subjects = await createSubjectResolver(
   (message) => console.warn(`restaurants ${message}`),
   { audit: (message) => console.info(`restaurants ${message}`) },
 );
+// OTLP metrics (business counters of Kitchen Orders among them) are exported
+// only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+const telemetry = startTelemetry("restaurants");
 const mongo = await connectMongoDb(config.mongodb);
 const container = createRestaurantsContainer({
   server: config.server,
@@ -58,4 +62,5 @@ try {
   // The container closes the SpiceDB client before MongoDB disconnects.
   await container.dispose();
   await mongo.close();
+  await telemetry.shutdown();
 }

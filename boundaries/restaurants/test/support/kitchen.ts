@@ -1,5 +1,6 @@
 import type { Outbox } from "../../pkg/application/outbox.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
+import type { UnitOfWork } from "../../pkg/application/unit-of-work.ts";
 import { SequentialIdGenerator } from "../../pkg/infrastructure/memory/id-generator.ts";
 import { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
@@ -38,6 +39,8 @@ export const createKitchenWorld = (
   options: {
     infrastructure?: Infrastructure;
     outbox?: Outbox;
+    /** Unit of Work of the commands; defaults to the in-memory one. */
+    unitOfWork?: UnitOfWork;
     onRepeat?: RepeatPolicy;
     cancellationDuringPreparation?: CancellationPolicy["duringPreparation"];
   } = {},
@@ -54,7 +57,7 @@ export const createKitchenWorld = (
   const ids = new SequentialIdGenerator("restaurant-order");
   const commandDependencies = {
     accessControl,
-    unitOfWork: infrastructure.unitOfWork,
+    unitOfWork: options.unitOfWork ?? infrastructure.unitOfWork,
     restaurantOrders,
     outbox,
     clock: infrastructure.clock,

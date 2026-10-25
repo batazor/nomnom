@@ -38,8 +38,12 @@ import {
   type Registrations,
 } from "../pkg/di/container.ts";
 import type { MongoDbConnection } from "../pkg/infrastructure/mongodb/client.ts";
-import { MongoOutbox } from "../pkg/infrastructure/mongodb/outbox.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
+import {
+  MongoOutbox,
+  type OutboxEventMapper,
+} from "../pkg/infrastructure/mongodb/outbox.ts";
+import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
+import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
@@ -47,6 +51,7 @@ import {
   type MenuCradle,
   registerMenu,
 } from "../slices/menu/di/registrations.ts";
+import { MENU_AGGREGATE_TYPE } from "../slices/menu/infrastructure/integration/menu-events.ts";
 import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
@@ -56,11 +61,18 @@ import {
   type RestaurantCradle,
   registerRestaurant,
 } from "../slices/restaurant/di/registrations.ts";
+import { RESTAURANT_AGGREGATE_TYPE } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
 import type { KitchenAccessControl } from "../slices/restaurantorder/applications/access-control.ts";
 import {
   type RestaurantOrderCradle,
   registerRestaurantOrder,
 } from "../slices/restaurantorder/di/registrations.ts";
+import { RESTAURANT_ORDER_AGGREGATE_TYPE } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+import {
+  ObservedMongoUnitOfWork,
+  ObservedOutbox,
+  RestaurantOrderDomainMetrics,
+} from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
 
 /** First reconciliation pass shortly after start. */
 const RECONCILER_FIRST_PASS_MS = 10_000;
@@ -85,7 +97,13 @@ export interface InfrastructureCradle {
   readonly db: Db;
   readonly clock: Clock;
   readonly ids: IdGenerator;
+  readonly domainMetrics: RestaurantOrderDomainMetrics;
   readonly unitOfWork: MongoUnitOfWork;
+  /**
+   * Outbox mapper of the process: dispatches by `aggregate_type` to the
+   * allowlist of the owning slice; each aggregate has its own topic.
+   */
+  readonly outboxEventMapper: OutboxEventMapper;
   readonly outbox: Outbox;
   readonly spicedb: SpiceDbClient;
   readonly spicedbAccessControl: SpiceDbAccessControl;
@@ -134,15 +152,36 @@ const infrastructureRegistrations = (
   db: asValue(resources.mongo.db),
   clock: asValue<Clock>({ now: () => new Date() }),
   ids: asValue<IdGenerator>({ next: () => randomUUID() }),
+  // Business metrics change only after the outermost transaction commits, by
+  // the Domain Events written to the Outbox (docs/observability.md#метрики).
+  domainMetrics: asFunction(
+    () => new RestaurantOrderDomainMetrics(),
+  ).singleton(),
   unitOfWork: asFunction(
-    ({ mongoClient }: RestaurantsCradle) => new MongoUnitOfWork(mongoClient),
+    ({ mongoClient, domainMetrics }: RestaurantsCradle) =>
+      new ObservedMongoUnitOfWork(mongoClient, domainMetrics),
+  ).singleton(),
+  outboxEventMapper: asFunction(
+    ({
+      restaurantOutboxEventMapper,
+      menuOutboxEventMapper,
+      restaurantOrderOutboxEventMapper,
+    }: RestaurantsCradle) =>
+      outboxEventMapperByAggregate({
+        [RESTAURANT_AGGREGATE_TYPE]: restaurantOutboxEventMapper,
+        [MENU_AGGREGATE_TYPE]: menuOutboxEventMapper,
+        [RESTAURANT_ORDER_AGGREGATE_TYPE]: restaurantOrderOutboxEventMapper,
+      }),
   ).singleton(),
   outbox: asFunction(
-    ({ db, unitOfWork, outboxEventMapper }: RestaurantsCradle) =>
-      new MongoOutbox(db, unitOfWork, {
-        mapper: outboxEventMapper,
-        metadata: currentTraceMetadata,
-      }),
+    ({ db, unitOfWork, outboxEventMapper, domainMetrics }: RestaurantsCradle) =>
+      new ObservedOutbox(
+        new MongoOutbox(db, unitOfWork, {
+          mapper: outboxEventMapper,
+          metadata: currentTraceMetadata,
+        }),
+        domainMetrics,
+      ),
   ).singleton(),
   // SpiceDB (ADR 18): one client for checks and writes; errors and timeouts
   // fail closed as UNAVAILABLE.

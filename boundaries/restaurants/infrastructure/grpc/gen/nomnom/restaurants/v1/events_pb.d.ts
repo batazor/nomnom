@@ -163,3 +163,74 @@ export declare type RestaurantOrderCancelled = Message<"nomnom.restaurants.v1.Re
  */
 export declare const RestaurantOrderCancelledSchema: GenMessage<RestaurantOrderCancelled>;
 
+/**
+ * Ресторан открыт для новых Restaurant Order (Open Restaurant).
+ *
+ * @generated from message nomnom.restaurants.v1.RestaurantOpened
+ */
+export declare type RestaurantOpened = Message<"nomnom.restaurants.v1.RestaurantOpened"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RestaurantOpened.
+ * Use `create(RestaurantOpenedSchema)` to create a new message.
+ */
+export declare const RestaurantOpenedSchema: GenMessage<RestaurantOpened>;
+
+/**
+ * Ресторан закрыт для новых Restaurant Order (Close Restaurant); уже полученные
+ * и принятые заказы не отменяются.
+ *
+ * @generated from message nomnom.restaurants.v1.RestaurantClosed
+ */
+export declare type RestaurantClosed = Message<"nomnom.restaurants.v1.RestaurantClosed"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RestaurantClosed.
+ * Use `create(RestaurantClosedSchema)` to create a new message.
+ */
+export declare const RestaurantClosedSchema: GenMessage<RestaurantClosed>;
+
+/**
+ * Изменилась доступность Menu Item (Set Menu Item Availability или Update Menu
+ * Item с новой доступностью); available — новое значение.
+ *
+ * @generated from message nomnom.restaurants.v1.MenuItemAvailabilityChanged
+ */
+export declare type MenuItemAvailabilityChanged = Message<"nomnom.restaurants.v1.MenuItemAvailabilityChanged"> & {
+  /**
+   * @generated from field: string menu_id = 1;
+   */
+  menuId: string;
+
+  /**
+   * @generated from field: string restaurant_id = 2;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string menu_item_id = 3;
+   */
+  menuItemId: string;
+
+  /**
+   * @generated from field: bool available = 4;
+   */
+  available: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.MenuItemAvailabilityChanged.
+ * Use `create(MenuItemAvailabilityChangedSchema)` to create a new message.
+ */
+export declare const MenuItemAvailabilityChangedSchema: GenMessage<MenuItemAvailabilityChanged>;
+

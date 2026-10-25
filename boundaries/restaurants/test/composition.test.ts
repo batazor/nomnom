@@ -67,6 +67,47 @@ test("the restaurants container resolves every registration in the application s
     assert.equal(cradle.staffRelationships, cradle.relationshipWriter);
     // One Unit of Work joins repositories and the Outbox in a transaction.
     assert.equal(container.resolve("unitOfWork"), cradle.unitOfWork);
+    // The Outbox mapper dispatches every aggregate to its own stream.
+    const occurredAt = new Date(0);
+    assert.deepEqual(
+      [
+        [
+          { type: "Restaurant", id: "r-1", version: 2 },
+          { type: "RestaurantOpened", restaurantId: "r-1", occurredAt },
+        ],
+        [
+          { type: "Menu", id: "m-1", version: 3 },
+          {
+            type: "MenuItemAvailabilityChanged",
+            menuId: "m-1",
+            restaurantId: "r-1",
+            menuItemId: "pho",
+            isAvailable: false,
+            occurredAt,
+          },
+        ],
+        [
+          { type: "RestaurantOrder", id: "ro-1", version: 2 },
+          { type: "PreparationStarted", orderId: "o-1", occurredAt },
+        ],
+        [
+          { type: "Restaurant", id: "r-1", version: 1 },
+          { type: "RestaurantRegistered", restaurantId: "r-1", occurredAt },
+        ],
+      ].map(
+        ([aggregate, event]) =>
+          cradle.outboxEventMapper(
+            aggregate as { type: string; id: string; version: number },
+            event as { type: string; occurredAt: Date },
+          )?.topic,
+      ),
+      [
+        "restaurants.v1.restaurant-events",
+        "restaurants.v1.menu-events",
+        "restaurants.v1.restaurant-order-events",
+        undefined,
+      ],
+    );
   } finally {
     await container.dispose();
     await mongo.close();

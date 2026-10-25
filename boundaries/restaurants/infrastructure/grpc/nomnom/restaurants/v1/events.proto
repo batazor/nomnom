@@ -4,10 +4,15 @@ package nomnom.restaurants.v1;
 
 import "google/protobuf/timestamp.proto";
 
-// Integration Events стрима restaurants.v1.restaurant-order-events (ADR 25, ADR 28).
-// Envelope (event_id, event_type, occurred_at, aggregate_*) передаётся в Kafka
-// headers; event_type — полное имя сообщения ниже, partition key — aggregate_id
-// Kitchen Order.
+// Integration Events контекста restaurants (ADR 25, ADR 28). Envelope (event_id,
+// event_type, occurred_at, aggregate_*) передаётся в Kafka headers; event_type —
+// полное имя сообщения ниже, partition key — aggregate_id. Один стрим на
+// aggregate, чтобы порядок по aggregate_id сохранялся:
+//   restaurants.v1.restaurant-order-events — Kitchen Order (RestaurantOrder);
+//   restaurants.v1.restaurant-events       — Restaurant (RestaurantOpened, RestaurantClosed);
+//   restaurants.v1.menu-events             — Menu (MenuItemAvailabilityChanged).
+
+// --- restaurants.v1.restaurant-order-events (aggregate_id — Kitchen Order) ---
 
 // Ресторан принял Kitchen Order (Order Acceptance).
 message RestaurantOrderAccepted {
@@ -48,4 +53,29 @@ message RestaurantOrderCancelled {
   string order_id = 1;
   string reason = 2;
   bool preparation_started = 3;
+}
+
+// --- restaurants.v1.restaurant-events (aggregate_type Restaurant, aggregate_id —
+// restaurant_id) ---
+
+// Ресторан открыт для новых Restaurant Order (Open Restaurant).
+message RestaurantOpened {
+  string restaurant_id = 1;
+}
+
+// Ресторан закрыт для новых Restaurant Order (Close Restaurant); уже полученные
+// и принятые заказы не отменяются.
+message RestaurantClosed {
+  string restaurant_id = 1;
+}
+
+// --- restaurants.v1.menu-events (aggregate_type Menu, aggregate_id — menu_id) ---
+
+// Изменилась доступность Menu Item (Set Menu Item Availability или Update Menu
+// Item с новой доступностью); available — новое значение.
+message MenuItemAvailabilityChanged {
+  string menu_id = 1;
+  string restaurant_id = 2;
+  string menu_item_id = 3;
+  bool available = 4;
 }

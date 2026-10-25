@@ -1,6 +1,7 @@
 // Awilix registrations of the `restaurant` slice (ADR 5): MongoDB adapters,
-// handlers exposed through transport and the relationship reconciler.
-import { type AwilixContainer, asFunction } from "awilix";
+// the Outbox mapper of the Restaurant aggregate, handlers exposed through
+// transport and the relationship reconciler.
+import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Db } from "mongodb";
 
 import type { RelationshipsClient } from "../../../infrastructure/spicedb/access-control.ts";
@@ -11,6 +12,7 @@ import type {
   SpiceDbEnabledConfig,
 } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
+import type { OutboxEventMapper } from "../../../pkg/infrastructure/mongodb/outbox.ts";
 import type { MongoUnitOfWork } from "../../../pkg/infrastructure/mongodb/unit-of-work.ts";
 import type { VersionedCollection } from "../../../pkg/infrastructure/mongodb/versioned-collection.ts";
 import type {
@@ -23,6 +25,7 @@ import { GetRestaurantHandler } from "../applications/get-restaurant/get-restaur
 import { ListRestaurantsHandler } from "../applications/list-restaurants/list-restaurants.ts";
 import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
+import { restaurantEventMapper } from "../infrastructure/integration/restaurant-events.ts";
 import {
   createRestaurantCollection,
   MongoRestaurantCatalog,
@@ -48,6 +51,12 @@ export interface RestaurantDependencies {
 
 /** What the slice provides to the process and to other slices. */
 export interface RestaurantCradle {
+  /**
+   * Only `RestaurantOpened`/`RestaurantClosed` of the Restaurant aggregate are
+   * written to the Outbox (explicit allowlist, topic
+   * restaurants.v1.restaurant-events).
+   */
+  readonly restaurantOutboxEventMapper: OutboxEventMapper;
   /** One collection shared by the repository, memberships and catalog. */
   readonly restaurantCollection: VersionedCollection<RestaurantDocument>;
   /**
@@ -71,6 +80,7 @@ export const registerRestaurant = (
   container: AwilixContainer<Cradle>,
 ): void => {
   const registrations: Registrations<RestaurantCradle> = {
+    restaurantOutboxEventMapper: asValue(restaurantEventMapper),
     restaurantCollection: asFunction(({ db, unitOfWork }: Cradle) =>
       createRestaurantCollection(db, unitOfWork),
     ).singleton(),

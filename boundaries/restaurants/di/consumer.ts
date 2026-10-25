@@ -31,7 +31,7 @@ import {
 } from "../pkg/infrastructure/messaging/processor.ts";
 import type { MongoDbConnection } from "../pkg/infrastructure/mongodb/client.ts";
 import { MongoInbox } from "../pkg/infrastructure/mongodb/inbox.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
+import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import type { MessagePublisher } from "../pkg/infrastructure/outbox/relay.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import type { RestaurantRepository } from "../slices/restaurant/domains/restaurant/restaurant.ts";
@@ -52,6 +52,12 @@ import {
   createRestaurantOrderCollection,
   MongoRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
+import {
+  ObservedMongoUnitOfWork,
+  observeReceiveOrderRequest,
+  type ReceiveOrderRequestPort,
+  RestaurantOrderDomainMetrics,
+} from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
 
 /** Configuration and resources the composition root hands to the container. */
 export type ConsumerResources = Readonly<{
@@ -73,12 +79,13 @@ export interface ConsumerCradle {
   readonly log: (message: string) => void;
   readonly clock: Clock;
   readonly ids: IdGenerator;
+  readonly domainMetrics: RestaurantOrderDomainMetrics;
   readonly unitOfWork: MongoUnitOfWork;
   readonly restaurants: RestaurantRepository;
   readonly restaurantOrders: RestaurantOrderRepository;
   /** Allows only Receive Order Request from the orders event stream. */
   readonly kitchenAccessControl: KitchenAccessControl;
-  readonly receiveOrderRequest: ReceiveOrderRequestHandler;
+  readonly receiveOrderRequest: ReceiveOrderRequestPort;
   readonly inbox: Inbox;
   readonly consumerMetrics: ConsumerMetrics;
   readonly orderPlaced: EventHandler;
@@ -100,8 +107,14 @@ export const createConsumerContainer = (
     log: asValue(resources.log),
     clock: asValue<Clock>({ now: () => new Date() }),
     ids: asValue<IdGenerator>({ next: () => randomUUID() }),
+    // `nomnom.restaurants.orders.received` is recorded after the Inbox
+    // transaction of the message commits; an Inbox duplicate records nothing.
+    domainMetrics: asFunction(
+      () => new RestaurantOrderDomainMetrics(),
+    ).singleton(),
     unitOfWork: asFunction(
-      ({ mongoClient }: ConsumerCradle) => new MongoUnitOfWork(mongoClient),
+      ({ mongoClient, domainMetrics }: ConsumerCradle) =>
+        new ObservedMongoUnitOfWork(mongoClient, domainMetrics),
     ).singleton(),
     restaurants: asFunction(
       ({ db, unitOfWork }: ConsumerCradle) =>
@@ -125,14 +138,18 @@ export const createConsumerContainer = (
         restaurantOrders,
         ids,
         clock,
+        domainMetrics,
       }: ConsumerCradle) =>
-        new ReceiveOrderRequestHandler({
-          accessControl: kitchenAccessControl,
-          restaurants,
-          restaurantOrders,
-          ids,
-          clock,
-        }),
+        observeReceiveOrderRequest(
+          new ReceiveOrderRequestHandler({
+            accessControl: kitchenAccessControl,
+            restaurants,
+            restaurantOrders,
+            ids,
+            clock,
+          }),
+          domainMetrics,
+        ),
     ).singleton(),
     inbox: asFunction(
       ({ db, unitOfWork, clock }: ConsumerCradle) =>
