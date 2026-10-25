@@ -8,7 +8,7 @@
 
 - [ ] 2.1 `orders` (после `extract-order-fulfillment-slice`): пакеты Go делятся на файлы по теме, тесты — так же; `go test ./...`, `go vet ./...`, `make lint` (`FR-489`, `AC-554`).
 - [ ] 2.2 `delivery` (после `fix-delivery-slice-boundaries`): встроенные тесты в `tests.rs`, крупные `mod.rs` в подмодули с `pub use`; `cargo test`, `cargo clippy --all-targets` (`FR-489`).
-- [ ] 2.3 `restaurants` (после `rename-restaurant-order-slice`): модули и тесты по ответственности; `npm test`, typecheck, `npm run check` (`FR-489`).
+- [x] 2.3 `restaurants` (после `rename-restaurant-order-slice`): модули и тесты по ответственности; `npm test`, typecheck, `npm run check` (`FR-489`).
 - [ ] 2.4 `payments`: модули и тесты по ответственности; тесты, `ruff`, `ty` (`FR-489`).
 - [ ] 2.5 `bff` и `ui`: нарушители, если есть; проверки приложений (`FR-489`).
 

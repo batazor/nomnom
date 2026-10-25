@@ -1,0 +1,43 @@
+import { type Code, ConnectError } from "@connectrpc/connect";
+
+import { createRestaurantsService } from "../../infrastructure/grpc/service.ts";
+import type { SubjectResolver } from "../../infrastructure/grpc/subject.ts";
+import type { Subject } from "../../pkg/application/subject.ts";
+import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { createKitchenWorld, ordersService } from "./kitchen.ts";
+
+export const context = undefined as never;
+
+export const resolverOf = (subject: Subject): SubjectResolver => ({
+  resolve: async () => subject,
+});
+
+/** Service over the in-memory kitchen world with an `orders-worker` caller. */
+export const createWorld = (
+  options: { subjects?: SubjectResolver | null } = {},
+) => {
+  const world = createKitchenWorld();
+  const service = createRestaurantsService({
+    getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
+    receiveOrderRequest: world.receive,
+    cancelRestaurantOrder: world.cancel,
+    acceptRestaurantOrder: world.accept,
+    rejectRestaurantOrder: world.reject,
+    startPreparation: world.startPreparation,
+    markRestaurantOrderAssembled: world.markAssembled,
+    markRestaurantOrderReady: world.markReady,
+    reportPreparationDelay: world.reportDelay,
+    reportPreparationFailure: world.reportFailure,
+    registerRestaurant: world.register,
+    assignStaff: world.assignStaff,
+    revokeStaff: world.revokeStaff,
+    subjects:
+      options.subjects === null
+        ? undefined
+        : (options.subjects ?? resolverOf(ordersService)),
+  });
+  return { world, service };
+};
+
+export const rejectsWith = (code: Code) => (error: unknown) =>
+  error instanceof ConnectError && error.code === code;
