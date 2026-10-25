@@ -1,6 +1,6 @@
-// Package infrastructure adapts the order tracking ports to the gRPC APIs of
-// orders and restaurants, called through the internal gateway (ADR 15).
-package infrastructure
+// Package gateway connects the slices of BFF to the gRPC APIs of bounded
+// contexts through the internal gateway (ADR 15).
+package gateway
 
 import (
 	"fmt"

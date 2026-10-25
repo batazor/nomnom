@@ -19,7 +19,7 @@ BFF — отдельный сервис и единая прикладная т�
 - generated-код и lock-файл контракта коммитятся;
 - минимальный stateless-запрос `bffInfo` подтверждает сборку полного контура.
 
-Доменные клиентские сценарии и подключения к внутренним сервисам ещё не реализованы.
+Реализованы слайсы `catalog`, `checkout` и `ordertracking` поверх `restaurants` и `orders` через internal gateway (см. [Customer API](#customer-api)); `customerOrders` пока только в схеме.
 
 ## Customer API
 
@@ -28,11 +28,11 @@ BFF — отдельный сервис и единая прикладная т�
 | Операция | Назначение | Статус |
 | --- | --- | --- |
 | `bffInfo` | метаданные BFF | реализована |
-| `restaurants(first, after)` | рестораны с cursor-пагинацией | только схема |
-| `restaurant(id)` | ресторан с меню | только схема |
+| `restaurants(first, after)` | рестораны с cursor-пагинацией | реализована (`catalog`) |
+| `restaurant(id)` | ресторан с меню | реализована (`catalog`) |
 | `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | реализована (`ordertracking`) |
 | `customerOrders(first, after)` | история заказов покупателя | только схема |
-| `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey` | только схема |
+| `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey` | реализована (`checkout`) |
 | `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | реализована (`ordertracking`) |
 
 Операции «только схема» возвращают GraphQL error с gRPC `Unimplemented`: `BffService` встраивает `UnimplementedBffServiceServer`.
@@ -51,6 +51,31 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order
 | остальные сбои | error `UNAVAILABLE` без внутренних деталей |
 
 Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE`/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway ждёт развёртывания BFF в kind.
+
+### Слайс `catalog`
+
+Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checkout-flow/). `plugins/bff/catalog/applications` — сценарии List Restaurants и Get Restaurant с меню без Protobuf и GraphQL-типов; `catalog/infrastructure` вызывает публичные `ListRestaurants`, `GetRestaurant` и `GetMenu` `restaurants` с service token BFF и без user assertion (`identity.WithoutUser`). Resolvers каталога access token не требуют.
+
+- `restaurants(first, after)` → `ListRestaurants` только открытых ресторанов (`include_closed = false`); `first` — 1..100, иначе error `INVALID_ARGUMENT`; `after` и `pageInfo.endCursor` — `next_page_token` `restaurants` как есть, cursor ребра — id ресторана (тот же ключ курсора), на последней странице `endCursor` — cursor последнего ребра, на пустой — `null`; `menu` в списке не заполняется.
+- `restaurant(id)` → `GetRestaurant` + `GetMenu`: `NOT_FOUND` ресторана — `null`, `NOT_FOUND` меню — `menu = null`; `acceptingOrders` — `is_open`, пустое описание позиции — `null`.
+- Без gateway или identity — error `UNAVAILABLE`; остальные сбои `restaurants` — error `UNAVAILABLE` без внутренних деталей.
+
+### Слайс `checkout`
+
+Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checkout-flow/). `plugins/bff/checkout/applications` вызывает `PlaceOrder` от имени покупателя и строит payload сценарием `GetOrder` слайса `ordertracking` (тот же `Order`, что у `order(id)`); `checkout/infrastructure` переводит отказы `orders` по `ErrorInfo`.
+
+| Ответ `orders` `PlaceOrder` | GraphQL `placeOrder` |
+| --- | --- |
+| нет или невалидный access token | error `UNAUTHENTICATED`, `orders` не вызывается |
+| пустые `restaurantId` или `idempotencyKey` | error `INVALID_ARGUMENT` |
+| успех | `order` из `GetOrder` (`RECEIVED`), `problems = []` |
+| `FAILED_PRECONDITION` / `ORDER_NOT_ORDERABLE` | `order = null`, problem на каждый известный код из metadata `codes`; `menu_item_ids` — у `ORDER_ITEM_UNAVAILABLE`, у лимитов суммы `menuItemIds = []` |
+| `FAILED_PRECONDITION` / `RESTAURANT_NOT_ACCEPTING_ORDERS` | `order = null`, problem без позиций |
+| `NOT_FOUND` / `RESTAURANT_NOT_FOUND` | error `NOT_FOUND`: в схеме нет problem для несуществующего ресторана, исправить это в корзине нельзя |
+| `INVALID_ARGUMENT` (`INVALID_ORDER`, `INVALID_ARGUMENT`) | error `INVALID_ARGUMENT` без деталей `orders` |
+| остальные сбои, в том числе отказ без известных кодов | error `UNAVAILABLE` без внутренних деталей |
+
+Повтор с тем же `idempotencyKey` возвращает уже оформленный заказ. `customerOrders` не реализован: `OrderSummary` `orders` не содержит позиций и истории.
 
 Правила контракта:
 
@@ -140,12 +165,19 @@ boundaries/bff/
   package.json                # закреплённый wgc и команды проекта
   plugins/bff/
     src/schema.graphql        # публичный GraphQL-контракт
-    src/main.go               # реализация plugin RPC
-    src/main_test.go          # тесты plugin
+    src/main.go               # сборка plugin и bffInfo
+    src/<slice>.go            # resolvers слайса и его подключение
+    src/*_test.go             # тесты plugin
+    catalog/                  # слайс каталога: applications, infrastructure
+    checkout/                 # слайс оформления заказа
+    ordertracking/            # слайс отслеживания заказа
+    identity/                 # access token, user assertion, service token
+    infrastructure/gateway/   # соединение с internal gateway
+    infrastructure/grpc/      # gRPC-клиенты контекстов (generated)
     generated/                # generated gRPC-контракт и mapping
 ```
 
-По мере появления сценариев код plugin будет организован vertical slices, например `checkout`, `order-tracking` и `restaurant-catalog`. Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель.
+Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель.
 
 Внутренние клиенты будут генерироваться из закреплённых BSR commits согласно [общесистемному ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). Интеграция этих клиентов с plugin относится к следующему шагу.
 

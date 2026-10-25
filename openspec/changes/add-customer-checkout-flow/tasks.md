@@ -11,8 +11,8 @@
 
 ## 3. BFF
 
-- [ ] 3.1 Перегенерировать клиенты; слайс `catalog` и resolvers `restaurants`, `restaurant` (`FR-499`, `AC-568`).
-- [ ] 3.2 Слайс `checkout` и resolver `placeOrder` с переводом отказов (`FR-500`, `AC-569`, `AC-570`); README.
+- [x] 3.1 Перегенерировать клиенты; слайс `catalog` и resolvers `restaurants`, `restaurant` (`FR-499`, `AC-568`).
+- [x] 3.2 Слайс `checkout` и resolver `placeOrder` с переводом отказов (`FR-500`, `AC-569`, `AC-570`); README.
 
 ## 4. UI
 

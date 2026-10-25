@@ -36,7 +36,7 @@ plugins/bff/
 
 - `restaurants(first, after)` → `ListRestaurants`; курсор — `next_page_token` как есть; `menu` в списке не заполняется.
 - `restaurant(id)` → `GetRestaurant` + `GetMenu`; `NOT_FOUND` ресторана — `null`, нет меню — `menu = null`.
-- `placeOrder` требует access token; `PlaceOrder` от имени покупателя, затем `GetOrder` того же заказа и представление `ordertracking` (переиспользуется сценарий `GetOrder`); `FAILED_PRECONDITION` с `ORDER_NOT_ORDERABLE` — `problems` из metadata, `RESTAURANT_NOT_ACCEPTING_ORDERS` — problem без позиций; `order = null` при problems.
+- `placeOrder` требует access token; `PlaceOrder` от имени покупателя, затем `GetOrder` того же заказа и представление `ordertracking` (переиспользуется сценарий `GetOrder`); `FAILED_PRECONDITION` с `ORDER_NOT_ORDERABLE` — `problems` из metadata, `RESTAURANT_NOT_ACCEPTING_ORDERS` — problem без позиций; `order = null` при problems. `NOT_FOUND` с `RESTAURANT_NOT_FOUND` — GraphQL error `NOT_FOUND`: в схеме нет problem для несуществующего ресторана, и в корзине это не исправить.
 - Каталог публичный: resolvers каталога не требуют access token.
 
 ### 5. UI
