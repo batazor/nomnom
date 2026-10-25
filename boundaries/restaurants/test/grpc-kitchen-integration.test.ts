@@ -29,6 +29,8 @@ import {
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { AcceptOrderHandler } from "../slices/restaurantorder/applications/accept-order/accept-order.ts";
+import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
+import { ListIncomingOrdersHandler } from "../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import { MarkAssembledHandler } from "../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
 import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
@@ -41,9 +43,11 @@ import {
   UnconstrainedAcceptanceConditions,
 } from "../slices/restaurantorder/infrastructure/acceptance/mvp.ts";
 import { restaurantOrderEventMapper } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+import { FifoKitchenQueueOrdering } from "../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
 import { InMemoryKitchenAccessControl } from "../slices/restaurantorder/infrastructure/memory/restaurant-orders.ts";
 import {
   createRestaurantOrderCollection,
+  MongoKitchenBoard,
   MongoRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
 import {
@@ -86,6 +90,9 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
       createMenuCollection(mongo.db, unitOfWork),
     );
     const restaurantOrders = new MongoRestaurantOrderRepository(
+      createRestaurantOrderCollection(mongo.db, unitOfWork),
+    );
+    const board = new MongoKitchenBoard(
       createRestaurantOrderCollection(mongo.db, unitOfWork),
     );
     const clock = { now: () => new Date() };
@@ -171,6 +178,15 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
       }),
       reportPreparationDelay: new ReportPreparationDelayHandler(commands),
       reportPreparationFailure: new ReportPreparationFailureHandler(commands),
+      getKitchenQueue: new GetKitchenQueueHandler({
+        accessControl,
+        reader: board,
+        ordering: new FifoKitchenQueueOrdering(),
+      }),
+      listIncomingOrders: new ListIncomingOrdersHandler({
+        accessControl,
+        reader: board,
+      }),
     });
   });
 
@@ -224,6 +240,30 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
       "nomnom.restaurants.v1.PreparationDelayed",
       "nomnom.restaurants.v1.RestaurantOrderReady",
     ]);
+  });
+
+  test("AC-742 ListIncomingOrders lists received orders until Acceptance moves them to GetKitchenQueue", async () => {
+    const first = await received("order-incoming-1");
+    const second = await received("order-incoming-2");
+    const ids = new Set([first.restaurantOrderId, second.restaurantOrderId]);
+    const incomingIds = async () =>
+      (await service.listIncomingOrders({ restaurantId }, context)).orders
+        .map((order) => order.restaurantOrder?.restaurantOrderId ?? "")
+        .filter((id) => ids.has(id))
+        .sort();
+
+    // Orders received within one millisecond tie on received_at.
+    assert.deepEqual(await incomingIds(), [...ids].sort());
+    await service.acceptRestaurantOrder(first, context);
+
+    assert.deepEqual(await incomingIds(), [second.restaurantOrderId]);
+    const queue = await service.getKitchenQueue({ restaurantId }, context);
+    assert.ok(
+      queue.entries.some(
+        (entry) =>
+          entry.restaurantOrder?.restaurantOrderId === first.restaurantOrderId,
+      ),
+    );
   });
 
   test("AC-540 RejectRestaurantOrder and ReportPreparationFailure write their facts", async () => {

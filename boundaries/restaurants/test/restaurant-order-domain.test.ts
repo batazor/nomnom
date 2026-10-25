@@ -130,6 +130,7 @@ test("happy path fills the timeline and records each fact", () => {
 
   assert.equal(order.state, "READY");
   assert.deepEqual(order.timeline, {
+    receivedAt: at(0),
     acceptedAt: at(1),
     queuedAt: at(1),
     preparationStartedAt: at(5),
@@ -181,7 +182,7 @@ test("failed transition does not change state or record events", () => {
     InvalidTransitionError,
   );
   assert.equal(order.state, "RECEIVED");
-  assert.deepEqual(order.timeline, {});
+  assert.deepEqual(order.timeline, { receivedAt: at(0) });
   assert.deepEqual(order.pullEvents(), []);
 });
 

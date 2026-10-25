@@ -7,12 +7,14 @@ import type {
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type { RestaurantView } from "../../slices/restaurant/applications/restaurant-view.ts";
 import type { KitchenQueueEntry } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
+import type { IncomingOrder } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-view.ts";
 import {
   MenuItemSchema,
   RestaurantSchema,
 } from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
+  IncomingOrderSchema,
   KitchenQueueEntrySchema,
   RestaurantOrderSchema,
   RestaurantOrderState,
@@ -80,6 +82,26 @@ export const toKitchenQueueEntryMessage = (
     },
     acceptedAt: optionalTimestamp(entry.acceptedAt),
     queuedAt: optionalTimestamp(entry.queuedAt),
+  });
+
+export const toIncomingOrderMessage = (
+  restaurantId: string,
+  order: IncomingOrder,
+) =>
+  create(IncomingOrderSchema, {
+    restaurantOrder: {
+      restaurantOrderId: order.restaurantOrderId,
+      orderId: order.orderId,
+      restaurantId,
+      state: RestaurantOrderState.RECEIVED,
+      version: BigInt(order.version),
+    },
+    items: order.items.map((item) => ({
+      menuItemId: item.menuItemId,
+      quantity: item.quantity,
+      options: [...item.options],
+    })),
+    receivedAt: optionalTimestamp(order.receivedAt),
   });
 
 export const toStaffMessage = (result: StaffChangeResult) => ({

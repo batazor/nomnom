@@ -15,6 +15,7 @@ import type { RevokeStaffHandler } from "../../slices/restaurant/applications/re
 import type { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import type { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import type { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
+import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import type { MarkAssembledHandler } from "../../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
 import type { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
 import type { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
@@ -65,6 +66,7 @@ export type RestaurantsServiceDependencies = Readonly<{
   reportPreparationDelay: Pick<ReportPreparationDelayHandler, "execute">;
   reportPreparationFailure: Pick<ReportPreparationFailureHandler, "execute">;
   getKitchenQueue: Pick<GetKitchenQueueHandler, "execute">;
+  listIncomingOrders: Pick<ListIncomingOrdersHandler, "execute">;
   registerRestaurant: Pick<RegisterRestaurantHandler, "execute">;
   assignStaff: Pick<AssignStaffHandler, "execute">;
   revokeStaff: Pick<RevokeStaffHandler, "execute">;

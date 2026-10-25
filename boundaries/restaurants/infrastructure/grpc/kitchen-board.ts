@@ -1,46 +1,74 @@
 import { create } from "@bufbuild/protobuf";
-import type { ServiceImpl } from "@connectrpc/connect";
+import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
+import type { KitchenBoardQuery } from "../../slices/restaurantorder/applications/kitchen-board.ts";
 import { requireField, transportError } from "./errors.ts";
 import {
   GetKitchenQueueResponseSchema,
+  ListIncomingOrdersResponseSchema,
   type RestaurantsService,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
-import { toKitchenQueueEntryMessage } from "./messages.ts";
+import {
+  toIncomingOrderMessage,
+  toKitchenQueueEntryMessage,
+} from "./messages.ts";
 import { withRequestRevision } from "./revision.ts";
 import type { RestaurantsServiceDependencies } from "./service.ts";
 import type { SubjectResolver } from "./subject.ts";
 
 type KitchenBoardRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
-  "getKitchenQueue"
+  "getKitchenQueue" | "listIncomingOrders"
 >;
 
 /**
- * Kitchen board queries of restaurant staff (FR-583): read-only, they require
- * `restaurant#operate_kitchen` through the query's own access port.
+ * Kitchen board queries of restaurant staff (FR-583, FR-586): read-only, they
+ * require `restaurant#operate_kitchen` through the query's own access port.
  */
 export const createKitchenBoardRpcs = (
   dependencies: RestaurantsServiceDependencies,
   subjects: SubjectResolver,
-): KitchenBoardRpcs => ({
-  async getKitchenQueue(request, context) {
-    try {
-      const subject = withRequestRevision(
-        await subjects.resolve(context),
-        context,
-      );
-      requireField("restaurant_id", request.restaurantId);
-      const queue = await dependencies.getKitchenQueue.execute({
-        subject,
-        restaurantId: request.restaurantId,
-      });
-      return create(GetKitchenQueueResponseSchema, {
-        entries: queue.entries.map((entry) =>
-          toKitchenQueueEntryMessage(queue.restaurantId, entry),
-        ),
-      });
-    } catch (error) {
-      throw transportError(error);
-    }
-  },
-});
+): KitchenBoardRpcs => {
+  /** Resolves the caller and the restaurant of a kitchen board query. */
+  const boardQuery = async (
+    request: { restaurantId: string },
+    context: HandlerContext,
+  ): Promise<KitchenBoardQuery> => {
+    const subject = withRequestRevision(
+      await subjects.resolve(context),
+      context,
+    );
+    requireField("restaurant_id", request.restaurantId);
+    return { subject, restaurantId: request.restaurantId };
+  };
+  return {
+    async getKitchenQueue(request, context) {
+      try {
+        const queue = await dependencies.getKitchenQueue.execute(
+          await boardQuery(request, context),
+        );
+        return create(GetKitchenQueueResponseSchema, {
+          entries: queue.entries.map((entry) =>
+            toKitchenQueueEntryMessage(queue.restaurantId, entry),
+          ),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async listIncomingOrders(request, context) {
+      try {
+        const incoming = await dependencies.listIncomingOrders.execute(
+          await boardQuery(request, context),
+        );
+        return create(ListIncomingOrdersResponseSchema, {
+          orders: incoming.orders.map((order) =>
+            toIncomingOrderMessage(incoming.restaurantId, order),
+          ),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+  };
+};

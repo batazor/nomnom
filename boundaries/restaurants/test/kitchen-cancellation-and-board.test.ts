@@ -224,6 +224,7 @@ test("AC-269 get restaurant order returns composition, state and timeline", asyn
     { menuItemId: phoId, quantity: 2, options: [] },
   ]);
   assert.deepEqual(view.timeline, {
+    receivedAt: now,
     acceptedAt: now,
     queuedAt: now,
     expectedReadyAt: new Date(now.getTime() + minutes(20)),

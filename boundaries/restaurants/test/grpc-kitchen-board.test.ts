@@ -97,3 +97,80 @@ test("GetKitchenQueue without restaurant_id is INVALID_ARGUMENT", async () => {
     rejectsWith(Code.InvalidArgument),
   );
 });
+
+test("AC-742 ListIncomingOrders lists received orders by received time without accepted ones", async () => {
+  const { world, service } = createWorld({ subjects: resolverOf(cook) });
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const other = await world.givenKitchen("Noodle Bar");
+  const receivedAt = world.clock.now();
+  const first = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+  world.clock.advance(minutes(1));
+  const second = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+  const accepted = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  await world.givenOrderIn("RECEIVED", other.restaurantId, other.phoId);
+
+  const response = await service.listIncomingOrders({ restaurantId }, context);
+
+  assert.deepEqual(
+    response.orders.map((order) => [
+      order.restaurantOrder?.restaurantOrderId,
+      order.restaurantOrder?.orderId,
+    ]),
+    [
+      [first.restaurantOrderId, first.orderId],
+      [second.restaurantOrderId, second.orderId],
+    ],
+  );
+  assert.ok(
+    response.orders.every(
+      (order) =>
+        order.restaurantOrder?.restaurantOrderId !== accepted.restaurantOrderId,
+    ),
+  );
+  const [incoming] = response.orders;
+  assert.equal(incoming?.restaurantOrder?.restaurantId, restaurantId);
+  assert.equal(incoming?.restaurantOrder?.state, RestaurantOrderState.RECEIVED);
+  assert.equal(incoming?.restaurantOrder?.version, 1n);
+  assert.equal(incoming?.restaurantOrder?.expectedReadyAt, undefined);
+  assert.deepEqual(
+    incoming?.items.map((item) => [item.menuItemId, item.quantity]),
+    [[phoId, 2]],
+  );
+  assert.ok(incoming?.receivedAt !== undefined);
+  assert.equal(
+    timestampDate(incoming.receivedAt).getTime(),
+    receivedAt.getTime(),
+  );
+});
+
+test("AC-743 ListIncomingOrders without restaurant#operate_kitchen is PERMISSION_DENIED", async () => {
+  const { world, service } = createWorld({
+    subjects: resolverOf({ type: "user", id: "stranger" }),
+  });
+  const { restaurantId, phoId } = await world.givenKitchen();
+  await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+
+  await assert.rejects(
+    async () => service.listIncomingOrders({ restaurantId }, context),
+    rejectsWith(Code.PermissionDenied),
+  );
+});
+
+test("AC-743 ListIncomingOrders without a verified identity is UNAUTHENTICATED", async () => {
+  const { world, service } = createWorld({ subjects: null });
+  const { restaurantId } = await world.givenKitchen();
+
+  await assert.rejects(
+    async () => service.listIncomingOrders({ restaurantId }, context),
+    rejectsWith(Code.Unauthenticated),
+  );
+});
+
+test("ListIncomingOrders without restaurant_id is INVALID_ARGUMENT", async () => {
+  const { service } = createWorld({ subjects: resolverOf(cook) });
+
+  await assert.rejects(
+    async () => service.listIncomingOrders({ restaurantId: "" }, context),
+    rejectsWith(Code.InvalidArgument),
+  );
+});

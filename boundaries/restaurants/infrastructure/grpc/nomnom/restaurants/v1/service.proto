@@ -37,6 +37,10 @@ service RestaurantsService {
   // restaurant#operate_kitchen. Orders in RECEIVED awaiting Acceptance are not
   // in the queue.
   rpc GetKitchenQueue(GetKitchenQueueRequest) returns (GetKitchenQueueResponse);
+  // Incoming orders of a restaurant (FR-586): Restaurant Orders in RECEIVED
+  // awaiting Accept or Reject, by ascending received_at, then by id. Requires
+  // restaurant#operate_kitchen. An accepted order leaves this list.
+  rpc ListIncomingOrders(ListIncomingOrdersRequest) returns (ListIncomingOrdersResponse);
 
   // Restaurant administration. RegisterRestaurant requires platform#register_restaurant
   // and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
@@ -235,6 +239,30 @@ message KitchenQueueEntry {
 message GetKitchenQueueResponse {
   // In the recommended order; empty when nothing is queued.
   repeated KitchenQueueEntry entries = 1;
+}
+
+message ListIncomingOrdersRequest {
+  string restaurant_id = 1;
+}
+
+// Line of a Restaurant Order as the kitchen prepares it.
+message RestaurantOrderItem {
+  string menu_item_id = 1;
+  int32 quantity = 2;
+  repeated string options = 3;
+}
+
+message IncomingOrder {
+  // State RECEIVED and version of the order; expected_ready_at is unset.
+  RestaurantOrder restaurant_order = 1;
+  repeated RestaurantOrderItem items = 2;
+  // Unset only on orders received before the time was recorded.
+  google.protobuf.Timestamp received_at = 3;
+}
+
+message ListIncomingOrdersResponse {
+  // By ascending received_at; empty when nothing awaits a decision.
+  repeated IncomingOrder orders = 1;
 }
 
 message RegisterRestaurantRequest {

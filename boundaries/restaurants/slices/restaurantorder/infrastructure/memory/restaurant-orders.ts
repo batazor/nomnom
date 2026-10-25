@@ -22,6 +22,10 @@ import type {
   ActivePreparationsReader,
 } from "../../applications/list-active-preparations/list-active-preparations.ts";
 import type {
+  IncomingOrder,
+  IncomingOrdersReader,
+} from "../../applications/list-incoming-orders/list-incoming-orders.ts";
+import type {
   ReadyOrder,
   ReadyOrdersReader,
 } from "../../applications/list-ready-orders/list-ready-orders.ts";
@@ -107,6 +111,7 @@ const boardItems = (snapshot: RestaurantOrderSnapshot) =>
 export class InMemoryKitchenBoard
   implements
     RestaurantOrderReader,
+    IncomingOrdersReader,
     KitchenQueueReader,
     ActivePreparationsReader,
     ReadyOrdersReader
@@ -125,6 +130,18 @@ export class InMemoryKitchenBoard
     return stored === undefined || stored.document.restaurantId !== restaurantId
       ? undefined
       : snapshotToView(stored.document, stored.version);
+  }
+
+  async listIncoming(restaurantId: string): Promise<readonly IncomingOrder[]> {
+    return this.#inStates(restaurantId, [RestaurantOrderState.Received])
+      .sort(byTime((document) => document.timeline.receivedAt))
+      .map(({ document, version }) => ({
+        restaurantOrderId: document.id,
+        orderId: document.orderId,
+        items: boardItems(document),
+        receivedAt: document.timeline.receivedAt,
+        version,
+      }));
   }
 
   async listQueued(

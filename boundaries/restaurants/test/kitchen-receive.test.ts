@@ -15,6 +15,7 @@ import { cook, createKitchenWorld, ordersService } from "./support/kitchen.ts";
 test("AC-242 receive order request creates a RECEIVED restaurant order", async () => {
   const world = createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
+  const receivedAt = world.clock.now();
 
   const result = await world.receive.execute({
     subject: ordersService,
@@ -30,7 +31,7 @@ test("AC-242 receive order request creates a RECEIVED restaurant order", async (
     restaurantId,
     state: "RECEIVED",
     items: [{ menuItemId: phoId, quantity: 2, options: ["spicy"] }],
-    timeline: {},
+    timeline: { receivedAt },
     rejectionReason: undefined,
     failureReason: undefined,
     cancelledAtStage: undefined,

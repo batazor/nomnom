@@ -28,6 +28,7 @@ import type {
 import { CancelRestaurantOrderHandler } from "../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import { GetKitchenQueueHandler } from "../applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { KitchenCommandDependencies } from "../applications/kitchen-command.ts";
+import { ListIncomingOrdersHandler } from "../applications/list-incoming-orders/list-incoming-orders.ts";
 import { MarkAssembledHandler } from "../applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
 import {
@@ -103,7 +104,10 @@ export interface RestaurantOrderCradle {
   readonly markRestaurantOrderReady: MarkReadyForPickupHandler;
   readonly reportPreparationDelay: ReportPreparationDelayHandler;
   readonly reportPreparationFailure: ReportPreparationFailureHandler;
+  /** Read models of the kitchen board over the restaurant order documents. */
+  readonly kitchenBoard: MongoKitchenBoard;
   readonly getKitchenQueue: GetKitchenQueueHandler;
+  readonly listIncomingOrders: ListIncomingOrdersHandler;
 }
 
 type Cradle = RestaurantOrderDependencies & RestaurantOrderCradle;
@@ -220,16 +224,25 @@ export const registerRestaurantOrder = (
       (cradle: Cradle) =>
         new ReportPreparationFailureHandler(commandDependencies(cradle)),
     ).singleton(),
-    // Kitchen board read model over the restaurant order documents; the order
-    // of the queue is the MVP FIFO policy until the scheduling decision.
+    kitchenBoard: asFunction(
+      ({ db, unitOfWork }: Cradle) =>
+        new MongoKitchenBoard(createRestaurantOrderCollection(db, unitOfWork)),
+    ).singleton(),
+    // The order of the queue is the MVP FIFO policy until the scheduling
+    // decision.
     getKitchenQueue: asFunction(
-      ({ db, unitOfWork, kitchenAccessControl }: Cradle) =>
+      ({ kitchenBoard, kitchenAccessControl }: Cradle) =>
         new GetKitchenQueueHandler({
           accessControl: kitchenAccessControl,
-          reader: new MongoKitchenBoard(
-            createRestaurantOrderCollection(db, unitOfWork),
-          ),
+          reader: kitchenBoard,
           ordering: new FifoKitchenQueueOrdering(),
+        }),
+    ).singleton(),
+    listIncomingOrders: asFunction(
+      ({ kitchenBoard, kitchenAccessControl }: Cradle) =>
+        new ListIncomingOrdersHandler({
+          accessControl: kitchenAccessControl,
+          reader: kitchenBoard,
         }),
     ).singleton(),
   };

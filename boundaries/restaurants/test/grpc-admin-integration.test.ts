@@ -175,6 +175,7 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
       reportPreparationDelay: unused,
       reportPreparationFailure: unused,
       getKitchenQueue: unused,
+      listIncomingOrders: unused,
       registerRestaurant: new RegisterRestaurantHandler({
         accessControl,
         ownerRelationships: writer,

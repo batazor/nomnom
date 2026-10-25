@@ -43,6 +43,7 @@ export const restaurantOrderCollectionSpec: CollectionSpec = {
         timeline: {
           bsonType: "object",
           properties: {
+            receivedAt: optionalDate,
             acceptedAt: optionalDate,
             queuedAt: optionalDate,
             preparationStartedAt: optionalDate,
@@ -69,7 +70,12 @@ export const restaurantOrderCollectionSpec: CollectionSpec = {
       name: "restaurant_orders_order_unique",
       unique: true,
     },
-    // Kitchen board: queue, active preparations and ready orders per restaurant.
+    // Kitchen board: incoming, queue, active preparations and ready orders
+    // per restaurant.
+    {
+      key: { restaurantId: 1, state: 1, "timeline.receivedAt": 1 },
+      name: "restaurant_orders_board_received",
+    },
     {
       key: { restaurantId: 1, state: 1, "timeline.preparationStartedAt": 1 },
       name: "restaurant_orders_board_started",
