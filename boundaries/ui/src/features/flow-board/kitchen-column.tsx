@@ -1,3 +1,4 @@
+import { AnimatePresence, m } from "motion/react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 
@@ -179,17 +180,28 @@ function KitchenOrders({
   }
   return (
     <ul aria-label={t("board.kitchen.orders")} className="board-cards">
-      {data.kitchen.orders.map((order) => (
-        <li key={order.id}>
-          <KitchenOrderCard
-            onChanged={() => reexecute({ requestPolicy: "network-only" })}
-            onSelect={() => onSelectOrder(order.orderId)}
-            order={order}
-            restaurantId={restaurantId}
-            selected={order.orderId === selectedOrderId}
-          />
-        </li>
-      ))}
+      {/* Orders arrive from polling: new ones slide in, finished ones fade
+          out, and the rest move to their new place. */}
+      <AnimatePresence initial={false}>
+        {data.kitchen.orders.map((order) => (
+          <m.li
+            key={order.id}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            initial={{ opacity: 0, y: -8 }}
+            layout
+            transition={{ duration: 0.2, ease: "easeOut" }}
+          >
+            <KitchenOrderCard
+              onChanged={() => reexecute({ requestPolicy: "network-only" })}
+              onSelect={() => onSelectOrder(order.orderId)}
+              order={order}
+              restaurantId={restaurantId}
+              selected={order.orderId === selectedOrderId}
+            />
+          </m.li>
+        ))}
+      </AnimatePresence>
     </ul>
   );
 }

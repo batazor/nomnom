@@ -1,4 +1,4 @@
-import { m } from "motion/react";
+import { AnimatePresence, m } from "motion/react";
 import { useState } from "react";
 import { useClient, useMutation, useQuery } from "urql";
 
@@ -200,34 +200,43 @@ export function CourierColumn({
 
       {courier.offers.length > 0 ? (
         <ul aria-label={t("board.courier.offers")} className="board-cards">
-          {courier.offers.map((offer) => (
-            <li key={offer.id}>
-              <article className="board-card" data-stage="OFFER">
-                <div className="board-card-head">
-                  <span className="board-card-title">
-                    {t("board.courier.offer")}
-                  </span>
-                  <OfferCountdown expiresAt={offer.expiresAt} />
-                </div>
-                <Route from={offer.pickupAddress} to={offer.dropoffAddress} />
-                <div className="board-card-actions">
-                  <Button
-                    isPending={accepting.fetching}
-                    onPress={async () => {
-                      const result = await acceptOffer({ offerId: offer.id });
-                      settle({
-                        error: result.error,
-                        problem: result.data?.acceptDeliveryOffer.problem,
-                      });
-                    }}
-                    size="sm"
-                  >
-                    {t("board.courier.accept")}
-                  </Button>
-                </div>
-              </article>
-            </li>
-          ))}
+          <AnimatePresence initial={false}>
+            {courier.offers.map((offer) => (
+              <m.li
+                key={offer.id}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                initial={{ opacity: 0, y: -8 }}
+                layout
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <article className="board-card" data-stage="OFFER">
+                  <div className="board-card-head">
+                    <span className="board-card-title">
+                      {t("board.courier.offer")}
+                    </span>
+                    <OfferCountdown expiresAt={offer.expiresAt} />
+                  </div>
+                  <Route from={offer.pickupAddress} to={offer.dropoffAddress} />
+                  <div className="board-card-actions">
+                    <Button
+                      isPending={accepting.fetching}
+                      onPress={async () => {
+                        const result = await acceptOffer({ offerId: offer.id });
+                        settle({
+                          error: result.error,
+                          problem: result.data?.acceptDeliveryOffer.problem,
+                        });
+                      }}
+                      size="sm"
+                    >
+                      {t("board.courier.accept")}
+                    </Button>
+                  </div>
+                </article>
+              </m.li>
+            ))}
+          </AnimatePresence>
         </ul>
       ) : delivery ? null : (
         <div className="board-empty-state">
