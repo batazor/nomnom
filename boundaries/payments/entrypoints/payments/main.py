@@ -19,7 +19,7 @@ def run() -> None:
 
 def serve(settings: Settings) -> None:
     worker = create_default_worker(
-        ("0.0.0.0", settings.server.port), settings.identity, settings.spicedb
+        ("0.0.0.0", settings.server.port), settings.identity, settings.spicedb, settings.provider
     )
     Lifecycle(
         LifecycleConfig(

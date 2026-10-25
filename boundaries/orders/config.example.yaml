@@ -27,9 +27,9 @@ fulfillment:
   pickup_timeout: 60m
   delivery_timeout: 120m
   publish_stage: true
-  # unavailable | simulated | grpc (simulated — только локальная проверка маршрута;
-  # grpc вызывает командные API соседей через internal gateway).
-  neighbours: unavailable
+  # grpc | unavailable | simulated (grpc — по умолчанию, командные API соседей через
+  # internal gateway; unavailable — явное отключение; simulated — только локальная проверка маршрута).
+  neighbours: grpc
 # Адрес internal gateway (env INTERNAL_GATEWAY_ADDR); обязателен при neighbours: grpc.
 internal_gateway:
   address: ""

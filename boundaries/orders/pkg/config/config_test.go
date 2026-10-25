@@ -126,6 +126,8 @@ func clearConfigEnvironment(t *testing.T) {
 			}
 		})
 	}
+	// The default grpc neighbours require a gateway address.
+	t.Setenv(EnvInternalGatewayAddr, "internal-gateway:8080")
 }
 
 func TestLoadUsesTemporalAndFulfillmentDefaults(t *testing.T) {
@@ -148,7 +150,7 @@ func TestLoadUsesTemporalAndFulfillmentDefaults(t *testing.T) {
 		PickupTimeout:           60 * time.Minute,
 		DeliveryTimeout:         120 * time.Minute,
 		PublishStage:            true,
-		Neighbours:              NeighboursUnavailable,
+		Neighbours:              NeighboursGRPC,
 	}, cfg.Fulfillment)
 }
 
@@ -195,7 +197,7 @@ func TestLoadRejectsInvalidWorkerSettings(t *testing.T) {
 
 func TestLoadRequiresGatewayForGRPCNeighbours(t *testing.T) {
 	clearConfigEnvironment(t)
-	t.Setenv(EnvFulfillment("neighbours"), "grpc")
+	t.Setenv(EnvInternalGatewayAddr, "")
 
 	_, err := Load()
 	require.ErrorContains(t, err, EnvInternalGatewayAddr)

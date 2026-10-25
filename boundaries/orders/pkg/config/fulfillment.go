@@ -12,12 +12,13 @@ import (
 type Neighbours string
 
 const (
-	// NeighboursUnavailable fails every call with a retryable error until gRPC
-	// clients of the neighbouring contexts exist.
+	// NeighboursUnavailable fails every call with a retryable error; an explicit
+	// opt-out while a neighbouring context is not deployed.
 	NeighboursUnavailable Neighbours = "unavailable"
 	// NeighboursSimulated approves every call without effect; local checks only.
 	NeighboursSimulated Neighbours = "simulated"
-	// NeighboursGRPC calls the command APIs through the internal gateway.
+	// NeighboursGRPC calls the command APIs through the internal gateway; the
+	// default, requires INTERNAL_GATEWAY_ADDR.
 	NeighboursGRPC Neighbours = "grpc"
 )
 
@@ -52,7 +53,7 @@ var fulfillmentDefaults = map[string]any{
 	"pickup_timeout":            60 * time.Minute,
 	"delivery_timeout":          120 * time.Minute,
 	"publish_stage":             true,
-	"neighbours":                string(NeighboursUnavailable),
+	"neighbours":                string(NeighboursGRPC),
 }
 
 // EnvFulfillment returns the environment variable of a fulfillment key, for
