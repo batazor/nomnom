@@ -1,0 +1,97 @@
+# Dev token issuer (только kind, README «Демо-данные и dev token issuer»): GET /tokens отдаёт
+# access tokens тестового identity provider для демо-пользователей и демо-рестораны, чтобы
+# flow board customer UI вызывал BFF от имени покупателя, владельца, кухни и курьера без логина.
+# Ключ — Secret demo-token-issuer-idp из tests/identity/fixtures (создаёт before-hook Skaffold),
+# рестораны — ConfigMap demo-seed (пишет scripts/seed-demo.py после deploy).
+#
+# NetworkPolicy: pod под базовыми политиками nomnom-bff (default deny); ему не нужен ни egress,
+# ни ingress от pod — браузер на хосте ходит через kubectl port-forward, как к BFF.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-token-issuer
+  namespace: nomnom-bff
+  labels:
+    app.kubernetes.io/name: demo-token-issuer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo-token-issuer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo-token-issuer
+    spec:
+      terminationGracePeriodSeconds: 1
+      automountServiceAccountToken: false
+      containers:
+        - name: issuer
+          image: nomnom/demo-token-issuer
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "3011"
+            - name: KEY_FILE
+              value: /etc/demo-idp/idp-signing-key.pem
+            - name: JWKS_FILE
+              value: /etc/demo-idp/idp-jwks.json
+            - name: VECTORS_FILE
+              value: /etc/demo-idp/idp-vectors.json
+            - name: RESTAURANTS_FILE
+              value: /etc/demo-seed/restaurants.json
+            - name: TOKEN_TTL_SECONDS
+              value: "3600"
+            # Vite dev server и preview customer UI.
+            - name: ALLOWED_ORIGINS
+              value: http://localhost:4173,http://localhost:4174
+          ports:
+            - name: http
+              containerPort: 3011
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: idp
+              mountPath: /etc/demo-idp
+              readOnly: true
+            - name: seed
+              mountPath: /etc/demo-seed
+              readOnly: true
+      volumes:
+        - name: idp
+          secret:
+            secretName: demo-token-issuer-idp
+        - name: seed
+          configMap:
+            name: demo-seed
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-token-issuer
+  namespace: nomnom-bff
+  labels:
+    app.kubernetes.io/name: demo-token-issuer
+spec:
+  selector:
+    app.kubernetes.io/name: demo-token-issuer
+  ports:
+    - name: http
+      port: 3011
+      targetPort: http

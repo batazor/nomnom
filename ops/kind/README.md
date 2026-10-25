@@ -285,6 +285,56 @@ GRAFANA_CLOUD=1`: без profile internal gateway и контексты пишу
 конфигурация `customer-ui-kind` в `.claude/launch.json` (BFF на `localhost:3010`, Faro на
 `localhost:12347` через port-forward).
 
+## Демо-данные и dev token issuer
+
+Flow board customer UI ведёт заказ на одном экране от лица четырёх пользователей. Пока вход
+(Dex) не подключён к UI, kind даёт им фиксированные subjects, данные и access tokens. **Только
+kind**: ни seed, ни issuer не входят в charts приложений и в другие окружения.
+
+| Роль | Subject | Что есть после deploy |
+| --- | --- | --- |
+| покупатель | `nomnom-demo-customer` | ничего (заказы оформляет UI) |
+| владелец | `nomnom-demo-owner` | три открытых ресторана с меню (EUR) |
+| кухня | `nomnom-demo-kitchen` | персонал всех трёх ресторанов |
+| курьер | `nomnom-demo-courier` | зарегистрирован, позиция в центре Берлина, на линии |
+
+Рестораны: «Пельменная «Сибирь»», «Чайхана «Самарканд»», «Блинная «Теремок у моста»» (5–7 блюд
+каждая). Данные — [`demo/seed.json`](demo/seed.json).
+
+**Seed.** `after`-hook kubectl-деплоера (`make kind-deploy`) запускает
+[`scripts/seed-demo.py`](scripts/seed-demo.py): те же публичные gRPC-вызовы, что e2e пути заказа,
+через fixture `e2e-driver` и user assertion (`scripts/mint-jwt.py`) — `kind-operator`
+регистрирует рестораны и курьера, владелец назначает кухню, заводит меню и открывает рестораны,
+курьер сообщает позицию и выходит на линию. Seed идемпотентен: ресторан ищется по имени в
+`ListOwnedRestaurants` владельца, блюдо — по имени в `GetMenu`, повторный `RegisterCourier`
+допускается. SpiceDB в kind хранит данные в памяти и перезапускается при изменении schema или
+bootstrap, а рестораны и курьер остаются в MongoDB и PostgreSQL; поэтому seed TOUCH-ит их
+relationships (`owner`, `staff`, `self`) одноразовым pod в `nomnom-authz` (grpcurl, reflection
+SpiceDB). Grants в `authz/bootstrap-kind.yaml` не нужны. Ids ресторанов seed пишет в ConfigMap
+`nomnom-bff/demo-seed`. Запуск вручную: `python3 ops/kind/scripts/seed-demo.py kind-nomnom-test`.
+
+Subjects демо-пользователей начинаются с `nomnom-`, а не с `demo-`: dispatch без геокодирования
+выбирает среди свободных курьеров первого по id, и `demo-courier` забирал бы предложения курьера
+e2e (`kind-e2e-courier-*`).
+
+**Dev token issuer** — `demo-token-issuer` в `nomnom-bff`
+([`demo/token-issuer`](demo/token-issuer), манифесты [`manifests/demo`](manifests/demo/token-issuer.yaml)):
+stdlib-сервис на Python, подписывает access tokens ключом тестового identity provider
+(`tests/identity/fixtures`, Secret `demo-token-issuer-idp` создаёт `before`-hook) с теми же
+claims, что `mint-jwt.py access-token` (iss/aud из `idp-vectors.json`), но на 1 час. CORS —
+`http://localhost:4173` и `http://localhost:4174`. Pod под базовыми политиками неймспейса:
+ни egress, ни ingress от pod ему не нужны, браузер ходит через port-forward, как к BFF.
+
+```bash
+kubectl -n nomnom-bff port-forward svc/demo-token-issuer 3011
+kubectl -n nomnom-bff port-forward svc/bff 3010
+curl -s localhost:3011/tokens
+# {"expiresAt": 1792942302,
+#  "tokens": {"customer": "eyJ…", "owner": "…", "kitchen": "…", "courier": "…"},
+#  "subjects": {"customer": "nomnom-demo-customer", …},
+#  "restaurants": [{"id": "c9dd…", "name": "Пельменная «Сибирь»"}, …]}
+```
+
 ## Проверки
 
 `make kind-test` запускает тесты Kyverno Chainsaw из `e2e/`

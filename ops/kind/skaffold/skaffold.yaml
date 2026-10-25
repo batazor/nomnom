@@ -119,6 +119,9 @@ build:
       context: ../../..
       docker:
         dockerfile: ops/kind/e2e/probe/Dockerfile
+    # Dev token issuer (только kind): access tokens демо-пользователей для flow board UI.
+    - image: nomnom/demo-token-issuer
+      context: ../demo/token-issuer
 manifests:
   # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) ставит chart ../bootstrap из
   # before-hook: rawYaml и releases Skaffold получают pod template label skaffold.dev/run-id, и
@@ -128,6 +131,7 @@ manifests:
     - ../manifests/gateway/public-gateway.yaml
     - ../manifests/fixtures/net-probe.yaml
     - ../manifests/observability/trace-capture.yaml
+    - ../manifests/demo/token-issuer.yaml
   # Internal gateway: profile grafana-cloud заменяет путь на ../manifests/observability,
   # которая включает его и переключает spans gateway на Alloy.
   kustomize:
@@ -164,6 +168,10 @@ deploy:
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
                   -l gateway.envoyproxy.io/owning-gateway-name=public
                 test "$(k -n envoy-gateway-system get service internal-gateway -o jsonpath='{.spec.type}')" = ClusterIP
+        # Демо-данные flow board (только kind): рестораны с меню, персонал, курьер на линии —
+        # идемпотентно, через e2e-driver; ids ресторанов → ConfigMap nomnom-bff/demo-seed.
+        - host:
+            command: [sh, -c, 'python3 -I ../scripts/seed-demo.py "$SKAFFOLD_KUBE_CONTEXT"']
   # Bounded contexts и BFF ставятся собственными charts (ADR 12) с values тестового окружения.
   helm:
     # Releases независимы и ставятся параллельно; порядок задаёт dependsOn.
@@ -191,6 +199,19 @@ deploy:
                   --set-file authz.bootstrap=../../../authorization/bootstrap.yaml \
                   --set-file authz.kindBootstrap=../authz/bootstrap-kind.yaml \
                   --set-file identity.idpJwks=../../../tests/identity/fixtures/idp-jwks.json
+        # Ключ тестового identity provider для dev token issuer (manifests/demo): pod читает
+        # его при старте. Только kind — тот же ключ, что у scripts/mint-jwt.py access-token.
+        - host:
+            command:
+              - sh
+              - -c
+              - |
+                set -eu
+                f=../../../tests/identity/fixtures
+                kubectl --context "$SKAFFOLD_KUBE_CONTEXT" -n nomnom-bff create secret generic demo-token-issuer-idp \
+                  --from-file="$f/idp-signing-key.pem" --from-file="$f/idp-jwks.json" \
+                  --from-file="$f/idp-vectors.json" --dry-run=client -o yaml |
+                  kubectl --context "$SKAFFOLD_KUBE_CONTEXT" apply -f -
         # Kafka и Temporal dev server для orders-consumer (ADR 28) нужны до установки charts:
         # consumer подключается к ним при startup.
         - host:
