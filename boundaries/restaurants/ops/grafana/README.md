@@ -36,20 +36,20 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Request rate by entry | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Errors by class | TODO | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Technical error ratio | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Latency p50 / p95 / p99 | TODO | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| CPU | TODO | [`process_cpu_time_seconds_total`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Memory | TODO | [`process_memory_usage_bytes`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Request rate by entry | live | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Errors by class | live | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Technical error ratio | live | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Latency p50 / p95 / p99 | live | — |
+| CPU | live | — |
+| Memory | live | — |
 
 ### Runtime
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| V8 heap used / limit | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`v8js_memory_heap_limit_bytes`](../../../../docs/observability/metric-inventory.md#runtime), [`v8js_memory_heap_used_bytes`](../../../../docs/observability/metric-inventory.md#runtime) |
-| Event loop delay p99 | TODO | [`nodejs_eventloop_delay_p99_seconds`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| GC duration p95 | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`v8js_gc_duration_seconds`](../../../../docs/observability/metric-inventory.md#runtime) |
+| V8 heap used / limit | TODO | [`v8js_memory_heap_limit_bytes`](../../../../docs/observability/metric-inventory.md#runtime), [`v8js_memory_heap_used_bytes`](../../../../docs/observability/metric-inventory.md#runtime) |
+| Event loop delay p99 | TODO | [`nodejs_eventloop_delay_p99_seconds`](../../../../docs/observability/metric-inventory.md#runtime) |
+| GC duration p95 | TODO | [`v8js_gc_duration_seconds`](../../../../docs/observability/metric-inventory.md#runtime) |
 
 ### Pods
 
@@ -66,73 +66,73 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| mongodb: operations | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| mongodb: p95 by operation | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| mongodb: pool connections | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_idle_min`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| mongodb: pool saturation | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| mongodb: pending checkouts and timeouts | TODO | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| mongodb: pool wait / use / create p95 | TODO | [`db_client_connection_create_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_use_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| mongodb: pool cleared | TODO | [`nomnom_db_client_connection_pool_clears_total`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| mongodb: operations | live | — |
+| mongodb: p95 by operation | live | — |
+| mongodb: pool connections | live | [`db_client_connection_idle_min`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| mongodb: pool saturation | TODO | [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| mongodb: pending checkouts and timeouts | TODO | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db) |
+| mongodb: pool wait / use / create p95 | TODO | [`db_client_connection_create_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_use_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
+| mongodb: pool cleared | TODO | [`nomnom_db_client_connection_pool_clears_total`](../../../../docs/observability/metric-inventory.md#db) |
 
 ### Kafka
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Consumed | TODO | [`messaging_client_consumed_messages_total`](../../../../docs/observability/metric-inventory.md#messaging-otel), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Produced (Outbox Forwarder) | TODO | [`messaging_client_sent_messages_total`](../../../../docs/observability/metric-inventory.md#messaging-otel), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Processing failures | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Consumed | TODO | [`messaging_client_consumed_messages_total`](../../../../docs/observability/metric-inventory.md#messaging-otel) |
+| Produced (Outbox Forwarder) | TODO | [`messaging_client_sent_messages_total`](../../../../docs/observability/metric-inventory.md#messaging-otel) |
+| Processing failures | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Consumer lag | TODO | [`kafka_consumergroup_lag`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Retries and poison (DLQ) | TODO | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_retry_attempts_total`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Processing duration p95 by event_type | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Message age at processing p95 | TODO | [`nomnom_messaging_message_age_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Inbox: processed / duplicates | TODO | [`nomnom_inbox_duplicates_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Outbox pending | TODO | [`nomnom_outbox_pending_messages`](../../../../docs/observability/metric-inventory.md#outbox), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Outbox oldest pending age | TODO | [`nomnom_outbox_oldest_pending_age_seconds`](../../../../docs/observability/metric-inventory.md#outbox), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Outbox publish retries | TODO | [`nomnom_outbox_publish_retries_total`](../../../../docs/observability/metric-inventory.md#outbox), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Retries and poison (DLQ) | TODO | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_retry_attempts_total`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Processing duration p95 by event_type | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Message age at processing p95 | TODO | [`nomnom_messaging_message_age_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Inbox: processed / duplicates | TODO | [`nomnom_inbox_duplicates_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Outbox pending | TODO | [`nomnom_outbox_pending_messages`](../../../../docs/observability/metric-inventory.md#outbox) |
+| Outbox oldest pending age | TODO | [`nomnom_outbox_oldest_pending_age_seconds`](../../../../docs/observability/metric-inventory.md#outbox) |
+| Outbox publish retries | TODO | [`nomnom_outbox_publish_retries_total`](../../../../docs/observability/metric-inventory.md#outbox) |
 
 ### Transactions
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Transactions by outcome | TODO | [`nomnom_uow_transactions_total`](../../../../docs/observability/metric-inventory.md#uow), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Transaction duration | TODO | [`nomnom_uow_duration_seconds`](../../../../docs/observability/metric-inventory.md#uow), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Retries by conflict | TODO | [`nomnom_uow_retries_total`](../../../../docs/observability/metric-inventory.md#uow), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Transactions by outcome | TODO | [`nomnom_uow_transactions_total`](../../../../docs/observability/metric-inventory.md#uow) |
+| Transaction duration | TODO | [`nomnom_uow_duration_seconds`](../../../../docs/observability/metric-inventory.md#uow) |
+| Retries by conflict | TODO | [`nomnom_uow_retries_total`](../../../../docs/observability/metric-inventory.md#uow) |
 
 ### Domain Lifecycle
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Invalid transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Terminal transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm) |
+| Invalid transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm) |
+| Terminal transitions | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm) |
 
 ### Domain metrics
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Restaurant orders: received / accepted / rejected | TODO | [`nomnom_restaurants_orders_accepted_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_restaurants_orders_received_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_restaurants_orders_rejected_total`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Rejections by reason | TODO | [`nomnom_restaurants_orders_rejected_total`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Restaurant orders: received / accepted / rejected | TODO | [`nomnom_restaurants_orders_accepted_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_restaurants_orders_received_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_restaurants_orders_rejected_total`](../../../../docs/observability/metric-inventory.md#domain) |
+| Rejections by reason | TODO | [`nomnom_restaurants_orders_rejected_total`](../../../../docs/observability/metric-inventory.md#domain) |
 
 ### Kitchen
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Kitchen queue size | TODO | [`nomnom_kitchen_queue_size`](../../../../docs/observability/metric-inventory.md#kitchen), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Oldest queued order age | TODO | [`nomnom_kitchen_queue_oldest_age_seconds`](../../../../docs/observability/metric-inventory.md#kitchen), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Active preparations / ready for pickup | TODO | [`nomnom_kitchen_preparations_active`](../../../../docs/observability/metric-inventory.md#kitchen), [`nomnom_kitchen_ready_for_pickup`](../../../../docs/observability/metric-inventory.md#kitchen), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Preparation duration | TODO | [`nomnom_kitchen_preparation_duration_seconds`](../../../../docs/observability/metric-inventory.md#kitchen), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Delays | TODO | [`nomnom_kitchen_delays_total`](../../../../docs/observability/metric-inventory.md#kitchen), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Kitchen queue size | TODO | [`nomnom_kitchen_queue_size`](../../../../docs/observability/metric-inventory.md#kitchen) |
+| Oldest queued order age | TODO | [`nomnom_kitchen_queue_oldest_age_seconds`](../../../../docs/observability/metric-inventory.md#kitchen) |
+| Active preparations / ready for pickup | TODO | [`nomnom_kitchen_preparations_active`](../../../../docs/observability/metric-inventory.md#kitchen), [`nomnom_kitchen_ready_for_pickup`](../../../../docs/observability/metric-inventory.md#kitchen) |
+| Preparation duration | TODO | [`nomnom_kitchen_preparation_duration_seconds`](../../../../docs/observability/metric-inventory.md#kitchen) |
+| Delays | TODO | [`nomnom_kitchen_delays_total`](../../../../docs/observability/metric-inventory.md#kitchen) |
 
 ### Authorization
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Checks by result | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Denied by permission | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Checks by result | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
+| Denied by permission | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
+| Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
+| Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 6 из 50. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 15 из 50. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
@@ -140,10 +140,10 @@ Rule group `restaurants` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.
 
 | Alert | Severity | Статус | Недостающие метрики |
 | --- | --- | --- | --- |
-| Restaurants: gRPC technical errors | critical | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
-| Restaurants: gRPC p95 latency | warning | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| Restaurants: gRPC technical errors | critical | активно | — |
+| Restaurants: gRPC p95 latency | warning | активно | — |
 | Restaurants: messages sent to DLQ | warning | ждёт метрик | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Restaurants: mongodb pool saturated | warning | ждёт метрик | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| Restaurants: mongodb pool saturated | warning | ждёт метрик | [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
 | Restaurants: mongodb pool checkouts queued | warning | ждёт метрик | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db) |
 | Restaurants: mongodb pool wait p95 | warning | ждёт метрик | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
 | Restaurants: mongodb pool checkout timeouts | warning | ждёт метрик | [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db) |

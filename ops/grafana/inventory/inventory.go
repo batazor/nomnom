@@ -86,7 +86,7 @@ const RepoURL = "https://github.com/batazor/nomnom/blob/main/"
 const DocPath = "docs/observability/metric-inventory.md"
 
 // VerifiedPipeline — где подтверждены метрики со статусом Present.
-const VerifiedPipeline = "2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`)."
+const VerifiedPipeline = "2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`): 2026-10-25 подтверждены rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series)."
 
 // Exemplars включаются в запросах только когда это подтверждено end-to-end:
 // SDK histograms с exemplars, Alloy и Mimir (-ingester.max-global-exemplars-per-user).
@@ -134,11 +134,11 @@ var Sections = []Section{
 
 var Metrics = []Metric{
 	// resource
-	{Name: "target_info", Section: "resource", Type: Gauge, Source: "OTel resource → Mimir OTLP", Labels: []string{"job", "instance", "deployment_environment_name", "service_version"}, Status: verified([]string{OrdersConsumer}, Orders, OrdersWorker, Restaurants, Delivery, Payments, BFF), Note: "Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations."},
+	{Name: "target_info", Section: "resource", Type: Gauge, Source: "OTel resource → Mimir OTLP", Labels: []string{"job", "instance", "deployment_environment_name", "service_version"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}, BFF), Note: "Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations."},
 
 	// rpc
-	{Name: "rpc_server_call_duration_seconds", Section: "rpc", Type: Histogram, Source: "`rpc.server.call.duration` (otelgrpc v0.72)", Labels: []string{"rpc_system_name", "rpc_method", "rpc_response_status_code"}, Status: verified([]string{Orders}, Restaurants, Delivery, Payments), Note: "`rpc_method` — `Service/Method`; `rpc_response_status_code` — имя кода (`OK`, `NOT_FOUND`). Инструментации других runtime закрепляются на тех же semconv-именах."},
-	{Name: "rpc_client_call_duration_seconds", Section: "rpc", Type: Histogram, Source: "`rpc.client.call.duration` (otelgrpc v0.72)", Labels: []string{"rpc_system_name", "rpc_method", "rpc_response_status_code", "error_type", "server_address", "server_port"}, Status: verified([]string{OrdersWorker}, BFF, Restaurants, Delivery, Payments), Note: "Вызовы через internal gateway (ADR 15); `server_address`/`server_port` — адрес gateway. SpiceDB — в row Authorization."},
+	{Name: "rpc_server_call_duration_seconds", Section: "rpc", Type: Histogram, Source: "`rpc.server.call.duration` (otelgrpc v0.72)", Labels: []string{"rpc_system_name", "rpc_method", "rpc_response_status_code"}, Status: verified([]string{Orders, Restaurants, Delivery, Payments}), Note: "`rpc_method` — `Service/Method`; `rpc_response_status_code` — имя кода (`OK`, `NOT_FOUND`). Инструментации других runtime закрепляются на тех же semconv-именах."},
+	{Name: "rpc_client_call_duration_seconds", Section: "rpc", Type: Histogram, Source: "`rpc.client.call.duration` (otelgrpc v0.72)", Labels: []string{"rpc_system_name", "rpc_method", "rpc_response_status_code", "error_type", "server_address", "server_port"}, Status: verified([]string{OrdersWorker, Orders, Restaurants, Delivery, Payments}, BFF), Note: "Вызовы через internal gateway (ADR 15); `server_address`/`server_port` — адрес gateway. SpiceDB — в row Authorization."},
 
 	// graphql
 	{Name: "router_http_requests_total", Section: "graphql", Type: Counter, Source: "Cosmo `router.http.requests`", Labels: []string{"wg_operation_type", "wg_operation_name", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "`wg_operation_name` ограничен persisted operations клиента."},
@@ -146,8 +146,8 @@ var Metrics = []Metric{
 	{Name: "router_http_request_duration_milliseconds", Section: "graphql", Type: Histogram, Source: "Cosmo `router.http.request.duration_milliseconds`", Labels: []string{"wg_operation_type", "wg_operation_name", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway)."},
 
 	// runtime
-	{Name: "process_cpu_time_seconds_total", Section: "runtime", Type: Counter, Source: "`process.cpu.time`", Labels: []string{"cpu_mode"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Go: `go.opentelemetry.io/contrib/instrumentation/host` (метрики `system.*` отбрасываются View)."},
-	{Name: "process_memory_usage_bytes", Section: "runtime", Type: Gauge, Source: "`process.memory.usage`", Status: expected(Restaurants, Delivery, Payments), Note: "Для Go не экспортируется; память Go-ролей — `go_memory_used_bytes`."},
+	{Name: "process_cpu_time_seconds_total", Section: "runtime", Type: Counter, Source: "`process.cpu.time`", Labels: []string{"cpu_mode"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}), Note: "Go: `go.opentelemetry.io/contrib/instrumentation/host` (метрики `system.*` отбрасываются View)."},
+	{Name: "process_memory_usage_bytes", Section: "runtime", Type: Gauge, Source: "`process.memory.usage`", Status: verified([]string{Restaurants, Delivery, Payments}), Note: "Для Go не экспортируется; память Go-ролей — `go_memory_used_bytes`."},
 	{Name: "process_thread_count", Section: "runtime", Type: Gauge, Source: "`process.thread.count`", Status: expected(Delivery, Payments), Note: "Python: worker model gRPC thread pool."},
 	{Name: "go_memory_used_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.used`", Labels: []string{"go_memory_type"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
 	{Name: "go_memory_allocated_bytes_total", Section: "runtime", Type: Counter, Source: "`go.memory.allocated`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
@@ -162,8 +162,8 @@ var Metrics = []Metric{
 	{Name: "cpython_gc_collections_total", Section: "runtime", Type: Counter, Source: "`cpython.gc.collections`", Labels: []string{"cpython_gc_generation"}, Status: expected(Payments)},
 
 	// db
-	{Name: "db_client_operation_duration_seconds", Section: "db", Type: Histogram, Source: "`db.client.operation.duration`", Labels: []string{"db_system_name", "db_operation_name", "db_collection_name", "error_type"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments)},
-	{Name: "db_client_connection_count", Section: "db", Type: Gauge, Source: "`db.client.connection.count`", Labels: []string{"db_client_connection_pool_name", "db_client_connection_state"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments), Note: postgresPoolNote},
+	{Name: "db_client_operation_duration_seconds", Section: "db", Type: Histogram, Source: "`db.client.operation.duration`", Labels: []string{"db_system_name", "db_operation_name", "db_collection_name", "error_type"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery}, Payments)},
+	{Name: "db_client_connection_count", Section: "db", Type: Gauge, Source: "`db.client.connection.count`", Labels: []string{"db_client_connection_pool_name", "db_client_connection_state"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}), Note: postgresPoolNote},
 	{Name: "db_client_connection_max", Section: "db", Type: Gauge, Source: "`db.client.connection.max`", Labels: []string{"db_client_connection_pool_name"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments), Note: postgresPoolNote},
 	{Name: "db_client_connection_wait_time_seconds", Section: "db", Type: Histogram, Source: "`db.client.connection.wait_time`", Labels: []string{"db_client_connection_pool_name"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments), Note: postgresPoolNote},
 	{Name: "db_client_connection_idle_min", Section: "db", Type: Gauge, Source: "`db.client.connection.idle.min`", Labels: []string{"db_client_connection_pool_name"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments), Note: mongoPoolNote + " " + postgresPoolNote},
@@ -200,7 +200,7 @@ var Metrics = []Metric{
 	{Name: "nomnom_outbox_publish_lag_seconds", Section: "outbox", Type: Histogram, Source: "Forwarder / relay", Labels: []string{"messaging_destination_name", "nomnom_event_type"}, Status: expected(contextServices...), Note: "occurred_at → ack брокера: задержка доставки события соседям."},
 
 	// usecase
-	{Name: "nomnom_usecase_duration_seconds", Section: "usecase", Type: Histogram, Source: "Use case decorator (`pkg/telemetry`)", Labels: []string{"nomnom_usecase_name", "nomnom_usecase_kind", "nomnom_outcome", "error_type"}, Status: expected(Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments), Note: "`kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`."},
+	{Name: "nomnom_usecase_duration_seconds", Section: "usecase", Type: Histogram, Source: "Use case decorator (`pkg/telemetry`)", Labels: []string{"nomnom_usecase_name", "nomnom_usecase_kind", "nomnom_outcome", "error_type"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}), Note: "`kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`."},
 
 	// uow
 	{Name: "nomnom_uow_transactions_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"nomnom_outcome"}, Status: expected(contextServices...), Note: "`outcome`: committed | rolled_back | commit_failed."},

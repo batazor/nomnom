@@ -149,6 +149,54 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-orders-overview",
+        "summary": "Больше 5% вызовов use cases — технические сбои (outcome=error, не бизнес-отказы)."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (job) (rate(nomnom_usecase_duration_seconds_count{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_outcome=\"error\"}[5m])) / sum by (job) (rate(nomnom_usecase_duration_seconds_count{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0.05",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-orders-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "orders",
+      "title": "Orders: use case errors",
+      "uid": "nomnom-orders-usecase-errors"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-orders-overview",
         "summary": "Integration Events ушли в <stream>.dlq: их обработка не повторяется сама."
       },
       "condition": "C",

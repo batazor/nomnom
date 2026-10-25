@@ -71,10 +71,10 @@ JSON — артефакт генератора: правки вносятся в
 | gRPC via internal gateway: rate | live | — |
 | gRPC via internal gateway: technical errors | live | — |
 | gRPC via internal gateway: p95 | live | — |
-| postgresql: operations | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db) |
-| postgresql: p95 by operation | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db) |
-| postgresql: pool connections | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_idle_min`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
-| postgresql: pool saturation | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| postgresql: operations | live | — |
+| postgresql: p95 by operation | live | — |
+| postgresql: pool connections | live | [`db_client_connection_idle_min`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| postgresql: pool saturation | TODO | [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
 | postgresql: pending checkouts and timeouts | TODO | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db) |
 | postgresql: pool wait / use / create p95 | TODO | [`db_client_connection_create_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_use_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
 
@@ -98,10 +98,10 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Calls by outcome | TODO | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
-| Rejections by use case | TODO | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
-| Errors by use case | TODO | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
-| Duration p95 by use case | TODO | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
+| Calls by outcome | live | — |
+| Rejections by use case | live | — |
+| Errors by use case | live | — |
+| Duration p95 by use case | live | — |
 
 ### Transactions
 
@@ -132,14 +132,14 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Workflows started | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Workflows completed / failed | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Workflow end-to-end latency p95 | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Oldest running fulfillment | TODO | [`nomnom_orders_fulfillment_oldest_running_age_seconds`](../../../../docs/observability/metric-inventory.md#temporal), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Activities executed / failed attempts | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Activity latency p95 | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Worker task slots | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Compensations | TODO | [`nomnom_orders_compensations_total`](../../../../docs/observability/metric-inventory.md#temporal), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Workflows started | live | — |
+| Workflows completed / failed | live | — |
+| Workflow end-to-end latency p95 | live | — |
+| Oldest running fulfillment | TODO | [`nomnom_orders_fulfillment_oldest_running_age_seconds`](../../../../docs/observability/metric-inventory.md#temporal) |
+| Activities executed / failed attempts | live | — |
+| Activity latency p95 | live | — |
+| Worker task slots | live | — |
+| Compensations | TODO | [`nomnom_orders_compensations_total`](../../../../docs/observability/metric-inventory.md#temporal) |
 
 ### Authorization
 
@@ -150,7 +150,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 25 из 62. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 38 из 62. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
@@ -161,9 +161,9 @@ Rule group `orders` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)
 | Orders: gRPC technical errors | critical | активно | — |
 | Orders: gRPC p95 latency | warning | активно | — |
 | Orders: neighbour calls failing | warning | активно | — |
-| Orders: use case errors | warning | ждёт метрик | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
+| Orders: use case errors | warning | активно | — |
 | Orders: messages sent to DLQ | warning | активно | — |
-| Orders: postgresql pool saturated | warning | ждёт метрик | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| Orders: postgresql pool saturated | warning | ждёт метрик | [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
 | Orders: postgresql pool checkouts queued | warning | ждёт метрик | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db) |
 | Orders: postgresql pool wait p95 | warning | ждёт метрик | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
 | Orders: postgresql pool checkout timeouts | warning | ждёт метрик | [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db) |

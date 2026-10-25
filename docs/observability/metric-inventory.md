@@ -18,9 +18,9 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 119; пар «метрика × сервис» со статусом «есть»: 91.
+Метрик в инвентаре: 119; пар «метрика × сервис» со статусом «есть»: 126.
 
-Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`).
+Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`): 2026-10-25 подтверждены rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
 Метрики подключены в процессах `orders`: `orders` (gRPC server), `orders-worker` (Temporal, gRPC client
 к gateway) и `orders-consumer` (Watermill, OTel middleware), во всех трёх — Go runtime и process CPU через
@@ -34,7 +34,7 @@ OTel resource в Mimir: `job="nomnom/<service.name>"`, `instance=<service.instan
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `target_info` | OTel resource → Mimir OTLP | gauge | `job`, `instance`, `deployment_environment_name`, `service_version` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается<br>`bff`: ожидается | Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations. |
+| `target_info` | OTel resource → Mimir OTLP | gauge | `job`, `instance`, `deployment_environment_name`, `service_version` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations. |
 
 <a id="rpc"></a>
 
@@ -44,8 +44,8 @@ OTel resource в Mimir: `job="nomnom/<service.name>"`, `instance=<service.instan
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `rpc_server_call_duration_seconds` | `rpc.server.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code` | `orders`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `rpc_method` — `Service/Method`; `rpc_response_status_code` — имя кода (`OK`, `NOT_FOUND`). Инструментации других runtime закрепляются на тех же semconv-именах. |
-| `rpc_client_call_duration_seconds` | `rpc.client.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code`, `error_type`, `server_address`, `server_port` | `orders-worker`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается<br>`bff`: ожидается | Вызовы через internal gateway (ADR 15); `server_address`/`server_port` — адрес gateway. SpiceDB — в row Authorization. |
+| `rpc_server_call_duration_seconds` | `rpc.server.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code` | `orders`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть | `rpc_method` — `Service/Method`; `rpc_response_status_code` — имя кода (`OK`, `NOT_FOUND`). Инструментации других runtime закрепляются на тех же semconv-именах. |
+| `rpc_client_call_duration_seconds` | `rpc.client.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code`, `error_type`, `server_address`, `server_port` | `orders`: есть<br>`orders-worker`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | Вызовы через internal gateway (ADR 15); `server_address`/`server_port` — адрес gateway. SpiceDB — в row Authorization. |
 
 <a id="graphql"></a>
 
@@ -67,8 +67,8 @@ Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). 
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `process_cpu_time_seconds_total` | `process.cpu.time` | counter | `cpu_mode` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Go: `go.opentelemetry.io/contrib/instrumentation/host` (метрики `system.*` отбрасываются View). |
-| `process_memory_usage_bytes` | `process.memory.usage` | gauge | — | `restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Для Go не экспортируется; память Go-ролей — `go_memory_used_bytes`. |
+| `process_cpu_time_seconds_total` | `process.cpu.time` | counter | `cpu_mode` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть | Go: `go.opentelemetry.io/contrib/instrumentation/host` (метрики `system.*` отбрасываются View). |
+| `process_memory_usage_bytes` | `process.memory.usage` | gauge | — | `restaurants`: есть<br>`delivery`: есть<br>`payments`: есть | Для Go не экспортируется; память Go-ролей — `go_memory_used_bytes`. |
 | `process_thread_count` | `process.thread.count` | gauge | — | `delivery`: ожидается<br>`payments`: ожидается | Python: worker model gRPC thread pool. |
 | `go_memory_used_bytes` | `go.memory.used` | gauge | `go_memory_type` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
 | `go_memory_allocated_bytes_total` | `go.memory.allocated` | counter | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
@@ -90,8 +90,8 @@ Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver в `r
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `db_client_operation_duration_seconds` | `db.client.operation.duration` | histogram | `db_system_name`, `db_operation_name`, `db_collection_name`, `error_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
-| `db_client_connection_count` | `db.client.connection.count` | gauge | `db_client_connection_pool_name`, `db_client_connection_state` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/postgres/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/postgres/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/postgres/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`. |
+| `db_client_operation_duration_seconds` | `db.client.operation.duration` | histogram | `db_system_name`, `db_operation_name`, `db_collection_name`, `error_type` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: ожидается | — |
+| `db_client_connection_count` | `db.client.connection.count` | gauge | `db_client_connection_pool_name`, `db_client_connection_state` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть | `orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/postgres/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/postgres/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/postgres/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`. |
 | `db_client_connection_max` | `db.client.connection.max` | gauge | `db_client_connection_pool_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/postgres/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/postgres/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/postgres/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`. |
 | `db_client_connection_wait_time_seconds` | `db.client.connection.wait_time` | histogram | `db_client_connection_pool_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/postgres/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/postgres/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/postgres/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`. |
 | `db_client_connection_idle_min` | `db.client.connection.idle.min` | gauge | `db_client_connection_pool_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. `orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/postgres/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/postgres/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/postgres/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`. |
@@ -163,7 +163,7 @@ SQL-метрики Forwarder-роли (опрос таблицы Outbox), не p
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_usecase_duration_seconds` | Use case decorator (`pkg/telemetry`) | histogram | `nomnom_usecase_name`, `nomnom_usecase_kind`, `nomnom_outcome`, `error_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`. |
+| `nomnom_usecase_duration_seconds` | Use case decorator (`pkg/telemetry`) | histogram | `nomnom_usecase_name`, `nomnom_usecase_kind`, `nomnom_outcome`, `error_type` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть | `kind`: command | query. Rate по `_count` — частота вызовов и доля `rejected`/`error`. |
 
 <a id="uow"></a>
 

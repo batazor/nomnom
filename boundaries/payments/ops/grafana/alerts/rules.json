@@ -1,5 +1,103 @@
 {
   "folderUid": "nomnom",
   "interval": 60,
+  "rules": [
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-payments-overview",
+        "summary": "Больше 5% входящих gRPC-вызовов завершаются техническими кодами (UNAVAILABLE, INTERNAL, DEADLINE_EXCEEDED…)."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0.05",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-payments-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "payments",
+      "title": "Payments: gRPC technical errors",
+      "uid": "nomnom-payments-grpc-errors"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-payments-overview",
+        "summary": "p95 входящих gRPC-вызовов дольше 1 s."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "histogram_quantile(0.95, sum by (job, le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(payments)\"}[5m])))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 1",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-payments-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "payments",
+      "title": "Payments: gRPC p95 latency",
+      "uid": "nomnom-payments-grpc-latency"
+    }
+  ],
   "title": "payments"
 }
