@@ -2,6 +2,7 @@ import logging
 import sys
 
 from infrastructure.grpc.service import create_default_worker
+from infrastructure.postgres import create_database
 from pkg import telemetry
 from pkg.config import Settings, load_settings
 from pkg.lifecycle import Lifecycle, LifecycleConfig
@@ -18,16 +19,27 @@ def run() -> None:
 
 
 def serve(settings: Settings) -> None:
-    worker = create_default_worker(
-        ("0.0.0.0", settings.server.port), settings.identity, settings.spicedb, settings.provider
-    )
-    Lifecycle(
-        LifecycleConfig(
-            management_port=settings.management.port,
-            readiness_delay=settings.shutdown.readiness_delay.total_seconds(),
-            drain_timeout=settings.shutdown.drain_timeout.total_seconds(),
-        ),
-    ).run(worker)
+    database = create_database(settings.database)
+    try:
+        # Недоступная база завершает процесс до открытия портов; схему применяет
+        # entrypoints.payments_migrate (init container).
+        database.check()
+        worker = create_default_worker(
+            ("0.0.0.0", settings.server.port),
+            settings.identity,
+            settings.spicedb,
+            settings.provider,
+            database=database,
+        )
+        Lifecycle(
+            LifecycleConfig(
+                management_port=settings.management.port,
+                readiness_delay=settings.shutdown.readiness_delay.total_seconds(),
+                drain_timeout=settings.shutdown.drain_timeout.total_seconds(),
+            ),
+        ).run(worker)
+    finally:
+        database.close()
 
 
 def main() -> int:

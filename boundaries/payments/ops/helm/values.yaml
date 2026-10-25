@@ -187,6 +187,19 @@ spicedb:
     name: ""
     key: "preshared-key"
 
+# PostgreSQL (ADR 8, локальный ADR 1). DSN берётся из внешнего Secret (env DATABASE__URL) и не
+# хранится в values; без dsnSecret.name переменная не задаётся и процесс не стартует.
+database:
+  # Secret создаётся развёртыванием, не этим chart.
+  urlSecret:
+    name: ""
+    key: "dsn"
+  # Размер пула соединений процесса (DATABASE__MAX_CONNS).
+  maxConns: 10
+  # Init container `python -m entrypoints.payments_migrate.main` перед процессом;
+  # advisory lock сериализует параллельные запуски реплик.
+  migrate: true
+
 volumes: []
 volumeMounts: []
 

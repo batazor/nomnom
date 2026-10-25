@@ -20,7 +20,7 @@ Python.
 
 ## Use Cases
 
-Статус реализации: application handlers всех перечисленных сценариев реализованы change [`implement-payments-application-layer`](../../openspec/changes/implement-payments-application-layer/) поверх портов и проверены unit-тестами с in-memory adapters; transport, хранилище и provider adapters ещё не реализованы (см. [Статус реализации](#статус-реализации)).
+Статус реализации: application handlers всех перечисленных сценариев реализованы change [`implement-payments-application-layer`](../../openspec/changes/implement-payments-application-layer/) поверх портов и проверены unit-тестами с in-memory adapters; хранилище — PostgreSQL (`infrastructure/postgres`, [локальный ADR 1](docs/adr/0001-use-postgresql-for-payments-storage.md)), provider adapters ещё не реализованы (см. [Статус реализации](#статус-реализации)).
 
 ### Commands
 
@@ -186,7 +186,7 @@ Inbox не защищает вызовы платёжного провайдер
 
 Unit of Work охватывает только локальные изменения: payment state, operation record и Outbox. Вызов провайдера выполняется вне транзакции, обычно между записью операции и фиксацией её результата; порядок определяется use case и idempotency policy — см. [документацию Unit of Work](../../docs/unit-of-work.md#payments) и [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md).
 
-Хранилище `payments` ещё не выбрано. Его выбор должен подтвердить атомарную уникальность `(consumer, event_id)` вместе с изменением business state. Kafka-клиент, схема Inbox и адаптеры относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+Хранилище `payments` — PostgreSQL ([локальный ADR 1](docs/adr/0001-use-postgresql-for-payments-storage.md)): таблица `inbox` с первичным ключом `(consumer, event_id)` и таблица `outbox` записываются в той же локальной транзакции, что и `payments`/`payment_operations`. Provider callbacks уже дедуплицируются через `inbox` (consumer `payment-provider`); Kafka-клиент и Outbox publisher относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 ## Observability
 
@@ -202,7 +202,7 @@ Unit of Work охватывает только локальные изменен
 - Финансовые операции следуют схеме `UoW { pending operation } → provider call → UoW { result + Payment + Outbox }`. Повтор с тем же idempotency key возвращает сохранённый результат без provider call либо завершает незавершённую операцию повтором provider call с тем же ключом. У `Payment` не более одной незавершённой операции.
 - Provider callbacks дедуплицируются по `provider_message_id` в той же Unit of Work, что и изменение состояния; асинхронный результат применяется не более одного раза.
 - Порты: `UnitOfWork`, `Clock`, `Subject`, `AggregateRef` и общие application errors — в `pkg/application`; authorization (`PaymentPermissionChecker`), provider gateway, Outbox, provider message inbox и генератор идентификаторов — в `slices/payment/applications/ports.py`. Handlers и порты синхронные.
-- In-memory/fake adapters находятся только в `tests/payment_fakes.py` и повторяют контракт будущего хранилища: rollback, optimistic concurrency, уникальность `order_id` и idempotency key.
+- In-memory/fake adapters находятся только в `tests/payment_fakes.py` и повторяют контракт хранилища: rollback, optimistic concurrency, уникальность `order_id` и idempotency key.
 
 Реализован runtime contract процесса по [Cloud Native Runtime](../../docs/cloud-native-runtime.md) и [ADR 17](../../docs/adr/0017-cloud-native-application-runtime.md) в `pkg/lifecycle`:
 
@@ -212,7 +212,23 @@ Unit of Work охватывает только локальные изменен
 
 Длительности задаются как `<int>(ms|s|m)`: `SHUTDOWN__READINESS_DELAY` (по умолчанию `5s`, `>= 0`), `SHUTDOWN__DRAIN_TIMEOUT` (по умолчанию `20s`, `> 0`) и `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT` (по умолчанию `5s`, `> 0`). Traces и metrics экспортируются через OTLP, только если задан `OTEL_EXPORTER_OTLP_ENDPOINT`; после drain providers сбрасываются не дольше `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`.
 
-Не реализованы: provider client, проверка подписи webhooks, постоянное хранилище, user identity через BFF, Outbox publisher, Kafka, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения хранилища и провайдера composition root (`create_default_worker`) собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)), отказ записи в хранилище. Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+Реализовано хранилище PostgreSQL в `infrastructure/postgres` (psycopg 3, пул `psycopg_pool`):
+
+- Схема — `infrastructure/postgres/migrations/*.sql` (forward-only), применяется `python -m entrypoints.payments_migrate.main` под advisory lock; версии — в `schema_migrations`. Таблицы `payments`, `payment_operations`, `outbox`, `inbox`.
+- `PostgresUnitOfWork` — одна локальная транзакция; repositories, Outbox и Inbox внутри `run` используют её соединение (context variable), вложенный `run` присоединяется. Вне Unit of Work каждый вызов берёт своё соединение из пула.
+- Outbox по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md): `seq`, `event_id` (UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`), `event_type` (полное имя Protobuf-сообщения), `topic`, `payload` (Protobuf, `BYTEA`), `metadata` (`traceparent`), `published_at`, `attempts`, `last_error`. Какие Domain Events публикуются, решает внедряемый `OutboxEventMapper` (`infrastructure/postgres/outbox.py`); событие без контракта (mapper вернул `None`) в Outbox не пишется. Пока Protobuf-контрактов нет, composition root использует `NoPublishedContracts` — Outbox остаётся пустым; Protobuf mappers и `payments-relay` добавляются отдельно (`create_default_handlers(outbox_mapper=...)`).
+- Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePayment`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKey`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPending`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflict`.
+- `DATABASE__URL` обязателен: пустое значение завершает процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). `DATABASE__MAX_CONNS` — размер пула (по умолчанию `10`).
+- Integration-тесты `tests/test_postgres_integration.py` запускаются при заданном `DATABASE_URL`:
+
+```bash
+docker run -d --rm --name payments-pg -p 55432:5432 \
+  -e POSTGRES_USER=payments -e POSTGRES_PASSWORD=payments postgres:18.6-alpine3.24
+DATABASE_URL=postgresql://payments:payments@localhost:55432/payments make test
+docker stop payments-pg
+```
+
+Не реализованы: provider client, проверка подписи webhooks, user identity через BFF, Outbox publisher, Kafka, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения провайдера composition root (`create_default_worker`) собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
 
 ## Запуск
 

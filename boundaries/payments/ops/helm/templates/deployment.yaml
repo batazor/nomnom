@@ -38,6 +38,20 @@ spec:
       securityContext:
         {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 8 }}
       {{- end }}
+      {{- if and .Values.database.migrate .Values.database.urlSecret.name }}
+      # Миграции PostgreSQL до старта процесса; реплики сериализуются advisory lock'ом.
+      initContainers:
+        - name: migrate
+          image: {{ include "payments.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "entrypoints.payments_migrate.main"]
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "payments.databaseEnv" . | nindent 12 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "payments.image" . | quote }}
@@ -95,6 +109,7 @@ spec:
                   name: {{ .Values.spicedb.presharedKeySecret.name | quote }}
                   key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
             {{- end }}
+            {{- include "payments.databaseEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}

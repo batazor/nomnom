@@ -103,3 +103,21 @@ SpiceDB (ADR 18): при заданном spicedb.endpoint приложение 
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+PostgreSQL env (ADR 8): DSN из внешнего Secret. Без database.urlSecret.name переменная не
+задаётся, и процесс payments не стартует (DATABASE__URL обязателен).
+*/}}
+{{- define "payments.databaseEnv" -}}
+{{- with .Values.database }}
+{{- if .urlSecret.name -}}
+- name: DATABASE__URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .urlSecret.name | quote }}
+      key: {{ .urlSecret.key | quote }}
+- name: DATABASE__MAX_CONNS
+  value: {{ .maxConns | quote }}
+{{- end }}
+{{- end }}
+{{- end }}

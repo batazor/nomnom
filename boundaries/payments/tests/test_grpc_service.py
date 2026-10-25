@@ -3,7 +3,7 @@ import unittest
 from typing import cast
 
 import grpc
-from payment_fakes import PaymentsTestKit
+from payment_fakes import PaymentsTestKit, unreachable_database
 
 from infrastructure.grpc.service import (
     GrpcWorker,
@@ -232,7 +232,9 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
 
 class DefaultWorkerTest(unittest.TestCase):
     def test_default_worker_rejects_calls_without_verified_identity(self) -> None:
-        worker = create_default_worker(("127.0.0.1", 0))
+        database = unreachable_database()
+        self.addCleanup(database.close)
+        worker = create_default_worker(("127.0.0.1", 0), database=database)
         worker.start()
         channel = grpc.insecure_channel(f"127.0.0.1:{worker.port}")
         try:

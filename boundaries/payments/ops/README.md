@@ -179,6 +179,24 @@ helm template payments ops/helm \
   --set spicedb.presharedKeySecret.name=spicedb-preshared-key
 ```
 
+## PostgreSQL
+
+Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). DSN передаётся из внешнего Secret `database.urlSecret.name`/`key` (env `DATABASE__URL`); без него переменная не задаётся и процесс не стартует. При `database.migrate: true` Pod получает init container `python -m entrypoints.payments_migrate.main` (forward-only SQL-миграции под advisory lock).
+
+| Значение | По умолчанию | Назначение |
+| --- | --- | --- |
+| `database.urlSecret.name` | `""` | Secret с DSN; создаётся развёртыванием, не chart. |
+| `database.urlSecret.key` | `dsn` | Ключ в Secret. |
+| `database.maxConns` | `10` | Размер пула соединений (`DATABASE__MAX_CONNS`). |
+| `database.migrate` | `true` | Init container с миграциями перед процессом. |
+
+Роль базы должна владеть схемой (создаёт таблицы и `schema_migrations`). Пример для kind:
+
+```bash
+helm upgrade --install payments ops/helm \
+  --set database.urlSecret.name=payments-postgres
+```
+
 ## Ресурсы
 
 `resources.requests` и `resources.limits` не заданы: профиль потребления ещё не измерен.

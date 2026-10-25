@@ -3,13 +3,13 @@
 import sys
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from concurrent import futures
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NoReturn, TypeVar
+from typing import NoReturn
 
 import grpc
 
@@ -18,6 +18,15 @@ from infrastructure.grpc.identity import (
     RejectingSubjectResolver,
     SubjectResolver,
     create_subject_resolver,
+)
+from infrastructure.postgres import (
+    NoPublishedContracts,
+    OutboxEventMapper,
+    PostgresDatabase,
+    PostgresPaymentOperationRepository,
+    PostgresPaymentOutbox,
+    PostgresPaymentRepository,
+    PostgresUnitOfWork,
 )
 from infrastructure.provider import create_provider
 from pkg.application import (
@@ -80,8 +89,6 @@ if str(_GEN_ROOT) not in sys.path:
     sys.path.insert(0, str(_GEN_ROOT))
 
 from nomnom.payments.v1 import payments_pb2, service_pb2, service_pb2_grpc  # noqa: E402
-
-T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -297,58 +304,6 @@ class GrpcWorker:
             raise DrainTimeoutError("payments gRPC requests exceeded drain timeout")
 
 
-class StorageNotConfigured(RuntimeError):
-    """Persistent storage of payments is not connected yet."""
-
-
-class UnconfiguredPaymentRepository:
-    """Finds nothing and refuses writes until persistent storage is connected."""
-
-    def get(self, payment_id):  # type: ignore[no-untyped-def]
-        return None
-
-    def get_by_order(self, order_id):  # type: ignore[no-untyped-def]
-        return None
-
-    def add(self, payment):  # type: ignore[no-untyped-def]
-        raise StorageNotConfigured("payments storage is not configured")
-
-    def save(self, payment):  # type: ignore[no-untyped-def]
-        raise StorageNotConfigured("payments storage is not configured")
-
-
-class UnconfiguredPaymentOperationRepository:
-    def get(self, operation_id):  # type: ignore[no-untyped-def]
-        return None
-
-    def get_by_idempotency_key(self, idempotency_key):  # type: ignore[no-untyped-def]
-        return None
-
-    def find_pending(self, payment_id):  # type: ignore[no-untyped-def]
-        return None
-
-    def list_for_payment(self, payment_id):  # type: ignore[no-untyped-def]
-        return []
-
-    def add(self, operation):  # type: ignore[no-untyped-def]
-        raise StorageNotConfigured("payments storage is not configured")
-
-    def save(self, operation):  # type: ignore[no-untyped-def]
-        raise StorageNotConfigured("payments storage is not configured")
-
-
-class UnconfiguredOutbox:
-    def add(self, aggregate, events):  # type: ignore[no-untyped-def]
-        raise StorageNotConfigured("payments outbox is not configured")
-
-
-class PassThroughUnitOfWork:
-    """No transaction: every storage write is refused by the unconfigured adapters."""
-
-    def run(self, work: Callable[[], T]) -> T:
-        return work()
-
-
 class SystemClock:
     def now(self) -> datetime:
         return datetime.now(timezone.utc)
@@ -363,22 +318,26 @@ class UuidIdentifiers:
 
 
 def create_default_handlers(
+    database: PostgresDatabase,
     permissions: PaymentPermissionChecker | None = None,
     provider: PaymentProviderGateway | None = None,
+    outbox_mapper: OutboxEventMapper | None = None,
 ) -> PaymentsHandlers:
-    """Fail-closed composition until storage and provider adapters exist.
+    """Handlers over PostgreSQL storage: one local transaction per Unit of Work.
 
     Without a permission checker every permission is denied (SpiceDB not configured).
+    Without an Outbox mapper no Domain Event has a published contract (ADR 31), so
+    nothing is written to the Outbox until the Protobuf mappers are injected here.
     """
-    payments = UnconfiguredPaymentRepository()
+    payments = PostgresPaymentRepository(database)
     if permissions is None:
         permissions = create_permission_checker(None)
     ids = UuidIdentifiers()
     executor = PaymentOperationExecutor(
-        uow=PassThroughUnitOfWork(),
+        uow=PostgresUnitOfWork(database),
         payments=payments,
-        operations=UnconfiguredPaymentOperationRepository(),
-        outbox=UnconfiguredOutbox(),
+        operations=PostgresPaymentOperationRepository(database),
+        outbox=PostgresPaymentOutbox(database, outbox_mapper or NoPublishedContracts()),
         provider=provider if provider is not None else create_provider(None),
         permissions=permissions,
         clock=SystemClock(),
@@ -399,6 +358,8 @@ def create_default_worker(
     identity: IdentitySettings | None = None,
     spicedb: SpiceDBSettings | None = None,
     provider: ProviderSettings | None = None,
+    *,
+    database: PostgresDatabase,
 ) -> GrpcWorker:
     """Composition root of the gRPC worker.
 
@@ -407,11 +368,12 @@ def create_default_worker(
     Without ``SPICEDB__ENDPOINT`` every permission is denied; otherwise each protected use
     case checks SpiceDB and fails closed (``UNAVAILABLE``) on error or timeout.
     Without ``PROVIDER__KIND=fake`` every financial operation is ``UNAVAILABLE``.
+    Storage is the PostgreSQL ``database`` owned (opened, checked, closed) by the caller.
     """
     subjects = (
         create_subject_resolver(identity) if identity is not None else RejectingSubjectResolver()
     )
     permissions = create_permission_checker(spicedb)
     return GrpcWorker(
-        address, create_default_handlers(permissions, create_provider(provider)), subjects
+        address, create_default_handlers(database, permissions, create_provider(provider)), subjects
     )

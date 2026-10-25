@@ -33,6 +33,9 @@ MANAGE = (
 )
 VIEW = (PaymentPermission.VIEW, PaymentPermission.VIEW_OPERATIONS)
 
+# DATABASE__URL обязателен: без него load_settings падает.
+REQUIRED_ENV = {"DATABASE__URL": "postgresql://payments@localhost/payments"}
+
 
 class _RpcFailure(grpc.RpcError):
     def __init__(self, code: grpc.StatusCode) -> None:
@@ -178,7 +181,7 @@ class CompositionTest(unittest.TestCase):
 
 class SettingsTest(unittest.TestCase):
     def test_defaults(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
             settings = load_settings().spicedb
         self.assertEqual(settings.endpoint, "")
         self.assertFalse(settings.enabled)
@@ -192,7 +195,7 @@ class SettingsTest(unittest.TestCase):
             "SPICEDB__INSECURE": "true",
             "SPICEDB__TIMEOUT": "500ms",
         }
-        with patch.dict(os.environ, environment, clear=True):
+        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
             settings = load_settings().spicedb
         self.assertTrue(settings.enabled)
         self.assertEqual(settings.endpoint, "spicedb.nomnom-authz:50051")
@@ -202,14 +205,16 @@ class SettingsTest(unittest.TestCase):
 
     def test_endpoint_without_key_is_startup_error(self) -> None:
         environment = {"SPICEDB__ENDPOINT": "localhost:50051", "SPICEDB__PRESHARED_KEY": " "}
-        with patch.dict(os.environ, environment, clear=True):
+        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
             with self.assertRaises(ValidationError):
                 load_settings()
 
     def test_rejects_invalid_timeout(self) -> None:
         for value in ("0s", "2", "PT2S", "-1s"):
             with self.subTest(value=value):
-                with patch.dict(os.environ, {"SPICEDB__TIMEOUT": value}, clear=True):
+                with patch.dict(
+                    os.environ, {**REQUIRED_ENV, "SPICEDB__TIMEOUT": value}, clear=True
+                ):
                     with self.assertRaises(ValidationError):
                         load_settings()
 

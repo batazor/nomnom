@@ -7,10 +7,13 @@ from pydantic import ValidationError
 
 from pkg.config import load_settings
 
+# DATABASE__URL обязателен: без него load_settings падает.
+REQUIRED_ENV = {"DATABASE__URL": "postgresql://payments@localhost/payments"}
+
 
 class ConfigTest(unittest.TestCase):
     def test_uses_default_port(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
             self.assertEqual(load_settings().server.port, 8084)
 
     def test_server_port_takes_precedence_over_port(self) -> None:
@@ -18,16 +21,16 @@ class ConfigTest(unittest.TestCase):
             "SERVER__PORT": "9004",
             "PORT": "9005",
         }
-        with patch.dict(os.environ, environment, clear=True):
+        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
             self.assertEqual(load_settings().server.port, 9004)
 
     def test_rejects_invalid_port(self) -> None:
-        with patch.dict(os.environ, {"PORT": "70000"}, clear=True):
+        with patch.dict(os.environ, {**REQUIRED_ENV, "PORT": "70000"}, clear=True):
             with self.assertRaises(ValidationError):
                 load_settings()
 
     def test_uses_default_management_and_shutdown(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
             settings = load_settings()
         self.assertEqual(settings.management.port, 9084)
         self.assertEqual(settings.shutdown.readiness_delay, timedelta(seconds=5))
@@ -39,26 +42,30 @@ class ConfigTest(unittest.TestCase):
             "SHUTDOWN__READINESS_DELAY": "500ms",
             "SHUTDOWN__DRAIN_TIMEOUT": "1m",
         }
-        with patch.dict(os.environ, environment, clear=True):
+        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
             settings = load_settings()
         self.assertEqual(settings.management.port, 9100)
         self.assertEqual(settings.shutdown.readiness_delay, timedelta(milliseconds=500))
         self.assertEqual(settings.shutdown.drain_timeout, timedelta(minutes=1))
 
     def test_allows_zero_readiness_delay(self) -> None:
-        with patch.dict(os.environ, {"SHUTDOWN__READINESS_DELAY": "0s"}, clear=True):
+        with patch.dict(
+            os.environ, {**REQUIRED_ENV, "SHUTDOWN__READINESS_DELAY": "0s"}, clear=True
+        ):
             self.assertEqual(load_settings().shutdown.readiness_delay, timedelta(0))
 
     def test_rejects_invalid_management_port(self) -> None:
         for value in ("0", "65536", "abc"):
             with self.subTest(value=value):
-                with patch.dict(os.environ, {"MANAGEMENT__PORT": value}, clear=True):
+                with patch.dict(
+                    os.environ, {**REQUIRED_ENV, "MANAGEMENT__PORT": value}, clear=True
+                ):
                     with self.assertRaises(ValidationError):
                         load_settings()
 
     def test_rejects_management_port_equal_to_server_port(self) -> None:
         environment = {"SERVER__PORT": "9084", "MANAGEMENT__PORT": "9084"}
-        with patch.dict(os.environ, environment, clear=True):
+        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
             with self.assertRaisesRegex(ValueError, "management port must differ"):
                 load_settings()
 
@@ -66,11 +73,27 @@ class ConfigTest(unittest.TestCase):
         for value in ("5", "5h", "1.5s", "-1s", "5 s", "PT5S", "", "s"):
             for env in ("SHUTDOWN__READINESS_DELAY", "SHUTDOWN__DRAIN_TIMEOUT"):
                 with self.subTest(env=env, value=value):
-                    with patch.dict(os.environ, {env: value}, clear=True):
+                    with patch.dict(os.environ, {**REQUIRED_ENV, env: value}, clear=True):
                         with self.assertRaises(ValidationError):
                             load_settings()
 
     def test_rejects_zero_drain_timeout(self) -> None:
-        with patch.dict(os.environ, {"SHUTDOWN__DRAIN_TIMEOUT": "0s"}, clear=True):
+        with patch.dict(os.environ, {**REQUIRED_ENV, "SHUTDOWN__DRAIN_TIMEOUT": "0s"}, clear=True):
             with self.assertRaises(ValidationError):
                 load_settings()
+
+    def test_requires_database_url(self) -> None:
+        for value in (None, "", "   "):
+            environment = {} if value is None else {"DATABASE__URL": value}
+            with self.subTest(url=value):
+                with patch.dict(os.environ, environment, clear=True):
+                    with self.assertRaisesRegex(ValidationError, "DATABASE__URL"):
+                        load_settings()
+
+    def test_reads_postgres_settings(self) -> None:
+        environment = {**REQUIRED_ENV, "DATABASE__MAX_CONNS": "4"}
+        with patch.dict(os.environ, environment, clear=True):
+            settings = load_settings().database
+        self.assertEqual(settings.url, REQUIRED_ENV["DATABASE__URL"])
+        self.assertEqual(settings.max_conns, 4)
+        self.assertNotIn("payments@localhost", repr(settings))

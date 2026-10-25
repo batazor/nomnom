@@ -29,6 +29,6 @@ spicedb:
     name: spicedb-preshared-key
 
 # ADR 8: PostgreSQL payments тестового окружения; Secret payments-postgres создаёт scripts/postgres.sh.
-postgres:
-  dsnSecret:
+database:
+  urlSecret:
     name: payments-postgres

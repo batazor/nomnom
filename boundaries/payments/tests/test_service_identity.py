@@ -12,7 +12,7 @@ import grpc
 import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
 from jwt.algorithms import ECAlgorithm
-from payment_fakes import PaymentsTestKit
+from payment_fakes import PaymentsTestKit, unreachable_database
 from pydantic import ValidationError
 
 from infrastructure.grpc import identity
@@ -50,6 +50,9 @@ ORDERS_WORKER = Subject(SubjectKind.SERVICE, VECTORS["expected_service"])
 VALID_NBF = 1_700_000_000
 VALID_EXP = 4_102_444_800
 
+# DATABASE__URL обязателен: без него load_settings падает.
+REQUIRED_ENV = {"DATABASE__URL": "postgresql://payments@localhost/payments"}
+
 
 class _Aborted(Exception):
     pass
@@ -84,7 +87,7 @@ def _vector_settings(**overrides: str) -> IdentitySettings:
         "IDENTITY__SERVICE_ACCOUNTS": VECTORS["service_accounts"],
     }
     values.update(overrides)
-    with patch.dict(os.environ, values, clear=True):
+    with patch.dict(os.environ, {**REQUIRED_ENV, **values}, clear=True):
         return IdentitySettings(_env_file=None)  # type: ignore[call-arg]
 
 
@@ -239,7 +242,7 @@ class IdentityConfigTest(unittest.TestCase):
     """FR-432, AC-462: fail closed without configuration, fail startup on invalid config."""
 
     def test_identity_is_disabled_by_default(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
             self.assertFalse(load_settings().identity.enabled)
 
     def test_reads_identity_from_environment(self) -> None:
@@ -276,7 +279,7 @@ class IdentityConfigTest(unittest.TestCase):
                 self.assertIsInstance(resolver, RejectingSubjectResolver)
 
     def test_without_issuer_valid_token_is_unauthenticated(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
             settings = load_settings().identity
         with self.assertLogs("infrastructure.grpc.identity", level="WARNING"):
             resolver = create_subject_resolver(settings)
@@ -307,7 +310,7 @@ class IdentityConfigTest(unittest.TestCase):
 
     def test_malformed_allowlist_fails_load_settings(self) -> None:
         environment = {"IDENTITY__SERVICE_ACCOUNTS": "broken"}
-        with patch.dict(os.environ, environment, clear=True):
+        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
             with self.assertRaises(ValidationError):
                 load_settings()
 
@@ -332,8 +335,10 @@ class IdentityConfigTest(unittest.TestCase):
 
     def test_default_worker_fails_before_listening_on_invalid_jwks(self) -> None:
         settings = _vector_settings(IDENTITY__JWKS_FILE="/nonexistent/jwks.json")
+        database = unreachable_database()
+        self.addCleanup(database.close)
         with self.assertRaises(IdentityConfigError):
-            create_default_worker(("127.0.0.1", 0), settings)
+            create_default_worker(("127.0.0.1", 0), settings, database=database)
 
 
 def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, TypeVar
 
+from infrastructure.postgres import PostgresDatabase, create_database
 from pkg.application import (
     AggregateRef,
     AuthorizationUnavailable,
@@ -18,6 +19,7 @@ from pkg.application import (
     Subject,
     SubjectKind,
 )
+from pkg.config import DatabaseSettings
 from slices.payment.applications.operation_flow import (
     PaymentOperationExecutor,
     ProviderResultApplier,
@@ -452,3 +454,8 @@ class PaymentsTestKit:
 
 
 _STATES_WITH_REFERENCE = {PaymentState.AUTHORIZED, PaymentState.CAPTURED, PaymentState.REFUNDED}
+
+
+def unreachable_database() -> PostgresDatabase:
+    """Pool that never connects: for composition tests that stop before storage."""
+    return create_database(DatabaseSettings(DATABASE__URL="postgresql://payments@127.0.0.1:1/x"))
