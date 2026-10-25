@@ -34,7 +34,7 @@ Temporal не используется для:
 
 Один Order Fulfillment Workflow на один логический `Order`, без child workflows. Workflow ID — `order:<order_id>`, namespace — отдельный на окружение, task queue — `orders`. Повторный старт для того же `Order` адресует существующий workflow (`USE_EXISTING`). Будущая декомпозиция допустима только с сохранением этого внешнего identity.
 
-Workflow использует только слайс `order`, поэтому adapter размещается в `slices/order/infrastructure/temporal/fulfillorder`; если workflow начнёт охватывать несколько слайсов, он переносится в `boundaries/orders/infrastructure/temporal/` по [общесистемному ADR 6](../../../../docs/adr/0006-ddd-structure-inside-vertical-slices.md#входы-в-application).
+Процесс — отдельная бизнес-возможность со своей моделью, поэтому он выделен в слайс `fulfillment` (OpenSpec change `extract-order-fulfillment-slice`): правила принимает доменная модель `slices/fulfillment/domains/fulfillment` без Temporal SDK, а workflow, Activities и client — адаптер `slices/fulfillment/infrastructure/temporal`. Порт workflow остаётся в слайсе `order` (`slices/order/applications/fulfillment`), `order` не импортирует `fulfillment`. Если workflow начнёт охватывать несколько слайсов помимо `order`, он переносится в `boundaries/orders/infrastructure/temporal/` по [общесистемному ADR 6](../../../../docs/adr/0006-ddd-structure-inside-vertical-slices.md#входы-в-application).
 
 ### Старт
 
