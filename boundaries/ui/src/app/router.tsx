@@ -5,15 +5,17 @@ import {
 } from "react-router-dom";
 
 import { AppLayout } from "./layout";
-import { CustomerJourneyPreview } from "../features/customer-journey-preview/customer-journey-preview";
+import { BrowseRestaurantsPage } from "../features/browse-restaurants/browse-restaurants-page";
 import { ViewOrderPage } from "../features/view-order/view-order-page";
+import { ViewRestaurantPage } from "../features/view-restaurant/view-restaurant-page";
 
 export const routes = [
   {
     path: "/",
     element: <AppLayout />,
     children: [
-      { index: true, element: <CustomerJourneyPreview /> },
+      { index: true, element: <BrowseRestaurantsPage /> },
+      { path: "restaurants/:restaurantId", element: <ViewRestaurantPage /> },
       { path: "orders/:orderId", element: <ViewOrderPage /> },
     ],
   },

@@ -1,0 +1,325 @@
+.restaurant-page {
+  display: grid;
+  width: min(100%, 64rem);
+  gap: var(--space-6);
+  align-self: start;
+  margin: 0 auto;
+  /* Room for the cart bar fixed at the bottom of a phone screen. */
+  padding-bottom: var(--space-16);
+}
+
+.restaurant-header {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.restaurant-back {
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+
+.restaurant-back:hover {
+  color: var(--color-foreground);
+  text-decoration: underline;
+}
+
+.restaurant-header h1,
+.restaurant-message h1 {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.restaurant-header p,
+.restaurant-message p,
+.restaurant-no-menu {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.restaurant-header .restaurant-closed {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
+}
+
+.restaurant-message {
+  justify-items: start;
+  max-width: 36rem;
+}
+
+.restaurant-layout {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.restaurant-menu,
+.restaurant-cart {
+  min-width: 0;
+}
+
+.restaurant-menu h2,
+.restaurant-cart h2 {
+  margin: 0 0 var(--space-3);
+  color: var(--color-foreground);
+  font-size: 1.0625rem;
+  font-weight: 650;
+}
+
+.menu-items {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-items li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.menu-items li:last-child {
+  border-bottom: 0;
+}
+
+.menu-item-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.menu-item-copy h3 {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.menu-item-copy p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.menu-items .menu-item-price {
+  color: var(--color-foreground);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.menu-items li[data-available="false"] .menu-item-copy {
+  opacity: 0.7;
+}
+
+.menu-item-action {
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+  justify-items: end;
+  font-size: var(--font-size-xs);
+}
+
+.menu-item-sold-out {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+.menu-item-in-cart {
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+.restaurant-cart {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  scroll-margin-top: var(--space-4);
+}
+
+.restaurant-cart h2 {
+  margin: 0;
+}
+
+.cart-empty {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+}
+
+.cart-lines {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cart-lines li {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cart-line-head {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+}
+
+.cart-line-name {
+  min-width: 0;
+  color: var(--color-foreground);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.cart-line-total {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.cart-line-note {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.cart-line-controls {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cart-stepper {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.cart-quantity {
+  min-width: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+
+.cart-subtotal {
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.cart-subtotal dl,
+.cart-subtotal p {
+  margin: 0;
+}
+
+.cart-subtotal dl div {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  color: var(--color-foreground);
+  font-weight: 650;
+}
+
+.cart-subtotal dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.cart-subtotal p {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+.cart-jump {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  left: var(--space-4);
+  z-index: 10;
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--color-foreground);
+  box-shadow: var(--shadow-floating);
+  color: var(--color-background);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.restaurant-skeleton {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.restaurant-skeleton span {
+  display: block;
+  height: 4.5rem;
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+}
+
+.restaurant-skeleton .restaurant-skeleton-title {
+  width: 60%;
+  height: 2rem;
+  margin-bottom: var(--space-3);
+}
+
+/* Phone order: menu, then cart and checkout; side by side on wide screens. */
+@media (min-width: 64rem) {
+  .restaurant-page {
+    padding-bottom: 0;
+  }
+
+  .restaurant-layout {
+    grid-template-columns: minmax(0, 1.5fr) minmax(20rem, 1fr);
+    align-items: start;
+  }
+
+  .cart-jump {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .restaurant-skeleton span {
+    animation: restaurant-skeleton-pulse 1.4s var(--motion-easing) infinite
+      alternate;
+  }
+}
+
+@keyframes restaurant-skeleton-pulse {
+  to {
+    opacity: 0.55;
+  }
+}

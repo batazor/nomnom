@@ -1,44 +1,5 @@
 # Contract-test coverage for customer operations that no feature uses yet.
 
-query MockRestaurants($first: Int!, $after: String) {
-  restaurants(first: $first, after: $after) {
-    edges {
-      cursor
-      node {
-        id
-        name
-        address
-        acceptingOrders
-      }
-    }
-    pageInfo {
-      hasNextPage
-      endCursor
-    }
-  }
-}
-
-query MockRestaurant($id: ID!) {
-  restaurant(id: $id) {
-    id
-    name
-    address
-    acceptingOrders
-    menu {
-      items {
-        id
-        name
-        description
-        price {
-          amount
-          currency
-        }
-        available
-      }
-    }
-  }
-}
-
 query MockCustomerOrders($first: Int!, $after: String) {
   customerOrders(first: $first, after: $after) {
     edges {
@@ -60,37 +21,6 @@ query MockCustomerOrders($first: Int!, $after: String) {
     pageInfo {
       hasNextPage
       endCursor
-    }
-  }
-}
-
-mutation MockPlaceOrder($input: PlaceOrderInput!) {
-  placeOrder(input: $input) {
-    order {
-      id
-      status
-      total {
-        amount
-        currency
-      }
-      items {
-        menuItem {
-          id
-          name
-        }
-        quantity
-        lineTotal {
-          amount
-          currency
-        }
-      }
-      cancellation {
-        availableUntil
-      }
-    }
-    problems {
-      code
-      menuItemIds
     }
   }
 }

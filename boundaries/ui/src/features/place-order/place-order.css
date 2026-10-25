@@ -1,0 +1,33 @@
+.checkout {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.checkout h3 {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: var(--font-size-md);
+  font-weight: 650;
+}
+
+.checkout-problems {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.checkout-problems p,
+.checkout .checkout-error {
+  margin: 0;
+}
+
+.checkout .checkout-error {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}

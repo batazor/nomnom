@@ -39,10 +39,10 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   RequestOrderCancellation: {
     input: { orderId: "order-received", requestId: "contract-cancel" },
   },
-  MockRestaurants: { first: 1 },
-  MockRestaurant: { id: kitchenEight.id },
+  BrowseRestaurants: { first: 2 },
+  ViewRestaurant: { id: kitchenEight.id },
   MockCustomerOrders: { first: 3 },
-  MockPlaceOrder: {
+  PlaceOrder: {
     input: {
       restaurantId: kitchenEight.id,
       items: [{ menuItemId: "menu-bao", quantity: 1 }],

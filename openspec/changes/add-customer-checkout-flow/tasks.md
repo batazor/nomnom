@@ -16,7 +16,7 @@
 
 ## 4. UI
 
-- [ ] 4.1 `browse-restaurants` на `/`, `view-restaurant` с корзиной, `place-order` с idempotency key и problems, переход на заказ; удалить preview; i18n, доступность, тесты на MSW (`FR-501`, `AC-571`–`AC-573`); README и `docs/ui.md`.
+- [x] 4.1 `browse-restaurants` на `/`, `view-restaurant` с корзиной, `place-order` с idempotency key и problems, переход на заказ; удалить preview; i18n, доступность, тесты на MSW (`FR-501`, `AC-571`–`AC-573`); README и `docs/ui.md`.
 
 ## 5. Проверка
 

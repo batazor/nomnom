@@ -1,0 +1,17 @@
+query BrowseRestaurants($first: Int!, $after: String) {
+  restaurants(first: $first, after: $after) {
+    edges {
+      cursor
+      node {
+        id
+        name
+        address
+        acceptingOrders
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}

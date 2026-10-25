@@ -1,8 +1,10 @@
 import axe from "axe-core";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { mockStore } from "../shared/graphql/mocks/handlers";
+import { mockServer } from "../shared/graphql/mocks/server";
 import { AppProviders } from "./providers";
 import { AppRouter } from "./router";
 
@@ -12,55 +14,51 @@ const config = {
   enableMocks: true,
 };
 
+beforeAll(() => mockServer.listen({ onUnhandledFrame: "error" }));
+afterEach(() => {
+  mockServer.resetHandlers();
+  mockStore.reset();
+});
+afterAll(() => mockServer.close());
+
+function renderApp(path: string) {
+  return render(
+    <AppProviders config={config}>
+      <AppRouter initialEntries={[path]} />
+    </AppProviders>,
+  );
+}
+
 describe("customer application shell", () => {
-  it("renders and navigates the localized mobile-first route", async () => {
-    const user = userEvent.setup();
+  it("opens the restaurant catalog on the mobile-first home route", async () => {
     Object.defineProperty(window, "innerWidth", {
       value: 390,
       configurable: true,
     });
-    render(
-      <AppProviders config={config}>
-        <AppRouter initialEntries={["/"]} />
-      </AppProviders>,
-    );
+    renderApp("/");
 
     expect(screen.getByRole("main")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Один путь от меню до двери" }),
+      await screen.findByRole("heading", { level: 1, name: "Рестораны рядом" }),
     ).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-ui-primary="true"]')).toHaveLength(
-      1,
-    );
     expect(document.querySelector(".app-shell")).toBeInTheDocument();
     expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-    await user.click(screen.getByRole("link", { name: "BiteRoute" }));
-    expect(screen.getByRole("main")).toBeInTheDocument();
   });
 
-  it("keeps the placeholder action local without a backend call", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
+  it("leads back to the catalog from the brand", async () => {
     const user = userEvent.setup();
-    render(
-      <AppProviders config={config}>
-        <AppRouter initialEntries={["/"]} />
-      </AppProviders>,
-    );
+    renderApp("/orders/order-preparing");
+    await screen.findByRole("heading", { level: 1, name: "Готовится" });
 
-    await user.click(screen.getByRole("button", { name: "Проверить заказ" }));
+    await user.click(screen.getByRole("link", { name: "BiteRoute" }));
     expect(
-      screen.getByText("Fixture-заказ готов к просмотру"),
+      await screen.findByRole("heading", { level: 1, name: "Рестораны рядом" }),
     ).toBeInTheDocument();
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
   });
 
   it("has no detectable accessibility violations", async () => {
-    const { container } = render(
-      <AppProviders config={config}>
-        <AppRouter initialEntries={["/"]} />
-      </AppProviders>,
-    );
+    const { container } = renderApp("/");
+    await screen.findByRole("heading", { level: 1, name: "Рестораны рядом" });
     const result = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
     });
