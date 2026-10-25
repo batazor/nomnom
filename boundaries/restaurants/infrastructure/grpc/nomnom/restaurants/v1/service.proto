@@ -14,6 +14,11 @@ service RestaurantsService {
   // (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
   // cursor ordered by restaurant id.
   rpc ListRestaurants(ListRestaurantsRequest) returns (ListRestaurantsResponse);
+  // Restaurants owned by the calling user, open and closed, paged by a cursor
+  // ordered by restaurant id. Requires a user subject: restaurant#manage =
+  // owner, so the owner filter is the authorization; a service subject is
+  // PERMISSION_DENIED.
+  rpc ListOwnedRestaurants(ListOwnedRestaurantsRequest) returns (ListOwnedRestaurantsResponse);
 
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc ReceiveOrderRequest(ReceiveOrderRequestRequest) returns (ReceiveOrderRequestResponse);
@@ -94,6 +99,19 @@ message ListRestaurantsRequest {
 }
 
 message ListRestaurantsResponse {
+  repeated Restaurant restaurants = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+message ListOwnedRestaurantsRequest {
+  // 1..100; 0 means the default of 50.
+  int32 page_size = 1;
+  // next_page_token of the previous page; empty for the first page.
+  string page_token = 2;
+}
+
+message ListOwnedRestaurantsResponse {
   repeated Restaurant restaurants = 1;
   // Empty on the last page.
   string next_page_token = 2;

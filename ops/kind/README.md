@@ -206,7 +206,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | --- | --- | --- |
 | `orders-v1-reads` | `GetOrder`, `ListCustomerOrders` | `reads` |
 | `orders-v1` | остальные методы `OrdersService` (совпадение по сервису) | `commands` |
-| `restaurants-v1-reads` | `GetRestaurant`, `GetMenu`, `ListRestaurants` | `reads` |
+| `restaurants-v1-reads` | `GetRestaurant`, `GetMenu`, `ListRestaurants`, `ListOwnedRestaurants` | `reads` |
 | `restaurants-v1-commands` | `ReceiveOrderRequest`, `CancelRestaurantOrder` | `commands` |
 | `restaurants-v1-management` | `OpenRestaurant`, `CloseRestaurant`, `CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability` | `commands` |
 | `restaurants-v1-kitchen` | `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure` | `commands` |

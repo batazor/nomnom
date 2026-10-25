@@ -22,6 +22,7 @@ const (
 	RestaurantsService_GetRestaurant_FullMethodName                = "/nomnom.restaurants.v1.RestaurantsService/GetRestaurant"
 	RestaurantsService_GetMenu_FullMethodName                      = "/nomnom.restaurants.v1.RestaurantsService/GetMenu"
 	RestaurantsService_ListRestaurants_FullMethodName              = "/nomnom.restaurants.v1.RestaurantsService/ListRestaurants"
+	RestaurantsService_ListOwnedRestaurants_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/ListOwnedRestaurants"
 	RestaurantsService_ReceiveOrderRequest_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest"
 	RestaurantsService_CancelRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder"
 	RestaurantsService_AcceptRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder"
@@ -31,6 +32,8 @@ const (
 	RestaurantsService_MarkRestaurantOrderReady_FullMethodName     = "/nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderReady"
 	RestaurantsService_ReportPreparationDelay_FullMethodName       = "/nomnom.restaurants.v1.RestaurantsService/ReportPreparationDelay"
 	RestaurantsService_ReportPreparationFailure_FullMethodName     = "/nomnom.restaurants.v1.RestaurantsService/ReportPreparationFailure"
+	RestaurantsService_GetKitchenQueue_FullMethodName              = "/nomnom.restaurants.v1.RestaurantsService/GetKitchenQueue"
+	RestaurantsService_ListIncomingOrders_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/ListIncomingOrders"
 	RestaurantsService_RegisterRestaurant_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant"
 	RestaurantsService_AssignStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/AssignStaff"
 	RestaurantsService_RevokeStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/RevokeStaff"
@@ -54,6 +57,11 @@ type RestaurantsServiceClient interface {
 	// (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
 	// cursor ordered by restaurant id.
 	ListRestaurants(ctx context.Context, in *ListRestaurantsRequest, opts ...grpc.CallOption) (*ListRestaurantsResponse, error)
+	// Restaurants owned by the calling user, open and closed, paged by a cursor
+	// ordered by restaurant id. Requires a user subject: restaurant#manage =
+	// owner, so the owner filter is the authorization; a service subject is
+	// PERMISSION_DENIED.
+	ListOwnedRestaurants(ctx context.Context, in *ListOwnedRestaurantsRequest, opts ...grpc.CallOption) (*ListOwnedRestaurantsResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(ctx context.Context, in *ReceiveOrderRequestRequest, opts ...grpc.CallOption) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(ctx context.Context, in *CancelRestaurantOrderRequest, opts ...grpc.CallOption) (*CancelRestaurantOrderResponse, error)
@@ -69,6 +77,15 @@ type RestaurantsServiceClient interface {
 	MarkRestaurantOrderReady(ctx context.Context, in *MarkRestaurantOrderReadyRequest, opts ...grpc.CallOption) (*MarkRestaurantOrderReadyResponse, error)
 	ReportPreparationDelay(ctx context.Context, in *ReportPreparationDelayRequest, opts ...grpc.CallOption) (*ReportPreparationDelayResponse, error)
 	ReportPreparationFailure(ctx context.Context, in *ReportPreparationFailureRequest, opts ...grpc.CallOption) (*ReportPreparationFailureResponse, error)
+	// Kitchen Queue of a restaurant (FR-583): Restaurant Orders in QUEUED in the
+	// order recommended by the Kitchen Queue policy. Requires
+	// restaurant#operate_kitchen. Orders in RECEIVED awaiting Acceptance are not
+	// in the queue.
+	GetKitchenQueue(ctx context.Context, in *GetKitchenQueueRequest, opts ...grpc.CallOption) (*GetKitchenQueueResponse, error)
+	// Incoming orders of a restaurant (FR-586): Restaurant Orders in RECEIVED
+	// awaiting Accept or Reject, by ascending received_at, then by id. Requires
+	// restaurant#operate_kitchen. An accepted order leaves this list.
+	ListIncomingOrders(ctx context.Context, in *ListIncomingOrdersRequest, opts ...grpc.CallOption) (*ListIncomingOrdersResponse, error)
 	// Restaurant administration. RegisterRestaurant requires platform#register_restaurant
 	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
 	// and write restaurant#staff before saving. Staff commands are idempotent.
@@ -126,6 +143,16 @@ func (c *restaurantsServiceClient) ListRestaurants(ctx context.Context, in *List
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListRestaurantsResponse)
 	err := c.cc.Invoke(ctx, RestaurantsService_ListRestaurants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ListOwnedRestaurants(ctx context.Context, in *ListOwnedRestaurantsRequest, opts ...grpc.CallOption) (*ListOwnedRestaurantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOwnedRestaurantsResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ListOwnedRestaurants_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +243,26 @@ func (c *restaurantsServiceClient) ReportPreparationFailure(ctx context.Context,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReportPreparationFailureResponse)
 	err := c.cc.Invoke(ctx, RestaurantsService_ReportPreparationFailure_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) GetKitchenQueue(ctx context.Context, in *GetKitchenQueueRequest, opts ...grpc.CallOption) (*GetKitchenQueueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetKitchenQueueResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_GetKitchenQueue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ListIncomingOrders(ctx context.Context, in *ListIncomingOrdersRequest, opts ...grpc.CallOption) (*ListIncomingOrdersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListIncomingOrdersResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ListIncomingOrders_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -324,6 +371,11 @@ type RestaurantsServiceServer interface {
 	// (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
 	// cursor ordered by restaurant id.
 	ListRestaurants(context.Context, *ListRestaurantsRequest) (*ListRestaurantsResponse, error)
+	// Restaurants owned by the calling user, open and closed, paged by a cursor
+	// ordered by restaurant id. Requires a user subject: restaurant#manage =
+	// owner, so the owner filter is the authorization; a service subject is
+	// PERMISSION_DENIED.
+	ListOwnedRestaurants(context.Context, *ListOwnedRestaurantsRequest) (*ListOwnedRestaurantsResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(context.Context, *ReceiveOrderRequestRequest) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(context.Context, *CancelRestaurantOrderRequest) (*CancelRestaurantOrderResponse, error)
@@ -339,6 +391,15 @@ type RestaurantsServiceServer interface {
 	MarkRestaurantOrderReady(context.Context, *MarkRestaurantOrderReadyRequest) (*MarkRestaurantOrderReadyResponse, error)
 	ReportPreparationDelay(context.Context, *ReportPreparationDelayRequest) (*ReportPreparationDelayResponse, error)
 	ReportPreparationFailure(context.Context, *ReportPreparationFailureRequest) (*ReportPreparationFailureResponse, error)
+	// Kitchen Queue of a restaurant (FR-583): Restaurant Orders in QUEUED in the
+	// order recommended by the Kitchen Queue policy. Requires
+	// restaurant#operate_kitchen. Orders in RECEIVED awaiting Acceptance are not
+	// in the queue.
+	GetKitchenQueue(context.Context, *GetKitchenQueueRequest) (*GetKitchenQueueResponse, error)
+	// Incoming orders of a restaurant (FR-586): Restaurant Orders in RECEIVED
+	// awaiting Accept or Reject, by ascending received_at, then by id. Requires
+	// restaurant#operate_kitchen. An accepted order leaves this list.
+	ListIncomingOrders(context.Context, *ListIncomingOrdersRequest) (*ListIncomingOrdersResponse, error)
 	// Restaurant administration. RegisterRestaurant requires platform#register_restaurant
 	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
 	// and write restaurant#staff before saving. Staff commands are idempotent.
@@ -381,6 +442,9 @@ func (UnimplementedRestaurantsServiceServer) GetMenu(context.Context, *GetMenuRe
 func (UnimplementedRestaurantsServiceServer) ListRestaurants(context.Context, *ListRestaurantsRequest) (*ListRestaurantsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRestaurants not implemented")
 }
+func (UnimplementedRestaurantsServiceServer) ListOwnedRestaurants(context.Context, *ListOwnedRestaurantsRequest) (*ListOwnedRestaurantsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOwnedRestaurants not implemented")
+}
 func (UnimplementedRestaurantsServiceServer) ReceiveOrderRequest(context.Context, *ReceiveOrderRequestRequest) (*ReceiveOrderRequestResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReceiveOrderRequest not implemented")
 }
@@ -407,6 +471,12 @@ func (UnimplementedRestaurantsServiceServer) ReportPreparationDelay(context.Cont
 }
 func (UnimplementedRestaurantsServiceServer) ReportPreparationFailure(context.Context, *ReportPreparationFailureRequest) (*ReportPreparationFailureResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportPreparationFailure not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) GetKitchenQueue(context.Context, *GetKitchenQueueRequest) (*GetKitchenQueueResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetKitchenQueue not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ListIncomingOrders(context.Context, *ListIncomingOrdersRequest) (*ListIncomingOrdersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListIncomingOrders not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) RegisterRestaurant(context.Context, *RegisterRestaurantRequest) (*RegisterRestaurantResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterRestaurant not implemented")
@@ -506,6 +576,24 @@ func _RestaurantsService_ListRestaurants_Handler(srv interface{}, ctx context.Co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RestaurantsServiceServer).ListRestaurants(ctx, req.(*ListRestaurantsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ListOwnedRestaurants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOwnedRestaurantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ListOwnedRestaurants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ListOwnedRestaurants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ListOwnedRestaurants(ctx, req.(*ListOwnedRestaurantsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -668,6 +756,42 @@ func _RestaurantsService_ReportPreparationFailure_Handler(srv interface{}, ctx c
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RestaurantsServiceServer).ReportPreparationFailure(ctx, req.(*ReportPreparationFailureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_GetKitchenQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetKitchenQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).GetKitchenQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_GetKitchenQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).GetKitchenQueue(ctx, req.(*GetKitchenQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ListIncomingOrders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListIncomingOrdersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ListIncomingOrders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ListIncomingOrders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ListIncomingOrders(ctx, req.(*ListIncomingOrdersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -854,6 +978,10 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RestaurantsService_ListRestaurants_Handler,
 		},
 		{
+			MethodName: "ListOwnedRestaurants",
+			Handler:    _RestaurantsService_ListOwnedRestaurants_Handler,
+		},
+		{
 			MethodName: "ReceiveOrderRequest",
 			Handler:    _RestaurantsService_ReceiveOrderRequest_Handler,
 		},
@@ -888,6 +1016,14 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReportPreparationFailure",
 			Handler:    _RestaurantsService_ReportPreparationFailure_Handler,
+		},
+		{
+			MethodName: "GetKitchenQueue",
+			Handler:    _RestaurantsService_GetKitchenQueue_Handler,
+		},
+		{
+			MethodName: "ListIncomingOrders",
+			Handler:    _RestaurantsService_ListIncomingOrders_Handler,
 		},
 		{
 			MethodName: "RegisterRestaurant",

@@ -7,6 +7,7 @@ import {
 } from "../pkg/application/errors.ts";
 import type { Outbox } from "../pkg/application/outbox.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import {
   InvalidPageSizeError,
   ListRestaurantsHandler,
@@ -424,4 +425,44 @@ test("AC-214 list restaurants pages with a cursor without repeats", async () => 
   assert.equal(second.nextCursor, undefined);
   await assert.rejects(list.execute({ limit: 0 }), InvalidPageSizeError);
   await assert.rejects(list.execute({ limit: 101 }), InvalidPageSizeError);
+});
+
+test("list owned restaurants returns open and closed restaurants of the owner only", async () => {
+  const world = await createRestaurantWorld();
+  const open = await world.givenRestaurant("Open");
+  const closed = await world.givenRestaurant("Closed", { open: false });
+  await world.register.execute({
+    subject: operator,
+    name: "Foreign",
+    ownerId: stranger.id,
+    address: PICKUP_ADDRESS,
+  });
+  const list = new ListOwnedRestaurantsHandler({ reader: world.catalog });
+
+  const first = await list.execute({ subject: owner, limit: 1 });
+  const second = await list.execute({
+    subject: owner,
+    limit: 1,
+    cursor: first.nextCursor,
+  });
+  const strangers = await list.execute({
+    subject: { type: "user", id: "nobody" },
+  });
+
+  assert.deepEqual(
+    [...first.restaurants, ...second.restaurants].map(
+      (restaurant) => restaurant.restaurantId,
+    ),
+    [open, closed].sort(),
+  );
+  assert.equal(second.nextCursor, undefined);
+  assert.deepEqual(strangers.restaurants, []);
+  await assert.rejects(
+    list.execute({ subject: { type: "service", id: "orders" } }),
+    PermissionDeniedError,
+  );
+  await assert.rejects(
+    list.execute({ subject: owner, limit: 101 }),
+    InvalidPageSizeError,
+  );
 });

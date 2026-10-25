@@ -149,6 +149,7 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
       getRestaurant: unused,
       getMenu: unused,
       listRestaurants: unused,
+      listOwnedRestaurants: unused,
       receiveOrderRequest: unused,
       cancelRestaurantOrder: unused,
       acceptRestaurantOrder: unused,

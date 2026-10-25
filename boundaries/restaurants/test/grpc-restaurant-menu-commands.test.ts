@@ -30,6 +30,7 @@ const createWorld = async () => {
     getRestaurant: unused,
     getMenu: world.getMenu,
     listRestaurants: unused,
+    listOwnedRestaurants: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,

@@ -130,6 +130,54 @@ export declare type ListRestaurantsResponse = Message<"nomnom.restaurants.v1.Lis
 export declare const ListRestaurantsResponseSchema: GenMessage<ListRestaurantsResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.ListOwnedRestaurantsRequest
+ */
+export declare type ListOwnedRestaurantsRequest = Message<"nomnom.restaurants.v1.ListOwnedRestaurantsRequest"> & {
+  /**
+   * 1..100; 0 means the default of 50.
+   *
+   * @generated from field: int32 page_size = 1;
+   */
+  pageSize: number;
+
+  /**
+   * next_page_token of the previous page; empty for the first page.
+   *
+   * @generated from field: string page_token = 2;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListOwnedRestaurantsRequest.
+ * Use `create(ListOwnedRestaurantsRequestSchema)` to create a new message.
+ */
+export declare const ListOwnedRestaurantsRequestSchema: GenMessage<ListOwnedRestaurantsRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListOwnedRestaurantsResponse
+ */
+export declare type ListOwnedRestaurantsResponse = Message<"nomnom.restaurants.v1.ListOwnedRestaurantsResponse"> & {
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.Restaurant restaurants = 1;
+   */
+  restaurants: Restaurant[];
+
+  /**
+   * Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListOwnedRestaurantsResponse.
+ * Use `create(ListOwnedRestaurantsResponseSchema)` to create a new message.
+ */
+export declare const ListOwnedRestaurantsResponseSchema: GenMessage<ListOwnedRestaurantsResponse>;
+
+/**
  * @generated from message nomnom.restaurants.v1.OrderRequestItem
  */
 export declare type OrderRequestItem = Message<"nomnom.restaurants.v1.OrderRequestItem"> & {
@@ -1323,6 +1371,19 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof ListRestaurantsRequestSchema;
     output: typeof ListRestaurantsResponseSchema;
+  },
+  /**
+   * Restaurants owned by the calling user, open and closed, paged by a cursor
+   * ordered by restaurant id. Requires a user subject: restaurant#manage =
+   * owner, so the owner filter is the authorization; a service subject is
+   * PERMISSION_DENIED.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ListOwnedRestaurants
+   */
+  listOwnedRestaurants: {
+    methodKind: "unary";
+    input: typeof ListOwnedRestaurantsRequestSchema;
+    output: typeof ListOwnedRestaurantsResponseSchema;
   },
   /**
    * Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.

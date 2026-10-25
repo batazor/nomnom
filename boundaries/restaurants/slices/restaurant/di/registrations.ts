@@ -25,6 +25,7 @@ import type {
 import { AssignStaffHandler } from "../applications/assign-staff/assign-staff.ts";
 import { CloseRestaurantHandler } from "../applications/close-restaurant/close-restaurant.ts";
 import { GetRestaurantHandler } from "../applications/get-restaurant/get-restaurant.ts";
+import { ListOwnedRestaurantsHandler } from "../applications/list-owned-restaurants/list-owned-restaurants.ts";
 import { ListRestaurantsHandler } from "../applications/list-restaurants/list-restaurants.ts";
 import { OpenRestaurantHandler } from "../applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
@@ -74,6 +75,7 @@ export interface RestaurantCradle {
   readonly restaurantCatalog: MongoRestaurantCatalog;
   readonly getRestaurant: GetRestaurantHandler;
   readonly listRestaurants: ListRestaurantsHandler;
+  readonly listOwnedRestaurants: ListOwnedRestaurantsHandler;
   readonly registerRestaurant: RegisterRestaurantHandler;
   readonly assignStaff: AssignStaffHandler;
   readonly revokeStaff: RevokeStaffHandler;
@@ -111,6 +113,10 @@ export const registerRestaurant = (
     listRestaurants: asFunction(
       ({ restaurantCatalog }: Cradle) =>
         new ListRestaurantsHandler({ reader: restaurantCatalog }),
+    ).singleton(),
+    listOwnedRestaurants: asFunction(
+      ({ restaurantCatalog }: Cradle) =>
+        new ListOwnedRestaurantsHandler({ reader: restaurantCatalog }),
     ).singleton(),
     registerRestaurant: asFunction(
       ({

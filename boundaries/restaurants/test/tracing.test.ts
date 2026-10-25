@@ -59,6 +59,7 @@ const startServer = async () => {
     getRestaurant: unused,
     getMenu: unused,
     listRestaurants: unused,
+    listOwnedRestaurants: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,

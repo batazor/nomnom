@@ -13,6 +13,7 @@ import {
   CancelRestaurantOrderRequestSchema,
   GetMenuRequestSchema,
   GetRestaurantRequestSchema,
+  ListOwnedRestaurantsRequestSchema,
   ListRestaurantsRequestSchema,
   ReceiveOrderRequestRequestSchema,
   RestaurantsService,
@@ -20,6 +21,7 @@ import {
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import {
   context,
@@ -115,6 +117,40 @@ test("AC-565 ListRestaurants pages open restaurants with a next page token", asy
   assert.deepEqual(
     [...first.restaurants, ...second.restaurants].map((r) => r.name).sort(),
     ["Pho Bar", "Ramen Bar"],
+  );
+});
+
+test("ListOwnedRestaurants lists restaurants of the calling owner", async () => {
+  const { world, service } = await createWorld({
+    subjects: resolverOf({ type: "user", id: "owner" }),
+  });
+  await world.givenRestaurant("Pho Bar");
+  await world.givenRestaurant("Closed Bar", { open: false });
+
+  const response = await service.listOwnedRestaurants(
+    create(ListOwnedRestaurantsRequestSchema, {}),
+    context,
+  );
+
+  assert.deepEqual(response.restaurants.map((r) => r.name).sort(), [
+    "Closed Bar",
+    "Pho Bar",
+  ]);
+  assert.equal(response.nextPageToken, "");
+});
+
+test("ListOwnedRestaurants rejects a service subject with PERMISSION_DENIED", async () => {
+  const { service } = await createWorld({
+    subjects: resolverOf({ type: "service", id: "orders" }),
+  });
+
+  await assert.rejects(
+    async () =>
+      service.listOwnedRestaurants(
+        create(ListOwnedRestaurantsRequestSchema, {}),
+        context,
+      ),
+    rejectsWith(Code.PermissionDenied),
   );
 });
 
@@ -268,6 +304,9 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
     listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
+    listOwnedRestaurants: new ListOwnedRestaurantsHandler({
+      reader: world.catalog,
+    }),
     receiveOrderRequest: {
       execute: async () => {
         throw new AuthorizationUnavailableError();

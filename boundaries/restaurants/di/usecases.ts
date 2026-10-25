@@ -17,6 +17,7 @@ import {
 export const RESTAURANTS_USE_CASES = {
   getRestaurant: query("get_restaurant"),
   listRestaurants: query("list_restaurants"),
+  listOwnedRestaurants: query("list_owned_restaurants"),
   registerRestaurant: command("register_restaurant"),
   assignStaff: command("assign_staff"),
   revokeStaff: command("revoke_staff"),

@@ -9,6 +9,7 @@ import {
 } from "../../../../pkg/infrastructure/mongodb/versioned-collection.ts";
 import type { AuthorizationRevision } from "../../applications/access-control.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
+import type { OwnedRestaurantsReader } from "../../applications/list-owned-restaurants/list-owned-restaurants.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
 import type { RestaurantView } from "../../applications/restaurant-view.ts";
 import {
@@ -189,7 +190,10 @@ const toView = (document: RestaurantDocument): RestaurantView => ({
 
 /** Query model over the restaurant documents, ordered by restaurant id. */
 export class MongoRestaurantCatalog
-  implements RestaurantPublicReader, RestaurantCatalogReader
+  implements
+    RestaurantPublicReader,
+    RestaurantCatalogReader,
+    OwnedRestaurantsReader
 {
   readonly #collection: VersionedCollection<RestaurantDocument>;
 
@@ -210,6 +214,23 @@ export class MongoRestaurantCatalog
     const documents = await this.#collection.find(
       {
         ...(criteria.includeClosed ? {} : { isOpen: true }),
+        ...(criteria.after === undefined
+          ? {}
+          : { _id: { $gt: criteria.after } }),
+      },
+      { sort: { _id: 1 }, limit: criteria.limit },
+    );
+    return documents.map(toView);
+  }
+
+  async listOwned(criteria: {
+    ownerId: string;
+    after: string | undefined;
+    limit: number;
+  }): Promise<readonly RestaurantView[]> {
+    const documents = await this.#collection.find(
+      {
+        ownerId: criteria.ownerId,
         ...(criteria.after === undefined
           ? {}
           : { _id: { $gt: criteria.after } }),

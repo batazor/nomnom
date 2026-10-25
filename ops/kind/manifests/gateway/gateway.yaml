@@ -166,6 +166,10 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: ListRestaurants
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ListOwnedRestaurants
       backendRefs:
         - name: restaurants
           namespace: nomnom-restaurants

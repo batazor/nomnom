@@ -166,6 +166,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
       }),
       getMenu: unused,
       listRestaurants: unused,
+      listOwnedRestaurants: unused,
       receiveOrderRequest: unused,
       cancelRestaurantOrder: unused,
       acceptRestaurantOrder: unused,

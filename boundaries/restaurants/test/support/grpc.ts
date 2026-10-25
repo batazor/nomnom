@@ -19,6 +19,7 @@ import {
 import type { SubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
 import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { ListOwnedRestaurantsHandler } from "../../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import { createKitchenWorld, ordersService } from "./kitchen.ts";
@@ -86,6 +87,9 @@ export const createWorld = async (
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
     listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
+    listOwnedRestaurants: new ListOwnedRestaurantsHandler({
+      reader: world.catalog,
+    }),
     receiveOrderRequest: world.receive,
     cancelRestaurantOrder: world.cancel,
     acceptRestaurantOrder: world.accept,

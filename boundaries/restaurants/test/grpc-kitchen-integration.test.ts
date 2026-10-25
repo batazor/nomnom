@@ -147,6 +147,7 @@ describe("kitchen command RPCs over MongoDB", () => {
       getRestaurant: unused,
       getMenu: unused,
       listRestaurants: unused,
+      listOwnedRestaurants: unused,
       receiveOrderRequest: unused,
       cancelRestaurantOrder: unused,
       registerRestaurant: unused,
