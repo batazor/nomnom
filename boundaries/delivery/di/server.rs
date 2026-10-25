@@ -27,8 +27,8 @@ use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
 use crate::infrastructure::postgres::{PostgresStore, migrate};
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
 use crate::infrastructure::spicedb::{
-    RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization, SpiceDbClient,
-    SpiceDbConfigError, SpiceDbRelationships,
+    CheckMetrics, RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization,
+    SpiceDbClient, SpiceDbConfigError, SpiceDbRelationships,
 };
 use crate::pkg::config::{
     AppConfig, DatabaseConfig, OffersConfig, SPICEDB_ENDPOINT_ENV, SpiceDbConfig,
@@ -91,7 +91,7 @@ pub fn spicedb_authorization<S>(client: SpiceDbClient, store: Arc<S>) -> SpiceDb
 where
     S: ?Sized + CourierRepository + DeliveryRepository + Send + Sync + 'static,
 {
-    SpiceDbAuthorization::new(Box::new(client))
+    SpiceDbAuthorization::new(Box::new(client), CheckMetrics::global())
         .with_revisions(Arc::new(RepositoryRevisions(store)) as Arc<dyn RevisionReader>)
 }
 

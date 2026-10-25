@@ -29,6 +29,12 @@
 //!
 //! A committed `DeliveryFailed` is also logged and set on the active span by
 //! [`FailureLog`] when the composition root passes one.
+//!
+//! The same decorator observes the repositories of `Delivery` and
+//! `DeliveryOffer` inside a Unit of Work: it remembers the state an aggregate
+//! was loaded (or added) with, and a save that changes it is the applied FSM
+//! transition of [`TransitionMetrics`], recorded with the events after the
+//! outermost commit.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -41,9 +47,14 @@ use opentelemetry::metrics::{Counter, Histogram, Meter};
 use crate::pkg::application::{TransactionScope, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
-use crate::slices::delivery::domains::delivery::DomainEvent;
+use crate::slices::delivery::domains::delivery::{
+    Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
+    DeliveryRepository, DomainEvent, OfferState, OrderId, State, applied_offer_transition,
+    applied_transition,
+};
 
 use super::failure_log::{FailureLog, ReportedFailure};
+use super::transitions::{Transition, TransitionMetrics};
 
 /// Instrumentation scope of the business metrics.
 pub const METER_NAME: &str = "nomnom.delivery.domain";
@@ -219,20 +230,38 @@ impl DomainMetrics {
     }
 }
 
-/// Decorator of the Unit of Work and Outbox ports of the `delivery` slice
-/// that records [`DomainMetrics`] after the outermost commit. Use cases run
-/// synchronously on one thread, so events are collected per thread.
+/// What the outermost Unit of Work of a thread records once it commits.
+enum Observation {
+    Event(DomainEvent),
+    Transition(Transition),
+}
+
+/// The open Unit of Work of one thread: its observations and the stored
+/// states of the aggregates it loaded, added or saved.
+#[derive(Default)]
+struct Scope {
+    observations: Vec<Observation>,
+    deliveries: HashMap<DeliveryId, State>,
+    offers: HashMap<DeliveryOfferId, OfferState>,
+}
+
+/// Decorator of the Unit of Work, Outbox and repository ports of the
+/// `delivery` slice that records [`DomainMetrics`] and FSM transitions after
+/// the outermost commit. Use cases run synchronously on one thread, so
+/// observations are collected per thread.
 pub struct ObservedOutbox {
     metrics: DomainMetrics,
+    transitions: TransitionMetrics,
     failure_log: Option<FailureLog>,
-    pending: Mutex<HashMap<ThreadId, Vec<DomainEvent>>>,
+    pending: Mutex<HashMap<ThreadId, Scope>>,
 }
 
 impl ObservedOutbox {
     #[must_use]
-    pub fn new(metrics: DomainMetrics) -> Self {
+    pub fn new(metrics: DomainMetrics, transitions: TransitionMetrics) -> Self {
         Self {
             metrics,
+            transitions,
             failure_log: None,
             pending: Mutex::new(HashMap::new()),
         }
@@ -245,36 +274,47 @@ impl ObservedOutbox {
         self
     }
 
-    /// Committed events: metrics, then the failure log.
-    fn observe(&self, events: &[DomainEvent]) {
-        self.metrics.record(events);
-        let Some(log) = &self.failure_log else {
-            return;
-        };
-        for event in events {
-            if let DomainEvent::DeliveryFailed {
-                delivery_id,
-                order_id,
-                courier_id,
-                reason,
-            } = event
-            {
-                log.record(&ReportedFailure {
-                    delivery_id,
-                    order_id,
-                    courier_id: Some(courier_id),
-                    reason,
-                });
+    /// Committed observations in their order: metrics and the failure log of
+    /// events, transitions.
+    fn observe(&self, observations: &[Observation]) {
+        for observation in observations {
+            match observation {
+                Observation::Event(event) => {
+                    self.metrics.record(std::slice::from_ref(event));
+                    self.log_failure(event);
+                }
+                Observation::Transition(transition) => self.transitions.applied(*transition),
             }
         }
     }
 
-    fn pending(&self) -> MutexGuard<'_, HashMap<ThreadId, Vec<DomainEvent>>> {
+    fn log_failure(&self, event: &DomainEvent) {
+        let Some(log) = &self.failure_log else {
+            return;
+        };
+        if let DomainEvent::DeliveryFailed {
+            delivery_id,
+            order_id,
+            courier_id,
+            reason,
+        } = event
+        {
+            log.record(&ReportedFailure {
+                delivery_id,
+                order_id,
+                courier_id: Some(courier_id),
+                reason,
+            });
+        }
+    }
+
+    fn pending(&self) -> MutexGuard<'_, HashMap<ThreadId, Scope>> {
         self.pending.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// [`TransactionScope::run_scoped`] of `inner`, recording the events
-    /// added to the Outbox once the outermost scope commits.
+    /// added to the Outbox and the transitions saved once the outermost scope
+    /// commits.
     pub fn run_scoped(
         &self,
         inner: &dyn TransactionScope,
@@ -283,10 +323,10 @@ impl ObservedOutbox {
         let thread = thread::current().id();
         let nested_mark = {
             let mut pending = self.pending();
-            if let Some(events) = pending.get(&thread) {
-                Some(events.len())
+            if let Some(scope) = pending.get(&thread) {
+                Some(scope.observations.len())
             } else {
-                pending.insert(thread, Vec::new());
+                pending.insert(thread, Scope::default());
                 None
             }
         };
@@ -296,11 +336,11 @@ impl ObservedOutbox {
                 committed = work();
                 committed
             });
-            // Events of a nested scope that rolled back are not counted.
+            // Observations of a nested scope that rolled back are not counted.
             if (outcome.is_err() || !committed)
-                && let Some(events) = self.pending().get_mut(&thread)
+                && let Some(scope) = self.pending().get_mut(&thread)
             {
-                events.truncate(mark);
+                scope.observations.truncate(mark);
             }
             return outcome;
         }
@@ -312,9 +352,9 @@ impl ObservedOutbox {
             committed = work();
             committed
         });
-        let events = collector.finish();
+        let observations = collector.finish();
         if outcome.is_ok() && committed {
-            self.observe(&events);
+            self.observe(&observations);
         }
         outcome
     }
@@ -330,28 +370,148 @@ impl ObservedOutbox {
         inner.add(message)?;
         let thread = thread::current().id();
         let mut pending = self.pending();
-        if let Some(events) = pending.get_mut(&thread) {
-            events.push(event);
+        if let Some(scope) = pending.get_mut(&thread) {
+            scope.observations.push(Observation::Event(event));
         } else {
             drop(pending);
-            self.observe(&[event]);
+            self.observe(&[Observation::Event(event)]);
         }
         Ok(())
     }
+
+    /// [`DeliveryRepository::get`] of `inner`.
+    pub fn get_delivery(
+        &self,
+        inner: &dyn DeliveryRepository,
+        id: &DeliveryId,
+    ) -> Result<Option<Delivery>, RepositoryError> {
+        let delivery = DeliveryRepository::get(inner, id)?;
+        if let Some(delivery) = &delivery {
+            self.stored_delivery(delivery);
+        }
+        Ok(delivery)
+    }
+
+    /// [`DeliveryRepository::find_by_order`] of `inner`.
+    pub fn find_delivery_by_order(
+        &self,
+        inner: &dyn DeliveryRepository,
+        order_id: &OrderId,
+    ) -> Result<Option<Delivery>, RepositoryError> {
+        let delivery = inner.find_by_order(order_id)?;
+        if let Some(delivery) = &delivery {
+            self.stored_delivery(delivery);
+        }
+        Ok(delivery)
+    }
+
+    /// [`DeliveryRepository::add`] of `inner`.
+    pub fn add_delivery(
+        &self,
+        inner: &dyn DeliveryRepository,
+        delivery: &Delivery,
+    ) -> Result<(), RepositoryError> {
+        DeliveryRepository::add(inner, delivery)?;
+        self.stored_delivery(delivery);
+        Ok(())
+    }
+
+    /// [`DeliveryRepository::save`] of `inner`; a changed state is the applied
+    /// transition.
+    pub fn save_delivery(
+        &self,
+        inner: &dyn DeliveryRepository,
+        delivery: &Delivery,
+    ) -> Result<(), RepositoryError> {
+        DeliveryRepository::save(inner, delivery)?;
+        self.stored_delivery(delivery);
+        Ok(())
+    }
+
+    /// [`DeliveryOfferRepository::get`] of `inner`.
+    pub fn get_offer(
+        &self,
+        inner: &dyn DeliveryOfferRepository,
+        id: &DeliveryOfferId,
+    ) -> Result<Option<DeliveryOffer>, RepositoryError> {
+        let offer = DeliveryOfferRepository::get(inner, id)?;
+        if let Some(offer) = &offer {
+            self.stored_offer(offer);
+        }
+        Ok(offer)
+    }
+
+    /// [`DeliveryOfferRepository::add`] of `inner`.
+    pub fn add_offer(
+        &self,
+        inner: &dyn DeliveryOfferRepository,
+        offer: &DeliveryOffer,
+    ) -> Result<(), RepositoryError> {
+        DeliveryOfferRepository::add(inner, offer)?;
+        self.stored_offer(offer);
+        Ok(())
+    }
+
+    /// [`DeliveryOfferRepository::save`] of `inner`; a changed state is the
+    /// applied transition.
+    pub fn save_offer(
+        &self,
+        inner: &dyn DeliveryOfferRepository,
+        offer: &DeliveryOffer,
+    ) -> Result<(), RepositoryError> {
+        DeliveryOfferRepository::save(inner, offer)?;
+        self.stored_offer(offer);
+        Ok(())
+    }
+
+    /// Remembers the stored state of `delivery` inside the open Unit of
+    /// Work; a different state stored before it is the applied transition
+    /// between them. Outside a Unit of Work nothing is tracked.
+    fn stored_delivery(&self, delivery: &Delivery) {
+        let mut pending = self.pending();
+        let Some(scope) = pending.get_mut(&thread::current().id()) else {
+            return;
+        };
+        let to = delivery.state();
+        if let Some(from) = scope.deliveries.insert(delivery.id().clone(), to)
+            && let Some(result) = applied_transition(from, to)
+        {
+            scope
+                .observations
+                .push(Observation::Transition(Transition::Delivery(result)));
+        }
+    }
+
+    /// [`Self::stored_delivery`] of a Delivery Offer.
+    fn stored_offer(&self, offer: &DeliveryOffer) {
+        let mut pending = self.pending();
+        let Some(scope) = pending.get_mut(&thread::current().id()) else {
+            return;
+        };
+        let to = offer.state();
+        if let Some(from) = scope.offers.insert(offer.id().clone(), to)
+            && let Some(result) = applied_offer_transition(from, to)
+        {
+            scope
+                .observations
+                .push(Observation::Transition(Transition::Offer(result)));
+        }
+    }
 }
 
-/// Events of the outermost scope of one thread; dropped on panic too, so a
-/// failed Unit of Work never leaks events into the next one.
+/// Observations of the outermost scope of one thread; dropped on panic too,
+/// so a failed Unit of Work never leaks them into the next one.
 struct Collector<'a> {
     owner: &'a ObservedOutbox,
     thread: ThreadId,
 }
 
 impl Collector<'_> {
-    fn finish(self) -> Vec<DomainEvent> {
+    fn finish(self) -> Vec<Observation> {
         self.owner
             .pending()
             .remove(&self.thread)
+            .map(|scope| scope.observations)
             .unwrap_or_default()
     }
 }

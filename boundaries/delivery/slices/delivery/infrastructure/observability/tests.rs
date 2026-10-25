@@ -11,7 +11,7 @@ use crate::pkg::application::{ScopedUnitOfWork, Subject, UnitOfWork};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::create_delivery;
 use crate::slices::delivery::domains::delivery::{
-    DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
+    Address, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
 };
 
 const NOW: i64 = 10_000;
@@ -40,10 +40,12 @@ impl Harness {
             reasons,
             Arc::new(move || clock.load(Ordering::SeqCst)),
         );
+        let observed =
+            ObservedOutbox::new(metrics, TransitionMetrics::new(&provider.meter("test")));
         Self {
             provider,
             exporter,
-            observed: ObservedOutbox::new(metrics),
+            observed,
             now,
         }
     }
@@ -248,6 +250,101 @@ fn committed_events_are_counted_by_metric() {
     assert_eq!(harness.count("nomnom.delivery.pickups", None), 1);
     assert_eq!(harness.count("nomnom.delivery.completed", None), 1);
     assert_eq!(harness.count("nomnom.delivery.failed", None), 1);
+}
+
+/// A waiting Delivery stored outside any Unit of Work.
+fn stored_delivery(store: &TestStore) -> Delivery {
+    let delivery = Delivery::new(
+        delivery_id(),
+        OrderId::new("order-1"),
+        Address::new("Pickup street 1").expect("pickup"),
+        Address::new("Dropoff street 2").expect("dropoff"),
+    );
+    DeliveryRepository::add(store, &delivery).expect("add");
+    delivery
+}
+
+/// Loads the stored Delivery, assigns the courier and saves it through the
+/// decorator inside one Unit of Work; `commit` decides the outcome.
+fn assign_in_unit_of_work(harness: &Harness, store: &TestStore, commit: bool) {
+    harness
+        .observed
+        .run_scoped(store, &mut || {
+            let mut delivery = harness
+                .observed
+                .get_delivery(store, &delivery_id())
+                .expect("get")
+                .expect("stored");
+            delivery.assign(courier_id()).expect("assign");
+            harness
+                .observed
+                .save_delivery(store, &delivery)
+                .expect("save");
+            commit
+        })
+        .expect("unit of work");
+}
+
+#[test]
+fn saved_state_change_is_the_applied_transition_after_commit() {
+    let harness = Harness::new();
+    let store = TestStore::new();
+    stored_delivery(&store);
+
+    assign_in_unit_of_work(&harness, &store, false);
+    assert_eq!(harness.count("nomnom.fsm.transitions", None), 0);
+
+    assign_in_unit_of_work(&harness, &store, true);
+    for attribute in [
+        ("nomnom.fsm.aggregate_type", "delivery"),
+        ("nomnom.fsm.from_state", "waiting"),
+        ("nomnom.fsm.trigger", "assign"),
+        ("nomnom.fsm.to_state", "assigned"),
+        ("nomnom.fsm.result", "applied"),
+        ("nomnom.fsm.terminal", "false"),
+    ] {
+        assert_eq!(
+            harness.count("nomnom.fsm.transitions", Some(attribute)),
+            1,
+            "{attribute:?}"
+        );
+    }
+}
+
+#[test]
+fn save_without_state_change_or_outside_unit_of_work_records_no_transition() {
+    let harness = Harness::new();
+    let store = TestStore::new();
+    stored_delivery(&store);
+
+    harness
+        .observed
+        .run_scoped(&store, &mut || {
+            let loaded = harness
+                .observed
+                .get_delivery(&store, &delivery_id())
+                .expect("get")
+                .expect("stored");
+            harness
+                .observed
+                .save_delivery(&store, &loaded)
+                .expect("save");
+            true
+        })
+        .expect("committed");
+    // Without a Unit of Work the loaded state is not tracked.
+    let mut delivery = harness
+        .observed
+        .get_delivery(&store, &delivery_id())
+        .expect("get")
+        .expect("stored");
+    delivery.assign(courier_id()).expect("assign");
+    harness
+        .observed
+        .save_delivery(&store, &delivery)
+        .expect("save");
+
+    assert_eq!(harness.count("nomnom.fsm.transitions", None), 0);
 }
 
 #[test]
@@ -522,11 +619,14 @@ fn committed_failure_is_logged_once_and_rolled_back_failure_is_not() {
     let provider = SdkMeterProvider::builder()
         .with_reader(PeriodicReader::builder(exporter).build())
         .build();
-    let observed = ObservedOutbox::new(DomainMetrics::new(
-        &provider.meter("test"),
-        &DeliveryFailureCode::CODES,
-        Arc::new(|| NOW),
-    ))
+    let observed = ObservedOutbox::new(
+        DomainMetrics::new(
+            &provider.meter("test"),
+            &DeliveryFailureCode::CODES,
+            Arc::new(|| NOW),
+        ),
+        TransitionMetrics::new(&provider.meter("test")),
+    )
     .with_failure_log(FailureLog);
     let store = TestStore::new();
     let run = |commit: bool| {

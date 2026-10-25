@@ -58,6 +58,35 @@ fn allowed_transitions_follow_the_table() {
 }
 
 #[test]
+fn stored_state_changes_read_as_the_allowed_transition() {
+    for from in ALL_STATES {
+        for to in ALL_STATES {
+            let expected = ALL_TRIGGERS
+                .into_iter()
+                .find(|trigger| {
+                    transition(from, *trigger, Some(&CourierId::new("courier-1")))
+                        .is_ok_and(|result| result.to == to)
+                })
+                .map(|trigger| TransitionResult { from, trigger, to });
+            assert_eq!(applied_transition(from, to), expected, "{from:?} -> {to:?}");
+        }
+    }
+    assert_eq!(applied_transition(State::Waiting, State::PickedUp), None);
+}
+
+#[test]
+fn terminal_states_are_the_states_without_an_allowed_trigger() {
+    let terminal: Vec<State> = ALL_STATES
+        .into_iter()
+        .filter(|state| state.is_terminal())
+        .collect();
+    assert_eq!(
+        terminal,
+        vec![State::Delivered, State::Failed, State::Cancelled]
+    );
+}
+
+#[test]
 fn terminal_states_reject_every_other_trigger() {
     for (state, repeated) in [
         (State::Delivered, Trigger::Complete),

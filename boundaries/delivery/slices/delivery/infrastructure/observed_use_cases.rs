@@ -8,6 +8,9 @@
 //!   `already_exists`, `failed_precondition`;
 //! - `error`: `concurrent_modification`, `unavailable`, `transaction`,
 //!   `internal`.
+//!
+//! A call refused with `InvalidTransition` is also the rejected FSM
+//! transition of [`TransitionMetrics`].
 
 use std::sync::Arc;
 
@@ -21,6 +24,8 @@ use crate::slices::delivery::applications::{
     replan_delivery, report_delivery_failure,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
+
+use super::transitions::TransitionMetrics;
 
 pub const CREATE_DELIVERY: UseCase = UseCase::command("create_delivery");
 pub const FIND_COURIER: UseCase = UseCase::query("find_courier");
@@ -65,17 +70,38 @@ pub fn classify(error: &DeliveryApplicationError) -> Failure {
     }
 }
 
-/// [`DeliveryUseCases`] observed by [`UseCaseTelemetry`]; results are
-/// returned unchanged.
+/// [`DeliveryUseCases`] observed by [`UseCaseTelemetry`] and
+/// [`TransitionMetrics`]; results are returned unchanged.
 pub struct ObservedDeliveryUseCases {
     inner: Arc<dyn DeliveryUseCases>,
     telemetry: Arc<UseCaseTelemetry>,
+    transitions: TransitionMetrics,
 }
 
 impl ObservedDeliveryUseCases {
     #[must_use]
-    pub fn new(inner: Arc<dyn DeliveryUseCases>, telemetry: Arc<UseCaseTelemetry>) -> Self {
-        Self { inner, telemetry }
+    pub fn new(
+        inner: Arc<dyn DeliveryUseCases>,
+        telemetry: Arc<UseCaseTelemetry>,
+        transitions: TransitionMetrics,
+    ) -> Self {
+        Self {
+            inner,
+            telemetry,
+            transitions,
+        }
+    }
+
+    fn observe<T>(
+        &self,
+        use_case: UseCase,
+        call: impl FnOnce() -> Result<T, DeliveryApplicationError>,
+    ) -> Result<T, DeliveryApplicationError> {
+        let result = self.telemetry.observe(use_case, classify, call);
+        if let Err(error) = &result {
+            self.transitions.rejected(error);
+        }
+        result
     }
 }
 
@@ -85,7 +111,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: create_delivery::Input,
     ) -> Result<create_delivery::Output, DeliveryApplicationError> {
-        self.telemetry.observe(CREATE_DELIVERY, classify, || {
+        self.observe(CREATE_DELIVERY, || {
             self.inner.create_delivery(subject, input)
         })
     }
@@ -95,9 +121,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: find_courier::Input,
     ) -> Result<find_courier::Output, DeliveryApplicationError> {
-        self.telemetry.observe(FIND_COURIER, classify, || {
-            self.inner.find_courier(subject, input)
-        })
+        self.observe(FIND_COURIER, || self.inner.find_courier(subject, input))
     }
 
     fn offer_delivery(
@@ -105,9 +129,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: offer_delivery::Input,
     ) -> Result<offer_delivery::Output, DeliveryApplicationError> {
-        self.telemetry.observe(OFFER_DELIVERY, classify, || {
-            self.inner.offer_delivery(subject, input)
-        })
+        self.observe(OFFER_DELIVERY, || self.inner.offer_delivery(subject, input))
     }
 
     fn list_available_delivery_offers(
@@ -115,10 +137,9 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: list_available_delivery_offers::Input,
     ) -> Result<list_available_delivery_offers::Output, DeliveryApplicationError> {
-        self.telemetry
-            .observe(LIST_AVAILABLE_DELIVERY_OFFERS, classify, || {
-                self.inner.list_available_delivery_offers(subject, input)
-            })
+        self.observe(LIST_AVAILABLE_DELIVERY_OFFERS, || {
+            self.inner.list_available_delivery_offers(subject, input)
+        })
     }
 
     fn get_courier_current_delivery(
@@ -126,10 +147,9 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: get_courier_current_delivery::Input,
     ) -> Result<get_courier_current_delivery::Output, DeliveryApplicationError> {
-        self.telemetry
-            .observe(GET_COURIER_CURRENT_DELIVERY, classify, || {
-                self.inner.get_courier_current_delivery(subject, input)
-            })
+        self.observe(GET_COURIER_CURRENT_DELIVERY, || {
+            self.inner.get_courier_current_delivery(subject, input)
+        })
     }
 
     fn accept_delivery_offer(
@@ -137,7 +157,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: accept_delivery_offer::Input,
     ) -> Result<accept_delivery_offer::Output, DeliveryApplicationError> {
-        self.telemetry.observe(ACCEPT_DELIVERY_OFFER, classify, || {
+        self.observe(ACCEPT_DELIVERY_OFFER, || {
             self.inner.accept_delivery_offer(subject, input)
         })
     }
@@ -147,7 +167,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: reject_delivery_offer::Input,
     ) -> Result<reject_delivery_offer::Output, DeliveryApplicationError> {
-        self.telemetry.observe(REJECT_DELIVERY_OFFER, classify, || {
+        self.observe(REJECT_DELIVERY_OFFER, || {
             self.inner.reject_delivery_offer(subject, input)
         })
     }
@@ -157,7 +177,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: reassign_courier::Input,
     ) -> Result<reassign_courier::Output, DeliveryApplicationError> {
-        self.telemetry.observe(REASSIGN_COURIER, classify, || {
+        self.observe(REASSIGN_COURIER, || {
             self.inner.reassign_courier(subject, input)
         })
     }
@@ -167,9 +187,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: confirm_pickup::Input,
     ) -> Result<confirm_pickup::Output, DeliveryApplicationError> {
-        self.telemetry.observe(CONFIRM_PICKUP, classify, || {
-            self.inner.confirm_pickup(subject, input)
-        })
+        self.observe(CONFIRM_PICKUP, || self.inner.confirm_pickup(subject, input))
     }
 
     fn confirm_delivery(
@@ -177,7 +195,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: confirm_delivery::Input,
     ) -> Result<confirm_delivery::Output, DeliveryApplicationError> {
-        self.telemetry.observe(CONFIRM_DELIVERY, classify, || {
+        self.observe(CONFIRM_DELIVERY, || {
             self.inner.confirm_delivery(subject, input)
         })
     }
@@ -187,10 +205,9 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: report_delivery_failure::Input,
     ) -> Result<report_delivery_failure::Output, DeliveryApplicationError> {
-        self.telemetry
-            .observe(REPORT_DELIVERY_FAILURE, classify, || {
-                self.inner.report_delivery_failure(subject, input)
-            })
+        self.observe(REPORT_DELIVERY_FAILURE, || {
+            self.inner.report_delivery_failure(subject, input)
+        })
     }
 
     fn cancel_delivery(
@@ -198,7 +215,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: cancel_delivery::Input,
     ) -> Result<cancel_delivery::Output, DeliveryApplicationError> {
-        self.telemetry.observe(CANCEL_DELIVERY, classify, || {
+        self.observe(CANCEL_DELIVERY, || {
             self.inner.cancel_delivery(subject, input)
         })
     }
@@ -208,7 +225,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         subject: &Subject,
         input: replan_delivery::Input,
     ) -> Result<replan_delivery::Output, DeliveryApplicationError> {
-        self.telemetry.observe(REPLAN_DELIVERY, classify, || {
+        self.observe(REPLAN_DELIVERY, || {
             self.inner.replan_delivery(subject, input)
         })
     }
@@ -217,17 +234,16 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         &self,
         input: expire_delivery_offers::Input,
     ) -> Result<expire_delivery_offers::Output, DeliveryApplicationError> {
-        self.telemetry
-            .observe(EXPIRE_DELIVERY_OFFERS, classify, || {
-                self.inner.expire_delivery_offers(input)
-            })
+        self.observe(EXPIRE_DELIVERY_OFFERS, || {
+            self.inner.expire_delivery_offers(input)
+        })
     }
 
     fn dispatch_deliveries(
         &self,
         input: dispatch_deliveries::Input,
     ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError> {
-        self.telemetry.observe(DISPATCH_DELIVERIES, classify, || {
+        self.observe(DISPATCH_DELIVERIES, || {
             self.inner.dispatch_deliveries(input)
         })
     }

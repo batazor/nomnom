@@ -25,6 +25,14 @@ impl State {
     pub fn has_active_assignment(self) -> bool {
         Self::WITH_ACTIVE_ASSIGNMENT.contains(&self)
     }
+
+    /// No trigger of the transition table leaves the state.
+    #[must_use]
+    pub fn is_terminal(self) -> bool {
+        !TRANSITION_TABLE
+            .iter()
+            .any(|rule| rule.from == self && matches!(rule.outcome, Outcome::Allowed(_)))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -225,6 +233,24 @@ fn resolve(
 /// Checks the table outcome for `(from, trigger)` without evaluating guards.
 pub(super) fn ensure_allowed(from: State, trigger: Trigger) -> Result<(), TransitionError> {
     resolve(from, trigger).map(|_| ())
+}
+
+/// The allowed transition of the table from `from` to `to`, if exactly one
+/// trigger leads there: how a stored state change reads as a transition.
+#[must_use]
+pub fn applied_transition(from: State, to: State) -> Option<TransitionResult> {
+    let mut allowed = TRANSITION_TABLE.iter().filter(|rule| {
+        rule.from == from && matches!(rule.outcome, Outcome::Allowed(target) if target == to)
+    });
+    let rule = allowed.next()?;
+    if allowed.next().is_some() {
+        return None;
+    }
+    Some(TransitionResult {
+        from,
+        trigger: rule.trigger,
+        to,
+    })
 }
 
 pub(super) fn transition(

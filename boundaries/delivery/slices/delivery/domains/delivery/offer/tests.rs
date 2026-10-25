@@ -169,6 +169,32 @@ fn offer_must_expire_after_it_is_offered() {
 }
 
 #[test]
+fn stored_offer_state_changes_read_as_the_allowed_transition() {
+    for from in ALL_OFFER_STATES {
+        for to in ALL_OFFER_STATES {
+            let expected = ALL_OFFER_TRIGGERS
+                .into_iter()
+                .find(|trigger| {
+                    offer_transition(from, *trigger).is_ok_and(|result| result.to == to)
+                })
+                .map(|trigger| OfferTransitionResult { from, trigger, to });
+            assert_eq!(
+                applied_offer_transition(from, to),
+                expected,
+                "{from:?} -> {to:?}"
+            );
+        }
+    }
+    assert!(!OfferState::Pending.is_terminal());
+    for state in ALL_OFFER_STATES
+        .into_iter()
+        .filter(|state| *state != OfferState::Pending)
+    {
+        assert!(state.is_terminal(), "{state:?}");
+    }
+}
+
+#[test]
 fn pending_offer_moves_on_every_trigger() {
     for (trigger, to) in [
         (OfferTrigger::Accept, OfferState::Accepted),
