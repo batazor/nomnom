@@ -243,12 +243,12 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_orders_placed_total` | use case decorator | counter | — | `orders`: ожидается | — |
-| `nomnom_orders_completed_total` | use case decorator | counter | — | `orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
-| `nomnom_orders_cancelled_total` | use case decorator | counter | `nomnom_reason` | `orders`: ожидается<br>`orders-worker`: ожидается | — |
-| `nomnom_orders_failed_total` | use case decorator | counter | `nomnom_reason` | `orders-worker`: ожидается | — |
+| `nomnom_orders_placed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | — | `orders`: ожидается | — |
+| `nomnom_orders_completed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | — | `orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
+| `nomnom_orders_cancelled_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_reason` | `orders`: ожидается<br>`orders-worker`: ожидается | — |
+| `nomnom_orders_failed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_reason` | `orders-worker`: ожидается | — |
 | `nomnom_orders_cancellation_requests_total` | use case decorator | counter | `nomnom_outcome` | `orders`: ожидается | — |
-| `nomnom_orders_fulfillment_duration_seconds` | use case decorator | histogram | — | `orders-worker`: ожидается | — |
+| `nomnom_orders_fulfillment_duration_seconds` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | histogram | — | `orders-worker`: ожидается | — |
 | `nomnom_orders_in_state` | projection/polling | gauge | `nomnom_order_state` | `orders`: ожидается | Требует отдельной projection; PromQL по counters не эмулируется. |
 | `nomnom_restaurants_orders_received_total` | use case decorator | counter | — | `restaurants`: ожидается | — |
 | `nomnom_restaurants_orders_accepted_total` | use case decorator | counter | — | `restaurants`: ожидается | — |
@@ -262,9 +262,9 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_delivery_failed_total` | use case decorator | counter | `nomnom_reason` | `delivery`: ожидается | — |
 | `nomnom_delivery_assignment_latency_seconds` | use case decorator | histogram | — | `delivery`: ожидается | — |
 | `nomnom_delivery_duration_seconds` | use case decorator | histogram | — | `delivery`: ожидается | — |
-| `nomnom_payments_authorizations_total` | use case decorator | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: authorized | declined | failed; attempts = сумма. |
-| `nomnom_payments_captures_total` | use case decorator | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: captured | failed. |
-| `nomnom_payments_refunds_total` | use case decorator | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: refunded | failed. |
+| `nomnom_payments_authorizations_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: authorized | declined | failed; attempts = сумма. |
+| `nomnom_payments_captures_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: captured | failed. |
+| `nomnom_payments_refunds_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `outcome`: refunded | failed. |
 
 <a id="pods"></a>
 

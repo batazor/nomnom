@@ -231,12 +231,12 @@ var Metrics = []Metric{
 	{Name: "nomnom_payments_provider_request_duration_seconds", Section: "provider", Type: Histogram, Source: "Provider gateway adapter", Labels: []string{"nomnom_payment_operation", "nomnom_outcome"}, Status: expected(Payments), Note: "`operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат."},
 
 	// domain: orders
-	{Name: "nomnom_orders_placed_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Orders)},
-	{Name: "nomnom_orders_completed_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(OrdersWorker, OrdersConsumer)},
-	{Name: "nomnom_orders_cancelled_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_reason"}, Status: expected(Orders, OrdersWorker)},
-	{Name: "nomnom_orders_failed_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_reason"}, Status: expected(OrdersWorker)},
+	{Name: "nomnom_orders_placed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: expected(Orders)},
+	{Name: "nomnom_orders_completed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: expected(OrdersWorker, OrdersConsumer)},
+	{Name: "nomnom_orders_cancelled_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_reason"}, Status: expected(Orders, OrdersWorker)},
+	{Name: "nomnom_orders_failed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_reason"}, Status: expected(OrdersWorker)},
 	{Name: "nomnom_orders_cancellation_requests_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Orders)},
-	{Name: "nomnom_orders_fulfillment_duration_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(OrdersWorker)},
+	{Name: "nomnom_orders_fulfillment_duration_seconds", Section: "domain", Type: Histogram, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: expected(OrdersWorker)},
 	{Name: "nomnom_orders_in_state", Section: "domain", Type: Gauge, Source: "projection/polling", Labels: []string{"nomnom_order_state"}, Status: expected(Orders), Note: "Требует отдельной projection; PromQL по counters не эмулируется."},
 	// domain: restaurants
 	{Name: "nomnom_restaurants_orders_received_total", Section: "domain", Type: Counter, Source: "use case decorator", Status: expected(Restaurants)},
@@ -253,9 +253,9 @@ var Metrics = []Metric{
 	{Name: "nomnom_delivery_assignment_latency_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(Delivery)},
 	{Name: "nomnom_delivery_duration_seconds", Section: "domain", Type: Histogram, Source: "use case decorator", Status: expected(Delivery)},
 	// domain: payments
-	{Name: "nomnom_payments_authorizations_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: authorized | declined | failed; attempts = сумма."},
-	{Name: "nomnom_payments_captures_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: captured | failed."},
-	{Name: "nomnom_payments_refunds_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: refunded | failed."},
+	{Name: "nomnom_payments_authorizations_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: authorized | declined | failed; attempts = сумма."},
+	{Name: "nomnom_payments_captures_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: captured | failed."},
+	{Name: "nomnom_payments_refunds_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_outcome"}, Status: expected(Payments), Note: "`outcome`: refunded | failed."},
 
 	// pods (Alloy: cAdvisor kubelet + kube-state-metrics, job infra/kubernetes)
 	{Name: "container_cpu_usage_seconds_total", Section: "pods", Type: Counter, Source: "cAdvisor kubelet", Labels: []string{"namespace", "pod", "container"}, Status: podStatus(), Note: "Только контейнеры: pod-level cgroup и pause отбрасываются в Alloy."},
