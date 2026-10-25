@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -30,7 +31,11 @@ var ErrOperationPending = errors.New("payment operation is pending")
 // With a non-empty tokenDir every call carries the projected token of the
 // target context (ADR 27).
 func Dial(address, tokenDir string) (*grpc.ClientConn, error) {
-	options := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	options := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Client-side метрики зависимостей через internal gateway (глобальный MeterProvider).
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	}
 	if tokenDir != "" {
 		options = append(options, grpc.WithUnaryInterceptor(ServiceToken(tokenDir)))
 	}

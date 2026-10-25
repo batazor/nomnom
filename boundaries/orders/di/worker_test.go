@@ -68,7 +68,9 @@ func newTestWorker(t *testing.T, cfg config.Config, fake *fakeRunner) (*Temporal
 	w.dial = func(ctx context.Context, options client.Options) (client.Client, error) {
 		_, hasDeadline := ctx.Deadline()
 		assert.True(t, hasDeadline, "connection is bounded by connect timeout")
-		assert.Equal(t, client.Options{HostPort: "temporal:7233", Namespace: "orders-local"}, options)
+		assert.Equal(t, "temporal:7233", options.HostPort)
+		assert.Equal(t, "orders-local", options.Namespace)
+		assert.NotNil(t, options.MetricsHandler, "Temporal SDK metrics go to the OTel pipeline")
 		return temporalClient, nil
 	}
 	w.newWorker = func(_ client.Client, options worker.Options) runner {

@@ -1,19 +1,19 @@
 package overview
 
-// gRPC status codes по классам ошибки (rpc_grpc_status_code — число):
+// gRPC status codes по классам ошибки (rpc_response_status_code — имя кода):
 // transport/availability — сеть, deadline, перегрузка, недоступность зависимости;
 // application — дефект или неожиданный сбой; business rejection — отказ по правилам
 // домена/контракта. Бизнес-результаты внутри OK-ответа (PaymentDeclined) ошибками не считаются.
 const (
-	codesTransport   = `rpc_grpc_status_code=~"1|4|8|14"`
-	codesApplication = `rpc_grpc_status_code=~"2|12|13|15"`
-	codesBusiness    = `rpc_grpc_status_code=~"3|5|6|7|9|10|11|16"`
-	codesTechnical   = `rpc_grpc_status_code=~"1|2|4|8|12|13|14|15"`
+	codesTransport   = `rpc_response_status_code=~"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE"`
+	codesApplication = `rpc_response_status_code=~"UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS"`
+	codesBusiness    = `rpc_response_status_code=~"INVALID_ARGUMENT|NOT_FOUND|ALREADY_EXISTS|PERMISSION_DENIED|FAILED_PRECONDITION|ABORTED|OUT_OF_RANGE|UNAUTHENTICATED"`
+	codesTechnical   = `rpc_response_status_code=~"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS"`
 )
 
 const (
-	rpcServer = "rpc_server_duration_milliseconds"
-	rpcClient = "rpc_client_duration_milliseconds"
+	rpcServer = "rpc_server_call_duration_seconds"
+	rpcClient = "rpc_client_call_duration_seconds"
 	router    = "router_http_request_duration_milliseconds"
 	// Входящий GraphQL-запрос клиента; с wg_subgraph_name — вызов subgraph.
 	clientRequest = `wg_subgraph_name=""`
@@ -70,7 +70,7 @@ func (g *generator) health(sc Scope) []Panel {
 			Description: "Transport/availability (CANCELLED, DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE), application (UNKNOWN, UNIMPLEMENTED, INTERNAL, DATA_LOSS) и business rejection (INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS, PERMISSION_DENIED, FAILED_PRECONDITION, ABORTED, OUT_OF_RANGE, UNAUTHENTICATED). Бизнес-результаты в OK-ответе (PaymentDeclined) ошибками не являются."},
 		{Title: "Technical error ratio", Unit: "percentunit", Queries: ratio,
 			Description: "Доля transport + application ошибок; business rejections исключены."},
-		{Title: "Latency p50 / p95 / p99", Unit: "ms", Queries: latency, Traces: true,
+		{Title: "Latency p50 / p95 / p99", Unit: latencyUnit(o), Queries: latency, Traces: true,
 			Description: "Server-side latency из histograms входа."},
 	}
 	if g.opts.Language == Cosmo {
@@ -78,6 +78,14 @@ func (g *generator) health(sc Scope) []Panel {
 	}
 	cpu, memory := g.saturation(sc)
 	return append(panels, cpu, memory)
+}
+
+// latencyUnit — gRPC histograms в секундах, GraphQL Cosmo Router — в миллисекундах.
+func latencyUnit(o Options) string {
+	if o.GRPC {
+		return "s"
+	}
+	return "ms"
 }
 
 func (g *generator) saturation(sc Scope) (Panel, Panel) {
@@ -127,11 +135,11 @@ func (g *generator) dependencies(sc Scope) []Panel {
 	o := g.opts
 	var panels []Panel
 	if o.GRPCClients {
-		gateway := `rpc_service!~"authzed.*"`
+		gateway := `rpc_method!~"authzed.*"`
 		panels = append(panels,
-			Panel{Title: "gRPC via internal gateway: rate", Unit: "ops", Queries: []Query{{Sum("rpc_service", sc.Rate(rpcClient+"_count", gateway)), "{{rpc_service}}"}}},
-			Panel{Title: "gRPC via internal gateway: technical errors", Unit: "ops", Traces: true, Queries: []Query{{Sum("rpc_service, rpc_grpc_status_code", sc.Rate(rpcClient+"_count", gateway, codesTechnical)), "{{rpc_service}} {{rpc_grpc_status_code}}"}}},
-			Panel{Title: "gRPC via internal gateway: p95", Unit: "ms", Queries: []Query{{sc.Quantile("0.95", "rpc_service", rpcClient, gateway), "{{rpc_service}}"}}},
+			Panel{Title: "gRPC via internal gateway: rate", Unit: "ops", Queries: []Query{{Sum("rpc_method", sc.Rate(rpcClient+"_count", gateway)), "{{rpc_method}}"}}},
+			Panel{Title: "gRPC via internal gateway: technical errors", Unit: "ops", Traces: true, Queries: []Query{{Sum("rpc_method, rpc_response_status_code", sc.Rate(rpcClient+"_count", gateway, codesTechnical)), "{{rpc_method}} {{rpc_response_status_code}}"}}},
+			Panel{Title: "gRPC via internal gateway: p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "rpc_method", rpcClient, gateway), "{{rpc_method}}"}}},
 		)
 	}
 	if o.GraphQL {

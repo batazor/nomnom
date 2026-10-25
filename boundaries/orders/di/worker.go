@@ -2,6 +2,7 @@ package di
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -21,6 +22,9 @@ import (
 	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
 
+// WorkerServiceName — service.name Temporal worker по умолчанию; OTEL_SERVICE_NAME переопределяет.
+const WorkerServiceName = "orders-worker"
+
 // TemporalWorker — lifecycle.Worker процесса orders-worker: подключается к
 // Temporal в Start, опрашивает task queue orders и останавливает poll в Shutdown.
 type TemporalWorker struct {
@@ -33,11 +37,13 @@ type TemporalWorker struct {
 	newWorker func(c client.Client, options worker.Options) runner
 	ensure    func(ctx context.Context, c client.Client) error
 
-	client  client.Client
-	worker  runner
-	fatal   chan error
-	stopped chan struct{}
-	once    sync.Once
+	newMetrics func(ctx context.Context, serviceName string) (*telemetry.Metrics, error)
+	metrics    *telemetry.Metrics
+	client     client.Client
+	worker     runner
+	fatal      chan error
+	stopped    chan struct{}
+	once       sync.Once
 }
 
 // runner — часть worker.Worker, которой управляет lifecycle.
@@ -54,6 +60,7 @@ func NewTemporalWorker(cfg config.Config, activities *fulfillorder.Activities) *
 		drain:      cfg.Shutdown.DrainTimeout,
 		activities: activities,
 		dial:       client.DialContext,
+		newMetrics: telemetry.Start,
 		newWorker: func(c client.Client, options worker.Options) runner {
 			return worker.New(c, fulfillorder.TaskQueue, options)
 		},
@@ -71,9 +78,19 @@ func (w *TemporalWorker) Start(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, w.cfg.ConnectTimeout)
 	defer cancel()
 
-	c, err := w.dial(ctx, client.Options{HostPort: w.cfg.HostPort, Namespace: w.cfg.Namespace})
+	metrics, err := w.newMetrics(ctx, WorkerServiceName)
 	if err != nil {
-		return fmt.Errorf("connect temporal %s: %w", w.cfg.HostPort, err)
+		return fmt.Errorf("start telemetry: %w", err)
+	}
+	w.metrics = metrics
+
+	c, err := w.dial(ctx, client.Options{
+		HostPort:       w.cfg.HostPort,
+		Namespace:      w.cfg.Namespace,
+		MetricsHandler: metrics.TemporalMetricsHandler(),
+	})
+	if err != nil {
+		return errors.Join(fmt.Errorf("connect temporal %s: %w", w.cfg.HostPort, err), metrics.Shutdown(ctx))
 	}
 	if w.stage {
 		if err := w.ensure(ctx, c); err != nil {
@@ -119,6 +136,14 @@ func (w *TemporalWorker) Shutdown(ctx context.Context) error {
 		w.worker.Stop()
 		w.client.Close()
 		close(done)
+	}()
+	defer func() {
+		if w.metrics != nil {
+			// Финальный export после остановки poll; ошибку flush не смешиваем с drain.
+			if err := w.metrics.Shutdown(ctx); err != nil {
+				log.Printf("flush metrics: %v", err)
+			}
+		}
 	}()
 	select {
 	case <-done:

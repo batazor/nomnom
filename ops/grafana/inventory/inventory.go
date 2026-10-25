@@ -77,7 +77,7 @@ const RepoURL = "https://github.com/batazor/nomnom/blob/main/"
 const DocPath = "docs/observability/metric-inventory.md"
 
 // VerifiedPipeline — где подтверждены метрики со статусом Present.
-const VerifiedPipeline = "2026-10-25: orders-consumer → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker). В kind Alloy и Mimir пока не развёрнуты."
+const VerifiedPipeline = "2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`)."
 
 // Exemplars включаются в запросах только когда это подтверждено end-to-end:
 // SDK histograms с exemplars, Alloy и Mimir (-ingester.max-global-exemplars-per-user).
@@ -102,7 +102,7 @@ func expected(services ...string) map[string]Status {
 
 var Sections = []Section{
 	{"resource", "Resource и идентичность", "OTel resource в Mimir: `job=\"nomnom/<service.name>\"`, `instance=<service.instance.id>`, остальные resource attributes — в `target_info`. Promotion resource attributes не используется (docs/observability.md), поэтому environment и version фильтруются join с `target_info`."},
-	{"rpc", "gRPC (server и client через internal gateway)", "`otelgrpc` / grpc-node / tonic / grpcio OTel instrumentation. Semconv RPC ещё в статусе development: актуальное имя `rpc.server.call.duration` (s) заменит `rpc.server.duration` (ms) при закреплении версии SDK; генератор меняется в одном месте."},
+	{"rpc", "gRPC (server и client через internal gateway)", "`otelgrpc` v0.72 (stats handler) в `orders`; grpc-node / tonic / grpcio — при подключении в других контекстах. Используются актуальные semconv RPC: `rpc.server.call.duration`/`rpc.client.call.duration` в секундах, статус — имя кода в `rpc_response_status_code`, сервис и метод — в `rpc_method`."},
 	{"graphql", "GraphQL / HTTP (BFF, Cosmo Router)", "Встроенная telemetry Cosmo Router. Router экспортирует метрики по умолчанию, но OTLP exporter к Alloy в `config.yaml` не настроен и Alloy не развёрнут — метрики не доставляются."},
 	{"runtime", "Runtime", "Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). Node.js: `@opentelemetry/instrumentation-runtime-node`. Python: `opentelemetry-instrumentation-system-metrics`. Rust: semconv process metrics; метрики tokio runtime не имеют semconv и не инвентаризированы."},
 	{"db", "Database client (PostgreSQL, MongoDB)", "Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL/MongoDB — отдельные community dashboards, не overview."},
@@ -113,7 +113,7 @@ var Sections = []Section{
 	{"usecase", "Application use cases", "Декоратор application handlers в composition root (docs/observability.md#use-cases). Один histogram на все use cases; `outcome`: success | rejected | error — бизнес-отказ отделён от технического сбоя. `error_type` — закрытый набор slice, пуст при success. Без ID, subject и payload."},
 	{"uow", "Unit of Work", "Декоратор Unit of Work (ADR 20). Deadlock/serialization — классы retry, а не SQL-панели поверх DB instrumentation."},
 	{"fsm", "Domain Lifecycle (FSM)", "Декоратор применения FSM-перехода (ADR 21). Labels допустимы только с закрытым набором значений из FSM-таблицы."},
-	{"temporal", "Temporal", "Temporal Go SDK `MetricsHandler` (contrib/opentelemetry) в `orders-worker` и клиенте `orders`. Суффикс единицы timers зависит от handler и проверяется при подключении."},
+	{"temporal", "Temporal", "Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — histograms в секундах с границами `telemetry.SecondsBuckets`; без монотонных counters SDK пишет UpDownCounter и в Mimir counters приходят без `_total`."},
 	{"kitchen", "Kitchen", "Gauges kitchen queue — projection/polling Kitchen Board, не выводятся из counters. Consumer lag ≠ Kitchen Queue Size."},
 	{"authz", "Authorization (SpiceDB)", "Декоратор порта авторизации (ADR 18). `denied` — бизнес-результат, `error`/`timeout` — технический сбой. Без subject/resource ID."},
 	{"provider", "Payment provider", "Клиентский адаптер платёжного провайдера; провайдер не выбран."},
@@ -125,8 +125,8 @@ var Metrics = []Metric{
 	{Name: "target_info", Section: "resource", Type: Gauge, Source: "OTel resource → Mimir OTLP", Labels: []string{"job", "instance", "deployment_environment_name", "service_version"}, Status: verified([]string{OrdersConsumer}, Orders, OrdersWorker, Restaurants, Delivery, Payments, BFF), Note: "Нужна для variables `environment`/`version`/`service_instance`, фильтра environment и deployment annotations."},
 
 	// rpc
-	{Name: "rpc_server_duration_milliseconds", Section: "rpc", Type: Histogram, Source: "`rpc.server.duration`", Labels: []string{"rpc_system", "rpc_service", "rpc_method", "rpc_grpc_status_code"}, Status: expected(grpcServers...)},
-	{Name: "rpc_client_duration_milliseconds", Section: "rpc", Type: Histogram, Source: "`rpc.client.duration`", Labels: []string{"rpc_system", "rpc_service", "rpc_method", "rpc_grpc_status_code"}, Status: expected(OrdersWorker, BFF), Note: "Вызовы через internal gateway (ADR 15); SpiceDB — в row Authorization."},
+	{Name: "rpc_server_call_duration_seconds", Section: "rpc", Type: Histogram, Source: "`rpc.server.call.duration` (otelgrpc v0.72)", Labels: []string{"rpc_system_name", "rpc_method", "rpc_response_status_code"}, Status: verified([]string{Orders}, Restaurants, Delivery, Payments), Note: "`rpc_method` — `Service/Method`; `rpc_response_status_code` — имя кода (`OK`, `NOT_FOUND`). Инструментации других runtime закрепляются на тех же semconv-именах."},
+	{Name: "rpc_client_call_duration_seconds", Section: "rpc", Type: Histogram, Source: "`rpc.client.call.duration` (otelgrpc v0.72)", Labels: []string{"rpc_system_name", "rpc_method", "rpc_response_status_code", "error_type", "server_address", "server_port"}, Status: verified([]string{OrdersWorker}, BFF), Note: "Вызовы через internal gateway (ADR 15); `server_address`/`server_port` — адрес gateway. SpiceDB — в row Authorization."},
 
 	// graphql
 	{Name: "router_http_requests_total", Section: "graphql", Type: Counter, Source: "Cosmo `router.http.requests`", Labels: []string{"wg_operation_type", "wg_operation_name", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "`wg_operation_name` ограничен persisted operations клиента."},
@@ -134,14 +134,14 @@ var Metrics = []Metric{
 	{Name: "router_http_request_duration_milliseconds", Section: "graphql", Type: Histogram, Source: "Cosmo `router.http.request.duration_milliseconds`", Labels: []string{"wg_operation_type", "wg_operation_name", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway)."},
 
 	// runtime
-	{Name: "process_cpu_time_seconds_total", Section: "runtime", Type: Counter, Source: "`process.cpu.time`", Labels: []string{"cpu_mode"}, Status: expected(append(slices.Clone(goServices), Restaurants, Delivery, Payments)...), Note: "Go: `go.opentelemetry.io/contrib/instrumentation/host`."},
+	{Name: "process_cpu_time_seconds_total", Section: "runtime", Type: Counter, Source: "`process.cpu.time`", Labels: []string{"cpu_mode"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer}, Restaurants, Delivery, Payments), Note: "Go: `go.opentelemetry.io/contrib/instrumentation/host` (метрики `system.*` отбрасываются View)."},
 	{Name: "process_memory_usage_bytes", Section: "runtime", Type: Gauge, Source: "`process.memory.usage`", Status: expected(Restaurants, Delivery, Payments), Note: "Для Go не экспортируется; память Go-ролей — `go_memory_used_bytes`."},
 	{Name: "process_thread_count", Section: "runtime", Type: Gauge, Source: "`process.thread.count`", Status: expected(Delivery, Payments), Note: "Python: worker model gRPC thread pool."},
-	{Name: "go_memory_used_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.used`", Labels: []string{"go_memory_type"}, Status: expected(goServices...)},
-	{Name: "go_memory_allocated_bytes_total", Section: "runtime", Type: Counter, Source: "`go.memory.allocated`", Status: expected(goServices...)},
-	{Name: "go_memory_gc_goal_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.gc.goal`", Status: expected(goServices...)},
-	{Name: "go_goroutine_count", Section: "runtime", Type: Gauge, Source: "`go.goroutine.count`", Status: expected(goServices...)},
-	{Name: "go_processor_limit", Section: "runtime", Type: Gauge, Source: "`go.processor.limit`", Status: expected(goServices...)},
+	{Name: "go_memory_used_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.used`", Labels: []string{"go_memory_type"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
+	{Name: "go_memory_allocated_bytes_total", Section: "runtime", Type: Counter, Source: "`go.memory.allocated`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
+	{Name: "go_memory_gc_goal_bytes", Section: "runtime", Type: Gauge, Source: "`go.memory.gc.goal`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
+	{Name: "go_goroutine_count", Section: "runtime", Type: Gauge, Source: "`go.goroutine.count`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
+	{Name: "go_processor_limit", Section: "runtime", Type: Gauge, Source: "`go.processor.limit`", Status: verified([]string{Orders, OrdersWorker, OrdersConsumer})},
 	{Name: "v8js_memory_heap_used_bytes", Section: "runtime", Type: Gauge, Source: "`v8js.memory.heap.used`", Labels: []string{"v8js_heap_space_name"}, Status: expected(Restaurants)},
 	{Name: "v8js_memory_heap_limit_bytes", Section: "runtime", Type: Gauge, Source: "`v8js.memory.heap.limit`", Labels: []string{"v8js_heap_space_name"}, Status: expected(Restaurants)},
 	{Name: "nodejs_eventloop_delay_p99_seconds", Section: "runtime", Type: Gauge, Source: "`nodejs.eventloop.delay.p99`", Status: expected(Restaurants)},
@@ -190,14 +190,14 @@ var Metrics = []Metric{
 	{Name: "nomnom_fsm_transitions_total", Section: "fsm", Type: Counter, Source: "FSM transition decorator", Labels: []string{"aggregate_type", "from_state", "to_state", "trigger", "result", "terminal"}, Status: expected(contextServices...), Note: "`result`: applied | rejected (invalid transition); `terminal`: true | false."},
 
 	// temporal
-	{Name: "temporal_request_total", Section: "temporal", Type: Counter, Source: "Temporal SDK client", Labels: []string{"operation", "namespace"}, Status: expected(Orders, OrdersWorker), Note: "`operation=\"StartWorkflowExecution\"` — запуск workflow."},
-	{Name: "temporal_workflow_completed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: expected(OrdersWorker)},
-	{Name: "temporal_workflow_failed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: expected(OrdersWorker)},
-	{Name: "temporal_workflow_endtoend_latency_seconds", Section: "temporal", Type: Histogram, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: expected(OrdersWorker)},
-	{Name: "temporal_activity_execution_latency_seconds", Section: "temporal", Type: Histogram, Source: "Temporal SDK worker", Labels: []string{"activity_type", "namespace", "task_queue"}, Status: expected(OrdersWorker)},
-	{Name: "temporal_activity_execution_failed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"activity_type", "namespace", "task_queue"}, Status: expected(OrdersWorker), Note: "Каждая неуспешная попытка; retries = попытки сверх первой."},
-	{Name: "temporal_worker_task_slots_used", Section: "temporal", Type: Gauge, Source: "Temporal SDK worker", Labels: []string{"worker_type", "task_queue"}, Status: expected(OrdersWorker)},
-	{Name: "temporal_worker_task_slots_available", Section: "temporal", Type: Gauge, Source: "Temporal SDK worker", Labels: []string{"worker_type", "task_queue"}, Status: expected(OrdersWorker)},
+	{Name: "temporal_request_total", Section: "temporal", Type: Counter, Source: "Temporal SDK client", Labels: []string{"operation", "namespace"}, Status: verified([]string{OrdersWorker, OrdersConsumer}), Note: "`operation=\"StartWorkflowExecution\"` — запуск workflow (клиент `orders-consumer`)."},
+	{Name: "temporal_workflow_completed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: verified([]string{OrdersWorker})},
+	{Name: "temporal_workflow_failed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: verified([]string{OrdersWorker})},
+	{Name: "temporal_workflow_endtoend_latency_seconds", Section: "temporal", Type: Histogram, Source: "Temporal SDK worker", Labels: []string{"workflow_type", "namespace", "task_queue"}, Status: verified([]string{OrdersWorker})},
+	{Name: "temporal_activity_execution_latency_seconds", Section: "temporal", Type: Histogram, Source: "Temporal SDK worker", Labels: []string{"activity_type", "namespace", "task_queue"}, Status: verified([]string{OrdersWorker})},
+	{Name: "temporal_activity_execution_failed_total", Section: "temporal", Type: Counter, Source: "Temporal SDK worker", Labels: []string{"activity_type", "namespace", "task_queue"}, Status: verified([]string{OrdersWorker}), Note: "Каждая неуспешная попытка; retries = попытки сверх первой."},
+	{Name: "temporal_worker_task_slots_used", Section: "temporal", Type: Gauge, Source: "Temporal SDK worker", Labels: []string{"worker_type", "task_queue"}, Status: verified([]string{OrdersWorker})},
+	{Name: "temporal_worker_task_slots_available", Section: "temporal", Type: Gauge, Source: "Temporal SDK worker", Labels: []string{"worker_type", "task_queue"}, Status: verified([]string{OrdersWorker})},
 	{Name: "nomnom_orders_fulfillment_oldest_running_age_seconds", Section: "temporal", Type: Gauge, Source: "Polling Temporal Visibility", Status: expected(OrdersWorker), Note: "Возраст старейшего выполняющегося Order Fulfillment Workflow; SDK его не даёт."},
 	{Name: "nomnom_orders_compensations_total", Section: "temporal", Type: Counter, Source: "Compensation Activity decorator", Labels: []string{"step", "outcome"}, Status: expected(OrdersWorker), Note: "`outcome`: attempted | failed."},
 

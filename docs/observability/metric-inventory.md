@@ -18,13 +18,13 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 85; пар «метрика × сервис» со статусом «есть»: 9.
+Метрик в инвентаре: 85; пар «метрика × сервис» со статусом «есть»: 38.
 
-Подтверждение статуса «есть»: 2026-10-25: orders-consumer → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker). В kind Alloy и Mimir пока не развёрнуты.
+Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`).
 
-Метрики подключены только в `orders-consumer`: telemetry bootstrap (`orders/pkg/telemetry`), встроенные метрики
-Watermill и OTel middleware `pkg/messaging`. Остальные процессы OpenTelemetry SDK пока не подключают, поэтому их
-панели — TODO.
+Метрики подключены в процессах `orders`: `orders` (gRPC server), `orders-worker` (Temporal, gRPC client
+к gateway) и `orders-consumer` (Watermill, OTel middleware), во всех трёх — Go runtime и process CPU через
+`orders/pkg/telemetry`. Остальные контексты OpenTelemetry SDK пока не подключают, поэтому их панели — TODO.
 
 <a id="resource"></a>
 
@@ -40,12 +40,12 @@ OTel resource в Mimir: `job="nomnom/<service.name>"`, `instance=<service.instan
 
 ## gRPC (server и client через internal gateway)
 
-`otelgrpc` / grpc-node / tonic / grpcio OTel instrumentation. Semconv RPC ещё в статусе development: актуальное имя `rpc.server.call.duration` (s) заменит `rpc.server.duration` (ms) при закреплении версии SDK; генератор меняется в одном месте.
+`otelgrpc` v0.72 (stats handler) в `orders`; grpc-node / tonic / grpcio — при подключении в других контекстах. Используются актуальные semconv RPC: `rpc.server.call.duration`/`rpc.client.call.duration` в секундах, статус — имя кода в `rpc_response_status_code`, сервис и метод — в `rpc_method`.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `rpc_server_duration_milliseconds` | `rpc.server.duration` | histogram | `rpc_system`, `rpc_service`, `rpc_method`, `rpc_grpc_status_code` | `orders`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | — |
-| `rpc_client_duration_milliseconds` | `rpc.client.duration` | histogram | `rpc_system`, `rpc_service`, `rpc_method`, `rpc_grpc_status_code` | `orders-worker`: ожидается<br>`bff`: ожидается | Вызовы через internal gateway (ADR 15); SpiceDB — в row Authorization. |
+| `rpc_server_call_duration_seconds` | `rpc.server.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code` | `orders`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `rpc_method` — `Service/Method`; `rpc_response_status_code` — имя кода (`OK`, `NOT_FOUND`). Инструментации других runtime закрепляются на тех же semconv-именах. |
+| `rpc_client_call_duration_seconds` | `rpc.client.call.duration` (otelgrpc v0.72) | histogram | `rpc_system_name`, `rpc_method`, `rpc_response_status_code`, `error_type`, `server_address`, `server_port` | `orders-worker`: есть<br>`bff`: ожидается | Вызовы через internal gateway (ADR 15); `server_address`/`server_port` — адрес gateway. SpiceDB — в row Authorization. |
 
 <a id="graphql"></a>
 
@@ -67,14 +67,14 @@ Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). 
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `process_cpu_time_seconds_total` | `process.cpu.time` | counter | `cpu_mode` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Go: `go.opentelemetry.io/contrib/instrumentation/host`. |
+| `process_cpu_time_seconds_total` | `process.cpu.time` | counter | `cpu_mode` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Go: `go.opentelemetry.io/contrib/instrumentation/host` (метрики `system.*` отбрасываются View). |
 | `process_memory_usage_bytes` | `process.memory.usage` | gauge | — | `restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Для Go не экспортируется; память Go-ролей — `go_memory_used_bytes`. |
 | `process_thread_count` | `process.thread.count` | gauge | — | `delivery`: ожидается<br>`payments`: ожидается | Python: worker model gRPC thread pool. |
-| `go_memory_used_bytes` | `go.memory.used` | gauge | `go_memory_type` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
-| `go_memory_allocated_bytes_total` | `go.memory.allocated` | counter | — | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
-| `go_memory_gc_goal_bytes` | `go.memory.gc.goal` | gauge | — | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
-| `go_goroutine_count` | `go.goroutine.count` | gauge | — | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
-| `go_processor_limit` | `go.processor.limit` | gauge | — | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
+| `go_memory_used_bytes` | `go.memory.used` | gauge | `go_memory_type` | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
+| `go_memory_allocated_bytes_total` | `go.memory.allocated` | counter | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
+| `go_memory_gc_goal_bytes` | `go.memory.gc.goal` | gauge | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
+| `go_goroutine_count` | `go.goroutine.count` | gauge | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
+| `go_processor_limit` | `go.processor.limit` | gauge | — | `orders`: есть<br>`orders-worker`: есть<br>`orders-consumer`: есть | — |
 | `v8js_memory_heap_used_bytes` | `v8js.memory.heap.used` | gauge | `v8js_heap_space_name` | `restaurants`: ожидается | — |
 | `v8js_memory_heap_limit_bytes` | `v8js.memory.heap.limit` | gauge | `v8js_heap_space_name` | `restaurants`: ожидается | — |
 | `nodejs_eventloop_delay_p99_seconds` | `nodejs.eventloop.delay.p99` | gauge | — | `restaurants`: ожидается | — |
@@ -182,18 +182,18 @@ SQL-метрики Forwarder-роли (опрос таблицы Outbox), не p
 
 ## Temporal
 
-Temporal Go SDK `MetricsHandler` (contrib/opentelemetry) в `orders-worker` и клиенте `orders`. Суффикс единицы timers зависит от handler и проверяется при подключении.
+Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — histograms в секундах с границами `telemetry.SecondsBuckets`; без монотонных counters SDK пишет UpDownCounter и в Mimir counters приходят без `_total`.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `temporal_request_total` | Temporal SDK client | counter | `operation`, `namespace` | `orders`: ожидается<br>`orders-worker`: ожидается | `operation="StartWorkflowExecution"` — запуск workflow. |
-| `temporal_workflow_completed_total` | Temporal SDK worker | counter | `workflow_type`, `namespace`, `task_queue` | `orders-worker`: ожидается | — |
-| `temporal_workflow_failed_total` | Temporal SDK worker | counter | `workflow_type`, `namespace`, `task_queue` | `orders-worker`: ожидается | — |
-| `temporal_workflow_endtoend_latency_seconds` | Temporal SDK worker | histogram | `workflow_type`, `namespace`, `task_queue` | `orders-worker`: ожидается | — |
-| `temporal_activity_execution_latency_seconds` | Temporal SDK worker | histogram | `activity_type`, `namespace`, `task_queue` | `orders-worker`: ожидается | — |
-| `temporal_activity_execution_failed_total` | Temporal SDK worker | counter | `activity_type`, `namespace`, `task_queue` | `orders-worker`: ожидается | Каждая неуспешная попытка; retries = попытки сверх первой. |
-| `temporal_worker_task_slots_used` | Temporal SDK worker | gauge | `worker_type`, `task_queue` | `orders-worker`: ожидается | — |
-| `temporal_worker_task_slots_available` | Temporal SDK worker | gauge | `worker_type`, `task_queue` | `orders-worker`: ожидается | — |
+| `temporal_request_total` | Temporal SDK client | counter | `operation`, `namespace` | `orders-worker`: есть<br>`orders-consumer`: есть | `operation="StartWorkflowExecution"` — запуск workflow (клиент `orders-consumer`). |
+| `temporal_workflow_completed_total` | Temporal SDK worker | counter | `workflow_type`, `namespace`, `task_queue` | `orders-worker`: есть | — |
+| `temporal_workflow_failed_total` | Temporal SDK worker | counter | `workflow_type`, `namespace`, `task_queue` | `orders-worker`: есть | — |
+| `temporal_workflow_endtoend_latency_seconds` | Temporal SDK worker | histogram | `workflow_type`, `namespace`, `task_queue` | `orders-worker`: есть | — |
+| `temporal_activity_execution_latency_seconds` | Temporal SDK worker | histogram | `activity_type`, `namespace`, `task_queue` | `orders-worker`: есть | — |
+| `temporal_activity_execution_failed_total` | Temporal SDK worker | counter | `activity_type`, `namespace`, `task_queue` | `orders-worker`: есть | Каждая неуспешная попытка; retries = попытки сверх первой. |
+| `temporal_worker_task_slots_used` | Temporal SDK worker | gauge | `worker_type`, `task_queue` | `orders-worker`: есть | — |
+| `temporal_worker_task_slots_available` | Temporal SDK worker | gauge | `worker_type`, `task_queue` | `orders-worker`: есть | — |
 | `nomnom_orders_fulfillment_oldest_running_age_seconds` | Polling Temporal Visibility | gauge | — | `orders-worker`: ожидается | Возраст старейшего выполняющегося Order Fulfillment Workflow; SDK его не даёт. |
 | `nomnom_orders_compensations_total` | Compensation Activity decorator | counter | `step`, `outcome` | `orders-worker`: ожидается | `outcome`: attempted | failed. |
 

@@ -39,9 +39,9 @@ func Markdown() string {
 	}
 	fmt.Fprintf(&b, "Метрик в инвентаре: %d; пар «метрика × сервис» со статусом «есть»: %d.\n\n", len(Metrics), present)
 	b.WriteString("Подтверждение статуса «есть»: " + VerifiedPipeline + "\n\n")
-	b.WriteString("Метрики подключены только в `orders-consumer`: telemetry bootstrap (`orders/pkg/telemetry`), встроенные метрики\n" +
-		"Watermill и OTel middleware `pkg/messaging`. Остальные процессы OpenTelemetry SDK пока не подключают, поэтому их\n" +
-		"панели — TODO.\n\n")
+	b.WriteString("Метрики подключены в процессах `orders`: `orders` (gRPC server), `orders-worker` (Temporal, gRPC client\n" +
+		"к gateway) и `orders-consumer` (Watermill, OTel middleware), во всех трёх — Go runtime и process CPU через\n" +
+		"`orders/pkg/telemetry`. Остальные контексты OpenTelemetry SDK пока не подключают, поэтому их панели — TODO.\n\n")
 	for _, s := range Sections {
 		fmt.Fprintf(&b, "<a id=%q></a>\n\n## %s\n\n%s\n\n", s.ID, s.Title, s.Intro)
 		b.WriteString("| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |\n| --- | --- | --- | --- | --- | --- |\n")

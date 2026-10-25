@@ -1,7 +1,8 @@
 // Package telemetry поднимает OpenTelemetry metrics процесса orders (ADR 9):
 // MeterProvider с общим resource, OTLP exporter в Alloy и Prometheus bridge для
 // библиотек, которые пишут только в prometheus.Registerer (Watermill
-// components/metrics). Один pipeline: метрики bridge уходят тем же OTLP с теми же
+// components/metrics). Runtime-метрики Go и process.cpu.time собираются для
+// каждого процесса; host-метрики system.* отбрасываются — это сигналы узла, а не сервиса. Один pipeline: метрики bridge уходят тем же OTLP с теми же
 // resource attributes, отдельный /metrics не открывается.
 package telemetry
 
@@ -12,18 +13,29 @@ import (
 	"os"
 
 	prombridge "go.opentelemetry.io/contrib/bridges/prometheus"
+	"go.opentelemetry.io/contrib/instrumentation/host"
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/sdk/instrumentation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.temporal.io/sdk/client"
+	temporalotel "go.temporal.io/sdk/contrib/opentelemetry"
 )
 
 // ServiceNamespace — service.namespace всех процессов (docs/observability.md).
 const ServiceNamespace = "nomnom"
+
+// TemporalMeterName — scope метрик Temporal SDK (contrib/opentelemetry).
+const TemporalMeterName = "temporal-sdk-go"
+
+// SecondsBuckets — границы histograms длительностей в секундах.
+var SecondsBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300}
 
 // Metrics — metrics pipeline процесса. Registry принимает метрики библиотек на
 // Prometheus client; MeterProvider собирает их через bridge вместе с OTel instruments.
@@ -70,7 +82,16 @@ func New(ctx context.Context, serviceName string, newReader ReaderFactory) (*Met
 	}
 
 	registry := prometheus.NewRegistry()
-	options := []sdkmetric.Option{sdkmetric.WithResource(res)}
+	options := []sdkmetric.Option{
+		sdkmetric.WithResource(res),
+		sdkmetric.WithView(sdkmetric.NewView(sdkmetric.Instrument{Name: "system.*"}, sdkmetric.Stream{Aggregation: sdkmetric.AggregationDrop{}})),
+		// Timers Temporal SDK — histograms в секундах без своих границ; дефолтные
+		// границы SDK рассчитаны на миллисекунды.
+		sdkmetric.WithView(sdkmetric.NewView(
+			sdkmetric.Instrument{Kind: sdkmetric.InstrumentKindHistogram, Scope: instrumentation.Scope{Name: TemporalMeterName}},
+			sdkmetric.Stream{Aggregation: sdkmetric.AggregationExplicitBucketHistogram{Boundaries: SecondsBuckets}},
+		)),
+	}
 	if newReader != nil {
 		reader, err := newReader(prombridge.NewMetricProducer(prombridge.WithGatherer(registry)))
 		if err != nil {
@@ -78,10 +99,27 @@ func New(ctx context.Context, serviceName string, newReader ReaderFactory) (*Met
 		}
 		options = append(options, sdkmetric.WithReader(reader))
 	}
-	return &Metrics{Registry: registry, MeterProvider: sdkmetric.NewMeterProvider(options...)}, nil
+	provider := sdkmetric.NewMeterProvider(options...)
+	if err := runtime.Start(runtime.WithMeterProvider(provider)); err != nil {
+		return nil, errors.Join(fmt.Errorf("start runtime metrics: %w", err), provider.Shutdown(ctx))
+	}
+	if err := host.Start(host.WithMeterProvider(provider)); err != nil {
+		return nil, errors.Join(fmt.Errorf("start process metrics: %w", err), provider.Shutdown(ctx))
+	}
+	return &Metrics{Registry: registry, MeterProvider: provider}, nil
 }
 
 func (m *Metrics) Meter(name string) metric.Meter { return m.MeterProvider.Meter(name) }
+
+// TemporalMetricsHandler — metrics Temporal SDK в общий pipeline. Counters
+// монотонные: иначе SDK пишет UpDownCounter, Mimir получает gauge без _total, и
+// rate() по нему некорректен.
+func (m *Metrics) TemporalMetricsHandler() client.MetricsHandler {
+	return temporalotel.NewMetricsHandler(temporalotel.MetricsHandlerOptions{
+		Meter:                m.Meter(TemporalMeterName),
+		UseMonotonicCounters: true,
+	})
+}
 
 // Shutdown выполняет финальный export; вызывается после drain, до выхода процесса
 // (docs/cloud-native-runtime.md#observability-lifecycle).

@@ -99,7 +99,11 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 
 	dialCtx, cancel := context.WithTimeout(ctx, c.cfg.Temporal.ConnectTimeout)
 	defer cancel()
-	temporal, err := c.dial(dialCtx, client.Options{HostPort: c.cfg.Temporal.HostPort, Namespace: c.cfg.Temporal.Namespace})
+	temporal, err := c.dial(dialCtx, client.Options{
+		HostPort:       c.cfg.Temporal.HostPort,
+		Namespace:      c.cfg.Temporal.Namespace,
+		MetricsHandler: metrics.TemporalMetricsHandler(),
+	})
 	if err != nil {
 		return fmt.Errorf("connect temporal %s: %w", c.cfg.Temporal.HostPort, err)
 	}

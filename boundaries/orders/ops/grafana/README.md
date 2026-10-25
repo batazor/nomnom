@@ -37,29 +37,29 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Request rate by entry | live | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`temporal_activity_execution_latency_seconds`](../../../../docs/observability/metric-inventory.md#temporal) |
-| Errors by class | live | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc), [`temporal_activity_execution_failed_total`](../../../../docs/observability/metric-inventory.md#temporal) |
-| Technical error ratio | live | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
-| Latency p50 / p95 / p99 | TODO | [`rpc_server_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
-| CPU | TODO | [`process_cpu_time_seconds_total`](../../../../docs/observability/metric-inventory.md#runtime) |
-| Memory | TODO | [`go_memory_used_bytes`](../../../../docs/observability/metric-inventory.md#runtime) |
+| Request rate by entry | live | — |
+| Errors by class | live | — |
+| Technical error ratio | live | — |
+| Latency p50 / p95 / p99 | live | — |
+| CPU | live | — |
+| Memory | live | — |
 
 ### Runtime
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Heap and runtime memory | TODO | [`go_memory_gc_goal_bytes`](../../../../docs/observability/metric-inventory.md#runtime), [`go_memory_used_bytes`](../../../../docs/observability/metric-inventory.md#runtime) |
-| Allocation rate | TODO | [`go_memory_allocated_bytes_total`](../../../../docs/observability/metric-inventory.md#runtime) |
-| Goroutines | TODO | [`go_goroutine_count`](../../../../docs/observability/metric-inventory.md#runtime) |
-| GOMAXPROCS | TODO | [`go_processor_limit`](../../../../docs/observability/metric-inventory.md#runtime) |
+| Heap and runtime memory | live | — |
+| Allocation rate | live | — |
+| Goroutines | live | — |
+| GOMAXPROCS | live | — |
 
 ### Dependencies
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| gRPC via internal gateway: rate | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
-| gRPC via internal gateway: technical errors | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
-| gRPC via internal gateway: p95 | TODO | [`rpc_client_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| gRPC via internal gateway: rate | live | — |
+| gRPC via internal gateway: technical errors | live | — |
+| gRPC via internal gateway: p95 | live | — |
 | postgresql: operations | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db) |
 | postgresql: p95 by operation | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db) |
 | postgresql: pool | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
@@ -119,13 +119,13 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Workflows started | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`temporal_request_total`](../../../../docs/observability/metric-inventory.md#temporal) |
-| Workflows completed / failed | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`temporal_workflow_completed_total`](../../../../docs/observability/metric-inventory.md#temporal), [`temporal_workflow_failed_total`](../../../../docs/observability/metric-inventory.md#temporal) |
-| Workflow end-to-end latency p95 | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`temporal_workflow_endtoend_latency_seconds`](../../../../docs/observability/metric-inventory.md#temporal) |
+| Workflows started | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Workflows completed / failed | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Workflow end-to-end latency p95 | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Oldest running fulfillment | TODO | [`nomnom_orders_fulfillment_oldest_running_age_seconds`](../../../../docs/observability/metric-inventory.md#temporal), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| Activities executed / failed attempts | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`temporal_activity_execution_failed_total`](../../../../docs/observability/metric-inventory.md#temporal), [`temporal_activity_execution_latency_seconds`](../../../../docs/observability/metric-inventory.md#temporal) |
-| Activity latency p95 | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`temporal_activity_execution_latency_seconds`](../../../../docs/observability/metric-inventory.md#temporal) |
-| Worker task slots | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`temporal_worker_task_slots_available`](../../../../docs/observability/metric-inventory.md#temporal), [`temporal_worker_task_slots_used`](../../../../docs/observability/metric-inventory.md#temporal) |
+| Activities executed / failed attempts | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Activity latency p95 | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Worker task slots | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Compensations | TODO | [`nomnom_orders_compensations_total`](../../../../docs/observability/metric-inventory.md#temporal), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
 ### Authorization
@@ -137,7 +137,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 9 из 54. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 19 из 54. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Переходы
 
