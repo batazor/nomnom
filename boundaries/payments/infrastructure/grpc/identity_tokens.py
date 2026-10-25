@@ -1,5 +1,7 @@
-"""Token building blocks of caller identity: constants, JWKS loading and claim checks
-shared by service tokens (ADR 27) and BFF user assertions (ADR 32)."""
+"""Token building blocks of caller identity: constants, JWKS loading and claim checks.
+
+Shared by service tokens (ADR 27) and BFF user assertions (ADR 32).
+"""
 
 import json
 from collections.abc import Collection, Mapping

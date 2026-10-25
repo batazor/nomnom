@@ -43,6 +43,12 @@ def create_webhook_handler(
     callbacks: ApplyProviderCallbackHandler,
     now: Callable[[], datetime],
 ) -> type[BaseHTTPRequestHandler]:
+    """Build the ``BaseHTTPRequestHandler`` class serving ``POST /webhooks/provider``.
+
+    The handler verifies the signature, maps the body and applies it through ``callbacks``;
+    application errors map to 4xx so that only technical failures make the provider redeliver.
+    """
+
     class WebhookHandler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 

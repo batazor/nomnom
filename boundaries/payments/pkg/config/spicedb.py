@@ -1,4 +1,4 @@
-"""Подключение к SpiceDB (ADR 18)."""
+"""Connection to SpiceDB (ADR 18)."""
 
 from datetime import timedelta
 
@@ -15,7 +15,7 @@ DEFAULT_SPICEDB_TIMEOUT = timedelta(seconds=2)
 
 
 class SpiceDBSettings(BaseSettings):
-    """Подключение к SpiceDB (ADR 18); пустой endpoint — запрет всех permissions."""
+    """Connection to SpiceDB (ADR 18); an empty endpoint denies every permission."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -56,4 +56,5 @@ class SpiceDBSettings(BaseSettings):
 
     @property
     def enabled(self) -> bool:
+        """Whether a SpiceDB endpoint is configured."""
         return bool(self.endpoint)

@@ -34,6 +34,8 @@ from .ports import PaymentOutbox, ProviderOperationOutcome, ProviderOperationSta
 
 @dataclass(frozen=True)
 class AppliedProviderResult:
+    """Operation and Payment state after applying a result; ``applied`` is ``False`` on a no-op."""
+
     operation: PaymentOperation
     payment_state: PaymentState
     applied: bool
@@ -60,6 +62,18 @@ class ProviderResultApplier:
     def apply(
         self, operation_id: OperationId, outcome: ProviderOperationOutcome
     ) -> AppliedProviderResult:
+        """Apply the final result to the operation and its Payment and record outbox events.
+
+        An equal result for a completed operation is a no-op (``applied=False``).
+
+        Raises:
+            InvalidPaymentRequestError: The outcome is not final or the Provider result
+                is rejected by the Payment guard.
+            PaymentOperationNotFoundError: The operation is unknown.
+            PaymentNotFoundError: The Payment of the operation is missing.
+            ProviderResultConflictError: The result contradicts the recorded one.
+            PaymentStateConflictError: The Payment state does not allow the result.
+        """
         domain_outcome = to_domain_outcome(outcome)
         operation = self._operations.get(operation_id)
         if operation is None:
@@ -101,6 +115,11 @@ class ProviderResultApplier:
 
 
 def to_domain_outcome(outcome: ProviderOperationOutcome) -> OperationOutcome:
+    """Translate a final Provider answer into the domain outcome.
+
+    Raises:
+        InvalidPaymentRequestError: The answer is ``accepted`` or a decline has no reason.
+    """
     if outcome.status is ProviderOperationStatus.SUCCEEDED:
         return OperationOutcome.success(outcome.provider_reference)
     if outcome.status is ProviderOperationStatus.DECLINED:
@@ -112,6 +131,8 @@ def to_domain_outcome(outcome: ProviderOperationOutcome) -> OperationOutcome:
 
 
 class ProviderResultStatus(StrEnum):
+    """How an asynchronous Provider result was handled."""
+
     APPLIED = "applied"
     ALREADY_APPLIED = "already_applied"
     DUPLICATE_MESSAGE = "duplicate_message"
@@ -128,6 +149,7 @@ class ProviderResultApplication:
 
     @classmethod
     def of(cls, applied: AppliedProviderResult) -> ProviderResultApplication:
+        """Build the application outcome from an applied or already applied result."""
         return cls(
             status=(
                 ProviderResultStatus.APPLIED

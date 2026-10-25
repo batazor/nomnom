@@ -1,5 +1,7 @@
-"""Caller identity for gRPC: verified projected ServiceAccount tokens (ADR 27) and
-user assertions signed by BFF (ADR 32).
+"""Caller identity for gRPC: verified service tokens and BFF user assertions.
+
+Service identity comes from projected ServiceAccount tokens (ADR 27), user identity from
+assertions signed by BFF (ADR 32).
 
 The verification contract is shared by every context and pinned by the vectors in
 ``tests/identity``; see ``openspec/changes/add-service-identity/design.md`` and
@@ -57,13 +59,18 @@ logger = logging.getLogger(__name__)
 
 
 class SubjectResolver(Protocol):
-    def resolve(self, context: grpc.ServicerContext) -> Subject: ...
+    """Turns the metadata of an incoming gRPC call into the verified caller ``Subject``."""
+
+    def resolve(self, context: grpc.ServicerContext) -> Subject:
+        """Return the caller, or abort the call with ``UNAUTHENTICATED``."""
+        ...
 
 
 class RejectingSubjectResolver:
     """Deny by default until verified identity is configured."""
 
     def resolve(self, context: grpc.ServicerContext) -> NoReturn:
+        """Abort every call with ``UNAUTHENTICATED``."""
         context.abort(grpc.StatusCode.UNAUTHENTICATED, "verified caller identity is required")
 
 
@@ -101,6 +108,11 @@ class ServiceTokenSubjectResolver:
         self._user_delegates = frozenset(user_delegates)
 
     def resolve(self, context: grpc.ServicerContext) -> Subject:  # noqa: RET503 - _abort raises
+        """Verify the caller and return its ``Subject``.
+
+        Any rejected token or assertion aborts the call with ``UNAUTHENTICATED`` and a generic
+        message; the reason is logged only.
+        """
         try:
             service = self._verify(_bearer_token(context))
         except _TokenRejectedError as error:

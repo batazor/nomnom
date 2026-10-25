@@ -8,6 +8,8 @@ from .vo.money import Money
 
 @dataclass(frozen=True)
 class PaymentAuthorized:
+    """The Provider confirmed the Authorization of the full Payment amount."""
+
     payment_id: PaymentId
     order_id: OrderId
     amount: Money
@@ -15,6 +17,8 @@ class PaymentAuthorized:
 
 @dataclass(frozen=True)
 class PaymentCaptured:
+    """The previously authorized amount was captured (full Capture)."""
+
     payment_id: PaymentId
     order_id: OrderId
     amount: Money
@@ -22,6 +26,8 @@ class PaymentCaptured:
 
 @dataclass(frozen=True)
 class PaymentAuthorizationCancelled:
+    """The Authorization was released without a Capture; the Payment is pending again."""
+
     payment_id: PaymentId
     order_id: OrderId
     amount: Money
@@ -29,6 +35,8 @@ class PaymentAuthorizationCancelled:
 
 @dataclass(frozen=True)
 class PaymentRefunded:
+    """The captured amount was returned in full."""
+
     payment_id: PaymentId
     order_id: OrderId
     amount: Money
@@ -36,6 +44,8 @@ class PaymentRefunded:
 
 @dataclass(frozen=True)
 class PaymentFailed:
+    """The Payment reached the terminal ``failed`` state, e.g. after a declined Authorization."""
+
     payment_id: PaymentId
     order_id: OrderId
     reason: str
@@ -43,6 +53,8 @@ class PaymentFailed:
 
 @dataclass(frozen=True)
 class PaymentOperationDeclined:
+    """The Provider declined a Payment Operation; the reason is the Provider's decline reason."""
+
     operation_id: OperationId
     payment_id: PaymentId
     kind: OperationKind

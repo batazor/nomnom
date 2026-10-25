@@ -16,6 +16,8 @@ PAYMENT_AGGREGATE = "Payment"
 
 
 class OperationStatus(StrEnum):
+    """Transport-facing status of a Payment Operation."""
+
     SUCCEEDED = "succeeded"
     DECLINED = "declined"
     PENDING = "pending"
@@ -44,6 +46,7 @@ class PaymentOperationResult:
     def of(
         cls, operation: PaymentOperation, payment_state: PaymentState, replayed: bool
     ) -> PaymentOperationResult:
+        """Build the result from the operation and the Payment state after it."""
         return cls(
             payment_id=operation.payment_id,
             operation_id=operation.id,

@@ -71,7 +71,7 @@ def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetr
 
 
 def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
-    """psycopg pool; an unreachable database stops the process before ports open.
+    """The psycopg pool; an unreachable database stops the process before ports open.
 
     The schema is applied by ``payments-migrate`` (init container), not here.
     """
@@ -84,14 +84,17 @@ def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
 
 
 def listen_all(port: int) -> tuple[str, int]:
+    """Bind address on every interface of the container for ``port``."""
     return ("0.0.0.0", port)  # noqa: S104 - containers listen on all interfaces
 
 
 def seconds(value: timedelta) -> float:
+    """Convert a configured duration to the float seconds that adapters expect."""
     return value.total_seconds()
 
 
 def create_lifecycle(management: ManagementSettings, shutdown: ShutdownSettings) -> Lifecycle:
+    """Process lifecycle with the configured management port and shutdown timings."""
     return Lifecycle(
         LifecycleConfig(
             management_port=management.port,

@@ -1,3 +1,5 @@
+"""OpenTelemetry setup of the process: OTLP tracing and metrics (ADR 9)."""
+
 import logging
 import os
 import threading
@@ -11,20 +13,27 @@ _ENDPOINT_ENVS = ("OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDP
 
 
 class Telemetry:
-    """Владелец telemetry providers процесса. shutdown() вызывается последним шагом
-    runtime contract (docs/cloud-native-runtime.md, шаг 8)."""
+    """Owner of the process telemetry providers.
+
+    ``shutdown()`` is the last step of the runtime contract
+    (docs/cloud-native-runtime.md, step 8).
+    """
 
     def __init__(self, shutdowns: list[Callable[[], object]] | None = None) -> None:
         self._shutdowns = shutdowns or []
 
     @property
     def enabled(self) -> bool:
+        """Whether OTLP export was configured and providers are installed."""
         return bool(self._shutdowns)
 
     def shutdown(self, timeout: float) -> bool:
-        """Flush и shutdown providers в пределах timeout секунд. Возвращает False,
-        если не уложились: exporter мог зависнуть на недоступном collector, а выход
-        процесса из-за telemetry не задерживается."""
+        """Flush and shut down the providers within ``timeout`` seconds.
+
+        Returns:
+            ``False`` when the flush did not finish in time: an exporter may hang on an
+            unreachable collector, and telemetry never delays the process exit.
+        """
         if not self._shutdowns:
             return True
         done = threading.Event()
@@ -48,7 +57,11 @@ class Telemetry:
 
 
 def setup(environ: Mapping[str, str] | None = None) -> Telemetry:
-    """Регистрирует глобальные tracer и meter providers с OTLP exporter."""
+    """Register global tracer and meter providers with an OTLP exporter.
+
+    Export is enabled only by the standard OpenTelemetry endpoint variables; without them
+    a disabled ``Telemetry`` is returned and nothing is registered.
+    """
     env = os.environ if environ is None else environ
     if not any(env.get(name) for name in _ENDPOINT_ENVS):
         return Telemetry()

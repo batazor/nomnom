@@ -7,6 +7,8 @@ from typing import NamedTuple
 
 
 class PaymentState(StrEnum):
+    """Business state of a Payment; ``refunded`` and ``failed`` are terminal."""
+
     PENDING = "pending"
     AUTHORIZED = "authorized"
     CAPTURED = "captured"
@@ -15,6 +17,8 @@ class PaymentState(StrEnum):
 
 
 class PaymentTrigger(StrEnum):
+    """Input of the Payment state machine, one per domain operation."""
+
     AUTHORIZE = "authorize"
     CANCEL_AUTHORIZATION = "cancel_authorization"
     CAPTURE = "capture"
@@ -24,6 +28,8 @@ class PaymentTrigger(StrEnum):
 
 @dataclass(frozen=True)
 class TransitionResult:
+    """A transition the state machine accepted: where it started, why, and where it ends."""
+
     from_state: PaymentState
     trigger: PaymentTrigger
     to_state: PaymentState
@@ -31,6 +37,8 @@ class TransitionResult:
 
 @dataclass(eq=True)
 class InvalidTransitionError(Exception):
+    """The trigger is not allowed in the current state at all."""
+
     from_state: PaymentState
     trigger: PaymentTrigger
 
@@ -40,6 +48,8 @@ class InvalidTransitionError(Exception):
 
 @dataclass(eq=True)
 class GuardFailedError(Exception):
+    """The transition is allowed by the table, but its guard rejected the input."""
+
     reason: str
 
     def __str__(self) -> str:
@@ -48,6 +58,11 @@ class GuardFailedError(Exception):
 
 @dataclass(eq=True)
 class AlreadyInStateError(Exception):
+    """The trigger repeats an outcome the Payment has already reached.
+
+    Callers can treat it as an idempotent repetition rather than a conflict.
+    """
+
     state: PaymentState
 
     def __str__(self) -> str:
@@ -55,6 +70,8 @@ class AlreadyInStateError(Exception):
 
 
 class TransitionInput(NamedTuple):
+    """Data that transition guards need; only the Authorization guard uses it today."""
+
     provider_reference: str | None = None
 
 
@@ -134,6 +151,14 @@ def transition(
     trigger: PaymentTrigger,
     transition_input: TransitionInput = _EMPTY_INPUT,
 ) -> TransitionResult:
+    """Compute the transition for ``trigger`` without mutating anything.
+
+    Raises:
+        InvalidTransitionError: The table forbids the trigger in ``from_state``.
+        AlreadyInStateError: The trigger repeats an already reached outcome.
+        GuardFailedError: The guard rejected ``transition_input``, for example an
+            Authorization without a Provider Reference.
+    """
     ensure_allowed(from_state, trigger)
     definition = _TRANSITION_TABLE[(from_state, trigger)]
     if definition.guard is not None:

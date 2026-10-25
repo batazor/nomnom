@@ -5,6 +5,8 @@ from enum import StrEnum
 
 
 class SubjectKind(StrEnum):
+    """Whether a Subject is an end user or a service workload."""
+
     USER = "user"
     SERVICE = "service"
 

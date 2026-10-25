@@ -16,6 +16,7 @@ _LOCK_KEY = 0x7061796D656E7473  # "payments"
 
 
 def migrations() -> list[tuple[int, str, str]]:
+    """Return the bundled migrations as ``(version, file name, SQL)`` sorted by version."""
     found = []
     for entry in resources.files(__package__).joinpath("migrations").iterdir():
         match = _FILE.match(entry.name)

@@ -29,14 +29,18 @@ extend-exclude = ["infrastructure/grpc/gen"]
 select = [
     "E4", "E7", "E9", "F", "I", "B", "UP",
     "SIM", "RUF", "RET", "BLE", "S", "T20", "LOG", "N",
-    "DTZ", "PERF", "C4", "PIE", "PTH", "ERA", "G", "FURB", "ISC",
+    "DTZ", "PERF", "C4", "PIE", "PTH", "ERA", "G", "FURB", "ISC", "D",
 ]
-# Docstrings and comments are written in Russian.
-ignore = ["RUF001", "RUF002", "RUF003"]
+# Code comments are written in Russian.
+# D105: magic methods need no docstring; D107: __init__ is documented on the class.
+ignore = ["RUF001", "RUF002", "RUF003", "D105", "D107"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 # unittest suites: plain asserts and fixed test secrets are expected.
-"tests/**" = ["S101", "S105", "S106", "BLE001"]
+"tests/**" = ["S101", "S105", "S106", "BLE001", "D"]
 # Process entrypoints report startup failures on stderr and turn any error into exit code 1.
 "entrypoints/**" = ["T201", "BLE001"]
 

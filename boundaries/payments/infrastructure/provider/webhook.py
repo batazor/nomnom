@@ -22,6 +22,7 @@ class InvalidWebhookError(ValueError):
 
 
 def sign_payload(secret: str, timestamp: int, body: bytes) -> str:
+    """Return the ``Provider-Signature`` header value of ``body`` signed at ``timestamp``."""
     digest = hmac.new(secret.encode(), f"{timestamp}.".encode() + body, hashlib.sha256)
     return f"t={timestamp},v1={digest.hexdigest()}"
 
@@ -34,6 +35,12 @@ class WebhookVerifier:
         self._tolerance = tolerance
 
     def verify(self, header: str | None, body: bytes, now: datetime) -> None:
+        """Accept the webhook only with a valid signature inside the timestamp tolerance.
+
+        Raises:
+            InvalidWebhookError: no secret configured, malformed header, stale timestamp or
+                signature mismatch.
+        """
         if not self._secret:
             raise InvalidWebhookError("webhook secret is not configured")
         timestamp, signatures = _parse_header(header or "")

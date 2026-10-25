@@ -1,4 +1,4 @@
-"""Общий формат длительностей конфигурации."""
+"""Duration format shared by the configuration of every project language."""
 
 import re
 from datetime import timedelta
@@ -13,6 +13,11 @@ _DURATION_UNITS = {
 
 
 def parse_duration(value: str) -> timedelta:
+    """Parse ``<int>(ms|s|m)``, for example ``500ms``, ``5s`` or ``1m``.
+
+    Raises:
+        ValueError: The value does not match the format.
+    """
     match = _DURATION_PATTERN.match(value)
     if match is None:
         raise ValueError(f"invalid duration {value!r}: expected <int>(ms|s|m), e.g. 500ms, 5s, 1m")

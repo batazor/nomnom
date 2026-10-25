@@ -1,6 +1,9 @@
+"""Errors that end the process lifecycle with a non-zero exit code."""
+
+
 class LifecycleError(Exception):
-    """Нештатное завершение lifecycle процесса; приводит к non-zero exit."""
+    """Abnormal end of the process lifecycle; leads to a non-zero exit code."""
 
 
 class DrainTimeoutError(LifecycleError):
-    """Начатая работа не завершилась до shutdown deadline."""
+    """Work in flight did not finish before the shutdown deadline."""

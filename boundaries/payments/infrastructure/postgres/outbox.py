@@ -32,6 +32,8 @@ class OutboxMessage:
 
 
 class OutboxEventMapper(Protocol):
+    """Maps a Payment Domain Event to its published Integration Event contract."""
+
     def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage | None:
         """Return the Integration Event, or ``None`` when the event has no contract."""
         ...
@@ -41,10 +43,16 @@ class NoPublishedContracts:
     """Default mapper of the factories: no event reaches the Outbox."""
 
     def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage | None:
+        """Always ``None``."""
         return None
 
 
 def outbox_event_id(aggregate: AggregateRef, event_type: str) -> uuid.UUID:
+    """Return the deterministic Outbox event ID (UUIDv5) of an event of one aggregate version.
+
+    Writing the same event of the same version again yields the same ID, so consumers can
+    deduplicate redeliveries.
+    """
     return uuid.uuid5(
         EVENT_ID_NAMESPACE,
         f"{aggregate.type}:{aggregate.id}:{aggregate.version}:{event_type}",

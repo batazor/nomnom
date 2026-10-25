@@ -1,3 +1,5 @@
+"""Process lifecycle: health state, management port, SIGTERM handling and drain."""
+
 import logging
 import signal
 import threading
@@ -23,6 +25,8 @@ _SIGNALS = (signal.SIGTERM, signal.SIGINT)
 
 @dataclass(frozen=True)
 class LifecycleConfig:
+    """Ports and shutdown timings of the process lifecycle."""
+
     # Порт технического порта с /health/*; 0 — свободный порт (для тестов).
     management_port: int
     # Ожидание распространения not ready до остановки приёма работы, в секундах.
@@ -34,20 +38,25 @@ class LifecycleConfig:
 
 
 class Worker(Protocol):
-    """Единица работы процесса, которой владеет composition root:
-    HTTP/gRPC server, consumer или background worker."""
+    """Unit of process work owned by the composition root.
+
+    For example an HTTP/gRPC server, a consumer or a background worker.
+    """
 
     def start(self) -> None:
-        """Захватывает ресурсы, например listener. Исключение прерывает startup."""
+        """Acquire resources such as a listener; an exception aborts startup."""
         ...
 
     def run(self) -> None:
-        """Обслуживает работу до shutdown и возвращается после штатной остановки."""
+        """Serve work until shutdown and return after a graceful stop."""
         ...
 
     def shutdown(self, deadline: float) -> None:
-        """Прекращает приём новой работы и дожидается начатой до deadline
-        (значение time.monotonic). Исключение означает, что drain не уложился."""
+        """Stop accepting new work and wait for work in flight until ``deadline``.
+
+        ``deadline`` is a ``time.monotonic`` value. An exception means the drain did not
+        complete in time.
+        """
         ...
 
 
@@ -69,9 +78,11 @@ class _RunThread(threading.Thread):
 
 
 class Lifecycle:
-    """Runtime contract процесса (docs/cloud-native-runtime.md): health state,
-    технический порт, обработка SIGTERM, readiness-propagation delay и drain.
-    Бизнес-код от него не зависит."""
+    """Runtime contract of the process (docs/cloud-native-runtime.md).
+
+    Owns the health state, the management port, SIGTERM handling, the
+    readiness-propagation delay and the drain. Business code does not depend on it.
+    """
 
     def __init__(self, config: LifecycleConfig) -> None:
         self._config = config
@@ -81,14 +92,21 @@ class Lifecycle:
 
     @property
     def management_port(self) -> int | None:
-        """Фактически занятый технический порт; None до его открытия."""
+        """Actually bound management port; ``None`` until it is open."""
         management = self._management
         return None if management is None else management.port
 
     def run(self, worker: Worker, stop_event: threading.Event | None = None) -> None:
-        """Выполняет lifecycle: технический порт → start → ready → SIGTERM/SIGINT
-        или stop_event → not ready → readiness delay → shutdown → выход.
-        Нормальный возврат означает штатный shutdown; любая ошибка — исключение."""
+        """Run the whole lifecycle of ``worker``.
+
+        Sequence: management port → start → ready → SIGTERM/SIGINT or ``stop_event`` →
+        not ready → readiness delay → shutdown → exit. A normal return means a graceful
+        shutdown.
+
+        Raises:
+            LifecycleError: Startup failed, the worker stopped before shutdown, or the
+                drain did not complete.
+        """
         previous_handlers = self._install_signal_handlers()
         try:
             self._management = self._serve_management()

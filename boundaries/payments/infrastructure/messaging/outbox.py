@@ -10,6 +10,8 @@ WATERMILL_UUID_HEADER = "_watermill_message_uuid"
 
 @dataclass(frozen=True)
 class OutboxRecord:
+    """An unpublished Integration Event row of the ``outbox`` table; ``seq`` orders publishing."""
+
     seq: int
     event_id: str
     event_type: str
@@ -25,6 +27,8 @@ class OutboxRecord:
 
 @dataclass(frozen=True)
 class TopicBacklog:
+    """Unpublished records of one topic and the ``occurred_at`` of the oldest of them."""
+
     topic: str
     pending: int
     oldest_occurred_at: datetime | None
@@ -65,24 +69,44 @@ class PublishError(Exception):
 
 
 class OutboxStore(Protocol):
-    def try_lock(self) -> bool: ...
+    """Storage port of the relay: the single-active-replica lock and the Outbox queries."""
 
-    def unlock(self) -> None: ...
+    def try_lock(self) -> bool:
+        """Hold or acquire the relay lock; ``False`` means this replica is standby."""
+        ...
 
-    def fetch_pending(self, limit: int) -> list[OutboxRecord]: ...
+    def unlock(self) -> None:
+        """Release the relay lock if held; never raises on a lost session."""
+        ...
 
-    def mark_published(self, seq: int) -> None: ...
+    def fetch_pending(self, limit: int) -> list[OutboxRecord]:
+        """Return up to ``limit`` unpublished records in ``seq`` order."""
+        ...
 
-    def record_failure(self, seq: int, error: str) -> None: ...
+    def mark_published(self, seq: int) -> None:
+        """Mark the record as confirmed by the broker."""
+        ...
 
-    def delete_published_before(self, cutoff: datetime) -> int: ...
+    def record_failure(self, seq: int, error: str) -> None:
+        """Count a failed publish attempt and keep the (truncated) error."""
+        ...
 
-    def backlog(self) -> list[TopicBacklog]: ...
+    def delete_published_before(self, cutoff: datetime) -> int:
+        """Delete records published before ``cutoff`` and return their number."""
+        ...
+
+    def backlog(self) -> list[TopicBacklog]:
+        """Return the per-topic backlog of unpublished records."""
+        ...
 
 
 class Publisher(Protocol):
+    """Broker port of the relay."""
+
     def publish(self, record: OutboxRecord) -> None:
         """Return after the broker confirmed the record; raise ``PublishError`` otherwise."""
         ...
 
-    def close(self, timeout: float) -> None: ...
+    def close(self, timeout: float) -> None:
+        """Flush in-flight records within ``timeout`` seconds and release the client."""
+        ...

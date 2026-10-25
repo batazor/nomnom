@@ -9,24 +9,32 @@ class InvalidPaymentRequestError(ApplicationError):
 
 
 class PaymentNotFoundError(ApplicationError):
+    """The requested Payment does not exist."""
+
     def __init__(self, payment_id: PaymentId) -> None:
         super().__init__(f"payment {payment_id} not found")
         self.payment_id = payment_id
 
 
 class PaymentOperationNotFoundError(ApplicationError):
+    """The requested Payment Operation does not exist."""
+
     def __init__(self, operation_id: OperationId) -> None:
         super().__init__(f"payment operation {operation_id} not found")
         self.operation_id = operation_id
 
 
 class PaymentAlreadyExistsError(ApplicationError):
+    """The Order already has a Payment with a different amount or currency."""
+
     def __init__(self, order_id: OrderId) -> None:
         super().__init__(f"payment for order {order_id} already exists with other terms")
         self.order_id = order_id
 
 
 class PaymentStateConflictError(ApplicationError):
+    """The current Payment state does not allow the requested operation."""
+
     def __init__(self, payment_id: PaymentId, state: PaymentState, operation: str) -> None:
         super().__init__(f"payment {payment_id} in state {state.value} does not allow {operation}")
         self.payment_id = payment_id
@@ -35,18 +43,24 @@ class PaymentStateConflictError(ApplicationError):
 
 
 class OperationInProgressError(ApplicationError):
+    """The Payment has another operation without a final result; retry later."""
+
     def __init__(self, payment_id: PaymentId) -> None:
         super().__init__(f"payment {payment_id} has another operation in progress")
         self.payment_id = payment_id
 
 
 class IdempotencyKeyConflictError(ApplicationError):
+    """The idempotency key is already used for another Payment or operation kind."""
+
     def __init__(self, idempotency_key: str) -> None:
         super().__init__("idempotency key is already used for another payment operation")
         self.idempotency_key = idempotency_key
 
 
 class ProviderResultConflictError(ApplicationError):
+    """A Provider result contradicts the final result already recorded for the operation."""
+
     def __init__(self, operation_id: OperationId, recorded: str | None, received: str) -> None:
         super().__init__(
             f"provider result {received} contradicts recorded result {recorded} "

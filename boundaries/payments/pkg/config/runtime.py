@@ -1,4 +1,4 @@
-"""Порты процесса и сроки graceful shutdown."""
+"""Process ports and graceful shutdown timings."""
 
 from datetime import timedelta
 
@@ -24,6 +24,8 @@ TELEMETRY_FLUSH_TIMEOUT_ENV = "SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT"
 
 
 class ServerSettings(BaseSettings):
+    """Business gRPC port; ``SERVER__PORT`` or the platform-provided ``PORT``."""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     port: int = Field(
@@ -35,7 +37,7 @@ class ServerSettings(BaseSettings):
 
 
 class ManagementSettings(BaseSettings):
-    """Технический порт (Kubernetes-имя `metrics`): health отделён от бизнес-порта."""
+    """Management port (Kubernetes name ``metrics``): health is kept off the business port."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -48,6 +50,8 @@ class ManagementSettings(BaseSettings):
 
 
 class ShutdownSettings(BaseSettings):
+    """Graceful shutdown timings: readiness delay, drain deadline and telemetry flush."""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Ожидание распространения not ready до остановки приёма запросов.

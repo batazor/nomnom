@@ -1,4 +1,4 @@
-"""Service identity (ADR 27) и user assertions BFF (ADR 32)."""
+"""Service identity (ADR 27) and BFF user assertions (ADR 32) settings."""
 
 import re
 
@@ -18,9 +18,14 @@ _SERVICE_ACCOUNT_ENTRY = re.compile(r"^([^/:=\s]+)/([^/:=\s]+)=(\S+)$")
 
 
 def parse_service_accounts(value: str) -> dict[str, str]:
-    """Разбирает allowlist ``namespace/serviceaccount=service-name`` через запятую.
+    """Parse a comma-separated ``namespace/serviceaccount=service-name`` allowlist.
 
-    Возвращает отображение ``system:serviceaccount:<ns>:<sa>`` → имя сервиса (ADR 27).
+    Returns:
+        Mapping of ``system:serviceaccount:<ns>:<sa>`` to the service name (ADR 27);
+        empty for a blank value.
+
+    Raises:
+        ValueError: An entry is malformed or a ServiceAccount is listed twice.
     """
     accounts: dict[str, str] = {}
     if not value.strip():
@@ -48,7 +53,11 @@ _USER_DELEGATE_ENTRY = re.compile(r"^[^\s,]+$")
 
 
 def parse_user_delegates(value: str) -> frozenset[str]:
-    """Разбирает allowlist делегатов user assertions — имён сервисов через запятую (ADR 32)."""
+    """Parse the comma-separated allowlist of services that may delegate a user (ADR 32).
+
+    Raises:
+        ValueError: An entry is malformed or listed twice.
+    """
     delegates: set[str] = set()
     if not value.strip():
         return frozenset()
@@ -65,11 +74,12 @@ def parse_user_delegates(value: str) -> frozenset[str]:
 
 
 class IdentitySettings(BaseSettings):
-    """Проверка service identity по projected ServiceAccount token (ADR 27) и user
-    assertions BFF (ADR 32).
+    """Verification of callers: service identity and BFF user assertions.
 
-    Пока issuer, audience или JWKS не заданы, вызовы отклоняются (fail closed). Пока не
-    заданы user issuer, user JWKS или делегаты, отклоняется любой вызов с user assertion.
+    Service identity comes from a projected ServiceAccount token (ADR 27), users from
+    BFF user assertions (ADR 32). While the issuer, audience or JWKS is missing, every
+    call is rejected (fail closed). While the user issuer, user JWKS or delegates are
+    missing, every call carrying a user assertion is rejected.
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -111,16 +121,20 @@ class IdentitySettings(BaseSettings):
 
     @property
     def enabled(self) -> bool:
+        """Whether service identity verification is fully configured."""
         return bool(self.issuer and self.audience and self.jwks_file)
 
     @property
     def service_account_map(self) -> dict[str, str]:
+        """Parsed ServiceAccount allowlist; see ``parse_service_accounts``."""
         return parse_service_accounts(self.service_accounts)
 
     @property
     def user_assertions_enabled(self) -> bool:
+        """Whether user assertions can be verified and therefore accepted."""
         return bool(self.user_issuer and self.user_jwks_file and self.user_delegates)
 
     @property
     def user_delegate_set(self) -> frozenset[str]:
+        """Parsed allowlist of services that may pass a user on its behalf."""
         return parse_user_delegates(self.user_delegates)

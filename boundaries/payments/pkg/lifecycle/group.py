@@ -1,3 +1,5 @@
+"""Composite Worker that runs several business ports as one."""
+
 import threading
 import time
 
@@ -6,8 +8,14 @@ from pkg.lifecycle.lifecycle import Worker
 
 
 class WorkerGroup:
-    """Несколько бизнес-портов как один Worker: run() возвращается, как только
-    завершился любой из них, shutdown() останавливает все в пределах deadline."""
+    """Several business ports supervised as one Worker.
+
+    ``run()`` returns as soon as any of them exits; ``shutdown()`` stops all of them
+    within the same deadline.
+
+    Raises:
+        LifecycleError: The group is created without workers.
+    """
 
     def __init__(self, *workers: Worker) -> None:
         if not workers:
@@ -15,6 +23,10 @@ class WorkerGroup:
         self._workers = workers
 
     def start(self) -> None:
+        """Start the workers in order; on failure shut down the already started ones.
+
+        The original start error is re-raised after the rollback.
+        """
         started: list[Worker] = []
         try:
             for worker in self._workers:
@@ -26,6 +38,11 @@ class WorkerGroup:
             raise
 
     def run(self) -> None:
+        """Run every worker in its own thread until the first one exits.
+
+        Re-raises the first error reported by a worker; returns normally when a worker
+        exits without an error.
+        """
         exited = threading.Event()
         errors: list[BaseException] = []
 
@@ -44,6 +61,7 @@ class WorkerGroup:
             raise errors[0]
 
     def shutdown(self, deadline: float) -> None:
+        """Shut down every worker, even if some fail, and re-raise the first failure."""
         errors: list[Exception] = []
         for worker in self._workers:
             try:

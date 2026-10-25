@@ -28,6 +28,10 @@ class PostgresOutboxStore:
         self._lock_conn: psycopg.Connection | None = None
 
     def try_lock(self) -> bool:
+        """Keep or take the session advisory lock that makes this replica the active relay.
+
+        A lost lock session is dropped and the lock is retried on a new connection.
+        """
         conn = self._lock_conn
         if conn is not None:
             try:
@@ -51,6 +55,7 @@ class PostgresOutboxStore:
         return False
 
     def unlock(self) -> None:
+        """Release the advisory lock and close its session; failures are logged."""
         conn = self._lock_conn
         if conn is None:
             return
@@ -67,6 +72,7 @@ class PostgresOutboxStore:
                 conn.close()
 
     def fetch_pending(self, limit: int) -> list[OutboxRecord]:
+        """Return up to ``limit`` unpublished records in ``seq`` order."""
         with self._db.connection() as conn:
             rows = conn.execute(
                 "SELECT seq, event_id, event_type, aggregate_type, aggregate_id, "
@@ -104,10 +110,12 @@ class PostgresOutboxStore:
         ]
 
     def mark_published(self, seq: int) -> None:
+        """Set ``published_at`` so the record is not relayed again."""
         with self._db.connection() as conn:
             conn.execute("UPDATE outbox SET published_at = now() WHERE seq = %s", (seq,))
 
     def record_failure(self, seq: int, error: str) -> None:
+        """Increment ``attempts`` and store ``error`` truncated to 1000 characters."""
         with self._db.connection() as conn:
             conn.execute(
                 "UPDATE outbox SET attempts = attempts + 1, last_error = %s WHERE seq = %s",
@@ -115,6 +123,7 @@ class PostgresOutboxStore:
             )
 
     def delete_published_before(self, cutoff: datetime) -> int:
+        """Delete records published before ``cutoff``; unpublished ones are kept."""
         with self._db.connection() as conn:
             cursor = conn.execute(
                 "DELETE FROM outbox WHERE published_at IS NOT NULL AND published_at < %s",
@@ -123,6 +132,7 @@ class PostgresOutboxStore:
             return cursor.rowcount
 
     def backlog(self) -> list[TopicBacklog]:
+        """Return the count and oldest ``occurred_at`` of unpublished records per topic."""
         with self._db.connection() as conn:
             rows = conn.execute(
                 "SELECT topic, count(*), min(occurred_at) FROM outbox "

@@ -85,6 +85,12 @@ class _Reservation:
 
 
 class PaymentOperationExecutor:
+    """Executes Authorization, Capture, Cancel Authorization and Refund idempotently.
+
+    The Provider is called outside of any Unit of Work, between recording the pending
+    operation and applying its final result.
+    """
+
     def __init__(
         self,
         uow: UnitOfWork,
@@ -108,6 +114,20 @@ class PaymentOperationExecutor:
     def execute(
         self, subject: Subject, payment_id: str, idempotency_key: str, kind: OperationKind
     ) -> PaymentOperationResult:
+        """Run one financial operation of ``kind`` for the Payment.
+
+        Returns the recorded result without a Provider call when the key is already
+        completed, and a ``pending`` result when the Provider accepted it asynchronously.
+
+        Raises:
+            InvalidPaymentRequestError: The payment id or idempotency key is blank.
+            PermissionDeniedError: The subject may not perform the operation.
+            PaymentNotFoundError: The Payment does not exist.
+            IdempotencyKeyConflictError: The key belongs to another Payment or kind.
+            PaymentStateConflictError: The Payment state does not allow the operation.
+            OperationInProgressError: Another operation of the Payment has no final result.
+            ProviderUnavailableError: The Provider could not be reached; retry with the same key.
+        """
         key = idempotency_key.strip()
         if not key:
             raise InvalidPaymentRequestError("idempotency key is required")

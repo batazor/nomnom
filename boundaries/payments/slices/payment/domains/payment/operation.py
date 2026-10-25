@@ -12,18 +12,24 @@ from .vo.money import Money
 
 
 class OperationState(StrEnum):
+    """Lifecycle of a Payment Operation: ``pending`` until one final result."""
+
     PENDING = "pending"
     SUCCEEDED = "succeeded"
     DECLINED = "declined"
 
 
 class OperationTrigger(StrEnum):
+    """Final Provider result applied to a pending Payment Operation."""
+
     SUCCEED = "succeed"
     DECLINE = "decline"
 
 
 @dataclass(eq=True)
 class InvalidOperationTransitionError(Exception):
+    """The operation already has the opposite final result; results never change."""
+
     from_state: OperationState
     trigger: OperationTrigger
 
@@ -36,6 +42,8 @@ class InvalidOperationTransitionError(Exception):
 
 @dataclass(eq=True)
 class OperationAlreadyCompletedError(Exception):
+    """The operation already has this final result, so the call is a repetition."""
+
     state: OperationState
 
     def __str__(self) -> str:
@@ -87,6 +95,13 @@ def _transition(state: OperationState, trigger: OperationTrigger) -> OperationSt
 
 
 class PaymentOperation:
+    """One logical Authorization, Capture, Cancel Authorization or Refund of a Payment.
+
+    It is identified by its idempotency key, starts ``pending`` and receives exactly
+    one final result. A declined operation records ``PaymentOperationDeclined``.
+    Raises ``ValueError`` when created with a blank idempotency key.
+    """
+
     def __init__(
         self,
         operation_id: OperationId,
@@ -126,6 +141,12 @@ class PaymentOperation:
         completed_at: datetime | None,
         version: int,
     ) -> PaymentOperation:
+        """Rebuild an operation from storage without recording events.
+
+        Raises:
+            ValueError: The stored state is inconsistent: a completed operation without
+                completion time or a declined one without a reason.
+        """
         if state is not OperationState.PENDING and completed_at is None:
             raise ValueError("completed payment operation requires completion time")
         if state is OperationState.DECLINED and not decline_reason:
@@ -139,11 +160,24 @@ class PaymentOperation:
         return operation
 
     def succeed(self, provider_reference: str | None, completed_at: datetime) -> None:
+        """Record a successful final result.
+
+        Raises:
+            OperationAlreadyCompletedError: The operation already succeeded.
+            InvalidOperationTransitionError: The operation was already declined.
+        """
         self._state = _transition(self._state, OperationTrigger.SUCCEED)
         self._provider_reference = provider_reference.strip() if provider_reference else None
         self._completed_at = completed_at
 
     def decline(self, reason: str, completed_at: datetime) -> None:
+        """Record a decline and the ``PaymentOperationDeclined`` event.
+
+        Raises:
+            ValueError: ``reason`` is blank.
+            OperationAlreadyCompletedError: The operation was already declined.
+            InvalidOperationTransitionError: The operation already succeeded.
+        """
         if not reason.strip():
             raise ValueError("decline reason must not be empty")
         self._state = _transition(self._state, OperationTrigger.DECLINE)
@@ -154,59 +188,73 @@ class PaymentOperation:
         )
 
     def is_for(self, payment_id: PaymentId, kind: OperationKind) -> bool:
+        """Whether the operation is of ``kind`` and belongs to the Payment."""
         return self._payment_id == payment_id and self._kind is kind
 
     def pull_events(self) -> list[PaymentOperationDeclined]:
+        """Return the recorded events and forget them, so each is published once."""
         events = list(self._events)
         self._events.clear()
         return events
 
     @property
     def id(self) -> OperationId:
+        """Identifier, also used as the merchant reference at the Provider."""
         return self._id
 
     @property
     def payment_id(self) -> PaymentId:
+        """Payment the operation belongs to."""
         return self._payment_id
 
     @property
     def kind(self) -> OperationKind:
+        """Which Provider operation is requested."""
         return self._kind
 
     @property
     def idempotency_key(self) -> str:
+        """Caller-supplied key that makes repeated requests return this operation."""
         return self._idempotency_key
 
     @property
     def amount(self) -> Money:
+        """Amount the operation is requested for."""
         return self._amount
 
     @property
     def requested_at(self) -> datetime:
+        """When the operation was requested; operations of a Payment are ordered by it."""
         return self._requested_at
 
     @property
     def state(self) -> OperationState:
+        """Current lifecycle state."""
         return self._state
 
     @property
     def is_completed(self) -> bool:
+        """Whether a final result (success or decline) is recorded."""
         return self._state is not OperationState.PENDING
 
     @property
     def provider_reference(self) -> str | None:
+        """Provider Reference of a successful operation, if the Provider returned one."""
         return self._provider_reference
 
     @property
     def decline_reason(self) -> str | None:
+        """Provider's reason of a declined operation; ``None`` otherwise."""
         return self._decline_reason
 
     @property
     def completed_at(self) -> datetime | None:
+        """When the final result was recorded; ``None`` while pending."""
         return self._completed_at
 
     @property
     def version(self) -> int:
+        """Version loaded from storage for optimistic concurrency; 0 for a new operation."""
         return self._version
 
 
@@ -220,10 +268,12 @@ class OperationOutcome:
 
     @classmethod
     def success(cls, provider_reference: str | None = None) -> OperationOutcome:
+        """Build a successful outcome."""
         return cls(True, provider_reference=provider_reference)
 
     @classmethod
     def declined(cls, reason: str) -> OperationOutcome:
+        """Build a declined outcome with the Provider's reason."""
         return cls(False, decline_reason=reason)
 
 

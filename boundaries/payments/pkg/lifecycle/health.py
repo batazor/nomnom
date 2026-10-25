@@ -1,3 +1,5 @@
+"""Health state of the process and the management port serving /health/* probes."""
+
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -10,36 +12,44 @@ REASON_SHUTTING_DOWN = "shutting_down"
 
 
 class Health:
-    """Уже вычисленное состояние экземпляра; handlers только читают его
-    и никогда не обращаются к зависимостям."""
+    """Precomputed health state of the instance.
+
+    Probe handlers only read it and never call dependencies. Thread-safe.
+    """
 
     def __init__(self) -> None:
         self._started = threading.Event()
         self._shutting_down = threading.Event()
 
     def mark_started(self) -> None:
+        """Record that startup completed; the instance becomes ready unless shutting down."""
         self._started.set()
 
     def mark_shutting_down(self) -> None:
+        """Record that shutdown began; readiness turns off for good."""
         self._shutting_down.set()
 
     @property
     def started(self) -> bool:
+        """Whether startup has completed."""
         return self._started.is_set()
 
     @property
     def shutting_down(self) -> bool:
+        """Whether shutdown has begun."""
         return self._shutting_down.is_set()
 
     @property
     def ready(self) -> bool:
-        """Может ли экземпляр принимать новую работу."""
+        """Whether the instance may accept new work."""
         return self.started and not self.shutting_down
 
     def startup_reason(self) -> str | None:
+        """Reason the startup probe fails, or ``None`` once started."""
         return None if self.started else REASON_INITIALIZING
 
     def readiness_reason(self) -> str | None:
+        """Reason the readiness probe fails, or ``None`` while ready."""
         if self.shutting_down:
             return REASON_SHUTTING_DOWN
         return self.startup_reason()
@@ -83,7 +93,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
 
 
 class ManagementServer(FastBindMixin, ThreadingHTTPServer):
-    """Технический порт с /health/*; обслуживается в собственном потоке."""
+    """Management port serving /health/* from its own thread."""
 
     # Daemon-потоки probes не задерживают закрытие порта и выход процесса.
     daemon_threads = True
@@ -97,9 +107,11 @@ class ManagementServer(FastBindMixin, ThreadingHTTPServer):
 
     @property
     def port(self) -> int:
+        """Actually bound port; useful when binding to port 0."""
         return self.server_address[1]
 
     def start(self) -> None:
+        """Start serving probes in a background daemon thread."""
         self._thread = threading.Thread(
             target=self.serve_forever,
             kwargs={"poll_interval": 0.1},
@@ -109,13 +121,16 @@ class ManagementServer(FastBindMixin, ThreadingHTTPServer):
         self._thread.start()
 
     def close(self) -> None:
-        """Останавливает технический порт; вызывается последним, чтобы до этого
-        момента probes видели live=200 и ready=503."""
+        """Stop the management port.
+
+        Called last, so that until then probes see live=200 and ready=503.
+        """
         if self._thread is not None:
             self.shutdown()
             self._thread.join()
         self.server_close()
 
     def handle_error(self, request: object, client_address: object) -> None:
+        """Ignore failed probe connections; they are not process errors."""
         # Оборванное probe-соединение не является ошибкой процесса.
         return

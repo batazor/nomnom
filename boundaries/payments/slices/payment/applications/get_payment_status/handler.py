@@ -14,6 +14,8 @@ from ..ports import PaymentPermission, PaymentPermissionChecker, PaymentResource
 
 @dataclass(frozen=True)
 class GetPaymentStatusInput:
+    """Query of one Payment on behalf of a subject."""
+
     subject: Subject
     payment_id: str
 
@@ -30,10 +32,16 @@ class GetPaymentStatusResult:
 
 
 class PaymentStatusReader(Protocol):
-    def get(self, payment_id: PaymentId) -> Payment | None: ...
+    """Read-only access to Payments needed by the query."""
+
+    def get(self, payment_id: PaymentId) -> Payment | None:
+        """Return the Payment, or ``None`` when it does not exist."""
+        ...
 
 
 class GetPaymentStatusHandler:
+    """Returns the current state of a Payment the subject may view."""
+
     def __init__(
         self, payments: PaymentStatusReader, permissions: PaymentPermissionChecker
     ) -> None:
@@ -41,6 +49,13 @@ class GetPaymentStatusHandler:
         self._permissions = permissions
 
     def handle(self, query: GetPaymentStatusInput) -> GetPaymentStatusResult:
+        """Return the Payment view; the permission is checked before the lookup.
+
+        Raises:
+            InvalidPaymentRequestError: The payment id is blank.
+            PermissionDeniedError: The subject may not view the Payment.
+            PaymentNotFoundError: The Payment does not exist.
+        """
         if not query.payment_id.strip():
             raise InvalidPaymentRequestError("payment id is required")
         payment_id = PaymentId(query.payment_id)

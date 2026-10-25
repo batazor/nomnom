@@ -7,6 +7,8 @@ T = TypeVar("T")
 
 
 class UnitOfWork(Protocol):
+    """Local transaction boundary of one use case over the payments storage."""
+
     def run(self, work: Callable[[], T]) -> T:
         """Execute ``work`` in one local transaction of the payments storage.
 

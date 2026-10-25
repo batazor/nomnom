@@ -1,4 +1,4 @@
-"""Конфигурация payments-relay (ADR 31): Kafka и polling Outbox."""
+"""Configuration of payments-relay (ADR 31): Kafka and Outbox polling."""
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -24,8 +24,11 @@ DEFAULT_OUTBOX_RETENTION = timedelta(days=7)
 
 
 class KafkaSettings(BaseSettings):
-    """Kafka relay payments (ADR 31). Брокеры обязательны: основной процесс Kafka не
-    использует, а relay без них завершается на старте."""
+    """Kafka connection of the payments relay (ADR 31).
+
+    Brokers are required: the main process does not use Kafka, and the relay stops at
+    startup without them.
+    """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -51,7 +54,7 @@ class KafkaSettings(BaseSettings):
 
 
 class OutboxSettings(BaseSettings):
-    """Polling relay Outbox (ADR 31)."""
+    """Outbox polling of the relay (ADR 31)."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -81,6 +84,8 @@ class OutboxSettings(BaseSettings):
 
 @dataclass(frozen=True)
 class RelaySettings:
+    """Validated configuration of the payments-relay process, grouped by section."""
+
     management: ManagementSettings
     shutdown: ShutdownSettings
     database: DatabaseSettings
@@ -89,7 +94,12 @@ class RelaySettings:
 
 
 def load_relay_settings() -> RelaySettings:
-    """Конфигурация payments-relay; пустые DATABASE__URL или KAFKA__BROKERS — ошибка."""
+    """Load and validate the payments-relay configuration from env.
+
+    Raises:
+        ValueError: A setting is invalid, including an empty ``DATABASE__URL`` or
+            ``KAFKA__BROKERS`` (pydantic ``ValidationError`` is a ``ValueError``).
+    """
     return RelaySettings(
         management=ManagementSettings(),
         shutdown=ShutdownSettings(),

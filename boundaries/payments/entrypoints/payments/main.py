@@ -1,3 +1,8 @@
+"""payments process: gRPC API and provider webhooks of the Payment context.
+
+The dependency graph is ``di.payments.PaymentsContainer``.
+"""
+
 import logging
 import sys
 
@@ -7,6 +12,11 @@ from pkg.config import load_settings
 
 
 def run() -> None:
+    """Build the container and run the process lifecycle until a graceful shutdown.
+
+    Invalid configuration or an unreachable database raises before any port opens;
+    telemetry is initialized first and shut down last.
+    """
     # Невалидная конфигурация завершает процесс до открытия портов.
     container = PaymentsContainer()
     container.config.from_dict(sections(load_settings()))
@@ -25,6 +35,7 @@ def run() -> None:
 
 
 def main() -> int:
+    """Console entrypoint; any failure is printed to stderr and turns into exit code 1."""
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(message)s")
     try:
         run()

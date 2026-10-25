@@ -1,4 +1,4 @@
-"""Подключение к PostgreSQL payments."""
+"""Connection to the payments PostgreSQL database."""
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -9,10 +9,10 @@ DEFAULT_DATABASE_MAX_CONNS = 10
 
 
 class DatabaseSettings(BaseSettings):
-    """Подключение к PostgreSQL payments (ADR 8, локальный ADR 1).
+    """Connection to the payments PostgreSQL database (ADR 8, local ADR 1).
 
-    DSN обязателен: пустое значение завершает процесс на старте. В кластере приходит
-    из Secret и в values не хранится.
+    The DSN is required: an empty value stops the process at startup. In the cluster it
+    comes from a Secret and is never stored in values.
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

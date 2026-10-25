@@ -44,9 +44,15 @@ class OperationAlreadyPendingError(Exception):
 
 
 class PaymentRepository(Protocol):
-    def get(self, payment_id: PaymentId) -> Payment | None: ...
+    """Storage of Payment aggregates; at most one Payment per Order."""
 
-    def get_by_order(self, order_id: OrderId) -> Payment | None: ...
+    def get(self, payment_id: PaymentId) -> Payment | None:
+        """Return the Payment, or ``None`` when it does not exist."""
+        ...
+
+    def get_by_order(self, order_id: OrderId) -> Payment | None:
+        """Return the only Payment of the Order, or ``None`` when it was not created."""
+        ...
 
     def add(self, payment: Payment) -> int:
         """Persist a new Payment and return its version; raises ``DuplicatePaymentError``."""
@@ -58,11 +64,19 @@ class PaymentRepository(Protocol):
 
 
 class PaymentOperationRepository(Protocol):
-    def get(self, operation_id: OperationId) -> PaymentOperation | None: ...
+    """Storage of Payment Operations; idempotency keys are unique across Payments."""
 
-    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None: ...
+    def get(self, operation_id: OperationId) -> PaymentOperation | None:
+        """Return the operation, or ``None`` when it does not exist."""
+        ...
 
-    def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None: ...
+    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
+        """Return the operation recorded for the idempotency key, or ``None``."""
+        ...
+
+    def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None:
+        """Return the operation of the Payment that has no final result yet, if any."""
+        ...
 
     def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperation]:
         """Return operations of the Payment ordered by ``requested_at``."""

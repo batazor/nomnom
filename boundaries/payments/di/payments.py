@@ -27,6 +27,7 @@ from infrastructure.authorization import (
 from infrastructure.grpc.identity import SubjectResolver, create_subject_resolver
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers, UuidIdentifiers
 from infrastructure.messaging import PaymentEventsMapper
+from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
 from infrastructure.postgres import (
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
@@ -62,7 +63,7 @@ class SpiceDBConfigurationError(RuntimeError):
 
 
 def spicedb_client(settings: SpiceDBSettings) -> Iterator[PermissionsClient | None]:
-    """authzed client of the process; ``None`` while ``SPICEDB__ENDPOINT`` is empty.
+    """The authzed client of the process; ``None`` while ``SPICEDB__ENDPOINT`` is empty.
 
     Channels connect lazily on the first check. The authzed client keeps no handle on
     its channel, so there is nothing to release before the process exits.
@@ -133,10 +134,21 @@ class PaymentsContainer(containers.DeclarativeContainer):
     outbox_mapper = providers.Singleton(PaymentEventsMapper)
     clock = providers.Singleton(SystemClock)
     ids = providers.Singleton(UuidIdentifiers)
-    uow = providers.Singleton(PostgresUnitOfWork, database)
+    # Business counters (ops/semconv domain.yaml): Domain Events written to the Outbox
+    # are recorded after the outer Unit of Work commits.
+    domain_metrics = providers.Singleton(DomainMetrics)
+    uow = providers.Singleton(
+        ObservedUnitOfWork,
+        providers.Singleton(PostgresUnitOfWork, database),
+        domain_metrics,
+    )
     payments = providers.Singleton(PostgresPaymentRepository, database)
     operations = providers.Singleton(PostgresPaymentOperationRepository, database)
-    outbox = providers.Singleton(PostgresPaymentOutbox, database, outbox_mapper)
+    outbox = providers.Singleton(
+        ObservedOutbox,
+        providers.Singleton(PostgresPaymentOutbox, database, outbox_mapper),
+        domain_metrics,
+    )
     inbox = providers.Singleton(PostgresProviderMessageInbox, database)
 
     # Use cases: one local transaction per Unit of Work.

@@ -22,6 +22,8 @@ from ..ports import PaymentPermission, PaymentPermissionChecker, PaymentResource
 
 @dataclass(frozen=True)
 class ListPaymentOperationsInput:
+    """Query of the operations of one Payment on behalf of a subject."""
+
     subject: Subject
     payment_id: str
 
@@ -43,11 +45,15 @@ class PaymentOperationView:
 
 @dataclass(frozen=True)
 class ListPaymentOperationsResult:
+    """Operations of the Payment in request order."""
+
     payment_id: PaymentId
     operations: tuple[PaymentOperationView, ...]
 
 
 class ListPaymentOperationsHandler:
+    """Returns the Payment Operations of a Payment the subject may inspect."""
+
     def __init__(
         self,
         payments: PaymentRepository,
@@ -59,6 +65,13 @@ class ListPaymentOperationsHandler:
         self._permissions = permissions
 
     def handle(self, query: ListPaymentOperationsInput) -> ListPaymentOperationsResult:
+        """Return the operations ordered by ``requested_at``.
+
+        Raises:
+            InvalidPaymentRequestError: The payment id is blank.
+            PermissionDeniedError: The subject may not view the operations.
+            PaymentNotFoundError: The Payment does not exist.
+        """
         if not query.payment_id.strip():
             raise InvalidPaymentRequestError("payment id is required")
         payment_id = PaymentId(query.payment_id)

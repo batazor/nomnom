@@ -17,6 +17,8 @@ from slices.payment.domains.payment import (
 
 
 class PaymentPermission(StrEnum):
+    """Permissions on a Payment checked in the authorization graph."""
+
     CREATE = "create"
     AUTHORIZE = "authorize"
     CAPTURE = "capture"
@@ -28,6 +30,8 @@ class PaymentPermission(StrEnum):
 
 @dataclass(frozen=True)
 class PaymentResource:
+    """Payment the permission is checked on; ``order_id`` is known only at creation."""
+
     payment_id: PaymentId
     order_id: OrderId | None = None
 
@@ -47,6 +51,8 @@ class ProviderUnavailableError(ApplicationError):
 
 
 class ProviderOperationStatus(StrEnum):
+    """Provider answer to an operation request."""
+
     SUCCEEDED = "succeeded"
     DECLINED = "declined"
     ACCEPTED = "accepted"
@@ -54,6 +60,12 @@ class ProviderOperationStatus(StrEnum):
 
 @dataclass(frozen=True)
 class ProviderOperationRequest:
+    """Operation the Provider is asked to execute.
+
+    ``authorization_reference`` is the Provider Reference of the current Authorization,
+    needed by Capture, Cancel Authorization and Refund.
+    """
+
     operation_id: OperationId
     payment_id: PaymentId
     kind: OperationKind
@@ -72,18 +84,23 @@ class ProviderOperationOutcome:
 
     @classmethod
     def succeeded(cls, provider_reference: str | None = None) -> ProviderOperationOutcome:
+        """Build a final successful answer."""
         return cls(ProviderOperationStatus.SUCCEEDED, provider_reference=provider_reference)
 
     @classmethod
     def declined(cls, reason: str) -> ProviderOperationOutcome:
+        """Build a final decline with the Provider's reason."""
         return cls(ProviderOperationStatus.DECLINED, decline_reason=reason)
 
     @classmethod
     def accepted(cls) -> ProviderOperationOutcome:
+        """Build an answer whose final result arrives later by callback."""
         return cls(ProviderOperationStatus.ACCEPTED)
 
 
 class PaymentProviderGateway(Protocol):
+    """Port of the external Provider that executes Payment Operations."""
+
     def execute(self, request: ProviderOperationRequest) -> ProviderOperationOutcome:
         """Request the operation from the provider.
 
@@ -96,18 +113,28 @@ class PaymentProviderGateway(Protocol):
 
 
 class PaymentOutbox(Protocol):
+    """Transactional outbox for the facts published by the payments context."""
+
     def add(self, aggregate: AggregateRef, events: Sequence[PaymentDomainEvent]) -> None:
         """Record published facts in the active Unit of Work."""
         ...
 
 
 class ProviderMessageInbox(Protocol):
+    """Deduplication of Provider messages such as webhooks."""
+
     def register(self, provider_message_id: str) -> bool:
         """Record the message in the active Unit of Work; ``False`` for a duplicate."""
         ...
 
 
 class PaymentIdentifiers(Protocol):
-    def new_payment_id(self) -> PaymentId: ...
+    """Source of new identifiers, so that use cases stay deterministic in tests."""
 
-    def new_operation_id(self) -> OperationId: ...
+    def new_payment_id(self) -> PaymentId:
+        """Return a new unique Payment identifier."""
+        ...
+
+    def new_operation_id(self) -> OperationId:
+        """Return a new unique Payment Operation identifier."""
+        ...

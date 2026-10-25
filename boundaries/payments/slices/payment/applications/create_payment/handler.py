@@ -21,6 +21,8 @@ from ..ports import PaymentIdentifiers, PaymentPermission, PaymentPermissionChec
 
 @dataclass(frozen=True)
 class CreatePaymentInput:
+    """Request to create the Payment of an Order; ``amount`` is an exact decimal string."""
+
     subject: Subject
     order_id: str
     amount: str
@@ -29,6 +31,8 @@ class CreatePaymentInput:
 
 @dataclass(frozen=True)
 class CreatePaymentResult:
+    """Created or already existing Payment; ``created`` is ``False`` on a repetition."""
+
     payment_id: PaymentId
     state: PaymentState
     created: bool
@@ -51,6 +55,14 @@ class CreatePaymentHandler:
         self._ids = ids
 
     def handle(self, command: CreatePaymentInput) -> CreatePaymentResult:
+        """Create the Payment of the Order, or return the existing one with the same amount.
+
+        Raises:
+            InvalidPaymentRequestError: The order id is blank or the amount is not a
+                positive exact decimal in an ISO 4217 currency.
+            PermissionDeniedError: The subject may not create the Payment.
+            PaymentAlreadyExistsError: The Order already has a Payment with another amount.
+        """
         if not command.order_id.strip():
             raise InvalidPaymentRequestError("order id is required")
         order_id = OrderId(command.order_id)

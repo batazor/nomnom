@@ -1,8 +1,8 @@
-"""payments-relay: публикует Integration Events из Outbox в Kafka (ADR 31).
+"""payments-relay: publishes Integration Events from the Outbox to Kafka (ADR 31).
 
-Отдельный процесс того же образа; активен один экземпляр (advisory lock), остальные —
-failover. Пустые DATABASE__URL или KAFKA__BROKERS завершают процесс на старте.
-Граф зависимостей — ``di.relay.RelayContainer``.
+A separate process of the same image; one instance is active (advisory lock), the
+others stand by for failover. An empty DATABASE__URL or KAFKA__BROKERS stops the process
+at startup. The dependency graph is ``di.relay.RelayContainer``.
 """
 
 import logging
@@ -14,6 +14,10 @@ from pkg.config import load_relay_settings
 
 
 def run() -> None:
+    """Build the relay container and run the process lifecycle until a graceful shutdown.
+
+    Telemetry is initialized first and shut down last.
+    """
     container = RelayContainer()
     container.config.from_dict(sections(load_relay_settings()))
     container.init_resources(TelemetryResource)
@@ -28,6 +32,7 @@ def run() -> None:
 
 
 def main() -> int:
+    """Console entrypoint; any failure is printed to stderr and turns into exit code 1."""
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(message)s")
     try:
         run()

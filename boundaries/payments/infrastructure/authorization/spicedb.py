@@ -54,7 +54,9 @@ class PermissionsClient(Protocol):
 
     def CheckPermission(  # noqa: N802 - name fixed by the gRPC/specification contract
         self, request: CheckPermissionRequest, *, timeout: float
-    ) -> CheckPermissionResponse: ...
+    ) -> CheckPermissionResponse:
+        """Check one permission; ``timeout`` bounds the RPC in seconds."""
+        ...
 
 
 def check_request(
@@ -86,6 +88,11 @@ class SpiceDBPermissionChecker:
     def is_allowed(
         self, subject: Subject, permission: PaymentPermission, resource: PaymentResource
     ) -> bool:
+        """Ask SpiceDB whether ``subject`` holds the platform capability of ``permission``.
+
+        Raises:
+            AuthorizationUnavailableError: SpiceDB failed or timed out; details are logged only.
+        """
         request = check_request(subject, permission, resource)
         try:
             response = self._client.CheckPermission(request, timeout=self._timeout)
@@ -107,7 +114,7 @@ class SpiceDBPermissionChecker:
 
 
 def _reason(error: Exception) -> str:
-    """gRPC status code or exception type; messages may carry endpoint details."""
+    """Return the gRPC status code or the exception type; messages may carry endpoint details."""
     code = getattr(error, "code", None)
     if callable(code):
         try:
@@ -123,6 +130,7 @@ class DenyAllPermissions:
     def is_allowed(
         self, subject: Subject, permission: PaymentPermission, resource: PaymentResource
     ) -> bool:
+        """Always deny."""
         return False
 
 

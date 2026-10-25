@@ -18,6 +18,11 @@ _CURRENCY_PATTERN = re.compile(r"^[A-Z]{3}$")
 
 @dataclass(frozen=True)
 class Money:
+    """Non-negative exact decimal amount in an ISO 4217 currency.
+
+    Raises ``InvalidMoneyError`` on construction when an invariant is violated.
+    """
+
     amount: Decimal
     currency: str
 
@@ -33,6 +38,12 @@ class Money:
 
     @classmethod
     def parse(cls, amount: str | Decimal, currency: str) -> Money:
+        """Build Money from an exact decimal or its string form.
+
+        Raises:
+            InvalidMoneyError: ``amount`` is a float, is not an exact decimal, or the
+                result violates the Money invariants.
+        """
         if isinstance(amount, float):
             raise InvalidMoneyError("binary floating-point amounts are not supported")
         try:
@@ -42,6 +53,7 @@ class Money:
         return cls(exact_amount, currency)
 
     def add(self, other: Money) -> Money:
+        """Return the sum; raises ``CurrencyMismatchError`` for different currencies."""
         if self.currency != other.currency:
             raise CurrencyMismatchError("money arithmetic requires one currency")
         return Money(self.amount + other.amount, self.currency)

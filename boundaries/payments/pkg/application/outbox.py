@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AggregateRef:
+    """Aggregate type, id and the committed version its published events belong to."""
+
     type: str
     id: str
     version: int

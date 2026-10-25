@@ -1,1 +1,1 @@
-"""Payments HTTP process."""
+"""payments process: gRPC API and provider webhooks."""

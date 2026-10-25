@@ -1,4 +1,4 @@
-"""Runtime contract процесса payments (docs/cloud-native-runtime.md)."""
+"""Runtime contract of the payments processes (docs/cloud-native-runtime.md)."""
 
 from pkg.lifecycle.errors import DrainTimeoutError, LifecycleError
 from pkg.lifecycle.group import WorkerGroup

@@ -21,6 +21,13 @@ from .vo.money import Money
 
 
 class Payment:
+    """Aggregate of a monetary operation for one Order.
+
+    State changes go only through the Payment state machine; each successful change
+    records a domain event to be pulled with ``pull_events``. Raises ``ValueError``
+    when created with a non-positive amount.
+    """
+
     def __init__(self, payment_id: PaymentId, order_id: OrderId, amount: Money) -> None:
         if amount.amount <= 0:
             raise ValueError("payment amount must be positive")
@@ -42,6 +49,11 @@ class Payment:
         provider_reference: str | None,
         version: int,
     ) -> Payment:
+        """Rebuild a Payment from storage without recording events.
+
+        Raises:
+            ValueError: An authorized, captured or refunded state has no Provider Reference.
+        """
         if state in {
             PaymentState.AUTHORIZED,
             PaymentState.CAPTURED,
@@ -63,6 +75,11 @@ class Payment:
         ensure_allowed(self._state, trigger)
 
     def authorize(self, provider_reference: str) -> TransitionResult:
+        """Move to ``authorized`` and keep the Provider Reference of the Authorization.
+
+        Raises the state machine errors of ``transition``, including ``GuardFailedError``
+        for a blank ``provider_reference``.
+        """
         result = transition(
             self._state,
             PaymentTrigger.AUTHORIZE,
@@ -74,22 +91,32 @@ class Payment:
         return result
 
     def capture(self) -> TransitionResult:
+        """Move to ``captured`` after a full Capture; raises the state machine errors."""
         result = self._apply(PaymentTrigger.CAPTURE)
         self._events.append(PaymentCaptured(self._id, self._order_id, self._amount))
         return result
 
     def cancel_authorization(self) -> TransitionResult:
+        """Release the Authorization and return to ``pending``, dropping the Provider Reference.
+
+        Raises the state machine errors.
+        """
         result = self._apply(PaymentTrigger.CANCEL_AUTHORIZATION)
         self._provider_reference = None
         self._events.append(PaymentAuthorizationCancelled(self._id, self._order_id, self._amount))
         return result
 
     def refund(self) -> TransitionResult:
+        """Move to ``refunded`` after a full Refund; raises the state machine errors."""
         result = self._apply(PaymentTrigger.REFUND)
         self._events.append(PaymentRefunded(self._id, self._order_id, self._amount))
         return result
 
     def fail(self, reason: str) -> TransitionResult:
+        """Move to the terminal ``failed`` state with a reason.
+
+        Raises ``ValueError`` for a blank reason and the state machine errors otherwise.
+        """
         if not reason.strip():
             raise ValueError("payment failure reason must not be empty")
         result = self._apply(PaymentTrigger.FAIL)
@@ -102,30 +129,37 @@ class Payment:
         return result
 
     def pull_events(self) -> list[PaymentEvent]:
+        """Return the recorded events and forget them, so each is published once."""
         events = list(self._events)
         self._events.clear()
         return events
 
     @property
     def id(self) -> PaymentId:
+        """Identifier of the Payment."""
         return self._id
 
     @property
     def order_id(self) -> OrderId:
+        """Order the Payment belongs to."""
         return self._order_id
 
     @property
     def amount(self) -> Money:
+        """Full amount of the Payment; partial Capture and Refund are not modelled."""
         return self._amount
 
     @property
     def state(self) -> PaymentState:
+        """Current business state."""
         return self._state
 
     @property
     def provider_reference(self) -> str | None:
+        """Provider Reference of the active Authorization, if any."""
         return self._provider_reference
 
     @property
     def version(self) -> int:
+        """Version loaded from storage for optimistic concurrency; 0 for a new Payment."""
         return self._version

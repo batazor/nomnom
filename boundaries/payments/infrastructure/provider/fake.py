@@ -15,7 +15,10 @@ DECLINE_AMOUNT = Decimal("666.00")
 
 
 class UnconfiguredProvider:
+    """Provider stand-in while no provider is configured: every call is a technical failure."""
+
     def execute(self, request: ProviderOperationRequest) -> ProviderOperationOutcome:
+        """Always raise ``ProviderUnavailableError``."""
         raise ProviderUnavailableError("payment provider is not configured")
 
 
@@ -30,6 +33,11 @@ class FakePaymentProvider:
         self._results: dict[str, ProviderOperationOutcome] = {}
 
     def execute(self, request: ProviderOperationRequest) -> ProviderOperationOutcome:
+        """Return the stored result of the idempotency key, or decide and store a new one.
+
+        Authorization of ``DECLINE_AMOUNT`` is declined; other operations without an
+        Authorization reference are declined with ``authorization_not_found``.
+        """
         with self._lock:
             known = self._results.get(request.idempotency_key)
             if known is None:

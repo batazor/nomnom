@@ -82,6 +82,7 @@ class PaymentEventsMapper:
     """OutboxEventMapper of the ``payments.v1.payment-events`` topic."""
 
     def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage | None:
+        """Build the Protobuf contract of ``event``; ``None`` when the event is not published."""
         build = _CONTRACTS.get(type(event))
         if build is None:
             return None

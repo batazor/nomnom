@@ -4,18 +4,20 @@ from enum import StrEnum
 
 
 class PaymentId(str):
-    pass
+    """Identifier of a Payment, assigned by the payments context."""
 
 
 class OrderId(str):
-    pass
+    """Order ID from the Published Language; payments never imports the Order model."""
 
 
 class OperationId(str):
-    pass
+    """Identifier of a Payment Operation, sent to the Provider as the merchant reference."""
 
 
 class OperationKind(StrEnum):
+    """Kind of Payment Operation the Provider is asked to perform."""
+
     AUTHORIZE = "authorize"
     CAPTURE = "capture"
     CANCEL_AUTHORIZATION = "cancel_authorization"

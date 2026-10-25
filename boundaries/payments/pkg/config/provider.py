@@ -1,4 +1,4 @@
-"""Платёжный провайдер и приём его webhooks."""
+"""Payment provider and the intake of its webhooks."""
 
 from datetime import timedelta
 
@@ -17,9 +17,9 @@ DEFAULT_PROVIDER_WEBHOOK_PORT = 8085
 
 
 class ProviderSettings(BaseSettings):
-    """Платёжный провайдер; ``unconfigured`` — каждая операция ``UNAVAILABLE``.
+    """Payment provider selection; with ``unconfigured`` every operation is ``UNAVAILABLE``.
 
-    ``fake`` — детерминированный sandbox в памяти процесса, без реальных денег.
+    ``fake`` is a deterministic in-process sandbox that moves no real money.
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

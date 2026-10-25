@@ -62,19 +62,23 @@ class RelayMetrics:
         )
 
     def set_backlog(self, backlog: Sequence[TopicBacklog]) -> None:
+        """Replace the backlog reported by the pending and oldest-age gauges."""
         with self._lock:
             self._backlog = list(backlog)
 
     def backlog(self) -> list[TopicBacklog]:
+        """Return a copy of the last reported backlog."""
         with self._lock:
             return list(self._backlog)
 
     def published(self, record: OutboxRecord, duration: float, confirmed_at: datetime) -> None:
+        """Record publish duration and lag from ``occurred_at`` to broker confirmation."""
         attributes = {_DESTINATION: record.topic, _EVENT_TYPE: record.event_type}
         self._duration.record(duration, {**attributes, _OUTCOME: "success"})
         self._lag.record(max(0.0, (confirmed_at - record.occurred_at).total_seconds()), attributes)
 
     def failed(self, record: OutboxRecord, error_class: str) -> None:
+        """Count a failed publish attempt; ``error_class`` is ``transient`` or ``permanent``."""
         self._retries.add(
             1,
             {_DESTINATION: record.topic, _EVENT_TYPE: record.event_type, _ERROR_CLASS: error_class},

@@ -37,6 +37,12 @@ class KafkaPublisher:
         self._producer = Producer(config)
 
     def publish(self, record: OutboxRecord) -> None:
+        """Produce ``record`` keyed by aggregate ID and wait for its delivery report.
+
+        Raises:
+            PublishError: produce failed, the report timed out or reported an error;
+                ``retriable`` follows the broker error.
+        """
         from confluent_kafka import KafkaException
 
         report: dict[str, Any] = {}
@@ -66,6 +72,7 @@ class KafkaPublisher:
             raise PublishError(f"delivery: {error}", retriable=bool(error.retriable()))
 
     def close(self, timeout: float) -> None:
+        """Flush queued messages within ``timeout`` seconds; leftovers are logged, not raised."""
         remaining = self._producer.flush(max(timeout, 0.0))
         if remaining:
             logger.warning("kafka producer closed with %d undelivered messages", remaining)

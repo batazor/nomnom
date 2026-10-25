@@ -1,3 +1,5 @@
+"""Lifecycle Worker for a business port built on the standard http.server."""
+
 import contextlib
 import logging
 import socket
@@ -14,8 +16,11 @@ _POLL_INTERVAL = 0.1
 
 
 class _TrackingHTTPServer(FastBindMixin, HTTPServer):
-    """HTTP server, обслуживающий каждое соединение в daemon-потоке и самостоятельно
-    отслеживающий их: ThreadingMixIn либо не ждёт daemon-потоки, либо ждёт их без дедлайна."""
+    """HTTP server that serves each connection in a tracked daemon thread.
+
+    ``ThreadingMixIn`` either does not wait for daemon threads or waits for them without a
+    deadline, so connections are tracked here to drain them within one.
+    """
 
     allow_reuse_address = True
 
@@ -59,7 +64,7 @@ class _TrackingHTTPServer(FastBindMixin, HTTPServer):
 
 
 class HttpWorker:
-    """lifecycle.Worker бизнес-порта на основе стандартного http.server."""
+    """``lifecycle.Worker`` of a business port built on the standard http.server."""
 
     def __init__(
         self,
@@ -74,11 +79,15 @@ class HttpWorker:
 
     @property
     def port(self) -> int:
-        """Фактически занятый порт; полезен при bind на порт 0."""
+        """Actually bound port; useful when binding to port 0."""
         return self._require_server().server_address[1]
 
     def start(self) -> None:
-        """Открывает бизнес-порт; после него процесс может стать ready."""
+        """Open the business port; after it the process may become ready.
+
+        Raises:
+            LifecycleError: The address cannot be bound.
+        """
         try:
             self._server = _TrackingHTTPServer(self._address, self._handler)
         except OSError as error:
@@ -87,13 +96,20 @@ class HttpWorker:
         logger.info("%s listening on :%d", self._name, self.port)
 
     def run(self) -> None:
-        """Обслуживает входящие запросы до вызова shutdown."""
+        """Serve incoming requests until ``shutdown`` is called."""
         self._require_server().serve_forever(poll_interval=_POLL_INTERVAL)
 
     def shutdown(self, deadline: float) -> None:
-        """Прекращает приём новых запросов, закрывает idle keep-alive соединения
-        и дожидается начатых до deadline (time.monotonic); оставшиеся соединения
-        закрываются принудительно."""
+        """Stop accepting requests and drain the ones in flight until ``deadline``.
+
+        Idle keep-alive connections are closed at once; requests in flight may finish
+        until ``deadline`` (a ``time.monotonic`` value), then remaining connections are
+        closed forcibly.
+
+        Raises:
+            DrainTimeoutError: Requests were still in flight at the deadline.
+            LifecycleError: The worker was never started.
+        """
         server = self._require_server()
         server.shutdown()
         server.server_close()

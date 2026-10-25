@@ -48,16 +48,25 @@ def _constraint(error: errors.UniqueViolation) -> str | None:
 
 
 class PostgresPaymentRepository:
+    """Payment aggregates in the ``payments`` table with optimistic locking by ``version``."""
+
     def __init__(self, database: PostgresDatabase) -> None:
         self._db = database
 
     def get(self, payment_id: PaymentId) -> Payment | None:
+        """Return the Payment, or ``None`` when it does not exist."""
         return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE id = %s", payment_id)  # noqa: S608 - only fixed column/condition constants are interpolated
 
     def get_by_order(self, order_id: OrderId) -> Payment | None:
+        """Return the only Payment of the Order, or ``None``."""
         return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE order_id = %s", order_id)  # noqa: S608 - only fixed column/condition constants are interpolated
 
     def add(self, payment: Payment) -> int:
+        """Insert a new Payment at version 1 and return that version.
+
+        Raises:
+            DuplicatePaymentError: the Order already has a Payment.
+        """
         with self._db.connection() as conn:
             try:
                 with conn.transaction():
@@ -80,6 +89,11 @@ class PostgresPaymentRepository:
         return 1
 
     def save(self, payment: Payment) -> int:
+        """Persist the Payment state if its loaded version is current; return the new version.
+
+        Raises:
+            ConcurrencyConflictError: the Payment was modified concurrently.
+        """
         with self._db.connection() as conn:
             row = conn.execute(
                 "UPDATE payments SET state = %s, provider_reference = %s, version = version + 1 "
@@ -107,19 +121,25 @@ class PostgresPaymentRepository:
 
 
 class PostgresPaymentOperationRepository:
+    """Payment Operations in the ``payment_operations`` table with optimistic locking."""
+
     def __init__(self, database: PostgresDatabase) -> None:
         self._db = database
 
     def get(self, operation_id: OperationId) -> PaymentOperation | None:
+        """Return the Payment Operation, or ``None``."""
         return self._first("id = %s", operation_id)
 
     def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
+        """Return the Payment Operation registered under the key, or ``None``."""
         return self._first("idempotency_key = %s", idempotency_key)
 
     def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None:
+        """Return the pending Payment Operation of the Payment; there is at most one."""
         return self._first("payment_id = %s AND state = 'pending'", payment_id)
 
     def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperation]:
+        """Return every Payment Operation of the Payment in request order."""
         with self._db.connection() as conn:
             rows = conn.execute(
                 f"SELECT {_OPERATION_COLUMNS} FROM payment_operations "  # noqa: S608 - only fixed column/condition constants are interpolated
@@ -129,6 +149,12 @@ class PostgresPaymentOperationRepository:
         return [_operation(row) for row in rows]
 
     def add(self, operation: PaymentOperation) -> None:
+        """Insert a new pending Payment Operation at version 1.
+
+        Raises:
+            DuplicateIdempotencyKeyError: the idempotency key is already used.
+            OperationAlreadyPendingError: the Payment already has a pending operation.
+        """
         with self._db.connection() as conn:
             try:
                 with conn.transaction():
@@ -158,6 +184,11 @@ class PostgresPaymentOperationRepository:
                 raise
 
     def save(self, operation: PaymentOperation) -> int:
+        """Persist the operation result if its loaded version is current; return the new version.
+
+        Raises:
+            ConcurrencyConflictError: the operation was modified concurrently.
+        """
         with self._db.connection() as conn:
             row = conn.execute(
                 "UPDATE payment_operations SET state = %s, provider_reference = %s, "
@@ -227,6 +258,7 @@ class PostgresPaymentOutbox:
         self._mapper = mapper
 
     def add(self, aggregate: AggregateRef, events: Sequence[PaymentDomainEvent]) -> None:
+        """Write the mapped events with the current ``traceparent``; unmapped events are skipped."""
         messages = [m for m in (self._mapper.map(aggregate, e) for e in events) if m is not None]
         if not messages:
             return
@@ -260,6 +292,7 @@ class PostgresProviderMessageInbox:
         self._consumer = consumer
 
     def register(self, provider_message_id: str) -> bool:
+        """Record the provider message ID; ``False`` when it was already processed."""
         with self._db.connection() as conn:
             row = conn.execute(
                 "INSERT INTO inbox (consumer, event_id) VALUES (%s, %s) "

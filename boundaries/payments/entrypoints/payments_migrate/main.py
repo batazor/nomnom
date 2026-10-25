@@ -1,7 +1,8 @@
-"""Применяет миграции PostgreSQL payments и завершается.
+"""Apply the payments PostgreSQL migrations and exit.
 
-В Kubernetes запускается init container'ом перед процессом; advisory lock сериализует
-параллельные запуски реплик. Граф зависимостей — ``di.migrate.MigrateContainer``.
+In Kubernetes it runs as an init container before the process; an advisory lock
+serializes concurrent runs of replicas. The dependency graph is
+``di.migrate.MigrateContainer``.
 """
 
 import sys
@@ -11,6 +12,7 @@ from pkg.config import DatabaseSettings
 
 
 def main() -> int:
+    """Console entrypoint; returns 1 and prints the error to stderr when migration fails."""
     try:
         container = MigrateContainer()
         container.config.from_dict({"database": DatabaseSettings()})

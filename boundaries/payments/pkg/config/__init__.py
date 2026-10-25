@@ -1,4 +1,4 @@
-"""Конфигурация payments и payments-relay из env; ошибка валидации завершает процесс."""
+"""Configuration of payments and payments-relay from env; a validation error stops the process."""
 
 from dataclasses import dataclass
 
@@ -133,6 +133,8 @@ __all__ = [
 
 @dataclass(frozen=True)
 class Settings:
+    """Validated configuration of the payments process, grouped by section."""
+
     server: ServerSettings
     management: ManagementSettings
     shutdown: ShutdownSettings
@@ -143,7 +145,14 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    """Загружает и валидирует конфигурацию; ошибка завершает процесс до открытия портов."""
+    """Load and validate the payments configuration from env.
+
+    A failure stops the process before any port is open.
+
+    Raises:
+        ValueError: A setting is invalid or the server, management and webhook ports
+            are not distinct (pydantic ``ValidationError`` is a ``ValueError``).
+    """
     settings = Settings(
         server=ServerSettings(),
         management=ManagementSettings(),

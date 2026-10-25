@@ -57,6 +57,8 @@ CLEANUP_INTERVAL = timedelta(minutes=1)
 
 @dataclass(frozen=True)
 class CycleResult:
+    """Outcome of one relay cycle; ``active`` is ``False`` on a standby replica."""
+
     active: bool
     published: int = 0
     failed: bool = False
@@ -87,6 +89,11 @@ class OutboxRelay:
         self._last_cleanup: datetime | None = None
 
     def run_once(self, should_stop: Callable[[], bool] = lambda: False) -> CycleResult:
+        """Publish one batch in ``seq`` order, then run retention cleanup and refresh metrics.
+
+        The batch stops at the first failed record, so records of an aggregate are never
+        reordered; ``should_stop`` is checked between records.
+        """
         if not self._store.try_lock():
             # Standby: the active replica reports the backlog.
             self._metrics.set_backlog([])
@@ -149,9 +156,10 @@ class RelayWorker:
         self._stopped = threading.Event()
 
     def start(self) -> None:
-        pass
+        """Nothing to start: the loop runs in ``run``."""
 
     def run(self) -> None:
+        """Run relay cycles until shutdown; a failed cycle is logged and retried later."""
         try:
             while not self._stop.is_set():
                 busy = False
@@ -169,6 +177,12 @@ class RelayWorker:
             self._stopped.set()
 
     def shutdown(self, deadline: float) -> None:
+        """Stop the loop, close the publisher and release the lock before ``deadline`` (monotonic).
+
+        Raises:
+            TimeoutError: the running cycle did not finish in time; process exit
+                releases the lock.
+        """
         self._stop.set()
         stopped = self._stopped.wait(max(0.0, deadline - time.monotonic()))
         try:

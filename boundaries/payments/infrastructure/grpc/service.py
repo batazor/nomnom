@@ -115,6 +115,12 @@ def _application_errors(context: grpc.ServicerContext) -> Iterator[None]:
 
 
 class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore[misc]
+    """gRPC servicer: resolves the caller, runs the use case, maps the result to Protobuf.
+
+    Application errors become gRPC status codes; a provider decline is a regular ``DECLINED``
+    operation result.
+    """
+
     def __init__(self, handlers: PaymentsHandlers, subjects: SubjectResolver) -> None:
         self._handlers = handlers
         self._subjects = subjects
@@ -124,6 +130,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
         request: service_pb2.GetPaymentStatusRequest,
         context: grpc.ServicerContext,
     ) -> service_pb2.GetPaymentStatusResponse:
+        """Return the current state of a Payment."""
         subject = self._subjects.resolve(context)
         with _application_errors(context):
             result = self._handlers.get_payment_status.handle(
@@ -147,6 +154,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
         request: service_pb2.CreatePaymentRequest,
         context: grpc.ServicerContext,
     ) -> service_pb2.CreatePaymentResponse:
+        """Create the Payment of an Order; a repeat returns it with ``created=False``."""
         subject = self._subjects.resolve(context)
         with _application_errors(context):
             result = self._handlers.create_payment.handle(
@@ -168,6 +176,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
         request: service_pb2.AuthorizePaymentRequest,
         context: grpc.ServicerContext,
     ) -> service_pb2.AuthorizePaymentResponse:
+        """Run the Authorization Payment Operation under the caller's idempotency key."""
         subject = self._subjects.resolve(context)
         with _application_errors(context):
             result = self._handlers.authorize_payment.handle(
@@ -180,6 +189,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
         request: service_pb2.CapturePaymentRequest,
         context: grpc.ServicerContext,
     ) -> service_pb2.CapturePaymentResponse:
+        """Run the Capture of the authorized amount under the caller's idempotency key."""
         subject = self._subjects.resolve(context)
         with _application_errors(context):
             result = self._handlers.capture_payment.handle(
@@ -192,6 +202,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
         request: service_pb2.CancelAuthorizationRequest,
         context: grpc.ServicerContext,
     ) -> service_pb2.CancelAuthorizationResponse:
+        """Release the authorized amount without Capture under the caller's idempotency key."""
         subject = self._subjects.resolve(context)
         with _application_errors(context):
             result = self._handlers.cancel_authorization.handle(
@@ -204,6 +215,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
         request: service_pb2.RefundPaymentRequest,
         context: grpc.ServicerContext,
     ) -> service_pb2.RefundPaymentResponse:
+        """Run the full Refund of the captured amount under the caller's idempotency key."""
         subject = self._subjects.resolve(context)
         with _application_errors(context):
             result = self._handlers.refund_payment.handle(
@@ -266,15 +278,23 @@ class GrpcWorker:
 
     @property
     def port(self) -> int:
+        """Port actually bound; differs from the configured one when it was ``0``."""
         return self._port
 
     def start(self) -> None:
+        """Start serving requests in the server's thread pool."""
         self._server.start()
 
     def run(self) -> None:
+        """Block until the server terminates."""
         self._server.wait_for_termination()
 
     def shutdown(self, deadline: float) -> None:
+        """Stop accepting calls and drain in-flight ones until ``deadline`` (monotonic).
+
+        Raises:
+            DrainTimeoutError: requests were still running at the deadline and were cancelled.
+        """
         remaining = max(0.0, deadline - time.monotonic())
         stopped = self._server.stop(remaining)
         if not stopped.wait(remaining):
@@ -283,8 +303,12 @@ class GrpcWorker:
 
 
 class UuidIdentifiers:
+    """Random UUIDv4 identifiers of Payments and Payment Operations."""
+
     def new_payment_id(self) -> PaymentId:
+        """Return a fresh, never reused Payment ID."""
         return PaymentId(str(uuid.uuid4()))
 
     def new_operation_id(self) -> OperationId:
+        """Return a fresh, never reused Payment Operation ID."""
         return OperationId(str(uuid.uuid4()))

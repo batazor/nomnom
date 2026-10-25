@@ -22,6 +22,8 @@ from ..ports import ProviderMessageInbox, ProviderOperationOutcome
 
 @dataclass(frozen=True)
 class ApplyProviderCallbackInput:
+    """Verified Provider webhook mapped to a final or accepted outcome of one operation."""
+
     provider_message_id: str
     operation_id: str
     outcome: ProviderOperationOutcome
@@ -31,6 +33,8 @@ ApplyProviderCallbackResult = ProviderResultApplication
 
 
 class ApplyProviderCallbackHandler:
+    """Applies a Provider webhook result once per Provider message and once per operation."""
+
     def __init__(
         self, uow: UnitOfWork, inbox: ProviderMessageInbox, applier: ProviderResultApplier
     ) -> None:
@@ -39,6 +43,16 @@ class ApplyProviderCallbackHandler:
         self._applier = applier
 
     def handle(self, command: ApplyProviderCallbackInput) -> ApplyProviderCallbackResult:
+        """Deduplicate the message and apply its result in one Unit of Work.
+
+        Returns ``duplicate_message`` for an already registered message, otherwise the
+        outcome of applying the result to the operation.
+
+        Raises:
+            InvalidPaymentRequestError: The ids are blank or the outcome is not final.
+            PaymentOperationNotFoundError: The operation is unknown.
+            ProviderResultConflictError: The result contradicts the recorded one.
+        """
         message_id = command.provider_message_id.strip()
         if not message_id:
             raise InvalidPaymentRequestError("provider message id is required")

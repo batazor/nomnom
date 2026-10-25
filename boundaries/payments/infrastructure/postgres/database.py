@@ -24,11 +24,14 @@ _active: ContextVar[psycopg.Connection | None] = ContextVar(
 
 
 class PostgresDatabase:
+    """Connection pool of the payments database, aware of the active Unit of Work."""
+
     def __init__(self, pool: ConnectionPool) -> None:
         self._pool = pool
 
     @contextmanager
     def connection(self) -> Iterator[psycopg.Connection]:
+        """Yield the active Unit of Work connection, or a pooled one committed on exit."""
         active = _active.get()
         if active is not None:
             yield active
@@ -42,6 +45,7 @@ class PostgresDatabase:
             conn.execute("SELECT 1")
 
     def close(self) -> None:
+        """Close the pool and all its connections."""
         self._pool.close()
 
 
@@ -52,6 +56,7 @@ class PostgresUnitOfWork:
         self._database = database
 
     def run(self, work: Callable[[], T]) -> T:
+        """Run ``work`` in one transaction: commit on return, roll back and re-raise on error."""
         if _active.get() is not None:
             return work()
         with self._database._pool.connection() as conn, conn.transaction():
