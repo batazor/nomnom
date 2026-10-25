@@ -1,11 +1,19 @@
 import {
+  type CancellationDecision,
+  CancellationRejectionReason,
+  TERMINAL_CANCELLATION_REJECTIONS,
+} from "./cancellation.ts";
+import {
   InvalidRestaurantOrderError,
   InvalidRestaurantOrderReason,
 } from "./errors.ts";
 import type { EventPayload, RestaurantOrderEvent } from "./events.ts";
 import {
   type AcceptanceEligibility,
+  AlreadyInStateError,
   type CancellationPolicy,
+  GuardFailedError,
+  InvalidTransitionError,
   RestaurantOrderState,
   resolveTransition,
   type TransitionRequest,
@@ -19,6 +27,10 @@ import {
 } from "./items.ts";
 import { Quantity } from "./vo/quantity.ts";
 
+export {
+  type CancellationDecision,
+  CancellationRejectionReason,
+} from "./cancellation.ts";
 export {
   DuplicateOrderIdError,
   InvalidRestaurantOrderError,
@@ -374,13 +386,38 @@ export class RestaurantOrder {
     );
   }
 
+  /**
+   * Cancels by stage and returns the decision: a repeat answers with the
+   * stage of the first cancellation, Preparation follows `policy` and a
+   * terminal State is rejected with its reason. Only `cancelled` changes the
+   * State and records `RestaurantOrderCancelled`.
+   */
   cancel(input: {
     cancelledAt: Date;
     policy: CancellationPolicy;
     reason?: string;
-  }): void {
+  }): CancellationDecision {
     const stage = this.state;
-    this.apply({ trigger: "Cancel", policy: input.policy });
+    try {
+      this.apply({ trigger: "Cancel", policy: input.policy });
+    } catch (error) {
+      if (error instanceof AlreadyInStateError) {
+        return { outcome: "repeated", stage: this.cancelledAtStage ?? stage };
+      }
+      if (error instanceof GuardFailedError) {
+        return {
+          outcome: "rejected",
+          reason:
+            CancellationRejectionReason.CancellationDuringPreparationNotAllowed,
+          state: stage,
+        };
+      }
+      const terminal = TERMINAL_CANCELLATION_REJECTIONS[stage];
+      if (error instanceof InvalidTransitionError && terminal !== undefined) {
+        return { outcome: "rejected", reason: terminal, state: stage };
+      }
+      throw error;
+    }
     const reason = optionalText(input.reason);
     this.setCancellation({ stage, reason });
     this.record(
@@ -392,6 +429,7 @@ export class RestaurantOrder {
       },
       input.cancelledAt,
     );
+    return { outcome: "cancelled", stage };
   }
 }
 

@@ -21,7 +21,7 @@ import type {
 import {
   type RestaurantOrderView,
   snapshotToView,
-} from "../../applications/restaurant-order-support.ts";
+} from "../../applications/restaurant-order-view.ts";
 import {
   DuplicateOrderIdError,
   RestaurantOrder,

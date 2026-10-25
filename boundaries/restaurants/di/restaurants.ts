@@ -18,11 +18,11 @@ import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurant
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
+import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
 import {
   createSpiceDbClient,
-  SpiceDbAccessControl,
   type SpiceDbClient,
-} from "../infrastructure/spicedb/access-control.ts";
+} from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import type { Clock } from "../pkg/application/clock.ts";
 import type { IdGenerator } from "../pkg/application/id-generator.ts";
@@ -62,8 +62,8 @@ import {
   registerRestaurant,
 } from "../slices/restaurant/di/registrations.ts";
 import { RESTAURANT_AGGREGATE_TYPE } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
-import type { KitchenAccessControl } from "../slices/restaurantorder/applications/access-control.ts";
 import {
+  type KitchenAccess,
   type RestaurantOrderCradle,
   registerRestaurantOrder,
 } from "../slices/restaurantorder/di/registrations.ts";
@@ -107,7 +107,7 @@ export interface InfrastructureCradle {
   readonly outbox: Outbox;
   readonly spicedb: SpiceDbClient;
   readonly spicedbAccessControl: SpiceDbAccessControl;
-  readonly kitchenAccessControl: KitchenAccessControl;
+  readonly kitchenAccessControl: KitchenAccess;
   readonly restaurantAccessControl: RestaurantAccessControl;
   readonly relationshipWriter: SpiceDbRelationshipWriter;
   readonly ownerRelationships: OwnerRelationshipWriter;

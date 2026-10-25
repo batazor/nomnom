@@ -4,7 +4,7 @@
 import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Db } from "mongodb";
 
-import type { RelationshipsClient } from "../../../infrastructure/spicedb/access-control.ts";
+import type { RelationshipsClient } from "../../../infrastructure/spicedb/client.ts";
 import type { Clock } from "../../../pkg/application/clock.ts";
 import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
 import type {

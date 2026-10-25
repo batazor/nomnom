@@ -39,8 +39,11 @@ import {
   createRestaurantCollection,
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
-import type { KitchenAccessControl } from "../slices/restaurantorder/applications/access-control.ts";
-import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
+import type { FulfillmentCoordinatorAccess } from "../slices/restaurantorder/applications/access-control.ts";
+import {
+  ReceiveOrderRequestHandler,
+  type RestaurantExistence,
+} from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
 import type { RestaurantOrderRepository } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   createOrderPlacedHandler,
@@ -58,6 +61,7 @@ import {
   type ReceiveOrderRequestPort,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
+import { RepositoryRestaurantExistence } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 
 /** Configuration and resources the composition root hands to the container. */
 export type ConsumerResources = Readonly<{
@@ -82,9 +86,10 @@ export interface ConsumerCradle {
   readonly domainMetrics: RestaurantOrderDomainMetrics;
   readonly unitOfWork: MongoUnitOfWork;
   readonly restaurants: RestaurantRepository;
+  readonly restaurantExistence: RestaurantExistence;
   readonly restaurantOrders: RestaurantOrderRepository;
   /** Allows only Receive Order Request from the orders event stream. */
-  readonly kitchenAccessControl: KitchenAccessControl;
+  readonly fulfillmentAccess: FulfillmentCoordinatorAccess;
   readonly receiveOrderRequest: ReceiveOrderRequestPort;
   readonly inbox: Inbox;
   readonly consumerMetrics: ConsumerMetrics;
@@ -122,19 +127,23 @@ export const createConsumerContainer = (
           createRestaurantCollection(db, unitOfWork),
         ),
     ).singleton(),
+    restaurantExistence: asFunction(
+      ({ restaurants }: ConsumerCradle) =>
+        new RepositoryRestaurantExistence(restaurants),
+    ).singleton(),
     restaurantOrders: asFunction(
       ({ db, unitOfWork }: ConsumerCradle) =>
         new MongoRestaurantOrderRepository(
           createRestaurantOrderCollection(db, unitOfWork),
         ),
     ).singleton(),
-    kitchenAccessControl: asFunction(
+    fulfillmentAccess: asFunction(
       () => new OrdersEventSourceAccessControl(),
     ).singleton(),
     receiveOrderRequest: asFunction(
       ({
-        kitchenAccessControl,
-        restaurants,
+        fulfillmentAccess,
+        restaurantExistence,
         restaurantOrders,
         ids,
         clock,
@@ -142,8 +151,8 @@ export const createConsumerContainer = (
       }: ConsumerCradle) =>
         observeReceiveOrderRequest(
           new ReceiveOrderRequestHandler({
-            accessControl: kitchenAccessControl,
-            restaurants,
+            accessControl: fulfillmentAccess,
+            restaurants: restaurantExistence,
             restaurantOrders,
             ids,
             clock,

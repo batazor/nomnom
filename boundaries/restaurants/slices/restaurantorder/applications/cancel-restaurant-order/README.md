@@ -11,7 +11,7 @@
 
 - **Владелец:** `restaurants/slices/restaurantorder`.
 - **Домен:** `domains/restaurantorder`.
-- **Взаимодействие:** Вызывается compensation Activity через RPC `CancelRestaurantOrder` (FR-428) и не завершает общий `Order`. Отмена и её повтор — `cancelled = true`; отказ по стадии — `cancelled = false` и `rejection_reason` (например `already_ready`, AC-454), а не gRPC-ошибка.
+- **Взаимодействие:** Вызывается compensation Activity через RPC `CancelRestaurantOrder` (FR-428) и не завершает общий `Order`. Отмена и её повтор — `cancelled = true`; отказ по стадии — `cancelled = false` и `rejection_reason` (например `already_ready`, AC-454), а не gRPC-ошибка. Исход решает агрегат: `RestaurantOrder.cancel()` возвращает `CancellationDecision` (`cancelled`, `repeated`, `rejected` с причиной); handler только сохраняет отмену и публикует `RestaurantOrderCancelled` (FR-547, AC-637).
 
 ## Последовательность
 
@@ -24,8 +24,9 @@ sequenceDiagram
     participant Store as Unit of Work / Outbox
     Workflow->>API: запросить компенсацию
     API->>App: отменить Kitchen Order
-    App->>Kitchen: проверить и выполнить отмену
-    App->>Store: сохранить результат
+    App->>Kitchen: cancel()
+    Kitchen-->>App: решение по стадии
+    App->>Store: сохранить отмену и факт
     Store-->>App: commit
     App-->>Workflow: результат компенсации
 ```

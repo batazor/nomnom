@@ -6,6 +6,7 @@ import { AcceptOrderHandler } from "../../slices/restaurantorder/applications/ac
 import { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import { GetRestaurantOrderHandler } from "../../slices/restaurantorder/applications/get-restaurant-order/get-restaurant-order.ts";
+import type { RepeatPolicy } from "../../slices/restaurantorder/applications/kitchen-command.ts";
 import { ListActivePreparationsHandler } from "../../slices/restaurantorder/applications/list-active-preparations/list-active-preparations.ts";
 import { ListReadyOrdersHandler } from "../../slices/restaurantorder/applications/list-ready-orders/list-ready-orders.ts";
 import { MarkAssembledHandler } from "../../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
@@ -15,7 +16,6 @@ import { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applica
 import { RejectOrderHandler } from "../../slices/restaurantorder/applications/reject-order/reject-order.ts";
 import { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
-import type { RepeatPolicy } from "../../slices/restaurantorder/applications/restaurant-order-support.ts";
 import { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
 import type { CancellationPolicy } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
@@ -27,6 +27,10 @@ import {
   InMemoryRestaurantOrderRepository,
   StaticAcceptanceConditions,
 } from "../../slices/restaurantorder/infrastructure/memory/restaurant-orders.ts";
+import {
+  RepositoryAcceptanceFactsReader,
+  RepositoryRestaurantExistence,
+} from "../../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import { createMenuWorld } from "./menus.ts";
 import { createInfrastructure, type Infrastructure } from "./restaurants.ts";
 
@@ -67,15 +71,14 @@ export const createKitchenWorld = (
   const handlers = {
     receive: new ReceiveOrderRequestHandler({
       accessControl,
-      restaurants: menuWorld.restaurants,
+      restaurants: new RepositoryRestaurantExistence(menuWorld.restaurants),
       restaurantOrders,
       ids,
       clock: infrastructure.clock,
     }),
     accept: new AcceptOrderHandler({
       ...commandDependencies,
-      restaurants: menuWorld.restaurants,
-      menus: menuWorld.menus,
+      facts: new RepositoryAcceptanceFactsReader(menuWorld),
       conditions,
       readyTimeEstimator: new FixedDurationReadyTimeEstimator(
         minutes(PREPARATION_MINUTES),

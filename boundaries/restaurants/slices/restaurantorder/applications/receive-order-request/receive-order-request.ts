@@ -4,20 +4,19 @@ import {
   NotFoundError,
 } from "../../../../pkg/application/errors.ts";
 import type { IdGenerator } from "../../../../pkg/application/id-generator.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
-import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import {
   DuplicateOrderIdError,
   type PreparationItemInput,
   RestaurantOrder,
   type RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { KitchenAccessControl } from "../access-control.ts";
+import type { FulfillmentCoordinatorAccess } from "../access-control.ts";
 import {
-  authorize,
   type RestaurantOrderView,
   toRestaurantOrderView,
-} from "../restaurant-order-support.ts";
+} from "../restaurant-order-view.ts";
 
 export type ReceiveOrderRequest = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */
@@ -27,6 +26,11 @@ export type ReceiveOrderRequest = Readonly<{
   orderId: string;
   items: readonly PreparationItemInput[];
 }>;
+
+/** Whether a restaurant is registered; nothing else of it is needed here. */
+export interface RestaurantExistence {
+  exists(restaurantId: string): Promise<boolean>;
+}
 
 export type ReceiveOrderRequestResult = Readonly<{
   restaurantOrder: RestaurantOrderView;
@@ -41,15 +45,15 @@ export type ReceiveOrderRequestResult = Readonly<{
  * written, so no Unit of Work is needed.
  */
 export class ReceiveOrderRequestHandler {
-  readonly #accessControl: KitchenAccessControl;
-  readonly #restaurants: RestaurantRepository;
+  readonly #accessControl: FulfillmentCoordinatorAccess;
+  readonly #restaurants: RestaurantExistence;
   readonly #restaurantOrders: RestaurantOrderRepository;
   readonly #ids: IdGenerator;
   readonly #clock: Clock;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
-    restaurants: RestaurantRepository;
+    accessControl: FulfillmentCoordinatorAccess;
+    restaurants: RestaurantExistence;
     restaurantOrders: RestaurantOrderRepository;
     ids: IdGenerator;
     clock: Clock;
@@ -64,7 +68,7 @@ export class ReceiveOrderRequestHandler {
   async execute(
     command: ReceiveOrderRequest,
   ): Promise<ReceiveOrderRequestResult> {
-    await authorize(
+    await requirePermission(
       this.#accessControl.canCoordinateFulfillment(
         command.subject,
         command.restaurantId,
@@ -75,7 +79,7 @@ export class ReceiveOrderRequestHandler {
     if (existing !== undefined) {
       return existing;
     }
-    if ((await this.#restaurants.get(command.restaurantId)) === undefined) {
+    if (!(await this.#restaurants.exists(command.restaurantId))) {
       throw new NotFoundError("Restaurant", command.restaurantId);
     }
     const order = RestaurantOrder.receive({

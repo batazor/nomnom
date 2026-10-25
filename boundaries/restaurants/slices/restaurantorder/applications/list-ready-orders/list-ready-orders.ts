@@ -1,4 +1,4 @@
-import type { KitchenAccessControl } from "../access-control.ts";
+import type { KitchenStaffAccess } from "../access-control.ts";
 import {
   authorizeKitchenBoard,
   type KitchenBoardQuery,
@@ -26,11 +26,11 @@ export interface ReadyOrdersReader {
 }
 
 export class ListReadyOrdersHandler {
-  readonly #accessControl: KitchenAccessControl;
+  readonly #accessControl: KitchenStaffAccess;
   readonly #reader: ReadyOrdersReader;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
+    accessControl: KitchenStaffAccess;
     reader: ReadyOrdersReader;
   }) {
     this.#accessControl = dependencies.accessControl;

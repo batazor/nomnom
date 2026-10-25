@@ -14,7 +14,7 @@ import type {
   ErrorClass,
   EventHandler,
 } from "../../../../pkg/infrastructure/messaging/processor.ts";
-import type { KitchenAccessControl } from "../../applications/access-control.ts";
+import type { FulfillmentCoordinatorAccess } from "../../applications/access-control.ts";
 import type { ReceiveOrderRequestHandler } from "../../applications/receive-order-request/receive-order-request.ts";
 
 /** Стрим Integration Events orders (orders/infrastructure/postgres/outbox.go). */
@@ -36,22 +36,17 @@ export const ORDERS_EVENT_SOURCE: Subject = Object.freeze({
 /**
  * Authorization port Receive Order Request в процессе consumer: разрешает
  * только координацию fulfillment от {@link ORDERS_EVENT_SOURCE}; команды кухни
- * и чтения consumer не выполняет.
+ * и чтения consumer не выполняет, поэтому других портов доступа адаптер не
+ * реализует.
  */
-export class OrdersEventSourceAccessControl implements KitchenAccessControl {
-  async canOperateKitchen(): Promise<boolean> {
-    return false;
-  }
-
+export class OrdersEventSourceAccessControl
+  implements FulfillmentCoordinatorAccess
+{
   async canCoordinateFulfillment(subject: Subject): Promise<boolean> {
     return (
       subject.type === ORDERS_EVENT_SOURCE.type &&
       subject.id === ORDERS_EVENT_SOURCE.id
     );
-  }
-
-  async canViewRestaurantOrders(): Promise<boolean> {
-    return false;
   }
 }
 

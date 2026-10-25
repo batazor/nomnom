@@ -1,18 +1,18 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
 import { NotFoundError } from "../../../../pkg/application/errors.ts";
 import type { Outbox } from "../../../../pkg/application/outbox.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
-import {
-  AlreadyInStateError,
-  type CancellationPolicy,
-  GuardFailedError,
-  InvalidTransitionError,
-  type RestaurantOrderRepository,
+import type {
+  CancellationDecision,
+  CancellationPolicy,
+  CancellationRejectionReason,
+  RestaurantOrderRepository,
   RestaurantOrderState,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { KitchenAccessControl } from "../access-control.ts";
-import { authorize, saveAndPublish } from "../restaurant-order-support.ts";
+import type { FulfillmentCoordinatorAccess } from "../access-control.ts";
+import { saveAndPublish } from "../publish-order-change.ts";
 
 export type CancelRestaurantOrder = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */
@@ -22,16 +22,7 @@ export type CancelRestaurantOrder = Readonly<{
   reason?: string;
 }>;
 
-export const CancellationRejectionReason = {
-  AlreadyReady: "already_ready",
-  AlreadyRejected: "already_rejected",
-  AlreadyFailed: "already_failed",
-  CancellationDuringPreparationNotAllowed:
-    "cancellation_during_preparation_not_allowed",
-} as const;
-
-export type CancellationRejectionReason =
-  (typeof CancellationRejectionReason)[keyof typeof CancellationRejectionReason];
+export { CancellationRejectionReason } from "../../domains/restaurantorder/restaurantorder.ts";
 
 /** Business result by stage; a rejection is not a technical error. */
 export type CancelRestaurantOrderResult =
@@ -50,23 +41,33 @@ export type CancelRestaurantOrderResult =
       state: RestaurantOrderState;
     }>;
 
-const TERMINAL_REJECTIONS: Partial<
-  Record<RestaurantOrderState, CancellationRejectionReason>
-> = {
-  [RestaurantOrderState.Ready]: CancellationRejectionReason.AlreadyReady,
-  [RestaurantOrderState.Rejected]: CancellationRejectionReason.AlreadyRejected,
-  [RestaurantOrderState.Failed]: CancellationRejectionReason.AlreadyFailed,
-};
+const toResult = (
+  restaurantOrderId: string,
+  decision: CancellationDecision,
+): CancelRestaurantOrderResult =>
+  decision.outcome === "rejected"
+    ? {
+        outcome: "cancellation_rejected",
+        restaurantOrderId,
+        reason: decision.reason,
+        state: decision.state,
+      }
+    : {
+        outcome: "cancelled",
+        restaurantOrderId,
+        stage: decision.stage,
+        repeated: decision.outcome === "repeated",
+      };
 
 /**
- * Compensation command of `orders`. Cancels by stage and answers with a
- * business result; publishes `RestaurantOrderCancelled` only when the State
- * changes. Cancellation during Preparation follows the explicit policy. An
- * unknown `orderId` is not found: no tombstone is kept for Cancel before
- * Receive.
+ * Compensation command of `orders`. The Restaurant Order decides the outcome
+ * by stage; the handler persists it and publishes `RestaurantOrderCancelled`
+ * only when the State changes. Cancellation during Preparation follows the
+ * explicit policy. An unknown `orderId` is not found: no tombstone is kept
+ * for Cancel before Receive.
  */
 export class CancelRestaurantOrderHandler {
-  readonly #accessControl: KitchenAccessControl;
+  readonly #accessControl: FulfillmentCoordinatorAccess;
   readonly #unitOfWork: UnitOfWork;
   readonly #restaurantOrders: RestaurantOrderRepository;
   readonly #outbox: Outbox;
@@ -74,7 +75,7 @@ export class CancelRestaurantOrderHandler {
   readonly #policy: CancellationPolicy;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
+    accessControl: FulfillmentCoordinatorAccess;
     unitOfWork: UnitOfWork;
     restaurantOrders: RestaurantOrderRepository;
     outbox: Outbox;
@@ -94,7 +95,7 @@ export class CancelRestaurantOrderHandler {
   async execute(
     command: CancelRestaurantOrder,
   ): Promise<CancelRestaurantOrderResult> {
-    await authorize(
+    await requirePermission(
       this.#accessControl.canCoordinateFulfillment(
         command.subject,
         command.restaurantId,
@@ -107,51 +108,17 @@ export class CancelRestaurantOrderHandler {
       if (order === undefined || order.restaurantId !== command.restaurantId) {
         throw new NotFoundError("RestaurantOrder", command.orderId);
       }
-      const stage = order.state;
-      try {
-        order.cancel({
-          cancelledAt: now,
-          policy: this.#policy,
-          reason: command.reason,
-        });
-      } catch (error) {
-        if (error instanceof AlreadyInStateError) {
-          return {
-            outcome: "cancelled",
-            restaurantOrderId: order.id,
-            stage: order.cancelledAtStage ?? stage,
-            repeated: true,
-          };
-        }
-        if (error instanceof GuardFailedError) {
-          return {
-            outcome: "cancellation_rejected",
-            restaurantOrderId: order.id,
-            reason:
-              CancellationRejectionReason.CancellationDuringPreparationNotAllowed,
-            state: stage,
-          };
-        }
-        const terminal = TERMINAL_REJECTIONS[stage];
-        if (error instanceof InvalidTransitionError && terminal !== undefined) {
-          return {
-            outcome: "cancellation_rejected",
-            restaurantOrderId: order.id,
-            reason: terminal,
-            state: stage,
-          };
-        }
-        throw error;
+      const decision = order.cancel({
+        cancelledAt: now,
+        policy: this.#policy,
+        reason: command.reason,
+      });
+      if (decision.outcome === "cancelled") {
+        await saveAndPublish(this.#restaurantOrders, this.#outbox, order, [
+          "RestaurantOrderCancelled",
+        ]);
       }
-      await saveAndPublish(this.#restaurantOrders, this.#outbox, order, [
-        "RestaurantOrderCancelled",
-      ]);
-      return {
-        outcome: "cancelled",
-        restaurantOrderId: order.id,
-        stage,
-        repeated: false,
-      };
+      return toResult(order.id, decision);
     });
   }
 }

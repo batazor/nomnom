@@ -1,6 +1,7 @@
 import type { Clock } from "../../../pkg/application/clock.ts";
-import { PermissionDeniedError } from "../../../pkg/application/errors.ts";
 import type { Outbox } from "../../../pkg/application/outbox.ts";
+import { publishAggregateChange } from "../../../pkg/application/publish-aggregate-change.ts";
+import { requirePermission } from "../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../pkg/application/subject.ts";
 import type { UnitOfWork } from "../../../pkg/application/unit-of-work.ts";
 import type {
@@ -32,14 +33,13 @@ export const changeOpening = async (
   action: string,
   change: (restaurant: Restaurant, at: Date) => boolean,
 ): Promise<RestaurantChangeResult> => {
-  if (
-    !(await dependencies.accessControl.canManageRestaurant(
+  await requirePermission(
+    dependencies.accessControl.canManageRestaurant(
       command.subject,
       command.restaurantId,
-    ))
-  ) {
-    throw new PermissionDeniedError(action);
-  }
+    ),
+    action,
+  );
   const at = dependencies.clock.now();
   return dependencies.unitOfWork.run(async () => {
     const restaurant = await loadRestaurant(
@@ -53,10 +53,12 @@ export const changeOpening = async (
         changed: false,
       };
     }
-    const version = await dependencies.restaurants.save(restaurant);
-    await dependencies.outbox.add(
-      { type: "Restaurant", id: restaurant.id, version },
-      restaurant.pullEvents(),
+    const version = await publishAggregateChange(
+      dependencies.restaurants,
+      dependencies.outbox,
+      "Restaurant",
+      undefined,
+      restaurant,
     );
     return { ...toRestaurantView(restaurant), version, changed: true };
   });

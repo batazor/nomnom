@@ -1,9 +1,8 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
 import { NotFoundError } from "../../../../pkg/application/errors.ts";
 import type { Outbox } from "../../../../pkg/application/outbox.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
-import type { MenuRepository } from "../../../menu/domains/menu/menu.ts";
-import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import {
   type AcceptanceConditions,
   evaluateOrderAcceptance,
@@ -12,17 +11,37 @@ import type {
   PreparationItem,
   RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { KitchenAccessControl } from "../access-control.ts";
+import type { KitchenStaffAccess } from "../access-control.ts";
+import type { KitchenCommand } from "../kitchen-command.ts";
+import { loadRestaurantOrder } from "../load-restaurant-order.ts";
+import { saveAndPublish } from "../publish-order-change.ts";
 import {
-  authorize,
-  type KitchenCommand,
-  loadRestaurantOrder,
   type RestaurantOrderView,
-  saveAndPublish,
   toRestaurantOrderView,
-} from "../restaurant-order-support.ts";
+} from "../restaurant-order-view.ts";
 
 export type AcceptOrder = KitchenCommand;
+
+/**
+ * Facts of the restaurant and its menu that Acceptance needs: whether the
+ * restaurant is open and the availability of the requested Menu Items. An item
+ * missing from the menu (or a restaurant without a menu) has no entry.
+ */
+export type AcceptanceFacts = Readonly<{
+  isOpen: boolean;
+  available: ReadonlyMap<string, boolean>;
+}>;
+
+/**
+ * Reads {@link AcceptanceFacts} inside the Unit of Work; `undefined` when the
+ * restaurant does not exist. It reads only local `restaurants` data.
+ */
+export interface AcceptanceFactsReader {
+  read(
+    restaurantId: string,
+    menuItemIds: readonly string[],
+  ): Promise<AcceptanceFacts | undefined>;
+}
 
 /**
  * Supplies the out-of-state Acceptance conditions (opening hours, schedule
@@ -57,22 +76,20 @@ export interface ReadyTimeEstimator {
  * `RestaurantOrderAccepted` is published; `RestaurantOrderQueued` stays local.
  */
 export class AcceptOrderHandler {
-  readonly #accessControl: KitchenAccessControl;
+  readonly #accessControl: KitchenStaffAccess;
   readonly #unitOfWork: UnitOfWork;
   readonly #restaurantOrders: RestaurantOrderRepository;
-  readonly #restaurants: RestaurantRepository;
-  readonly #menus: MenuRepository;
+  readonly #facts: AcceptanceFactsReader;
   readonly #conditions: AcceptanceConditionsProvider;
   readonly #readyTimeEstimator: ReadyTimeEstimator;
   readonly #outbox: Outbox;
   readonly #clock: Clock;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
+    accessControl: KitchenStaffAccess;
     unitOfWork: UnitOfWork;
     restaurantOrders: RestaurantOrderRepository;
-    restaurants: RestaurantRepository;
-    menus: MenuRepository;
+    facts: AcceptanceFactsReader;
     conditions: AcceptanceConditionsProvider;
     readyTimeEstimator: ReadyTimeEstimator;
     outbox: Outbox;
@@ -81,8 +98,7 @@ export class AcceptOrderHandler {
     this.#accessControl = dependencies.accessControl;
     this.#unitOfWork = dependencies.unitOfWork;
     this.#restaurantOrders = dependencies.restaurantOrders;
-    this.#restaurants = dependencies.restaurants;
-    this.#menus = dependencies.menus;
+    this.#facts = dependencies.facts;
     this.#conditions = dependencies.conditions;
     this.#readyTimeEstimator = dependencies.readyTimeEstimator;
     this.#outbox = dependencies.outbox;
@@ -90,7 +106,7 @@ export class AcceptOrderHandler {
   }
 
   async execute(command: AcceptOrder): Promise<RestaurantOrderView> {
-    await authorize(
+    await requirePermission(
       this.#accessControl.canOperateKitchen(
         command.subject,
         command.restaurantId,
@@ -104,20 +120,27 @@ export class AcceptOrderHandler {
         command.restaurantId,
         command.restaurantOrderId,
       );
-      const restaurant = await this.#restaurants.get(order.restaurantId);
-      if (restaurant === undefined) {
+      const menuItemIds = [
+        ...new Set(order.items.map((item) => item.menuItemId)),
+      ];
+      const facts = await this.#facts.read(order.restaurantId, menuItemIds);
+      if (facts === undefined) {
         throw new NotFoundError("Restaurant", order.restaurantId);
       }
-      const menu = await this.#menus.findByRestaurantId(order.restaurantId);
       const conditions = await this.#conditions.load({
         restaurantId: order.restaurantId,
-        menuItemIds: [...new Set(order.items.map((item) => item.menuItemId))],
+        menuItemIds,
         now,
       });
       const eligibility = evaluateOrderAcceptance({
         now,
-        restaurant,
-        menu,
+        restaurant: { isOpen: facts.isOpen },
+        menu: {
+          findItem: (menuItemId) => {
+            const isAvailable = facts.available.get(menuItemId);
+            return isAvailable === undefined ? undefined : { isAvailable };
+          },
+        },
         items: order.items.map((item) => ({
           menuItemId: item.menuItemId,
           quantity: item.quantity.value,

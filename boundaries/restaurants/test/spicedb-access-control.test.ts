@@ -7,10 +7,10 @@ import {
 } from "../infrastructure/grpc/service.ts";
 
 import {
-  type PermissionsClient,
   type RevisionReader,
   SpiceDbAccessControl,
 } from "../infrastructure/spicedb/access-control.ts";
+import type { PermissionsClient } from "../infrastructure/spicedb/client.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import { loadConfig } from "../pkg/config/config.ts";

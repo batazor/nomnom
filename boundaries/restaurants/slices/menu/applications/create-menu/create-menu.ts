@@ -4,11 +4,11 @@ import {
   NotFoundError,
 } from "../../../../pkg/application/errors.ts";
 import type { IdGenerator } from "../../../../pkg/application/id-generator.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import { Menu, type MenuRepository } from "../../domains/menu/menu.ts";
 import type { MenuAccessControl } from "../access-control.ts";
-import { authorizeMenu } from "../menu-support.ts";
 
 export type CreateMenu = Readonly<{
   subject: Subject;
@@ -44,10 +44,8 @@ export class CreateMenuHandler {
   }
 
   async execute(command: CreateMenu): Promise<CreateMenuResult> {
-    await authorizeMenu(
-      this.#accessControl,
-      command.subject,
-      command.restaurantId,
+    await requirePermission(
+      this.#accessControl.canManageMenu(command.subject, command.restaurantId),
       "create menu",
     );
     if ((await this.#restaurants.get(command.restaurantId)) === undefined) {

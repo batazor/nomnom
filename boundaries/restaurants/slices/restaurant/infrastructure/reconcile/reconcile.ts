@@ -11,7 +11,7 @@ import { v1 } from "@authzed/authzed-node";
 import {
   type RelationshipsClient,
   withDeadline,
-} from "../../../../infrastructure/spicedb/access-control.ts";
+} from "../../../../infrastructure/spicedb/client.ts";
 import {
   RESTAURANT,
   type RelationshipOperation,

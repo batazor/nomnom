@@ -1,4 +1,4 @@
-import type { KitchenAccessControl } from "../access-control.ts";
+import type { KitchenStaffAccess } from "../access-control.ts";
 import {
   authorizeKitchenBoard,
   type KitchenBoardItem,
@@ -37,12 +37,12 @@ export interface KitchenQueueOrdering {
 
 /** Returns queued orders in the order given by the Kitchen Queue policy. */
 export class GetKitchenQueueHandler {
-  readonly #accessControl: KitchenAccessControl;
+  readonly #accessControl: KitchenStaffAccess;
   readonly #reader: KitchenQueueReader;
   readonly #ordering: KitchenQueueOrdering;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
+    accessControl: KitchenStaffAccess;
     reader: KitchenQueueReader;
     ordering: KitchenQueueOrdering;
   }) {

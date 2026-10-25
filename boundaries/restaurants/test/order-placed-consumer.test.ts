@@ -19,6 +19,7 @@ import {
   ORDERS_EVENT_SOURCE,
   OrdersEventSourceAccessControl,
 } from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
+import { RepositoryRestaurantExistence } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import { createKitchenWorld, ordersService } from "./support/kitchen.ts";
 import { createInfrastructure } from "./support/restaurants.ts";
 
@@ -65,7 +66,7 @@ const setup = async () => {
   const kitchen = await world.givenKitchen();
   const receiveOrderRequest = new ReceiveOrderRequestHandler({
     accessControl: new OrdersEventSourceAccessControl(),
-    restaurants: world.restaurants,
+    restaurants: new RepositoryRestaurantExistence(world.restaurants),
     restaurantOrders: world.restaurantOrders,
     ids: new SequentialIdGenerator("restaurant-order"),
     clock: infrastructure.clock,
@@ -242,6 +243,7 @@ test("the event source access control allows only fulfillment from the orders st
     }),
     false,
   );
-  assert.equal(await accessControl.canOperateKitchen(), false);
-  assert.equal(await accessControl.canViewRestaurantOrders(), false);
+  // AC-638: the adapter implements only FulfillmentCoordinatorAccess.
+  assert.equal("canOperateKitchen" in accessControl, false);
+  assert.equal("canViewRestaurantOrders" in accessControl, false);
 });
