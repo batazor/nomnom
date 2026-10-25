@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 from .outbox import OutboxRecord, PublishError, kafka_headers
 
@@ -20,7 +20,7 @@ class KafkaPublisher:
         brokers: str,
         client_id: str,
         delivery_timeout: float = DEFAULT_DELIVERY_TIMEOUT,
-        extra_config: Optional[dict[str, Any]] = None,
+        extra_config: dict[str, Any] | None = None,
     ) -> None:
         from confluent_kafka import Producer
 

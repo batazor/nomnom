@@ -47,7 +47,7 @@ class SpiceDBSettings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def _require_key(self) -> "SpiceDBSettings":
+    def _require_key(self) -> SpiceDBSettings:
         if self.endpoint and not self.preshared_key:
             raise ValueError(
                 f"{SPICEDB_PRESHARED_KEY_ENV} must not be empty when {SPICEDB_ENDPOINT_ENV} is set",

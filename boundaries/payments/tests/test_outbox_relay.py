@@ -1,8 +1,7 @@
 """Outbox relay logic of ADR 31: headers, head-of-line, retention, single active instance."""
 
 import unittest
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta, timezone
 
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -17,7 +16,7 @@ from infrastructure.messaging.relay import (
 )
 from pkg.config import KafkaSettings, OutboxSettings
 
-NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
 TOPIC = "payments.v1.payment-events"
 
 
@@ -37,7 +36,7 @@ def _record(seq: int, occurred_at: datetime = NOW - timedelta(seconds=2)) -> Out
 
 
 class FakeStore:
-    def __init__(self, records: list[OutboxRecord], published_at: Optional[dict] = None) -> None:
+    def __init__(self, records: list[OutboxRecord], published_at: dict | None = None) -> None:
         self.records = {r.seq: r for r in records}
         self.published: dict[int, datetime] = dict(published_at or {})
         self.failures: dict[int, list[str]] = {}
@@ -77,7 +76,7 @@ class FakeStore:
 
 
 class FakePublisher:
-    def __init__(self, fail_seqs: Optional[set[int]] = None, retriable: bool = True) -> None:
+    def __init__(self, fail_seqs: set[int] | None = None, retriable: bool = True) -> None:
         self.fail_seqs = set(fail_seqs or ())
         self.retriable = retriable
         self.sent: list[int] = []
@@ -111,7 +110,7 @@ def _points(reader: InMemoryMetricReader) -> dict[str, list]:
 
 class HeadersTest(unittest.TestCase):
     def test_envelope_headers_match_orders_format(self) -> None:
-        record = _record(7, datetime(2026, 10, 25, 14, 30, 1, 120000, tzinfo=timezone.utc))
+        record = _record(7, datetime(2026, 10, 25, 14, 30, 1, 120000, tzinfo=UTC))
         headers = dict(kafka_headers(record))
         self.assertEqual(
             headers,
@@ -138,7 +137,7 @@ class HeadersTest(unittest.TestCase):
             "2026-01-02T03:04:05Z",
         )
         self.assertEqual(
-            format_rfc3339_nano(datetime(2026, 1, 2, 3, 4, 5, 1, tzinfo=timezone.utc)),
+            format_rfc3339_nano(datetime(2026, 1, 2, 3, 4, 5, 1, tzinfo=UTC)),
             "2026-01-02T03:04:05.000001Z",
         )
 

@@ -1,7 +1,6 @@
 """In-memory domain events recorded by the payments domain model."""
 
 from dataclasses import dataclass
-from typing import Union
 
 from .ids import OperationId, OperationKind, OrderId, PaymentId
 from .vo.money import Money
@@ -50,12 +49,12 @@ class PaymentOperationDeclined:
     reason: str
 
 
-PaymentEvent = Union[
-    PaymentAuthorized,
-    PaymentCaptured,
-    PaymentAuthorizationCancelled,
-    PaymentRefunded,
-    PaymentFailed,
-]
+PaymentEvent = (
+    PaymentAuthorized
+    | PaymentCaptured
+    | PaymentAuthorizationCancelled
+    | PaymentRefunded
+    | PaymentFailed
+)
 
-PaymentDomainEvent = Union[PaymentEvent, PaymentOperationDeclined]
+PaymentDomainEvent = PaymentEvent | PaymentOperationDeclined

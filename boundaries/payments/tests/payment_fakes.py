@@ -7,10 +7,10 @@ provider deduplication by idempotency key.
 """
 
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional, TypeVar
+from datetime import UTC, datetime, timedelta
+from typing import TypeVar
 from unittest.mock import patch
 
 from dependency_injector import providers
@@ -57,7 +57,7 @@ T = TypeVar("T")
 
 ORCHESTRATOR = Subject(SubjectKind.SERVICE, "orders-activity-worker")
 OPERATOR = Subject(SubjectKind.USER, "operator-1")
-NOW = datetime(2026, 10, 25, 10, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class PaymentRecord:
     order_id: OrderId
     amount: Money
     state: PaymentState
-    provider_reference: Optional[str]
+    provider_reference: str | None
     version: int
 
 
@@ -79,9 +79,9 @@ class OperationRecord:
     amount: Money
     requested_at: datetime
     state: OperationState
-    provider_reference: Optional[str]
-    decline_reason: Optional[str]
-    completed_at: Optional[datetime]
+    provider_reference: str | None
+    decline_reason: str | None
+    completed_at: datetime | None
     version: int
 
 
@@ -98,7 +98,7 @@ class InMemoryPaymentStore:
     outbox: list[OutboxRecord] = field(default_factory=list)
     provider_messages: set[str] = field(default_factory=set)
 
-    def snapshot(self) -> "InMemoryPaymentStore":
+    def snapshot(self) -> InMemoryPaymentStore:
         return InMemoryPaymentStore(
             dict(self.payments),
             dict(self.operations),
@@ -106,7 +106,7 @@ class InMemoryPaymentStore:
             set(self.provider_messages),
         )
 
-    def restore(self, snapshot: "InMemoryPaymentStore") -> None:
+    def restore(self, snapshot: InMemoryPaymentStore) -> None:
         self.payments = dict(snapshot.payments)
         self.operations = dict(snapshot.operations)
         self.outbox = list(snapshot.outbox)
@@ -141,11 +141,11 @@ class InMemoryPaymentRepository:
     def __init__(self, store: InMemoryPaymentStore) -> None:
         self._store = store
 
-    def get(self, payment_id: PaymentId) -> Optional[Payment]:
+    def get(self, payment_id: PaymentId) -> Payment | None:
         record = self._store.payments.get(payment_id)
         return None if record is None else self._to_domain(record)
 
-    def get_by_order(self, order_id: OrderId) -> Optional[Payment]:
+    def get_by_order(self, order_id: OrderId) -> Payment | None:
         for record in self._store.payments.values():
             if record.order_id == order_id:
                 return self._to_domain(record)
@@ -195,11 +195,11 @@ class InMemoryPaymentOperationRepository:
         # lookups miss existing operations until the next ``add``.
         self.stale_lookups = False
 
-    def get(self, operation_id: OperationId) -> Optional[PaymentOperation]:
+    def get(self, operation_id: OperationId) -> PaymentOperation | None:
         record = self._store.operations.get(operation_id)
         return None if record is None else self._to_domain(record)
 
-    def get_by_idempotency_key(self, idempotency_key: str) -> Optional[PaymentOperation]:
+    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
         if self.stale_lookups:
             return None
         for record in self._store.operations.values():
@@ -207,7 +207,7 @@ class InMemoryPaymentOperationRepository:
                 return self._to_domain(record)
         return None
 
-    def find_pending(self, payment_id: PaymentId) -> Optional[PaymentOperation]:
+    def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None:
         if self.stale_lookups:
             return None
         for record in self._store.operations.values():
@@ -426,7 +426,7 @@ class PaymentsTestKit:
         idempotency_key: str,
         state: OperationState = OperationState.PENDING,
         operation_id: str = "operation-0",
-        decline_reason: Optional[str] = None,
+        decline_reason: str | None = None,
     ) -> OperationId:
         payment = self.store.payments[payment_id]
         completed = state is not OperationState.PENDING
@@ -470,7 +470,7 @@ def unreachable_database() -> PostgresDatabase:
 UNREACHABLE_DATABASE_URL = "postgresql://payments@127.0.0.1:1/x"
 
 
-def payments_container(environment: Optional[Mapping[str, str]] = None) -> PaymentsContainer:
+def payments_container(environment: Mapping[str, str] | None = None) -> PaymentsContainer:
     """``PaymentsContainer`` over settings from ``environment``.
 
     The database is an unreachable pool (closed by ``close_container``) and both workers

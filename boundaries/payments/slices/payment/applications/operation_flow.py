@@ -12,7 +12,6 @@ repeats the provider call with the same key, which the provider deduplicates.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from pkg.application import Clock, Subject, UnitOfWork
 from slices.payment.domains.payment import (
@@ -82,7 +81,7 @@ _PERMISSION_OF: dict[OperationKind, PaymentPermission] = {
 class _Reservation:
     operation: PaymentOperation
     payment_state: PaymentState
-    authorization_reference: Optional[str]
+    authorization_reference: str | None
 
 
 class PaymentOperationExecutor:

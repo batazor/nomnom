@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from slices.payment.domains.payment.specifications import (
     PaymentCapturable,
@@ -88,7 +88,7 @@ class PaymentSpecificationsTest(unittest.TestCase):
 
     @staticmethod
     def instant() -> datetime:
-        return datetime(2026, 10, 25, 10, 0, tzinfo=timezone.utc)
+        return datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 
     @staticmethod
     def money(amount: str) -> Money:

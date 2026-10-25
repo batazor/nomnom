@@ -3,7 +3,6 @@ import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Optional
 
 from pkg.lifecycle._bind import FastBindMixin
 from pkg.lifecycle.errors import DrainTimeoutError, LifecycleError
@@ -70,7 +69,7 @@ class HttpWorker:
         self._address = address
         self._handler = handler
         self._name = name
-        self._server: Optional[_TrackingHTTPServer] = None
+        self._server: _TrackingHTTPServer | None = None
 
     @property
     def port(self) -> int:

@@ -3,8 +3,8 @@ import json
 import threading
 import time
 import unittest
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler
-from typing import Callable, Optional
 from unittest.mock import ANY
 
 from pkg.lifecycle import (
@@ -40,13 +40,13 @@ def eventually(condition: Callable[[], bool], timeout: float = TIMEOUT) -> bool:
 class FakeWorker:
     """Обслуживает работу до shutdown; drain задаёт длительность завершения начатой работы."""
 
-    def __init__(self, start_error: Optional[Exception] = None, drain: float = 0.0) -> None:
+    def __init__(self, start_error: Exception | None = None, drain: float = 0.0) -> None:
         self.start_error = start_error
         self.drain = drain
         self.started = threading.Event()
-        self.shutdown_at: Optional[float] = None
+        self.shutdown_at: float | None = None
         self._stop = threading.Event()
-        self._exit_error: Optional[Exception] = None
+        self._exit_error: Exception | None = None
 
     def start(self) -> None:
         if self.start_error is not None:
@@ -69,7 +69,7 @@ class FakeWorker:
         finally:
             self._stop.set()
 
-    def exit(self, error: Optional[Exception] = None) -> None:
+    def exit(self, error: Exception | None = None) -> None:
         self._exit_error = error
         self._stop.set()
 
@@ -79,8 +79,8 @@ class LifecycleRun:
 
     def __init__(self, lifecycle: Lifecycle, worker: Worker) -> None:
         self.stop = threading.Event()
-        self.error: Optional[BaseException] = None
-        self.stopped_at: Optional[float] = None
+        self.error: BaseException | None = None
+        self.stopped_at: float | None = None
         self._thread = threading.Thread(target=self._run, args=(lifecycle, worker), daemon=True)
         self._thread.start()
 
@@ -94,7 +94,7 @@ class LifecycleRun:
         self.stopped_at = time.monotonic()
         self.stop.set()
 
-    def wait(self) -> Optional[BaseException]:
+    def wait(self) -> BaseException | None:
         self._thread.join(TIMEOUT)
         if self._thread.is_alive():
             raise AssertionError("lifecycle did not return")

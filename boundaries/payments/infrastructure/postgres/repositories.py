@@ -6,7 +6,7 @@ means a concurrent modification.
 """
 
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 
 from psycopg import errors
 from psycopg.types.json import Jsonb
@@ -43,7 +43,7 @@ _OPERATION_COLUMNS = (
 )
 
 
-def _constraint(error: errors.UniqueViolation) -> Optional[str]:
+def _constraint(error: errors.UniqueViolation) -> str | None:
     return error.diag.constraint_name
 
 
@@ -51,10 +51,10 @@ class PostgresPaymentRepository:
     def __init__(self, database: PostgresDatabase) -> None:
         self._db = database
 
-    def get(self, payment_id: PaymentId) -> Optional[Payment]:
+    def get(self, payment_id: PaymentId) -> Payment | None:
         return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE id = %s", payment_id)
 
-    def get_by_order(self, order_id: OrderId) -> Optional[Payment]:
+    def get_by_order(self, order_id: OrderId) -> Payment | None:
         return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE order_id = %s", order_id)
 
     def add(self, payment: Payment) -> int:
@@ -90,7 +90,7 @@ class PostgresPaymentRepository:
             raise ConcurrencyConflict("Payment", payment.id)
         return int(row[0])
 
-    def _one(self, query: str, value: str) -> Optional[Payment]:
+    def _one(self, query: str, value: str) -> Payment | None:
         with self._db.connection() as conn:
             row = conn.execute(query, (value,)).fetchone()
         if row is None:
@@ -110,13 +110,13 @@ class PostgresPaymentOperationRepository:
     def __init__(self, database: PostgresDatabase) -> None:
         self._db = database
 
-    def get(self, operation_id: OperationId) -> Optional[PaymentOperation]:
+    def get(self, operation_id: OperationId) -> PaymentOperation | None:
         return self._first("id = %s", operation_id)
 
-    def get_by_idempotency_key(self, idempotency_key: str) -> Optional[PaymentOperation]:
+    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
         return self._first("idempotency_key = %s", idempotency_key)
 
-    def find_pending(self, payment_id: PaymentId) -> Optional[PaymentOperation]:
+    def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None:
         return self._first("payment_id = %s AND state = 'pending'", payment_id)
 
     def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperation]:
@@ -176,7 +176,7 @@ class PostgresPaymentOperationRepository:
             raise ConcurrencyConflict("PaymentOperation", operation.id)
         return int(row[0])
 
-    def _first(self, condition: str, value: str) -> Optional[PaymentOperation]:
+    def _first(self, condition: str, value: str) -> PaymentOperation | None:
         with self._db.connection() as conn:
             row = conn.execute(
                 f"SELECT {_OPERATION_COLUMNS} FROM payment_operations WHERE {condition} LIMIT 1",

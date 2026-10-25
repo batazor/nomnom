@@ -3,7 +3,6 @@
 import json
 import logging
 from datetime import datetime
-from typing import Optional
 
 import psycopg
 
@@ -25,7 +24,7 @@ class PostgresOutboxStore:
     def __init__(self, database: PostgresDatabase, dsn: str) -> None:
         self._db = database
         self._dsn = dsn
-        self._lock_conn: Optional[psycopg.Connection] = None
+        self._lock_conn: psycopg.Connection | None = None
 
     def try_lock(self) -> bool:
         conn = self._lock_conn

@@ -4,7 +4,7 @@ import threading
 import time
 from dataclasses import dataclass
 from types import FrameType
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 from pkg.lifecycle.errors import LifecycleError
 from pkg.lifecycle.health import Health, ManagementServer
@@ -57,7 +57,7 @@ class _RunThread(threading.Thread):
         super().__init__(name="worker", daemon=True)
         self._worker = worker
         self._exited = exited
-        self.error: Optional[BaseException] = None
+        self.error: BaseException | None = None
 
     def run(self) -> None:
         try:
@@ -76,16 +76,16 @@ class Lifecycle:
     def __init__(self, config: LifecycleConfig) -> None:
         self._config = config
         self.health = Health()
-        self._management: Optional[ManagementServer] = None
-        self._signal: Optional[int] = None
+        self._management: ManagementServer | None = None
+        self._signal: int | None = None
 
     @property
-    def management_port(self) -> Optional[int]:
+    def management_port(self) -> int | None:
         """Фактически занятый технический порт; None до его открытия."""
         management = self._management
         return None if management is None else management.port
 
-    def run(self, worker: Worker, stop_event: Optional[threading.Event] = None) -> None:
+    def run(self, worker: Worker, stop_event: threading.Event | None = None) -> None:
         """Выполняет lifecycle: технический порт → start → ready → SIGTERM/SIGINT
         или stop_event → not ready → readiness delay → shutdown → выход.
         Нормальный возврат означает штатный shutdown; любая ошибка — исключение."""
@@ -101,7 +101,7 @@ class Lifecycle:
         finally:
             _restore_signal_handlers(previous_handlers)
 
-    def _run_worker(self, worker: Worker, stop_event: Optional[threading.Event]) -> None:
+    def _run_worker(self, worker: Worker, stop_event: threading.Event | None) -> None:
         try:
             worker.start()
         except Exception as error:
@@ -146,7 +146,7 @@ class Lifecycle:
             message = "; ".join(str(error) or type(error).__name__ for error in errors)
             raise LifecycleError(f"shutdown: {message}") from errors[0]
 
-    def _stop_requested(self, stop_event: Optional[threading.Event]) -> bool:
+    def _stop_requested(self, stop_event: threading.Event | None) -> bool:
         return self._signal is not None or (stop_event is not None and stop_event.is_set())
 
     def _serve_management(self) -> ManagementServer:
@@ -159,7 +159,7 @@ class Lifecycle:
         logger.info("management listening on :%d", management.port)
         return management
 
-    def _install_signal_handlers(self) -> Optional[dict[int, Any]]:
+    def _install_signal_handlers(self) -> dict[int, Any] | None:
         # signal.signal доступен только из главного потока; в тестах lifecycle
         # запускается в отдельном потоке и останавливается через stop_event.
         if threading.current_thread() is not threading.main_thread():
@@ -169,7 +169,7 @@ class Lifecycle:
             signal.signal(signum, self._handle_signal)
         return previous
 
-    def _handle_signal(self, signum: int, frame: Optional[FrameType]) -> None:
+    def _handle_signal(self, signum: int, frame: FrameType | None) -> None:
         self._signal = signum
 
 
@@ -180,14 +180,14 @@ def _reset_signal_handlers() -> None:
         signal.signal(signum, signal.SIG_DFL)
 
 
-def _restore_signal_handlers(previous: Optional[dict[int, Any]]) -> None:
+def _restore_signal_handlers(previous: dict[int, Any] | None) -> None:
     if previous is None:
         return
     for signum, handler in previous.items():
         signal.signal(signum, handler)
 
 
-def _stopped_unexpectedly(error: Optional[BaseException]) -> LifecycleError:
+def _stopped_unexpectedly(error: BaseException | None) -> LifecycleError:
     reason = "no error reported" if error is None else str(error) or type(error).__name__
     stopped = LifecycleError(f"worker stopped before shutdown: {reason}")
     stopped.__cause__ = error

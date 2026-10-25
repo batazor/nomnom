@@ -11,9 +11,9 @@ from it again. Published records older than the retention are deleted.
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional
+from datetime import UTC, datetime, timedelta
 
 from .kafka_publisher import DEFAULT_DELIVERY_TIMEOUT, KafkaPublisher
 from .outbox import (
@@ -73,8 +73,8 @@ class OutboxRelay:
         *,
         batch_size: int,
         retention: timedelta,
-        metrics_: Optional[RelayMetrics] = None,
-        now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        metrics_: RelayMetrics | None = None,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
         cleanup_interval: timedelta = CLEANUP_INTERVAL,
     ) -> None:
         self._store = store
@@ -84,7 +84,7 @@ class OutboxRelay:
         self._metrics = metrics_ or RelayMetrics(now=now)
         self._now = now
         self._cleanup_interval = cleanup_interval
-        self._last_cleanup: Optional[datetime] = None
+        self._last_cleanup: datetime | None = None
 
     def run_once(self, should_stop: Callable[[], bool] = lambda: False) -> CycleResult:
         if not self._store.try_lock():

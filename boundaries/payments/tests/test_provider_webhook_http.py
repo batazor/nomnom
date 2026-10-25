@@ -3,7 +3,7 @@ import json
 import threading
 import time
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from payment_fakes import PaymentsTestKit
 
@@ -19,7 +19,7 @@ from pkg.lifecycle import HttpWorker, LifecycleError, WorkerGroup
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
 
-NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 SECRET = "whsec_test"
 
 

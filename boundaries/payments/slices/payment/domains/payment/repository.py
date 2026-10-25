@@ -6,7 +6,7 @@ Inside an active Unit of Work every method participates in that transaction.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Protocol
 
 from .ids import OperationId, OrderId, PaymentId
 from .operation import PaymentOperation
@@ -44,9 +44,9 @@ class OperationAlreadyPending(Exception):
 
 
 class PaymentRepository(Protocol):
-    def get(self, payment_id: PaymentId) -> Optional[Payment]: ...
+    def get(self, payment_id: PaymentId) -> Payment | None: ...
 
-    def get_by_order(self, order_id: OrderId) -> Optional[Payment]: ...
+    def get_by_order(self, order_id: OrderId) -> Payment | None: ...
 
     def add(self, payment: Payment) -> int:
         """Persist a new Payment and return its version; raises ``DuplicatePayment``."""
@@ -58,11 +58,11 @@ class PaymentRepository(Protocol):
 
 
 class PaymentOperationRepository(Protocol):
-    def get(self, operation_id: OperationId) -> Optional[PaymentOperation]: ...
+    def get(self, operation_id: OperationId) -> PaymentOperation | None: ...
 
-    def get_by_idempotency_key(self, idempotency_key: str) -> Optional[PaymentOperation]: ...
+    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None: ...
 
-    def find_pending(self, payment_id: PaymentId) -> Optional[PaymentOperation]: ...
+    def find_pending(self, payment_id: PaymentId) -> PaymentOperation | None: ...
 
     def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperation]:
         """Return operations of the Payment ordered by ``requested_at``."""

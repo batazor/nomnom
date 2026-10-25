@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from slices.payment.domains.payment import (
     AlreadyInState,
@@ -29,7 +29,7 @@ from slices.payment.domains.payment import (
 )
 from slices.payment.domains.payment.operation import OPERATION_TRANSITIONS
 
-NOW = datetime(2026, 10, 25, 10, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 AMOUNT = Money.parse("10.00", "EUR")
 PAYMENT_ID = PaymentId("payment-1")
 

@@ -1,7 +1,7 @@
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Optional, cast
+from typing import cast
 
 from pkg.lifecycle._bind import FastBindMixin
 
@@ -36,10 +36,10 @@ class Health:
         """Может ли экземпляр принимать новую работу."""
         return self.started and not self.shutting_down
 
-    def startup_reason(self) -> Optional[str]:
+    def startup_reason(self) -> str | None:
         return None if self.started else REASON_INITIALIZING
 
-    def readiness_reason(self) -> Optional[str]:
+    def readiness_reason(self) -> str | None:
         if self.shutting_down:
             return REASON_SHUTTING_DOWN
         return self.startup_reason()
@@ -64,7 +64,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
 
-    def _write(self, reason: Optional[str]) -> None:
+    def _write(self, reason: str | None) -> None:
         if reason is None:
             status, payload = 200, {"status": "ok"}
         else:
@@ -93,7 +93,7 @@ class ManagementServer(FastBindMixin, ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], health: Health) -> None:
         super().__init__(address, _HealthHandler)
         self.health = health
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     @property
     def port(self) -> int:

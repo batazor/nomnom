@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 from slices.payment.domains.payment import (
     OperationId,
@@ -38,13 +37,13 @@ class PaymentOperationResult:
     kind: OperationKind
     status: OperationStatus
     payment_state: PaymentState
-    decline_reason: Optional[str] = None
+    decline_reason: str | None = None
     replayed: bool = False
 
     @classmethod
     def of(
         cls, operation: PaymentOperation, payment_state: PaymentState, replayed: bool
-    ) -> "PaymentOperationResult":
+    ) -> PaymentOperationResult:
         return cls(
             payment_id=operation.payment_id,
             operation_id=operation.id,

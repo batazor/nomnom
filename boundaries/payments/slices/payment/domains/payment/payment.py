@@ -1,7 +1,5 @@
 """Payment aggregate driven by the Payment state machine."""
 
-from typing import Optional
-
 from .events import (
     PaymentAuthorizationCancelled,
     PaymentAuthorized,
@@ -30,7 +28,7 @@ class Payment:
         self._order_id = order_id
         self._amount = amount
         self._state = PaymentState.PENDING
-        self._provider_reference: Optional[str] = None
+        self._provider_reference: str | None = None
         self._version = 0
         self._events: list[PaymentEvent] = []
 
@@ -41,9 +39,9 @@ class Payment:
         order_id: OrderId,
         amount: Money,
         state: PaymentState,
-        provider_reference: Optional[str],
+        provider_reference: str | None,
         version: int,
-    ) -> "Payment":
+    ) -> Payment:
         if state in {
             PaymentState.AUTHORIZED,
             PaymentState.CAPTURED,
@@ -125,7 +123,7 @@ class Payment:
         return self._state
 
     @property
-    def provider_reference(self) -> Optional[str]:
+    def provider_reference(self) -> str | None:
         return self._provider_reference
 
     @property

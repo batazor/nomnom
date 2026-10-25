@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pkg.application import AggregateRef, Clock
 from slices.payment.domains.payment import (
@@ -120,11 +119,11 @@ class ProviderResultApplication:
 
     status: ProviderResultStatus
     operation_id: OperationId
-    operation_status: Optional[OperationStatus] = None
-    payment_state: Optional[PaymentState] = None
+    operation_status: OperationStatus | None = None
+    payment_state: PaymentState | None = None
 
     @classmethod
-    def of(cls, applied: AppliedProviderResult) -> "ProviderResultApplication":
+    def of(cls, applied: AppliedProviderResult) -> ProviderResultApplication:
         return cls(
             status=(
                 ProviderResultStatus.APPLIED

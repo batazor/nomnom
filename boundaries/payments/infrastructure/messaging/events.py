@@ -5,8 +5,8 @@ such as ``PaymentOperationDeclined``, maps to ``None`` and never reaches the Out
 """
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from google.protobuf.message import Message
 
@@ -81,7 +81,7 @@ def event_type_of(message: Message) -> str:
 class PaymentEventsMapper:
     """OutboxEventMapper of the ``payments.v1.payment-events`` topic."""
 
-    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> Optional[OutboxMessage]:
+    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage | None:
         build = _CONTRACTS.get(type(event))
         if build is None:
             return None

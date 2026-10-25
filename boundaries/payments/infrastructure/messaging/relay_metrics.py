@@ -1,9 +1,8 @@
 """OTel instruments of the payments Outbox relay (observability of ADR 13)."""
 
 import threading
-from collections.abc import Sequence
-from datetime import datetime, timezone
-from typing import Callable, Optional
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 
 from opentelemetry import metrics
 
@@ -20,8 +19,8 @@ class RelayMetrics:
 
     def __init__(
         self,
-        meter: Optional[metrics.Meter] = None,
-        now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        meter: metrics.Meter | None = None,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         meter = meter or metrics.get_meter("nomnom.payments.outbox")
         self._now = now

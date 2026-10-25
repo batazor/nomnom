@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Protocol
+from typing import Protocol
 
 from pkg.application import AggregateRef, ApplicationError, Subject
 from slices.payment.domains.payment import (
@@ -29,7 +29,7 @@ class PaymentPermission(str, Enum):
 @dataclass(frozen=True)
 class PaymentResource:
     payment_id: PaymentId
-    order_id: Optional[OrderId] = None
+    order_id: OrderId | None = None
 
 
 class PaymentPermissionChecker(Protocol):
@@ -59,7 +59,7 @@ class ProviderOperationRequest:
     kind: OperationKind
     idempotency_key: str
     amount: Money
-    authorization_reference: Optional[str]
+    authorization_reference: str | None
 
 
 @dataclass(frozen=True)
@@ -67,19 +67,19 @@ class ProviderOperationOutcome:
     """Provider answer; ``accepted`` means the final result arrives asynchronously."""
 
     status: ProviderOperationStatus
-    provider_reference: Optional[str] = None
-    decline_reason: Optional[str] = None
+    provider_reference: str | None = None
+    decline_reason: str | None = None
 
     @classmethod
-    def succeeded(cls, provider_reference: Optional[str] = None) -> "ProviderOperationOutcome":
+    def succeeded(cls, provider_reference: str | None = None) -> ProviderOperationOutcome:
         return cls(ProviderOperationStatus.SUCCEEDED, provider_reference=provider_reference)
 
     @classmethod
-    def declined(cls, reason: str) -> "ProviderOperationOutcome":
+    def declined(cls, reason: str) -> ProviderOperationOutcome:
         return cls(ProviderOperationStatus.DECLINED, decline_reason=reason)
 
     @classmethod
-    def accepted(cls) -> "ProviderOperationOutcome":
+    def accepted(cls) -> ProviderOperationOutcome:
         return cls(ProviderOperationStatus.ACCEPTED)
 
 

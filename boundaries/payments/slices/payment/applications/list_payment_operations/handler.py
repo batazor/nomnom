@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from pkg.application import Subject
 from slices.payment.domains.payment import (
@@ -38,8 +37,8 @@ class PaymentOperationView:
     currency: str
     idempotency_key: str
     requested_at: datetime
-    completed_at: Optional[datetime]
-    decline_reason: Optional[str]
+    completed_at: datetime | None
+    decline_reason: str | None
 
 
 @dataclass(frozen=True)

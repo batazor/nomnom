@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from .events import PaymentDomainEvent, PaymentOperationDeclined
 from .fsm import PaymentTrigger
@@ -56,7 +55,7 @@ class OperationMismatch(Exception):
 
 # Single source of truth for every OperationState x OperationTrigger pair:
 # a target state, or None when the trigger repeats or contradicts a completed result.
-OPERATION_TRANSITIONS: dict[tuple[OperationState, OperationTrigger], Optional[OperationState]] = {
+OPERATION_TRANSITIONS: dict[tuple[OperationState, OperationTrigger], OperationState | None] = {
     (OperationState.PENDING, OperationTrigger.SUCCEED): OperationState.SUCCEEDED,
     (OperationState.PENDING, OperationTrigger.DECLINE): OperationState.DECLINED,
     (OperationState.SUCCEEDED, OperationTrigger.SUCCEED): None,
@@ -106,9 +105,9 @@ class PaymentOperation:
         self._amount = amount
         self._requested_at = requested_at
         self._state = OperationState.PENDING
-        self._provider_reference: Optional[str] = None
-        self._decline_reason: Optional[str] = None
-        self._completed_at: Optional[datetime] = None
+        self._provider_reference: str | None = None
+        self._decline_reason: str | None = None
+        self._completed_at: datetime | None = None
         self._version = 0
         self._events: list[PaymentOperationDeclined] = []
 
@@ -122,11 +121,11 @@ class PaymentOperation:
         amount: Money,
         requested_at: datetime,
         state: OperationState,
-        provider_reference: Optional[str],
-        decline_reason: Optional[str],
-        completed_at: Optional[datetime],
+        provider_reference: str | None,
+        decline_reason: str | None,
+        completed_at: datetime | None,
         version: int,
-    ) -> "PaymentOperation":
+    ) -> PaymentOperation:
         if state is not OperationState.PENDING and completed_at is None:
             raise ValueError("completed payment operation requires completion time")
         if state is OperationState.DECLINED and not decline_reason:
@@ -139,7 +138,7 @@ class PaymentOperation:
         operation._version = version
         return operation
 
-    def succeed(self, provider_reference: Optional[str], completed_at: datetime) -> None:
+    def succeed(self, provider_reference: str | None, completed_at: datetime) -> None:
         self._state = _transition(self._state, OperationTrigger.SUCCEED)
         self._provider_reference = provider_reference.strip() if provider_reference else None
         self._completed_at = completed_at
@@ -195,15 +194,15 @@ class PaymentOperation:
         return self._state is not OperationState.PENDING
 
     @property
-    def provider_reference(self) -> Optional[str]:
+    def provider_reference(self) -> str | None:
         return self._provider_reference
 
     @property
-    def decline_reason(self) -> Optional[str]:
+    def decline_reason(self) -> str | None:
         return self._decline_reason
 
     @property
-    def completed_at(self) -> Optional[datetime]:
+    def completed_at(self) -> datetime | None:
         return self._completed_at
 
     @property
@@ -216,15 +215,15 @@ class OperationOutcome:
     """Final provider result of a Payment Operation, passed into the domain as a value."""
 
     succeeded: bool
-    provider_reference: Optional[str] = None
-    decline_reason: Optional[str] = None
+    provider_reference: str | None = None
+    decline_reason: str | None = None
 
     @classmethod
-    def success(cls, provider_reference: Optional[str] = None) -> "OperationOutcome":
+    def success(cls, provider_reference: str | None = None) -> OperationOutcome:
         return cls(True, provider_reference=provider_reference)
 
     @classmethod
-    def declined(cls, reason: str) -> "OperationOutcome":
+    def declined(cls, reason: str) -> OperationOutcome:
         return cls(False, decline_reason=reason)
 
 
@@ -263,9 +262,7 @@ def complete_operation(
     return events
 
 
-def _apply_success(
-    payment: Payment, kind: OperationKind, provider_reference: Optional[str]
-) -> None:
+def _apply_success(payment: Payment, kind: OperationKind, provider_reference: str | None) -> None:
     if kind is OperationKind.AUTHORIZE:
         payment.authorize(provider_reference or "")
     elif kind is OperationKind.CAPTURE:

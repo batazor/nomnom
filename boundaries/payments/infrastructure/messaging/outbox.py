@@ -1,8 +1,8 @@
 """Outbox record, its Event Envelope headers and the relay's ports (ADR 31)."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional, Protocol
+from datetime import UTC, datetime
+from typing import Protocol
 
 # Header of the Watermill message UUID: Go consumers log it as the message id.
 WATERMILL_UUID_HEADER = "_watermill_message_uuid"
@@ -27,12 +27,12 @@ class OutboxRecord:
 class TopicBacklog:
     topic: str
     pending: int
-    oldest_occurred_at: Optional[datetime]
+    oldest_occurred_at: datetime | None
 
 
 def format_rfc3339_nano(value: datetime) -> str:
     """UTC timestamp in Go ``time.RFC3339Nano``: trailing fractional zeros dropped, ``Z``."""
-    value = value.astimezone(timezone.utc)
+    value = value.astimezone(UTC)
     text = value.strftime("%Y-%m-%dT%H:%M:%S")
     if value.microsecond:
         text += f".{value.microsecond:06d}".rstrip("0")

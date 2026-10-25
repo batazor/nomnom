@@ -99,7 +99,7 @@ class IdentitySettings(BaseSettings):
         return value.strip()
 
     @model_validator(mode="after")
-    def _validate_allowlist(self) -> "IdentitySettings":
+    def _validate_allowlist(self) -> IdentitySettings:
         accounts = parse_service_accounts(self.service_accounts)
         if self.issuer and not accounts:
             raise ValueError(

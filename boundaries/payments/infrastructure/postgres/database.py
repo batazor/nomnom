@@ -6,10 +6,10 @@ transaction. Outside a Unit of Work a call takes its own pooled connection and
 commits on return.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Callable, Optional, TypeVar
+from typing import TypeVar
 
 import psycopg
 from psycopg_pool import ConnectionPool
@@ -18,7 +18,7 @@ from pkg.config import DatabaseSettings
 
 T = TypeVar("T")
 
-_active: ContextVar[Optional[psycopg.Connection]] = ContextVar(
+_active: ContextVar[psycopg.Connection | None] = ContextVar(
     "payments_postgres_connection", default=None
 )
 

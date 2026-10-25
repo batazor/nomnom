@@ -3,7 +3,6 @@
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Union
 
 
 class InvalidMoney(ValueError):
@@ -33,7 +32,7 @@ class Money:
             raise InvalidMoney("currency must be an ISO 4217 code")
 
     @classmethod
-    def parse(cls, amount: Union[str, Decimal], currency: str) -> "Money":
+    def parse(cls, amount: str | Decimal, currency: str) -> Money:
         if isinstance(amount, float):
             raise InvalidMoney("binary floating-point amounts are not supported")
         try:
@@ -42,7 +41,7 @@ class Money:
             raise InvalidMoney("amount must be an exact decimal") from error
         return cls(exact_amount, currency)
 
-    def add(self, other: "Money") -> "Money":
+    def add(self, other: Money) -> Money:
         if self.currency != other.currency:
             raise CurrencyMismatch("money arithmetic requires one currency")
         return Money(self.amount + other.amount, self.currency)

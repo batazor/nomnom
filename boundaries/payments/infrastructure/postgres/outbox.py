@@ -8,7 +8,7 @@ to ``NoPublishedContracts``: no Domain Event has a contract, nothing is written.
 
 import uuid
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Protocol
 
 from opentelemetry import propagate
 
@@ -32,7 +32,7 @@ class OutboxMessage:
 
 
 class OutboxEventMapper(Protocol):
-    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> Optional[OutboxMessage]:
+    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage | None:
         """Return the Integration Event, or ``None`` when the event has no contract."""
         ...
 
@@ -40,7 +40,7 @@ class OutboxEventMapper(Protocol):
 class NoPublishedContracts:
     """Default mapper of the factories: no event reaches the Outbox."""
 
-    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> Optional[OutboxMessage]:
+    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage | None:
         return None
 
 

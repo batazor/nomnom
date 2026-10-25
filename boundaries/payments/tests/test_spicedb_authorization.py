@@ -1,7 +1,6 @@
 import os
 import unittest
 from datetime import timedelta
-from typing import Optional
 from unittest.mock import patch
 
 import grpc
@@ -48,10 +47,10 @@ class _RpcFailure(grpc.RpcError):
 class FakePermissionsClient:
     def __init__(
         self,
-        permissionship: "CheckPermissionResponse.Permissionship.ValueType" = (
+        permissionship: CheckPermissionResponse.Permissionship.ValueType = (
             Permissionship.PERMISSIONSHIP_HAS_PERMISSION
         ),
-        error: Optional[Exception] = None,
+        error: Exception | None = None,
     ) -> None:
         self.permissionship = permissionship
         self.error = error

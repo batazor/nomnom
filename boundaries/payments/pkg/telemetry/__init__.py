@@ -2,7 +2,6 @@ import logging
 import os
 import threading
 from collections.abc import Callable, Mapping
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +14,7 @@ class Telemetry:
     """Владелец telemetry providers процесса. shutdown() вызывается последним шагом
     runtime contract (docs/cloud-native-runtime.md, шаг 8)."""
 
-    def __init__(self, shutdowns: Optional[list[Callable[[], object]]] = None) -> None:
+    def __init__(self, shutdowns: list[Callable[[], object]] | None = None) -> None:
         self._shutdowns = shutdowns or []
 
     @property
@@ -48,7 +47,7 @@ class Telemetry:
         return False
 
 
-def setup(environ: Optional[Mapping[str, str]] = None) -> Telemetry:
+def setup(environ: Mapping[str, str] | None = None) -> Telemetry:
     """Регистрирует глобальные tracer и meter providers с OTLP exporter."""
     env = os.environ if environ is None else environ
     if not any(env.get(name) for name in _ENDPOINT_ENVS):

@@ -10,7 +10,6 @@ import os
 import unittest
 import uuid
 from datetime import timedelta
-from typing import Optional
 
 import psycopg
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
@@ -59,7 +58,7 @@ AUTHORIZED_TYPE = "nomnom.payments.v1.PaymentAuthorized"
 class _AuthorizedOnly:
     """Test mapper: only PaymentAuthorized has a contract; payload is a stand-in."""
 
-    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> Optional[OutboxMessage]:
+    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage | None:
         if not isinstance(event, PaymentAuthorized):
             return None
         return OutboxMessage(

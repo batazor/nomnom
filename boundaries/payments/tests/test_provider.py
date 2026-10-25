@@ -1,7 +1,7 @@
 import json
 import os
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from pydantic import ValidationError
@@ -24,7 +24,7 @@ from slices.payment.applications.ports import (
 )
 from slices.payment.domains.payment import Money, OperationId, OperationKind, PaymentId
 
-NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 SECRET = "whsec_test"
 
 

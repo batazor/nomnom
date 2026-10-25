@@ -1,5 +1,4 @@
 import unittest
-from typing import Optional
 
 from payment_fakes import (
     ORCHESTRATOR,
@@ -117,9 +116,9 @@ class RacingPaymentRepository(InMemoryPaymentRepository):
 
     def __init__(self, store: InMemoryPaymentStore, winner: Payment) -> None:
         super().__init__(store)
-        self._winner: Optional[Payment] = winner
+        self._winner: Payment | None = winner
 
-    def get_by_order(self, order_id: OrderId) -> Optional[Payment]:
+    def get_by_order(self, order_id: OrderId) -> Payment | None:
         found = super().get_by_order(order_id)
         if self._winner is not None:
             winner, self._winner = self._winner, None

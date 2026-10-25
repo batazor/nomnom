@@ -1,7 +1,5 @@
 """Typed application errors of the payment slice."""
 
-from typing import Optional
-
 from pkg.application import ApplicationError
 from slices.payment.domains.payment import OperationId, OrderId, PaymentId, PaymentState
 
@@ -49,7 +47,7 @@ class IdempotencyKeyConflict(ApplicationError):
 
 
 class ProviderResultConflict(ApplicationError):
-    def __init__(self, operation_id: OperationId, recorded: Optional[str], received: str) -> None:
+    def __init__(self, operation_id: OperationId, recorded: str | None, received: str) -> None:
         super().__init__(
             f"provider result {received} contradicts recorded result {recorded} "
             f"of operation {operation_id}"

@@ -1,8 +1,9 @@
 """Pure, data-defined finite state machine of a Payment."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, NamedTuple, Optional
+from typing import NamedTuple
 
 
 class PaymentState(str, Enum):
@@ -54,7 +55,7 @@ class AlreadyInState(Exception):
 
 
 class TransitionInput(NamedTuple):
-    provider_reference: Optional[str] = None
+    provider_reference: str | None = None
 
 
 class _Outcome(Enum):
@@ -69,8 +70,8 @@ _Guard = Callable[[TransitionInput], None]
 @dataclass(frozen=True)
 class _TransitionDefinition:
     outcome: _Outcome
-    to_state: Optional[PaymentState] = None
-    guard: Optional[_Guard] = None
+    to_state: PaymentState | None = None
+    guard: _Guard | None = None
 
 
 def _provider_reference_is_present(transition_input: TransitionInput) -> None:
