@@ -1,10 +1,12 @@
 """OTel instruments of the payments Outbox relay (observability of ADR 13)."""
 
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
 
 from opentelemetry import metrics
+
+from infrastructure.postgres.outbox import PAYMENT_EVENTS_TOPIC
 
 from .outbox import OutboxRecord, TopicBacklog
 
@@ -22,17 +24,26 @@ class RelayMetrics:
     Prometheus names: ``nomnom_outbox_pending_messages``,
     ``nomnom_outbox_oldest_pending_age_seconds``, ``nomnom_outbox_publish_retries_total``,
     ``nomnom_outbox_publish_duration_seconds``, ``nomnom_outbox_publish_lag_seconds``.
+
+    The pending and oldest-age gauges report every known topic: the context's topics
+    (``topics``) plus any topic seen in a backlog. A topic without unpublished records
+    reports 0 instead of disappearing, so dashboards and alerts clear. Nothing is
+    reported before the first backlog report.
     """
 
     def __init__(
         self,
         meter: metrics.Meter | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        topics: Iterable[str] = (PAYMENT_EVENTS_TOPIC,),
     ) -> None:
         meter = meter or metrics.get_meter("nomnom.payments.outbox")
         self._now = now
         self._lock = threading.Lock()
-        self._backlog: list[TopicBacklog] = []
+        # None until the first backlog report: nothing is known yet, so nothing is observed.
+        self._backlog: list[TopicBacklog] | None = None
+        # Insertion-ordered set of topics the gauges report, 0 when the backlog is empty.
+        self._topics: dict[str, None] = dict.fromkeys(topics)
         meter.create_observable_gauge(
             "nomnom.outbox.pending.messages",
             callbacks=[self._observe_pending],
@@ -62,14 +73,22 @@ class RelayMetrics:
         )
 
     def set_backlog(self, backlog: Sequence[TopicBacklog]) -> None:
-        """Replace the backlog reported by the pending and oldest-age gauges."""
+        """Replace the backlog; known topics missing from it report 0."""
         with self._lock:
             self._backlog = list(backlog)
+            for item in self._backlog:
+                self._topics.setdefault(item.topic)
 
     def backlog(self) -> list[TopicBacklog]:
-        """Return a copy of the last reported backlog."""
+        """Return the last backlog, with an empty entry for every other known topic.
+
+        Empty until the first ``set_backlog``: before that the backlog is unknown, not 0.
+        """
         with self._lock:
-            return list(self._backlog)
+            if self._backlog is None:
+                return []
+            reported = {item.topic: item for item in self._backlog}
+            return [reported.get(t, TopicBacklog(t, 0, None)) for t in self._topics]
 
     def published(self, record: OutboxRecord, duration: float, confirmed_at: datetime) -> None:
         """Record publish duration and lag from ``occurred_at`` to broker confirmation."""
@@ -91,8 +110,10 @@ class RelayMetrics:
         now = self._now()
         return [
             metrics.Observation(
-                max(0.0, (now - b.oldest_occurred_at).total_seconds()), {_DESTINATION: b.topic}
+                0.0
+                if b.oldest_occurred_at is None
+                else max(0.0, (now - b.oldest_occurred_at).total_seconds()),
+                {_DESTINATION: b.topic},
             )
             for b in self.backlog()
-            if b.oldest_occurred_at is not None
         ]
