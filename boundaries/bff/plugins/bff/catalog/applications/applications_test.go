@@ -39,12 +39,12 @@ var (
 func TestListRestaurantsPassesTheCursorThrough(t *testing.T) {
 	restaurants := &fakeRestaurants{page: Page{Restaurants: []Restaurant{pho}, NextCursor: "restaurant-1"}}
 
-	page, err := NewListRestaurants(restaurants).Handle(context.Background(), 1, "restaurant-0")
+	page, err := NewListRestaurants(restaurants, restaurants).Handle(context.Background(), 1, "restaurant-0")
 
 	require.NoError(t, err)
 	assert.Equal(t, PageRequest{Size: 1, Cursor: "restaurant-0"}, restaurants.got)
 	assert.Equal(t, RestaurantPage{
-		Edges:       []RestaurantEdge{{Cursor: "restaurant-1", Restaurant: pho}},
+		Edges:       []RestaurantEdge{{Cursor: "restaurant-1", Restaurant: pho, Menu: []MenuItem{}}},
 		HasNextPage: true,
 		EndCursor:   "restaurant-1",
 	}, page)
@@ -53,14 +53,14 @@ func TestListRestaurantsPassesTheCursorThrough(t *testing.T) {
 func TestListRestaurantsLastPageEndsAtItsLastEdge(t *testing.T) {
 	restaurants := &fakeRestaurants{page: Page{Restaurants: []Restaurant{pho, ramen}}}
 
-	page, err := NewListRestaurants(restaurants).Handle(context.Background(), 10, "")
+	page, err := NewListRestaurants(restaurants, restaurants).Handle(context.Background(), 10, "")
 
 	require.NoError(t, err)
 	assert.False(t, page.HasNextPage)
 	assert.Equal(t, "restaurant-2", page.EndCursor)
 
 	restaurants.page = Page{}
-	page, err = NewListRestaurants(restaurants).Handle(context.Background(), 10, "")
+	page, err = NewListRestaurants(restaurants, restaurants).Handle(context.Background(), 10, "")
 	require.NoError(t, err)
 	assert.Empty(t, page.Edges)
 	assert.Empty(t, page.EndCursor)
@@ -68,7 +68,7 @@ func TestListRestaurantsLastPageEndsAtItsLastEdge(t *testing.T) {
 
 func TestListRestaurantsRejectsAnUnusablePageSize(t *testing.T) {
 	for _, first := range []int{0, -1, MaxPageSize + 1} {
-		_, err := NewListRestaurants(&fakeRestaurants{}).Handle(context.Background(), first, "")
+		_, err := NewListRestaurants(&fakeRestaurants{}, &fakeRestaurants{}).Handle(context.Background(), first, "")
 		assert.ErrorIs(t, err, ErrInvalidPageSize, first)
 	}
 }
@@ -101,4 +101,39 @@ func TestGetRestaurantErrors(t *testing.T) {
 	down := errors.New("unavailable")
 	_, err = NewGetRestaurant(&fakeRestaurants{restaurant: pho, menuErr: down}).Handle(context.Background(), "restaurant-1")
 	assert.ErrorIs(t, err, down)
+}
+
+func TestListRestaurantsCarriesEachMenu(t *testing.T) {
+	soup := MenuItem{ID: "menu-1", Name: "Фо бо", Price: Money{Amount: "450", Currency: "RUB"}, Available: true}
+	restaurants := &fakeRestaurants{page: Page{Restaurants: []Restaurant{pho}}}
+	menus := menusByRestaurant{pho.ID: {soup}}
+
+	page, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 10, "")
+
+	require.NoError(t, err)
+	assert.Equal(t, []MenuItem{soup}, page.Edges[0].Menu)
+}
+
+func TestListRestaurantsLeavesAMissingMenuNil(t *testing.T) {
+	restaurants := &fakeRestaurants{page: Page{Restaurants: []Restaurant{pho}}, menuErr: ErrMenuNotFound}
+
+	page, err := NewListRestaurants(restaurants, restaurants).Handle(context.Background(), 10, "")
+
+	require.NoError(t, err)
+	assert.Nil(t, page.Edges[0].Menu)
+}
+
+func TestListRestaurantsFailsWhenAMenuCannotBeRead(t *testing.T) {
+	broken := errors.New("restaurants unavailable")
+	restaurants := &fakeRestaurants{page: Page{Restaurants: []Restaurant{pho, ramen}}, menuErr: broken}
+
+	_, err := NewListRestaurants(restaurants, restaurants).Handle(context.Background(), 10, "")
+
+	require.ErrorIs(t, err, broken)
+}
+
+type menusByRestaurant map[string][]MenuItem
+
+func (m menusByRestaurant) Menu(_ context.Context, restaurantID string) ([]MenuItem, error) {
+	return m[restaurantID], nil
 }

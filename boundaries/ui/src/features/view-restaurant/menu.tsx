@@ -1,5 +1,5 @@
 import { useI18n } from "../../shared/i18n/i18n";
-import { Button } from "../../shared/ui";
+import { Button, DishIcon } from "../../shared/ui";
 import { maxQuantity } from "./cart";
 import { type Money, useMoney } from "./money";
 
@@ -12,11 +12,13 @@ export type MenuEntry = Readonly<{
 }>;
 
 export function Menu({
+  restaurantId,
   items,
   quantities,
   acceptingOrders,
   onAdd,
 }: {
+  restaurantId: string;
   items: readonly MenuEntry[];
   quantities: ReadonlyMap<string, number>;
   acceptingOrders: boolean;
@@ -34,6 +36,12 @@ export function Menu({
           const soldOutId = `menu-sold-out-${item.id}`;
           return (
             <li data-available={item.available} key={item.id}>
+              <DishIcon
+                itemId={item.id}
+                name={item.name}
+                restaurantId={restaurantId}
+                size="md"
+              />
               <div className="menu-item-copy">
                 <h5>{item.name}</h5>
                 {item.description ? <p>{item.description}</p> : null}

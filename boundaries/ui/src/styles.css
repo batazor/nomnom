@@ -499,3 +499,52 @@ a,
   background: var(--color-surface-muted);
   color: var(--color-foreground);
 }
+
+.nomnom-dish-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 28%;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.nomnom-dish-icon[data-size="xs"] {
+  width: 1.125rem;
+  height: 1.125rem;
+  font-size: 0.5625rem;
+}
+
+.nomnom-dish-icon[data-size="md"] {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: var(--font-size-md);
+}
+
+.nomnom-dish-icon[data-tone="0"] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.nomnom-dish-icon[data-tone="1"] {
+  background: color-mix(
+    in oklch,
+    var(--color-success) 18%,
+    var(--color-surface)
+  );
+  color: var(--color-success);
+}
+
+.nomnom-dish-icon[data-tone="2"] {
+  background: color-mix(
+    in oklch,
+    var(--color-warning) 18%,
+    var(--color-surface)
+  );
+  color: var(--color-warning);
+}
+
+.nomnom-dish-icon[data-tone="3"] {
+  background: var(--color-surface-muted);
+  color: var(--color-muted);
+}

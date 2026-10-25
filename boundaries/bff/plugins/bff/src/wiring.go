@@ -204,7 +204,7 @@ func newCourier(delivery grpc.ClientConnInterface) *courier {
 func newRestaurantCatalog(restaurants grpc.ClientConnInterface) *restaurantCatalog {
 	restaurantsAPI := cataloginfra.NewRestaurants(restaurants)
 	return &restaurantCatalog{
-		listRestaurants: catalogapp.NewListRestaurants(restaurantsAPI),
+		listRestaurants: catalogapp.NewListRestaurants(restaurantsAPI, restaurantsAPI),
 		getRestaurant:   catalogapp.NewGetRestaurant(restaurantsAPI),
 	}
 }

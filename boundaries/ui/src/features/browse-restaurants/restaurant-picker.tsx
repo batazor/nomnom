@@ -2,9 +2,11 @@ import { m } from "motion/react";
 import { useEffect, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
-import { Button } from "../../shared/ui";
+import { Button, DishIcon } from "../../shared/ui";
 import { useRestaurantPages } from "./use-restaurant-pages";
 import "./browse-restaurants.css";
+
+const folderSize = 4;
 
 // Open restaurants page by page; choosing one hands its id to the caller.
 // Each card carries layoutId restaurant-<id>, so the caller can grow the
@@ -66,6 +68,21 @@ export function RestaurantPicker({
               transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
               type="button"
             >
+              {/* A folder of the first dishes; opening the restaurant flies
+                  them to their places in the menu. */}
+              <span aria-hidden="true" className="catalog-folder">
+                {(restaurant.menu?.items ?? [])
+                  .slice(0, folderSize)
+                  .map((item) => (
+                    <DishIcon
+                      itemId={item.id}
+                      key={item.id}
+                      name={item.name}
+                      restaurantId={restaurant.id}
+                      size="xs"
+                    />
+                  ))}
+              </span>
               <m.span className="catalog-name" layout="position">
                 {restaurant.name}
               </m.span>

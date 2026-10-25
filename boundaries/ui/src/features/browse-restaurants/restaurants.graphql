@@ -7,6 +7,12 @@ query BrowseRestaurants($first: Int!, $after: String) {
         name
         address
         acceptingOrders
+        menu {
+          items {
+            id
+            name
+          }
+        }
       }
     }
     pageInfo {

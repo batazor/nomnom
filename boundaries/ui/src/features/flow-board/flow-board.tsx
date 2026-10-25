@@ -1,12 +1,15 @@
 import { LayoutGroup, m } from "motion/react";
 import { type ReactNode, useCallback, useState } from "react";
-import { useQuery } from "urql";
+import { useClient, useQuery } from "urql";
 import {
   boardUser,
   SignInButton,
   useSignInAvailable,
 } from "../../shared/auth/sign-in";
-import { BoardOrderStatusDocument } from "../../shared/graphql/generated/graphql";
+import {
+  BoardOrderStatusDocument,
+  ViewRestaurantDocument,
+} from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { AsRole, useCanAct } from "../../shared/session/roles";
@@ -82,6 +85,18 @@ function Board() {
     setDetails({ orderId, from });
   }
 
+  // The restaurant opens once its menu is in the cache: the header and the
+  // dish icons then mount at once and fly out of the card, with no skeleton
+  // in between. A failed read opens it too, to show its error.
+  const client = useClient();
+  async function openRestaurant(restaurantId: string) {
+    await client
+      .query(ViewRestaurantDocument, { id: restaurantId })
+      .toPromise();
+    setCustomerRestaurantId(restaurantId);
+    setKitchenRestaurantId(restaurantId);
+  }
+
   function placed(orderId: string) {
     orders.add(orderId);
     setSelectedOrderId(orderId);
@@ -124,43 +139,29 @@ function Board() {
 
         <m.div className="board-columns" layout="position">
           <BoardColumn column="customer">
-            {/* The chosen restaurant card grows into its menu, and going back
-              folds the menu into the card again. */}
+            {/* The chosen restaurant card opens like an iOS folder: the card
+              becomes the restaurant header and its dish icons fly to their
+              places in the menu; going back folds them into the card again. */}
             {customerRestaurantId ? (
-              <m.div
-                className="board-restaurant"
-                key={customerRestaurantId}
-                layoutId={`restaurant-${customerRestaurantId}`}
-                style={{ borderRadius: "var(--radius-card)" }}
-                transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
-              >
-                <m.div
-                  animate={{ opacity: 1, transition: { delay: 0.15 } }}
-                  className="board-restaurant-content"
-                  initial={{ opacity: 0 }}
+              <div className="board-restaurant" key={customerRestaurantId}>
+                <Button
+                  className="board-restaurant-back"
+                  onClick={() => setCustomerRestaurantId(null)}
+                  size="sm"
+                  variant="ghost"
                 >
-                  <Button
-                    className="board-restaurant-back"
-                    onClick={() => setCustomerRestaurantId(null)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    {t("board.customer.back")}
-                  </Button>
-                  <RestaurantOrdering
-                    onPlaced={placed}
-                    restaurantId={customerRestaurantId}
-                    ticket={(submit) => <OrderTicket submit={submit} />}
-                  />
-                </m.div>
-              </m.div>
+                  {t("board.customer.back")}
+                </Button>
+                <RestaurantOrdering
+                  onPlaced={placed}
+                  restaurantId={customerRestaurantId}
+                  ticket={(submit) => <OrderTicket submit={submit} />}
+                />
+              </div>
             ) : (
               <>
                 <RestaurantPicker
-                  onSelect={(restaurantId) => {
-                    setCustomerRestaurantId(restaurantId);
-                    setKitchenRestaurantId(restaurantId);
-                  }}
+                  onSelect={(restaurantId) => void openRestaurant(restaurantId)}
                 />
                 <div className="board-empty-state">
                   <Illustration name="order-food" size="sm" />

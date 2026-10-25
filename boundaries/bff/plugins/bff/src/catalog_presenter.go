@@ -16,10 +16,9 @@ func restaurantConnection(page applications.RestaurantPage) *service.RestaurantC
 		connection.PageInfo.EndCursor = wrapperspb.String(page.EndCursor)
 	}
 	for _, edge := range page.Edges {
-		// menu is not filled in the list (design decision 4).
 		connection.Edges = append(connection.Edges, &service.RestaurantEdge{
 			Cursor: edge.Cursor,
-			Node:   restaurantMessage(edge.Restaurant),
+			Node:   restaurantWithMenu(applications.RestaurantView{Restaurant: edge.Restaurant, Menu: edge.Menu}),
 		})
 	}
 	return connection

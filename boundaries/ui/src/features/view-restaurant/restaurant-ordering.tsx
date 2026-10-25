@@ -1,3 +1,4 @@
+import { m } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useQuery } from "urql";
 
@@ -118,15 +119,22 @@ function RestaurantView({
 
   return (
     <article aria-labelledby="restaurant-title" className="restaurant-page">
-      <header className="restaurant-header">
-        <h3 id="restaurant-title">{restaurant.name}</h3>
-        <p>{restaurant.address}</p>
+      {/* The restaurant card of the list grows into this header. */}
+      <m.header
+        className="restaurant-header"
+        layoutId={`restaurant-${restaurant.id}`}
+        transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
+      >
+        <m.h3 id="restaurant-title" layout="position">
+          {restaurant.name}
+        </m.h3>
+        <m.p layout="position">{restaurant.address}</m.p>
         {restaurant.acceptingOrders ? null : (
           <p className="restaurant-closed" role="status">
             {t("restaurant.closed")}
           </p>
         )}
-      </header>
+      </m.header>
 
       {menu ? (
         <div className="restaurant-layout">
@@ -135,6 +143,7 @@ function RestaurantView({
             items={menu.items}
             onAdd={add}
             quantities={quantities}
+            restaurantId={restaurant.id}
           />
           <CartPanel
             entries={entries}
