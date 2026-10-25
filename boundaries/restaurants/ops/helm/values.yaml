@@ -212,6 +212,22 @@ mongodb:
   database: "restaurants"
   # Server selection timeout при старте и запросах (500ms, 5s, 1m).
   timeout: "5s"
+  # Connection pool MongoClient процесса (MONGODB__*), лимиты — на пул одного сервера
+  # replica set (драйвер держит пул на каждый сервер). Значения вне диапазона
+  # останавливают render chart и старт процесса. Метрики пула — db.client.connection.*
+  # (docs/observability/metric-inventory.md#db).
+  pool:
+    # Соединений на сервер (1..100): API обслуживает конкурентные RPC. Relay — 3,
+    # consumer — 5 (values-relay.yaml, values-consumer.yaml).
+    maxPoolSize: 20
+    # Прогретые соединения; 0 — пул растёт по требованию и не держит idle-соединения.
+    minPoolSize: 0
+    # Idle-соединение закрывается после этого срока (500ms, 5s, 5m).
+    maxIdleTime: "5m"
+    # Ожидание свободного соединения до ошибки checkout (timeout вместо зависания).
+    waitQueueTimeout: "5s"
+    # Одновременно устанавливаемые соединения: сглаживает шторм подключений после рестарта.
+    maxConnecting: 2
   # init container migrate: коллекции, JSON Schema validators, индексы и миграции
   # документов перед стартом процесса; шаги идемпотентны, параллельные реплики безопасны.
   migrate:
@@ -219,6 +235,8 @@ mongodb:
     # Команда production-образа; для dev-образа (исходники .ts) —
     # ["node", "cmd/restaurants-migrate/main.ts"].
     command: ["node", "dist/cmd/restaurants-migrate/main.js"]
+    # maxPoolSize init container: DDL и миграции документов выполняются последовательно.
+    maxPoolSize: 2
 
 volumes: []
 volumeMounts: []

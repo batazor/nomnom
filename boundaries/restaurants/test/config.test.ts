@@ -68,8 +68,77 @@ test("MongoDB config defaults the database and timeout", () => {
       uri: "mongodb://mongo:27017/?replicaSet=rs0",
       database: "restaurants",
       timeoutMs: 5000,
+      pool: {
+        maxPoolSize: 20,
+        minPoolSize: 0,
+        maxIdleTimeMs: 300_000,
+        waitQueueTimeoutMs: 5000,
+        maxConnecting: 2,
+      },
     },
   );
+});
+
+test("MongoDB pool defaults depend on the process", () => {
+  const environment = { MONGODB__URI: "mongodb://m" };
+  const maxPoolSize = (process?: "api" | "relay" | "consumer" | "migrate") => {
+    const { mongodb } = loadConfig(environment, { process });
+    assert.ok(mongodb.enabled);
+    return [mongodb.pool.maxPoolSize, mongodb.pool.maxConnecting];
+  };
+  assert.deepEqual(maxPoolSize(), [20, 2]);
+  assert.deepEqual(maxPoolSize("relay"), [3, 2]);
+  assert.deepEqual(maxPoolSize("consumer"), [5, 2]);
+  assert.deepEqual(maxPoolSize("migrate"), [2, 2]);
+});
+
+test("MongoDB pool reads MONGODB__* overrides", () => {
+  const { mongodb } = loadConfig({
+    MONGODB__URI: "mongodb://m",
+    MONGODB__MAX_POOL_SIZE: "8",
+    MONGODB__MIN_POOL_SIZE: "1",
+    MONGODB__MAX_IDLE_TIME: "1m",
+    MONGODB__WAIT_QUEUE_TIMEOUT: "750ms",
+    MONGODB__MAX_CONNECTING: "4",
+  });
+  assert.ok(mongodb.enabled);
+  assert.deepEqual(mongodb.pool, {
+    maxPoolSize: 8,
+    minPoolSize: 1,
+    maxIdleTimeMs: 60_000,
+    waitQueueTimeoutMs: 750,
+    maxConnecting: 4,
+  });
+  // The default maxConnecting never exceeds a one-connection pool.
+  const single = loadConfig({
+    MONGODB__URI: "mongodb://m",
+    MONGODB__MAX_POOL_SIZE: "1",
+  }).mongodb;
+  assert.ok(single.enabled);
+  assert.equal(single.pool.maxConnecting, 1);
+});
+
+test("MongoDB pool rejects values out of range at startup", () => {
+  const invalid: Record<string, string>[] = [
+    { MONGODB__MAX_POOL_SIZE: "0" },
+    { MONGODB__MAX_POOL_SIZE: "101" },
+    { MONGODB__MAX_POOL_SIZE: "2.5" },
+    { MONGODB__MAX_POOL_SIZE: "many" },
+    { MONGODB__MIN_POOL_SIZE: "-1" },
+    { MONGODB__MAX_POOL_SIZE: "5", MONGODB__MIN_POOL_SIZE: "6" },
+    { MONGODB__MAX_IDLE_TIME: "0s" },
+    { MONGODB__MAX_IDLE_TIME: "300000" },
+    { MONGODB__WAIT_QUEUE_TIMEOUT: "0ms" },
+    { MONGODB__MAX_CONNECTING: "0" },
+    { MONGODB__MAX_POOL_SIZE: "3", MONGODB__MAX_CONNECTING: "4" },
+  ];
+  for (const overrides of invalid) {
+    assert.throws(
+      () => loadConfig({ MONGODB__URI: "mongodb://m", ...overrides }),
+      /MONGODB__/,
+      JSON.stringify(overrides),
+    );
+  }
 });
 
 test("MongoDB config rejects malformed values", () => {

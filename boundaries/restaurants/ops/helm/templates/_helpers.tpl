@@ -107,11 +107,14 @@ SpiceDB (ADR 18): с endpoint приложению нужен preshared key из
 {{- end -}}
 
 {{/*
-MongoDB (ADR 8): переменные подключения из Secret. Без uriSecret.name ничего не
-задаётся, и процессы restaurants и restaurants-migrate не стартуют (MONGODB__URI обязателен).
+MongoDB (ADR 8): переменные подключения из Secret и лимиты connection pool процесса.
+Без uriSecret.name ничего не задаётся, и процессы restaurants и restaurants-migrate не
+стартуют (MONGODB__URI обязателен).
+Usage: {{ include "restaurants.mongodbEnv" (dict "context" $ "pool" .Values.mongodb.pool) }}
 */}}
 {{- define "restaurants.mongodbEnv" -}}
-{{- with .Values.mongodb }}
+{{- $pool := .pool -}}
+{{- with .context.Values.mongodb }}
 {{- if .uriSecret.name }}
 - name: MONGODB__URI
   valueFrom:
@@ -122,12 +125,22 @@ MongoDB (ADR 8): переменные подключения из Secret. Без
   value: {{ .database | quote }}
 - name: MONGODB__TIMEOUT
   value: {{ .timeout | quote }}
+- name: MONGODB__MAX_POOL_SIZE
+  value: {{ $pool.maxPoolSize | quote }}
+- name: MONGODB__MIN_POOL_SIZE
+  value: {{ $pool.minPoolSize | quote }}
+- name: MONGODB__MAX_IDLE_TIME
+  value: {{ $pool.maxIdleTime | quote }}
+- name: MONGODB__WAIT_QUEUE_TIMEOUT
+  value: {{ $pool.waitQueueTimeout | quote }}
+- name: MONGODB__MAX_CONNECTING
+  value: {{ $pool.maxConnecting | quote }}
 {{- end }}
 {{- end }}
 {{- end }}
 
 {{/*
-MongoDB: имя базы и timeout в формате приложения.
+MongoDB: имя базы, timeout и лимиты пула в формате приложения (pkg/config/connections.ts).
 */}}
 {{- define "restaurants.validateMongoDb" -}}
 {{- with .Values.mongodb -}}
@@ -140,6 +153,26 @@ MongoDB: имя базы и timeout в формате приложения.
 {{- end -}}
 {{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .timeout)) -}}
 {{- fail (printf "mongodb.timeout must be a positive duration like 500ms, 5s or 1m, got %q" (toString .timeout)) -}}
+{{- end -}}
+{{- $max := int .pool.maxPoolSize -}}
+{{- range $name, $value := dict "pool.maxPoolSize" .pool.maxPoolSize "migrate.maxPoolSize" .migrate.maxPoolSize -}}
+{{- if not (and (regexMatch "^[0-9]+$" (toString $value)) (ge (int $value) 1) (le (int $value) 100)) -}}
+{{- fail (printf "mongodb.%s must be an integer between 1 and 100, got %q" $name (toString $value)) -}}
+{{- end -}}
+{{- end -}}
+{{- if not (and (regexMatch "^[0-9]+$" (toString .pool.minPoolSize)) (le (int .pool.minPoolSize) $max)) -}}
+{{- fail (printf "mongodb.pool.minPoolSize must be an integer between 0 and pool.maxPoolSize (%d), got %q" $max (toString .pool.minPoolSize)) -}}
+{{- end -}}
+{{- if not (and (regexMatch "^[0-9]+$" (toString .pool.maxConnecting)) (ge (int .pool.maxConnecting) 1) (le (int .pool.maxConnecting) $max)) -}}
+{{- fail (printf "mongodb.pool.maxConnecting must be an integer between 1 and pool.maxPoolSize (%d), got %q" $max (toString .pool.maxConnecting)) -}}
+{{- end -}}
+{{- if and .migrate.enabled (gt (int .pool.maxConnecting) (int .migrate.maxPoolSize)) -}}
+{{- fail (printf "mongodb.pool.maxConnecting (%v) must not exceed mongodb.migrate.maxPoolSize (%v)" .pool.maxConnecting .migrate.maxPoolSize) -}}
+{{- end -}}
+{{- range $name, $value := dict "maxIdleTime" .pool.maxIdleTime "waitQueueTimeout" .pool.waitQueueTimeout -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString $value)) -}}
+{{- fail (printf "mongodb.pool.%s must be a positive duration like 500ms, 5s or 5m, got %q" $name (toString $value)) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

@@ -26,7 +26,7 @@ import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 const log = (message: string) => console.log(`restaurants-consumer ${message}`);
 
 loadLocalEnv();
-const config = loadConfig();
+const config = loadConfig(process.env, { process: "consumer" });
 // MongoDB and Kafka are required: without them the process does not start.
 // Collections and indexes, the Inbox included, are created by
 // restaurants-migrate before the workload starts.

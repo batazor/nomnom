@@ -6,6 +6,7 @@ import {
 
 import { AppLayout } from "./layout";
 import { BrowseRestaurantsPage } from "../features/browse-restaurants/browse-restaurants-page";
+import { ManageRestaurantPage } from "../features/manage-restaurant/manage-restaurant-page";
 import { ViewOrderPage } from "../features/view-order/view-order-page";
 import { ViewRestaurantPage } from "../features/view-restaurant/view-restaurant-page";
 
@@ -17,6 +18,10 @@ export const routes = [
       { index: true, element: <BrowseRestaurantsPage /> },
       { path: "restaurants/:restaurantId", element: <ViewRestaurantPage /> },
       { path: "orders/:orderId", element: <ViewOrderPage /> },
+      {
+        path: "manage/restaurants/:restaurantId",
+        element: <ManageRestaurantPage />,
+      },
     ],
   },
 ];

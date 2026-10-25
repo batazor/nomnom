@@ -306,6 +306,13 @@ MongoDB предлагается как основное логическое х
 | `MONGODB__URI` | connection string replica set; обязателен — без него `restaurants` и `restaurants-migrate` не стартуют | — |
 | `MONGODB__DATABASE` | имя базы | `restaurants` |
 | `MONGODB__TIMEOUT` | server selection timeout; недоступная MongoDB останавливает старт | `5s` |
+| `MONGODB__MAX_POOL_SIZE` | соединений в пуле одного сервера replica set (1..100), `maxPoolSize` | `restaurants` 20, `restaurants-relay` 3, `restaurants-consumer` 5, `restaurants-migrate` 2 |
+| `MONGODB__MIN_POOL_SIZE` | прогретые соединения (0..`MAX_POOL_SIZE`), `minPoolSize` | `0` |
+| `MONGODB__MAX_IDLE_TIME` | idle-соединение закрывается после этого срока, `maxIdleTimeMS` | `5m` |
+| `MONGODB__WAIT_QUEUE_TIMEOUT` | ожидание свободного соединения до ошибки checkout, `waitQueueTimeoutMS` | `5s` |
+| `MONGODB__MAX_CONNECTING` | одновременно устанавливаемые соединения (1..`MAX_POOL_SIZE`), `maxConnecting` | `2` (не больше `MAX_POOL_SIZE`) |
+
+Connection pool — один `MongoClient` на процесс (`pkg/infrastructure/mongodb/client.ts`); драйвер держит пул на каждый сервер replica set, лимиты действуют на пул одного сервера и перекрывают одноимённые параметры URI. Default `MAX_POOL_SIZE` выбирает процесс (`loadConfig(env, { process })`); значение вне диапазона или нулевой таймаут (у драйвера 0 означает «без ограничения») останавливает старт. Метрики пула — CMAP events драйвера (`pool-metrics.ts`) по semconv `db.client.connection.*` (`count` по `state` idle | used, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`) с `db.client.connection.pool.name` = `<host:port>/<database>`, плюс `nomnom.db.client.connection.pool.clears` ([инвентарь](../../docs/observability/metric-inventory.md#db)); панели и alert rules пула — row Dependencies overview ([ops/grafana](ops/grafana/README.md)).
 
 Коллекции, validators и индексы создаёт `npm run migrate` (`cmd/restaurants-migrate`, идемпотентно); основной процесс схему не меняет.
 

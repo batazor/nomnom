@@ -34,7 +34,10 @@ Replan из `orders` по таймауту назначения остаётся
 
 `courier_id` курьерских RPC — поле запроса; домен отклоняет действие над чужой доставкой или предложением. Ошибки переводятся существующей таблицей transport.
 
-### 3. Get Kitchen Queue по gRPC
+### 3. Входящие заказы и Get Kitchen Queue по gRPC
+
+Get Kitchen Queue по своей спецификации содержит только принятые (`QUEUED`) заказы. Новый заказ ждёт решения кухни, поэтому нужен отдельный query **List Incoming Orders**: заказы в `RECEIVED` по возрастанию времени получения. Это доска «входящие» кухни, а не изменение смысла очереди.
+
 
 `GetKitchenQueue(restaurant_id)` возвращает заказы очереди кухни в рекомендованном порядке с `restaurant_order_id`, `order_id`, состоянием и версией. Проверка — `restaurant#operate_kitchen`, как у команд кухни.
 
@@ -64,7 +67,7 @@ Chainsaw-тест в `ops/kind/e2e/order-lifecycle/` с уникальными i
 2. Владелец: AssignStaff, CreateMenu, AddMenuItem, OpenRestaurant.
 3. Курьер: UpdateCourierLocation, SetCourierAvailability(available).
 4. Покупатель: `placeOrder` через BFF.
-5. Кухня: ожидает заказ в GetKitchenQueue → AcceptRestaurantOrder.
+5. Кухня: ожидает заказ в ListIncomingOrders → AcceptRestaurantOrder; заказ появляется в GetKitchenQueue.
 6. Курьер: ожидает предложение в ListAvailableDeliveryOffers → AcceptDeliveryOffer.
 7. Кухня: StartPreparation → MarkRestaurantOrderReady.
 8. Курьер: ConfirmPickup → ConfirmDelivery.

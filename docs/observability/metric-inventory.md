@@ -18,7 +18,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 112; пар «метрика × сервис» со статусом «есть»: 91.
+Метрик в инвентаре: 118; пар «метрика × сервис» со статусом «есть»: 91.
 
 Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`).
 
@@ -85,7 +85,7 @@ Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). 
 
 ## Database client (PostgreSQL, MongoDB)
 
-Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL — Platform / Overview (раздел [PostgreSQL](#postgresql)), MongoDB — пока нет; в overview сервисов не дублируются.
+Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver в `restaurants`: операции — instrumentation драйвера, пул — CMAP events (`db.client.connection.*` и `nomnom.db.client.connection.pool.clears`). Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL — Platform / Overview (раздел [PostgreSQL](#postgresql)), MongoDB — пока нет; в overview сервисов не дублируются.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
@@ -93,6 +93,12 @@ Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instr
 | `db_client_connection_count` | `db.client.connection.count` | gauge | `db_client_connection_pool_name`, `db_client_connection_state` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается | — |
 | `db_client_connection_max` | `db.client.connection.max` | gauge | `db_client_connection_pool_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается | — |
 | `db_client_connection_wait_time_seconds` | `db.client.connection.wait_time` | histogram | `db_client_connection_pool_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается | — |
+| `db_client_connection_idle_min` | `db.client.connection.idle.min` | gauge | `db_client_connection_pool_name` | `restaurants`: ожидается | `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. |
+| `db_client_connection_pending_requests` | `db.client.connection.pending_requests` | gauge | `db_client_connection_pool_name` | `restaurants`: ожидается | Checkouts, ждущие соединения пула. `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. |
+| `db_client_connection_timeouts_total` | `db.client.connection.timeouts` | counter | `db_client_connection_pool_name` | `restaurants`: ожидается | Checkout не получил соединение за wait timeout (MongoDB `waitQueueTimeoutMS`). `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. |
+| `db_client_connection_create_time_seconds` | `db.client.connection.create_time` | histogram | `db_client_connection_pool_name` | `restaurants`: ожидается | Установка соединения с handshake и auth. `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. |
+| `db_client_connection_use_time_seconds` | `db.client.connection.use_time` | histogram | `db_client_connection_pool_name` | `restaurants`: ожидается | От checkout до возврата соединения в пул. `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. |
+| `nomnom_db_client_connection_pool_clears_total` | MongoDB CMAP `connectionPoolCleared` | counter | `db_client_connection_pool_name` | `restaurants`: ожидается | В semconv нет: драйвер пометил сервер недоступным и закрыл соединения его пула (failover, сетевой сбой). `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. |
 
 <a id="watermill"></a>
 

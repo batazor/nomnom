@@ -52,7 +52,8 @@ spec:
             {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
           {{- end }}
           env:
-            {{- include "restaurants.mongodbEnv" . | trim | nindent 12 }}
+            {{- $migratePool := merge (dict "maxPoolSize" .Values.mongodb.migrate.maxPoolSize) (deepCopy .Values.mongodb.pool) }}
+            {{- include "restaurants.mongodbEnv" (dict "context" . "pool" $migratePool) | trim | nindent 12 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -125,7 +126,7 @@ spec:
                   key: {{ .presharedKeySecret.key | quote }}
             {{- end }}
             {{- end }}
-            {{- include "restaurants.mongodbEnv" . | trim | nindent 12 }}
+            {{- include "restaurants.mongodbEnv" (dict "context" . "pool" .Values.mongodb.pool) | trim | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}

@@ -503,6 +503,20 @@ type RequestOrderCancellationPayload {
   problem: OrderCancellationProblem
 }
 
+"""
+Result of opening or closing a restaurant by its owner
+"""
+type RestaurantOpeningPayload {
+  """
+  Restaurant after the command; acceptingOrders is its opening state, menu is null
+  """
+  restaurant: Restaurant!
+  """
+  False when the restaurant was already in the requested state
+  """
+  changed: Boolean!
+}
+
 type Mutation {
   """
   Place an order for the current customer
@@ -512,4 +526,12 @@ type Mutation {
   Request cancellation of an order of the current customer
   """
   requestOrderCancellation(input: RequestOrderCancellationInput!): RequestOrderCancellationPayload!
+  """
+  Open a restaurant of the current user for new orders; repeating it changes nothing
+  """
+  openRestaurant(restaurantId: ID!): RestaurantOpeningPayload!
+  """
+  Close a restaurant of the current user for new orders; repeating it changes nothing
+  """
+  closeRestaurant(restaurantId: ID!): RestaurantOpeningPayload!
 }

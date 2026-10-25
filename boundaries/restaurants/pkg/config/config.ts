@@ -14,6 +14,7 @@ import {
   DEFAULT_READINESS_DELAY,
   DRAIN_TIMEOUT_ENV,
   MANAGEMENT_PORT_ENV,
+  type MongoDbProcess,
   PORT_ENV,
   READINESS_DELAY_ENV,
 } from "./env.ts";
@@ -75,8 +76,14 @@ export function loadLocalEnv(path = ".env"): void {
   }
 }
 
+export type LoadConfigOptions = Readonly<{
+  /** Процесс, по которому выбирается default `MONGODB__MAX_POOL_SIZE`. */
+  process?: MongoDbProcess;
+}>;
+
 export function loadConfig(
   environment: Record<string, string | undefined> = process.env,
+  options: LoadConfigOptions = {},
 ): AppConfig {
   const server = loadServerConfig(environment);
   const management = Object.freeze({
@@ -95,7 +102,7 @@ export function loadConfig(
     shutdown: loadShutdownConfig(environment),
     identity: loadIdentityConfig(environment),
     spicedb: loadSpiceDbConfig(environment),
-    mongodb: loadMongoDbConfig(environment),
+    mongodb: loadMongoDbConfig(environment, options.process),
     reconciler: loadReconcilerConfig(environment),
     kitchen: loadKitchenConfig(environment),
     kafka: loadKafkaConfig(environment),
