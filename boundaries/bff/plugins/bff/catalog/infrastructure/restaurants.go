@@ -1,4 +1,4 @@
-// Package infrastructure adapts the catalog port to the public reads of
+// Package infrastructure adapts the catalog ports to the public reads of
 // restaurants.v1.RestaurantsService, called through the internal gateway with
 // the service token of BFF and without a user assertion.
 package infrastructure
@@ -16,7 +16,8 @@ import (
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 )
 
-// Restaurants implements applications.Restaurants.
+// Restaurants implements applications.RestaurantLister and
+// applications.RestaurantReader.
 type Restaurants struct {
 	client restaurantsv1.RestaurantsServiceClient
 }
@@ -25,7 +26,10 @@ func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
 	return &Restaurants{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
 }
 
-var _ applications.Restaurants = (*Restaurants)(nil)
+var (
+	_ applications.RestaurantLister = (*Restaurants)(nil)
+	_ applications.RestaurantReader = (*Restaurants)(nil)
+)
 
 // List asks for open restaurants only: include_closed stays false.
 func (r *Restaurants) List(ctx context.Context, request applications.PageRequest) (applications.Page, error) {

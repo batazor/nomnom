@@ -62,8 +62,9 @@ type Input struct {
 	IdempotencyKey string
 }
 
-// Orders is the orders API on behalf of the customer in the request context.
-type Orders interface {
+// OrderPlacer is the Place Order command of orders on behalf of the customer
+// in the request context.
+type OrderPlacer interface {
 	// PlaceOrder returns PlacementRefused for a business refusal.
 	PlaceOrder(ctx context.Context, input Input) (orderID string, err error)
 }
@@ -81,11 +82,11 @@ type Result struct {
 }
 
 type PlaceOrder struct {
-	orders Orders
+	orders OrderPlacer
 	views  OrderViews
 }
 
-func NewPlaceOrder(orders Orders, views OrderViews) PlaceOrder {
+func NewPlaceOrder(orders OrderPlacer, views OrderViews) PlaceOrder {
 	return PlaceOrder{orders: orders, views: views}
 }
 

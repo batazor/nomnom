@@ -3,7 +3,7 @@
 Go plugin реализует GraphQL-поля клиентского BFF для WunderGraph Cosmo Router.
 
 - Публичный контракт: [`src/schema.graphql`](src/schema.graphql).
-- Реализация: [`src/main.go`](src/main.go).
+- Реализация: [`src/main.go`](src/main.go), сборка слайсов — [`src/wiring.go`](src/wiring.go).
 - Generated Router/plugin gRPC-контракт: `generated/`.
 - Архитектура и команды: [корневой README BFF](../../README.md).
 

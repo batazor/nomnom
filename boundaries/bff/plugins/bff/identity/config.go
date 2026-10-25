@@ -39,11 +39,11 @@ func (c Config) Enabled() bool {
 	return c != Config{}
 }
 
-// Identity is the assembled BFF identity.
+// Identity is the assembled BFF identity: the incoming check of access tokens
+// and the outgoing credentials of calls to contexts.
 type Identity struct {
-	AccessTokens  *AccessTokenVerifier
-	Assertions    *AssertionSigner
-	ServiceTokens ServiceTokens
+	AccessTokens *AccessTokenVerifier
+	Outgoing     OutgoingCredentials
 }
 
 // Load fails on a partial or invalid configuration: a BFF that cannot prove
@@ -68,5 +68,8 @@ func Load(c Config) (*Identity, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Identity{AccessTokens: tokens, Assertions: signer, ServiceTokens: ServiceTokens{Dir: c.ServiceTokenDir}}, nil
+	return &Identity{
+		AccessTokens: tokens,
+		Outgoing:     OutgoingCredentials{ServiceTokens: ServiceTokens{Dir: c.ServiceTokenDir}, Signer: signer},
+	}, nil
 }

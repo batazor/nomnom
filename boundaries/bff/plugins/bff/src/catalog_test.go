@@ -120,9 +120,3 @@ func TestQueryRestaurantMissingIsNullAndWithoutMenuHasNullMenu(t *testing.T) {
 	assert.NotNil(t, response.GetRestaurant())
 	assert.Nil(t, response.GetRestaurant().GetMenu())
 }
-
-func TestCatalogWithoutGatewayIsNotConnected(t *testing.T) {
-	catalog, err := newRestaurantCatalog(nil, func(string) string { return "gateway:8080" })
-	require.NoError(t, err)
-	assert.Nil(t, catalog, "no identity")
-}

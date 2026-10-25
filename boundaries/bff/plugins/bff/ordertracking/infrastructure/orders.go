@@ -6,16 +6,17 @@ import (
 	"context"
 	"fmt"
 
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpcerr"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
-// Orders implements applications.Orders on orders.v1.OrdersService.
+// Orders implements applications.OrderReader and
+// applications.CancellationRequester on orders.v1.OrdersService.
 type Orders struct {
 	client ordersv1.OrdersServiceClient
 }
@@ -23,6 +24,11 @@ type Orders struct {
 func NewOrders(conn grpc.ClientConnInterface) *Orders {
 	return &Orders{client: ordersv1.NewOrdersServiceClient(conn)}
 }
+
+var (
+	_ applications.OrderReader           = (*Orders)(nil)
+	_ applications.CancellationRequester = (*Orders)(nil)
+)
 
 var orderStates = map[ordersv1.OrderState]string{
 	ordersv1.OrderState_ORDER_STATE_PLACED:    "placed",
@@ -34,7 +40,7 @@ var orderStates = map[ordersv1.OrderState]string{
 func (o *Orders) GetOrder(ctx context.Context, orderID string) (applications.OrderSnapshot, error) {
 	response, err := o.client.GetOrder(ctx, &ordersv1.GetOrderRequest{OrderId: orderID})
 	if err != nil {
-		return applications.OrderSnapshot{}, ordersError("get order", err)
+		return applications.OrderSnapshot{}, getOrderError(err)
 	}
 	return snapshot(response.GetOrder()), nil
 }
@@ -46,7 +52,7 @@ func (o *Orders) RequestCancellation(ctx context.Context, request applications.C
 		Reason:    request.Reason,
 	})
 	if err != nil {
-		return "", ordersError("request order cancellation", err)
+		return "", requestCancellationError(err)
 	}
 	switch response.GetOutcome() {
 	case ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_REQUESTED:
@@ -57,21 +63,29 @@ func (o *Orders) RequestCancellation(ctx context.Context, request applications.C
 	return "", fmt.Errorf("request order cancellation: unknown outcome %s", response.GetOutcome())
 }
 
-// ordersError hides whether a foreign Order exists and turns FAILED_PRECONDITION
-// into a business refusal named by its ErrorInfo reason.
-func ordersError(operation string, err error) error {
-	st := status.Convert(err)
-	switch st.Code() {
+// getOrderError hides whether a foreign Order exists. GetOrder has no
+// business refusals: any other error, FAILED_PRECONDITION included, stays an
+// error of the read.
+func getOrderError(err error) error {
+	switch status.Code(err) {
+	case codes.NotFound, codes.PermissionDenied:
+		return applications.ErrOrderNotFound
+	}
+	return fmt.Errorf("get order: %w", err)
+}
+
+// requestCancellationError hides whether a foreign Order exists and turns
+// FAILED_PRECONDITION into a business refusal named by its ErrorInfo reason.
+func requestCancellationError(err error) error {
+	switch status.Code(err) {
 	case codes.NotFound, codes.PermissionDenied:
 		return applications.ErrOrderNotFound
 	case codes.FailedPrecondition:
-		for _, detail := range st.Details() {
-			if info, ok := detail.(*errdetails.ErrorInfo); ok {
-				return applications.CancellationRefused{Reason: info.GetReason()}
-			}
+		if reason, _, ok := grpcerr.Info(err); ok {
+			return applications.CancellationRefused{Reason: reason}
 		}
 	}
-	return fmt.Errorf("%s: %w", operation, err)
+	return fmt.Errorf("request order cancellation: %w", err)
 }
 
 func snapshot(order *ordersv1.Order) applications.OrderSnapshot {

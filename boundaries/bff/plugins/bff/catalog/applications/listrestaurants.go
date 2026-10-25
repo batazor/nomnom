@@ -1,10 +1,24 @@
 package applications
 
-import (
-	"context"
-	"errors"
-	"fmt"
-)
+import "context"
+
+// RestaurantLister pages the public list of restaurants.
+type RestaurantLister interface {
+	// List returns open restaurants ordered by a stable key.
+	List(ctx context.Context, request PageRequest) (Page, error)
+}
+
+// PageRequest asks for Size restaurants after the Cursor of a previous page.
+type PageRequest struct {
+	Size   int
+	Cursor string
+}
+
+// Page is one page of restaurants; NextCursor is empty on the last page.
+type Page struct {
+	Restaurants []Restaurant
+	NextCursor  string
+}
 
 // RestaurantEdge is one restaurant of a page with its opaque cursor.
 type RestaurantEdge struct {
@@ -23,10 +37,10 @@ type RestaurantPage struct {
 // ListRestaurants pages the restaurants open now; closed ones are not offered
 // to the customer.
 type ListRestaurants struct {
-	restaurants Restaurants
+	restaurants RestaurantLister
 }
 
-func NewListRestaurants(restaurants Restaurants) ListRestaurants {
+func NewListRestaurants(restaurants RestaurantLister) ListRestaurants {
 	return ListRestaurants{restaurants: restaurants}
 }
 
@@ -53,40 +67,4 @@ func (h ListRestaurants) Handle(ctx context.Context, first int, after string) (R
 		result.EndCursor = result.Edges[len(result.Edges)-1].Cursor
 	}
 	return result, nil
-}
-
-// RestaurantView is a restaurant with its current menu.
-type RestaurantView struct {
-	Restaurant Restaurant
-	// Menu is nil when the restaurant has not published one.
-	Menu []MenuItem
-}
-
-// GetRestaurant reads a restaurant and its menu.
-type GetRestaurant struct {
-	restaurants Restaurants
-}
-
-func NewGetRestaurant(restaurants Restaurants) GetRestaurant {
-	return GetRestaurant{restaurants: restaurants}
-}
-
-// Handle returns ErrRestaurantNotFound for an unknown restaurant; a restaurant
-// without a menu has a nil Menu.
-func (h GetRestaurant) Handle(ctx context.Context, restaurantID string) (RestaurantView, error) {
-	restaurant, err := h.restaurants.Restaurant(ctx, restaurantID)
-	if err != nil {
-		return RestaurantView{}, err
-	}
-	menu, err := h.restaurants.Menu(ctx, restaurantID)
-	if errors.Is(err, ErrMenuNotFound) {
-		return RestaurantView{Restaurant: restaurant}, nil
-	}
-	if err != nil {
-		return RestaurantView{}, fmt.Errorf("read menu: %w", err)
-	}
-	if menu == nil {
-		menu = []MenuItem{}
-	}
-	return RestaurantView{Restaurant: restaurant, Menu: menu}, nil
 }

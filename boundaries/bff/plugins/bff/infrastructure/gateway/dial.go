@@ -14,10 +14,10 @@ import (
 // Dial opens a lazy connection to the internal gateway for one target context;
 // every call carries the service token of BFF for audience and, when the
 // request has a customer, a user assertion (ADR 32). No I/O happens here.
-func Dial(gateway, audience string, customers *identity.Identity) (*grpc.ClientConn, error) {
+func Dial(gateway, audience string, credentials identity.OutgoingCredentials) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(gateway,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(identity.UnaryClientInterceptor(audience, customers.ServiceTokens, customers.Assertions)),
+		grpc.WithUnaryInterceptor(identity.UnaryClientInterceptor(audience, credentials.ServiceTokens, credentials.Signer)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("dial internal gateway %s for %s: %w", gateway, audience, err)

@@ -45,12 +45,13 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order
 | --- | --- |
 | нет или невалидный access token | error `UNAUTHENTICATED`, контексты не вызываются |
 | `GetOrder`: `NOT_FOUND`, `PERMISSION_DENIED` | `order = null` |
+| `GetOrder`: остальные коды, в том числе `FAILED_PRECONDITION` | error `UNAVAILABLE`: у чтения заказа нет бизнес-отказов, это не отказ отмены |
 | `RequestOrderCancellation`: `CANCELLATION_WINDOW_NOT_OPEN` / `_EXPIRED` | `problem` с тем же кодом |
 | `RequestOrderCancellation`: `ORDER_STATE_CONFLICT` | `problem = ORDER_ALREADY_FINAL` |
 | `RequestOrderCancellation`: `NOT_FOUND`, `PERMISSION_DENIED` | error `NOT_FOUND` |
 | остальные сбои | error `UNAVAILABLE` без внутренних деталей |
 
-Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE`/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — раздел 7 `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
+Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — раздел 7 `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
 
 ### Слайс `catalog`
 
@@ -58,7 +59,7 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checko
 
 - `restaurants(first, after)` → `ListRestaurants` только открытых ресторанов (`include_closed = false`); `first` — 1..100, иначе error `INVALID_ARGUMENT`; `after` и `pageInfo.endCursor` — `next_page_token` `restaurants` как есть, cursor ребра — id ресторана (тот же ключ курсора), на последней странице `endCursor` — cursor последнего ребра, на пустой — `null`; `menu` в списке не заполняется.
 - `restaurant(id)` → `GetRestaurant` + `GetMenu`: `NOT_FOUND` ресторана — `null`, `NOT_FOUND` меню — `menu = null`; `acceptingOrders` — `is_open`, пустое описание позиции — `null`.
-- Без gateway или identity — error `UNAVAILABLE`; остальные сбои `restaurants` — error `UNAVAILABLE` без внутренних деталей.
+- Без gateway или identity — error `UNAVAILABLE` (`catalog operations are not available`); остальные сбои `restaurants` — error `UNAVAILABLE` без внутренних деталей.
 
 ### Слайс `checkout`
 
@@ -67,6 +68,7 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checko
 | Ответ `orders` `PlaceOrder` | GraphQL `placeOrder` |
 | --- | --- |
 | нет или невалидный access token | error `UNAUTHENTICATED`, `orders` не вызывается |
+| нет gateway или identity | error `UNAVAILABLE` (`checkout operations are not available`) |
 | пустые `restaurantId` или `idempotencyKey` | error `INVALID_ARGUMENT` |
 | успех | `order` из `GetOrder` (`RECEIVED`), `problems = []` |
 | `FAILED_PRECONDITION` / `ORDER_NOT_ORDERABLE` | `order = null`, problem на каждый известный код из metadata `codes`; `menu_item_ids` — у `ORDER_ITEM_UNAVAILABLE`, у лимитов суммы `menuItemIds = []` |
@@ -91,7 +93,8 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checko
 
 - **Access token.** Router передаёт заголовок `Authorization` в плагин правилом `headers.all.request: propagate` в [`config.yaml`](config.yaml); другие клиентские заголовки (например `x-user-id`) до плагина не доходят. Проверено на Router 0.363.0: без правила metadata `authorization` в плагине пустая. `AccessTokenVerifier` проверяет подпись по JWKS identity provider (RS256/ES256, `kid`), `iss`, `aud` BFF и срок с допуском 30 s; ID token (есть `nonce`, нет `scope`) отклоняется.
 - **User assertion.** `AssertionSigner` подписывает ES256 JWT на каждый вызов контекста: `iss: nomnom-bff`, `aud` контекста, `sub` из проверенного token, срок 30 s, случайный `jti`.
-- **Вызовы контекстов.** `UnaryClientInterceptor(audience, …)` ставит `authorization: Bearer <projected token BFF для audience>` (ADR 27) и, если в контексте запроса есть покупатель (`identity.WithUser`), `x-nomnom-user-assertion`.
+- **Входящая и исходящая части.** `identity.Load` собирает `Identity`: `AccessTokens` (`AccessTokenVerifier`) проверяет входящие запросы, `Outgoing` (`OutgoingCredentials`: `ServiceTokens` и `Signer`) аутентифицирует вызовы контекстов; `gateway.Dial` получает только исходящую часть.
+- **Вызовы контекстов.** `UnaryClientInterceptor(audience, tokens, signer)` (интерфейсы `TokenSource` и `Signer`) ставит `authorization: Bearer <projected token BFF для audience>` (ADR 27) и, если в контексте запроса есть покупатель (`identity.WithUser`), `x-nomnom-user-assertion`.
 
 | Переменная | Назначение |
 | --- | --- |
@@ -167,19 +170,26 @@ boundaries/bff/
   package.json                # закреплённый wgc и команды проекта
   plugins/bff/
     src/schema.graphql        # публичный GraphQL-контракт
-    src/main.go               # сборка plugin и bffInfo
-    src/<slice>.go            # resolvers слайса и его подключение
+    src/main.go               # запуск plugin и bffInfo; единственный log.Fatalf
+    src/wiring.go             # конфигурация, соединение на audience, сборка слайсов
+    src/auth.go               # requireCustomer и requireSlice
+    src/errors.go             # ошибки resolvers без внутренних деталей
+    src/*_presenter.go        # перевод представлений в GraphQL-типы, таблицы enum
+    src/<slice>.go            # только resolvers слайса
     src/*_test.go             # тесты plugin
     catalog/                  # слайс каталога: applications, infrastructure
     checkout/                 # слайс оформления заказа
     ordertracking/            # слайс отслеживания заказа
     identity/                 # access token, user assertion, service token
     infrastructure/gateway/   # соединение с internal gateway
+    infrastructure/grpcerr/   # ErrorInfo и metadata ошибок контекстов
     infrastructure/grpc/      # gRPC-клиенты контекстов (generated)
     generated/                # generated gRPC-контракт и mapping
 ```
 
-Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель.
+Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
+
+Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и открывает по одному соединению к `nomnom.orders` и `nomnom.restaurants` на все слайсы; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
 
 Внутренние клиенты будут генерироваться из закреплённых BSR commits согласно [общесистемному ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). Интеграция этих клиентов с plugin относится к следующему шагу.
 

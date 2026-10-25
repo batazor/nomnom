@@ -3,9 +3,6 @@ package identity
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -29,32 +26,10 @@ func UserFrom(ctx context.Context) (User, bool) {
 	return user, ok
 }
 
-// ServiceTokens reads the projected ServiceAccount token of an audience on
-// every call: kubelet rotates the file (ADR 27).
-type ServiceTokens struct {
-	Dir string
-}
-
-func (t ServiceTokens) Token(audience string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(t.Dir, audience))
-	if err != nil {
-		return "", fmt.Errorf("read service token for %s: %w", audience, err)
-	}
-	token := strings.TrimSpace(string(data))
-	if token == "" {
-		return "", fmt.Errorf("service token for %s is empty", audience)
-	}
-	return token, nil
-}
-
-type TokenSource interface {
-	Token(audience string) (string, error)
-}
-
 // UnaryClientInterceptor authenticates BFF calls to one context: the service
 // token of BFF always, and a user assertion for that audience when the request
 // context carries a verified customer.
-func UnaryClientInterceptor(audience string, tokens TokenSource, signer *AssertionSigner) grpc.UnaryClientInterceptor {
+func UnaryClientInterceptor(audience string, tokens TokenSource, signer Signer) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		token, err := tokens.Token(audience)
 		if err != nil {
