@@ -311,6 +311,7 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
   const resolved: Subject[] = [];
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
+    getMenu: world.getMenu,
     receiveOrderRequest: world.receive,
     cancelRestaurantOrder: world.cancel,
     acceptRestaurantOrder: world.accept,

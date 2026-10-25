@@ -7,6 +7,9 @@ import "nomnom/restaurants/v1/restaurants.proto";
 
 service RestaurantsService {
   rpc GetRestaurant(GetRestaurantRequest) returns (GetRestaurantResponse);
+  // Current menu of a restaurant: public data, no authorization (FR-216). A
+  // restaurant without a menu is NOT_FOUND. Not a snapshot of a placed order.
+  rpc GetMenu(GetMenuRequest) returns (GetMenuResponse);
 
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc ReceiveOrderRequest(ReceiveOrderRequestRequest) returns (ReceiveOrderRequestResponse);
@@ -39,6 +42,14 @@ message GetRestaurantRequest {
 
 message GetRestaurantResponse {
   Restaurant restaurant = 1;
+}
+
+message GetMenuRequest {
+  string restaurant_id = 1;
+}
+
+message GetMenuResponse {
+  repeated MenuItem items = 1;
 }
 
 message OrderRequestItem {

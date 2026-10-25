@@ -1,5 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import type { ServiceImpl } from "@connectrpc/connect";
+import type { GetMenuHandler } from "../../slices/menu/applications/get-menu/get-menu.ts";
 import type { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import type { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import type { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
@@ -17,6 +18,7 @@ import { requireField, transportError } from "./errors.ts";
 import {
   AssignStaffResponseSchema,
   CancelRestaurantOrderResponseSchema,
+  GetMenuResponseSchema,
   GetRestaurantResponseSchema,
   ReceiveOrderRequestResponseSchema,
   RegisterRestaurantResponseSchema,
@@ -24,7 +26,11 @@ import {
   RevokeStaffResponseSchema,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import { createKitchenRpcs } from "./kitchen.ts";
-import { toRestaurantMessage, toStaffMessage } from "./messages.ts";
+import {
+  toMenuItemMessages,
+  toRestaurantMessage,
+  toStaffMessage,
+} from "./messages.ts";
 import { withRequestRevision } from "./revision.ts";
 import { RejectingSubjectResolver, type SubjectResolver } from "./subject.ts";
 
@@ -35,6 +41,7 @@ export {
 
 export type RestaurantsServiceDependencies = Readonly<{
   getRestaurant: Pick<GetRestaurantHandler, "execute">;
+  getMenu: Pick<GetMenuHandler, "execute">;
   receiveOrderRequest: Pick<ReceiveOrderRequestHandler, "execute">;
   cancelRestaurantOrder: Pick<CancelRestaurantOrderHandler, "execute">;
   acceptRestaurantOrder: Pick<AcceptOrderHandler, "execute">;
@@ -64,6 +71,20 @@ export const createRestaurantsService = (
         });
         return create(GetRestaurantResponseSchema, {
           restaurant: toRestaurantMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async getMenu(request) {
+      try {
+        requireField("restaurant_id", request.restaurantId);
+        const view = await dependencies.getMenu.execute({
+          restaurantId: request.restaurantId,
+        });
+        return create(GetMenuResponseSchema, {
+          items: toMenuItemMessages(view),
         });
       } catch (error) {
         throw transportError(error);

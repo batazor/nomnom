@@ -5,6 +5,7 @@ package grpcadapter
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -220,8 +221,9 @@ func transportError(err error) error {
 	case errors.Is(err, vo.ErrInvalidValue), errors.As(err, &notOrderable),
 		errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem):
 		code, reason, message = codes.InvalidArgument, "INVALID_ORDER", err.Error()
-	case errors.As(err, &invalidTransition), errors.As(err, &cancellationNotAllowed),
-		errors.Is(err, fulfillment.ErrCancellationRefused):
+	case errors.As(err, &cancellationNotAllowed):
+		code, reason, message = codes.FailedPrecondition, cancellationReason(cancellationNotAllowed), err.Error()
+	case errors.As(err, &invalidTransition), errors.Is(err, fulfillment.ErrCancellationRefused):
 		code, reason, message = codes.FailedPrecondition, "ORDER_STATE_CONFLICT", err.Error()
 	case errors.Is(err, application.ErrPermissionDenied):
 		code, reason, message = codes.PermissionDenied, "OPERATION_NOT_ALLOWED", err.Error()
@@ -241,4 +243,14 @@ func transportError(err error) error {
 		return status.Error(code, message)
 	}
 	return withDetails.Err()
+}
+
+// cancellationReason names the cancellation window rule that refused the
+// request, for example CANCELLATION_WINDOW_EXPIRED, so that a client can tell it
+// from a finished Order (FR-494).
+func cancellationReason(err order.CancellationNotAllowed) string {
+	if len(err.Reasons) == 0 {
+		return "ORDER_STATE_CONFLICT"
+	}
+	return strings.ToUpper(string(err.Reasons[0].Code))
 }

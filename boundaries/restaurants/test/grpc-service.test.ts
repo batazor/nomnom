@@ -11,6 +11,7 @@ import {
 
 import {
   CancelRestaurantOrderRequestSchema,
+  GetMenuRequestSchema,
   GetRestaurantRequestSchema,
   ReceiveOrderRequestRequestSchema,
   RestaurantsService,
@@ -52,6 +53,37 @@ test("GetRestaurant maps the application view with the pickup address", async ()
   assert.equal(response.restaurant?.name, "Pho Bar");
   assert.equal(response.restaurant?.isOpen, true);
   assert.equal(response.restaurant?.address, PICKUP_ADDRESS);
+});
+
+test("FR-493 GetMenu returns the public menu with prices and availability", async () => {
+  const { world, service } = createWorld();
+  const { restaurantId, phoId } = await world.givenKitchen("Pho Bar");
+
+  const response = await service.getMenu(
+    create(GetMenuRequestSchema, { restaurantId }),
+    context,
+  );
+
+  const pho = response.items.find((item) => item.menuItemId === phoId);
+  assert.equal(pho?.name, "Pho");
+  assert.equal(pho?.available, true);
+  assert.deepEqual(
+    { amount: pho?.price?.amount, currency: pho?.price?.currency },
+    { amount: "9.50", currency: "EUR" },
+  );
+});
+
+test("GetMenu maps a restaurant without a menu to NOT_FOUND", async () => {
+  const { service } = createWorld();
+
+  await assert.rejects(
+    async () =>
+      service.getMenu(
+        create(GetMenuRequestSchema, { restaurantId: "missing" }),
+        context,
+      ),
+    rejectsWith(Code.NotFound),
+  );
 });
 
 test("GetRestaurant maps missing restaurants to NOT_FOUND", async () => {
@@ -172,6 +204,7 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
 
   const unavailable = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
+    getMenu: world.getMenu,
     receiveOrderRequest: {
       execute: async () => {
         throw new AuthorizationUnavailableError();

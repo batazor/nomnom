@@ -37,6 +37,7 @@ const createWorld = () => {
   let caller: Subject = operator;
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
+    getMenu: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,
@@ -231,6 +232,7 @@ test("staff RPCs map missing input to INVALID_ARGUMENT and unknown restaurants t
   world.authorization.grantManager(owner, "missing");
   const service = createRestaurantsService({
     getRestaurant: unused,
+    getMenu: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,
@@ -263,6 +265,7 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
   };
   const service = createRestaurantsService({
     getRestaurant: unused,
+    getMenu: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,
@@ -304,6 +307,7 @@ test("admin RPCs are UNAUTHENTICATED with the default rejecting resolver", async
   const world = createRestaurantWorld();
   const service = createRestaurantsService({
     getRestaurant: unused,
+    getMenu: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,

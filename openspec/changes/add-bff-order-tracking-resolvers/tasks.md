@@ -2,8 +2,8 @@
 
 ## 1. Контексты
 
-- [ ] 1.1 `orders`: `transportError` ставит `ErrorInfo.reason` из причины `CancellationNotAllowed`; тест сервиса на закрытое окно (`FR-494`, `AC-562`).
-- [ ] 1.2 `restaurants`: `GetMenu` в `service.proto`, генерация, обработчик поверх Get Menu, тесты на меню и `NOT_FOUND` (`FR-493`, `AC-561`).
+- [x] 1.1 `orders`: `transportError` ставит `ErrorInfo.reason` из причины `CancellationNotAllowed`; тест сервиса на закрытое окно (`FR-494`, `AC-562`).
+- [x] 1.2 `restaurants`: `GetMenu` в `service.proto`, генерация, обработчик поверх Get Menu, тесты на меню и `NOT_FOUND` (`FR-493`, `AC-561`).
 
 ## 2. BFF
 

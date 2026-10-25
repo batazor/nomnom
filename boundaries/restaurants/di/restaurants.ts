@@ -184,6 +184,7 @@ const processRegistrations = (
     const service = createRestaurantsService({
       subjects: cradle.subjects,
       getRestaurant: cradle.getRestaurant,
+      getMenu: cradle.getMenu,
       receiveOrderRequest: cradle.receiveOrderRequest,
       cancelRestaurantOrder: cradle.cancelRestaurantOrder,
       acceptRestaurantOrder: cradle.acceptRestaurantOrder,

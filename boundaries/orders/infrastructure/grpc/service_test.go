@@ -294,7 +294,8 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 		ports.clock.Advance(cancellationWindow + time.Second)
 		client := cancellationClient(t, order.StatePlaced, ports, memory.NewAuthorizer())
 		_, err := client.RequestOrderCancellation(context.Background(), cancellationRequest())
-		requireReason(t, err, codes.FailedPrecondition, "ORDER_STATE_CONFLICT")
+		// AC-562: the closed window is told apart from a finished Order.
+		requireReason(t, err, codes.FailedPrecondition, "CANCELLATION_WINDOW_EXPIRED")
 	})
 	t.Run("refused", func(t *testing.T) {
 		ports := newCommandPorts()

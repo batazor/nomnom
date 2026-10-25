@@ -19,6 +19,7 @@ export const createWorld = (
   const world = createKitchenWorld();
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
+    getMenu: world.getMenu,
     receiveOrderRequest: world.receive,
     cancelRestaurantOrder: world.cancel,
     acceptRestaurantOrder: world.accept,

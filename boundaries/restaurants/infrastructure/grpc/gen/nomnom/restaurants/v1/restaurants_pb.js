@@ -8,7 +8,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
  * Describes the file nomnom/restaurants/v1/restaurants.proto.
  */
 export const file_nomnom_restaurants_v1_restaurants = /*@__PURE__*/
-  fileDesc("Cidub21ub20vcmVzdGF1cmFudHMvdjEvcmVzdGF1cmFudHMucHJvdG8SFW5vbW5vbS5yZXN0YXVyYW50cy52MSJTCgpSZXN0YXVyYW50EhUKDXJlc3RhdXJhbnRfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdpc19vcGVuGAMgASgIEg8KB2FkZHJlc3MYBCABKAlCowEKGWNvbS5ub21ub20ucmVzdGF1cmFudHMudjFCEFJlc3RhdXJhbnRzUHJvdG9QAaICA05SWKoCFU5vbW5vbS5SZXN0YXVyYW50cy5WMcoCFU5vbW5vbVxSZXN0YXVyYW50c1xWMeICIU5vbW5vbVxSZXN0YXVyYW50c1xWMVxHUEJNZXRhZGF0YeoCF05vbW5vbTo6UmVzdGF1cmFudHM6OlYxYgZwcm90bzM");
+  fileDesc("Cidub21ub20vcmVzdGF1cmFudHMvdjEvcmVzdGF1cmFudHMucHJvdG8SFW5vbW5vbS5yZXN0YXVyYW50cy52MSJTCgpSZXN0YXVyYW50EhUKDXJlc3RhdXJhbnRfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdpc19vcGVuGAMgASgIEg8KB2FkZHJlc3MYBCABKAkiKQoFTW9uZXkSDgoGYW1vdW50GAEgASgJEhAKCGN1cnJlbmN5GAIgASgJIoMBCghNZW51SXRlbRIUCgxtZW51X2l0ZW1faWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIrCgVwcmljZRgEIAEoCzIcLm5vbW5vbS5yZXN0YXVyYW50cy52MS5Nb25leRIRCglhdmFpbGFibGUYBSABKAhCowEKGWNvbS5ub21ub20ucmVzdGF1cmFudHMudjFCEFJlc3RhdXJhbnRzUHJvdG9QAaICA05SWKoCFU5vbW5vbS5SZXN0YXVyYW50cy5WMcoCFU5vbW5vbVxSZXN0YXVyYW50c1xWMeICIU5vbW5vbVxSZXN0YXVyYW50c1xWMVxHUEJNZXRhZGF0YeoCF05vbW5vbTo6UmVzdGF1cmFudHM6OlYxYgZwcm90bzM");
 
 /**
  * Describes the message nomnom.restaurants.v1.Restaurant.
@@ -16,4 +16,18 @@ export const file_nomnom_restaurants_v1_restaurants = /*@__PURE__*/
  */
 export const RestaurantSchema = /*@__PURE__*/
   messageDesc(file_nomnom_restaurants_v1_restaurants, 0);
+
+/**
+ * Describes the message nomnom.restaurants.v1.Money.
+ * Use `create(MoneySchema)` to create a new message.
+ */
+export const MoneySchema = /*@__PURE__*/
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 1);
+
+/**
+ * Describes the message nomnom.restaurants.v1.MenuItem.
+ * Use `create(MenuItemSchema)` to create a new message.
+ */
+export const MenuItemSchema = /*@__PURE__*/
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 2);
 

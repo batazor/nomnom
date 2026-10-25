@@ -9,3 +9,18 @@ message Restaurant {
   // Pickup address of Restaurant Orders; delivery uses it as the pickup point.
   string address = 4;
 }
+
+// Exact amount: a decimal string with a dot separator and an ISO 4217 currency.
+message Money {
+  string amount = 1;
+  string currency = 2;
+}
+
+message MenuItem {
+  string menu_item_id = 1;
+  string name = 2;
+  // Empty when the item has no description.
+  string description = 3;
+  Money price = 4;
+  bool available = 5;
+}

@@ -43,3 +43,64 @@ export declare type Restaurant = Message<"nomnom.restaurants.v1.Restaurant"> & {
  */
 export declare const RestaurantSchema: GenMessage<Restaurant>;
 
+/**
+ * Exact amount: a decimal string with a dot separator and an ISO 4217 currency.
+ *
+ * @generated from message nomnom.restaurants.v1.Money
+ */
+export declare type Money = Message<"nomnom.restaurants.v1.Money"> & {
+  /**
+   * @generated from field: string amount = 1;
+   */
+  amount: string;
+
+  /**
+   * @generated from field: string currency = 2;
+   */
+  currency: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.Money.
+ * Use `create(MoneySchema)` to create a new message.
+ */
+export declare const MoneySchema: GenMessage<Money>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.MenuItem
+ */
+export declare type MenuItem = Message<"nomnom.restaurants.v1.MenuItem"> & {
+  /**
+   * @generated from field: string menu_item_id = 1;
+   */
+  menuItemId: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Empty when the item has no description.
+   *
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.Money price = 4;
+   */
+  price?: Money | undefined;
+
+  /**
+   * @generated from field: bool available = 5;
+   */
+  available: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.MenuItem.
+ * Use `create(MenuItemSchema)` to create a new message.
+ */
+export declare const MenuItemSchema: GenMessage<MenuItem>;
+

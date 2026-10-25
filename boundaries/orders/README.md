@@ -85,6 +85,7 @@ Temporal workflow относится к прикладному процессу 
 | `Order` не найден | `NOT_FOUND` | `ORDER_NOT_FOUND` |
 | Некорректный состав или Delivery Address | `INVALID_ARGUMENT` | `INVALID_ORDER` |
 | Текущее состояние запрещает переход | `FAILED_PRECONDITION` | `ORDER_STATE_CONFLICT` |
+| Окно отмены ещё не открыто или уже закрыто | `FAILED_PRECONDITION` | `CANCELLATION_WINDOW_NOT_OPEN`, `CANCELLATION_WINDOW_EXPIRED` |
 | `Order` с таким идентификатором уже существует | `ALREADY_EXISTS` | `ORDER_ALREADY_EXISTS` |
 | Неожиданная внутренняя ошибка | `INTERNAL` | `INTERNAL_ERROR` |
 | Внешняя зависимость недоступна | `UNAVAILABLE` | `DEPENDENCY_UNAVAILABLE` |
@@ -92,8 +93,9 @@ Temporal workflow относится к прикладному процессу 
 Недоступная зависимость (SpiceDB, catalog, отсутствующий workflow) проверяется раньше отказа
 доступа: fail-closed check оборачивает её в отказ, но вызывающий получает retryable `UNAVAILABLE`.
 `INVALID_ORDER` — ошибки value objects, `NotOrderable`, пустой состав и повтор `menu_item_id`;
-`ORDER_STATE_CONFLICT` — запрет FSM, закрытое окно отмены (`CancellationNotAllowed`) и отказ
-workflow принять Cancellation Request.
+`ORDER_STATE_CONFLICT` — запрет FSM и отказ workflow принять Cancellation Request; отказ по окну
+отмены (`CancellationNotAllowed`) называет нарушенное правило, чтобы клиент отличил его от
+завершённого заказа.
 
 В `google.rpc.ErrorInfo.domain` передаётся `nomnom.orders.v1`. Реализованы Buf-модуль,
 сгенерированные Go stubs и RPC `GetOrder`, `ListCustomerOrders`, `PlaceOrder` и

@@ -4,7 +4,7 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
-import type { Restaurant } from "./restaurants_pb.js";
+import type { MenuItem, Restaurant } from "./restaurants_pb.js";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -43,6 +43,38 @@ export declare type GetRestaurantResponse = Message<"nomnom.restaurants.v1.GetRe
  * Use `create(GetRestaurantResponseSchema)` to create a new message.
  */
 export declare const GetRestaurantResponseSchema: GenMessage<GetRestaurantResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.GetMenuRequest
+ */
+export declare type GetMenuRequest = Message<"nomnom.restaurants.v1.GetMenuRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.GetMenuRequest.
+ * Use `create(GetMenuRequestSchema)` to create a new message.
+ */
+export declare const GetMenuRequestSchema: GenMessage<GetMenuRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.GetMenuResponse
+ */
+export declare type GetMenuResponse = Message<"nomnom.restaurants.v1.GetMenuResponse"> & {
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.MenuItem items = 1;
+   */
+  items: MenuItem[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.GetMenuResponse.
+ * Use `create(GetMenuResponseSchema)` to create a new message.
+ */
+export declare const GetMenuResponseSchema: GenMessage<GetMenuResponse>;
 
 /**
  * @generated from message nomnom.restaurants.v1.OrderRequestItem
@@ -720,6 +752,17 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof GetRestaurantRequestSchema;
     output: typeof GetRestaurantResponseSchema;
+  },
+  /**
+   * Current menu of a restaurant: public data, no authorization (FR-216). A
+   * restaurant without a menu is NOT_FOUND. Not a snapshot of a placed order.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.GetMenu
+   */
+  getMenu: {
+    methodKind: "unary";
+    input: typeof GetMenuRequestSchema;
+    output: typeof GetMenuResponseSchema;
   },
   /**
    * Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.

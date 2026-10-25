@@ -132,6 +132,7 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
     service = createRestaurantsService({
       subjects: { resolve: async () => cook },
       getRestaurant: unused,
+      getMenu: unused,
       receiveOrderRequest: unused,
       cancelRestaurantOrder: unused,
       registerRestaurant: unused,
