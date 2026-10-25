@@ -61,6 +61,8 @@ type ConsumerConfig struct {
 const (
 	WatermillMetricsNamespace = "watermill"
 	ConsumerMetricsSubsystem  = "consumer"
+	// ForwarderMetricsSubsystem — роль orders-forwarder (Outbox → Kafka).
+	ForwarderMetricsSubsystem = "outbox_forwarder"
 )
 
 // NewConsumerRouter builds the Watermill router of the consumer process: one

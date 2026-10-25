@@ -221,6 +221,23 @@ CQRS остаётся логическим разделением command- и qu
 
 Решение — [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); контрактные тесты адаптеров — `make test-postgres` (PostgreSQL поднимается testcontainers в `TestMain`; `POSTGRES_DSN` — использовать готовую базу).
 
+### Пулер PostgreSQL
+
+Перед базой стоит пулер соединений, и он обязан работать в **session mode**: `orders` опирается на состояние server-сессии. Миграции goose берут session-level advisory lock (`lock.NewPostgresSessionLocker`) на отдельном соединении, pgx по умолчанию кэширует prepared statements на соединении (`QueryExecModeCacheStatement`). Transaction mode их ломает: lock и prepared statements окажутся на чужом server-соединении. Остальное от режима не зависит: Unit of Work и `FOR UPDATE` (назначение курьера, offsets Outbox forwarder'а watermill-sql) живут внутри одной транзакции, `pg_advisory_xact_lock` при инициализации схемы Outbox — transaction-scoped; `LISTEN/NOTIFY`, `SET` вне транзакции и временные таблицы не используются.
+
+Каждый процесс держит собственный пул pgx (`POSTGRES__*`): `MAX_CONNS` по конкурентности роли, `MIN_CONNS` 0–1, `MAX_CONN_LIFETIME` 30m с `MAX_CONN_LIFETIME_JITTER` 5m (реплики не переоткрывают соединения одновременно), `MAX_CONN_IDLE_TIME` 5m, `CONNECT_TIMEOUT` 5s, `HEALTH_CHECK_PERIOD` 1m; недопустимое значение — ошибка startup. В session mode каждое соединение пула занимает server-соединение пулера, поэтому сумма Σ(replicas × maxConns) всех ролей должна помещаться в `pool_size` пулера для базы `orders`:
+
+| Роль | values | maxConns | minConns |
+| --- | --- | --- | --- |
+| API | `values.yaml` | 10 | 1 |
+| worker | `values-worker.yaml` | 5 | 1 |
+| consumer | `values-consumer.yaml` | 5 | 1 |
+| forwarder | `values-forwarder.yaml` | 2 | 1 |
+| reconciler | `values-reconciler.yaml` | 2 | 0 |
+| init container migrate | — | 2 (lock + миграция) | 0 |
+
+При одной реплике каждой роли это 24 server-соединения плюс 2 на время миграций. Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`; `db.client.connection.pool.name=orders`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
+
 ## Dependency Injection
 
 В `orders` используется compile-time DI через [`github.com/google/wire`](https://github.com/google/wire). Зависимости передаются обычными Go-конструкторами, а Wire генерирует код их сборки в composition root каждого исполняемого процесса. Provider sets группируются по функциональности и необходимым инфраструктурным компонентам.
@@ -366,7 +383,22 @@ Workflow Stage публикуется низкокардинальным Search 
 
 Для `orders` observability охватывает gRPC, PostgreSQL, Watermill/Kafka, Temporal workflows и Activities, API и workers. W3C Trace Context передаётся через gRPC metadata и Watermill message metadata/Kafka headers; telemetry при replay workflow не должна повторно считаться бизнес-результатом.
 
-`pkg/telemetry` во всех процессах регистрирует W3C propagator и экспортирует metrics по OTLP при заданном `OTEL_EXPORTER_OTLP_ENDPOINT`. Traces (server и client spans `otelgrpc`) экспортируются по OTLP gRPC, только если задан `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`; без них trace context всё равно передаётся соседям, но spans не отправляются. В kind traces API уходят в приёмник проверок `trace-capture` ([`ops/kind`](../../ops/kind/README.md#проверки)). Общие правила и путь Pyroscope для Go описаны в [общесистемной документации observability](../../docs/observability.md).
+`pkg/telemetry` собирает три сигнала каждого процесса с одним resource: `service.namespace=nomnom`, `service.name` роли (`orders`, `orders-worker`, `orders-consumer`, `orders-forwarder`, `orders-reconciler`, `orders-migrate`; `OTEL_SERVICE_NAME` переопределяет), `service.version` (VCS revision сборки, Helm — image tag через `OTEL_RESOURCE_ATTRIBUTES`), `deployment.environment.name` и `service.instance.id` из `OTEL_RESOURCE_ATTRIBUTES`.
+
+| Процесс | Traces | Metrics | Logs |
+| --- | --- | --- | --- |
+| `orders` (API) | gRPC server, use cases, PostgreSQL, SpiceDB, catalog через internal gateway, Temporal client (start/signal) | gRPC server/client, use cases, domain, `db.client.*`, runtime | JSON |
+| `orders-worker` | Temporal workflow task и Activity, use cases, PostgreSQL, вызовы соседей через gateway | Temporal SDK, use cases, domain, `db.client.*`, gRPC client, runtime | JSON, Temporal SDK |
+| `orders-consumer` | Kafka receive (otelsarama) → process (parent из headers), use cases, PostgreSQL, SpiceDB, Temporal client | Watermill consumer, `nomnom.messaging.*`, use cases, `db.client.*`, Temporal SDK, runtime | JSON, Watermill, Temporal SDK |
+| `orders-forwarder` | Kafka producer span — дочерний к операции, записавшей событие в Outbox | Watermill `outbox_forwarder`, `db.client.*`, runtime | JSON, Watermill |
+| `orders-reconciler` | span прохода сверки, PostgreSQL, SpiceDB | `db.client.*`, runtime | JSON |
+| `orders-migrate` | — | — | JSON |
+
+- **Traces** экспортируются по OTLP gRPC, только если задан `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`; без них trace context всё равно передаётся соседям. W3C Trace Context (без baggage для Kafka и Temporal) идёт через gRPC metadata, Temporal headers (`contrib/opentelemetry` interceptor client'а, worker его наследует) и Kafka: Outbox записывает `traceparent`/`tracestate` контекста use case в metadata события (`messaging.InjectTraceContext`), Forwarder переносит их в headers, consumer извлекает их до span обработки. PostgreSQL — `otelpgx` поверх pgx: client spans только внутри trace, без текста statement и bind parameters. SpiceDB — client spans `otelgrpc` без RPC-метрик.
+- **Metrics** — по OTLP при `OTEL_EXPORTER_OTLP_ENDPOINT` (или `..._METRICS_ENDPOINT`). `db.client.operation.duration` (`otelpgx`) — с labels `db.system.name`, `db.operation.name`; пул — `db.client.connection.*` (`postgres/pool_metrics.go`).
+- **Logs** — одна JSON-запись на строку в stdout: `timestamp` (UTC, RFC 3339), `severity` (`DEBUG`…`ERROR`), `message`, resource-поля `service.*` и `deployment.environment.name`, `trace_id`/`span_id` только внутри span, ошибки — `error.message` и `error.type`. Через тот же handler идут `slog`, `log.Printf`, gRPC (`grpclog`, info/warning — на уровне debug), Watermill и Temporal SDK. Redaction: поля с именами `*token*`, `*password*`, `*secret*`, `*dsn*`, `authorization`, `cookie`, `payload` и байтовые значения заменяются на `[REDACTED]`; userinfo URL/DSN, `password=`, bearer/basic credentials и JWT вырезаются из любого текста. `LOG__LEVEL` — `debug`, `info` (по умолчанию), `warn`, `error`.
+
+В kind traces API уходят в приёмник проверок `trace-capture` ([`ops/kind`](../../ops/kind/README.md#проверки)). Общие правила и путь Pyroscope для Go описаны в [общесистемной документации observability](../../docs/observability.md).
 
 ## Статус реализации
 
@@ -470,6 +502,9 @@ make temporal-dev-stop
 | `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
 | `RECONCILER__INTERVAL`, `RECONCILER__GRACE`, `RECONCILER__PAGE_SIZE` | `5m`, `10m`, `500` | `cmd/orders-reconciler`: сверка relations `order` SpiceDB ↔ PostgreSQL |
 | `POSTGRES__DSN`, `POSTGRES__MAX_CONNS` | —, `10` | PostgreSQL orders (обязателен для всех процессов); локально — `make postgres-dev`, `make migrate` |
+| `POSTGRES__MIN_CONNS`, `POSTGRES__MAX_CONN_LIFETIME`, `POSTGRES__MAX_CONN_LIFETIME_JITTER`, `POSTGRES__MAX_CONN_IDLE_TIME`, `POSTGRES__CONNECT_TIMEOUT`, `POSTGRES__HEALTH_CHECK_PERIOD` | `0`, `30m`, `5m`, `5m`, `5s`, `1m` | Лимиты пула pgx процесса ([Пулер PostgreSQL](#пулер-postgresql)); `MIN_CONNS` — 0 или 1, длительности положительные |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_EXPORTER_OTLP_ENDPOINT` | имя роли, —, — | Resource и OTLP export traces/metrics ([Observability](#observability)); Helm задаёт `telemetry.serviceName`, `telemetry.resourceAttributes`, `telemetry.otlpEndpoint` |
+| `LOG__LEVEL` | `info` | Минимальный уровень JSON-логов: `debug`, `info`, `warn`, `error` (Helm `telemetry.logLevel`) |
 | `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` | `false`, `2s` | Plaintext (только kind/локально) и deadline проверки; ошибка или timeout — отказ |
 
 Проверка caller разделена по ответственности: [`jwks.go`](infrastructure/grpc/jwks.go) читает ключи,

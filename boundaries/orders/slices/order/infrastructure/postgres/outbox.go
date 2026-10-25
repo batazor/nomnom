@@ -9,6 +9,8 @@ import (
 	watermillsql "github.com/ThreeDotsLabs/watermill-sql/v4/pkg/sql"
 	"github.com/ThreeDotsLabs/watermill/components/forwarder"
 	"github.com/ThreeDotsLabs/watermill/message"
+
+	"nomnom/orders/pkg/messaging"
 )
 
 // OutboxTopic is the watermill-sql topic read by the Forwarder (ADR 13).
@@ -34,6 +36,8 @@ func (s *Store) AppendMessages(ctx context.Context, topic string, messages ...*m
 	if err != nil {
 		return fmt.Errorf("outbox publisher: %w", err)
 	}
+	// Trace context операции, записавшей событие, едет в metadata до Kafka headers.
+	messaging.InjectTraceContext(ctx, messages...)
 	outbox := forwarder.NewPublisher(publisher, forwarder.PublisherConfig{ForwarderTopic: OutboxTopic})
 	if err := outbox.Publish(topic, messages...); err != nil {
 		return fmt.Errorf("append outbox for %s: %w", topic, err)

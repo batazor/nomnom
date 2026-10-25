@@ -64,7 +64,12 @@ helm uninstall orders
 
 DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`/`key` (env `POSTGRES__DSN`); без него
 процесс не стартует. При `postgres.migrate: true` каждый workload получает init container
-`/orders-migrate` (goose под advisory lock). Forwarder Outbox → Kafka — отдельный release с
+`/orders-migrate` (goose под advisory lock). Пул процесса задают `postgres.maxConns`,
+`minConns`, `maxConnLifetime`, `maxConnLifetimeJitter`, `maxConnIdleTime`, `connectTimeout`,
+`healthCheckPeriod` (env `POSTGRES__*`); values каждой роли задают свой `maxConns` (API 10,
+worker и consumer 5, forwarder и reconciler 2), init container migrate — пул 2. Пулер перед
+базой — только session mode, Σ(replicas × maxConns) ≤ `pool_size`
+([README](../README.md#пулер-postgresql)). Forwarder Outbox → Kafka — отдельный release с
 `values-forwarder.yaml` (один экземпляр, без Service):
 
 ```bash
@@ -117,13 +122,28 @@ helm upgrade --install orders ops/helm --set image.tag=local
 
 ```yaml
 env:
-  OTEL_SERVICE_NAME: orders
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-  OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+  CANCELLATION__WINDOW: 5m
 ```
 
-Адрес Alloy и другие значения OpenTelemetry задаются окружением и не хардкодятся в chart;
-Alloy sidecar не добавляется — collector разворачивается отдельно.
+OpenTelemetry задаётся секцией `telemetry` (не через `env`: явные переменные chart
+перекрывают `envFrom`). Chart сам выставляет `OTEL_SERVICE_NAME` (`telemetry.serviceName`
+роли: `orders`, `orders-worker`, `orders-consumer`, `orders-forwarder`, `orders-reconciler`;
+init container — `orders-migrate`) и `OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя
+pod, `service.version` — image tag, плюс `telemetry.resourceAttributes`) во всех releases и
+в init container migrate:
+
+```yaml
+telemetry:
+  otlpEndpoint: http://alloy.observability.svc:4317   # OTEL_EXPORTER_OTLP_ENDPOINT
+  logLevel: info                                       # LOG__LEVEL
+  resourceAttributes:
+    deployment.environment.name: local
+```
+
+Адрес Alloy и окружение задаются values окружения и не хардкодятся в chart;
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` и другие переменные SDK можно передать через `env`.
+Alloy sidecar не добавляется — collector разворачивается отдельно. Процессы пишут JSON-логи
+в stdout (README приложения, «Observability»).
 
 Секреты (пароли, API tokens, credentials БД и Kafka, BSR tokens) не помещаются в
 `values.yaml` и `ConfigMap`. Они подключаются из внешних Kubernetes `Secret`:

@@ -59,7 +59,8 @@ spec:
             {{- end }}
           {{- end }}
           env:
-            {{- include "orders.postgresEnv" . | nindent 12 }}
+            {{- include "orders.postgresEnv" (dict "context" . "migrate" true) | nindent 12 }}
+            {{- include "orders.otelEnv" (dict "context" . "serviceName" "orders-migrate") | nindent 12 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -123,8 +124,8 @@ spec:
               value: /var/run/secrets/nomnom/identity
             {{- end }}
             {{- end }}
-            {{- include "orders.postgresEnv" . | nindent 12 }}
-            {{- include "orders.otelEnv" . | nindent 12 }}
+            {{- include "orders.postgresEnv" (dict "context" . "migrate" false) | nindent 12 }}
+            {{- include "orders.otelEnv" (dict "context" . "serviceName" "") | nindent 12 }}
             {{- with .Values.spicedb }}
             {{- if .endpoint }}
             - name: SPICEDB__ENDPOINT

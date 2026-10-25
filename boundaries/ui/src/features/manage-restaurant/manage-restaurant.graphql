@@ -1,0 +1,32 @@
+query ManageRestaurant($id: ID!) {
+  restaurant(id: $id) {
+    id
+    name
+    address
+    acceptingOrders
+  }
+}
+
+mutation OpenRestaurant($restaurantId: ID!) {
+  openRestaurant(restaurantId: $restaurantId) {
+    changed
+    restaurant {
+      id
+      name
+      address
+      acceptingOrders
+    }
+  }
+}
+
+mutation CloseRestaurant($restaurantId: ID!) {
+  closeRestaurant(restaurantId: $restaurantId) {
+    changed
+    restaurant {
+      id
+      name
+      address
+      acceptingOrders
+    }
+  }
+}

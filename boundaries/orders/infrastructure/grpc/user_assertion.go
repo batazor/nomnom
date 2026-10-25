@@ -3,7 +3,7 @@ package grpcadapter
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -31,8 +31,8 @@ func newUserAssertionVerifier(cfg config.IdentityConfig) (*userAssertionVerifier
 		}
 	}
 	if !cfg.UserVerifying() {
-		log.Printf("%s, %s or %s is not set: user assertions are rejected",
-			config.EnvIdentityUserIssuer, config.EnvIdentityUserJWKSFile, config.EnvIdentityUserDelegates)
+		slog.Warn(fmt.Sprintf("%s, %s or %s is not set: user assertions are rejected",
+			config.EnvIdentityUserIssuer, config.EnvIdentityUserJWKSFile, config.EnvIdentityUserDelegates))
 		return nil, nil
 	}
 	return &userAssertionVerifier{keys: keys, issuer: cfg.UserIssuer, delegates: cfg.Delegates()}, nil

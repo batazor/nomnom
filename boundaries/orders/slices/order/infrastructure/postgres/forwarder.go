@@ -16,7 +16,9 @@ const ForwarderHandlerName = "orders-outbox-forwarder"
 
 // NewForwarder moves Outbox records to the Kafka publisher, each to the topic
 // it was appended for. It must run as a single active instance (ADR 13).
-func NewForwarder(s *Store, out message.Publisher, logger watermill.LoggerAdapter) (*forwarder.Forwarder, error) {
+// middlewares decorate the forwarding handler (Watermill router metrics of the
+// forwarder role).
+func NewForwarder(s *Store, out message.Publisher, logger watermill.LoggerAdapter, middlewares ...message.HandlerMiddleware) (*forwarder.Forwarder, error) {
 	subscriber, err := watermillsql.NewSubscriber(watermillsql.BeginnerFromPgx(s.pool), watermillsql.SubscriberConfig{
 		ConsumerGroup:  "orders-forwarder",
 		SchemaAdapter:  watermillsql.DefaultPostgreSQLSchema{},
@@ -26,7 +28,7 @@ func NewForwarder(s *Store, out message.Publisher, logger watermill.LoggerAdapte
 	if err != nil {
 		return nil, fmt.Errorf("outbox subscriber: %w", err)
 	}
-	fwd, err := forwarder.NewForwarder(subscriber, out, logger, forwarder.Config{ForwarderTopic: OutboxTopic, HandlerName: ForwarderHandlerName})
+	fwd, err := forwarder.NewForwarder(subscriber, out, logger, forwarder.Config{ForwarderTopic: OutboxTopic, HandlerName: ForwarderHandlerName, Middlewares: middlewares})
 	if err != nil {
 		return nil, fmt.Errorf("outbox forwarder: %w", err)
 	}

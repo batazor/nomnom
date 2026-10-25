@@ -4,6 +4,9 @@
 # через env; FULFILLMENT__NEIGHBOURS=simulated в окружения не задаётся.
 component: worker
 
+telemetry:
+  serviceName: orders-worker
+
 command:
   - /orders-worker
 
@@ -15,3 +18,8 @@ identity:
     - nomnom.payments
     - nomnom.restaurants
     - nomnom.delivery
+
+# Пул PostgreSQL роли (README, «Пулер PostgreSQL»): Temporal activities обращаются к store по одной на задачу; лишние ждут в пуле.
+postgres:
+  maxConns: 5
+  minConns: 1

@@ -18,7 +18,7 @@ func Services() []Options {
 		{
 			Context: "restaurants", Title: "Restaurants", Language: Node,
 			Services: []string{inventory.Restaurants},
-			GRPC:     true, Database: MongoDB,
+			GRPC:     true, Database: MongoDB, DatabasePool: true,
 			Kafka:      &Kafka{ConsumerGroup: "restaurants", Consumers: []string{inventory.Restaurants}},
 			UnitOfWork: true, Lifecycle: true, Kitchen: true, Authorization: true,
 			Domain: restaurantsDomain,

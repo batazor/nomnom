@@ -17,3 +17,7 @@ func NewMigrator(cfg config.PostgresConfig) *Migrator { return &Migrator{cfg: cf
 
 // Run применяет миграции; ctx отменяется сигналом остановки процесса.
 func (m *Migrator) Run(ctx context.Context) error { return postgres.Migrate(ctx, m.cfg) }
+
+// MigratorServiceName — service.name процесса orders-migrate по умолчанию;
+// OTEL_SERVICE_NAME переопределяет. Migrate экспортирует только логи.
+const MigratorServiceName = "orders-migrate"

@@ -19,6 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	BffService_MutationCloseRestaurant_FullMethodName          = "/service.BffService/MutationCloseRestaurant"
+	BffService_MutationOpenRestaurant_FullMethodName           = "/service.BffService/MutationOpenRestaurant"
 	BffService_MutationPlaceOrder_FullMethodName               = "/service.BffService/MutationPlaceOrder"
 	BffService_MutationRequestOrderCancellation_FullMethodName = "/service.BffService/MutationRequestOrderCancellation"
 	BffService_QueryBffInfo_FullMethodName                     = "/service.BffService/QueryBffInfo"
@@ -34,6 +36,10 @@ const (
 //
 // Service definition for BffService
 type BffServiceClient interface {
+	// Close a restaurant of the current user for new orders; repeating it changes nothing
+	MutationCloseRestaurant(ctx context.Context, in *MutationCloseRestaurantRequest, opts ...grpc.CallOption) (*MutationCloseRestaurantResponse, error)
+	// Open a restaurant of the current user for new orders; repeating it changes nothing
+	MutationOpenRestaurant(ctx context.Context, in *MutationOpenRestaurantRequest, opts ...grpc.CallOption) (*MutationOpenRestaurantResponse, error)
 	// Place an order for the current customer
 	MutationPlaceOrder(ctx context.Context, in *MutationPlaceOrderRequest, opts ...grpc.CallOption) (*MutationPlaceOrderResponse, error)
 	// Request cancellation of an order of the current customer
@@ -56,6 +62,26 @@ type bffServiceClient struct {
 
 func NewBffServiceClient(cc grpc.ClientConnInterface) BffServiceClient {
 	return &bffServiceClient{cc}
+}
+
+func (c *bffServiceClient) MutationCloseRestaurant(ctx context.Context, in *MutationCloseRestaurantRequest, opts ...grpc.CallOption) (*MutationCloseRestaurantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationCloseRestaurantResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationCloseRestaurant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bffServiceClient) MutationOpenRestaurant(ctx context.Context, in *MutationOpenRestaurantRequest, opts ...grpc.CallOption) (*MutationOpenRestaurantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationOpenRestaurantResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationOpenRestaurant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *bffServiceClient) MutationPlaceOrder(ctx context.Context, in *MutationPlaceOrderRequest, opts ...grpc.CallOption) (*MutationPlaceOrderResponse, error) {
@@ -134,6 +160,10 @@ func (c *bffServiceClient) QueryRestaurants(ctx context.Context, in *QueryRestau
 //
 // Service definition for BffService
 type BffServiceServer interface {
+	// Close a restaurant of the current user for new orders; repeating it changes nothing
+	MutationCloseRestaurant(context.Context, *MutationCloseRestaurantRequest) (*MutationCloseRestaurantResponse, error)
+	// Open a restaurant of the current user for new orders; repeating it changes nothing
+	MutationOpenRestaurant(context.Context, *MutationOpenRestaurantRequest) (*MutationOpenRestaurantResponse, error)
 	// Place an order for the current customer
 	MutationPlaceOrder(context.Context, *MutationPlaceOrderRequest) (*MutationPlaceOrderResponse, error)
 	// Request cancellation of an order of the current customer
@@ -158,6 +188,12 @@ type BffServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedBffServiceServer struct{}
 
+func (UnimplementedBffServiceServer) MutationCloseRestaurant(context.Context, *MutationCloseRestaurantRequest) (*MutationCloseRestaurantResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationCloseRestaurant not implemented")
+}
+func (UnimplementedBffServiceServer) MutationOpenRestaurant(context.Context, *MutationOpenRestaurantRequest) (*MutationOpenRestaurantResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationOpenRestaurant not implemented")
+}
 func (UnimplementedBffServiceServer) MutationPlaceOrder(context.Context, *MutationPlaceOrderRequest) (*MutationPlaceOrderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationPlaceOrder not implemented")
 }
@@ -198,6 +234,42 @@ func RegisterBffServiceServer(s grpc.ServiceRegistrar, srv BffServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&BffService_ServiceDesc, srv)
+}
+
+func _BffService_MutationCloseRestaurant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationCloseRestaurantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationCloseRestaurant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationCloseRestaurant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationCloseRestaurant(ctx, req.(*MutationCloseRestaurantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BffService_MutationOpenRestaurant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationOpenRestaurantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationOpenRestaurant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationOpenRestaurant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationOpenRestaurant(ctx, req.(*MutationOpenRestaurantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _BffService_MutationPlaceOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -333,6 +405,14 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "service.BffService",
 	HandlerType: (*BffServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "MutationCloseRestaurant",
+			Handler:    _BffService_MutationCloseRestaurant_Handler,
+		},
+		{
+			MethodName: "MutationOpenRestaurant",
+			Handler:    _BffService_MutationOpenRestaurant_Handler,
+		},
 		{
 			MethodName: "MutationPlaceOrder",
 			Handler:    _BffService_MutationPlaceOrder_Handler,

@@ -8,7 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
 
 	"google.golang.org/grpc"
@@ -157,7 +157,8 @@ func (r *Restaurants) CancelOrder(ctx context.Context, request neighbours.Restau
 		return mapError("restaurants.CancelRestaurantOrder", err)
 	}
 	if !resp.GetCancelled() {
-		log.Printf("restaurant order of %s not cancelled: %s", request.OrderID, resp.GetRejectionReason())
+		slog.InfoContext(ctx, "restaurant order not cancelled",
+			slog.String("order_id", request.OrderID), slog.String("rejection_reason", resp.GetRejectionReason()))
 	}
 	return nil
 }
@@ -202,14 +203,14 @@ func (d *Delivery) Create(ctx context.Context, request neighbours.DeliveryReques
 func (d *Delivery) Replan(ctx context.Context, request neighbours.DeliveryRequest) error {
 	resp, err := d.client.ReplanDelivery(ctx, &deliveryv1.ReplanDeliveryRequest{OrderId: request.OrderID})
 	if status.Code(err) == codes.FailedPrecondition {
-		log.Printf("replan of delivery for %s skipped: %v", request.OrderID, err)
+		slog.InfoContext(ctx, "replan of delivery skipped", slog.String("order_id", request.OrderID), "error", err)
 		return nil
 	}
 	if err != nil {
 		return mapError("delivery.ReplanDelivery", err)
 	}
 	if resp.GetOfferedCourierId() == "" {
-		log.Printf("replan of delivery for %s found no courier", request.OrderID)
+		slog.InfoContext(ctx, "replan of delivery found no courier", slog.String("order_id", request.OrderID))
 	}
 	return nil
 }
@@ -221,7 +222,8 @@ func (d *Delivery) Cancel(ctx context.Context, request neighbours.DeliveryReques
 		return mapError("delivery.CancelDelivery", err)
 	}
 	if !resp.GetCancelled() {
-		log.Printf("delivery of %s not cancelled: %s", request.OrderID, resp.GetRejectionReason())
+		slog.InfoContext(ctx, "delivery not cancelled",
+			slog.String("order_id", request.OrderID), slog.String("rejection_reason", resp.GetRejectionReason()))
 	}
 	return nil
 }

@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 )
 
@@ -73,7 +73,7 @@ var (
 )
 
 func simulated(call, key string) {
-	log.Printf("simulated neighbour call %s, idempotency key %s", call, key)
+	slog.Info("simulated neighbour call", slog.String("call", call), slog.String("idempotency_key", key))
 }
 
 func (Simulated) Authorize(_ context.Context, r ports.PaymentRequest) (ports.PaymentDecision, error) {

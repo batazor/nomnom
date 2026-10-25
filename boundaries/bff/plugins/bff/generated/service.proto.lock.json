@@ -115,7 +115,9 @@
     "Mutation": {
       "fields": {
         "placeOrder": 1,
-        "requestOrderCancellation": 2
+        "requestOrderCancellation": 2,
+        "openRestaurant": 3,
+        "closeRestaurant": 4
       }
     },
     "MutationPlaceOrderRequest": {
@@ -288,6 +290,42 @@
     "OrderCancellationProblem": {
       "fields": {
         "code": 1
+      }
+    },
+    "MutationOpenRestaurantRequest": {
+      "fields": {
+        "restaurant_id": 1
+      }
+    },
+    "MutationOpenRestaurant": {
+      "fields": {
+        "restaurantId": 1
+      }
+    },
+    "MutationOpenRestaurantResponse": {
+      "fields": {
+        "open_restaurant": 1
+      }
+    },
+    "MutationCloseRestaurantRequest": {
+      "fields": {
+        "restaurant_id": 1
+      }
+    },
+    "MutationCloseRestaurant": {
+      "fields": {
+        "restaurantId": 1
+      }
+    },
+    "MutationCloseRestaurantResponse": {
+      "fields": {
+        "close_restaurant": 1
+      }
+    },
+    "RestaurantOpeningPayload": {
+      "fields": {
+        "restaurant": 1,
+        "changed": 2
       }
     }
   },

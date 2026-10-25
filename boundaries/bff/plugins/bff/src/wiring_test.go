@@ -62,6 +62,7 @@ func TestWiringOpensOneConnectionPerAudience(t *testing.T) {
 	assert.NotNil(t, bff.tracking)
 	assert.NotNil(t, bff.catalog)
 	assert.NotNil(t, bff.checkout)
+	assert.NotNil(t, bff.management)
 }
 
 func TestWiringWithoutGatewayOrIdentityLeavesSlicesUnconnected(t *testing.T) {
@@ -76,6 +77,7 @@ func TestWiringWithoutGatewayOrIdentityLeavesSlicesUnconnected(t *testing.T) {
 	assert.Nil(t, bff.tracking)
 	assert.Nil(t, bff.catalog)
 	assert.Nil(t, bff.checkout)
+	assert.Nil(t, bff.management)
 	assert.Empty(t, dial.audiences)
 }
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -78,7 +78,7 @@ func (r *Runtime) Run(ctx context.Context, worker Worker) error {
 	// Повторный сигнал больше не перехватывается и завершает процесс сразу.
 	stop()
 	r.health.markShuttingDown()
-	log.Printf("shutting down: readiness delay %s, drain timeout %s", r.cfg.ReadinessDelay, r.cfg.DrainTimeout)
+	slog.Info("shutting down", slog.Duration("readiness_delay", r.cfg.ReadinessDelay), slog.Duration("drain_timeout", r.cfg.DrainTimeout))
 
 	select {
 	case err := <-runErr:
@@ -109,7 +109,7 @@ func (r *Runtime) serveManagement(ctx context.Context) (*managementServer, error
 	if err != nil {
 		return nil, fmt.Errorf("listen management %s: %w", r.cfg.ManagementAddr, err)
 	}
-	log.Printf("management listening on %s", listener.Addr())
+	slog.InfoContext(ctx, "management listening", slog.String("server.address", listener.Addr().String()))
 
 	m := &managementServer{
 		server: &http.Server{Handler: r.health.Handler(), ReadHeaderTimeout: 5 * time.Second},
@@ -118,7 +118,7 @@ func (r *Runtime) serveManagement(ctx context.Context) (*managementServer, error
 	go func() {
 		defer close(m.done)
 		if err := m.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("serve management: %v", err)
+			slog.Error("serve management failed", "error", err)
 		}
 	}()
 	return m, nil

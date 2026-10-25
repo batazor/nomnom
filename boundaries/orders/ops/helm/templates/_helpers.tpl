@@ -66,38 +66,82 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- end -}}
 
 {{/*
-PostgreSQL env (ADR 8): DSN из внешнего Secret. Без dsnSecret.name переменная не
-задаётся, и процесс orders не стартует (POSTGRES__DSN обязателен).
+PostgreSQL env (ADR 8): DSN из внешнего Secret и лимиты пула процесса. Без dsnSecret.name
+переменные не задаются, и процесс orders не стартует (POSTGRES__DSN обязателен).
+За пулером в session mode каждое соединение пула держит server-соединение, поэтому
+maxConns задаётся values каждой роли. Init container migrate передаёт "migrate": goose
+держит advisory lock на одном соединении и применяет миграции на втором (пул 2).
+Usage: {{ include "orders.postgresEnv" (dict "context" $ "migrate" false) }}
 */}}
 {{- define "orders.postgresEnv" -}}
-{{- with .Values.postgres }}
+{{- with .context.Values.postgres }}
 {{- if .dsnSecret.name }}
+{{- $maxConns := ternary 2 .maxConns $.migrate -}}
+{{- $minConns := ternary 0 .minConns $.migrate -}}
+{{- if lt (int .maxConns) 1 -}}
+{{- fail (printf "postgres.maxConns must be positive, got %v" .maxConns) -}}
+{{- end -}}
+{{- if or (lt (int .minConns) 0) (gt (int .minConns) 1) -}}
+{{- fail (printf "postgres.minConns must be 0 or 1, got %v" .minConns) -}}
+{{- end -}}
+{{- if gt (int .minConns) (int .maxConns) -}}
+{{- fail "postgres.minConns must not exceed postgres.maxConns" -}}
+{{- end }}
 - name: POSTGRES__DSN
   valueFrom:
     secretKeyRef:
       name: {{ .dsnSecret.name }}
       key: {{ .dsnSecret.key }}
 - name: POSTGRES__MAX_CONNS
-  value: {{ .maxConns | quote }}
+  value: {{ $maxConns | quote }}
+- name: POSTGRES__MIN_CONNS
+  value: {{ $minConns | quote }}
+- name: POSTGRES__MAX_CONN_LIFETIME
+  value: {{ .maxConnLifetime | quote }}
+- name: POSTGRES__MAX_CONN_LIFETIME_JITTER
+  value: {{ .maxConnLifetimeJitter | quote }}
+- name: POSTGRES__MAX_CONN_IDLE_TIME
+  value: {{ .maxConnIdleTime | quote }}
+- name: POSTGRES__CONNECT_TIMEOUT
+  value: {{ .connectTimeout | quote }}
+- name: POSTGRES__HEALTH_CHECK_PERIOD
+  value: {{ .healthCheckPeriod | quote }}
 {{- end }}
 {{- end }}
 {{- end }}
 
 {{/*
-OpenTelemetry resource (ADR 9): service.instance.id — имя pod (downward API),
+OpenTelemetry (ADR 9, docs/observability.md): одинаковая идентификация traces, metrics и
+JSON-логов процесса. service.name — telemetry.serviceName роли (init container migrate
+передаёт "orders-migrate"), service.instance.id — имя pod (downward API),
 service.version — неизменяемый image.tag. Остальные атрибуты окружения задаются
 telemetry.resourceAttributes: явная env имеет приоритет над envFrom, поэтому
-OTEL_RESOURCE_ATTRIBUTES в env была бы перекрыта.
+OTEL_RESOURCE_ATTRIBUTES и OTEL_SERVICE_NAME в env были бы перекрыты. OTLP endpoint и
+уровень логов — необязательные telemetry.otlpEndpoint и telemetry.logLevel; пустые не
+задаются, и их можно передать через env/envFrom окружения.
+Usage: {{ include "orders.otelEnv" (dict "context" $ "serviceName" "") }}
 */}}
 {{- define "orders.otelEnv" -}}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "unknown" .Values.image.tag)) -}}
-{{- range $key, $value := .Values.telemetry.resourceAttributes }}
+{{- $values := .context.Values -}}
+{{- $serviceName := .serviceName | default $values.telemetry.serviceName | required "telemetry.serviceName is required" -}}
+{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "unknown" $values.image.tag)) -}}
+{{- range $key, $value := $values.telemetry.resourceAttributes }}
 {{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
 {{- end }}
 - name: POD_NAME
   valueFrom:
     fieldRef:
       fieldPath: metadata.name
+- name: OTEL_SERVICE_NAME
+  value: {{ $serviceName | quote }}
 - name: OTEL_RESOURCE_ATTRIBUTES
   value: {{ join "," $attrs | quote }}
+{{- with $values.telemetry.otlpEndpoint }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ . | quote }}
+{{- end }}
+{{- with $values.telemetry.logLevel }}
+- name: LOG__LEVEL
+  value: {{ . | quote }}
+{{- end }}
 {{- end }}

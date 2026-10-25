@@ -212,6 +212,13 @@ export const restaurantFixtures: readonly MockRestaurant[] = [
   ...moreRestaurants,
 ];
 
+// Restaurants the mock user owns: openRestaurant and closeRestaurant succeed
+// for them, any other existing restaurant answers PermissionDenied.
+export const managedRestaurantIds: ReadonlySet<string> = new Set([
+  kitchenEight.id,
+  nightBakery.id,
+]);
+
 export const deliveryAddressFixture = "ул. Лесная, 12, кв. 47";
 
 export function orderLine(item: MockMenuItem, quantity: number): MockOrderItem {

@@ -3,7 +3,7 @@ package grpcadapter
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"google.golang.org/grpc/metadata"
@@ -37,8 +37,8 @@ type ServiceTokenSubjectResolver struct {
 // and the rejecting resolver otherwise (fail closed).
 func NewSubjectResolver(cfg config.IdentityConfig) (SubjectResolver, error) {
 	if !cfg.Verifying() {
-		log.Printf("WARNING: %s, %s or %s is not set: every caller is rejected",
-			config.EnvIdentityIssuer, config.EnvIdentityAudience, config.EnvIdentityJWKSFile)
+		slog.Warn(fmt.Sprintf("%s, %s or %s is not set: every caller is rejected",
+			config.EnvIdentityIssuer, config.EnvIdentityAudience, config.EnvIdentityJWKSFile))
 		return NewRejectingSubjectResolver(), nil
 	}
 	service, err := newServiceTokenVerifier(cfg)
@@ -55,7 +55,7 @@ func NewSubjectResolver(cfg config.IdentityConfig) (SubjectResolver, error) {
 func (r *ServiceTokenSubjectResolver) Resolve(ctx context.Context) (application.Subject, error) {
 	subject, err := r.resolve(ctx)
 	if err != nil {
-		log.Printf("caller identity rejected: %v", err)
+		slog.WarnContext(ctx, "caller identity rejected", "error", err)
 		return application.Subject{}, ErrUnauthenticated
 	}
 	return subject, nil
@@ -90,6 +90,6 @@ func (r *ServiceTokenSubjectResolver) resolveUser(delegate string, assertions []
 	if err != nil {
 		return application.Subject{}, fmt.Errorf("user assertion from %s (jti %q): %w", delegate, claims.ID, err)
 	}
-	log.Printf("user assertion accepted: delegate=%s jti=%s", delegate, claims.ID)
+	slog.Info("user assertion accepted", slog.String("delegate", delegate), slog.String("jti", claims.ID))
 	return application.Subject{Kind: application.SubjectUser, ID: claims.Subject}, nil
 }

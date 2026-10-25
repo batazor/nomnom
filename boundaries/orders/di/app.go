@@ -8,7 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"time"
 
@@ -53,7 +53,7 @@ func (a *App) Start(ctx context.Context) error {
 		return errors.Join(fmt.Errorf("listen %s: %w", a.addr, err), a.metrics.Shutdown(ctx))
 	}
 	a.listener = listener
-	log.Printf("orders listening on %s", listener.Addr())
+	slog.InfoContext(ctx, "orders listening", slog.String("server.address", listener.Addr().String()))
 	return nil
 }
 

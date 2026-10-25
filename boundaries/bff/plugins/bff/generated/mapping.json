@@ -50,6 +50,20 @@
       "mapped": "MutationRequestOrderCancellation",
       "request": "MutationRequestOrderCancellationRequest",
       "response": "MutationRequestOrderCancellationResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "openRestaurant",
+      "mapped": "MutationOpenRestaurant",
+      "request": "MutationOpenRestaurantRequest",
+      "response": "MutationOpenRestaurantResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "closeRestaurant",
+      "mapped": "MutationCloseRestaurant",
+      "request": "MutationCloseRestaurantRequest",
+      "response": "MutationCloseRestaurantResponse"
     }
   ],
   "typeFieldMappings": [
@@ -130,6 +144,26 @@
             {
               "original": "input",
               "mapped": "input"
+            }
+          ]
+        },
+        {
+          "original": "openRestaurant",
+          "mapped": "open_restaurant",
+          "argumentMappings": [
+            {
+              "original": "restaurantId",
+              "mapped": "restaurant_id"
+            }
+          ]
+        },
+        {
+          "original": "closeRestaurant",
+          "mapped": "close_restaurant",
+          "argumentMappings": [
+            {
+              "original": "restaurantId",
+              "mapped": "restaurant_id"
             }
           ]
         }
@@ -482,6 +516,19 @@
         {
           "original": "problem",
           "mapped": "problem"
+        }
+      ]
+    },
+    {
+      "type": "RestaurantOpeningPayload",
+      "fieldMappings": [
+        {
+          "original": "restaurant",
+          "mapped": "restaurant"
+        },
+        {
+          "original": "changed",
+          "mapped": "changed"
         }
       ]
     }

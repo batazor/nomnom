@@ -51,7 +51,13 @@ multi-document транзакции. Пока `mongodb.uriSecret.name` пуст,
 `mongodb.migrate.command` (по умолчанию `node dist/cmd/restaurants-migrate/main.js`; для dev-образа
 — `["node", "cmd/restaurants-migrate/main.ts"]`). Он идемпотентно создаёт коллекции, JSON Schema
 validators, индексы и применяет миграции документов до старта процесса, как `orders-migrate`.
-С неверным `mongodb.database` или `mongodb.timeout` chart не рендерится.
+Лимиты connection pool задаёт `mongodb.pool` (`maxPoolSize` 20, `minPoolSize` 0, `maxIdleTime`
+`5m`, `waitQueueTimeout` `5s`, `maxConnecting` 2) → `MONGODB__MAX_POOL_SIZE`, `MONGODB__MIN_POOL_SIZE`,
+`MONGODB__MAX_IDLE_TIME`, `MONGODB__WAIT_QUEUE_TIMEOUT`, `MONGODB__MAX_CONNECTING`; `values-relay.yaml`
+задаёт `maxPoolSize` 3, `values-consumer.yaml` — 5, init container `migrate` берёт
+`mongodb.migrate.maxPoolSize` (2) и остальные лимиты из `mongodb.pool`.
+С неверным `mongodb.database`, `mongodb.timeout` или лимитом пула вне диапазона приложения chart не
+рендерится.
 
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
 к `Service` напрямую и проходят через internal gateway. Ingress, `HTTPRoute`/`GRPCRoute`,
