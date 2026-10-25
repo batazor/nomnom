@@ -13,6 +13,7 @@ import (
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/gateway"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/infrastructure"
 )
@@ -39,16 +40,16 @@ type orderTracking struct {
 // identity or a gateway address it returns nil: customer resolvers then answer
 // that they are not available, while bffInfo keeps working.
 func newOrderTracking(customers *identity.Identity, getenv func(string) string) (*orderTracking, error) {
-	gateway := getenv(envInternalGateway)
-	if customers == nil || gateway == "" {
+	address := getenv(envInternalGateway)
+	if customers == nil || address == "" {
 		log.Printf("%s or BFF identity is not set: customer order operations are unavailable", envInternalGateway)
 		return nil, nil
 	}
-	ordersConn, err := infrastructure.Dial(gateway, "nomnom.orders", customers)
+	ordersConn, err := gateway.Dial(address, "nomnom.orders", customers)
 	if err != nil {
 		return nil, err
 	}
-	restaurantsConn, err := infrastructure.Dial(gateway, "nomnom.restaurants", customers)
+	restaurantsConn, err := gateway.Dial(address, "nomnom.restaurants", customers)
 	if err != nil {
 		return nil, err
 	}
@@ -67,9 +68,15 @@ func loadOrderTracking(customers *identity.Identity) *orderTracking {
 	return tracking
 }
 
-// customer verifies the access token the Router forwards and puts the
-// customer into the context; a missing or invalid token never reaches a context.
+// customer verifies the customer of an order tracking operation.
 func (s *BffService) customer(ctx context.Context) (context.Context, error) {
+	return s.verifiedCustomer(ctx, s.tracking != nil)
+}
+
+// verifiedCustomer verifies the access token the Router forwards and puts the
+// customer into the context; a missing or invalid token never reaches a
+// context. available reports whether the slice of the operation is connected.
+func (s *BffService) verifiedCustomer(ctx context.Context, available bool) (context.Context, error) {
 	if s.identity == nil {
 		return nil, status.Error(codes.Unauthenticated, "authentication is not configured")
 	}
@@ -77,7 +84,7 @@ func (s *BffService) customer(ctx context.Context) (context.Context, error) {
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
-	if s.tracking == nil {
+	if !available {
 		return nil, status.Error(codes.Unavailable, "order operations are not available")
 	}
 	return identity.WithUser(ctx, user), nil

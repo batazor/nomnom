@@ -4,6 +4,7 @@ import { createRestaurantsService } from "../../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
 import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import { createKitchenWorld, ordersService } from "./kitchen.ts";
 
 export const context = undefined as never;
@@ -20,6 +21,7 @@ export const createWorld = (
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
+    listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
     receiveOrderRequest: world.receive,
     cancelRestaurantOrder: world.cancel,
     acceptRestaurantOrder: world.accept,

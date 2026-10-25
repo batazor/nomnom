@@ -60,6 +60,7 @@ func rejected(errorType string) telemetry.Failure {
 func Classify(err error) telemetry.Failure {
 	var invalid order.InvalidTransition
 	var guard order.GuardFailed
+	var notOrderable order.NotOrderable
 	switch {
 	case errors.Is(err, application.ErrInvalidInput), errors.Is(err, vo.ErrInvalidValue):
 		return rejected(ErrorTypeInvalidInput)
@@ -75,7 +76,8 @@ func Classify(err error) telemetry.Failure {
 	case errors.As(err, &guard):
 		return rejected(ErrorTypeGuardFailed)
 	case errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem),
-		errors.Is(err, order.ErrInvalidCancellationReason), errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders):
+		errors.Is(err, order.ErrInvalidCancellationReason), errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders),
+		errors.As(err, &notOrderable):
 		return rejected(ErrorTypeDomainRule)
 	case errors.Is(err, fulfillment.ErrCancellationRefused):
 		return rejected(ErrorTypeCancellationRefused)

@@ -29,6 +29,7 @@ import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import { loadIdentityConfig } from "../pkg/config/config.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import { createKitchenWorld } from "./support/kitchen.ts";
 
 /** Общие тестовые векторы ADR 27: `<repo>/tests/identity/fixtures`. */
@@ -312,6 +313,7 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
+    listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
     receiveOrderRequest: world.receive,
     cancelRestaurantOrder: world.cancel,
     acceptRestaurantOrder: world.accept,

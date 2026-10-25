@@ -28,9 +28,9 @@ func TestQueryBffInfo(t *testing.T) {
 
 // Customer operations are published in the schema ahead of their resolvers.
 func TestCustomerOperationsAreNotImplementedYet(t *testing.T) {
-	_, err := newClient(t).QueryRestaurants(
+	_, err := newClient(t).QueryCustomerOrders(
 		context.Background(),
-		&service.QueryRestaurantsRequest{First: 10},
+		&service.QueryCustomerOrdersRequest{First: 10},
 	)
 	require.Equal(t, codes.Unimplemented, status.Code(err))
 }

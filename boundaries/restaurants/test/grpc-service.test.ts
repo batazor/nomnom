@@ -13,6 +13,7 @@ import {
   CancelRestaurantOrderRequestSchema,
   GetMenuRequestSchema,
   GetRestaurantRequestSchema,
+  ListRestaurantsRequestSchema,
   ReceiveOrderRequestRequestSchema,
   RestaurantsService,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
@@ -20,6 +21,7 @@ import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import {
   context,
   createWorld,
@@ -83,6 +85,66 @@ test("GetMenu maps a restaurant without a menu to NOT_FOUND", async () => {
         context,
       ),
     rejectsWith(Code.NotFound),
+  );
+});
+
+test("AC-565 ListRestaurants pages open restaurants with a next page token", async () => {
+  const { world, service } = createWorld();
+  await world.givenRestaurant("Pho Bar");
+  await world.givenRestaurant("Ramen Bar");
+  await world.givenRestaurant("Closed Bar", { open: false });
+
+  const first = await service.listRestaurants(
+    create(ListRestaurantsRequestSchema, { pageSize: 1 }),
+    context,
+  );
+
+  assert.equal(first.restaurants.length, 1);
+  assert.notEqual(first.nextPageToken, "");
+
+  const second = await service.listRestaurants(
+    create(ListRestaurantsRequestSchema, {
+      pageSize: 1,
+      pageToken: first.nextPageToken,
+    }),
+    context,
+  );
+
+  assert.equal(second.restaurants.length, 1);
+  assert.equal(second.nextPageToken, "");
+  assert.deepEqual(
+    [...first.restaurants, ...second.restaurants].map((r) => r.name).sort(),
+    ["Pho Bar", "Ramen Bar"],
+  );
+});
+
+test("ListRestaurants includes closed restaurants on request with the default page size", async () => {
+  const { world, service } = createWorld();
+  await world.givenRestaurant("Pho Bar");
+  await world.givenRestaurant("Closed Bar", { open: false });
+
+  const response = await service.listRestaurants(
+    create(ListRestaurantsRequestSchema, { includeClosed: true }),
+    context,
+  );
+
+  assert.deepEqual(response.restaurants.map((r) => [r.name, r.isOpen]).sort(), [
+    ["Closed Bar", false],
+    ["Pho Bar", true],
+  ]);
+  assert.equal(response.nextPageToken, "");
+});
+
+test("ListRestaurants maps a page size out of range to INVALID_ARGUMENT", async () => {
+  const { service } = createWorld();
+
+  await assert.rejects(
+    async () =>
+      service.listRestaurants(
+        create(ListRestaurantsRequestSchema, { pageSize: 101 }),
+        context,
+      ),
+    rejectsWith(Code.InvalidArgument),
   );
 });
 
@@ -205,6 +267,7 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
   const unavailable = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
+    listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
     receiveOrderRequest: {
       execute: async () => {
         throw new AuthorizationUnavailableError();

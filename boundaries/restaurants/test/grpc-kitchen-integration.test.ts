@@ -133,6 +133,7 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
       subjects: { resolve: async () => cook },
       getRestaurant: unused,
       getMenu: unused,
+      listRestaurants: unused,
       receiveOrderRequest: unused,
       cancelRestaurantOrder: unused,
       registerRestaurant: unused,

@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	RestaurantsService_GetRestaurant_FullMethodName                = "/nomnom.restaurants.v1.RestaurantsService/GetRestaurant"
 	RestaurantsService_GetMenu_FullMethodName                      = "/nomnom.restaurants.v1.RestaurantsService/GetMenu"
+	RestaurantsService_ListRestaurants_FullMethodName              = "/nomnom.restaurants.v1.RestaurantsService/ListRestaurants"
 	RestaurantsService_ReceiveOrderRequest_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest"
 	RestaurantsService_CancelRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder"
 	RestaurantsService_AcceptRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder"
@@ -43,6 +44,10 @@ type RestaurantsServiceClient interface {
 	// Current menu of a restaurant: public data, no authorization (FR-216). A
 	// restaurant without a menu is NOT_FOUND. Not a snapshot of a placed order.
 	GetMenu(ctx context.Context, in *GetMenuRequest, opts ...grpc.CallOption) (*GetMenuResponse, error)
+	// Restaurants available for selection: public data, no authorization
+	// (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
+	// cursor ordered by restaurant id.
+	ListRestaurants(ctx context.Context, in *ListRestaurantsRequest, opts ...grpc.CallOption) (*ListRestaurantsResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(ctx context.Context, in *ReceiveOrderRequestRequest, opts ...grpc.CallOption) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(ctx context.Context, in *CancelRestaurantOrderRequest, opts ...grpc.CallOption) (*CancelRestaurantOrderResponse, error)
@@ -88,6 +93,16 @@ func (c *restaurantsServiceClient) GetMenu(ctx context.Context, in *GetMenuReque
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetMenuResponse)
 	err := c.cc.Invoke(ctx, RestaurantsService_GetMenu_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ListRestaurants(ctx context.Context, in *ListRestaurantsRequest, opts ...grpc.CallOption) (*ListRestaurantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRestaurantsResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ListRestaurants_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +237,10 @@ type RestaurantsServiceServer interface {
 	// Current menu of a restaurant: public data, no authorization (FR-216). A
 	// restaurant without a menu is NOT_FOUND. Not a snapshot of a placed order.
 	GetMenu(context.Context, *GetMenuRequest) (*GetMenuResponse, error)
+	// Restaurants available for selection: public data, no authorization
+	// (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
+	// cursor ordered by restaurant id.
+	ListRestaurants(context.Context, *ListRestaurantsRequest) (*ListRestaurantsResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(context.Context, *ReceiveOrderRequestRequest) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(context.Context, *CancelRestaurantOrderRequest) (*CancelRestaurantOrderResponse, error)
@@ -258,6 +277,9 @@ func (UnimplementedRestaurantsServiceServer) GetRestaurant(context.Context, *Get
 }
 func (UnimplementedRestaurantsServiceServer) GetMenu(context.Context, *GetMenuRequest) (*GetMenuResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMenu not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ListRestaurants(context.Context, *ListRestaurantsRequest) (*ListRestaurantsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRestaurants not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) ReceiveOrderRequest(context.Context, *ReceiveOrderRequestRequest) (*ReceiveOrderRequestResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReceiveOrderRequest not implemented")
@@ -348,6 +370,24 @@ func _RestaurantsService_GetMenu_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RestaurantsServiceServer).GetMenu(ctx, req.(*GetMenuRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ListRestaurants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRestaurantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ListRestaurants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ListRestaurants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ListRestaurants(ctx, req.(*ListRestaurantsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -582,6 +622,10 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMenu",
 			Handler:    _RestaurantsService_GetMenu_Handler,
+		},
+		{
+			MethodName: "ListRestaurants",
+			Handler:    _RestaurantsService_ListRestaurants_Handler,
 		},
 		{
 			MethodName: "ReceiveOrderRequest",

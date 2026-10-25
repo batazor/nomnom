@@ -2,17 +2,17 @@
 
 ## 1. restaurants
 
-- [ ] 1.1 `ListRestaurants` в proto, генерация, обработчик поверх use case, тесты (`FR-496`, `AC-565`); README.
+- [x] 1.1 `ListRestaurants` в proto, генерация, обработчик поверх use case, тесты (`FR-496`, `AC-565`); README.
 
 ## 2. orders
 
-- [x] 2.1 Адаптер каталога на `GetRestaurant`/`GetMenu` через internal gateway, `ErrRestaurantNotAcceptingOrders`, конфигурация `catalog.*`, DI вместо `UnavailableCatalog`; тесты на bufconn (`FR-497`, `AC-566`); перегенерировать клиент restaurants.
-- [ ] 2.2 `PlaceOrder`: `ORDER_NOT_ORDERABLE` с metadata `codes`/`menu_item_ids`, `RESTAURANT_NOT_ACCEPTING_ORDERS`; тесты сервиса (`FR-498`, `AC-567`); README, Helm values.
+- [x] 2.1 Адаптер каталога на `GetRestaurant`/`GetMenu` через internal gateway, `ErrRestaurantNotAcceptingOrders`, конфигурация `catalog.*`, DI вместо `UnavailableCatalog`; тесты на bufconn (`FR-497`, `AC-566`); перегенерировать клиент restaurants. Сделано на main в 3dda8c8.
+- [x] 2.2 `PlaceOrder`: `ORDER_NOT_ORDERABLE` с metadata `codes`/`menu_item_ids`, `RESTAURANT_NOT_ACCEPTING_ORDERS`; тесты сервиса (`FR-498`, `AC-567`); README, Helm values.
 
 ## 3. BFF
 
-- [ ] 3.1 Перегенерировать клиенты; слайс `catalog` и resolvers `restaurants`, `restaurant` (`FR-499`, `AC-568`).
-- [ ] 3.2 Слайс `checkout` и resolver `placeOrder` с переводом отказов (`FR-500`, `AC-569`, `AC-570`); README.
+- [x] 3.1 Перегенерировать клиенты; слайс `catalog` и resolvers `restaurants`, `restaurant` (`FR-499`, `AC-568`).
+- [x] 3.2 Слайс `checkout` и resolver `placeOrder` с переводом отказов (`FR-500`, `AC-569`, `AC-570`); README.
 
 ## 4. UI
 

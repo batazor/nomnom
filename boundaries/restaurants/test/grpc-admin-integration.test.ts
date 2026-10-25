@@ -164,6 +164,7 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
         reader: new InMemoryRestaurantCatalog(store),
       }),
       getMenu: unused,
+      listRestaurants: unused,
       receiveOrderRequest: unused,
       cancelRestaurantOrder: unused,
       acceptRestaurantOrder: unused,

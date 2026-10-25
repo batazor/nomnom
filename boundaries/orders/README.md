@@ -85,6 +85,7 @@ Temporal workflow относится к прикладному процессу 
 | `Order` не найден | `NOT_FOUND` | `ORDER_NOT_FOUND` |
 | Ресторан или его меню не найдены (Place Order) | `NOT_FOUND` | `RESTAURANT_NOT_FOUND` |
 | Ресторан закрыт (`is_open = false`, Place Order) | `FAILED_PRECONDITION` | `RESTAURANT_NOT_ACCEPTING_ORDERS` |
+| Позиции нельзя заказать (политика `OrderItemsOrderable`, Place Order) | `FAILED_PRECONDITION` | `ORDER_NOT_ORDERABLE` + metadata `codes`, `menu_item_ids` |
 | Некорректный состав или Delivery Address | `INVALID_ARGUMENT` | `INVALID_ORDER` |
 | Текущее состояние запрещает переход | `FAILED_PRECONDITION` | `ORDER_STATE_CONFLICT` |
 | Окно отмены ещё не открыто или уже закрыто | `FAILED_PRECONDITION` | `CANCELLATION_WINDOW_NOT_OPEN`, `CANCELLATION_WINDOW_EXPIRED` |
@@ -94,7 +95,11 @@ Temporal workflow относится к прикладному процессу 
 
 Недоступная зависимость (SpiceDB, catalog, отсутствующий workflow) проверяется раньше отказа
 доступа: fail-closed check оборачивает её в отказ, но вызывающий получает retryable `UNAVAILABLE`.
-`INVALID_ORDER` — ошибки value objects, `NotOrderable`, пустой состав и повтор `menu_item_id`;
+`INVALID_ORDER` — ошибки value objects, пустой состав и повтор `menu_item_id`;
+`ORDER_NOT_ORDERABLE` (`order.NotOrderable`) передаёт причины в `ErrorInfo.metadata` через запятую:
+`codes` — каждый код один раз в верхнем регистре (`ORDER_ITEM_UNAVAILABLE`,
+`ORDER_TOTAL_BELOW_MINIMUM`, `ORDER_TOTAL_ABOVE_MAXIMUM`), `menu_item_ids` — позиции, к которым
+относятся причины (пусто, если причины касаются только суммы);
 `ORDER_STATE_CONFLICT` — запрет FSM и отказ workflow принять Cancellation Request; отказ по окну
 отмены (`CancellationNotAllowed`) называет нарушенное правило, чтобы клиент отличил его от
 завершённого заказа.

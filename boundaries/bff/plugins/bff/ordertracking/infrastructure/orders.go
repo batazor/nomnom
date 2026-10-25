@@ -1,3 +1,5 @@
+// Package infrastructure adapts the order tracking ports to the gRPC APIs of
+// orders and restaurants, called through the internal gateway (ADR 15).
 package infrastructure
 
 import (

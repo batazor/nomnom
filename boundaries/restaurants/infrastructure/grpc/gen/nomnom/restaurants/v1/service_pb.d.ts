@@ -77,6 +77,59 @@ export declare type GetMenuResponse = Message<"nomnom.restaurants.v1.GetMenuResp
 export declare const GetMenuResponseSchema: GenMessage<GetMenuResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.ListRestaurantsRequest
+ */
+export declare type ListRestaurantsRequest = Message<"nomnom.restaurants.v1.ListRestaurantsRequest"> & {
+  /**
+   * 1..100; 0 means the default of 50.
+   *
+   * @generated from field: int32 page_size = 1;
+   */
+  pageSize: number;
+
+  /**
+   * next_page_token of the previous page; empty for the first page.
+   *
+   * @generated from field: string page_token = 2;
+   */
+  pageToken: string;
+
+  /**
+   * @generated from field: bool include_closed = 3;
+   */
+  includeClosed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListRestaurantsRequest.
+ * Use `create(ListRestaurantsRequestSchema)` to create a new message.
+ */
+export declare const ListRestaurantsRequestSchema: GenMessage<ListRestaurantsRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListRestaurantsResponse
+ */
+export declare type ListRestaurantsResponse = Message<"nomnom.restaurants.v1.ListRestaurantsResponse"> & {
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.Restaurant restaurants = 1;
+   */
+  restaurants: Restaurant[];
+
+  /**
+   * Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListRestaurantsResponse.
+ * Use `create(ListRestaurantsResponseSchema)` to create a new message.
+ */
+export declare const ListRestaurantsResponseSchema: GenMessage<ListRestaurantsResponse>;
+
+/**
  * @generated from message nomnom.restaurants.v1.OrderRequestItem
  */
 export declare type OrderRequestItem = Message<"nomnom.restaurants.v1.OrderRequestItem"> & {
@@ -763,6 +816,18 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof GetMenuRequestSchema;
     output: typeof GetMenuResponseSchema;
+  },
+  /**
+   * Restaurants available for selection: public data, no authorization
+   * (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
+   * cursor ordered by restaurant id.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ListRestaurants
+   */
+  listRestaurants: {
+    methodKind: "unary";
+    input: typeof ListRestaurantsRequestSchema;
+    output: typeof ListRestaurantsResponseSchema;
   },
   /**
    * Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
