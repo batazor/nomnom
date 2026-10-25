@@ -11,9 +11,7 @@ export type RuntimeConfig = Readonly<{
   // Faro collector (Alloy faro.receiver); without it browser telemetry is off.
   telemetryUrl?: string;
   environment: string;
-  // Dev token issuer of kind: access tokens of the demo users of the flow board.
-  devTokensUrl?: string;
-  // Browser login (ADR 35); without an issuer the sign-in buttons are hidden.
+  // Browser login (ADR 35); required unless the app runs on mocks.
   oidc?: OidcConfig;
 }>;
 
@@ -23,7 +21,6 @@ type RuntimeEnv = Readonly<{
   VITE_ENABLE_MOCKS?: string;
   VITE_FARO_URL?: string;
   VITE_DEPLOYMENT_ENVIRONMENT?: string;
-  VITE_DEV_TOKENS_URL?: string;
   VITE_OIDC_ISSUER?: string;
   VITE_OIDC_CLIENT_ID?: string;
   VITE_OIDC_AUDIENCE?: string;
@@ -65,15 +62,15 @@ export function parseRuntimeConfig(env: RuntimeEnv): RuntimeConfig {
       ? parseHttpUrl("VITE_FARO_URL", env.VITE_FARO_URL)
       : undefined,
     environment: env.VITE_DEPLOYMENT_ENVIRONMENT ?? "development",
-    devTokensUrl: env.VITE_DEV_TOKENS_URL
-      ? parseHttpUrl("VITE_DEV_TOKENS_URL", env.VITE_DEV_TOKENS_URL)
-      : undefined,
     oidc: parseOidc(env),
   });
 }
 
 function parseOidc(env: RuntimeEnv): OidcConfig | undefined {
-  if (!env.VITE_OIDC_ISSUER) return undefined;
+  if (!env.VITE_OIDC_ISSUER) {
+    if (env.VITE_ENABLE_MOCKS === "true") return undefined;
+    throw new Error("VITE_OIDC_ISSUER is required unless mocks are enabled");
+  }
   return Object.freeze({
     issuer: parseHttpUrl("VITE_OIDC_ISSUER", env.VITE_OIDC_ISSUER).replace(
       /\/$/,

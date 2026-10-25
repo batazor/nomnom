@@ -1,4 +1,4 @@
-.board-column-sign-in,
+.board-sign-in,
 .sign-in {
   display: flex;
   flex-wrap: wrap;
@@ -6,15 +6,11 @@
   gap: 0.5rem;
 }
 
-.board-column-sign-in:empty {
-  display: none;
-}
-
 .sign-in-user {
   overflow-wrap: anywhere;
 }
 
-.sign-in-demo {
-  color: var(--color-muted);
+.sign-in-error {
+  color: var(--color-danger);
   font-size: 0.8125rem;
 }

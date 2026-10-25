@@ -13,9 +13,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AppProviders } from "../../app/providers";
 import { AppRouter } from "../../app/router";
+import type { RuntimeConfig } from "../../shared/config/runtime-config";
 import { mockStore } from "../../shared/graphql/mocks/handlers";
 import { mockServer } from "../../shared/graphql/mocks/server";
-import { parseRoleSession } from "../../shared/session/roles";
 import { parseBoardOrders } from "./board-orders";
 
 const config = {
@@ -35,7 +35,7 @@ afterEach(() => {
 });
 afterAll(() => mockServer.close());
 
-function renderBoard(overrides: Partial<typeof config> = {}) {
+function renderBoard(overrides: Partial<RuntimeConfig> = {}) {
   return render(
     <AppProviders config={{ ...config, ...overrides }}>
       <AppRouter initialEntries={["/"]} />
@@ -253,20 +253,28 @@ describe("flow board", () => {
     ).toBeVisible();
   });
 
-  it("keeps the catalog when the test sign-ins are unavailable", async () => {
-    renderBoard({ enableMocks: false });
+  it("asks for the one demo sign-in before the kitchen and courier open", async () => {
+    renderBoard({
+      enableMocks: false,
+      oidc: {
+        issuer: "https://login.example.test/dex",
+        clientId: "nomnom-ui",
+        audience: "nomnom-bff",
+        redirectUri: "https://board.example.test/auth/callback",
+        demoEmailDomain: "nomnom.test",
+        demoPassword: "nomnom",
+      },
+    });
 
     expect(
-      await screen.findByText(/Нет доступа за кухню и курьера/),
+      await screen.findByRole("button", { name: "Войти в демо" }),
     ).toBeVisible();
     expect(
-      within(column("Кухня")).getByText(
-        "Колонка станет доступна, когда загрузятся тестовые входы.",
-      ),
+      within(column("Кухня")).getByText("Войдите, чтобы открыть колонку."),
     ).toBeVisible();
     expect(
-      await screen.findByRole("button", { name: /^Кухня №8/ }),
-    ).toBeInTheDocument();
+      within(column("Курьер")).getByText("Войдите, чтобы открыть колонку."),
+    ).toBeVisible();
   });
 
   it("keeps three columns on a phone without page scroll and passes axe", async () => {
@@ -314,25 +322,5 @@ describe("board state", () => {
     expect(parseBoardOrders('["a", 1, "b"]')).toEqual(["a", "b"]);
     expect(parseBoardOrders("{")).toEqual([]);
     expect(parseBoardOrders(null)).toEqual([]);
-  });
-
-  it("reads the dev token issuer response", () => {
-    const session = parseRoleSession({
-      tokens: { customer: "c", owner: "o", kitchen: "k", courier: "r" },
-      expiresAt: "2026-10-25T20:00:00Z",
-      restaurants: [{ id: "r1", name: "Пекарня" }, { id: 2 }],
-    });
-    expect(session.tokens.kitchen).toBe("k");
-    expect(session.expiresAt).toBe(Date.parse("2026-10-25T20:00:00Z"));
-    expect(session.restaurants).toEqual([{ id: "r1", name: "Пекарня" }]);
-    expect(
-      parseRoleSession({
-        tokens: { customer: "c", owner: "o", kitchen: "k", courier: "r" },
-        expiresAt: 1_792_958_400,
-      }).expiresAt,
-    ).toBe(1_792_958_400_000);
-    expect(() => parseRoleSession({ tokens: { customer: "c" } })).toThrow(
-      /owner/,
-    );
   });
 });

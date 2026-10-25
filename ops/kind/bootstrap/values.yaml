@@ -64,26 +64,16 @@ dex:
   # выдаёт его, потому что nomnom-bff доверяет nomnom-ui (trustedPeers).
   bffClientId: nomnom-bff
   tokenLifetime: 1h
-  # Демо-пользователи, пароль у всех nomnom (bcrypt). sub в tokens — не userID, а
+  # Пользователи, пароль у всех nomnom (bcrypt). sub в tokens — не userID, а
   # base64url(protobuf{userID, "local"}), например ChFub21ub20tZGVtby1vd25lchIFbG9jYWw для
-  # owner. Эти sub — subjects демо-данных (ops/kind/demo/seed.json, seed-demo.py) и dev token
-  # issuer, поэтому вход через Dex и demo-токены действуют от одних и тех же пользователей.
+  # demo. Демо ведёт один пользователь: он покупатель, владелец ресторанов, их кухня и курьер.
+  # Его sub — subject демо-данных (ops/kind/demo/seed.json, seed-demo.py) и dev token issuer,
+  # поэтому вход через Dex и demo-токены действуют от одного пользователя. userID
+  # nomnom-demo-owner остался от прежнего владельца: рестораны в MongoDB записаны на него.
   users:
-    - email: customer@nomnom.test
-      username: customer
-      userID: nomnom-demo-customer
-      hash: $2y$10$oeFTwhqIb2WGgPVjAMtQN.lkMABy5mKxpUrRgnAS0jDhGqfjGIgyq
-    - email: owner@nomnom.test
-      username: owner
+    - email: demo@nomnom.test
+      username: demo
       userID: nomnom-demo-owner
-      hash: $2y$10$oeFTwhqIb2WGgPVjAMtQN.lkMABy5mKxpUrRgnAS0jDhGqfjGIgyq
-    - email: kitchen@nomnom.test
-      username: kitchen
-      userID: nomnom-demo-kitchen
-      hash: $2y$10$oeFTwhqIb2WGgPVjAMtQN.lkMABy5mKxpUrRgnAS0jDhGqfjGIgyq
-    - email: courier@nomnom.test
-      username: courier
-      userID: nomnom-demo-courier
       hash: $2y$10$oeFTwhqIb2WGgPVjAMtQN.lkMABy5mKxpUrRgnAS0jDhGqfjGIgyq
     - email: operator@nomnom.test
       username: operator

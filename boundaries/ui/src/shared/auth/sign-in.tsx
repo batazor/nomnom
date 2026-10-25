@@ -14,6 +14,7 @@ import { Button } from "../ui";
 import {
   beginLogin,
   completeLogin,
+  demoLogin,
   type OidcConfig,
   type OidcLogin,
   refreshLogin,
@@ -163,6 +164,9 @@ export function SignInProvider({
   );
 }
 
+// The board signs in one demo user, who acts as every role on it.
+export const boardUser = "demo";
+
 // Whether users can sign in through the identity provider.
 export function useSignInAvailable(): boolean {
   return useContext(SignInContext).config !== undefined;
@@ -184,19 +188,11 @@ export function SignInButton({
   roleLabel: string;
 }) {
   const { t } = useI18n();
-  const { config, signIns, restoring, remove } = useContext(SignInContext);
+  const { config, signIns, restoring, add, remove } = useContext(SignInContext);
   const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
   if (!config) return null;
   const login = signIns[role];
-  const demo = config.demoEmailDomain ? (
-    <span className="sign-in-demo">
-      {t("auth.demo", {
-        email: `${role}@${config.demoEmailDomain}`,
-        password: config.demoPassword ?? "",
-      })}
-    </span>
-  ) : null;
-
   if (login) {
     return (
       <span className="sign-in">
@@ -210,25 +206,36 @@ export function SignInButton({
     );
   }
 
+  // The demo user of kind signs in with one press: no provider form to fill.
+  const demo = config.demoEmailDomain && config.demoPassword;
+  async function signIn() {
+    if (!config) return;
+    setPending(true);
+    try {
+      if (demo) {
+        add(await demoLogin(config, role));
+        setPending(false);
+      } else {
+        window.location.assign(
+          await beginLogin(config, role, window.location.pathname),
+        );
+      }
+    } catch {
+      setPending(false);
+      setFailed(true);
+    }
+  }
+
   return (
     <span className="sign-in">
-      <Button
-        isPending={pending || restoring.has(role)}
-        onPress={async () => {
-          setPending(true);
-          try {
-            window.location.assign(
-              await beginLogin(config, role, window.location.pathname),
-            );
-          } catch {
-            setPending(false);
-          }
-        }}
-        variant="secondary"
-      >
-        {t("auth.signIn", { role: roleLabel })}
+      <Button isPending={pending || restoring.has(role)} onPress={signIn}>
+        {demo ? t("auth.signInDemo") : t("auth.signIn", { role: roleLabel })}
       </Button>
-      {demo}
+      {failed ? (
+        <span className="sign-in-error" role="alert">
+          {t("auth.failedNow")}
+        </span>
+      ) : null}
     </span>
   );
 }

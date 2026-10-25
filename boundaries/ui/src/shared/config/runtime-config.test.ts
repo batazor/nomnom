@@ -16,7 +16,6 @@ describe("parseRuntimeConfig", () => {
       enableMocks: true,
       telemetryUrl: undefined,
       environment: "development",
-      devTokensUrl: undefined,
       oidc: undefined,
     });
   });
@@ -26,6 +25,7 @@ describe("parseRuntimeConfig", () => {
       VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
       VITE_FARO_URL: "https://telemetry.example.test/collect",
       VITE_DEPLOYMENT_ENVIRONMENT: "kind",
+      VITE_OIDC_ISSUER: "https://login.example.test/dex",
     });
     expect(config.telemetryUrl).toBe("https://telemetry.example.test/collect");
     expect(config.environment).toBe("kind");
@@ -41,6 +41,20 @@ describe("parseRuntimeConfig", () => {
     expect(() => parseRuntimeConfig({})).toThrow(
       "VITE_PUBLIC_GRAPHQL_URL is required",
     );
+  });
+
+  it("fails fast without a login issuer unless mocks are on", () => {
+    expect(() =>
+      parseRuntimeConfig({
+        VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
+      }),
+    ).toThrow("VITE_OIDC_ISSUER is required unless mocks are enabled");
+    expect(
+      parseRuntimeConfig({
+        VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
+        VITE_OIDC_ISSUER: "https://login.example.test/dex/",
+      }).oidc?.issuer,
+    ).toBe("https://login.example.test/dex");
   });
 
   it("rejects non-HTTP protocols", () => {

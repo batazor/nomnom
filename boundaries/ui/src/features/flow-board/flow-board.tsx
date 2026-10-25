@@ -4,13 +4,12 @@ import { useQuery } from "urql";
 import { BoardOrderStatusDocument } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { SignInButton, useSignInAvailable } from "../../shared/auth/sign-in";
 import {
-  AsRole,
-  type Role,
-  useCanActAs,
-  useRoleSession,
-} from "../../shared/session/roles";
+  boardUser,
+  SignInButton,
+  useSignInAvailable,
+} from "../../shared/auth/sign-in";
+import { AsRole, useCanAct } from "../../shared/session/roles";
 import { Illustration, SidePanel } from "../../shared/ui";
 import { RestaurantPicker } from "../browse-restaurants";
 import { OrderDetails } from "../view-order";
@@ -23,20 +22,6 @@ import { OrderStrip, OrderTimeline } from "./order-flow";
 import "./flow-board.css";
 
 type Column = "customer" | "kitchen" | "courier";
-
-// Users each column acts as; each can sign in through the identity provider.
-const columnRoles: Record<Column, readonly Role[]> = {
-  customer: ["customer"],
-  kitchen: ["owner", "kitchen"],
-  courier: ["courier"],
-};
-
-const roleTitle: Record<Role, MessageKey> = {
-  customer: "auth.role.customer",
-  owner: "auth.role.owner",
-  kitchen: "auth.role.kitchen",
-  courier: "auth.role.courier",
-};
 
 const columnTitle: Record<Column, MessageKey> = {
   customer: "board.customer",
@@ -57,13 +42,8 @@ export function FlowBoard() {
 
 function Board() {
   const { t } = useI18n();
-  const session = useRoleSession();
   const signInAvailable = useSignInAvailable();
-  const neededKey: MessageKey = signInAvailable
-    ? "board.session.neededSignIn"
-    : "board.session.needed";
-  const canRunKitchen = useCanActAs("owner");
-  const canDeliver = useCanActAs("courier");
+  const canAct = useCanAct();
   const orders = useBoardOrders();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(
     () => orders.ids[0] ?? null,
@@ -103,14 +83,11 @@ function Board() {
     <div className="board">
       <h1 className="sr-only">{t("board.title")}</h1>
 
-      {session.kind === "unavailable" ? (
-        <p className="board-session" role="status">
-          {t(
-            signInAvailable
-              ? "board.session.signIn"
-              : "board.session.unavailable",
-          )}
-        </p>
+      {/* Mocks need no sign-in; against BFF the board acts as one user. */}
+      {signInAvailable ? (
+        <div className="board-sign-in">
+          <SignInButton role={boardUser} roleLabel={t("auth.role.demo")} />
+        </div>
       ) : null}
 
       <section aria-labelledby="board-orders-title" className="board-top">
@@ -157,11 +134,8 @@ function Board() {
         </BoardColumn>
 
         <KitchenDropColumn>
-          {canRunKitchen ? (
+          {canAct ? (
             <KitchenColumn
-              demoRestaurants={
-                session.kind === "ready" ? session.session.restaurants : []
-              }
               onSelectOrder={setSelectedOrderId}
               preferredRestaurantId={kitchenRestaurantId}
               selectedOrderId={selectedOrderId}
@@ -171,14 +145,14 @@ function Board() {
               <Illustration name="take-out-boxes" size="sm" />
               <div className="board-empty-state">
                 <Illustration name="delivery-truck" size="sm" />
-                <p className="board-empty">{t(neededKey)}</p>
+                <p className="board-empty">{t("board.session.neededSignIn")}</p>
               </div>
             </div>
           )}
         </KitchenDropColumn>
 
         <BoardColumn column="courier">
-          {canDeliver ? (
+          {canAct ? (
             <AsRole as="courier">
               <CourierColumn
                 onSelectOrder={setSelectedOrderId}
@@ -186,7 +160,7 @@ function Board() {
               />
             </AsRole>
           ) : (
-            <p className="board-empty">{t(neededKey)}</p>
+            <p className="board-empty">{t("board.session.neededSignIn")}</p>
           )}
         </BoardColumn>
       </div>
@@ -246,15 +220,6 @@ function BoardColumn({
       <header className="board-column-header">
         <h2 id={`board-column-${column}-title`}>{t(columnTitle[column])}</h2>
         <p>{t(`board.${column}.lead` as MessageKey)}</p>
-        <div className="board-column-sign-in">
-          {columnRoles[column].map((role) => (
-            <SignInButton
-              key={role}
-              role={role}
-              roleLabel={t(roleTitle[role])}
-            />
-          ))}
-        </div>
       </header>
       <div className="board-column-body">{children}</div>
     </section>

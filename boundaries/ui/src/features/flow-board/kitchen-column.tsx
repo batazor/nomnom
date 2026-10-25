@@ -1,5 +1,5 @@
 import { AnimatePresence, m } from "motion/react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useSubscription } from "urql";
 
 import {
@@ -13,7 +13,7 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { AsRole, type DemoRestaurant } from "../../shared/session/roles";
+import { AsRole } from "../../shared/session/roles";
 import { Button } from "../../shared/ui";
 import { RestaurantOpening } from "../manage-restaurant";
 import { useDragSource } from "./board-dnd";
@@ -50,12 +50,10 @@ const nextAction: Record<
 // Kitchen of the restaurant the board looks at (the owner's first one until
 // then): the owner opens it, the kitchen staff moves its orders.
 export function KitchenColumn({
-  demoRestaurants,
   preferredRestaurantId,
   selectedOrderId,
   onSelectOrder,
 }: {
-  demoRestaurants: readonly DemoRestaurant[];
   preferredRestaurantId: string | null;
   selectedOrderId: string | null;
   onSelectOrder: (orderId: string) => void;
@@ -63,7 +61,7 @@ export function KitchenColumn({
   const { t } = useI18n();
   return (
     <AsRole as="owner">
-      <OwnedRestaurants demoRestaurants={demoRestaurants}>
+      <OwnedRestaurants>
         {(restaurants) => {
           const ids = restaurants.map((restaurant) => restaurant.id);
           // Never another restaurant's kitchen in place of the picked one.
@@ -77,16 +75,7 @@ export function KitchenColumn({
           }
           return (
             <>
-              {restaurant.acceptingOrders === undefined ? null : (
-                <RestaurantOpening
-                  key={restaurantId}
-                  restaurant={{
-                    id: restaurantId,
-                    name: restaurant.name,
-                    acceptingOrders: restaurant.acceptingOrders,
-                  }}
-                />
-              )}
+              <RestaurantOpening key={restaurantId} restaurant={restaurant} />
               <AsRole as="kitchen">
                 <KitchenOrders
                   onSelectOrder={onSelectOrder}
@@ -105,33 +94,24 @@ export function KitchenColumn({
 type KitchenRestaurant = Readonly<{
   id: string;
   name: string;
-  acceptingOrders?: boolean;
+  acceptingOrders: boolean;
 }>;
 
-// Restaurants of the demo owner, merged with the ones the dev token issuer
-// names, so the kitchen has a restaurant even before the owner list loads.
+// Restaurants of the signed-in owner; nothing until the list loads, so the
+// kitchen never claims a restaurant is someone else's while it is loading.
 function OwnedRestaurants({
-  demoRestaurants,
   children,
 }: {
-  demoRestaurants: readonly DemoRestaurant[];
   children: (restaurants: readonly KitchenRestaurant[]) => React.ReactNode;
 }) {
+  const { t } = useI18n();
   // Opening changes come with the kitchen board of the chosen restaurant;
   // the opening mutations refresh this list through the urql document cache.
   const [{ data }] = useQuery({
     query: BoardOwnedRestaurantsDocument,
   });
-  const restaurants = useMemo(() => {
-    const owned: KitchenRestaurant[] =
-      data?.myRestaurants.edges.map((edge) => edge.node) ?? [];
-    const known = new Set(owned.map((restaurant) => restaurant.id));
-    return [
-      ...owned,
-      ...demoRestaurants.filter((restaurant) => !known.has(restaurant.id)),
-    ];
-  }, [data, demoRestaurants]);
-  return <>{children(restaurants)}</>;
+  if (!data) return <p className="board-empty">{t("board.loading")}</p>;
+  return <>{children(data.myRestaurants.edges.map((edge) => edge.node))}</>;
 }
 
 function KitchenOrders({

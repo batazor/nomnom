@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Idempotent demo seed of the kind environment (after-hook of `make kind-deploy`).
 
-Plays the operator, the demo owner and the demo courier through the e2e-driver fixture the
+Plays the operator and the demo user (owner, kitchen staff and courier at once) through the e2e-driver fixture the
 same way e2e/templates/driver-call.yaml does: the driver's projected token plus a user
 assertion signed on the host with the BFF key (scripts/mint-jwt.py). Data: ops/kind/demo/seed.json.
 
 Re-running changes nothing that already exists: restaurants are matched by name among
 ListOwnedRestaurants of the owner, menu items by name among GetMenu, staff/open/availability
-calls are idempotent, and RegisterCourier of a known courier is tolerated. The resulting
-restaurants are written to ConfigMap nomnom-bff/demo-seed for the dev token issuer.
+calls are idempotent, and RegisterCourier of a known courier is tolerated.
 
 Usage: seed-demo.py <kube-context>
 """
@@ -194,10 +193,6 @@ def main(context: str) -> None:
         ] + [("courier", seed["courier"]["id"], "self", seed["courier"]["id"])])
         restaurants = [seed_restaurant(driver, seed, spec, existing) for spec in seed["restaurants"]]
         seed_courier(driver, seed)
-    configmap = kubectl(context, "-n", "nomnom-bff", "create", "configmap", "demo-seed",
-                        f"--from-literal=restaurants.json={json.dumps(restaurants, ensure_ascii=False)}",
-                        "--dry-run=client", "-o", "yaml")
-    kubectl(context, "apply", "-f", "-", stdin=configmap)
     print(f"demo seed: {len(restaurants)} restaurants, courier {seed['courier']['id']}")
 
 

@@ -4,6 +4,7 @@ import {
   beginLogin,
   codeChallenge,
   completeLogin,
+  demoLogin,
   type OidcConfig,
   refreshLogin,
 } from "./oidc";
@@ -128,5 +129,37 @@ describe("refresh", () => {
     await expect(
       refreshLogin(config, "spent", "owner", rejecting),
     ).rejects.toThrow("HTTP 400");
+  });
+});
+
+describe("demo sign-in", () => {
+  it("signs in the demo user with one password grant", async () => {
+    const calls: Call[] = [];
+    const token = jwt({ exp: 2_000_000_000, email: "demo@nomnom.test" });
+    const login = await demoLogin(
+      { ...config, demoEmailDomain: "nomnom.test", demoPassword: "nomnom" },
+      "demo",
+      fakeIdP(calls, token),
+    );
+    const body = calls.at(-1)?.body;
+    expect(calls.at(-1)?.url).toBe(`${config.issuer}/token`);
+    expect(body?.get("grant_type")).toBe("password");
+    expect(body?.get("username")).toBe("demo@nomnom.test");
+    expect(body?.get("password")).toBe("nomnom");
+    expect(body?.get("scope")).toContain(
+      "audience:server:client_id:nomnom-bff",
+    );
+    expect(login).toMatchObject({
+      accessToken: token,
+      refreshToken: "refresh-2",
+      user: "demo@nomnom.test",
+      purpose: "demo",
+    });
+  });
+
+  it("needs a configured demo user", async () => {
+    await expect(demoLogin(config, "demo", fakeIdP([], ""))).rejects.toThrow(
+      "No demo user configured",
+    );
   });
 });

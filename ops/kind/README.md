@@ -156,7 +156,7 @@ releases с pod template label `skaffold.dev/run-id`, а хранилища де
 | Secret `nomnom-bff/bff-assertion-key` (`tls.key`, `tls.crt`) | Certificate cert-manager: ECDSA P-256, PKCS#8, `rotationPolicy: Never`, kid `nomnom-bff-kind` | BFF (`identity.assertionKeySecret.key: tls.key`), проверка 7 |
 | ConfigMap `cluster-jwks`, `bff-jwks` (`jwks.json`) в неймспейсах контекстов | Job `identity-jwks` (hook): `/openid/v1/jwks` с проверкой issuer и публичный ключ BFF из `tls.crt`, server-side apply | `identity.jwksConfigMap`, `identity.userJwksConfigMap` контекстов |
 | Deployment и Service `nomnom-data/test-idp` | ConfigMap `test-idp` из `--set-file tests/identity/fixtures/idp-jwks.json`, раздаётся busybox httpd на `:8080/jwks.json`; **только для kind** — проверки подписывают access tokens ключом `tests/identity/fixtures/idp-signing-key.pem` (`scripts/mint-jwt.py`) | BFF, Router |
-| Deployment и Service `nomnom-data/dex` ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)) | `templates/dex.yaml`, `dex.*` в values: storage memory, staticPasswords (`customer`, `owner`, `kitchen`, `courier`, `operator` `@nomnom.test`, пароль `nomnom`), public client `nomnom-ui`, audience `nomnom-bff`; **только для kind** | браузер (port-forward), BFF и Router (JWKS) |
+| Deployment и Service `nomnom-data/dex` ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)) | `templates/dex.yaml`, `dex.*` в values: storage memory, staticPasswords (`demo` и `operator` `@nomnom.test`, пароль `nomnom`), public client `nomnom-ui`, audience `nomnom-bff`; **только для kind** | браузер (port-forward), BFF и Router (JWKS) |
 | ConfigMap `spicedb-bootstrap`, Deployment и Service `spicedb` (`nomnom-authz`) | `--set-file` из `authorization/` и kind-only grants `authz/bootstrap-kind.yaml`; checksum в pod template перезапускает SpiceDB только при изменении schema/bootstrap | — |
 | Secret `spicedb-preshared-key` (`preshared-key`) в `nomnom-authz` и неймспейсах контекстов | `lookup` или `randAlphaNum 64` | SpiceDB, контексты |
 | Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-observability/alloy-postgres` | `lookup` или `randAlphaNum 48`; DSN из того же значения | PostgreSQL, приложения, Alloy |
@@ -286,18 +286,22 @@ GRAFANA_CLOUD=1`: без profile internal gateway и контексты пишу
 конфигурация `customer-ui-kind` в `.claude/launch.json` (BFF на `localhost:3010`, Faro на
 `localhost:12347` через port-forward).
 
-## Демо-данные и dev token issuer
+## Демо-данные
 
-Flow board customer UI ведёт заказ на одном экране от лица четырёх пользователей. Пока вход
-(Dex) не подключён к UI, kind даёт им фиксированные subjects, данные и access tokens. **Только
-kind**: ни seed, ни issuer не входят в charts приложений и в другие окружения.
+Flow board customer UI ведёт заказ на одном экране от лица одного демо-пользователя: он
+покупатель, владелец ресторанов, их кухня и курьер. В UI это один вход — `demo@nomnom.test` /
+`nomnom` через Dex. **Только kind**: seed не входит в charts приложений и в другие окружения.
 
-| Роль | Subject | Что есть после deploy |
-| --- | --- | --- |
-| покупатель | `nomnom-demo-customer` | ничего (заказы оформляет UI) |
-| владелец | `nomnom-demo-owner` | три открытых ресторана с меню (EUR) |
-| кухня | `nomnom-demo-kitchen` | персонал всех трёх ресторанов |
-| курьер | `nomnom-demo-courier` | зарегистрирован, позиция в центре Берлина, на линии |
+| Роль | Что есть после deploy |
+| --- | --- |
+| покупатель | ничего (заказы оформляет UI) |
+| владелец | три открытых ресторана с меню (EUR) |
+| кухня | персонал всех трёх ресторанов |
+| курьер | зарегистрирован, позиция в центре Берлина, на линии |
+
+Subject — Dex sub пользователя `nomnom-demo-owner` (`ChFub21ub20tZGVtby1vd25lchIFbG9jYWw`): userID
+остался от прежнего отдельного владельца, на него записаны рестораны в MongoDB. Курьер
+`nomnom-demo-courier` из прежних deploy остаётся в PostgreSQL, но ни один вход им не владеет.
 
 Рестораны: «Пельменная «Сибирь»», «Чайхана «Самарканд»», «Блинная «Теремок у моста»» (5–7 блюд
 каждая). Данные — [`demo/seed.json`](demo/seed.json).
@@ -311,29 +315,17 @@ kind**: ни seed, ни issuer не входят в charts приложений 
 допускается. SpiceDB в kind хранит данные в памяти и перезапускается при изменении schema или
 bootstrap, а рестораны и курьер остаются в MongoDB и PostgreSQL; поэтому seed TOUCH-ит их
 relationships (`owner`, `staff`, `self`) одноразовым pod в `nomnom-authz` (grpcurl, reflection
-SpiceDB). Grants в `authz/bootstrap-kind.yaml` не нужны. Ids ресторанов seed пишет в ConfigMap
-`nomnom-bff/demo-seed`. Запуск вручную: `python3 ops/kind/scripts/seed-demo.py kind-nomnom-test`.
+SpiceDB). Grants в `authz/bootstrap-kind.yaml` не нужны. Запуск вручную: `python3 ops/kind/scripts/seed-demo.py kind-nomnom-test`.
 
 Subjects демо-пользователей начинаются с `nomnom-`, а не с `demo-`: dispatch без геокодирования
 выбирает среди свободных курьеров первого по id, и `demo-courier` забирал бы предложения курьера
 e2e (`kind-e2e-courier-*`).
 
-**Dev token issuer** — `demo-token-issuer` в `nomnom-bff`
-([`demo/token-issuer`](demo/token-issuer), манифесты [`manifests/demo`](manifests/demo/token-issuer.yaml)):
-stdlib-сервис на Python, подписывает access tokens ключом тестового identity provider
-(`tests/identity/fixtures`, Secret `demo-token-issuer-idp` создаёт `before`-hook) с теми же
-claims, что `mint-jwt.py access-token` (iss/aud из `idp-vectors.json`), но на 1 час. CORS —
-`http://localhost:4173` и `http://localhost:4174`. Pod под базовыми политиками неймспейса:
-ни egress, ни ingress от pod ему не нужны, браузер ходит через port-forward, как к BFF.
+Вход в UI — только через Dex (`customer-ui-kind-login` в `.claude/launch.json`, порт 4180):
 
 ```bash
-kubectl -n nomnom-bff port-forward svc/demo-token-issuer 3011
+kubectl -n nomnom-data port-forward svc/dex 5556
 kubectl -n nomnom-bff port-forward svc/bff 3010
-curl -s localhost:3011/tokens
-# {"expiresAt": 1792942302,
-#  "tokens": {"customer": "eyJ…", "owner": "…", "kitchen": "…", "courier": "…"},
-#  "subjects": {"customer": "nomnom-demo-customer", …},
-#  "restaurants": [{"id": "c9dd…", "name": "Пельменная «Сибирь»"}, …]}
 ```
 
 ## Проверки

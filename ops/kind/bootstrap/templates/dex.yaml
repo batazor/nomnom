@@ -2,7 +2,8 @@
 #   - Dex: OIDC provider со staticPasswords и storage memory. Issuer — адрес, по которому его
 #     видит браузер (port-forward svc/dex на localhost); Router и BFF берут JWKS по адресу
 #     Service. Ключи подписи Dex создаёт при старте и ротирует сам, поэтому JWKS читается по
-#     URL, а не из ConfigMap.
+#     URL, а не из ConfigMap. oauth2.passwordConnector включает password grant: кнопка демо
+#     на доске входит под demo@nomnom.test одним запросом, без формы Dex.
 #   - test-idp: JWKS тестового identity provider из tests/identity/fixtures по HTTP. Им
 #     подписывает access tokens scripts/mint-jwt.py для e2e-проверок без браузера.
 {{- $dex := .Values.dex }}
@@ -11,7 +12,7 @@
   "storage" (dict "type" "memory")
   "web" (dict "http" "0.0.0.0:5556" "allowedOrigins" $dex.allowedOrigins)
   "telemetry" (dict "http" "0.0.0.0:5558")
-  "oauth2" (dict "skipApprovalScreen" true "responseTypes" (list "code"))
+  "oauth2" (dict "skipApprovalScreen" true "responseTypes" (list "code") "passwordConnector" "local")
   "expiry" (dict "idTokens" $dex.tokenLifetime)
   "enablePasswordDB" true
   "staticClients" (list

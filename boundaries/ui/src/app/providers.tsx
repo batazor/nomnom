@@ -1,10 +1,9 @@
 import type { Faro } from "@grafana/faro-react";
 import { LazyMotion, MotionConfig } from "motion/react";
 import { type ReactNode, useMemo } from "react";
-
+import { SignInProvider } from "../shared/auth/sign-in";
 import type { RuntimeConfig } from "../shared/config/runtime-config";
 import type { SubscriptionTransport } from "../shared/graphql/client";
-import { SignInProvider } from "../shared/auth/sign-in";
 import { I18nProvider } from "../shared/i18n/i18n";
 import {
   AsRole,
@@ -63,10 +62,7 @@ export function AppProviders({
       <MotionConfig reducedMotion="user">
         <I18nProvider locale={config.locale}>
           <SignInProvider config={config.oidc}>
-            <RoleSessionProvider
-              mocks={config.enableMocks}
-              tokensUrl={config.devTokensUrl}
-            >
+            <RoleSessionProvider mocks={config.enableMocks}>
               <RoleClientSettings settings={settings}>
                 {/* Outside the board columns the app acts as the customer. */}
                 <AsRole as="customer">{children}</AsRole>

@@ -9,7 +9,7 @@ export type OidcConfig = Readonly<{
   // Client id of BFF: Dex puts it into aud through a cross-client scope.
   audience: string;
   redirectUri: string;
-  // Demo users of kind (<role>@domain, one password) shown next to sign-in.
+  // Demo user of kind (demo@domain and its password) shown next to sign-in.
   demoEmailDomain?: string;
   demoPassword?: string;
 }>;
@@ -165,6 +165,31 @@ export async function refreshLogin(
       grant_type: "refresh_token",
       client_id: config.clientId,
       refresh_token: refreshToken,
+    }),
+  });
+  return tokenLogin(response, purpose, "/");
+}
+
+// Signs in the demo user of kind in one step, without the provider's form:
+// the password grant, which Dex allows there for the board's demo button.
+export async function demoLogin(
+  config: OidcConfig,
+  purpose: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<OidcLogin> {
+  if (!config.demoEmailDomain || !config.demoPassword) {
+    throw new Error("No demo user configured");
+  }
+  const { token_endpoint } = await discover(config.issuer, fetchFn);
+  const response = await fetchFn(token_endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "password",
+      client_id: config.clientId,
+      username: `${purpose}@${config.demoEmailDomain}`,
+      password: config.demoPassword,
+      scope: `openid email offline_access audience:server:client_id:${config.audience}`,
     }),
   });
   return tokenLogin(response, purpose, "/");
