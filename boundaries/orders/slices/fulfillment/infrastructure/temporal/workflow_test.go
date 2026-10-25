@@ -126,8 +126,13 @@ func TestWorkflowCompletesOrder(t *testing.T) {
 		{OrderID: orderID, IdempotencyKey: "order:order-1:request_restaurant_order"},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:create_delivery"},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:capture_payment"},
-		{OrderID: orderID, IdempotencyKey: "order:order-1:complete_order"},
+		{OrderID: orderID, IdempotencyKey: "order:order-1:complete_order", DecidedAt: h.steps[len(h.steps)-1].DecidedAt},
 	}, h.steps)
+	// The completion moment is the workflow time after Delivery Completion.
+	assert.False(t, h.steps[len(h.steps)-1].DecidedAt.IsZero())
+	for _, step := range h.steps[:len(h.steps)-1] {
+		assert.True(t, step.DecidedAt.IsZero(), step.IdempotencyKey)
+	}
 }
 
 // The Workflow Stage is published as OrderFulfillmentStage once per change.

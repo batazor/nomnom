@@ -115,39 +115,70 @@ func assignment(eventID, courierID string, version uint64, at time.Time) recordc
 	}
 }
 
-func courierCanView(t *testing.T, authorizer *memory.Authorizer, courierID string) bool {
-	t.Helper()
-	return authorizer.Check(context.Background(), application.AccessCheck{
-		Subject:    application.Subject{Kind: application.SubjectUser, ID: courierID},
-		Permission: "view",
-		Resource:   application.Resource{Type: "order", ID: "order-1"},
-	}) == nil
+func assignmentOn(eventID, deliveryID, courierID string, version uint64, at time.Time) recordcourierassignment.Input {
+	in := assignment(eventID, courierID, version, at)
+	in.DeliveryID = deliveryID
+	return in
 }
 
-// AC-518, AC-519: the assignment writes the courier relationships before
-// commit, and a reassignment replaces the courier although the fact is
-// already recorded.
-func TestHandleWritesAndReplacesCourierRelationships(t *testing.T) {
+func linkedDelivery(t *testing.T, authorizer *memory.Authorizer) string {
+	t.Helper()
+	deliveryID, _ := authorizer.DeliveryOf("order-1")
+	return deliveryID
+}
+
+func revisionOf(t *testing.T, store *memory.Store) application.AuthorizationRevision {
+	t.Helper()
+	revision, _, err := store.Revision(context.Background(), "order-1")
+	require.NoError(t, err)
+	return revision
+}
+
+// AC-518: the assignment writes only order#delivery before commit and stores
+// the assignment; the courier sees the Order through delivery#courier.
+func TestHandleLinksDelivery(t *testing.T) {
 	store, authorizer := memory.NewStore(), memory.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recordcourierassignment.NewHandler(store, store, store, memory.NewWorkflow(), store, authorizer)
 
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
+
 	require.NoError(t, err)
-	assert.True(t, courierCanView(t, authorizer, "courier-1"))
+	assert.Equal(t, "delivery-1", linkedDelivery(t, authorizer))
+	assert.Equal(t, 1, authorizer.DeliveryWrites())
 	stored, found, err := store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: occurredAt, DeliveryVersion: 2}, stored)
+	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: occurredAt, DeliveryVersion: 2}, stored)
+	assert.Equal(t, application.AuthorizationRevision("memory:order-1:delivery:1"), revisionOf(t, store))
+}
+
+// AC-519: a reassignment within the same Delivery updates the assignment
+// without a SpiceDB request and keeps the revision; another Delivery replaces
+// the link in one request.
+func TestHandleReassignment(t *testing.T) {
+	store, authorizer := memory.NewStore(), memory.NewAuthorizer()
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
+	handler := recordcourierassignment.NewHandler(store, store, store, memory.NewWorkflow(), store, authorizer)
+	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
+	require.NoError(t, err)
 
 	result, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", 3, occurredAt.Add(time.Minute)))
+
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.OutcomeAlreadyApplied, result.Outcome)
-	assert.False(t, courierCanView(t, authorizer, "courier-1"))
-	assert.True(t, courierCanView(t, authorizer, "courier-2"))
-	revision, _, err := store.Revision(context.Background(), "order-1")
+	assert.Equal(t, 1, authorizer.DeliveryWrites(), "no SpiceDB request")
+	assert.Equal(t, application.AuthorizationRevision("memory:order-1:delivery:1"), revisionOf(t, store))
+	stored, _, err := store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)
-	assert.Equal(t, application.AuthorizationRevision("memory:order-1:courier:2"), revision)
+	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-2", AssignedAt: occurredAt.Add(time.Minute), DeliveryVersion: 3}, stored)
+
+	_, err = handler.Handle(context.Background(), assignmentOn("event-3", "delivery-2", "courier-3", 4, occurredAt.Add(2*time.Minute)))
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, authorizer.DeliveryWrites())
+	assert.Equal(t, "delivery-2", linkedDelivery(t, authorizer))
+	assert.Equal(t, application.AuthorizationRevision("memory:order-1:delivery:2"), revisionOf(t, store))
 }
 
 // AC-520, AC-669: an event of an older Delivery version than the stored
@@ -160,12 +191,14 @@ func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", 3, occurredAt))
 	require.NoError(t, err)
-	_, err = handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt.Add(time.Minute)))
+	_, err = handler.Handle(context.Background(), assignmentOn("event-1", "delivery-0", "courier-1", 2, occurredAt.Add(time.Minute)))
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, authorizer.CourierWrites())
-	assert.True(t, courierCanView(t, authorizer, "courier-2"))
-	assert.False(t, courierCanView(t, authorizer, "courier-1"))
+	assert.Equal(t, 1, authorizer.DeliveryWrites())
+	assert.Equal(t, "delivery-1", linkedDelivery(t, authorizer))
+	stored, _, err := store.CourierAssignment(context.Background(), "order-1")
+	require.NoError(t, err)
+	assert.Equal(t, "courier-2", stored.CourierID)
 }
 
 // AC-521: a failed relationship write rolls the Inbox record back, so
@@ -188,5 +221,5 @@ func TestHandleRollsBackOnRelationshipFailure(t *testing.T) {
 	result, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.OutcomeApplied, result.Outcome)
-	assert.True(t, courierCanView(t, authorizer, "courier-1"))
+	assert.Equal(t, "delivery-1", linkedDelivery(t, authorizer))
 }

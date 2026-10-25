@@ -8,10 +8,9 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
-	"nomnom/orders/slices/order/domains/order/vo"
 )
 
 // Use case names are metric label values: renaming one breaks dashboards.
@@ -45,6 +44,9 @@ const (
 	ErrorTypeDomainRule          = "domain_rule"
 	ErrorTypeCancellationRefused = "cancellation_refused"
 	ErrorTypeConcurrencyConflict = "concurrency_conflict"
+	// ErrorTypeDependencyUnavailable: SpiceDB, the catalog or the workflow did
+	// not answer, also behind a fail-closed authorization check.
+	ErrorTypeDependencyUnavailable = "dependency_unavailable"
 )
 
 // UseCases returns the instrumentation of the order slice.
@@ -54,36 +56,37 @@ func rejected(errorType string) telemetry.Failure {
 	return telemetry.Failure{Outcome: telemetry.OutcomeRejected, ErrorType: errorType}
 }
 
-// Classify separates refusals by the rules of a use case from technical
-// failures. A failed authorization backend is reported as permission_denied,
-// because application.FailClosed hides the cause by design.
+// failureByKind reports every application.ErrorKind: refusals by the rules of
+// a use case are rejected, technical failures are errors.
+var failureByKind = map[application.ErrorKind]telemetry.Failure{
+	application.KindInvalidInput:  rejected(ErrorTypeInvalidInput),
+	application.KindNotFound:      rejected(ErrorTypeNotFound),
+	application.KindAlreadyExists: rejected(ErrorTypeAlreadyExists),
+	application.KindDomainRule:    rejected(ErrorTypeDomainRule),
+	application.KindPermission:    rejected(ErrorTypePermissionDenied),
+	application.KindConflict:      {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeConcurrencyConflict},
+	application.KindUnavailable:   {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeDependencyUnavailable},
+	application.KindInternal:      {Outcome: telemetry.OutcomeError, ErrorType: telemetry.ErrorTypeInternal},
+}
+
+// Classify reports a use case error by its kind (errorkind.Classify). A domain
+// refusal keeps its finer error type: an FSM transition, a guard or a
+// Cancellation Request refused by the workflow.
 func Classify(err error) telemetry.Failure {
-	var invalid order.InvalidTransition
-	var guard order.GuardFailed
-	var notOrderable order.NotOrderable
-	switch {
-	case errors.Is(err, application.ErrInvalidInput), errors.Is(err, vo.ErrInvalidValue):
-		return rejected(ErrorTypeInvalidInput)
-	case errors.Is(err, application.ErrPermissionDenied):
-		return rejected(ErrorTypePermissionDenied)
-	case errors.Is(err, order.ErrOrderNotFound), errors.Is(err, placeorder.ErrUnknownRestaurant),
-		errors.Is(err, fulfillment.ErrWorkflowNotFound):
-		return rejected(ErrorTypeNotFound)
-	case errors.Is(err, order.ErrOrderAlreadyExists):
-		return rejected(ErrorTypeAlreadyExists)
-	case errors.As(err, &invalid):
-		return rejected(ErrorTypeInvalidTransition)
-	case errors.As(err, &guard):
-		return rejected(ErrorTypeGuardFailed)
-	case errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem),
-		errors.Is(err, order.ErrInvalidCancellationReason), errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders),
-		errors.As(err, &notOrderable):
-		return rejected(ErrorTypeDomainRule)
-	case errors.Is(err, fulfillment.ErrCancellationRefused):
-		return rejected(ErrorTypeCancellationRefused)
-	case errors.Is(err, application.ErrConcurrencyConflict):
-		return telemetry.Failure{Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeConcurrencyConflict}
-	default:
+	failure, ok := failureByKind[errorkind.Classify(err)]
+	if !ok {
 		return telemetry.Failure{Outcome: telemetry.OutcomeError, ErrorType: telemetry.ErrorTypeInternal}
 	}
+	var invalid order.InvalidTransition
+	var guard order.GuardFailed
+	switch {
+	case failure.ErrorType != ErrorTypeDomainRule:
+	case errors.As(err, &invalid):
+		failure.ErrorType = ErrorTypeInvalidTransition
+	case errors.As(err, &guard):
+		failure.ErrorType = ErrorTypeGuardFailed
+	case errors.Is(err, fulfillment.ErrCancellationRefused):
+		failure.ErrorType = ErrorTypeCancellationRefused
+	}
+	return failure
 }

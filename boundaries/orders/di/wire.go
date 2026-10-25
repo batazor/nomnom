@@ -30,6 +30,9 @@ var (
 	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
 	// spiceDBSet — клиент SpiceDB процесса orders-reconciler.
 	spiceDBSet = wire.NewSet(NewSpiceDBClient)
+	// workerStoreSet — store процесса слайса order, в том числе в роли хранилища
+	// Activities fulfillment.
+	workerStoreSet = wire.NewSet(orderdi.PostgresSet, wire.Bind(new(fulfillmentdi.Store), new(*orderdi.ProcessStore)))
 )
 
 // Injectors процессов orders: каждый cmd/* вызывает свой и передаёт результат
@@ -42,7 +45,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 }
 
 func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
-	wire.Build(configSet, orderdi.PostgresSet, NewReasonCodes, orderdi.TelemetrySet, fulfillmentdi.WorkerSet, NewTemporalWorker)
+	wire.Build(configSet, workerStoreSet, NewReasonCodes, orderdi.TelemetrySet, fulfillmentdi.WorkerSet, NewTemporalWorker)
 	return nil, nil, nil
 }
 

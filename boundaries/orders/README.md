@@ -41,7 +41,7 @@ Workflow относится к прикладному процессу. Доме
 | **Record Preparation Started** | Kafka consumer `orders` | Отразить начало Preparation | Стадия приготовления отражена в `Order` один раз | Integration event от `restaurants`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Order Ready** | Kafka consumer `orders` | Отразить готовность `Kitchen Order` к Pickup | Готовность отражена в `Order` один раз | Integration event от `restaurants`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Courier Assignment** | Kafka consumer `orders` | Отразить Courier Assignment | Назначение отражено в `Order` один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
-| **Record Courier Release** | Kafka consumer `orders` | Отозвать доступ курьера, снятого без замены или освобождённого отменой Delivery | `order#courier` (и `order#delivery` при отмене) удалены, если событие называет сохранённое назначение | Integration events `CourierUnassignedFromDelivery`/`DeliveryCancelled` от `delivery`, Transactional Inbox; `Order` и workflow не меняются |
+| **Record Courier Release** | Kafka consumer `orders` | Отразить снятие курьера без замены или отмену Delivery | Курьер снят с сохранённого назначения; при отмене Delivery удалена `order#delivery` (доступ курьера отзывает `delivery`) | Integration events `CourierUnassignedFromDelivery`/`DeliveryCancelled` от `delivery`, Transactional Inbox; `Order` и workflow не меняются |
 | **Record Pickup** | Kafka consumer `orders` | Отразить Pickup | Получение заказа курьером отражено один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Delivery Completion** | Kafka consumer `orders` | Отразить Delivery Completion | Завершение доставки отражено один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Delivery Failure** | Kafka consumer `orders` | Отразить неудачу Delivery | Бизнес-неудача доставки и причина отражены один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
@@ -78,7 +78,12 @@ Temporal workflow относится к прикладному процессу 
 
 Адаптер генерирует серверные Go stubs из локальной схемы и преобразует request messages в commands/queries, а прикладные результаты — в response messages. Protobuf-типы остаются в `infrastructure` и не используются моделями `Order`, handlers или Temporal workflow. Клиенты других контекстов получают схему только из BSR по закреплённому commit ref.
 
-Маппинг ошибок API:
+Маппинг ошибок API. Вид ошибки (`application.ErrorKind`: invalid input, not found, already exists,
+conflict, domain rule, unavailable, permission, internal) определяет одна функция
+[`errorkind.Classify`](slices/order/applications/errorkind/errorkind.go); gRPC, Kafka consumer,
+Temporal Activities и телеметрия переводят вид своими таблицами, тест каждой проверяет полноту.
+Уточнения этого API (`RESTAURANT_*`, `INVALID_ORDER`, metadata `ORDER_NOT_ORDERABLE`, правило окна
+отмены) остаются в gRPC-адаптере.
 
 | Ошибка `orders` | gRPC code | `ErrorInfo.reason` |
 | --- | --- | --- |
@@ -100,7 +105,7 @@ Temporal workflow относится к прикладному процессу 
 `codes` — каждый код один раз в верхнем регистре (`ORDER_ITEM_UNAVAILABLE`,
 `ORDER_TOTAL_BELOW_MINIMUM`, `ORDER_TOTAL_ABOVE_MAXIMUM`), `menu_item_ids` — позиции, к которым
 относятся причины (пусто, если причины касаются только суммы);
-`ORDER_STATE_CONFLICT` — запрет FSM и отказ workflow принять Cancellation Request; отказ по окну
+`ORDER_STATE_CONFLICT` — запрет FSM (включая нарушенный guard `GuardFailed`) и отказ workflow принять Cancellation Request; отказ по окну
 отмены (`CancellationNotAllowed`) называет нарушенное правило, чтобы клиент отличил его от
 завершённого заказа.
 
@@ -152,7 +157,7 @@ gateway не доверяет. Политика контрактов, генер
 
 Минимальные состояния `Order`: `placed`, `confirmed`, `cancelled`, `completed`. На первом этапе агрегат поддерживает оформление, подтверждение, отмену и завершение заказа.
 
-Кроме state, `Order` хранит время оформления, отражённые факты fulfillment (`restaurant_accepted`, `restaurant_rejected`, `preparation_started`, `ready_for_pickup`, `courier_assigned`, `picked_up`, `delivery_completed`, `delivery_failed`) и причину отрицательного итога. Факты — данные `Order`, а не новые states: допустимость их записи по state задаёт строка FSM `record_fact` (только `placed`/`confirmed`), повтор факта — ошибка `FactAlreadyRecorded`. `restaurant_accepted` записывает Confirm Order вместе с переходом `placed → confirmed` и моментом события Order Acceptance; заказы, подтверждённые раньше, его не имеют. Cancellation и Failure пока завершаются одним state `cancelled` с сохранённым видом итога (`cancellation`/`failure`) и кодом причины; отдельный `failed` state не согласован. Domain Events: `OrderPlaced`, `OrderCancelled`, `OrderCompleted`.
+Кроме state, `Order` хранит время оформления, отражённые факты fulfillment (`restaurant_accepted`, `restaurant_rejected`, `preparation_started`, `ready_for_pickup`, `courier_assigned`, `picked_up`, `delivery_completed`, `delivery_failed`) и причину отрицательного итога. Факты — данные `Order`, а не новые states: допустимость их записи по state задаёт строка FSM `record_fact` (только `placed`/`confirmed`), повтор факта — ошибка `FactAlreadyRecorded`. `restaurant_accepted` записывает Confirm Order вместе с переходом `placed → confirmed` и моментом события Order Acceptance; заказы, подтверждённые раньше, его не имеют. Cancellation и Failure пока завершаются одним state `cancelled` с сохранённым видом итога (`cancellation`/`failure`) и кодом причины; отдельный `failed` state не согласован. Domain Events: `OrderPlaced`, `OrderCancelled`, `OrderCompleted` (с моментом завершения `CompletedAt`, который передаёт `Complete`). Назначение курьера — value object `CourierAssignment` с правилами `Supersedes` (событие старше сохранённого устарело), `Displaced` (что вытесняет переназначение) и `Release` (снятие сохраняет своё время); контракт хранения `CourierAssignments` объявлен в домене.
 
 Инварианты:
 
@@ -216,7 +221,7 @@ CQRS остаётся логическим разделением command- и qu
 
 В `orders` используется compile-time DI через [`github.com/google/wire`](https://github.com/google/wire). Зависимости передаются обычными Go-конструкторами, а Wire генерирует код их сборки в composition root каждого исполняемого процесса. Provider sets группируются по функциональности и необходимым инфраструктурным компонентам.
 
-Каждый слайс описывает свои provider sets в собственном пакете `slices/<slice>/di`: у `order` это инфраструктурные `PostgresSet` (store и его роль портов `Store`) и `TelemetrySet` (инструменты use cases), а также наборы use cases процессов — `APISet` (`Module` API) и `ConsumerSet` (handlers Kafka consumer); у `fulfillment` — `WorkerSet` (адаптеры соседей и Activities поверх `Store` слайса `order`). Порты набора собираются в структуру зависимостей через `wire.Struct` (`Dependencies`, `Consumer`), поэтому новый порт — это поле структуры и provider, а не новый позиционный параметр у всех вызовов. Итоговая сборка процессов находится в корневом пакете `di`: `wire.go` объявляет provider sets процесса (секции конфигурации, Temporal client API, gRPC, SpiceDB reconciler'а) и по injector'у на каждый процесс — `InitializeApp`, `InitializeWorker`, `InitializeConsumer`, `InitializeForwarder`, `InitializeReconciler`, `InitializeMigrator`; `wire_gen.go` генерируется командой `make generate` и коммитится. `cmd/*` только загружают конфигурацию, вызывают свой injector и передают результат в `pkg/lifecycle` (`orders-migrate` вызывает `Run` и завершается). Ресурсы, созданные при сборке (пулы PostgreSQL, клиенты SpiceDB и Temporal API, соединение с internal gateway), освобождает cleanup injector'а; ресурсы, которым нужен контекст `Start` или pipeline метрик процесса (telemetry, Temporal client worker'а и consumer'а, Kafka, Watermill Router), открывает и закрывает сам lifecycle.Worker процесса. Lifecycle реализует [runtime contract](../../docs/cloud-native-runtime.md): `/health/startup`, `/health/live`, `/health/ready` на техническом порту `management.port` (по умолчанию `9081`, `MANAGEMENT__PORT`), а по `SIGTERM`/`SIGINT` переводит readiness в `503`, выжидает `shutdown.readiness_delay` (по умолчанию `5s`), прекращает приём запросов и дожидается начатых в пределах `shutdown.drain_timeout` (по умолчанию `20s`). Штатный shutdown — exit `0`; ошибка startup, остановка сервера до сигнала или превышение drain deadline — non-zero. Поведение проверяется `make runtime-contract` из корня репозитория.
+Каждый слайс описывает свои provider sets в собственном пакете `slices/<slice>/di`: у `order` это инфраструктурные `PostgresSet` (один `ProcessStore` процесса и его привязка к ролям хранилища) и `TelemetrySet` (инструменты use cases), а также наборы use cases процессов — `APISet` (`Module` API) и `ConsumerSet` (handlers Kafka consumer); у `fulfillment` — `WorkerSet` (адаптеры соседей и Activities). Вместо одного интерфейса хранилища потребители объявляют роли рядом с собой: `PlacementStore` и `ReadModels` у `Module`, `InboxStore` у `Consumer`, `fulfillmentdi.Store` у Activities, `spicedb.RevisionReader` у authorizer; Wire связывает их с одним `ProcessStore` — PostgreSQL, у которого Unit of Work и Outbox идут через декоратор бизнес-метрик `observability.ObservedStore`. Порты набора собираются в структуру зависимостей через `wire.Struct` (`Dependencies`, `Consumer`), поэтому новый порт — это поле структуры и provider, а не новый позиционный параметр у всех вызовов. Итоговая сборка процессов находится в корневом пакете `di`: `wire.go` объявляет provider sets процесса (секции конфигурации, Temporal client API, gRPC, SpiceDB reconciler'а) и по injector'у на каждый процесс — `InitializeApp`, `InitializeWorker`, `InitializeConsumer`, `InitializeForwarder`, `InitializeReconciler`, `InitializeMigrator`; `wire_gen.go` генерируется командой `make generate` и коммитится. `cmd/*` только загружают конфигурацию, вызывают свой injector и передают результат в `pkg/lifecycle` (`orders-migrate` вызывает `Run` и завершается). Ресурсы, созданные при сборке (пулы PostgreSQL, клиенты SpiceDB и Temporal API, соединение с internal gateway), освобождает cleanup injector'а; ресурсы, которым нужен контекст `Start` или pipeline метрик процесса (telemetry, Temporal client worker'а и consumer'а, Kafka, Watermill Router), открывает и закрывает сам lifecycle.Worker процесса. Lifecycle реализует [runtime contract](../../docs/cloud-native-runtime.md): `/health/startup`, `/health/live`, `/health/ready` на техническом порту `management.port` (по умолчанию `9081`, `MANAGEMENT__PORT`), а по `SIGTERM`/`SIGINT` переводит readiness в `503`, выжидает `shutdown.readiness_delay` (по умолчанию `5s`), прекращает приём запросов и дожидается начатых в пределах `shutdown.drain_timeout` (по умолчанию `20s`). Штатный shutdown — exit `0`; ошибка startup, остановка сервера до сигнала или превышение drain deadline — non-zero. Поведение проверяется `make runtime-contract` из корня репозитория.
 
 Импорты Wire и объявления сборки не входят в доменную модель и обработчики use cases. Composition root явно владеет запуском, остановкой и освобождением ресурсов. Доменные компоненты и обработчики можно создавать в тестах напрямую через конструкторы.
 
@@ -234,7 +239,7 @@ Temporal Activity retries не заменяют Inbox Pattern. Kafka-событ�
 
 Публикация интеграционных событий `orders` использует Transactional Outbox по общесистемному [ADR 13](../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md). Изменение `Order` и сообщение Outbox записываются в одной транзакции PostgreSQL через `watermill-sql` publisher, созданный на `*sql.Tx`; [Watermill Forwarder](https://watermill.io/advanced/forwarder/) доставляет сообщения в Kafka через `watermill-kafka`. UUID сообщения Watermill равен `event_id` и передаётся в Kafka header `event_id`. Kafka key `order_id` передаётся через metadata и извлекается partitioning marshaler Kafka publisher'а. Forwarder работает как single active instance: replicas служат failover, а не throughput. Activity, изменяющая `Order` и Outbox, идемпотентна по ключу, производному от Workflow ID и шага процесса, или по ожидаемой `aggregate_version`; workflow-код не публикует события.
 
-Domain Events переводятся в Integration Events `nomnom.orders.v1` (`OrderPlaced`, `OrderCompleted`, `OrderCancelled`, [`events.proto`](infrastructure/grpc/nomnom/orders/v1/events.proto)) в той же транзакции; `OrderPlaced` несёт состав заказа `items` — по нему `restaurants-consumer` создаёт Restaurant Order; `event_id` детерминирован (UUIDv5 от `order:<id>:<version>:<index>`). Процесс `cmd/orders-forwarder` переносит их из Outbox в Kafka `orders.v1.order-events` с ключом `order_id`. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+Domain Events переводятся в Integration Events `nomnom.orders.v1` (`OrderPlaced`, `OrderCompleted`, `OrderCancelled`, [`events.proto`](infrastructure/grpc/nomnom/orders/v1/events.proto)) в той же транзакции; `OrderPlaced` несёт состав заказа `items` — по нему `restaurants-consumer` создаёт Restaurant Order; `event_id` детерминирован (UUIDv5 от `order:<id>:<version>:<index>`), `occurred_at` берётся из Domain Event (для `OrderCompleted` — момент завершения). Перевод делает `IntegrationMapper` в `slices/order/infrastructure/messaging/outbound` (таблица Domain Event → контракт); PostgreSQL Outbox только сохраняет готовые сообщения, Forwarder (`postgres/forwarder.go`) — отдельно. Процесс `cmd/orders-forwarder` переносит их из Outbox в Kafka `orders.v1.order-events` с ключом `order_id`. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 Архитектурные решения контекста хранятся в [локальном журнале ADR](docs/adr/). Выбор Temporal зафиксирован в [ADR 2](docs/adr/0002-use-temporal-to-orchestrate-orders.md), контракт orchestration — в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md).
 
@@ -390,25 +395,29 @@ OpenSpec change `add-order-command-rpcs-and-relationships` (FR-464…FR-470, AC-
 | Relation | Writer | Когда |
 | --- | --- | --- |
 | `order#customer@user`, `order#restaurant@restaurant` | Place Order | один `WriteRelationships` до commit заказа |
-| `order#courier@user`, `order#delivery@delivery` | Record Courier Assignment, Record Courier Release (`orders-consumer`) | из `CourierAssignedToDelivery` (`TOUCH`), `CourierUnassignedFromDelivery`/`DeliveryCancelled` (`DELETE`) внутри Inbox unit of work до commit |
+| `order#delivery@delivery` | Record Courier Assignment, Record Courier Release (`orders-consumer`) | из `CourierAssignedToDelivery` (`TOUCH`; смена Delivery — `TOUCH` новой и `DELETE` прежней одним запросом) и `DeliveryCancelled` (`DELETE`) внутри Inbox unit of work до commit |
 
-`view = customer + restaurant->view_orders + courier + delivery->act_as_courier`, `cancel` — только
-customer. Назначение хранится в `orders.delivery_id`, `courier_id`, `courier_assigned_at`
-(миграция `00002`) и `courier_delivery_version` (миграция `00004`, Delivery `aggregate_version`
-события); reassignment — один атомарный запрос `TOUCH` нового и `DELETE` прежнего
-курьера, событие с версией Delivery ниже сохранённой пропускается (`occurred_at` порядок commit не
-задаёт), ZedToken записи сохраняется в `authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
+`view = customer + restaurant->view_orders + delivery->act_as_courier`, `cancel` — только
+customer. Relation `order#courier` нет (change `scope-courier-access-to-assignment`): курьер видит
+заказ, пока `delivery` держит `delivery#courier` активного назначения, — отзыв доступа целиком на
+стороне владельца факта. Назначение хранится как бизнес-данные в `orders.delivery_id`, `courier_id`,
+`courier_assigned_at` (миграция `00002`) и `courier_delivery_version` (миграция `00004`, Delivery
+`aggregate_version` события); правила — в `order.CourierAssignment`. Переназначение в пределах той же
+Delivery запросов к SpiceDB не делает и `authorization_revision` не меняет; событие с версией Delivery
+ниже сохранённой пропускается (`occurred_at` порядок commit не задаёт); ZedToken записи
+`order#delivery` сохраняется в `authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и
+redelivery повторяет событие.
 
 Не реализованы: выпуск user assertions в BFF (verifier в `orders` готов), поэтому Place Order пока
 недоступен клиентам.
 
-Снятие курьера без замены (`CourierUnassignedFromDelivery`) удаляет `order#courier` и очищает
-`courier_id`, отмена Delivery (`DeliveryCancelled`) — ещё и `order#delivery`/`delivery_id`; событие
-применяется, если относится к сохранённой Delivery и его версия не ниже сохранённой, и снимает
-сохранённого курьера. Снятие сохраняется со своей версией (миграции `00003`, `00004`), даже если
+Снятие курьера без замены (`CourierUnassignedFromDelivery`) только очищает `courier_id` без запроса
+к SpiceDB, отмена Delivery (`DeliveryCancelled`) удаляет `order#delivery` и очищает
+`delivery_id`; событие применяется, если относится к сохранённой Delivery и его версия не ниже
+сохранённой, и снимает сохранённого курьера. Снятие сохраняется со своей версией (миграции `00003`, `00004`), даже если
 назначение ещё не обработано, поэтому более старое назначение после него пропускается. См. [Record Courier Release](slices/order/applications/recordcourierrelease/README.md).
 
-Reconciliation `order#customer`, `order#restaurant`, `order#courier` и `order#delivery` —
+Reconciliation `order#customer`, `order#restaurant` и `order#delivery` (relation `courier` не сверяется: её нет в schema) —
 [`slices/order/infrastructure/reconcile`](slices/order/infrastructure/reconcile)
 и процесс `cmd/orders-reconciler` (Helm `values-reconciler.yaml`): для каждой relation orphan и
 stale relationships удаляются, только если остались такими на двух проходах с интервалом не
@@ -457,12 +466,15 @@ make temporal-dev-stop
 | `IDENTITY__SERVICE_ACCOUNTS` | — | Allowlist `namespace/serviceaccount=service-name,…` |
 | `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker; API — catalog `restaurants`, его чтения identity не требуют); пусто — без credentials |
 | `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE`, `IDENTITY__USER_DELEGATES` | —, —, — | User assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)): ожидаемый `iss`, JWKS BFF (только EC P-256) и services-делегаты через запятую (в развёртываниях `bff`). Без всех трёх любой вызов с assertion — `UNAUTHENTICATED`, service-вызовы не затронуты; неразбираемый JWKS — ошибка startup |
-| `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#courier`/`delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
+| `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
 | `RECONCILER__INTERVAL`, `RECONCILER__GRACE`, `RECONCILER__PAGE_SIZE` | `5m`, `10m`, `500` | `cmd/orders-reconciler`: сверка relations `order` SpiceDB ↔ PostgreSQL |
 | `POSTGRES__DSN`, `POSTGRES__MAX_CONNS` | —, `10` | PostgreSQL orders (обязателен для всех процессов); локально — `make postgres-dev`, `make migrate` |
 | `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` | `false`, `2s` | Plaintext (только kind/локально) и deadline проверки; ошибка или timeout — отказ |
 
-Порядок проверки caller в [`infrastructure/grpc/identity.go`](infrastructure/grpc/identity.go): service token
+Проверка caller разделена по ответственности: [`jwks.go`](infrastructure/grpc/jwks.go) читает ключи,
+[`service_token.go`](infrastructure/grpc/service_token.go) (`serviceTokenVerifier`) проверяет service token,
+[`user_assertion.go`](infrastructure/grpc/user_assertion.go) (`userAssertionVerifier`) — user assertion и
+делегатов, resolver в [`identity.go`](infrastructure/grpc/identity.go) соединяет их. Порядок: service token
 (`authorization`, ADR 27) → без metadata `x-nomnom-user-assertion` результат `Subject{service}` → service
 входит в `IDENTITY__USER_DELEGATES` → assertion: только ES256 с `kid` из JWKS BFF, `iss`, `aud` содержит
 `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, обязательный `iat` и `exp - iat ≤ 60 s`, непустые `sub` и

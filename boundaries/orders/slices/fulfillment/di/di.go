@@ -4,7 +4,9 @@ package di
 
 import (
 	"log"
+	"nomnom/orders/pkg/application"
 	gatewayclient "nomnom/orders/pkg/gateway"
+	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 
 	"github.com/google/wire"
 
@@ -15,21 +17,29 @@ import (
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
-	orderdi "nomnom/orders/slices/order/di"
+	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
 
 // WorkerSet — Activities fulfillment orders-worker и адаптеры соседних
-// контекстов. Store и телеметрию use cases даёт слайс order (PostgresSet,
-// TelemetrySet).
+// контекстов. Store процесса и телеметрию use cases даёт слайс order
+// (PostgresSet, TelemetrySet); роль Store связывает composition root.
 var WorkerSet = wire.NewSet(NewNeighbours, NewActivities)
+
+// Store — роль хранилища Activities: чтение Order для запросов соседям и Unit
+// of Work, repository и Outbox use cases Complete Order и Fail Or Cancel Order.
+type Store interface {
+	application.UnitOfWork
+	order.Repository
+	completeorder.Outbox
+}
 
 // Neighbours — адаптеры payments, restaurants и delivery для Activities
 // fulfillment.
 type Neighbours struct {
-	Payments    fulfillmenttemporal.Payments
-	Restaurants fulfillmenttemporal.Restaurants
-	Delivery    fulfillmenttemporal.Delivery
+	Payments    ports.Payments
+	Restaurants ports.Restaurants
+	Delivery    ports.Delivery
 }
 
 // NewNeighbours выбирает адаптеры соседних контекстов по fulfillment.neighbours;
@@ -57,7 +67,7 @@ func NewNeighbours(cfg config.FulfillmentConfig, gateway config.InternalGatewayC
 // NewActivities собирает Activities fulfillment поверх store слайса order и
 // адаптеров соседних контекстов. Workflow-код зависимостей не получает: внешние
 // операции выполняются только этими Activities (ADR 5).
-func NewActivities(store orderdi.Store, neighbours Neighbours, uc *telemetry.UseCases) *fulfillmenttemporal.Activities {
+func NewActivities(store Store, neighbours Neighbours, uc *telemetry.UseCases) *fulfillmenttemporal.Activities {
 	return &fulfillmenttemporal.Activities{
 		Orders:      store,
 		Payments:    neighbours.Payments,

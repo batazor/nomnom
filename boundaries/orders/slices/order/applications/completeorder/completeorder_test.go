@@ -3,6 +3,7 @@ package completeorder_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,14 +22,17 @@ func setup(t *testing.T, state order.State) (completeorder.Handler, *memory.Stor
 	return completeorder.NewHandler(store, store, store), store
 }
 
+var completedAt = time.Date(2026, 5, 1, 13, 0, 0, 0, time.UTC)
+
 // AC-120 and AC-121: a confirmed Order completes once with one OrderCompleted.
 func TestCompleteOrderOnceWithOutboxRecord(t *testing.T) {
 	handler, store := setup(t, order.StateConfirmed)
-	in := completeorder.Input{OrderID: "order-1"}
+	in := completeorder.Input{OrderID: "order-1", CompletedAt: completedAt}
 
 	first, err := handler.Handle(context.Background(), in)
 	require.NoError(t, err)
-	retried, err := handler.Handle(context.Background(), in)
+	// A retry carries the same moment; even another one adds no event.
+	retried, err := handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1", CompletedAt: completedAt.Add(time.Minute)})
 	require.NoError(t, err)
 
 	assert.Equal(t, completeorder.Result{Outcome: completeorder.OutcomeCompleted}, first)
@@ -40,7 +44,7 @@ func TestCompleteOrderOnceWithOutboxRecord(t *testing.T) {
 		AggregateType:    "order",
 		AggregateID:      "order-1",
 		AggregateVersion: 2,
-		Event:            order.OrderCompleted{OrderID: "order-1", PlacedAt: ordertest.PlacedAt},
+		Event:            order.OrderCompleted{OrderID: "order-1", PlacedAt: ordertest.PlacedAt, CompletedAt: completedAt},
 	}}, store.OutboxRecords())
 }
 
@@ -50,7 +54,7 @@ func TestCompleteOrderRejectsOtherStates(t *testing.T) {
 		t.Run(string(state), func(t *testing.T) {
 			handler, store := setup(t, state)
 
-			_, err := handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1"})
+			_, err := handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1", CompletedAt: completedAt})
 
 			assert.Equal(t, order.InvalidTransition{From: state, Trigger: order.TriggerComplete}, err)
 			snapshot, _ := store.Snapshot("order-1")
@@ -63,9 +67,12 @@ func TestCompleteOrderRejectsOtherStates(t *testing.T) {
 func TestCompleteOrderInputAndMissingOrder(t *testing.T) {
 	handler, _ := setup(t, order.StateConfirmed)
 
-	_, err := handler.Handle(context.Background(), completeorder.Input{})
+	_, err := handler.Handle(context.Background(), completeorder.Input{CompletedAt: completedAt})
 	require.ErrorIs(t, err, application.ErrInvalidInput)
 
-	_, err = handler.Handle(context.Background(), completeorder.Input{OrderID: "missing"})
+	_, err = handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1"})
+	require.ErrorIs(t, err, application.ErrInvalidInput)
+
+	_, err = handler.Handle(context.Background(), completeorder.Input{OrderID: "missing", CompletedAt: completedAt})
 	require.ErrorIs(t, err, order.ErrOrderNotFound)
 }

@@ -7,7 +7,6 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/getorder"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -28,11 +27,17 @@ type Authorizer struct {
 	writeError error
 	// restaurants are the written order#restaurant relationships.
 	restaurants map[order.ID]order.RestaurantID
-	writes      int
+	// deliveries are the written order#delivery relationships.
+	deliveries map[order.ID]string
+	writes     int
 }
 
 func NewAuthorizer() *Authorizer {
-	return &Authorizer{grants: make(map[grant]struct{}), restaurants: make(map[order.ID]order.RestaurantID)}
+	return &Authorizer{
+		grants:      make(map[grant]struct{}),
+		restaurants: make(map[order.ID]order.RestaurantID),
+		deliveries:  make(map[order.ID]string),
+	}
 }
 
 func (a *Authorizer) Allow(subject application.Subject, permission application.Permission, resource application.Resource) {
@@ -83,39 +88,43 @@ func (a *Authorizer) GrantOrderRelationships(_ context.Context, orderID order.ID
 	return application.AuthorizationRevision("memory:" + string(orderID)), nil
 }
 
-// AssignCourier grants view on the Order to the next courier and revokes it
-// from the previous one, as order#courier would.
-func (a *Authorizer) AssignCourier(_ context.Context, orderID order.ID, next recordcourierassignment.Assignment, previous *recordcourierassignment.Assignment) (application.AuthorizationRevision, error) {
+// LinkDelivery writes order#delivery of deliveryID and deletes that of
+// the displaced one, as one SpiceDB request would: an Order has one relation.
+func (a *Authorizer) LinkDelivery(_ context.Context, orderID order.ID, deliveryID, _ string) (application.AuthorizationRevision, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.writeError != nil {
 		return "", a.writeError
 	}
-	resource := application.Resource{Type: getorder.ResourceOrder, ID: string(orderID)}
-	if previous != nil && previous.CourierID != "" && previous.CourierID != next.CourierID {
-		delete(a.grants, grant{subject: application.Subject{Kind: application.SubjectUser, ID: previous.CourierID}, permission: getorder.PermissionView, resource: resource})
-	}
-	a.grants[grant{subject: application.Subject{Kind: application.SubjectUser, ID: next.CourierID}, permission: getorder.PermissionView, resource: resource}] = struct{}{}
+	a.deliveries[orderID] = deliveryID
 	a.writes++
-	return application.AuthorizationRevision(fmt.Sprintf("memory:%s:courier:%d", orderID, a.writes)), nil
+	return application.AuthorizationRevision(fmt.Sprintf("memory:%s:delivery:%d", orderID, a.writes)), nil
 }
 
-// ReleaseCourier revokes view on the Order from the released courier, as a
-// DELETE of order#courier would; order#delivery is not modelled.
-func (a *Authorizer) ReleaseCourier(_ context.Context, orderID order.ID, released recordcourierassignment.Assignment, _ bool) (application.AuthorizationRevision, error) {
+// UnlinkDelivery deletes order#delivery of deliveryID.
+func (a *Authorizer) UnlinkDelivery(_ context.Context, orderID order.ID, deliveryID string) (application.AuthorizationRevision, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.writeError != nil {
 		return "", a.writeError
 	}
-	resource := application.Resource{Type: getorder.ResourceOrder, ID: string(orderID)}
-	delete(a.grants, grant{subject: application.Subject{Kind: application.SubjectUser, ID: released.CourierID}, permission: getorder.PermissionView, resource: resource})
+	if a.deliveries[orderID] == deliveryID {
+		delete(a.deliveries, orderID)
+	}
 	a.writes++
-	return application.AuthorizationRevision(fmt.Sprintf("memory:%s:courier:%d", orderID, a.writes)), nil
+	return application.AuthorizationRevision(fmt.Sprintf("memory:%s:delivery:%d", orderID, a.writes)), nil
 }
 
-// CourierWrites counts AssignCourier and ReleaseCourier writes.
-func (a *Authorizer) CourierWrites() int {
+// DeliveryOf returns the written order#delivery subject of an Order.
+func (a *Authorizer) DeliveryOf(orderID order.ID) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	deliveryID, ok := a.deliveries[orderID]
+	return deliveryID, ok
+}
+
+// DeliveryWrites counts LinkDelivery and UnlinkDelivery requests.
+func (a *Authorizer) DeliveryWrites() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.writes

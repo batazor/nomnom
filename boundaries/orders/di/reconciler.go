@@ -15,7 +15,7 @@ import (
 )
 
 // RelationshipReconciler — lifecycle.Worker процесса orders-reconciler: сверяет
-// relations order (customer, restaurant, courier, delivery) в SpiceDB с заказами
+// relations order (customer, restaurant, delivery) в SpiceDB с заказами
 // PostgreSQL сразу после старта и затем каждые interval. Ошибка прохода логируется; следующий проход повторит его.
 type RelationshipReconciler struct {
 	reconciler *reconcile.Reconciler

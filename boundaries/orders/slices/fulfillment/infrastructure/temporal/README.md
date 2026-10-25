@@ -10,7 +10,7 @@ Temporal-адаптер процесса Order Fulfillment по [ADR 5](../../..
 | `policy.go` | `Policy` — deadlines модели во входе workflow плюс переключатель `PublishStage`; `DefaultPolicy` содержит placeholders, а не продуктовые сроки |
 | `workflow.go` | Главный цикл: исполняет `Next` модели как Activity, ждёт `NextDeadline`, вызывает `Expire`, публикует `Stage`, исполняет план `Compensate` |
 | `signals.go` | Signals → `Apply`/`Decide` модели и журнал непринятых фактов; Update `CancellationRequested`: validator — `AdmitCancellation`, handler — `AcceptCancellation` |
-| `activities.go` | Activities и client-порты `Payments`, `Restaurants`, `Delivery` |
+| `activities.go` | Activities: загрузить `Order` → построить запрос → вызвать порт соседа или use case → классифицировать ошибку; client-порты `Payments`, `Restaurants`, `Delivery` и их DTO — в [`applications/neighbours`](../../applications/neighbours/neighbours.go) |
 | `client.go` | Реализация порта [`fulfillment`](../../../order/applications/fulfillment/README.md) слайса `order` на Temporal client |
 | `searchattribute.go` | Проверка и регистрация Search Attribute `OrderFulfillmentStage` |
 | `register.go` | Регистрация workflow и Activities в worker |
@@ -40,11 +40,11 @@ Update `CancellationRequested` принимается до Pickup; позже и
 
 ## Activities
 
-Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `replan_delivery_2`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`. Отказ платежа — `PaymentDecision`, а не ошибка. `InvalidInput`, `OrderNotFound` и `InvalidTransition` — non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
+Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `replan_delivery_2`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`. Отказ платежа — `PaymentDecision`, а не ошибка. Retryability задаёт таблица `retryabilityByKind` по виду `errorkind.Classify`: `invalid_input` — `InvalidInput`, `not_found` — `OrderNotFound`, `domain_rule` (запрет FSM, guard, правило домена) — `InvalidTransition`, все non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
 
 ## Worker
 
-Процесс `cmd/orders-worker` (composition root `di.InitializeWorker`, provider set `slices/fulfillment/di.WorkerSet`) регистрирует workflow и Activities через `Register`, а при `PublishStage` вызывает `EnsureStageSearchAttribute`: Keyword-атрибут `OrderFulfillmentStage` должен существовать в namespace, иначе worker создаёт его (`TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true`) или не стартует. Client-порты соседей реализуют [`slices/fulfillment/infrastructure/neighbours`](../neighbours): `Unavailable` (retryable ошибка), `Simulated` (только локально) и `grpcclient` — командные RPC соседей через internal gateway.
+Процесс `cmd/orders-worker` (composition root `di.InitializeWorker`, provider set `slices/fulfillment/di.WorkerSet`) регистрирует workflow и Activities через `Register`, а при `PublishStage` вызывает `EnsureStageSearchAttribute`: Keyword-атрибут `OrderFulfillmentStage` должен существовать в namespace, иначе worker создаёт его (`TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true`) или не стартует. Client-порты соседей ([`applications/neighbours`](../../applications/neighbours/neighbours.go)) реализуют [`slices/fulfillment/infrastructure/neighbours`](../neighbours) — без зависимости от Temporal-адаптера: `Unavailable` (retryable ошибка), `Simulated` (только локально) и `grpcclient` — командные RPC соседей через internal gateway.
 
 ## Не реализовано
 

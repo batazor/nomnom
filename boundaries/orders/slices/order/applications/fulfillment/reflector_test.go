@@ -221,7 +221,7 @@ func TestReflectRejectsInvalidInputAndUnknownOrders(t *testing.T) {
 
 	// InvalidTransition from a non-final state is a defect, not a late event.
 	_, err = reflector.Reflect(context.Background(), pickup("event-2"), func(current *order.Order) error {
-		_, err := current.Complete()
+		_, err := current.Complete(time.Now())
 		return err
 	})
 	var invalidTransition order.InvalidTransition

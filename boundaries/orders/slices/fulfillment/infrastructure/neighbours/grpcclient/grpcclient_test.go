@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,6 @@ import (
 	paymentsv1 "nomnom/orders/pkg/gateway/gen/nomnom/payments/v1"
 	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
-	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 )
 
 type fakePayments struct {
@@ -130,7 +130,7 @@ func serve(t *testing.T) *fakes {
 	return f
 }
 
-var payment = temporal.PaymentRequest{
+var payment = neighbours.PaymentRequest{
 	OrderID: "order-1", Amount: "20", Currency: "EUR", IdempotencyKey: "order:order-1:authorize_payment",
 }
 
@@ -157,7 +157,7 @@ func TestPaymentsDeclineIsDecision(t *testing.T) {
 	d, err := grpcclient.NewPayments(f.conn).Capture(context.Background(), payment)
 
 	require.NoError(t, err)
-	assert.Equal(t, temporal.PaymentDecision{Reason: "card_declined"}, d)
+	assert.Equal(t, neighbours.PaymentDecision{Reason: "card_declined"}, d)
 }
 
 // AC-458: a pending operation is retried by the Activity with the same key.
@@ -196,7 +196,7 @@ func TestErrorsMapToRetryability(t *testing.T) {
 			f := serve(t)
 			f.delivery.err = status.Error(tt.code, "boom")
 
-			err := grpcclient.NewDelivery(f.conn).Cancel(context.Background(), temporal.DeliveryRequest{OrderID: "order-1"})
+			err := grpcclient.NewDelivery(f.conn).Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"})
 
 			require.Error(t, err)
 			assert.Equal(t, tt.permanent, errors.Is(err, application.ErrInvalidInput))
@@ -207,9 +207,9 @@ func TestErrorsMapToRetryability(t *testing.T) {
 func TestRestaurantsRequestAndCancel(t *testing.T) {
 	f := serve(t)
 	restaurants := grpcclient.NewRestaurants(f.conn)
-	request := temporal.RestaurantOrderRequest{
+	request := neighbours.RestaurantOrderRequest{
 		OrderID: "order-1", RestaurantID: "restaurant-1",
-		Items: []temporal.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
+		Items: []neighbours.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
 	}
 
 	require.NoError(t, restaurants.RequestOrder(context.Background(), request))
@@ -226,10 +226,10 @@ func TestDeliveryCreateUsesRestaurantAddress(t *testing.T) {
 	f := serve(t)
 	d := grpcclient.NewDelivery(f.conn)
 
-	require.NoError(t, d.Create(context.Background(), temporal.DeliveryRequest{
+	require.NoError(t, d.Create(context.Background(), neighbours.DeliveryRequest{
 		OrderID: "order-1", RestaurantID: "restaurant-1", DeliveryAddress: "Main street 1",
 	}))
-	require.NoError(t, d.Cancel(context.Background(), temporal.DeliveryRequest{OrderID: "order-1"}))
+	require.NoError(t, d.Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
 
 	require.Len(t, f.delivery.created, 1)
 	assert.Equal(t, "Kitchen street 1", f.delivery.created[0].GetPickupAddress())
@@ -240,7 +240,7 @@ func TestDeliveryCreateWithoutRestaurantAddressIsPermanent(t *testing.T) {
 	f := serve(t)
 	f.restaurants.address = ""
 
-	err := grpcclient.NewDelivery(f.conn).Create(context.Background(), temporal.DeliveryRequest{OrderID: "order-1", RestaurantID: "r"})
+	err := grpcclient.NewDelivery(f.conn).Create(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1", RestaurantID: "r"})
 
 	require.ErrorIs(t, err, application.ErrInvalidInput)
 	assert.Empty(t, f.delivery.created)
@@ -250,5 +250,5 @@ func TestDeliveryReplanPreconditionIsSkipped(t *testing.T) {
 	f := serve(t)
 	f.delivery.err = status.Error(codes.FailedPrecondition, "candidate busy")
 
-	require.NoError(t, grpcclient.NewDelivery(f.conn).Replan(context.Background(), temporal.DeliveryRequest{OrderID: "order-1"}))
+	require.NoError(t, grpcclient.NewDelivery(f.conn).Replan(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
 }

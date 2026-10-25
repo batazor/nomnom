@@ -18,7 +18,6 @@ type Relation string
 const (
 	RelationCustomer   Relation = "customer"
 	RelationRestaurant Relation = "restaurant"
-	RelationCourier    Relation = "courier"
 	RelationDelivery   Relation = "delivery"
 )
 
@@ -27,7 +26,6 @@ const (
 var relationColumns = map[Relation]string{
 	RelationCustomer:   "customer_id",
 	RelationRestaurant: "restaurant_id",
-	RelationCourier:    "courier_id",
 	RelationDelivery:   "delivery_id",
 }
 
@@ -46,7 +44,7 @@ type RelationSubject struct {
 }
 
 // SubjectsOf returns the subject id of relation for each Order among ids that
-// has one; an Order without the subject (no courier yet) is absent.
+// has one; an Order without the subject (no Delivery yet) is absent.
 func (s *Store) SubjectsOf(ctx context.Context, relation Relation, ids []string) (map[string]string, error) {
 	column, err := relation.column()
 	if err != nil {

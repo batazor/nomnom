@@ -19,7 +19,7 @@ Package не является use case. Он объявляет единстве
 `Reflector` выполняет insert-first протокол Inbox для 8 входящих use cases:
 
 ```text
-UoW { Inbox.Accept(consumer, event_id) → load Order → domain method → Save } → commit → Notify(event_id)
+application.AcceptOnce: UoW { Inbox.Accept(consumer, event_id) → load Order → domain method → Save } → commit → Notify(event_id)
 ```
 
 | Результат доменного метода | Outcome | Сохраняется |
@@ -29,6 +29,6 @@ UoW { Inbox.Accept(consumer, event_id) → load Order → domain method → Save
 | `InvalidTransition` для `completed`/`cancelled` | `ignored_late` | Inbox |
 | Inbox duplicate | `duplicate` | ничего |
 
-`ReflectWith` добавляет шаг `InTransaction` внутри того же unit of work после `Save`: он выполняется для `applied` и `already_applied`, но не для `duplicate` и `ignored_late`, а его ошибка откатывает Inbox record. Так Record Courier Assignment пишет relationships курьера до commit (dual-write rule `docs/security.md`), в том числе при reassignment, когда факт уже записан.
+`ReflectWith` добавляет шаг `InTransaction` внутри того же unit of work после `Save`: он выполняется для `applied` и `already_applied`, но не для `duplicate` и `ignored_late`, а его ошибка откатывает Inbox record. Так Record Courier Assignment пишет `order#delivery` до commit (dual-write rule `docs/security.md`), в том числе при reassignment, когда факт уже записан.
 
 Workflow уведомляется во всех успешных ветках, включая duplicate: это восстанавливает сбой между commit и уведомлением при повторной доставке. Ошибка уведомления возвращается вызывающему consumer, чтобы сообщение не было подтверждено. Решение и отличие от формулировки event-driven документации описаны в OpenSpec change `implement-orders-application-layer`.

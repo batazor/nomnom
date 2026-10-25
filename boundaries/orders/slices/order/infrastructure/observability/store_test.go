@@ -1,8 +1,9 @@
-package di_test
+package observability_test
 
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,7 +12,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"nomnom/orders/slices/order/applications/completeorder"
-	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/memory"
@@ -28,11 +28,11 @@ func TestObservedStoreCountsRetriedCompletionOnce(t *testing.T) {
 
 	mem := memory.NewStore()
 	require.NoError(t, mem.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed))))
-	store := orderdi.ObservedStore{Store: mem, Metrics: observability.NewDomainMetrics(nil)}
-	handler := completeorder.NewHandler(store, store, store)
+	store := observability.ObservedStore{UnitOfWork: mem, Outbox: mem, Metrics: observability.NewDomainMetrics(nil)}
+	handler := completeorder.NewHandler(store, mem, store)
 
 	for range 2 {
-		_, err := handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1"})
+		_, err := handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1", CompletedAt: ordertest.PlacedAt.Add(time.Hour)})
 		require.NoError(t, err)
 	}
 

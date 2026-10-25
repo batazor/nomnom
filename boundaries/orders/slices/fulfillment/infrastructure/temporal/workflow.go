@@ -164,6 +164,9 @@ func (r *run) compensate(ctx workflow.Context) (Result, error) {
 
 func (r *run) execute(ctx workflow.Context, activity, step string, result any) error {
 	input := StepInput{OrderID: r.in.OrderID, IdempotencyKey: WorkflowID(r.in.OrderID) + ":" + step}
+	if activity == ActivityCompleteOrder {
+		input.DecidedAt = workflow.Now(ctx)
+	}
 	return workflow.ExecuteActivity(r.activityContext(ctx), activity, input).Get(ctx, result)
 }
 

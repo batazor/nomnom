@@ -158,12 +158,14 @@ func (o *Order) Confirm(occurredAt time.Time) (TransitionResult, error) {
 	return result, nil
 }
 
-func (o *Order) Complete() (TransitionResult, error) {
-	result, err := o.apply(TriggerComplete, TransitionInput{})
+// Complete records the successful outcome chosen by the fulfillment process
+// at completedAt; OrderCompleted carries that moment as its event time.
+func (o *Order) Complete(completedAt time.Time) (TransitionResult, error) {
+	result, err := o.apply(TriggerComplete, TransitionInput{OccurredAt: completedAt})
 	if err != nil {
 		return TransitionResult{}, err
 	}
-	o.events = append(o.events, OrderCompleted{OrderID: o.id, PlacedAt: o.placedAt})
+	o.events = append(o.events, OrderCompleted{OrderID: o.id, PlacedAt: o.placedAt, CompletedAt: completedAt})
 	return result, nil
 }
 

@@ -9,6 +9,7 @@ package temporal
 import (
 	"time"
 
+	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/domains/fulfillment"
 )
 
@@ -153,14 +154,15 @@ type Result struct {
 type StepInput struct {
 	OrderID        string
 	IdempotencyKey string
+	// DecidedAt is the workflow time the step was decided at, set for
+	// CompleteOrder: the completion moment of the Order, the same on every
+	// Activity attempt.
+	DecidedAt time.Time `json:",omitzero"`
 }
 
-// PaymentDecision is the business result of a financial operation; a decline
-// is a result, not an error.
-type PaymentDecision struct {
-	Approved bool
-	Reason   string
-}
+// PaymentDecision is the result of AuthorizePayment and CapturePayment: the
+// business result of the payments port; a decline is a result, not an error.
+type PaymentDecision = neighbours.PaymentDecision
 
 // FinalizeInput carries the negative outcome chosen by the workflow.
 type FinalizeInput struct {

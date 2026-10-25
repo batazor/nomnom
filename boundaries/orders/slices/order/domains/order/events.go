@@ -35,6 +35,8 @@ type OrderCompleted struct {
 	OrderID ID
 	// PlacedAt is the start of fulfillment, carried for its duration.
 	PlacedAt time.Time
+	// CompletedAt is the moment of completion and the time of the event.
+	CompletedAt time.Time
 }
 
 func (OrderCompleted) isOrderDomainEvent() {}

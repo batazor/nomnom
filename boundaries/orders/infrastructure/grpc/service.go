@@ -4,17 +4,10 @@ package grpcadapter
 
 import (
 	"context"
-	"errors"
-	"strings"
 
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/placeorder"
@@ -23,8 +16,6 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
-
-const errorDomain = "nomnom.orders.v1"
 
 type Service struct {
 	ordersv1.UnimplementedOrdersServiceServer
@@ -201,87 +192,4 @@ func orderState(state order.State) ordersv1.OrderState {
 	default:
 		return ordersv1.OrderState_ORDER_STATE_UNSPECIFIED
 	}
-}
-
-// transportError maps application and domain errors to the API error table of
-// the README. An unavailable dependency is checked before permission denial:
-// fail-closed authorization wraps it, and the caller may retry it.
-func transportError(err error) error {
-	code, reason, message := codes.Internal, "INTERNAL_ERROR", "internal error"
-	var metadata map[string]string
-	var notOrderable order.NotOrderable
-	var invalidTransition order.InvalidTransition
-	var cancellationNotAllowed order.CancellationNotAllowed
-	switch {
-	case errors.Is(err, ErrUnauthenticated):
-		code, reason, message = codes.Unauthenticated, "AUTHENTICATION_REQUIRED", err.Error()
-	case errors.Is(err, application.ErrDependencyUnavailable), errors.Is(err, fulfillment.ErrWorkflowNotFound):
-		code, reason, message = codes.Unavailable, "DEPENDENCY_UNAVAILABLE", "dependency unavailable"
-	case errors.Is(err, placeorder.ErrUnknownRestaurant):
-		code, reason, message = codes.NotFound, "RESTAURANT_NOT_FOUND", err.Error()
-	case errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders):
-		code, reason, message = codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS", err.Error()
-	case errors.Is(err, application.ErrInvalidInput):
-		code, reason, message = codes.InvalidArgument, "INVALID_ARGUMENT", err.Error()
-	case errors.As(err, &notOrderable):
-		code, reason, message = codes.FailedPrecondition, "ORDER_NOT_ORDERABLE", err.Error()
-		metadata = notOrderableMetadata(notOrderable)
-	case errors.Is(err, vo.ErrInvalidValue),
-		errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem):
-		code, reason, message = codes.InvalidArgument, "INVALID_ORDER", err.Error()
-	case errors.As(err, &cancellationNotAllowed):
-		code, reason, message = codes.FailedPrecondition, cancellationReason(cancellationNotAllowed), err.Error()
-	case errors.As(err, &invalidTransition), errors.Is(err, fulfillment.ErrCancellationRefused):
-		code, reason, message = codes.FailedPrecondition, "ORDER_STATE_CONFLICT", err.Error()
-	case errors.Is(err, application.ErrPermissionDenied):
-		code, reason, message = codes.PermissionDenied, "OPERATION_NOT_ALLOWED", err.Error()
-	case errors.Is(err, order.ErrOrderNotFound):
-		code, reason, message = codes.NotFound, "ORDER_NOT_FOUND", err.Error()
-	case errors.Is(err, order.ErrOrderAlreadyExists):
-		code, reason, message = codes.AlreadyExists, "ORDER_ALREADY_EXISTS", err.Error()
-	case errors.Is(err, application.ErrConcurrencyConflict):
-		code, reason, message = codes.Aborted, "CONCURRENCY_CONFLICT", err.Error()
-	}
-
-	withDetails, detailsErr := status.New(code, message).WithDetails(&errdetails.ErrorInfo{
-		Reason:   reason,
-		Domain:   errorDomain,
-		Metadata: metadata,
-	})
-	if detailsErr != nil {
-		return status.Error(code, message)
-	}
-	return withDetails.Err()
-}
-
-// notOrderableMetadata names the reasons of an unsatisfied OrderItemsOrderable
-// policy (FR-498): `codes` lists each reason code once in upper case,
-// `menu_item_ids` the Menu Items the reasons refer to, both comma-separated.
-func notOrderableMetadata(err order.NotOrderable) map[string]string {
-	var reasonCodes, menuItemIDs []string
-	seen := make(map[string]struct{}, len(err.Reasons))
-	for _, reason := range err.Reasons {
-		reasonCode := strings.ToUpper(string(reason.Code))
-		if _, duplicate := seen[reasonCode]; !duplicate {
-			seen[reasonCode] = struct{}{}
-			reasonCodes = append(reasonCodes, reasonCode)
-		}
-		if reason.MenuItemID != "" {
-			menuItemIDs = append(menuItemIDs, string(reason.MenuItemID))
-		}
-	}
-	return map[string]string{
-		"codes":         strings.Join(reasonCodes, ","),
-		"menu_item_ids": strings.Join(menuItemIDs, ","),
-	}
-}
-
-// cancellationReason names the cancellation window rule that refused the
-// request, for example CANCELLATION_WINDOW_EXPIRED, so that a client can tell it
-// from a finished Order (FR-494).
-func cancellationReason(err order.CancellationNotAllowed) string {
-	if len(err.Reasons) == 0 {
-		return "ORDER_STATE_CONFLICT"
-	}
-	return strings.ToUpper(string(err.Reasons[0].Code))
 }

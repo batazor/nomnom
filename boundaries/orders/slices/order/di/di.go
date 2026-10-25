@@ -16,7 +16,6 @@ import (
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/getorder"
-	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
@@ -37,9 +36,14 @@ import (
 // добавляется полем в структуру зависимостей набора и provider'ом; позиционных
 // конструкторов нет.
 var (
-	// PostgresSet — общий PostgreSQL store процесса (ADR 8) и его роль портов Store.
-	// Store процесса — PostgreSQL под декоратором бизнес-метрик (ObservedStore).
-	PostgresSet = wire.NewSet(NewPostgresStore, observability.NewDomainMetrics, NewObservedStore)
+	// PostgresSet — общий PostgreSQL store процесса (ADR 8) во всех ролях портов:
+	// ProcessStore — PostgreSQL с Outbox из messaging/outbound, Unit of Work и
+	// Outbox под декоратором бизнес-метрик (observability.ObservedStore).
+	PostgresSet = wire.NewSet(NewPostgresStore, observability.NewDomainMetrics, NewProcessStore,
+		wire.Bind(new(PlacementStore), new(*ProcessStore)),
+		wire.Bind(new(ReadModels), new(*ProcessStore)),
+		wire.Bind(new(InboxStore), new(*ProcessStore)),
+		wire.Bind(new(spicedb.RevisionReader), new(*ProcessStore)))
 	// TelemetrySet — инструменты телеметрии use cases, общие для handlers процесса.
 	TelemetrySet = wire.NewSet(observability.UseCases)
 	// APISet — command и query use cases cmd/orders и их порты, кроме Workflow:
@@ -50,51 +54,6 @@ var (
 	// client открывает KafkaConsumer.Start.
 	ConsumerSet = wire.NewSet(NewCourierRelationships, wire.Struct(new(Consumer), "*"))
 )
-
-// Store — persistence-порты слайса: Unit of Work, repository, Inbox, Outbox,
-// idempotency keys, read models и authorization revision. В процессах — общий
-// PostgreSQL (ADR 8), в unit-тестах — in-memory store.
-type Store interface {
-	application.UnitOfWork
-	application.Inbox
-	order.Repository
-	Append(ctx context.Context, aggregateID order.ID, aggregateVersion uint64, events []order.DomainEvent) error
-	FindOrder(ctx context.Context, customerID order.CustomerID, key string) (order.ID, bool, error)
-	RememberOrder(ctx context.Context, customerID order.CustomerID, key string, orderID order.ID) error
-	RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error
-	Revision(ctx context.Context, orderID string) (application.AuthorizationRevision, bool, error)
-	recordcourierassignment.Assignments
-	OrderView(ctx context.Context, id order.ID) (getorder.OrderView, error)
-	ListCustomerOrders(ctx context.Context, request listcustomerorders.PageRequest) (listcustomerorders.Page, error)
-	CountByState(ctx context.Context) (map[order.State]int64, error)
-}
-
-// ObservedStore — Store, который после commit внешнего Unit of Work записывает
-// бизнес-метрики по Domain Events, попавшим в Outbox (observability.DomainMetrics).
-type ObservedStore struct {
-	Store
-	Metrics *observability.DomainMetrics
-}
-
-// NewObservedStore — Store процессов поверх PostgreSQL.
-func NewObservedStore(store *postgres.Store, metrics *observability.DomainMetrics) Store {
-	return ObservedStore{Store: store, Metrics: metrics}
-}
-
-func (s ObservedStore) Do(ctx context.Context, fn func(ctx context.Context) error) error {
-	ctx, done := s.Metrics.Track(ctx)
-	err := s.Store.Do(ctx, fn)
-	done(err)
-	return err
-}
-
-func (s ObservedStore) Append(ctx context.Context, aggregateID order.ID, aggregateVersion uint64, events []order.DomainEvent) error {
-	if err := s.Store.Append(ctx, aggregateID, aggregateVersion, events); err != nil {
-		return err
-	}
-	s.Metrics.Appended(ctx, events)
-	return nil
-}
 
 // Authorizer — permission checks use cases и creation-time relationships слайса.
 type Authorizer interface {
@@ -171,7 +130,7 @@ func NewPostgresStore(cfg config.PostgresConfig) (*postgres.Store, func(), error
 // NewAuthorizer connects the authorization ports to SpiceDB (ADR 18). The
 // endpoint is required: a process that checks permissions does not start
 // without it. Checks of an Order read at least as fresh as its stored revision.
-func NewAuthorizer(cfg config.SpiceDBConfig, store Store) (Authorizer, func(), error) {
+func NewAuthorizer(cfg config.SpiceDBConfig, revisions spicedb.RevisionReader) (Authorizer, func(), error) {
 	if strings.TrimSpace(cfg.Endpoint) == "" {
 		return nil, nil, fmt.Errorf("%s is required: orders checks permissions in SpiceDB", config.EnvSpiceDBEndpoint)
 	}
@@ -179,22 +138,22 @@ func NewAuthorizer(cfg config.SpiceDBConfig, store Store) (Authorizer, func(), e
 	if err != nil {
 		return nil, nil, err
 	}
-	return spicedb.NewAuthorizer(client, store, cfg.Timeout), func() { _ = client.Close() }, nil
+	return spicedb.NewAuthorizer(client, revisions, cfg.Timeout), func() { _ = client.Close() }, nil
 }
 
-// CourierRelationships — writer order#courier и order#delivery процесса
-// orders-consumer: назначение (Record Courier Assignment) и снятие без замены
-// или отмена Delivery (Record Courier Release).
+// CourierRelationships — writer order#delivery процесса orders-consumer:
+// назначение (Record Courier Assignment) и отмена Delivery (Record Courier
+// Release). Доступ курьера к заказу отзывает delivery (delivery#courier).
 type CourierRelationships interface {
 	recordcourierassignment.Relationships
 	recordcourierrelease.Relationships
 }
 
-// NewCourierRelationships подключает consumer к SpiceDB: связи курьера пишутся
+// NewCourierRelationships подключает consumer к SpiceDB: order#delivery пишется
 // в Inbox unit of work до commit, поэтому без SPICEDB__ENDPOINT процесс не стартует.
 func NewCourierRelationships(cfg config.SpiceDBConfig) (CourierRelationships, func(), error) {
 	if strings.TrimSpace(cfg.Endpoint) == "" {
-		return nil, nil, fmt.Errorf("%s is required: orders-consumer writes courier relationships to SpiceDB", config.EnvSpiceDBEndpoint)
+		return nil, nil, fmt.Errorf("%s is required: orders-consumer writes order#delivery to SpiceDB", config.EnvSpiceDBEndpoint)
 	}
 	client, err := spicedb.Dial(cfg)
 	if err != nil {

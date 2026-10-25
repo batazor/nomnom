@@ -9,15 +9,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 // CourierAssignment reads the Courier Assignment of an Order and locks its row
 // until the end of the active transaction, so reassignments of one Order apply
 // one after another.
-func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (recordcourierassignment.Assignment, bool, error) {
+func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (order.CourierAssignment, bool, error) {
 	var (
 		deliveryID, courierID *string
 		assignedAt            *time.Time
@@ -27,17 +25,17 @@ func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (record
 		SELECT delivery_id, courier_id, courier_assigned_at, courier_delivery_version FROM orders WHERE id = $1 FOR UPDATE`, orderID,
 	).Scan(&deliveryID, &courierID, &assignedAt, &version)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return recordcourierassignment.Assignment{}, false, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
+		return order.CourierAssignment{}, false, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
 	}
 	if err != nil {
-		return recordcourierassignment.Assignment{}, false, fmt.Errorf("read courier assignment of %s: %w", orderID, err)
+		return order.CourierAssignment{}, false, fmt.Errorf("read courier assignment of %s: %w", orderID, err)
 	}
 	// A released assignment keeps its time with an empty courier (and, for a
 	// cancelled Delivery, an empty delivery): it still orders later events.
 	if assignedAt == nil {
-		return recordcourierassignment.Assignment{}, false, nil
+		return order.CourierAssignment{}, false, nil
 	}
-	return recordcourierassignment.Assignment{
+	return order.CourierAssignment{
 		DeliveryID: deref(deliveryID), CourierID: deref(courierID), AssignedAt: assignedAt.UTC(),
 		DeliveryVersion: uint64(version), //nolint:gosec // the column is CHECK (>= 0).
 	}, true, nil
@@ -55,7 +53,7 @@ func deref(s *string) string {
 // delivery or courier is stored as NULL, so the relation is absent for the
 // reconciliation. The Delivery version is stored with it and orders later
 // courier events.
-func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment recordcourierassignment.Assignment, revision application.AuthorizationRevision) error {
+func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment order.CourierAssignment, revision string) error {
 	if assignment.DeliveryVersion > math.MaxInt64 {
 		return fmt.Errorf("remember courier assignment of %s: delivery version %d overflows BIGINT", orderID, assignment.DeliveryVersion)
 	}
@@ -66,7 +64,7 @@ func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID,
 		    authorization_revision = COALESCE(NULLIF($6, ''), authorization_revision)
 		WHERE id = $1`,
 		orderID, assignment.DeliveryID, assignment.CourierID, assignment.AssignedAt,
-		int64(assignment.DeliveryVersion), string(revision))
+		int64(assignment.DeliveryVersion), revision)
 	if err != nil {
 		return fmt.Errorf("remember courier assignment of %s: %w", orderID, err)
 	}

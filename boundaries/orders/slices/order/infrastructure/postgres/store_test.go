@@ -15,6 +15,7 @@ import (
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
+	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 )
 
@@ -41,7 +42,7 @@ func TestUnitOfWorkRollsBackOrderAndOutbox(t *testing.T) {
 
 	err := store.Do(ctx, func(ctx context.Context) error {
 		require.NoError(t, store.Add(ctx, placed))
-		require.NoError(t, store.Append(ctx, id, 1, []order.DomainEvent{order.OrderCompleted{OrderID: id}}))
+		require.NoError(t, outbound.NewOutbox(store).Append(ctx, id, 1, []order.DomainEvent{order.OrderCompleted{OrderID: id, CompletedAt: time.Now()}}))
 		return failure
 	})
 
@@ -71,6 +72,6 @@ func TestUnitOfWorkCommitsNestedAndRollsBackPanic(t *testing.T) {
 	_, err = store.Get(ctx, panicked)
 	require.ErrorIs(t, err, order.ErrOrderNotFound)
 
-	require.ErrorIs(t, store.Append(ctx, committed, 1, []order.DomainEvent{order.OrderCompleted{OrderID: committed}}),
+	require.ErrorIs(t, outbound.NewOutbox(store).Append(ctx, committed, 1, []order.DomainEvent{order.OrderCompleted{OrderID: committed, CompletedAt: time.Now()}}),
 		postgres.ErrOutboxOutsideTransaction)
 }

@@ -7,7 +7,6 @@ package messaging
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
@@ -16,6 +15,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/slices/order/applications/confirmorder"
+	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
@@ -26,7 +26,6 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
-	"nomnom/orders/slices/order/domains/order"
 )
 
 // Stream topics of the source aggregates. Names are provisional until the
@@ -137,18 +136,32 @@ func isDuplicate(out any) bool {
 	}
 }
 
-// classify maps application and domain errors to the consumer error classes.
+// transient leaves an error unmarked: the consumer retries it with backoff.
+func transient(err error) error { return err }
+
+// classByKind is the consumer error class (ADR 28) of every
+// application.ErrorKind: redelivery cannot fix invalid input, a missing Order
+// or a denial; a domain refusal is an expected business outcome; the rest is
+// retried.
+var classByKind = map[application.ErrorKind]func(error) error{
+	application.KindInvalidInput:  messaging.Permanent,
+	application.KindNotFound:      messaging.Permanent,
+	application.KindPermission:    messaging.Permanent,
+	application.KindDomainRule:    messaging.Business,
+	application.KindAlreadyExists: messaging.Business,
+	application.KindConflict:      transient,
+	application.KindUnavailable:   transient,
+	application.KindInternal:      transient,
+}
+
+// classify marks a handler error with the class of its kind.
 func classify(err error) error {
-	var invalid order.InvalidTransition
-	var guard order.GuardFailed
-	switch {
-	case err == nil:
+	if err == nil {
 		return nil
-	case errors.Is(err, application.ErrInvalidInput), errors.Is(err, order.ErrOrderNotFound):
-		return messaging.Permanent(err)
-	case errors.As(err, &invalid), errors.As(err, &guard):
-		return messaging.Business(err)
-	default:
+	}
+	mark, ok := classByKind[errorkind.Classify(err)]
+	if !ok {
 		return err
 	}
+	return mark(err)
 }

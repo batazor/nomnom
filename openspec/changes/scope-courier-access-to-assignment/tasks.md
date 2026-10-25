@@ -14,9 +14,9 @@
 
 ## 3. orders
 
-- [ ] 3.1 SpiceDB adapter: Record Courier Assignment пишет только `order#delivery` (смена Delivery — `TOUCH`+`DELETE` одним запросом, та же Delivery — без запроса); Release удаляет `order#delivery` только при `DeliveryCancelled`. Тесты AC-518, AC-519, AC-534, AC-535.
-- [ ] 3.2 Reconciler не сверяет `courier`; тесты AC-523, AC-524, AC-667.
-- [ ] 3.3 README orders, README Record Courier Assignment и Release.
+- [x] 3.1 SpiceDB adapter: Record Courier Assignment пишет только `order#delivery` (смена Delivery — `TOUCH`+`DELETE` одним запросом, та же Delivery — без запроса); Release удаляет `order#delivery` только при `DeliveryCancelled`. Тесты AC-518, AC-519, AC-534, AC-535.
+- [x] 3.2 Reconciler не сверяет `courier`; тесты AC-523, AC-524, AC-667.
+- [x] 3.3 README orders, README Record Courier Assignment и Release.
 
 ## 4. Документация и проверка
 

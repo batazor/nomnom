@@ -1,5 +1,5 @@
 // Package reconcile keeps the order relationships of the authorization graph
-// (order#customer, order#restaurant, order#courier, order#delivery) consistent
+// (order#customer, order#restaurant, order#delivery) consistent
 // with the Orders in PostgreSQL (docs/security.md, relationship lifecycle): it
 // deletes orphan and stale relationships after a grace period and restores
 // missing ones at once, but only after re-reading the subject under a row lock
@@ -34,7 +34,6 @@ type Relation struct {
 var Relations = []Relation{
 	{Name: postgres.RelationCustomer, SubjectType: "user"},
 	{Name: postgres.RelationRestaurant, SubjectType: "restaurant"},
-	{Name: postgres.RelationCourier, SubjectType: "user"},
 	{Name: postgres.RelationDelivery, SubjectType: "delivery"},
 }
 

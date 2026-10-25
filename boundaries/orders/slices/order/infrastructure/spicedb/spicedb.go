@@ -1,7 +1,8 @@
 // Package spicedb implements the authorization ports of the order slice on
 // SpiceDB (ADR 18): permission checks of the use cases, the creation-time
-// order#customer and order#restaurant relationships and the order#courier and
-// order#delivery relationships of the Courier Assignment.
+// order#customer and order#restaurant relationships and the order#delivery
+// relationship of the Courier Assignment. The schema has no order#courier:
+// the courier sees the Order through delivery->act_as_courier.
 // Schema: authorization/schema.zed.
 package spicedb
 
@@ -18,7 +19,6 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -29,7 +29,6 @@ const (
 	resourceOrder      = "order"
 	relationCustomer   = "customer"
 	relationRestaurant = "restaurant"
-	relationCourier    = "courier"
 	relationDelivery   = "delivery"
 	subjectUser        = "user"
 	subjectRestaurant  = "restaurant"
@@ -116,41 +115,26 @@ func (a *Authorizer) GrantOrderRelationships(ctx context.Context, orderID order.
 	)
 }
 
-// AssignCourier writes order#courier and order#delivery of next and deletes
-// those of previous that differ, in one atomic request: a reassignment never
-// leaves the Order visible to both couriers or to none. TOUCH and DELETE are
+// LinkDelivery writes order#delivery of deliveryID and deletes that of
+// displacedDeliveryID (when set) in one atomic request: the Order never links
+// both Deliveries or none. The courier sees the Order through
+// delivery->act_as_courier, which delivery owns. TOUCH and DELETE are
 // idempotent, so a redelivered event repeats the request safely.
-func (a *Authorizer) AssignCourier(ctx context.Context, orderID order.ID, next recordcourierassignment.Assignment, previous *recordcourierassignment.Assignment) (application.AuthorizationRevision, error) {
+func (a *Authorizer) LinkDelivery(ctx context.Context, orderID order.ID, deliveryID, displacedDeliveryID string) (application.AuthorizationRevision, error) {
 	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
-	updates := []*v1.RelationshipUpdate{
-		touch(resource, relationCourier, objectSubject(subjectUser, next.CourierID)),
-		touch(resource, relationDelivery, objectSubject(subjectDelivery, next.DeliveryID)),
+	updates := []*v1.RelationshipUpdate{touch(resource, relationDelivery, objectSubject(subjectDelivery, deliveryID))}
+	if displacedDeliveryID != "" && displacedDeliveryID != deliveryID {
+		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, displacedDeliveryID)))
 	}
-	if previous != nil && previous.CourierID != "" && previous.CourierID != next.CourierID {
-		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationCourier, objectSubject(subjectUser, previous.CourierID)))
-	}
-	if previous != nil && previous.DeliveryID != "" && previous.DeliveryID != next.DeliveryID {
-		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, previous.DeliveryID)))
-	}
-	return a.write(ctx, fmt.Sprintf("assign courier of order:%s", orderID), updates...)
+	return a.write(ctx, fmt.Sprintf("link delivery of order:%s", orderID), updates...)
 }
 
-// ReleaseCourier deletes order#courier of the released courier and, when
-// withDelivery, order#delivery in one request. DELETE of an absent
-// relationship is a no-op, so a repeat is idempotent.
-func (a *Authorizer) ReleaseCourier(ctx context.Context, orderID order.ID, released recordcourierassignment.Assignment, withDelivery bool) (application.AuthorizationRevision, error) {
+// UnlinkDelivery deletes order#delivery of a cancelled Delivery. DELETE of an
+// absent relationship is a no-op, so a repeat is idempotent.
+func (a *Authorizer) UnlinkDelivery(ctx context.Context, orderID order.ID, deliveryID string) (application.AuthorizationRevision, error) {
 	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
-	var updates []*v1.RelationshipUpdate
-	if released.CourierID != "" {
-		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationCourier, objectSubject(subjectUser, released.CourierID)))
-	}
-	if withDelivery && released.DeliveryID != "" {
-		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, released.DeliveryID)))
-	}
-	if len(updates) == 0 {
-		return "", nil
-	}
-	return a.write(ctx, fmt.Sprintf("release courier of order:%s", orderID), updates...)
+	return a.write(ctx, fmt.Sprintf("unlink delivery of order:%s", orderID),
+		update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, deliveryID)))
 }
 
 // write applies updates in one WriteRelationships request, which SpiceDB

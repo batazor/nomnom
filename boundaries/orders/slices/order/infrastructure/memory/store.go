@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -30,7 +29,7 @@ type state struct {
 	outbox      []OutboxRecord
 	idempotency map[idempotencyKey]order.ID
 	revisions   map[order.ID]application.AuthorizationRevision
-	assignments map[order.ID]recordcourierassignment.Assignment
+	assignments map[order.ID]order.CourierAssignment
 }
 
 // clone copies the containers; stored snapshots are replaced, never mutated.
@@ -41,7 +40,7 @@ func (s state) clone() state {
 		outbox:      append([]OutboxRecord(nil), s.outbox...),
 		idempotency: make(map[idempotencyKey]order.ID, len(s.idempotency)),
 		revisions:   make(map[order.ID]application.AuthorizationRevision, len(s.revisions)),
-		assignments: make(map[order.ID]recordcourierassignment.Assignment, len(s.assignments)),
+		assignments: make(map[order.ID]order.CourierAssignment, len(s.assignments)),
 	}
 	for id, snapshot := range s.orders {
 		cloned.orders[id] = snapshot

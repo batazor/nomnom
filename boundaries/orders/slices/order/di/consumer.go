@@ -1,6 +1,7 @@
 package di
 
 import (
+	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
@@ -13,23 +14,33 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/domains/order"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
+
+// InboxStore — роль хранилища handlers orders-consumer: Unit of Work,
+// Transactional Inbox, repository и Courier Assignment.
+type InboxStore interface {
+	application.UnitOfWork
+	application.Inbox
+	order.Repository
+	order.CourierAssignments
+}
 
 // Consumer — порты handlers orders-consumer; Wire заполняет все поля
 // (wire.Struct). Notifier workflow сюда не входит: его Temporal client с
 // metrics handler процесса открывает KafkaConsumer.Start, поэтому handlers
 // собирает Handlers уже после подключения.
 type Consumer struct {
-	Store         Store
+	Store         InboxStore
 	Relationships CourierRelationships
 	Telemetry     *telemetry.UseCases
 }
 
 // Handlers собирает application handlers, которые читают Kafka, под
 // декоратором телеметрии use cases. Record Courier Assignment и Record Courier
-// Release пишут связи курьера в SpiceDB внутри своего Inbox unit of work.
+// Release пишут order#delivery в SpiceDB внутри своего Inbox unit of work.
 func (c Consumer) Handlers(workflow fulfillment.Notifier) ordermessaging.Handlers {
 	store, relationships, uc := c.Store, c.Relationships, c.Telemetry
 	return ordermessaging.Handlers{

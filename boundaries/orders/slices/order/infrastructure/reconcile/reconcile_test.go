@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/postgres"
@@ -53,7 +52,7 @@ func newEnv(t *testing.T) *env {
 	return e
 }
 
-var customerRelation, courierRelation, deliveryRelation = Relations[0], Relations[2], Relations[3]
+var customerRelation, restaurantRelation, deliveryRelation = Relations[0], Relations[1], Relations[2]
 
 func (e *env) touch(orderID, customer string) { e.touchRelation(customerRelation, orderID, customer) }
 
@@ -133,82 +132,88 @@ func TestReconcileOrderCustomerRelationships(t *testing.T) {
 	assert.True(t, e.hasRelationship(committing, "customer-committing"), "a committed Order keeps its relationship")
 }
 
-// AC-524: courier and delivery relationships follow the stored Courier
-// Assignment; restaurant follows the Order.
-func TestReconcileCourierAndRestaurantRelationships(t *testing.T) {
+// AC-523: order#courier is not a reconciled relation: the schema has none, the
+// courier sees the Order through delivery->act_as_courier, which the
+// reconciler of delivery owns.
+func TestRelationsAreCustomerRestaurantDelivery(t *testing.T) {
+	names := make([]string, 0, len(Relations))
+	for _, relation := range Relations {
+		names = append(names, string(relation.Name))
+	}
+	assert.Equal(t, []string{"customer", "restaurant", "delivery"}, names)
+}
+
+// AC-524: the delivery relationship follows the stored Courier Assignment and
+// restaurant follows the Order: a previous Delivery that survived a lost
+// DELETE is stale and deleted after grace, the missing ones are restored.
+func TestReconcileDeliveryAndRestaurantRelationships(t *testing.T) {
 	e := newEnv(t)
 	assigned := id("assigned")
 	require.NoError(t, e.store.Add(e.ctx, ordertest.New(t, order.ID(assigned))))
-	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(assigned), recordcourierassignment.Assignment{
-		DeliveryID: "delivery-1", CourierID: "courier-new", AssignedAt: e.now,
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(assigned), order.CourierAssignment{
+		DeliveryID: "delivery-new", CourierID: "courier-1", AssignedAt: e.now,
 	}, ""))
-	// The previous courier survived a lost DELETE.
-	e.touchRelation(courierRelation, assigned, "courier-old")
+	e.touchRelation(deliveryRelation, assigned, "delivery-old")
 
 	e.pass(0)
-	assert.True(t, e.hasRelation(courierRelation, assigned, "courier-new"), "missing courier is restored")
-	assert.True(t, e.hasRelation(deliveryRelation, assigned, "delivery-1"), "missing delivery is restored")
-	assert.True(t, e.hasRelation(Relations[1], assigned, "restaurant-1"), "missing restaurant is restored")
-	assert.True(t, e.hasRelation(courierRelation, assigned, "courier-old"), "first sighting only marks a candidate")
+	assert.True(t, e.hasRelation(deliveryRelation, assigned, "delivery-new"), "missing delivery is restored")
+	assert.True(t, e.hasRelation(restaurantRelation, assigned, "restaurant-1"), "missing restaurant is restored")
+	assert.True(t, e.hasRelation(deliveryRelation, assigned, "delivery-old"), "first sighting only marks a candidate")
 
 	e.pass(11 * time.Minute)
-	assert.False(t, e.hasRelation(courierRelation, assigned, "courier-old"), "stale courier is deleted after grace")
-	assert.True(t, e.hasRelation(courierRelation, assigned, "courier-new"))
+	assert.False(t, e.hasRelation(deliveryRelation, assigned, "delivery-old"), "stale delivery is deleted after grace")
+	assert.True(t, e.hasRelation(deliveryRelation, assigned, "delivery-new"))
 }
 
-// AC-538: after Record Courier Release the courier (and, for a cancelled
-// Delivery, the delivery) column is NULL, so a surviving relationship is an
-// orphan and is deleted after grace.
-func TestReconcileReleasedCourier(t *testing.T) {
+// After Record Courier Release the delivery column of a cancelled Delivery is
+// NULL, so a surviving relationship is an orphan and is deleted after grace;
+// an unassignment keeps the Delivery.
+func TestReconcileReleasedDelivery(t *testing.T) {
 	e := newEnv(t)
 	unassigned, cancelled := id("unassigned"), id("cancelled")
 	for _, orderID := range []string{unassigned, cancelled} {
 		require.NoError(t, e.store.Add(e.ctx, ordertest.New(t, order.ID(orderID))))
-		e.touchRelation(courierRelation, orderID, "courier-1")
 		e.touchRelation(deliveryRelation, orderID, "delivery-1")
 	}
-	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(unassigned), recordcourierassignment.Assignment{
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(unassigned), order.CourierAssignment{
 		DeliveryID: "delivery-1", AssignedAt: e.now,
 	}, ""))
-	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(cancelled), recordcourierassignment.Assignment{
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(cancelled), order.CourierAssignment{
 		AssignedAt: e.now,
 	}, ""))
 
 	e.pass(0)
-	assert.True(t, e.hasRelation(courierRelation, unassigned, "courier-1"), "first sighting only marks a candidate")
+	assert.True(t, e.hasRelation(deliveryRelation, cancelled, "delivery-1"), "first sighting only marks a candidate")
 	e.pass(11 * time.Minute)
-	assert.False(t, e.hasRelation(courierRelation, unassigned, "courier-1"), "released courier is deleted")
 	assert.True(t, e.hasRelation(deliveryRelation, unassigned, "delivery-1"), "the delivery stays after an unassignment")
-	assert.False(t, e.hasRelation(courierRelation, cancelled, "courier-1"))
 	assert.False(t, e.hasRelation(deliveryRelation, cancelled, "delivery-1"), "a cancelled delivery is deleted")
 }
 
-// AC-667: a reassignment A→B wrote TOUCH B + DELETE A in SpiceDB and has not
-// committed when the pass reads PostgreSQL. The page still names courier A as
-// missing; the locked re-read waits for the commit, sees B and restores
-// nothing, so A never regains access.
-func TestReconcileDoesNotResurrectReplacedCourier(t *testing.T) {
+// AC-667: an assignment of a new Delivery B wrote TOUCH B + DELETE A in
+// SpiceDB and has not committed when the pass reads PostgreSQL. The page still
+// names Delivery A as missing; the locked re-read waits for the commit, sees B
+// and restores nothing, so A is never linked again.
+func TestReconcileDoesNotResurrectReplacedDelivery(t *testing.T) {
 	e := newEnv(t)
 	reassigned := id("reassigned")
 	require.NoError(t, e.store.Add(e.ctx, ordertest.New(t, order.ID(reassigned))))
-	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(reassigned), recordcourierassignment.Assignment{
-		DeliveryID: "delivery-1", CourierID: "courier-a", AssignedAt: e.now, DeliveryVersion: 2,
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(reassigned), order.CourierAssignment{
+		DeliveryID: "delivery-a", CourierID: "courier-1", AssignedAt: e.now, DeliveryVersion: 2,
 	}, ""))
 	e.touchRelation(customerRelation, reassigned, "customer-1")
-	e.touchRelation(Relations[1], reassigned, "restaurant-1")
-	e.touchRelation(deliveryRelation, reassigned, "delivery-1")
-	// The consumer of the reassignment: row lock, SpiceDB write, commit later.
+	e.touchRelation(restaurantRelation, reassigned, "restaurant-1")
+	// The consumer of the assignment: row lock, SpiceDB write, commit later.
 	locked, commit, committed := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
 		committed <- e.store.Do(e.ctx, func(ctx context.Context) error {
 			if _, _, err := e.store.CourierAssignment(ctx, order.ID(reassigned)); err != nil {
 				return err
 			}
-			e.touchRelation(courierRelation, reassigned, "courier-b")
+			e.touchRelation(deliveryRelation, reassigned, "delivery-b")
 			close(locked)
 			<-commit
-			return e.store.RememberCourierAssignment(ctx, order.ID(reassigned), recordcourierassignment.Assignment{
-				DeliveryID: "delivery-1", CourierID: "courier-b", AssignedAt: e.now, DeliveryVersion: 3,
+			return e.store.RememberCourierAssignment(ctx, order.ID(reassigned), order.CourierAssignment{
+				DeliveryID: "delivery-b", CourierID: "courier-2", AssignedAt: e.now, DeliveryVersion: 3,
 			}, "")
 		})
 	}()
@@ -220,7 +225,7 @@ func TestReconcileDoesNotResurrectReplacedCourier(t *testing.T) {
 		assert.NoError(t, err)
 		passed <- stats
 	}()
-	// The pass is blocked on the row lock of the in-flight reassignment.
+	// The pass is blocked on the row lock of the in-flight assignment.
 	require.Eventually(t, func() bool {
 		var waiting int
 		err := e.store.Pool().QueryRow(e.ctx, `SELECT count(*) FROM pg_locks WHERE NOT granted`).Scan(&waiting)
@@ -231,6 +236,6 @@ func TestReconcileDoesNotResurrectReplacedCourier(t *testing.T) {
 	stats := <-passed
 
 	assert.GreaterOrEqual(t, stats.MissingSuperseded, 1)
-	assert.False(t, e.hasRelation(courierRelation, reassigned, "courier-a"), "the replaced courier is not restored")
-	assert.True(t, e.hasRelation(courierRelation, reassigned, "courier-b"))
+	assert.False(t, e.hasRelation(deliveryRelation, reassigned, "delivery-a"), "the replaced Delivery is not restored")
+	assert.True(t, e.hasRelation(deliveryRelation, reassigned, "delivery-b"))
 }

@@ -50,8 +50,8 @@ type Reflection struct {
 	WorkflowNotified bool
 }
 
-// Reflector runs the insert-first Inbox protocol shared by the use cases that
-// reflect results of restaurants and delivery:
+// Reflector runs the insert-first Inbox protocol (application.AcceptOnce)
+// shared by the use cases that reflect results of restaurants and delivery:
 //
 //	UoW { Inbox.Accept → load Order → domain method → Save } → commit → Notify
 //
@@ -88,16 +88,7 @@ func (r Reflector) ReflectWith(ctx context.Context, fact InboundFact, apply func
 	}
 
 	var outcome Outcome
-	err := r.uow.Do(ctx, func(ctx context.Context) error {
-		accepted, err := r.inbox.Accept(ctx, fact.Consumer, fact.EventID)
-		if err != nil {
-			return fmt.Errorf("accept inbox event: %w", err)
-		}
-		if !accepted {
-			outcome = OutcomeDuplicate
-			return nil
-		}
-
+	accepted, err := application.AcceptOnce(ctx, r.uow, r.inbox, fact.Consumer, fact.EventID, func(ctx context.Context) error {
 		current, err := r.orders.Get(ctx, fact.OrderID)
 		if err != nil {
 			return err
@@ -118,6 +109,9 @@ func (r Reflector) ReflectWith(ctx context.Context, fact InboundFact, apply func
 	})
 	if err != nil {
 		return Reflection{}, err
+	}
+	if !accepted {
+		outcome = OutcomeDuplicate
 	}
 
 	reflection := Reflection{Outcome: outcome}

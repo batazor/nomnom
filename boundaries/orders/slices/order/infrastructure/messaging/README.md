@@ -24,12 +24,14 @@ Kafka → Subscriber → EventGroupProcessor → watermill_handler → mapper �
 
 ## Ошибки
 
+Вид ошибки use case даёт `errorkind.Classify`; класс consumer'а — таблица `classByKind` в [`watermill_handler.go`](watermill_handler.go), покрывающая все виды.
+
 | Ошибка | Класс | Действие |
 | --- | --- | --- |
 | Битый record, невалидный envelope (`GuardedUnmarshaler`) | deserialization | `<stream>.dlq` + ack до handler |
-| `application.ErrInvalidInput`, `order.ErrOrderNotFound`, битый Protobuf payload, неизвестный `event_type` | permanent | `<stream>.dlq` + ack |
-| `order.InvalidTransition`, `order.GuardFailed` | business | ack, лог |
-| Прочие (store, Temporal) | transient | retry с backoff (`messaging.DefaultRetryPolicy`), затем nack и повторная доставка |
+| Вид `invalid_input`, `not_found`, `permission`; битый Protobuf payload, неизвестный `event_type` | permanent | `<stream>.dlq` + ack |
+| Вид `domain_rule` (`order.InvalidTransition`, `order.GuardFailed`, …), `already_exists` | business | ack, лог |
+| Вид `conflict`, `unavailable`, `internal` (store, Temporal) | transient | retry с backoff (`messaging.DefaultRetryPolicy`), затем nack и повторная доставка |
 | Duplicate по Inbox | — | ack, no-op, `nomnom.inbox.duplicates` (workflow уведомляется повторно с тем же `event_id`) |
 
 ## Тесты
