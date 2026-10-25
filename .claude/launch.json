@@ -54,6 +54,28 @@
         "VITE_ENABLE_MOCKS": "true"
       },
       "port": 4187
+    },
+    {
+      "name": "customer-ui-kind-login",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--prefix",
+        "boundaries/ui",
+        "vite",
+        "boundaries/ui",
+        "--port",
+        "4180",
+        "--strictPort"
+      ],
+      "env": {
+        "VITE_PUBLIC_GRAPHQL_URL": "http://localhost:3010/graphql",
+        "VITE_LOCALE": "ru",
+        "VITE_ENABLE_MOCKS": "false",
+        "VITE_OIDC_ISSUER": "http://localhost:5556/dex",
+        "VITE_DEPLOYMENT_ENVIRONMENT": "kind"
+      },
+      "port": 4180,
+      "autoPort": false
     }
   ]
 }

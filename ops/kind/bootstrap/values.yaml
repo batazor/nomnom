@@ -47,14 +47,17 @@ identity:
 
 # ADR 35: Dex для входа в браузере (templates/dex.yaml). Браузер видит Dex через
 #   kubectl -n nomnom-data port-forward svc/dex 5556
-# поэтому issuer — localhost. Customer UI — Vite dev server на localhost:4173.
+# поэтому issuer — localhost. Customer UI — Vite dev server на localhost:4173 (4180 —
+# второй dev server, когда 4173 занят, .claude/launch.json customer-ui-kind-login).
 dex:
   issuer: http://localhost:5556/dex
   allowedOrigins:
     - http://localhost:4173
+    - http://localhost:4180
   uiClientId: nomnom-ui
   uiRedirectURIs:
     - http://localhost:4173/auth/callback
+    - http://localhost:4180/auth/callback
   # Audience access token: UI запрашивает scope audience:server:client_id:nomnom-bff, Dex
   # выдаёт его, потому что nomnom-bff доверяет nomnom-ui (trustedPeers).
   bffClientId: nomnom-bff

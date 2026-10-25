@@ -1,0 +1,15 @@
+.board-column-sign-in,
+.sign-in {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.board-column-sign-in:empty {
+  display: none;
+}
+
+.sign-in-user {
+  overflow-wrap: anywhere;
+}

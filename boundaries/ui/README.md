@@ -17,6 +17,10 @@ npm run dev
 
 Для локального mock transport в `.env.local` используется `VITE_ENABLE_MOCKS=true`. Единственный business endpoint приложения — `VITE_PUBLIC_GRAPHQL_URL`, адрес публичного GraphQL API BFF.
 
+## Вход через Dex
+
+С `VITE_OIDC_ISSUER` (в kind — `http://localhost:5556/dex`, port-forward `svc/dex` в `nomnom-data`) в каждой колонке доски есть кнопка «Войти: <роль>» ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)). `src/shared/auth/oidc.ts` выполняет authorization code + PKCE (public client `nomnom-ui`, scope `audience:server:client_id:nomnom-bff`, без `nonce`, `prompt=login`, чтобы в одном браузере войти несколькими пользователями); callback — route `/auth/callback`. Access token хранится только в памяти страницы и заменяет токен demo-пользователя этой роли (`AsRole`); перезагрузка страницы выходит из всех ролей. Redirect URI Dex разрешает для `localhost:4173` и `localhost:4180` (конфигурация `customer-ui-kind-login` в `.claude/launch.json`). Тестовые пользователи — `ops/kind/bootstrap/values.yaml` (`dex.users`).
+
 ## MSW-моки customer API
 
 Customer-схема BFF зафиксирована раньше resolvers (OpenSpec change [`add-customer-graphql-contract`](../../openspec/changes/add-customer-graphql-contract/)), поэтому UI развивается на MSW-моках той же схемы. Моки — только development и tests: в production bundle они не включаются, а данные fixtures демонстрационные.
