@@ -128,6 +128,8 @@ test("the kitchen tunables reach the composed handlers from configuration", asyn
     const container = createRestaurantsContainer(resourcesOf(config, mongo));
     try {
       return await container.cradle.readyTimeEstimator.estimate({
+        restaurantId: "restaurant",
+        items: [],
         acceptedAt,
       });
     } finally {

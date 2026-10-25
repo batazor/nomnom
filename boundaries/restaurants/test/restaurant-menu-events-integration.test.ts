@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
-
 import { fromBinary } from "@bufbuild/protobuf";
 import kafka from "@confluentinc/kafka-javascript";
-
 import {
   MenuItemAvailabilityChangedSchema,
   RestaurantOpenedSchema,
@@ -53,17 +51,16 @@ import {
   RESTAURANT_ORDER_AGGREGATE_TYPE,
   restaurantOrderEventMapper,
 } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+import { kafkaBrokers } from "./support/global-containers.ts";
 import { TestMenuAccessControl } from "./support/menus.ts";
 import { mongoUri } from "./support/mongodb.ts";
 
 // Open Restaurant and Set Menu Item Availability → Outbox → restaurants-relay
 // → Kafka against real infrastructure, for example
 //   docker run -d -p 9092:9092 apache/kafka:4.1.0
-// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
-// KAFKA_BROKERS=localhost:9092
+// MongoDB is the testcontainer of the global setup (test/support/global-containers.ts).
 const uri = mongoUri();
-const brokers = process.env.KAFKA_BROKERS?.trim() ?? "";
-const skip = brokers === "" ? "KAFKA_BROKERS is not set" : false;
+const brokers = kafkaBrokers();
 
 type Received = {
   topic: string;
@@ -74,12 +71,12 @@ type Received = {
 
 const owner: Subject = { type: "user", id: "owner" };
 
-describe("Restaurant and Menu Integration Events reach Kafka", { skip }, () => {
+describe("Restaurant and Menu Integration Events reach Kafka", () => {
   let mongo: MongoDbConnection;
   let publisher: KafkaPublisher;
   const client = new kafka.KafkaJS.Kafka({
     kafkaJS: {
-      brokers: brokers.split(","),
+      brokers: brokers,
       logLevel: kafka.KafkaJS.logLevel.ERROR,
     },
   });
@@ -106,7 +103,7 @@ describe("Restaurant and Menu Integration Events reach Kafka", { skip }, () => {
     await admin.disconnect();
     publisher = await KafkaPublisher.connect({
       enabled: true,
-      brokers: brokers.split(","),
+      brokers: brokers,
       clientId: "restaurants-events-test",
     });
   });

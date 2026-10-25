@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
-
 import { fromBinary } from "@bufbuild/protobuf";
 import kafka from "@confluentinc/kafka-javascript";
-
 import { PreparationFailedSchema } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
 import { KafkaPublisher } from "../pkg/infrastructure/kafka/publisher.ts";
@@ -26,15 +24,14 @@ import {
   RESTAURANT_ORDER_EVENTS_TOPIC,
   restaurantOrderEventMapper,
 } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+import { kafkaBrokers } from "./support/global-containers.ts";
 import { mongoUri } from "./support/mongodb.ts";
 
 // Outbox → restaurants-relay → Kafka against real infrastructure, for example
 //   docker run -d -p 9092:9092 apache/kafka:4.1.0
-// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
-// KAFKA_BROKERS=localhost:9092
+// MongoDB is the testcontainer of the global setup (test/support/global-containers.ts).
 const uri = mongoUri();
-const brokers = process.env.KAFKA_BROKERS?.trim() ?? "";
-const skip = brokers === "" ? "KAFKA_BROKERS is not set" : false;
+const brokers = kafkaBrokers();
 
 type Received = {
   key: string;
@@ -42,12 +39,12 @@ type Received = {
   headers: Record<string, string>;
 };
 
-describe("Outbox relay with MongoDB and Kafka", { skip }, () => {
+describe("Outbox relay with MongoDB and Kafka", () => {
   let mongo: MongoDbConnection;
   let publisher: KafkaPublisher;
   const client = new kafka.KafkaJS.Kafka({
     kafkaJS: {
-      brokers: brokers.split(","),
+      brokers: brokers,
       logLevel: kafka.KafkaJS.logLevel.ERROR,
     },
   });
@@ -71,7 +68,7 @@ describe("Outbox relay with MongoDB and Kafka", { skip }, () => {
     await admin.disconnect();
     publisher = await KafkaPublisher.connect({
       enabled: true,
-      brokers: brokers.split(","),
+      brokers: brokers,
       clientId: "restaurants-relay-test",
     });
   });
@@ -224,7 +221,7 @@ describe("Outbox relay with MongoDB and Kafka", { skip }, () => {
 
     const failing = await KafkaPublisher.connect({
       enabled: true,
-      brokers: brokers.split(","),
+      brokers: brokers,
       clientId: "restaurants-relay-test-failing",
     });
     const publishWithTimeout = {

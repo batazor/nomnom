@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, describe, test } from "node:test";
-
 import { v1 } from "@authzed/authzed-node";
-
 import {
   checkPermissionRequest,
   SpiceDbAccessControl,
@@ -24,6 +22,7 @@ import {
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
+import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { createTestDatabase } from "./support/mongodb.ts";
 import {
   FixedClock,
@@ -32,15 +31,14 @@ import {
   startOfDay,
 } from "./support/restaurants.ts";
 
-// Runs against the shared SpiceDB of `make spicedb-dev`
-// (SPICEDB_ENDPOINT=localhost:50051, key `devkey`, plaintext). Every id of a
+// Runs against the SpiceDB testcontainer of the global setup
+// (authorization/bootstrap.yaml, key `devkey`, plaintext). Every id of a
 // run starts with a unique prefix without dots; the reconciler is scoped to it
 // so other tests' relationships are never touched.
-const endpoint = process.env.SPICEDB_ENDPOINT?.trim() ?? "";
-const skip = endpoint === "" ? "SPICEDB_ENDPOINT is not set" : false;
+const endpoint = spiceDbEndpoint();
 const GRACE = 60_000;
 
-describe("SpiceDB restaurant relationships", { skip }, () => {
+describe("SpiceDB restaurant relationships", () => {
   const run = `it-${randomUUID()}-`;
   let client: SpiceDbClient | undefined;
   const spicedb = (): SpiceDbClient => {

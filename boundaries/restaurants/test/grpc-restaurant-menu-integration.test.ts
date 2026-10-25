@@ -58,7 +58,7 @@ import { mongoUri } from "./support/mongodb.ts";
 // Open Restaurant and Set Menu Item Availability over HTTP/2 (createGrpcServer
 // as in cmd/restaurants) with the MongoDB Unit of Work and MongoOutbox of the
 // process (Integration Event mapper, trace metadata) against a replica set:
-// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
+// MongoDB is the testcontainer of the global setup (test/support/global-containers.ts).
 const uri = mongoUri();
 
 const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";

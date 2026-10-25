@@ -17,7 +17,7 @@ import {
 import { mongoUri } from "./support/mongodb.ts";
 
 // Runs against a MongoDB replica set, for example
-// the testcontainer of the global setup (test/support/global-mongodb.ts).
+// the testcontainer of the global setup (test/support/global-containers.ts).
 const uri = mongoUri();
 
 class TestReader extends MetricReader {

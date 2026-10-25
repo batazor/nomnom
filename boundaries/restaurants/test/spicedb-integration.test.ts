@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
-
 import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
 import {
   createSpiceDbClient,
@@ -8,11 +7,11 @@ import {
 } from "../infrastructure/spicedb/client.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import type { SpiceDbEnabledConfig } from "../pkg/config/config.ts";
+import { spiceDbEndpoint } from "./support/global-containers.ts";
 
 // Runs against SpiceDB bootstrapped with authorization/bootstrap.yaml
-// (`make spicedb-dev`): SPICEDB_ENDPOINT=localhost:50051, key `devkey`.
-const endpoint = process.env.SPICEDB_ENDPOINT?.trim() ?? "";
-const skip = endpoint === "" ? "SPICEDB_ENDPOINT is not set" : false;
+// in the SpiceDB testcontainer of the global setup, key `devkey`.
+const endpoint = spiceDbEndpoint();
 
 const clients: SpiceDbClient[] = [];
 
@@ -36,7 +35,7 @@ function accessControl(
   });
 }
 
-describe("SpiceDB access control", { skip }, () => {
+describe("SpiceDB access control", () => {
   after(() => {
     for (const client of clients) {
       client.close();

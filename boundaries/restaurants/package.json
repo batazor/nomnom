@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --project tsconfig.json && cp -R infrastructure/grpc/gen dist/infrastructure/grpc/",
-    "check": "npm run proto:check && biome check .",
+    "check": "npm run proto:check && npm run typecheck && biome check .",
     "format": "biome format --write .",
     "generate:proto": "cd infrastructure/grpc && buf generate --template buf.gen.yaml",
     "lint": "biome lint .",
@@ -12,7 +12,8 @@
     "start": "node cmd/restaurants/main.ts",
     "relay": "node cmd/restaurants-relay/main.ts",
     "consumer": "node cmd/restaurants-consumer/main.ts",
-    "test": "node --test --test-global-setup=test/support/global-mongodb.ts test/*.test.ts",
+    "typecheck": "tsc --project tsconfig.test.json",
+    "test": "node --test --test-global-setup=test/support/global-containers.ts test/*.test.ts",
     "migrate": "node cmd/restaurants-migrate/main.ts"
   },
   "engines": {

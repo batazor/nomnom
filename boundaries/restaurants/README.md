@@ -198,11 +198,7 @@ Subject `user` → `user:<id>`, `service` → `service:<id>`. Consistency — с
 
 Пустой `SPICEDB__ENDPOINT` — ошибка startup: процесс без SpiceDB не стартует. Endpoint без preshared key, неверный `SPICEDB__INSECURE` или `SPICEDB__TIMEOUT` — ошибка startup.
 
-Unit-тесты маппинга и fail closed — `test/spicedb-access-control.test.ts` (fake клиент). Integration-тесты `test/spicedb-integration.test.ts` пропускаются без `SPICEDB_ENDPOINT`; против SpiceDB с `authorization/bootstrap.yaml` (ключ `devkey`, plaintext):
-
-```bash
-SPICEDB_ENDPOINT=localhost:50051 node --test test/spicedb-integration.test.ts
-```
+Unit-тесты маппинга и fail closed — `test/spicedb-access-control.test.ts` (fake клиент). Integration-тесты `test/spicedb-integration.test.ts` идут в `npm test` на SpiceDB testcontainer с `authorization/bootstrap.yaml` (ключ `devkey`, plaintext).
 
 ### Authorization revisions (ZedTokens)
 
@@ -229,12 +225,7 @@ Reconciler — фоновый цикл (`PeriodicLoop`, `pkg/lifecycle/periodic.
 | `RECONCILER__GRACE` | Минимальное время, которое связь остаётся сиротой до удаления или missing до восстановления; должно превышать длительность Revoke Staff (`SPICEDB__TIMEOUT` + сохранение) | `10m` |
 | `RECONCILER__PAGE_SIZE` | Размер страницы `ReadRelationships` и хранилища, 1…1000 | `500` |
 
-Unit-тесты: `test/staff-applications.test.ts`, `test/spicedb-relationships.test.ts`, `test/reconcile.test.ts` (fake клиент), `test/periodic.test.ts`. Integration-тесты `test/spicedb-relationships-integration.test.ts` (AC-476, AC-478) используют уникальный префикс id и ограничивают reconciler им, чтобы не трогать чужие связи общего SpiceDB; `test/reconcile.test.ts` (AC-710) — повторное назначение и снятие между проходами; `test/reconcile-mongodb-integration.test.ts` (AC-700) воспроизводит Revoke Staff в полёте над MongoDB replica set и SpiceDB и пропускается без `SPICEDB_ENDPOINT`:
-
-```bash
-SPICEDB_ENDPOINT=localhost:50051 node --test --test-global-setup=test/support/global-mongodb.ts \
-  test/spicedb-integration.test.ts test/spicedb-relationships-integration.test.ts test/reconcile-mongodb-integration.test.ts
-```
+Unit-тесты: `test/staff-applications.test.ts`, `test/spicedb-relationships.test.ts`, `test/reconcile.test.ts` (fake клиент), `test/periodic.test.ts`. Integration-тесты `test/spicedb-relationships-integration.test.ts` (AC-476, AC-478) используют уникальный префикс id и ограничивают reconciler им, чтобы не трогать чужие связи общего SpiceDB; `test/reconcile.test.ts` (AC-710) — повторное назначение и снятие между проходами; `test/reconcile-mongodb-integration.test.ts` (AC-700) воспроизводит Revoke Staff в полёте над MongoDB replica set и SpiceDB ; все они идут на SpiceDB testcontainer global setup (`npm test`).
 
 TypeScript-код генерируется в `infrastructure/grpc/gen` командой `npm run generate:proto` (`buf generate` по `infrastructure/grpc/buf.gen.yaml`, плагин `buf.build/bufbuild/es`).
 
@@ -444,12 +435,9 @@ npm test
 npm run check
 ```
 
-`npm test` требует Docker: global setup `test/support/global-mongodb.ts` поднимает один testcontainer MongoDB (`@testcontainers/mongodb`, single-node replica set с транзакциями, образ как в kind) на весь прогон и передаёт файлам `MONGODB_URI`. In-memory адаптеров хранилища нет: unit-тесты use cases и gRPC (`test/support/*.ts`) работают на `Mongo*`-адаптерах, каждый test world создаёт свою мигрированную базу с уникальным именем (`test/support/mongodb.ts`), базы удаляются в конце файла. Доменные тесты MongoDB не трогают. Интеграционные тесты MongoDB (`test/mongodb-integration.test.ts`, `test/grpc-kitchen-integration.test.ts`, `test/grpc-restaurant-menu-integration.test.ts`, `test/composition.test.ts`, `test/mongodb-pool-integration.test.ts`) идут на том же контейнере всегда; тесты Outbox → relay → Kafka (`test/outbox-relay-integration.test.ts`), Kafka → consumer → Inbox (`test/order-placed-consumer-integration.test.ts`) и Integration Events (`test/restaurant-menu-events-integration.test.ts`) пропускаются без `KAFKA_BROKERS`, тесты SpiceDB — без `SPICEDB_ENDPOINT`:
+`npm test` требует Docker: global setup `test/support/global-containers.ts` поднимает на весь прогон три testcontainer с образами как в kind: MongoDB (`@testcontainers/mongodb`, single-node replica set с транзакциями), Kafka (`apache/kafka`, KRaft, один брокер) и SpiceDB (`authzed/spicedb`, memory datastore со schema и grants из `authorization/bootstrap.yaml`, key `devkey`). Адреса передаются файлам через окружение и читаются `mongoUri()`, `kafkaBrokers()`, `spiceDbEndpoint()`; внешние инстансы подставить нельзя, и ни один тест не пропускается. In-memory адаптеров хранилища нет: unit-тесты use cases и gRPC (`test/support/*.ts`) работают на `Mongo*`-адаптерах, каждый test world создаёт свою мигрированную базу с уникальным именем (`test/support/mongodb.ts`), базы удаляются в конце файла. Доменные тесты MongoDB не трогают. Тесты Kafka и SpiceDB изолируются уникальными топиками, группами и префиксами id.
 
-```bash
-docker run -d --name restaurants-kafka -p 9092:9092 apache/kafka:4.1.0
-KAFKA_BROKERS=localhost:9092 npm test
-```
+Тесты типизированы: `npm run typecheck` (`tsconfig.test.json`, весь код включая `test/`) входит в `npm run check`. gRPC-тесты вызывают сервис через `createService` (`test/support/grpc.ts`): запрос собирается из init shape, как у клиента.
 
 Автоформатирование:
 

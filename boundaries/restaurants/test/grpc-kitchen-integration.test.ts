@@ -2,11 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-
 import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
-
 import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import {
@@ -54,12 +51,16 @@ import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,
 } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
+import {
+  createService,
+  type RestaurantsServiceUnderTest,
+} from "./support/grpc.ts";
 import { TestKitchenAccessControl } from "./support/kitchen.ts";
 import { mongoUri } from "./support/mongodb.ts";
 
 // Kitchen command RPCs composed as in cmd/restaurants/main.ts (MongoDB Unit of
 // Work, MongoOutbox with the Integration Event mapper) against a replica set:
-// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
+// MongoDB is the testcontainer of the global setup (test/support/global-containers.ts).
 const uri = mongoUri();
 
 const context = undefined as never;
@@ -68,7 +69,7 @@ const ordersService: Subject = { type: "service", id: "orders-worker" };
 
 describe("kitchen command RPCs over MongoDB", () => {
   let mongo: MongoDbConnection;
-  let service: ReturnType<typeof createRestaurantsService>;
+  let service: RestaurantsServiceUnderTest;
   let receive: ReceiveOrderRequestHandler;
   const restaurantId = `r-${randomUUID()}`;
 
@@ -141,7 +142,7 @@ describe("kitchen command RPCs over MongoDB", () => {
     const unused = {
       execute: async (): Promise<never> => assert.fail("unexpected call"),
     };
-    service = createRestaurantsService({
+    service = createService({
       subjects: { resolve: async () => cook },
       getRestaurant: unused,
       getMenu: unused,

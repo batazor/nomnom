@@ -12,10 +12,9 @@ import {
   SetMenuItemAvailabilityRequestSchema,
   UpdateMenuItemRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import type { Subject } from "../pkg/application/subject.ts";
-import { context, rejectsWith } from "./support/grpc.ts";
+import { context, createService, rejectsWith } from "./support/grpc.ts";
 import { createMenuWorld } from "./support/menus.ts";
 import { owner, stranger } from "./support/restaurants.ts";
 
@@ -27,7 +26,7 @@ const unused = {
 const createWorld = async () => {
   const world = await createMenuWorld();
   let caller: Subject = owner;
-  const service = createRestaurantsService({
+  const service = createService({
     getRestaurant: unused,
     getMenu: world.getMenu,
     listRestaurants: unused,

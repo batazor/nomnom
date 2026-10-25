@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-
 import { create, toBinary } from "@bufbuild/protobuf";
 import kafka from "@confluentinc/kafka-javascript";
-
 import { createConsumerContainer } from "../di/consumer.ts";
 import { OrderPlacedSchema } from "../infrastructure/grpc/gen/nomnom/orders/v1/events_pb.js";
 import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
@@ -23,25 +21,25 @@ import {
   INBOX_COLLECTION,
   type InboxDocument,
 } from "../pkg/infrastructure/mongodb/inbox.ts";
+import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { ORDER_PLACED_EVENT_TYPE } from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
+import { kafkaBrokers } from "./support/global-containers.ts";
 import { mongoUri } from "./support/mongodb.ts";
 
 // OrderPlaced → Kafka → restaurants-consumer → Inbox + Restaurant Order in
 // MongoDB against real infrastructure (see test/outbox-relay-integration.test.ts):
-// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
-// KAFKA_BROKERS=localhost:9092
+// MongoDB is the testcontainer of the global setup (test/support/global-containers.ts).
 const uri = mongoUri();
-const brokers = process.env.KAFKA_BROKERS?.trim() ?? "";
-const skip = brokers === "" ? "KAFKA_BROKERS is not set" : false;
+const brokers = kafkaBrokers();
 
-describe("OrderPlaced consumer with MongoDB and Kafka", { skip }, () => {
+describe("OrderPlaced consumer with MongoDB and Kafka", () => {
   // A topic per run keeps other runs' events out of this consumer group.
   const topic = `orders.v1.order-events.it-${randomUUID().slice(0, 8)}`;
   const kafkaConfig = {
     enabled: true as const,
-    brokers: brokers.split(","),
+    brokers: brokers,
     clientId: "restaurants-consumer-test",
   };
   const client = new kafka.KafkaJS.Kafka({
@@ -133,7 +131,7 @@ describe("OrderPlaced consumer with MongoDB and Kafka", { skip }, () => {
         fromBeginning: true,
       }),
       deadLetters: publisher,
-      log: () => {},
+      logger: silentLogger,
     });
     await container.cradle.restaurants.save(
       Restaurant.register({

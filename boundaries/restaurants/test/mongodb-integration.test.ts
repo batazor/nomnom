@@ -52,7 +52,7 @@ import {
 import { mongoUri } from "./support/mongodb.ts";
 
 // Runs against a MongoDB replica set (transactions), for example
-// the testcontainer of the global setup (test/support/global-mongodb.ts).
+// the testcontainer of the global setup (test/support/global-containers.ts).
 const uri = mongoUri();
 
 const now = new Date(Date.UTC(2026, 9, 25, 9));

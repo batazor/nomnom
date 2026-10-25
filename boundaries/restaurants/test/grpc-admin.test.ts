@@ -1,18 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
-
 import {
   AssignStaffRequestSchema,
   RegisterRestaurantRequestSchema,
   RevokeStaffRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { createService } from "./support/grpc.ts";
 import {
   createRestaurantWorld,
   operator,
@@ -35,7 +33,7 @@ const unused = {
 const createWorld = async () => {
   const world = await createRestaurantWorld();
   let caller: Subject = operator;
-  const service = createRestaurantsService({
+  const service = createService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: unused,
     listRestaurants: unused,
@@ -239,7 +237,7 @@ test("staff RPCs map missing input to INVALID_ARGUMENT and unknown restaurants t
   );
   const { world } = await createWorld();
   world.authorization.grantManager(owner, "missing");
-  const service = createRestaurantsService({
+  const service = createService({
     getRestaurant: unused,
     getMenu: unused,
     listRestaurants: unused,
@@ -281,7 +279,7 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
       throw new AuthorizationUnavailableError();
     },
   };
-  const service = createRestaurantsService({
+  const service = createService({
     getRestaurant: unused,
     getMenu: unused,
     listRestaurants: unused,
@@ -332,7 +330,7 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
 
 test("admin RPCs are UNAUTHENTICATED with the default rejecting resolver", async () => {
   const world = await createRestaurantWorld();
-  const service = createRestaurantsService({
+  const service = createService({
     getRestaurant: unused,
     getMenu: unused,
     listRestaurants: unused,

@@ -17,13 +17,13 @@ import {
   ReceiveOrderRequestRequestSchema,
   RestaurantsService,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import {
   context,
+  createService,
   createWorld,
   rejectsWith,
   resolverOf,
@@ -264,7 +264,7 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
     rejectsWith(Code.PermissionDenied),
   );
 
-  const unavailable = createRestaurantsService({
+  const unavailable = createService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
     listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),

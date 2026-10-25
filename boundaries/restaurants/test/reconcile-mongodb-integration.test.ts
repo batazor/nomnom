@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
-
 import { v1 } from "@authzed/authzed-node";
-
 import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
 import {
   createSpiceDbClient,
@@ -23,15 +21,15 @@ import {
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
+import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { mongoUri } from "./support/mongodb.ts";
 import { FixedClock, owner, startOfDay } from "./support/restaurants.ts";
 
 // Revoke Staff in flight against MongoDB and SpiceDB (AC-700): needs the MongoDB
 // testcontainer of the global setup and the
-// SpiceDB of `make spicedb-dev` (`SPICEDB_ENDPOINT`, key `devkey`,
+// SpiceDB testcontainer of the global setup (key `devkey`,
 // plaintext). Ids start with a unique prefix the reconciler is scoped to.
-const endpoint = process.env.SPICEDB_ENDPOINT?.trim() ?? "";
-const skip = endpoint === "" ? "SPICEDB_ENDPOINT is not set" : false;
+const endpoint = spiceDbEndpoint();
 const GRACE = 60_000;
 
 /** MongoDB repository whose save waits for `commit()`. */
@@ -61,7 +59,7 @@ class GatedRestaurantRepository extends MongoRestaurantRepository {
   }
 }
 
-describe("reconciliation against MongoDB and SpiceDB", { skip }, () => {
+describe("reconciliation against MongoDB and SpiceDB", () => {
   const run = `it-${randomUUID()}-`;
   let mongo: MongoDbConnection;
   let spicedb: SpiceDbClient;

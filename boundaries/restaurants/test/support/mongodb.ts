@@ -22,13 +22,13 @@ import { MongoUnitOfWork } from "../../pkg/infrastructure/mongodb/unit-of-work.t
 
 /**
  * MONGODB_URI comes from the global setup of `npm test`
- * (test/support/global-mongodb.ts): a replica set in a testcontainer.
+ * (test/support/global-containers.ts): a replica set in a testcontainer.
  */
 export const mongoUri = (): string => {
   const uri = process.env.MONGODB_URI?.trim() ?? "";
   if (uri === "") {
     throw new Error(
-      "MONGODB_URI is not set: run tests with --test-global-setup=test/support/global-mongodb.ts (npm test)",
+      "MONGODB_URI is not set: run tests with --test-global-setup=test/support/global-containers.ts (npm test)",
     );
   }
   return uri;

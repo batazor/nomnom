@@ -1,20 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
-
 import { v1 } from "@authzed/authzed-node";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
-
 import {
   AssignStaffRequestSchema,
   RegisterRestaurantRequestSchema,
   RevokeStaffRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import {
-  AUTHORIZATION_REVISION_HEADER,
-  createRestaurantsService,
-} from "../infrastructure/grpc/service.ts";
+import { AUTHORIZATION_REVISION_HEADER } from "../infrastructure/grpc/service.ts";
 import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
 import {
   createSpiceDbClient,
@@ -31,6 +26,8 @@ import {
   MongoRestaurantCatalog,
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+import { spiceDbEndpoint } from "./support/global-containers.ts";
+import { createService } from "./support/grpc.ts";
 import { createTestDatabase } from "./support/mongodb.ts";
 import {
   FixedClock,
@@ -41,11 +38,10 @@ import {
 
 // FR-446 through the gRPC service composed like cmd/restaurants/main.ts:
 // SpiceDbAccessControl and SpiceDbRelationshipWriter over one client and an
-// MongoDB repository from the testcontainer. Runs against the shared SpiceDB of `make spicedb-dev`
-// (SPICEDB_ENDPOINT=localhost:50051, key `devkey`, plaintext). Ids carry a
+// MongoDB repository from the testcontainer. Runs against the SpiceDB testcontainer of the global setup
+// (authorization/bootstrap.yaml, key `devkey`, plaintext). Ids carry a
 // unique dot-free prefix; created relationships are deleted afterwards.
-const endpoint = process.env.SPICEDB_ENDPOINT?.trim() ?? "";
-const skip = endpoint === "" ? "SPICEDB_ENDPOINT is not set" : false;
+const endpoint = spiceDbEndpoint();
 
 const operatorGrant = (
   operation: v1.RelationshipUpdate_Operation,
@@ -80,7 +76,7 @@ const context = { requestHeader } as never;
 const rejectsWith = (code: Code) => (error: unknown) =>
   error instanceof ConnectError && error.code === code;
 
-describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
+describe("FR-446 admin RPCs against SpiceDB", () => {
   const run = `it-admin-${randomUUID()}-`;
   const operator: Subject = { type: "user", id: `${run}operator` };
   const owner: Subject = { type: "user", id: `${run}owner` };
@@ -164,7 +160,7 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
     const unused = {
       execute: async (): Promise<never> => assert.fail("unexpected call"),
     };
-    const service = createRestaurantsService({
+    const service = createService({
       getRestaurant: new GetRestaurantHandler({
         reader: new MongoRestaurantCatalog(store),
       }),
