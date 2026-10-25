@@ -83,9 +83,32 @@ aggregate и `leavesOf(ACTIVE_PREPARATION)` для фильтров хранил
   полем или вложенной entity со своей таблицей (lifecycle Preparation Item). Регионы
   потребуют отдельного решения, когда один trigger должен атомарно менять несколько
   независимых измерений одного aggregate.
-- **Библиотеки statecharts в domain** (XState, sismic, statig, qmuntal/stateless и т. п.) —
-  не используются. Engine — небольшая собственная реализация в каждом языке над явными
-  данными; это то же требование ADR 21 к библиотеке.
+- **Библиотеки statecharts в domain** — не используются, см.
+  [рассмотренные библиотеки](#рассмотренные-библиотеки). Engine — небольшая собственная
+  реализация в каждом языке над явными данными; это то же требование ADR 21 к библиотеке.
+
+### Рассмотренные библиотеки
+
+Требования к библиотеке (из ADR 21 и этого ADR): таблица и иерархия доступны как данные для
+теста полноты и диаграмм; восстановление из persisted leaf без побочных эффектов; три
+различимых исхода `InvalidTransition` / `GuardFailed{reasons}` / `AlreadyInState`;
+compound state без обязательного initial child, так как он используется только как группа.
+Проверено 2026-10-26:
+
+| Язык | Библиотека | Иерархия, данные, восстановление | Мешает |
+| --- | --- | --- | --- |
+| TS | XState 5.33 (`transition()` — чистая функция с 5.19, `machine.resolveState`) | Иерархия, config — данные, восстановление есть, actions возвращаются, а не выполняются | Проверено прогоном: guard=false и необработанное событие возвращают тот же snapshot без причины — `GuardFailed{reasons}` и `InvalidTransition` неразличимы; каждый compound state обязан иметь `initial`; рантайм тянет actors/actions/delays в домен |
+| Go | qmuntal/stateless | `SubstateOf`, external state storage, `IsInState`, DOT-граф | Guard — `bool` без причины; необработанный trigger — panic либо `OnUnhandledTrigger`; мутирующий `Fire`, entry/exit — центральная модель API |
+| Go | dragomit/hsm, stateforward/hsm.go | UML-иерархия, history, регионы | Event-driven runtime с actions; таблица не экспортируется как данные |
+| Rust | statig 0.4 | Superstates через `Outcome::Super` | Переходы — код обработчиков в макросах, не данные; нет интроспекции для теста полноты; неявный `Top` обрабатывает всё; outcome без типизированных ошибок |
+| Python | python-statemachine 3.x (`StateChart`, SCXML-семантика, Mermaid) | Compound/parallel/history, валидация модели, диаграммы | Экземпляр машины с callbacks и event loop; guard — `bool`; compound активирует initial child |
+| Python | Sismic | Полный UML 2, YAML, тестовые инструменты | Интерпретатор с runtime, LGPL-3.0 |
+
+Ни одна библиотека не даёт типизированный `GuardFailed{reasons}` и явный `AlreadyInState` без
+обёртки, которая заново реализует разрешение перехода. Собственный engine — ~40 строк на
+язык; разрешение innermost-first тривиально, а таблица остаётся данными. Решение — собственный
+engine в каждом языке; библиотеки остаются кандидатами для UI-потоков, где нужен
+interpreter с actions и delays, — это отдельное решение вне ADR.
 
 ### Тесты и диаграммы
 
