@@ -12,30 +12,22 @@ repeats the provider call with the same key, which the provider deduplicates.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
 from typing import Optional
 
-from pkg.application import AggregateRef, Clock, Subject, UnitOfWork
+from pkg.application import Clock, Subject, UnitOfWork
 from slices.payment.domains.payment import (
     PAYMENT_TRIGGER_OF,
     AlreadyInState,
     DuplicateIdempotencyKey,
-    GuardFailed,
     InvalidTransition,
     OperationAlreadyPending,
     OperationId,
     OperationKind,
-    OperationOutcome,
-    OperationState,
-    Payment,
-    PaymentDomainEvent,
     PaymentId,
     PaymentOperation,
     PaymentOperationRepository,
     PaymentRepository,
     PaymentState,
-    complete_operation,
 )
 
 from .access import require_permission
@@ -46,8 +38,8 @@ from .errors import (
     PaymentNotFound,
     PaymentOperationNotFound,
     PaymentStateConflict,
-    ProviderResultConflict,
 )
+from .operation_result import PAYMENT_AGGREGATE, OperationStatus, PaymentOperationResult
 from .ports import (
     PaymentIdentifiers,
     PaymentOutbox,
@@ -55,12 +47,28 @@ from .ports import (
     PaymentPermissionChecker,
     PaymentProviderGateway,
     PaymentResource,
-    ProviderOperationOutcome,
     ProviderOperationRequest,
     ProviderOperationStatus,
 )
+from .provider_results import (
+    AppliedProviderResult,
+    ProviderResultApplication,
+    ProviderResultApplier,
+    ProviderResultStatus,
+    to_domain_outcome,
+)
 
-PAYMENT_AGGREGATE = "Payment"
+__all__ = [
+    "PAYMENT_AGGREGATE",
+    "AppliedProviderResult",
+    "OperationStatus",
+    "PaymentOperationExecutor",
+    "PaymentOperationResult",
+    "ProviderResultApplication",
+    "ProviderResultApplier",
+    "ProviderResultStatus",
+    "to_domain_outcome",
+]
 
 _PERMISSION_OF: dict[OperationKind, PaymentPermission] = {
     OperationKind.AUTHORIZE: PaymentPermission.AUTHORIZE,
@@ -68,121 +76,6 @@ _PERMISSION_OF: dict[OperationKind, PaymentPermission] = {
     OperationKind.CANCEL_AUTHORIZATION: PaymentPermission.CANCEL_AUTHORIZATION,
     OperationKind.REFUND: PaymentPermission.REFUND,
 }
-
-
-class OperationStatus(str, Enum):
-    SUCCEEDED = "succeeded"
-    DECLINED = "declined"
-    PENDING = "pending"
-
-
-_STATUS_OF: dict[OperationState, OperationStatus] = {
-    OperationState.SUCCEEDED: OperationStatus.SUCCEEDED,
-    OperationState.DECLINED: OperationStatus.DECLINED,
-    OperationState.PENDING: OperationStatus.PENDING,
-}
-
-
-@dataclass(frozen=True)
-class PaymentOperationResult:
-    """Result of a financial operation; provider references are not exposed."""
-
-    payment_id: PaymentId
-    operation_id: OperationId
-    kind: OperationKind
-    status: OperationStatus
-    payment_state: PaymentState
-    decline_reason: Optional[str] = None
-    replayed: bool = False
-
-    @classmethod
-    def of(
-        cls, operation: PaymentOperation, payment_state: PaymentState, replayed: bool
-    ) -> "PaymentOperationResult":
-        return cls(
-            payment_id=operation.payment_id,
-            operation_id=operation.id,
-            kind=operation.kind,
-            status=_STATUS_OF[operation.state],
-            payment_state=payment_state,
-            decline_reason=operation.decline_reason,
-            replayed=replayed,
-        )
-
-
-@dataclass(frozen=True)
-class AppliedProviderResult:
-    operation: PaymentOperation
-    payment_state: PaymentState
-    applied: bool
-
-
-class ProviderResultApplier:
-    """Applies a final provider result to a known operation at most once.
-
-    Must be called inside an active Unit of Work.
-    """
-
-    def __init__(
-        self,
-        payments: PaymentRepository,
-        operations: PaymentOperationRepository,
-        outbox: PaymentOutbox,
-        clock: Clock,
-    ) -> None:
-        self._payments = payments
-        self._operations = operations
-        self._outbox = outbox
-        self._clock = clock
-
-    def apply(
-        self, operation_id: OperationId, outcome: ProviderOperationOutcome
-    ) -> AppliedProviderResult:
-        domain_outcome = to_domain_outcome(outcome)
-        operation = self._operations.get(operation_id)
-        if operation is None:
-            raise PaymentOperationNotFound(operation_id)
-        payment = self._payments.get(operation.payment_id)
-        if payment is None:
-            raise PaymentNotFound(operation.payment_id)
-        if operation.is_completed:
-            received = (
-                OperationState.SUCCEEDED if domain_outcome.succeeded else OperationState.DECLINED
-            )
-            if operation.state is not received:
-                raise ProviderResultConflict(operation.id, operation.state.value, received.value)
-            return AppliedProviderResult(operation, payment.state, applied=False)
-
-        events = self._complete(payment, operation, domain_outcome, self._clock.now())
-        self._operations.save(operation)
-        version = self._payments.save(payment)
-        self._outbox.add(AggregateRef(PAYMENT_AGGREGATE, payment.id, version), events)
-        return AppliedProviderResult(operation, payment.state, applied=True)
-
-    @staticmethod
-    def _complete(
-        payment: Payment,
-        operation: PaymentOperation,
-        outcome: OperationOutcome,
-        completed_at: datetime,
-    ) -> list[PaymentDomainEvent]:
-        try:
-            return complete_operation(payment, operation, outcome, completed_at)
-        except (InvalidTransition, AlreadyInState) as error:
-            raise PaymentStateConflict(payment.id, payment.state, operation.kind.value) from error
-        except GuardFailed as error:
-            raise InvalidPaymentRequest(f"provider result rejected: {error.reason}") from error
-
-
-def to_domain_outcome(outcome: ProviderOperationOutcome) -> OperationOutcome:
-    if outcome.status is ProviderOperationStatus.SUCCEEDED:
-        return OperationOutcome.success(outcome.provider_reference)
-    if outcome.status is ProviderOperationStatus.DECLINED:
-        reason = (outcome.decline_reason or "").strip()
-        if not reason:
-            raise InvalidPaymentRequest("declined provider result requires a reason")
-        return OperationOutcome.declined(reason)
-    raise InvalidPaymentRequest("provider result must be final: succeeded or declined")
 
 
 @dataclass(frozen=True)
@@ -290,32 +183,3 @@ class PaymentOperationExecutor:
         if operation is None:
             raise PaymentOperationNotFound(operation_id)
         return operation
-
-
-class ProviderResultStatus(str, Enum):
-    APPLIED = "applied"
-    ALREADY_APPLIED = "already_applied"
-    DUPLICATE_MESSAGE = "duplicate_message"
-
-
-@dataclass(frozen=True)
-class ProviderResultApplication:
-    """Outcome of applying an asynchronous provider result."""
-
-    status: ProviderResultStatus
-    operation_id: OperationId
-    operation_status: Optional[OperationStatus] = None
-    payment_state: Optional[PaymentState] = None
-
-    @classmethod
-    def of(cls, applied: AppliedProviderResult) -> "ProviderResultApplication":
-        return cls(
-            status=(
-                ProviderResultStatus.APPLIED
-                if applied.applied
-                else ProviderResultStatus.ALREADY_APPLIED
-            ),
-            operation_id=applied.operation.id,
-            operation_status=_STATUS_OF[applied.operation.state],
-            payment_state=applied.payment_state,
-        )
