@@ -268,6 +268,7 @@ fn concurrent_updates_conflict_and_only_one_wins() {
                             delivery_id: id.clone(),
                             order_id: loaded.order_id().clone(),
                             courier_id: CourierId::new(courier),
+                            created_at_epoch_seconds: None,
                         }),
                     )?;
                     Ok::<_, TestError>(())
@@ -319,6 +320,7 @@ fn unit_of_work_commits_or_rolls_back_aggregate_and_outbox_together() {
         delivery_id: delivery.id().clone(),
         order_id: delivery.order_id().clone(),
         courier_id: CourierId::new("courier-1"),
+        created_at_epoch_seconds: None,
     };
     // No contract: the mapper returns None and nothing is written.
     let unpublished = DomainEvent::DeliveryCancelled {

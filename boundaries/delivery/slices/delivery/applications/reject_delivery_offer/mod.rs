@@ -1,13 +1,16 @@
 //! Reject Delivery Offer: the addressee closes a current offer as rejected.
-//! No Courier Assignment is created and no new search is started.
+//! No Courier Assignment is created and no new search is started. The offer
+//! and its `DeliveryOfferRejected` fact are written in one Unit of Work; a
+//! repeated rejection writes nothing.
 
-use crate::pkg::application::{Clock, Subject};
+use crate::pkg::application::{Clock, Subject, UnitOfWork};
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferId, DeliveryOfferRepository, OfferState,
 };
 
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
+use super::outbox::{DeliveryOutbox, publish};
 use super::{courier_id, load_offer, offer_id};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -24,13 +27,15 @@ pub struct Output {
     pub changed: bool,
 }
 
-pub struct Handler<'a> {
+pub struct Handler<'a, U: UnitOfWork> {
     pub authorization: &'a dyn DeliveryAuthorization,
+    pub unit_of_work: &'a U,
     pub offers: &'a dyn DeliveryOfferRepository,
+    pub outbox: &'a dyn DeliveryOutbox,
     pub clock: &'a dyn Clock,
 }
 
-impl Handler<'_> {
+impl<U: UnitOfWork> Handler<'_, U> {
     pub fn execute(
         &self,
         subject: &Subject,
@@ -50,7 +55,12 @@ impl Handler<'_> {
             false
         } else {
             offer.reject(&courier_id, self.clock.now_epoch_seconds())?;
-            self.offers.save(&offer)?;
+            self.unit_of_work.run(|| {
+                let rejected = offer.pull_events();
+                self.offers.save(&offer)?;
+                publish(self.outbox, rejected)?;
+                Ok::<(), DeliveryApplicationError>(())
+            })?;
             true
         };
         Ok(Output {
@@ -64,15 +74,27 @@ impl Handler<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::courier::domains::courier::CourierStatus;
+    use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{NOW, OFFER_TTL, World, subject};
-    use crate::slices::delivery::domains::delivery::{DeliveryOfferError, State};
+    use crate::slices::delivery::domains::delivery::{DeliveryOfferError, DomainEvent, State};
 
-    fn handler(world: &World) -> Handler<'_> {
+    fn rejection_fact() -> OutboxMessage {
+        OutboxMessage::delivery(DomainEvent::DeliveryOfferRejected {
+            delivery_id: DeliveryId::new("delivery-1"),
+            offer_id: DeliveryOfferId::new("offer-1"),
+            courier_id: CourierId::new("courier-1"),
+        })
+    }
+
+    fn handler(world: &World) -> Handler<'_, MemoryStore> {
         Handler {
             authorization: &world.authorization,
+            unit_of_work: &world.store,
             offers: &world.store,
+            outbox: &world.store,
             clock: &world.clock,
         }
     }
@@ -112,6 +134,8 @@ mod tests {
         assert_eq!(world.offer_state("offer-1"), OfferState::Rejected);
         assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
         assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
+        assert_eq!(world.store.outbox_messages(), vec![rejection_fact()]);
+        assert_eq!(world.store.commits(), 1);
     }
 
     /// AC-330
@@ -127,6 +151,7 @@ mod tests {
             .expect("repeat");
         assert!(!repeat.changed);
         assert_eq!(world.offer_state("offer-1"), OfferState::Rejected);
+        assert_eq!(world.store.outbox_messages(), vec![rejection_fact()]);
     }
 
     #[test]
@@ -146,6 +171,7 @@ mod tests {
             ))
         );
         assert_eq!(world.offer_state("offer-1"), OfferState::Pending);
+        assert!(world.store.outbox_messages().is_empty());
     }
 
     #[test]

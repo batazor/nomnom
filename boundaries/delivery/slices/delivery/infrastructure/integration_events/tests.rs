@@ -23,6 +23,7 @@ fn maps_courier_assignment() {
         delivery_id,
         order_id,
         courier_id,
+        created_at_epoch_seconds: Some(1_000),
     })
     .expect("published");
     assert_eq!(record.event_type, COURIER_ASSIGNED_TO_DELIVERY);
@@ -59,6 +60,7 @@ fn maps_pickup_and_completion() {
         delivery_id,
         order_id,
         courier_id,
+        created_at_epoch_seconds: Some(1_000),
     })
     .expect("published");
     assert_eq!(completed.event_type, DELIVERY_COMPLETED);

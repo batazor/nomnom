@@ -34,6 +34,9 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
     // Бизнес-порт открывается после технического.
     let worker = process.worker()?;
-    lifecycle.run(worker).await?;
+    let result = lifecycle.run(worker).await;
+    // Метрики выгружаются и после ошибки worker.
+    process.shutdown();
+    result?;
     Ok(())
 }

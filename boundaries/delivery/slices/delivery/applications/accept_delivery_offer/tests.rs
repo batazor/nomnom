@@ -53,12 +53,22 @@ fn world_with_two_offers() -> World {
     world
 }
 
-fn assignment_fact() -> OutboxMessage {
-    OutboxMessage::delivery(DomainEvent::CourierAssignedToDelivery {
-        delivery_id: DeliveryId::new("delivery-1"),
-        order_id: OrderId::new("order-of-delivery-1"),
-        courier_id: CourierId::new("courier-1"),
-    })
+/// Facts of one acceptance of `offer-1`: the accepted offer, then the
+/// Courier Assignment.
+fn assignment_fact() -> Vec<OutboxMessage> {
+    vec![
+        OutboxMessage::delivery(DomainEvent::DeliveryOfferAccepted {
+            delivery_id: DeliveryId::new("delivery-1"),
+            offer_id: DeliveryOfferId::new("offer-1"),
+            courier_id: CourierId::new("courier-1"),
+        }),
+        OutboxMessage::delivery(DomainEvent::CourierAssignedToDelivery {
+            delivery_id: DeliveryId::new("delivery-1"),
+            order_id: OrderId::new("order-of-delivery-1"),
+            courier_id: CourierId::new("courier-1"),
+            created_at_epoch_seconds: None,
+        }),
+    ]
 }
 
 /// AC-323
@@ -85,7 +95,7 @@ fn accepting_current_offer_creates_assignment_atomically() {
     assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
     assert_eq!(world.offer_state("offer-1"), OfferState::Accepted);
     assert_eq!(world.offer_state("offer-2"), OfferState::Withdrawn);
-    assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
+    assert_eq!(world.store.outbox_messages(), assignment_fact());
     assert_eq!(world.store.commits(), 1);
     assert_eq!(world.relationships.writes(), vec![assigned("courier-1")]);
     // FR-447: the revision of the TOUCH is stored with the delivery.
@@ -175,7 +185,7 @@ fn second_courier_cannot_accept_already_assigned_delivery() {
         Some(&CourierId::new("courier-1"))
     );
     assert_eq!(world.courier_status("courier-2"), CourierStatus::Available);
-    assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
+    assert_eq!(world.store.outbox_messages(), assignment_fact());
     assert_eq!(world.relationships.writes(), vec![assigned("courier-1")]);
 }
 
@@ -250,7 +260,7 @@ fn repeated_acceptance_is_idempotent_without_second_fact() {
         .expect("repeat");
 
     assert!(repeat.already_accepted);
-    assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
+    assert_eq!(world.store.outbox_messages(), assignment_fact());
     assert_eq!(world.store.commits(), 1);
     assert_eq!(world.relationships.writes(), vec![assigned("courier-1")]);
 }
@@ -339,7 +349,7 @@ fn acceptance_occupies_courier_through_port_in_one_transaction() {
     assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
     assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
     assert_eq!(world.offer_state("offer-1"), OfferState::Accepted);
-    assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
+    assert_eq!(world.store.outbox_messages(), assignment_fact());
     assert_eq!(world.store.commits(), 1);
 }
 

@@ -25,6 +25,8 @@ pub struct Delivery {
     dropoff_address: Address,
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
+    /// Creation time; `None` for a Delivery stored before it was recorded.
+    created_at_epoch_seconds: Option<i64>,
     /// Technical field: revision of the last `delivery:<id>#courier` write.
     authorization_revision: Option<AuthorizationRevision>,
     /// Technical field: optimistic concurrency version of the stored snapshot.
@@ -48,10 +50,31 @@ impl Delivery {
             dropoff_address,
             state: State::Waiting,
             failure_reason: None,
+            created_at_epoch_seconds: None,
             authorization_revision: None,
             version: 0,
             events: Vec::new(),
         }
+    }
+
+    /// Creates a waiting Delivery at `created_at_epoch_seconds` and records
+    /// [`DomainEvent::DeliveryCreated`].
+    #[must_use]
+    pub fn create(
+        id: DeliveryId,
+        order_id: OrderId,
+        pickup_address: Address,
+        dropoff_address: Address,
+        created_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut delivery = Self::new(id, order_id, pickup_address, dropoff_address)
+            .with_created_at(Some(created_at_epoch_seconds));
+        delivery.events.push(DomainEvent::DeliveryCreated {
+            delivery_id: delivery.id.clone(),
+            order_id: delivery.order_id.clone(),
+            created_at_epoch_seconds,
+        });
+        delivery
     }
 
     pub fn restore(
@@ -86,6 +109,7 @@ impl Delivery {
             dropoff_address,
             state,
             failure_reason,
+            created_at_epoch_seconds: None,
             authorization_revision: None,
             version: 0,
             events: Vec::new(),
@@ -103,6 +127,18 @@ impl Delivery {
     #[must_use]
     pub const fn version(&self) -> u64 {
         self.version
+    }
+
+    /// Snapshot field `created_at`, absent in old snapshots.
+    #[must_use]
+    pub fn with_created_at(mut self, created_at_epoch_seconds: Option<i64>) -> Self {
+        self.created_at_epoch_seconds = created_at_epoch_seconds;
+        self
+    }
+
+    #[must_use]
+    pub const fn created_at_epoch_seconds(&self) -> Option<i64> {
+        self.created_at_epoch_seconds
     }
 
     /// Snapshot field `authorization_revision`, absent in old snapshots.
@@ -135,6 +171,7 @@ impl Delivery {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
             courier_id: courier_id.clone(),
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
         });
         self.courier_id = Some(courier_id);
         self.state = result.to;
@@ -178,6 +215,7 @@ impl Delivery {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
             courier_id: courier_id.clone(),
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
         });
         Ok(result)
     }

@@ -15,7 +15,8 @@ use crate::infrastructure::memory::{
     StaticCourierLocator,
 };
 use crate::infrastructure::reconcile::ReconciliationStore;
-use crate::pkg::application::{Clock, IdGenerator, TransactionScope};
+use crate::pkg::application::{Clock, IdGenerator, TransactionScope, UnitOfWorkError};
+use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
@@ -26,11 +27,12 @@ use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
 use crate::slices::delivery::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use crate::slices::delivery::applications::list_available_delivery_offers::PendingDeliveryOffersReadModel;
-use crate::slices::delivery::applications::outbox::DeliveryOutbox;
+use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::di::{DeliveryDependencies, DeliveryPorts, DeliverySettings};
 use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, DeliveryRepository};
+use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
 
 /// Локальные значения политики назначения до появления продуктовых настроек.
 const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
@@ -241,6 +243,27 @@ pub struct LocalDeliveryPorts {
     locator: StaticCourierLocator,
     #[shaku(default = SequentialIdGenerator::new("delivery"))]
     ids: SequentialIdGenerator,
+    /// Business metrics after the outermost commit (decorator of the Unit
+    /// of Work and Outbox ports).
+    #[shaku(default = ObservedOutbox::new(DomainMetrics::global(DELIVERY_FAILURE_REASONS)))]
+    observed: ObservedOutbox,
+}
+
+/// Closed set of `nomnom.reason` of `nomnom.delivery.failed`. The reason of a
+/// Delivery Failure is free text without a catalog, so every value is recorded
+/// as `other` until `delivery` defines failure reason codes.
+const DELIVERY_FAILURE_REASONS: &[&str] = &[];
+
+impl TransactionScope for LocalDeliveryPorts {
+    fn run_scoped(&self, work: &mut dyn FnMut() -> bool) -> Result<(), UnitOfWorkError> {
+        self.observed.run_scoped(self.store.store(), work)
+    }
+}
+
+impl DeliveryOutbox for LocalDeliveryPorts {
+    fn add(&self, message: OutboxMessage) -> Result<(), RepositoryError> {
+        self.observed.add(self.store.store(), message)
+    }
 }
 
 impl DeliveryPorts for LocalDeliveryPorts {
@@ -253,7 +276,7 @@ impl DeliveryPorts for LocalDeliveryPorts {
     }
 
     fn transactions(&self) -> &dyn TransactionScope {
-        self.store.store()
+        self
     }
 
     fn deliveries(&self) -> &dyn DeliveryRepository {
@@ -277,7 +300,7 @@ impl DeliveryPorts for LocalDeliveryPorts {
     }
 
     fn outbox(&self) -> &dyn DeliveryOutbox {
-        self.store.store()
+        self
     }
 
     fn locator(&self) -> &dyn CourierLocator {
@@ -346,6 +369,7 @@ pub(super) fn infrastructure(
             .with_component_parameters::<LocalDeliveryPorts>(LocalDeliveryPortsParameters {
                 locator,
                 ids: SequentialIdGenerator::new("delivery"),
+                observed: ObservedOutbox::new(DomainMetrics::global(DELIVERY_FAILURE_REASONS)),
             })
             .build(),
     )
