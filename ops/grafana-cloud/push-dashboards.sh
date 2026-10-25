@@ -33,9 +33,10 @@ status="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${GRA
 [[ "${status}" == 200 || "${status}" == 409 || "${status}" == 412 ]] || { echo "grafana-cloud: create folder: HTTP ${status}" >&2; exit 1; }
 
 # Артефакты не меняются: annotation folder добавляется во временные копии.
+mkdir "${config_dir}/dashboards"
 for source in "${root}"/boundaries/*/ops/grafana/dashboards/overview.json; do
   service="$(basename "$(dirname "$(dirname "$(dirname "$(dirname "${source}")")")")")"
   jq --arg folder "${folder}" '.metadata.annotations["grafana.app/folder"] = $folder' "${source}" \
-    >"${config_dir}/${service}.json"
+    >"${config_dir}/dashboards/${service}.json"
 done
-g resources push -p "${config_dir}" -o text
+g resources push -p "${config_dir}/dashboards" -o text

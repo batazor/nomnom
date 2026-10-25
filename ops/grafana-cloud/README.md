@@ -6,14 +6,18 @@ Grafana Cloud (free tier) заменяет в тестах ещё не разв�
 
 1. Создать stack на grafana.com.
 2. Stack → **OpenTelemetry → Configure**: OTLP endpoint, Instance ID и token (`Generate now`, или access policy только с `metrics:write`).
-3. `cp .env.grafana-cloud.example .env.grafana-cloud` и заполнить. Файл игнорируется git.
+3. Stack → **Administration → Service accounts**: аккаунт с ролью Editor и token — для `make grafana-cloud-push`.
+4. `cp .env.grafana-cloud.example .env.grafana-cloud` и заполнить. Файл игнорируется git.
 
 ```bash
 make kind-up
 make kind-deploy GRAFANA_CLOUD=1   # Alloy в nomnom-observability, OTLP orders и orders-consumer → Alloy
 make kind-grafana-cloud-stop       # остановить отправку, кластер остаётся
 make kind-down
+make grafana-cloud-push            # overview dashboards → folder nomnom в stack (gcx)
 ```
+
+`push-dashboards.sh` собирает временный gcx config (token gcx кладёт в системный keychain) и загружает копии артефактов с annotation `grafana.app/folder: nomnom`: Editor в Grafana 13 создаёт dashboards в корне, но не может их читать и обновлять, а на созданный им folder получает права администратора. Закоммиченные артефакты не меняются.
 
 Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) запускает `before`-hook [`scripts/grafana-cloud.sh`](../kind/scripts/grafana-cloud.sh): Secret `grafana-cloud-otlp` из `.env.grafana-cloud` и [`manifests/observability/alloy.yaml`](../kind/manifests/observability/alloy.yaml). Без endpoint, instance ID или token hook падает. Releases `orders` и `orders-consumer` получают [`values/grafana-cloud.yaml`](../kind/values/grafana-cloud.yaml). Без `GRAFANA_CLOUD=1` kind не меняется, `kind-e2e` в облако ничего не отправляет.
 
@@ -32,6 +36,12 @@ Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) зап
 
 Расход виден в stack (**Cost management → Usage**) или запросом `count by (job) ({job=~"nomnom/.+"})`: OTLP ingestion собирает `job` из `service.namespace/service.name`.
 
+## Отличия от self-managed Mimir
+
+Grafana Cloud промотирует `service_name` и `service_namespace` в labels каждой метрики; self-managed Mimir по [docs/observability.md](../../docs/observability.md) этого не делает. Dashboards на эти labels не опираются (environment/version выбираются через `target_info`), поэтому работают в обоих вариантах.
+
 ## Проверено
 
 2026-10-25: Alloy v1.21.2 с этим config принял OTLP/HTTP, отправил точку `service.namespace=nomnom` в OTLP gateway `prod-eu-west-2` (`otelcol_exporter_sent_metric_points_total` = 1, без ошибок) и отфильтровал точку другого namespace.
+
+2026-10-25, kind + `make kind-deploy GRAFANA_CLOUD=1`: Alloy в `nomnom-observability`, `orders` и `orders-consumer` экспортируют в stack `bestnomnom` 22 series (`go_*`, `process_cpu_time_seconds_total`, `target_info`; jobs `nomnom/orders`, `nomnom/orders-consumer`).
