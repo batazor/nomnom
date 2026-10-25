@@ -7,6 +7,7 @@ from typing import Protocol
 
 from pkg.application import AggregateRef, ApplicationError, Subject
 from slices.payment.domains.payment import (
+    InvalidTransitionError,
     Money,
     OperationId,
     OperationKind,
@@ -14,6 +15,7 @@ from slices.payment.domains.payment import (
     PaymentDomainEvent,
     PaymentId,
     PaymentPermission,
+    TransitionResult,
 )
 
 __all__ = [
@@ -24,6 +26,7 @@ __all__ = [
     "PaymentPermissionChecker",
     "PaymentProviderGateway",
     "PaymentResource",
+    "PaymentTransitionObserver",
     "PendingOperationQuery",
     "ProviderMessageInbox",
     "ProviderOperationOutcome",
@@ -122,6 +125,22 @@ class PaymentOutbox(Protocol):
 
     def add(self, aggregate: AggregateRef, events: Sequence[PaymentDomainEvent]) -> None:
         """Record published facts in the active Unit of Work."""
+        ...
+
+
+class PaymentTransitionObserver(Protocol):
+    """Observer of the Payment state machine; the adapter records telemetry (ADR 21).
+
+    The domain knows nothing about observability: use cases hand over the transitions
+    a Payment applied and the triggers its table rejected.
+    """
+
+    def applied(self, transitions: Sequence[TransitionResult]) -> None:
+        """Note transitions applied in the active Unit of Work; they count after its commit."""
+        ...
+
+    def rejected(self, error: InvalidTransitionError) -> None:
+        """Note a trigger the transition table does not allow in the current state."""
         ...
 
 

@@ -16,6 +16,7 @@ from dependency_injector import providers
 
 from di.payments import PaymentsContainer
 from di.resources import sections
+from infrastructure.observability import FsmMetrics
 from infrastructure.postgres import (
     PAYMENT_EVENTS_TOPIC,
     OutboxMessage,
@@ -243,6 +244,7 @@ class PaymentsTestKit:
         self.permissions = FakePermissions()
         self.clock = FixedClock()
         self.ids = SequentialIdentifiers()
+        self.transitions = FsmMetrics()
 
     def executor(self) -> PaymentOperationExecutor:
         return PaymentOperationExecutor(
@@ -255,10 +257,13 @@ class PaymentsTestKit:
             clock=self.clock,
             operation_ids=self.ids,
             applier=self.applier(),
+            transitions=self.transitions,
         )
 
     def applier(self) -> ProviderResultApplier:
-        return ProviderResultApplier(self.payments, self.operations, self.outbox, self.clock)
+        return ProviderResultApplier(
+            self.payments, self.operations, self.outbox, self.clock, self.transitions
+        )
 
     def given_payment(
         self,

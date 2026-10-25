@@ -30,6 +30,7 @@ from infrastructure.ids import UuidIdentifiers
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.observability import (
     DomainMetrics,
+    FsmMetrics,
     ObservedOutbox,
     ObservedProvider,
     ObservedUnitOfWork,
@@ -44,6 +45,7 @@ from infrastructure.postgres import (
     PostgresProviderMessageInbox,
     PostgresUnitOfWork,
 )
+from infrastructure.postgres.transactions import TransactionMetrics
 from infrastructure.provider import (
     FakePaymentProvider,
     WebhookVerifier,
@@ -92,7 +94,7 @@ def spicedb_client(settings: SpiceDBSettings) -> Iterator[PermissionsClient]:
 def create_permission_checker(
     settings: SpiceDBSettings, client: PermissionsClient | None = None
 ) -> PaymentPermissionChecker:
-    """Authorization port; ``SPICEDB__ENDPOINT`` is required."""
+    """Authorization port with nomnom.authz.* per check; ``SPICEDB__ENDPOINT`` is required."""
     if not settings.enabled:
         raise SpiceDBConfigurationError(
             "SPICEDB__ENDPOINT is required: payments checks permissions in SpiceDB"
@@ -153,12 +155,16 @@ class PaymentsContainer(containers.DeclarativeContainer):
     clock = providers.Singleton(SystemClock)
     ids = providers.Singleton(UuidIdentifiers)
     # Business counters (ops/semconv domain.yaml): Domain Events written to the Outbox
-    # are recorded after the outer Unit of Work commits.
+    # are recorded after the outer Unit of Work commits; applied Payment FSM transitions
+    # (fsm.yaml) too.
     domain_metrics = providers.Singleton(DomainMetrics)
+    fsm_metrics = providers.Singleton(FsmMetrics)
+    # Unit of Work: bounded retry on conflicts and nomnom.uow.* per attempt (uow.yaml).
     uow = providers.Singleton(
         ObservedUnitOfWork,
-        providers.Singleton(PostgresUnitOfWork, database),
+        providers.Singleton(PostgresUnitOfWork, database, providers.Singleton(TransactionMetrics)),
         domain_metrics,
+        fsm_metrics,
     )
     payments = providers.Singleton(PostgresPaymentRepository, database)
     operations = providers.Singleton(PostgresPaymentOperationRepository, database)
@@ -170,7 +176,9 @@ class PaymentsContainer(containers.DeclarativeContainer):
     )
     inbox = providers.Singleton(PostgresProviderMessageInbox, database)
     # One applier of final Provider results for synchronous answers and callbacks.
-    applier = providers.Singleton(ProviderResultApplier, payments, operations, outbox, clock)
+    applier = providers.Singleton(
+        ProviderResultApplier, payments, operations, outbox, clock, fsm_metrics
+    )
 
     # Use cases: one local transaction per Unit of Work.
     executor = providers.Singleton(
@@ -184,6 +192,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
         clock=clock,
         operation_ids=ids,
         applier=applier,
+        transitions=fsm_metrics,
     )
     # Every use case is decorated in the composition root: span "usecase <name>" and
     # nomnom.usecase.duration (docs/observability.md#use-cases).

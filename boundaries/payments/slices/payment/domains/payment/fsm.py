@@ -16,6 +16,9 @@ class PaymentState(StrEnum):
     FAILED = "failed"
 
 
+TERMINAL_STATES: frozenset[PaymentState] = frozenset({PaymentState.REFUNDED, PaymentState.FAILED})
+
+
 class PaymentTrigger(StrEnum):
     """Input of the Payment state machine, one per domain operation."""
 

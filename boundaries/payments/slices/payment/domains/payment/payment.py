@@ -24,8 +24,9 @@ class Payment:
     """Aggregate of a monetary operation for one Order.
 
     State changes go only through the Payment state machine; each successful change
-    records a domain event to be pulled with ``pull_events``. Raises ``ValueError``
-    when created with a non-positive amount.
+    records a domain event to be pulled with ``pull_events`` and its transition to be
+    pulled with ``pull_transitions``. Raises ``ValueError`` when created with a
+    non-positive amount.
     """
 
     def __init__(self, payment_id: PaymentId, order_id: OrderId, amount: Money) -> None:
@@ -38,6 +39,7 @@ class Payment:
         self._provider_reference: str | None = None
         self._version = 0
         self._events: list[PaymentEvent] = []
+        self._transitions: list[TransitionResult] = []
 
     @classmethod
     def restore(
@@ -87,6 +89,7 @@ class Payment:
         )
         self._provider_reference = provider_reference.strip()
         self._state = result.to_state
+        self._transitions.append(result)
         self._events.append(PaymentAuthorized(self._id, self._order_id, self._amount))
         return result
 
@@ -126,6 +129,7 @@ class Payment:
     def _apply(self, trigger: PaymentTrigger) -> TransitionResult:
         result = transition(self._state, trigger)
         self._state = result.to_state
+        self._transitions.append(result)
         return result
 
     def pull_events(self) -> list[PaymentEvent]:
@@ -133,6 +137,12 @@ class Payment:
         events = list(self._events)
         self._events.clear()
         return events
+
+    def pull_transitions(self) -> list[TransitionResult]:
+        """Return the applied state machine transitions and forget them."""
+        transitions = list(self._transitions)
+        self._transitions.clear()
+        return transitions
 
     @property
     def id(self) -> PaymentId:

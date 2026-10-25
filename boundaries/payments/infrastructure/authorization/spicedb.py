@@ -2,9 +2,17 @@
 
 The mapping of payment permissions to SpiceDB checks is normative and shared with the
 other contexts: ``openspec/changes/add-spicedb-authorization/design.md``.
+
+Every check records ``nomnom.authz.checks`` and ``nomnom.authz.check.duration``
+(``ops/semconv/model/authz.yaml``) with the SpiceDB ``nomnom.authz.permission`` and
+``nomnom.authz.resource_type`` and ``nomnom.authz.result``: allowed | denied (business
+result) | error | timeout (technical failure). Subject and resource IDs never become
+attributes.
 """
 
 import logging
+import time
+from enum import StrEnum
 from typing import Protocol, cast
 
 import grpc
@@ -18,9 +26,11 @@ from authzed.api.v1 import (
     SyncClient,
 )
 from grpcutil import bearer_token_credentials
+from opentelemetry import metrics
 
 from pkg.application import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
+from pkg.telemetry import SECONDS_BUCKETS
 from pkg.telemetry.rpc import ClientTelemetryInterceptor, split_target
 from slices.payment.applications.ports import (
     PaymentPermission,
@@ -28,6 +38,12 @@ from slices.payment.applications.ports import (
 )
 
 logger = logging.getLogger(__name__)
+
+INSTRUMENTATION = "nomnom.payments.authz"
+
+AUTHZ_PERMISSION = "nomnom.authz.permission"
+AUTHZ_RESOURCE_TYPE = "nomnom.authz.resource_type"
+AUTHZ_RESULT = "nomnom.authz.result"
 
 PLATFORM = ObjectReference(object_type="platform", object_id="nomnom")
 MANAGE_PAYMENTS = "manage_payments"
@@ -61,6 +77,15 @@ class PermissionsClient(Protocol):
         ...
 
 
+class CheckResult(StrEnum):
+    """Closed ``nomnom.authz.result`` set of one check."""
+
+    ALLOWED = "allowed"
+    DENIED = "denied"
+    ERROR = "error"
+    TIMEOUT = "timeout"
+
+
 def check_request(
     subject: Subject, permission: PaymentPermission, resource: PaymentResource
 ) -> CheckPermissionRequest:
@@ -81,11 +106,28 @@ class SpiceDBPermissionChecker:
     ``NO_PERMISSION`` and ``CONDITIONAL_PERMISSION`` (missing caveat context) deny.
     """
 
-    def __init__(self, client: PermissionsClient, timeout_seconds: float) -> None:
+    def __init__(
+        self,
+        client: PermissionsClient,
+        timeout_seconds: float,
+        meter_provider: metrics.MeterProvider | None = None,
+    ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("SpiceDB timeout must be positive")
         self._client = client
         self._timeout = timeout_seconds
+        meter = metrics.get_meter(INSTRUMENTATION, meter_provider=meter_provider)
+        self._checks = meter.create_counter(
+            "nomnom.authz.checks",
+            unit="{check}",
+            description="Authorization checks by result.",
+        )
+        self._duration = meter.create_histogram(
+            "nomnom.authz.check.duration",
+            unit="s",
+            description="Duration of one authorization check.",
+            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
+        )
 
     def is_allowed(
         self, subject: Subject, permission: PaymentPermission, resource: PaymentResource
@@ -96,9 +138,18 @@ class SpiceDBPermissionChecker:
             AuthorizationUnavailableError: SpiceDB failed or timed out; details are logged only.
         """
         request = check_request(subject, permission, resource)
+        started = time.perf_counter()
+        result = CheckResult.ERROR
         try:
             response = self._client.CheckPermission(request, timeout=self._timeout)
+            allowed = (
+                response.permissionship
+                == CheckPermissionResponse.Permissionship.PERMISSIONSHIP_HAS_PERMISSION
+            )
+            result = CheckResult.ALLOWED if allowed else CheckResult.DENIED
+            return allowed
         except Exception as error:
+            result = _failure(error)
             # Details go to the log; the caller sees only "authorization unavailable".
             reason = _reason(error)
             logger.warning(
@@ -109,10 +160,28 @@ class SpiceDBPermissionChecker:
                 reason,
             )
             raise AuthorizationUnavailableError("authorization unavailable") from error
-        return (
-            response.permissionship
-            == CheckPermissionResponse.Permissionship.PERMISSIONSHIP_HAS_PERMISSION
-        )
+        finally:
+            attributes = {
+                AUTHZ_PERMISSION: request.permission,
+                AUTHZ_RESOURCE_TYPE: request.resource.object_type,
+                AUTHZ_RESULT: result.value,
+            }
+            self._checks.add(1, attributes)
+            self._duration.record(time.perf_counter() - started, attributes)
+
+
+def _failure(error: Exception) -> CheckResult:
+    """``timeout`` for an expired deadline, ``error`` for any other failure."""
+    if isinstance(error, TimeoutError):
+        return CheckResult.TIMEOUT
+    code = getattr(error, "code", None)
+    if callable(code):
+        try:
+            if code() is grpc.StatusCode.DEADLINE_EXCEEDED:
+                return CheckResult.TIMEOUT
+        except Exception:  # noqa: BLE001 - a broken error object is still an error
+            return CheckResult.ERROR
+    return CheckResult.ERROR
 
 
 def _reason(error: Exception) -> str:

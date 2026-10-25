@@ -29,7 +29,12 @@ from .errors import (
     ProviderResultConflictError,
 )
 from .operation_result import PAYMENT_AGGREGATE, STATUS_OF, OperationStatus
-from .ports import PaymentOutbox, ProviderOperationOutcome, ProviderOperationStatus
+from .ports import (
+    PaymentOutbox,
+    PaymentTransitionObserver,
+    ProviderOperationOutcome,
+    ProviderOperationStatus,
+)
 
 
 @dataclass(frozen=True)
@@ -53,11 +58,13 @@ class ProviderResultApplier:
         operations: PaymentOperationRepository,
         outbox: PaymentOutbox,
         clock: Clock,
+        transitions: PaymentTransitionObserver,
     ) -> None:
         self._payments = payments
         self._operations = operations
         self._outbox = outbox
         self._clock = clock
+        self._transitions = transitions
 
     def apply(
         self, operation_id: OperationId, outcome: ProviderOperationOutcome
@@ -95,10 +102,11 @@ class ProviderResultApplier:
         self._operations.save(operation)
         version = self._payments.save(payment)
         self._outbox.add(AggregateRef(PAYMENT_AGGREGATE, payment.id, version), events)
+        self._transitions.applied(payment.pull_transitions())
         return AppliedProviderResult(operation, payment.state, applied=True)
 
-    @staticmethod
     def _complete(
+        self,
         payment: Payment,
         operation: PaymentOperation,
         outcome: OperationOutcome,
@@ -106,7 +114,12 @@ class ProviderResultApplier:
     ) -> list[PaymentDomainEvent]:
         try:
             return complete_operation(payment, operation, outcome, completed_at)
-        except (InvalidTransitionError, AlreadyInStateError) as error:
+        except InvalidTransitionError as error:
+            self._transitions.rejected(error)
+            raise PaymentStateConflictError(
+                payment.id, payment.state, operation.kind.value
+            ) from error
+        except AlreadyInStateError as error:
             raise PaymentStateConflictError(
                 payment.id, payment.state, operation.kind.value
             ) from error
