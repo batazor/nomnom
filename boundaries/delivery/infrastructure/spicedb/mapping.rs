@@ -120,6 +120,13 @@ pub fn delivery_check(
         DeliveryResource::Courier(id) => {
             Some(PermissionCheck::new("courier", id.as_str(), "act", subject))
         }
+        // Dispatcher action on any delivery: a platform right of the
+        // operator, not the courier's access to the delivery (AC-694).
+        DeliveryResource::Delivery(_)
+            if permission == DeliveryPermission::ReportDeliveryFailure =>
+        {
+            Some(PermissionCheck::platform("dispatch_delivery", subject))
+        }
         DeliveryResource::Delivery(id) => Some(PermissionCheck::new(
             "delivery",
             id.as_str(),
@@ -239,12 +246,30 @@ mod tests {
         }
     }
 
+    /// AC-694
+    #[test]
+    fn dispatcher_failure_report_checks_dispatch_delivery() {
+        assert_eq!(
+            rendered(delivery_check(
+                &user(),
+                DeliveryPermission::ReportDeliveryFailure,
+                &DeliveryResource::Delivery(DeliveryId::new("delivery-1"))
+            )),
+            Some("platform:nomnom#dispatch_delivery@user:user-1".to_owned())
+        );
+    }
+
     #[test]
     fn other_delivery_permissions_check_courier_or_delivery() {
         let others = ALL_DELIVERY_PERMISSIONS
             .into_iter()
             .filter(|permission| !coordinates_delivery(*permission));
         for permission in others {
+            let on_delivery = if permission == DeliveryPermission::ReportDeliveryFailure {
+                "platform:nomnom#dispatch_delivery@user:user-1"
+            } else {
+                "delivery:delivery-1#act_as_courier@user:user-1"
+            };
             assert_eq!(
                 rendered(delivery_check(
                     &user(),
@@ -259,7 +284,8 @@ mod tests {
                     permission,
                     &DeliveryResource::Delivery(DeliveryId::new("delivery-1"))
                 )),
-                Some("delivery:delivery-1#act_as_courier@user:user-1".to_owned())
+                Some(on_delivery.to_owned()),
+                "{permission:?}"
             );
             assert_eq!(
                 delivery_check(&user(), permission, &DeliveryResource::Platform),
