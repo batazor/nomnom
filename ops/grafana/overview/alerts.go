@@ -3,6 +3,7 @@ package overview
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/grafana/grafana-foundation-sdk/go/alerting"
@@ -76,6 +77,8 @@ func buildGroup(name string, sc Scope, alerts []Alert) (AlertGroup, error) {
 			return AlertGroup{}, fmt.Errorf("alert %q: uid %q должен быть [a-z0-9-] и не длиннее 40", a.Title, uid)
 		}
 		ready, missing := g.check(a.Title, Query{Expr: a.Value}, sc)
+		slices.Sort(missing)
+		missing = slices.Compact(missing)
 		group.Report = append(group.Report, AlertSummary{Title: a.Title, Severity: a.Severity, Live: ready, Missing: missing})
 		if !ready {
 			continue

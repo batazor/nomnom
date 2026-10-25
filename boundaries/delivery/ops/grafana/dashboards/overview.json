@@ -1132,6 +1132,38 @@
         "kind": "Panel",
         "spec": {
           "id": 35,
+          "title": "Failures without a catalog reason",
+          "description": "Доля провалов с `nomnom_reason=\"other\"`. Рост — сигнал дополнить каталог причин: текст курьера (`detail`) — в логе `delivery.failure_reported` в Loki.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `delivery` |\n| --- | --- |\n| [`nomnom_delivery_failed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(increase(nomnom_delivery_failed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_reason=\"other\"}[$__rate_interval])) / sum(increase(nomnom_delivery_failed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-36": {
+        "kind": "Panel",
+        "spec": {
+          "id": 36,
           "title": "Assignment latency",
           "description": "Метрики: `nomnom_delivery_assignment_latency_seconds`.",
           "links": [],
@@ -1160,10 +1192,10 @@
           }
         }
       },
-      "panel-36": {
+      "panel-37": {
         "kind": "Panel",
         "spec": {
-          "id": 36,
+          "id": 37,
           "title": "Delivery duration",
           "description": "Метрики: `nomnom_delivery_duration_seconds`.",
           "links": [],
@@ -1192,10 +1224,10 @@
           }
         }
       },
-      "panel-37": {
+      "panel-38": {
         "kind": "Panel",
         "spec": {
-          "id": 37,
+          "id": 38,
           "title": "Checks by result",
           "description": "Метрики: `nomnom_authz_checks_total`.",
           "links": [],
@@ -1224,10 +1256,10 @@
           }
         }
       },
-      "panel-38": {
+      "panel-39": {
         "kind": "Panel",
         "spec": {
-          "id": 38,
+          "id": 39,
           "title": "Denied by permission",
           "description": "DENIED — решение политики, не сбой SpiceDB.",
           "links": [],
@@ -1247,49 +1279,6 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `delivery` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n| [`target_info`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#resource) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-39": {
-        "kind": "Panel",
-        "spec": {
-          "id": 39,
-          "title": "Errors and timeouts",
-          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
-          "links": [
-            {
-              "title": "Traces: ошибки сервиса в интервале",
-              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-              "targetBlank": true
-            },
-            {
-              "title": "Traces: медленные (\u003e 1s)",
-              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+duration+%3E+1s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-              "targetBlank": true
-            }
-          ],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `delivery` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n| [`target_info`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#resource) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1346,6 +1335,49 @@
         "kind": "Panel",
         "spec": {
           "id": 40,
+          "title": "Errors and timeouts",
+          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
+          "links": [
+            {
+              "title": "Traces: ошибки сервиса в интервале",
+              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+              "targetBlank": true
+            },
+            {
+              "title": "Traces: медленные (\u003e 1s)",
+              "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+duration+%3E+1s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+              "targetBlank": true
+            }
+          ],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `delivery` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n| [`target_info`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#resource) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-41": {
+        "kind": "Panel",
+        "spec": {
+          "id": 41,
           "title": "Check latency",
           "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
           "links": [],
@@ -2151,6 +2183,19 @@
                           "name": "panel-36"
                         }
                       }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-37"
+                        }
+                      }
                     }
                   ]
                 }
@@ -2175,7 +2220,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-37"
+                          "name": "panel-38"
                         }
                       }
                     },
@@ -2188,7 +2233,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-38"
+                          "name": "panel-39"
                         }
                       }
                     },
@@ -2201,7 +2246,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-39"
+                          "name": "panel-40"
                         }
                       }
                     },
@@ -2214,7 +2259,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-40"
+                          "name": "panel-41"
                         }
                       }
                     }

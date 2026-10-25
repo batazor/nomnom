@@ -29,7 +29,7 @@ func Services() []Options {
 			GRPC:       true,
 			Kafka:      &Kafka{ConsumerGroup: "delivery", Consumers: []string{inventory.Delivery}},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
-			Domain: deliveryDomain,
+			Domain: deliveryDomain, DomainAlerts: deliveryAlerts,
 		},
 		{
 			Context: "payments", Title: "Payments", Language: Python,
@@ -92,6 +92,8 @@ func deliveryDomain(sc Scope) []Panel {
 			{Sum("nomnom_reason", sc.Rate("nomnom_delivery_failed_total")), "failed {{nomnom_reason}}"},
 			{Sum("nomnom_reason", sc.Rate("nomnom_delivery_reassignments_total")), "reassigned {{nomnom_reason}}"},
 		}},
+		{Title: "Failures without a catalog reason", Unit: "percentunit", Queries: []Query{{failureOtherShare(sc, "$__rate_interval"), "other share"}},
+			Description: "Доля провалов с `nomnom_reason=\"other\"`. Рост — сигнал дополнить каталог причин: текст курьера (`detail`) — в логе `delivery.failure_reported` в Loki."},
 		{Title: "Assignment latency", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_delivery_assignment_latency_seconds")},
 		{Title: "Delivery duration", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_delivery_duration_seconds")},
 	}
@@ -111,4 +113,22 @@ func paymentsDomain(sc Scope) []Panel {
 			counter(sc, "nomnom_payments_refunds_total", "refund", `nomnom_outcome="failed"`),
 		}, Description: "Технические сбои операций; declined сюда не входит. Provider latency — row Dependencies."},
 	}
+}
+
+// failureOtherShare — доля провалов доставки без причины из каталога за window.
+func failureOtherShare(sc Scope, window string) string {
+	failed := func(matchers ...string) string {
+		return Sum("", "increase("+sc.Sel("nomnom_delivery_failed_total", matchers...)+"["+window+"])")
+	}
+	return failed(`nomnom_reason="other"`) + " / " + failed()
+}
+
+func deliveryAlerts(sc Scope) []Alert {
+	failed := Sum("", "increase("+sc.Sel("nomnom_delivery_failed_total")+"[1h])")
+	return []Alert{{
+		Slug: "delivery-failure-other", Title: "Delivery: failures outside the reason catalog", Severity: Warning,
+		For: "30m", Op: ">", Threshold: 0.2, DashboardID: UID("delivery"),
+		Summary: "Больше 20% провалов доставки за час — с причиной other (при 10+ провалах): каталог причин устарел, разберите detail в логах delivery.failure_reported.",
+		Value:   "(" + failureOtherShare(sc, "1h") + ") and on () (" + failed + " >= 10)",
+	}}
 }

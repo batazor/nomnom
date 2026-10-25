@@ -58,6 +58,8 @@ type Options struct {
 	Kitchen       bool
 	Authorization bool
 	Domain        func(Scope) []Panel
+	// DomainAlerts — alert rules бизнес-метрик сервиса (scope без variables).
+	DomainAlerts func(Scope) []Alert
 }
 
 type Kafka struct {

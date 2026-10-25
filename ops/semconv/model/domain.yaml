@@ -113,7 +113,7 @@ groups:
     type: metric
     metric_name: nomnom.delivery.offers
     stability: development
-    brief: "Delivery offers: accepted, rejected, expired (expired is not emitted until delivery has an Expire transition)."
+    brief: "Delivery offers: accepted, rejected, expired (pending offer past expires_at, closed by the expiry worker)."
     instrument: counter
     unit: "{offer}"
     attributes:
@@ -137,7 +137,7 @@ groups:
     type: metric
     metric_name: nomnom.delivery.failed
     stability: development
-    brief: "Deliveries failed."
+    brief: "Deliveries failed; nomnom.reason: customer_unreachable, address_not_found, no_access, customer_refused, order_damaged, courier_incident, other. Free-text detail goes to logs and traces only."
     instrument: counter
     unit: "{delivery}"
     attributes:

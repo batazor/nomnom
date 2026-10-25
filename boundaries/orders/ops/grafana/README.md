@@ -159,7 +159,7 @@ Rule group `orders` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)
 | Orders: gRPC technical errors | critical | активно | — |
 | Orders: gRPC p95 latency | warning | активно | — |
 | Orders: neighbour calls failing | warning | активно | — |
-| Orders: use case errors | warning | ждёт метрик | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase), [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
+| Orders: use case errors | warning | ждёт метрик | [`nomnom_usecase_duration_seconds`](../../../../docs/observability/metric-inventory.md#usecase) |
 | Orders: messages sent to DLQ | warning | активно | — |
 
 ## Переходы

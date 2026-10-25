@@ -100,6 +100,7 @@ JSON — артефакт генератора: правки вносятся в
 | Delivery flow | TODO | [`nomnom_delivery_assignments_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_delivery_completed_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_delivery_created_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_delivery_failed_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_delivery_pickups_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_delivery_reassignments_total`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Delivery offers | TODO | [`nomnom_delivery_offers_total`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Failures and reassignments by reason | TODO | [`nomnom_delivery_failed_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_delivery_reassignments_total`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Failures without a catalog reason | TODO | [`nomnom_delivery_failed_total`](../../../../docs/observability/metric-inventory.md#domain) |
 | Assignment latency | TODO | [`nomnom_delivery_assignment_latency_seconds`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Delivery duration | TODO | [`nomnom_delivery_duration_seconds`](../../../../docs/observability/metric-inventory.md#domain), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
@@ -112,7 +113,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
-Живых панелей: 6 из 40. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 6 из 41. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
@@ -120,9 +121,10 @@ Rule group `delivery` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.jso
 
 | Alert | Severity | Статус | Недостающие метрики |
 | --- | --- | --- | --- |
-| Delivery: gRPC technical errors | critical | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc), [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| Delivery: gRPC technical errors | critical | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
 | Delivery: gRPC p95 latency | warning | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
 | Delivery: messages sent to DLQ | warning | ждёт метрик | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Delivery: failures outside the reason catalog | warning | ждёт метрик | [`nomnom_delivery_failed_total`](../../../../docs/observability/metric-inventory.md#domain) |
 
 ## Переходы
 

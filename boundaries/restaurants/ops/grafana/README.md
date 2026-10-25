@@ -137,7 +137,7 @@ Rule group `restaurants` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.
 
 | Alert | Severity | Статус | Недостающие метрики |
 | --- | --- | --- | --- |
-| Restaurants: gRPC technical errors | critical | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc), [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| Restaurants: gRPC technical errors | critical | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
 | Restaurants: gRPC p95 latency | warning | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
 | Restaurants: messages sent to DLQ | warning | ждёт метрик | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging) |
 
