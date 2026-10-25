@@ -23,13 +23,12 @@ SERVICE_ACCOUNT = "/var/run/secrets/kubernetes.io/serviceaccount"
 P256_POINT_PREFIX = bytes.fromhex("06082a8648ce3d030107034200")
 
 
-def request(method, path, body=None):
+def request(method, path, body=None, accept="application/json"):
     host = os.environ["KUBERNETES_SERVICE_HOST"]
     api = f"https://{f'[{host}]' if ':' in host else host}:{os.environ['KUBERNETES_SERVICE_PORT']}"
     tls = ssl.create_default_context(cafile=f"{SERVICE_ACCOUNT}/ca.crt")
     with open(f"{SERVICE_ACCOUNT}/token") as token:
-        # /openid/v1/jwks отвечает application/jwk-set+json: только application/json даёт 406.
-        headers = {"Authorization": f"Bearer {token.read().strip()}", "Accept": "application/json, application/jwk-set+json"}
+        headers = {"Authorization": f"Bearer {token.read().strip()}", "Accept": accept}
     data = None
     if body is not None:
         headers["Content-Type"] = "application/apply-patch+yaml"
@@ -86,7 +85,7 @@ def main():
     issuer = json.loads(request("GET", "/.well-known/openid-configuration"))["issuer"]
     if issuer != expected_issuer:
         sys.exit(f"cluster issuer {issuer} differs from {expected_issuer} in ops/kind/values")
-    cluster = request("GET", "/openid/v1/jwks").decode()
+    cluster = request("GET", "/openid/v1/jwks", accept="application/jwk-set+json").decode()
     certificate = bff_certificate(os.environ["BFF_NAMESPACE"], os.environ["BFF_SECRET"], 300)
     bff = bff_jwks(certificate, os.environ["BFF_KEY_ID"])
     namespaces = os.environ["JWKS_NAMESPACES"].split()
