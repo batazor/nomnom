@@ -8,7 +8,7 @@ state + trigger + domain inputs = next state | typed domain error
 
 При одинаковых значениях `state`, `trigger` и domain inputs результат всегда одинаков. FSM не выполняет побочных эффектов и не зависит от способа вызова, хранения или наблюдения агрегата.
 
-Архитектурное решение зафиксировано в [ADR 21: Pure FSM Transitions](adr/0021-pure-fsm-transitions.md). Оно согласуется с разделением domain/application/infrastructure из [ADR 6](adr/0006-ddd-structure-inside-vertical-slices.md), локальной транзакционной границей из [ADR 20](adr/0020-unit-of-work-for-local-transactions.md) и оркестрацией заказов из [локального Temporal ADR](../boundaries/orders/docs/adr/0002-use-temporal-to-orchestrate-orders.md).
+Архитектурное решение зафиксировано в [ADR 21: Pure FSM Transitions](adr/0021-pure-fsm-transitions.md); иерархия состояний (statecharts) — в [ADR 41](adr/0041-statecharts-for-aggregate-lifecycle.md). Оно согласуется с разделением domain/application/infrastructure из [ADR 6](adr/0006-ddd-structure-inside-vertical-slices.md), локальной транзакционной границей из [ADR 20](adr/0020-unit-of-work-for-local-transactions.md) и оркестрацией заказов из [локального Temporal ADR](../boundaries/orders/docs/adr/0002-use-temporal-to-orchestrate-orders.md).
 
 ## Ответственность FSM
 
@@ -75,6 +75,37 @@ Transition engine сначала находит определённый исх�
 - `AlreadyInState{state}` — trigger семантически повторяет уже применённый переход в его целевом состоянии.
 
 FSM строгая: повторный trigger в целевом состоянии не считается успешным переходом. Для таких повторов таблица содержит явный исход `AlreadyInState`, поэтому поведение остаётся полным и проверяемым, а не зависит от скрытого special case engine. Application handler интерпретирует эту ошибку по бизнес-семантике конкретного use case: может превратить идемпотентный повтор или duplicate Signal в no-op либо вернуть ошибку. Infrastructure сопоставляет domain/application error с transport contract, обычно `FAILED_PRECONDITION`; FSM не знает gRPC/HTTP codes и `ErrorInfo`.
+
+## Statecharts: иерархия состояний
+
+Transition table может иметь иерархию состояний — подмножество statecharts, принятое в [ADR 41](adr/0041-statecharts-for-aggregate-lifecycle.md). Это не другой механизм, а способ записать ту же таблицу без повторов.
+
+- **Leaf state** — атомарное состояние, в котором aggregate находится, которое сохраняется, публикуется и попадает в метрики. Aggregate всегда ровно в одном leaf.
+- **Compound state** — именованная группа leaf states или других compound states. Это термин Ubiquitous Language (`IN_KITCHEN`, «заказ у кухни»), а не техническая группа; наружу и в хранилище не попадает.
+- Родитель каждого узла задан данными; узлы верхнего уровня помечены явно.
+
+Строка таблицы имеет форму:
+
+```text
+source (leaf | compound) | trigger | guard | target (leaf | stay) | failure
+```
+
+`stay` — targetless transition: aggregate остаётся в текущем leaf и меняет только свои данные (`ReportDelay`, `RecordFact`). Это не `AlreadyInState`: trigger не повторяет уже применённый переход.
+
+Разрешение пары `(leaf, trigger)` — innermost-first:
+
+```text
+for node in [leaf, parent(leaf), …, top-level]:
+  row = table[(node, trigger)]          → guard → target | GuardFailed
+  repeat = repeats[(node, trigger)]     → AlreadyInState   (только для leaf)
+none → InvalidTransition
+```
+
+Строка вложенного состояния переопределяет строку предка для того же trigger — например, `Cancel` на `ACTIVE_PREPARATION` с guard политики отмены переопределяет безусловный `Cancel` на `OPEN`. Строк на корне нет: переход «из любого состояния» был бы неявным поведением.
+
+Принадлежность к группе — функции модели, а не ручные списки: `isIn(state, node)` для loaded aggregate и `leavesOf(node)` для фильтров репозитория. `TERMINAL_STATES`, `WITH_ACTIVE_ASSIGNMENT`, `IsFinal()` и списки `$in` в адаптерах выражаются через compound state.
+
+Не используются: entry/exit actions (это callbacks), delayed (`after`) и eventless (`always`) transitions (время — у application и Temporal), history states (восстановление идёт из persisted leaf), параллельные регионы (независимое измерение — отдельное поле или entity со своей таблицей).
 
 ## Domain methods и domain events
 
@@ -160,9 +191,10 @@ from, trigger, inputs → to | typed error
 - недопустимые переходы с точным `InvalidTransition`;
 - строгие повторы с `AlreadyInState`;
 - отдельные boundary cases каждого guard с `GuardFailed{reason}`;
-- тест полноты: каждая пара из декартова произведения всех `state × trigger` имеет явно определённый исход.
+- тест полноты: каждая пара из декартова произведения всех leaf `state × trigger` имеет явно определённый исход;
+- для иерархической таблицы — структурные проверки: иерархия без циклов, у compound state есть потомки, пара `(node, trigger)` уникальна, повторы объявлены только на leaf и не совпадают со строкой перехода того же leaf.
 
-Тест полноты не требует, чтобы каждая пара была успешной: он требует отсутствия неявного поведения. BDD-сценарии проверяют бизнес-смысл, например возможность отмены заказа при заданных условиях, а не внутренний API или callback конкретной FSM-библиотеки.
+Тест полноты не требует, чтобы каждая пара была успешной: он требует отсутствия неявного поведения. Ожидаемая матрица пишется независимо от таблицы, поэтому перевод плоской таблицы в иерархию доказывается неизменной матрицей. BDD-сценарии проверяют бизнес-смысл, например возможность отмены заказа при заданных условиях, а не внутренний API или callback конкретной FSM-библиотеки.
 
 ## Observability
 
@@ -182,53 +214,61 @@ aggregate_type, from_state, trigger, to_state, result
 
 ## Kitchen / Preparation
 
-Концептуальная FSM aggregate `RestaurantOrder` в `restaurants`. Сценарии, use cases и бизнес-смысл states описаны в [Kitchen](kitchen.md); здесь — только модель переходов. Таблица концептуальная: окончательный набор states, triggers и guards фиксирует отдельная FSM-спецификация вместе с реализацией слайса.
+Statechart aggregate `RestaurantOrder` в `restaurants`; реализация — `boundaries/restaurants/slices/restaurantorder/domains/restaurantorder/fsm.ts`. Сценарии, use cases и бизнес-смысл states описаны в [Kitchen](kitchen.md); здесь — только модель переходов.
 
 `RestaurantOrder` — один aggregate с одной FSM. `Kitchen Order` — роль того же aggregate в кухонном процессе, а не второй aggregate и не вторая FSM. Её states не совпадают с `Order State` и Workflow Stage `orders` и не импортируются ими.
+
+Compound states:
+
+| Compound state | Входит | Смысл |
+| --- | --- | --- |
+| `OPEN` | `RECEIVED`, `ACCEPTED`, `IN_KITCHEN` | Работа кухни над заказом не завершена; заказ можно отменить |
+| `IN_KITCHEN` | `QUEUED`, `ACTIVE_PREPARATION` | Заказ принят в Kitchen Queue и имеет `expected_ready_at`; кухня может сообщить о задержке |
+| `ACTIVE_PREPARATION` | `PREPARING`, `ASSEMBLED` | Ресурсы кухни уже тратятся (List Active Preparations); возможна неудача приготовления, отмена — по политике |
+| `CLOSED` | `READY`, `REJECTED`, `CANCELLED`, `FAILED` | Terminal states |
 
 ```mermaid
 stateDiagram-v2
     [*] --> RECEIVED: Receive
-    RECEIVED --> ACCEPTED: Accept
+    state OPEN {
+        RECEIVED --> ACCEPTED: Accept
+        ACCEPTED --> QUEUED: Queue
+        state IN_KITCHEN {
+            QUEUED --> PREPARING: StartPreparation
+            state ACTIVE_PREPARATION {
+                PREPARING --> ASSEMBLED: MarkAssembled
+            }
+        }
+    }
+    state CLOSED {
+        READY
+        REJECTED
+        CANCELLED
+        FAILED
+    }
     RECEIVED --> REJECTED: Reject
-    ACCEPTED --> QUEUED: Queue
-    QUEUED --> PREPARING: StartPreparation
-    PREPARING --> ASSEMBLED: MarkAssembled
     ASSEMBLED --> READY: MarkReady
-    PREPARING --> FAILED: ReportFailure
-    ASSEMBLED --> FAILED: ReportFailure
-    RECEIVED --> CANCELLED: Cancel
-    ACCEPTED --> CANCELLED: Cancel
-    QUEUED --> CANCELLED: Cancel
-    PREPARING --> CANCELLED: Cancel
-    ASSEMBLED --> CANCELLED: Cancel
-    READY --> [*]
-    REJECTED --> [*]
-    CANCELLED --> [*]
-    FAILED --> [*]
+    OPEN --> CANCELLED: Cancel
+    ACTIVE_PREPARATION --> CANCELLED: Cancel [policy]
+    ACTIVE_PREPARATION --> FAILED: ReportFailure
+    CLOSED --> [*]
 ```
 
-Terminal states: `READY` (успешное завершение работы кухни), `REJECTED`, `CANCELLED`, `FAILED`. После `READY` Pickup принадлежит `delivery`; нужен ли `restaurants` собственный state передачи заказа — открытый вопрос.
+`IN_KITCHEN × ReportDelay` — targetless (`stay`) и на диаграмме не показан. `READY` — успешное завершение работы кухни. После `READY` Pickup принадлежит `delivery`; нужен ли `restaurants` собственный state передачи заказа — открытый вопрос.
 
-| from_state | trigger | guard | to_state | failure |
+| source | trigger | guard | target | failure |
 | --- | --- | --- | --- | --- |
 | `RECEIVED` | `Accept` | Ресторан принимает заказы, все позиции доступны (`RestaurantAcceptingOrders`, `MenuItemAvailable`) | `ACCEPTED` | `GuardFailed{reasons}` |
 | `RECEIVED` | `Reject` | — | `REJECTED` | — |
-| `RECEIVED` | `Cancel` | — | `CANCELLED` | — |
 | `ACCEPTED` | `Queue` | — | `QUEUED` | — |
-| `ACCEPTED` | `Cancel` | — | `CANCELLED` | — |
 | `QUEUED` | `StartPreparation` | — | `PREPARING` | — |
-| `QUEUED` | `ReportDelay` | Новое `expected_ready_at` позже текущего и позже `now` | `QUEUED` | `GuardFailed{NotLater}` |
-| `QUEUED` | `Cancel` | — | `CANCELLED` | — |
-| `PREPARING` | `ChangeItem` | Переход позиции допустим по таблице Preparation Item | `PREPARING` | Ошибка таблицы позиции |
+| `PREPARING` | `ChangeItem` | Переход позиции допустим по таблице Preparation Item | `stay` | Ошибка таблицы позиции |
 | `PREPARING` | `MarkAssembled` | Все required items в `READY` (только item-level model) | `ASSEMBLED` | `GuardFailed{RequiredItemsNotPrepared}` |
-| `PREPARING` | `ReportDelay` | Как для `QUEUED` | `PREPARING` | `GuardFailed{NotLater}` |
-| `PREPARING` | `ReportFailure` | — | `FAILED` | — |
-| `PREPARING` | `Cancel` | `RestaurantOrderCancellable`, если policy введена | `CANCELLED` | `GuardFailed{reasons}` |
 | `ASSEMBLED` | `MarkReady` | — | `READY` | — |
-| `ASSEMBLED` | `ReportDelay` | Как для `QUEUED` | `ASSEMBLED` | `GuardFailed{NotLater}` |
-| `ASSEMBLED` | `ReportFailure` | — | `FAILED` | — |
-| `ASSEMBLED` | `Cancel` | Как для `PREPARING` | `CANCELLED` | `GuardFailed{reasons}` |
+| `OPEN` | `Cancel` | — | `CANCELLED` | — |
+| `IN_KITCHEN` | `ReportDelay` | Новое `expected_ready_at` позже текущего и позже `now` | `stay` | `GuardFailed{NotLater}` |
+| `ACTIVE_PREPARATION` | `ReportFailure` | — | `FAILED` | — |
+| `ACTIVE_PREPARATION` | `Cancel` | `RestaurantOrderCancellable`, если policy введена; переопределяет `OPEN × Cancel` | `CANCELLED` | `GuardFailed{reasons}` |
 
 Строгие повторы с явным `AlreadyInState`:
 
@@ -259,7 +299,7 @@ Terminal states: `READY` (успешное завершение работы к�
 - Reject After Acceptance: строки `ACCEPTED/QUEUED × Reject` не добавлены, исход — `InvalidTransition`;
 - Cancel до Receive не доходит до FSM: заказа нет, application возвращает `NotFoundError`, tombstone не вводится.
 
-`ReportDelay` и `ChangeItem` — самостоятельные triggers с target state, равным source. Это не `AlreadyInState`: trigger не повторяет уже применённый переход, а меняет данные aggregate (`expected_ready_at`, State позиции) в разрешённом State заказа. Строки таблицы явно ограничивают, в каких States это допустимо.
+`ReportDelay` и `ChangeItem` — самостоятельные targetless triggers (`stay`). Это не `AlreadyInState`: trigger не повторяет уже применённый переход, а меняет данные aggregate (`expected_ready_at`, State позиции) в разрешённом State заказа. Source строки явно ограничивает, в каких States это допустимо.
 
 ### Preparation Item
 

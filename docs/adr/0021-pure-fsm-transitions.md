@@ -6,6 +6,8 @@ Date: 2026-10-24
 
 Accepted
 
+Дополнен [41. Statecharts для lifecycle агрегатов](0041-statecharts-for-aggregate-lifecycle.md): transition table получает иерархию состояний; правила этого ADR сохраняются.
+
 Связан с [6. DDD Structure Inside Vertical Slices](0006-ddd-structure-inside-vertical-slices.md), [11. Transactional Inbox and Idempotent Event Processing](0011-transactional-inbox-and-idempotent-event-processing.md), [13. Transactional Outbox for Integration Event Publishing](0013-transactional-outbox-for-integration-event-publishing.md) и [20. Unit of Work for Local Transactions](0020-unit-of-work-for-local-transactions.md).
 
 Для `orders` связан с [локальным ADR 2: Использовать Temporal для оркестрации заказов](../../boundaries/orders/docs/adr/0002-use-temporal-to-orchestrate-orders.md).

@@ -5,12 +5,20 @@ import {
   ALL_STATES,
   ALL_TRIGGERS,
   AlreadyInStateError,
+  RestaurantOrderCompoundState as C,
   GuardFailedError,
   InvalidTransitionError,
+  isIn,
+  leavesOf,
+  lineage,
+  PARENT,
+  REPEATS,
+  type RestaurantOrderNode,
   type RestaurantOrderState,
   type RestaurantOrderTrigger,
   resolveTransition,
   RestaurantOrderState as S,
+  TRANSITIONS,
   type TransitionRequest,
 } from "../slices/restaurantorder/domains/restaurantorder/fsm.ts";
 
@@ -243,4 +251,50 @@ test("Cancel during Preparation follows the cancellation policy", () => {
       state,
     );
   }
+});
+
+test("hierarchy is acyclic and every compound state has children", () => {
+  for (const node of Object.keys(PARENT) as RestaurantOrderNode[]) {
+    const nodes = lineage(node);
+    assert.equal(new Set(nodes).size, nodes.length, node);
+  }
+  for (const compound of Object.values(C)) {
+    assert.ok(
+      Object.values(PARENT).includes(compound),
+      `${compound} has no children`,
+    );
+    assert.ok(leavesOf(compound).length > 0, compound);
+  }
+});
+
+test("table declares each node × trigger once and repeats only on leaves", () => {
+  const declared = TRANSITIONS.map((row) => `${row.source} × ${row.trigger}`);
+  assert.equal(new Set(declared).size, declared.length);
+  for (const repeat of REPEATS) {
+    assert.ok(ALL_STATES.includes(repeat.state), repeat.state);
+    assert.ok(
+      !declared.includes(`${repeat.state} × ${repeat.trigger}`),
+      `${repeat.state} × ${repeat.trigger}`,
+    );
+  }
+});
+
+test("compound states group the expected leaf states", () => {
+  assert.deepEqual(leavesOf(C.Open), [
+    S.Received,
+    S.Accepted,
+    S.Queued,
+    S.Preparing,
+    S.Assembled,
+  ]);
+  assert.deepEqual(leavesOf(C.InKitchen), [S.Queued, S.Preparing, S.Assembled]);
+  assert.deepEqual(leavesOf(C.ActivePreparation), [S.Preparing, S.Assembled]);
+  assert.deepEqual(leavesOf(C.Closed), [
+    S.Ready,
+    S.Rejected,
+    S.Cancelled,
+    S.Failed,
+  ]);
+  assert.ok(isIn(S.Preparing, C.Open));
+  assert.ok(!isIn(S.Ready, C.Open));
 });

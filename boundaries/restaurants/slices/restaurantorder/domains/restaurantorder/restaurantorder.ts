@@ -43,6 +43,9 @@ export {
   type CancellationPolicy,
   GuardFailedError,
   InvalidTransitionError,
+  isIn,
+  leavesOf,
+  RestaurantOrderCompoundState,
   RestaurantOrderState,
 } from "./fsm.ts";
 export type { PreparationItem, PreparationItemInput } from "./items.ts";

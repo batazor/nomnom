@@ -1,10 +1,12 @@
 /**
- * Pure FSM of the `RestaurantOrder` aggregate: `state + trigger + inputs →
- * next state | typed error`. The transition table is data and is the single
- * source of truth for allowed transitions; see docs/fsm.md#kitchen--preparation.
- * Item-level transitions (`ChangeItem`) are not part of the current model.
+ * Pure statechart of the `RestaurantOrder` aggregate: `leaf state + trigger +
+ * inputs → next leaf state | typed error`. States form a hierarchy; a
+ * transition declared on a compound state applies to every state inside it,
+ * and the innermost declaration wins. The table and the hierarchy are data
+ * and the single source of truth for allowed transitions; see
+ * docs/fsm.md#kitchen--preparation and ADR 41. Item-level transitions
+ * (`ChangeItem`) are not part of the current model.
  */
-
 export const RestaurantOrderState = {
   Received: "RECEIVED",
   Accepted: "ACCEPTED",
@@ -41,12 +43,77 @@ export const ALL_TRIGGERS: readonly RestaurantOrderTrigger[] = Object.values(
   RestaurantOrderTrigger,
 );
 
-export const TERMINAL_STATES: ReadonlySet<RestaurantOrderState> = new Set([
-  RestaurantOrderState.Ready,
-  RestaurantOrderState.Rejected,
-  RestaurantOrderState.Cancelled,
-  RestaurantOrderState.Failed,
-]);
+/**
+ * Compound states: named groups of the Ubiquitous Language. They are never
+ * persisted or published; the aggregate is always in exactly one leaf state.
+ */
+export const RestaurantOrderCompoundState = {
+  /** Kitchen work is not finished; the order can still be cancelled. */
+  Open: "OPEN",
+  /** The order holds a place in the Kitchen Queue and an expected ready time. */
+  InKitchen: "IN_KITCHEN",
+  /** Kitchen resources are being spent on the order. */
+  ActivePreparation: "ACTIVE_PREPARATION",
+  /** Terminal states. */
+  Closed: "CLOSED",
+} as const;
+
+export type RestaurantOrderCompoundState =
+  (typeof RestaurantOrderCompoundState)[keyof typeof RestaurantOrderCompoundState];
+
+export type RestaurantOrderNode =
+  | RestaurantOrderState
+  | RestaurantOrderCompoundState;
+
+const S = RestaurantOrderState;
+const C = RestaurantOrderCompoundState;
+const T = RestaurantOrderTrigger;
+
+/** Parent of every node; `null` marks a top-level node. */
+export const PARENT: Readonly<
+  Record<RestaurantOrderNode, RestaurantOrderCompoundState | null>
+> = {
+  [C.Open]: null,
+  [C.Closed]: null,
+  [S.Received]: C.Open,
+  [S.Accepted]: C.Open,
+  [C.InKitchen]: C.Open,
+  [S.Queued]: C.InKitchen,
+  [C.ActivePreparation]: C.InKitchen,
+  [S.Preparing]: C.ActivePreparation,
+  [S.Assembled]: C.ActivePreparation,
+  [S.Ready]: C.Closed,
+  [S.Rejected]: C.Closed,
+  [S.Cancelled]: C.Closed,
+  [S.Failed]: C.Closed,
+};
+
+/** `node` followed by its ancestors up to the top level. */
+export const lineage = (
+  node: RestaurantOrderNode,
+): readonly RestaurantOrderNode[] => {
+  const nodes: RestaurantOrderNode[] = [];
+  for (
+    let current: RestaurantOrderNode | null = node;
+    current !== null;
+    current = PARENT[current]
+  ) {
+    nodes.push(current);
+  }
+  return nodes;
+};
+
+/** Whether `state` is `node` or lies inside it. */
+export const isIn = (
+  state: RestaurantOrderState,
+  node: RestaurantOrderNode,
+): boolean => lineage(state).includes(node);
+
+/** Leaf states inside `node`, in declaration order. */
+export const leavesOf = (
+  node: RestaurantOrderNode,
+): readonly RestaurantOrderState[] =>
+  ALL_STATES.filter((state) => isIn(state, node));
 
 /** Typed, stable reason of a failed guard; `menuItemId` is set for item reasons. */
 export type GuardFailureReason = Readonly<{
@@ -92,10 +159,13 @@ export type TransitionRequest =
 
 type Guard = (request: TransitionRequest) => readonly GuardFailureReason[];
 
+/** Targetless transition: the aggregate stays in its current leaf state. */
+export const STAY = "stay";
+
 export type TransitionRow = Readonly<{
-  from: RestaurantOrderState;
+  source: RestaurantOrderNode;
   trigger: RestaurantOrderTrigger;
-  to: RestaurantOrderState;
+  target: RestaurantOrderState | typeof STAY;
   guard?: Guard;
 }>;
 
@@ -121,59 +191,38 @@ const cancellableDuringPreparationGuard: Guard = (request) =>
     ? [{ code: GuardFailureCode.CancellationDuringPreparationNotAllowed }]
     : [];
 
-const S = RestaurantOrderState;
-const T = RestaurantOrderTrigger;
-
 export const TRANSITIONS: readonly TransitionRow[] = [
   {
-    from: S.Received,
+    source: S.Received,
     trigger: T.Accept,
-    to: S.Accepted,
+    target: S.Accepted,
     guard: acceptanceGuard,
   },
-  { from: S.Received, trigger: T.Reject, to: S.Rejected },
-  { from: S.Received, trigger: T.Cancel, to: S.Cancelled },
-  { from: S.Accepted, trigger: T.Queue, to: S.Queued },
-  { from: S.Accepted, trigger: T.Cancel, to: S.Cancelled },
-  { from: S.Queued, trigger: T.StartPreparation, to: S.Preparing },
+  { source: S.Received, trigger: T.Reject, target: S.Rejected },
+  { source: S.Accepted, trigger: T.Queue, target: S.Queued },
+  { source: S.Queued, trigger: T.StartPreparation, target: S.Preparing },
+  { source: S.Preparing, trigger: T.MarkAssembled, target: S.Assembled },
+  { source: S.Assembled, trigger: T.MarkReady, target: S.Ready },
+  { source: C.Open, trigger: T.Cancel, target: S.Cancelled },
   {
-    from: S.Queued,
+    source: C.InKitchen,
     trigger: T.ReportDelay,
-    to: S.Queued,
+    target: STAY,
     guard: laterExpectedReadyAtGuard,
   },
-  { from: S.Queued, trigger: T.Cancel, to: S.Cancelled },
-  { from: S.Preparing, trigger: T.MarkAssembled, to: S.Assembled },
+  { source: C.ActivePreparation, trigger: T.ReportFailure, target: S.Failed },
   {
-    from: S.Preparing,
-    trigger: T.ReportDelay,
-    to: S.Preparing,
-    guard: laterExpectedReadyAtGuard,
-  },
-  { from: S.Preparing, trigger: T.ReportFailure, to: S.Failed },
-  {
-    from: S.Preparing,
+    source: C.ActivePreparation,
     trigger: T.Cancel,
-    to: S.Cancelled,
-    guard: cancellableDuringPreparationGuard,
-  },
-  { from: S.Assembled, trigger: T.MarkReady, to: S.Ready },
-  {
-    from: S.Assembled,
-    trigger: T.ReportDelay,
-    to: S.Assembled,
-    guard: laterExpectedReadyAtGuard,
-  },
-  { from: S.Assembled, trigger: T.ReportFailure, to: S.Failed },
-  {
-    from: S.Assembled,
-    trigger: T.Cancel,
-    to: S.Cancelled,
+    target: S.Cancelled,
     guard: cancellableDuringPreparationGuard,
   },
 ];
 
-/** Strict repeats of an already applied transition: explicit `AlreadyInState`. */
+/**
+ * Strict repeats of an already applied transition: explicit `AlreadyInState`.
+ * Declared on leaf states only.
+ */
 export const REPEATS: readonly Readonly<{
   state: RestaurantOrderState;
   trigger: RestaurantOrderTrigger;
@@ -244,33 +293,40 @@ export type TransitionOutcome =
     }>
   | Readonly<{ ok: false; error: TransitionError }>;
 
-/** Resolves the outcome of `request.trigger` from `state` without side effects. */
+/**
+ * Resolves the outcome of `request.trigger` from `state` without side effects:
+ * the innermost declaration on `state` or one of its ancestors wins.
+ */
 export const resolveTransition = (
   state: RestaurantOrderState,
   request: TransitionRequest,
 ): TransitionOutcome => {
-  const row = TRANSITIONS.find(
-    (candidate) =>
-      candidate.from === state && candidate.trigger === request.trigger,
-  );
-  if (row !== undefined) {
-    const reasons = row.guard?.(request) ?? [];
-    if (reasons.length > 0) {
-      return {
-        ok: false,
-        error: new GuardFailedError(request.trigger, reasons),
-      };
+  for (const node of lineage(state)) {
+    const row = TRANSITIONS.find(
+      (candidate) =>
+        candidate.source === node && candidate.trigger === request.trigger,
+    );
+    if (row !== undefined) {
+      const reasons = row.guard?.(request) ?? [];
+      if (reasons.length > 0) {
+        return {
+          ok: false,
+          error: new GuardFailedError(request.trigger, reasons),
+        };
+      }
+      const to = row.target === STAY ? state : row.target;
+      return { ok: true, from: state, trigger: request.trigger, to };
     }
-    return { ok: true, from: state, trigger: request.trigger, to: row.to };
+    const repeat = REPEATS.some(
+      (candidate) =>
+        candidate.state === node && candidate.trigger === request.trigger,
+    );
+    if (repeat) {
+      return { ok: false, error: new AlreadyInStateError(state) };
+    }
   }
-  const repeat = REPEATS.some(
-    (candidate) =>
-      candidate.state === state && candidate.trigger === request.trigger,
-  );
   return {
     ok: false,
-    error: repeat
-      ? new AlreadyInStateError(state)
-      : new InvalidTransitionError(state, request.trigger),
+    error: new InvalidTransitionError(state, request.trigger),
   };
 };

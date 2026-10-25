@@ -37,7 +37,9 @@ import {
 } from "../../applications/restaurant-order-view.ts";
 import {
   DuplicateOrderIdError,
+  leavesOf,
   RestaurantOrder,
+  RestaurantOrderCompoundState,
   type RestaurantOrderRepository,
   type RestaurantOrderSnapshot,
   RestaurantOrderState,
@@ -275,7 +277,7 @@ export class MongoKitchenBoard
       {
         restaurantId,
         state: {
-          $in: [RestaurantOrderState.Preparing, RestaurantOrderState.Assembled],
+          $in: [...leavesOf(RestaurantOrderCompoundState.ActivePreparation)],
         },
       },
       { sort: { "timeline.preparationStartedAt": 1, _id: 1 } },
