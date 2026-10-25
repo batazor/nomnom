@@ -95,11 +95,22 @@ data:
     }
 
     // Traces и logs: короткий batch, чтобы trace и его логи появлялись в Grafana быстро.
+    // Traces дублируются в trace-capture: проверки kind (e2e/calls) читают spans из него
+    // при любом profile, а не только когда приложения шлют traces напрямую.
     otelcol.processor.batch "signals" {
       timeout = "5s"
       output {
-        traces = [otelcol.exporter.otlphttp.grafana_cloud.input]
+        traces = [otelcol.exporter.otlphttp.grafana_cloud.input, otelcol.exporter.otlp.trace_capture.input]
         logs   = [otelcol.exporter.otlphttp.grafana_cloud.input]
+      }
+    }
+
+    otelcol.exporter.otlp "trace_capture" {
+      client {
+        endpoint = "trace-capture.nomnom-observability.svc.cluster.local:4317"
+        tls {
+          insecure = true
+        }
       }
     }
 
