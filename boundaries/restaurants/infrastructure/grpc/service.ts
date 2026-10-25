@@ -14,6 +14,7 @@ import type { RegisterRestaurantHandler } from "../../slices/restaurant/applicat
 import type { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import type { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import type { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import type { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { MarkAssembledHandler } from "../../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
 import type { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
 import type { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
@@ -34,6 +35,7 @@ import {
   RevokeStaffResponseSchema,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import { createKitchenRpcs } from "./kitchen.ts";
+import { createKitchenBoardRpcs } from "./kitchen-board.ts";
 import { createMenuRpcs } from "./menu-commands.ts";
 import {
   toMenuItemMessages,
@@ -62,6 +64,7 @@ export type RestaurantsServiceDependencies = Readonly<{
   markRestaurantOrderReady: Pick<MarkReadyForPickupHandler, "execute">;
   reportPreparationDelay: Pick<ReportPreparationDelayHandler, "execute">;
   reportPreparationFailure: Pick<ReportPreparationFailureHandler, "execute">;
+  getKitchenQueue: Pick<GetKitchenQueueHandler, "execute">;
   registerRestaurant: Pick<RegisterRestaurantHandler, "execute">;
   assignStaff: Pick<AssignStaffHandler, "execute">;
   revokeStaff: Pick<RevokeStaffHandler, "execute">;
@@ -182,6 +185,7 @@ export const createRestaurantsService = (
     },
 
     ...createKitchenRpcs(dependencies, subjects),
+    ...createKitchenBoardRpcs(dependencies, subjects),
 
     async registerRestaurant(request, context) {
       try {

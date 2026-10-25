@@ -191,10 +191,12 @@ export class MongoKitchenBoard
     return documents.map((document) => ({
       restaurantOrderId: document._id,
       orderId: document.orderId,
+      state: document.state,
       items: boardItems(document),
       acceptedAt: document.timeline.acceptedAt,
       queuedAt: document.timeline.queuedAt,
       expectedReadyAt: document.timeline.expectedReadyAt,
+      version: document.version,
     }));
   }
 

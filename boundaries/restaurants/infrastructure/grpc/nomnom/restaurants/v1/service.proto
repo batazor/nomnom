@@ -32,6 +32,12 @@ service RestaurantsService {
   rpc ReportPreparationDelay(ReportPreparationDelayRequest) returns (ReportPreparationDelayResponse);
   rpc ReportPreparationFailure(ReportPreparationFailureRequest) returns (ReportPreparationFailureResponse);
 
+  // Kitchen Queue of a restaurant (FR-583): Restaurant Orders in QUEUED in the
+  // order recommended by the Kitchen Queue policy. Requires
+  // restaurant#operate_kitchen. Orders in RECEIVED awaiting Acceptance are not
+  // in the queue.
+  rpc GetKitchenQueue(GetKitchenQueueRequest) returns (GetKitchenQueueResponse);
+
   // Restaurant administration. RegisterRestaurant requires platform#register_restaurant
   // and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
   // and write restaurant#staff before saving. Staff commands are idempotent.
@@ -133,7 +139,7 @@ enum RestaurantOrderState {
   RESTAURANT_ORDER_STATE_FAILED = 9;
 }
 
-// Restaurant Order after a kitchen command.
+// Restaurant Order after a kitchen command or in the Kitchen Queue.
 message RestaurantOrder {
   string restaurant_order_id = 1;
   string order_id = 2;
@@ -213,6 +219,22 @@ message ReportPreparationFailureRequest {
 
 message ReportPreparationFailureResponse {
   RestaurantOrder restaurant_order = 1;
+}
+
+message GetKitchenQueueRequest {
+  string restaurant_id = 1;
+}
+
+message KitchenQueueEntry {
+  // State QUEUED, expected_ready_at and version of the order.
+  RestaurantOrder restaurant_order = 1;
+  google.protobuf.Timestamp accepted_at = 2;
+  google.protobuf.Timestamp queued_at = 3;
+}
+
+message GetKitchenQueueResponse {
+  // In the recommended order; empty when nothing is queued.
+  repeated KitchenQueueEntry entries = 1;
 }
 
 message RegisterRestaurantRequest {

@@ -9,7 +9,7 @@
 
 ## 2. restaurants
 
-- [ ] 2.1 proto и gRPC `GetKitchenQueue` поверх существующего query; тесты AC-737, AC-738.
+- [x] 2.1 proto и gRPC `GetKitchenQueue` поверх существующего query; тесты AC-737, AC-738.
 
 ## 3. kind
 

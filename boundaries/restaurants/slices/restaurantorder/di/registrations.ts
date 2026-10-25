@@ -26,6 +26,7 @@ import type {
   RestaurantOrderViewAccess,
 } from "../applications/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import { GetKitchenQueueHandler } from "../applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { KitchenCommandDependencies } from "../applications/kitchen-command.ts";
 import { MarkAssembledHandler } from "../applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
@@ -43,8 +44,10 @@ import {
   UnconstrainedAcceptanceConditions,
 } from "../infrastructure/acceptance/mvp.ts";
 import { restaurantOrderEventMapper } from "../infrastructure/integration/restaurant-order-events.ts";
+import { FifoKitchenQueueOrdering } from "../infrastructure/kitchen-queue/mvp.ts";
 import {
   createRestaurantOrderCollection,
+  MongoKitchenBoard,
   MongoRestaurantOrderRepository,
 } from "../infrastructure/mongodb/restaurant-orders.ts";
 import {
@@ -100,6 +103,7 @@ export interface RestaurantOrderCradle {
   readonly markRestaurantOrderReady: MarkReadyForPickupHandler;
   readonly reportPreparationDelay: ReportPreparationDelayHandler;
   readonly reportPreparationFailure: ReportPreparationFailureHandler;
+  readonly getKitchenQueue: GetKitchenQueueHandler;
 }
 
 type Cradle = RestaurantOrderDependencies & RestaurantOrderCradle;
@@ -215,6 +219,18 @@ export const registerRestaurantOrder = (
     reportPreparationFailure: asFunction(
       (cradle: Cradle) =>
         new ReportPreparationFailureHandler(commandDependencies(cradle)),
+    ).singleton(),
+    // Kitchen board read model over the restaurant order documents; the order
+    // of the queue is the MVP FIFO policy until the scheduling decision.
+    getKitchenQueue: asFunction(
+      ({ db, unitOfWork, kitchenAccessControl }: Cradle) =>
+        new GetKitchenQueueHandler({
+          accessControl: kitchenAccessControl,
+          reader: new MongoKitchenBoard(
+            createRestaurantOrderCollection(db, unitOfWork),
+          ),
+          ordering: new FifoKitchenQueueOrdering(),
+        }),
     ).singleton(),
   };
   container.register(registrations);

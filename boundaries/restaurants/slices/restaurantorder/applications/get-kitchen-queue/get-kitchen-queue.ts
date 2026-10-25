@@ -1,3 +1,4 @@
+import type { RestaurantOrderState } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control.ts";
 import {
   authorizeKitchenBoard,
@@ -10,10 +11,13 @@ export type GetKitchenQueue = KitchenBoardQuery;
 export type KitchenQueueEntry = Readonly<{
   restaurantOrderId: string;
   orderId: string;
+  state: RestaurantOrderState;
   items: readonly KitchenBoardItem[];
   acceptedAt: Date | undefined;
   queuedAt: Date | undefined;
   expectedReadyAt: Date | undefined;
+  /** Version of the Restaurant Order the entry was read at. */
+  version: number;
 }>;
 
 export type KitchenQueueResult = Readonly<{

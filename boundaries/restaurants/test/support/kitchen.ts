@@ -18,9 +18,9 @@ import { ReportPreparationDelayHandler } from "../../slices/restaurantorder/appl
 import { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
 import type { CancellationPolicy } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import { FifoKitchenQueueOrdering } from "../../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
 import {
   createRestaurantOrderStore,
-  FifoKitchenQueueOrdering,
   FixedDurationReadyTimeEstimator,
   InMemoryKitchenAccessControl,
   InMemoryKitchenBoard,

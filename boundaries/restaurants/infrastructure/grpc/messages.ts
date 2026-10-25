@@ -6,12 +6,14 @@ import type {
 } from "../../slices/menu/applications/menu-support.ts";
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type { RestaurantView } from "../../slices/restaurant/applications/restaurant-view.ts";
+import type { KitchenQueueEntry } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-view.ts";
 import {
   MenuItemSchema,
   RestaurantSchema,
 } from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
+  KitchenQueueEntrySchema,
   RestaurantOrderSchema,
   RestaurantOrderState,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
@@ -36,6 +38,9 @@ export const toMenuItemMessage = (item: MenuItemView) =>
 export const toMenuItemMessages = (view: MenuView) =>
   view.items.map(toMenuItemMessage);
 
+const optionalTimestamp = (value: Date | undefined) =>
+  value === undefined ? undefined : timestampFromDate(value);
+
 const STATE_MESSAGES: Readonly<
   Record<RestaurantOrderView["state"], RestaurantOrderState>
 > = {
@@ -56,11 +61,25 @@ export const toRestaurantOrderMessage = (view: RestaurantOrderView) =>
     orderId: view.orderId,
     restaurantId: view.restaurantId,
     state: STATE_MESSAGES[view.state],
-    expectedReadyAt:
-      view.timeline.expectedReadyAt === undefined
-        ? undefined
-        : timestampFromDate(view.timeline.expectedReadyAt),
+    expectedReadyAt: optionalTimestamp(view.timeline.expectedReadyAt),
     version: BigInt(view.version),
+  });
+
+export const toKitchenQueueEntryMessage = (
+  restaurantId: string,
+  entry: KitchenQueueEntry,
+) =>
+  create(KitchenQueueEntrySchema, {
+    restaurantOrder: {
+      restaurantOrderId: entry.restaurantOrderId,
+      orderId: entry.orderId,
+      restaurantId,
+      state: STATE_MESSAGES[entry.state],
+      expectedReadyAt: optionalTimestamp(entry.expectedReadyAt),
+      version: BigInt(entry.version),
+    },
+    acceptedAt: optionalTimestamp(entry.acceptedAt),
+    queuedAt: optionalTimestamp(entry.queuedAt),
   });
 
 export const toStaffMessage = (result: StaffChangeResult) => ({

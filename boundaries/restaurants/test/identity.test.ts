@@ -323,6 +323,7 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
     markRestaurantOrderReady: world.markReady,
     reportPreparationDelay: world.reportDelay,
     reportPreparationFailure: world.reportFailure,
+    getKitchenQueue: world.getKitchenQueue,
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
