@@ -39,7 +39,8 @@ Rust.
 | **Cancel Delivery** | Fulfillment process `orders` | Отменить доставку заказа до Pickup по `order_id` | `waiting`/`assigned` → `cancelled`, курьер освобождён, `DeliveryCancelled` в Outbox; повтор — успех; после Pickup — бизнес-отказ `already_picked_up`, после `delivered`/`failed` — `already_closed` | Вызывается Temporal Activity через `CancelDelivery` как компенсация; бизнес-отказ не является ошибкой |
 | **Confirm Pickup** | Назначенный курьер | Подтвердить получение заказа у ресторана | Для `Delivery` зафиксирован Pickup | Публикует бизнес-факт через Outbox |
 | **Confirm Delivery** | Назначенный курьер | Подтвердить передачу заказа клиенту | Для `Delivery` зафиксирована Delivery Completion | Публикует бизнес-факт через Outbox |
-| **Report Delivery Failure** | Назначенный курьер или авторизованный диспетчер | Зафиксировать невозможность завершить доставку | Неудача и её причина сохранены, результат доступен `orders` | Публикует бизнес-факт через Outbox; retryability причины остаётся открытым вопросом |
+| **Report Delivery Failure** | Назначенный курьер или авторизованный диспетчер | Зафиксировать невозможность завершить доставку | Неудача сохранена с кодом причины из каталога Delivery Failure Reason и необязательным пояснением, результат доступен `orders` | Публикует бизнес-факт через Outbox; неизвестный код — ошибка валидации; retryability кодов остаётся открытым вопросом |
+| **Expire Delivery Offers** | Фоновая задача процесса `delivery` | Закрыть pending offers, на которые не ответили до `expiresAt` | Offers с `expiresAt < now` переведены в `expired` пачками, каждый в своей Unit of Work с `DeliveryOfferExpired` в Outbox; конкурентно закрытые offers пропускаются | Без subject и проверки прав; повторное предложение другому курьеру не запускает (см. «Истечение Delivery Offers») |
 
 ### Queries
 
@@ -199,6 +200,19 @@ Stubs `authzed.api.v1` теперь включают `CheckPermission`, `WriteRe
 make test-spicedb   # SPICEDB_ENDPOINT=localhost:50051, оба integration-набора
 ```
 
+## Истечение Delivery Offers
+
+Фоновая задача основного процесса (`OfferExpiryWorker` в `di/offer_expiry_worker.rs`, рядом с `ReconcilingWorker`) раз в `OFFERS__EXPIRY_INTERVAL` вызывает Expire Delivery Offers (`slices/delivery/applications/expire_delivery_offers`): pending offers с `expires_at < now` читаются пачками по `OFFERS__EXPIRY_BATCH` (`ORDER BY expires_at`, partial index `delivery_offers_pending_expiry`), полные пачки — подряд. Каждый offer истекает в своей Unit of Work вместе с `DeliveryOfferExpired` в Outbox; optimistic-concurrency конфликт (offer конкурентно принят, отклонён или отозван) — пропуск, не ошибка. Цикл останавливается по сигналу shutdown основного worker; начатая пачка доводится до конца. Ошибка пачки пишется в stderr и прерывает только текущий проход. `DeliveryOfferExpired` — внутренний факт: не публикуется, считается в `nomnom.delivery.offers{nomnom.outcome="expired"}`. Queries (`ListAvailableDeliveryOffers`, `is_open_at`) считают `expired` закрытым, как и pending offer после `expiresAt`.
+
+Повторное предложение после истечения в этот use case не входит. Сейчас его делает `orders`: fulfillment workflow без `CourierAssignedToDelivery` за `FULFILLMENT__ASSIGNMENT_TIMEOUT` (15m) вызывает `ReplanDelivery` (до `FULFILLMENT__MAX_REPLANS`, затем эскалация оператору), а Find Courier пропускает курьеров, которым эта доставка уже предлагалась в любом состоянии, поэтому следующий offer получает другой ближайший курьер.
+
+| Переменная | Ключ TOML | Значение |
+| --- | --- | --- |
+| `OFFERS__EXPIRY_INTERVAL` | `offers.expiry_interval` | Интервал между проходами, по умолчанию `15s`; положительный |
+| `OFFERS__EXPIRY_BATCH` | `offers.expiry_batch` | Максимум offers пачки, по умолчанию `100`; `1..1000` |
+
+Невалидные значения завершают startup.
+
 ## Хранилище (PostgreSQL)
 
 [ADR 0001 контекста](docs/adr/0001-postgresql-хранилище-delivery.md), [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md). `PostgresStore` (`infrastructure/postgres`, `sqlx`) закрывает репозитории `Courier`, `Delivery`, `DeliveryOffer`, Outbox, `CourierLocationStore`, оба read model, `UnitOfWork` и `ReconciliationStore`. Схема — `infrastructure/postgres/migrations` (`sqlx::migrate!`), применяется процессом `delivery-migrate` (init container; advisory lock сериализует реплики).
@@ -231,7 +245,7 @@ docker stop delivery-pg
 | `Delivery` — aggregate root | `id`, `orderId`, `courierId`, `pickupAddress`, `dropoffAddress`, `status`, `failureReason` | Управляет назначением курьера и выполнением доставки |
 | `DeliveryOffer` — aggregate root | `id`, `deliveryId`, `courierId`, `offeredAt`, `expiresAt`, `state` | Ограниченное по времени предложение одному курьеру |
 
-Состояния `Courier`: `available`, `busy`, `unavailable` (вне линии, не получает новых назначений). Состояния `Delivery`: `waiting`, `assigned`, `pickedUp`, `delivered`, `failed`, `cancelled`. В `DeliveryState` контракта `nomnom.delivery.v1` значения для `cancelled` пока нет: отменённая доставка не бывает текущей доставкой курьера. Состояния `DeliveryOffer`: `pending`, `accepted`, `rejected`, `withdrawn`; истечение вычисляется по `expiresAt` и не хранится.
+Состояния `Courier`: `available`, `busy`, `unavailable` (вне линии, не получает новых назначений). Состояния `Delivery`: `waiting`, `assigned`, `pickedUp`, `delivered`, `failed`, `cancelled`. В `DeliveryState` контракта `nomnom.delivery.v1` значения для `cancelled` пока нет: отменённая доставка не бывает текущей доставкой курьера. Состояния `DeliveryOffer`: `pending`, `accepted`, `rejected`, `withdrawn`, `expired`. Pending offer после `expiresAt` уже закрыт для принятия и отклонения; переход `Expire` (только из `pending` и только при `now > expiresAt`) сохраняет это как `expired`. Повторный `Expire` — `AlreadyApplied`, `Expire` из других состояний и `Accept`/`Reject`/`Withdraw` из `expired` — `Invalid`.
 
 Инварианты:
 
@@ -254,7 +268,7 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 | VO | Значение и инварианты |
 | --- | --- |
 | `Address` | Непустая нормализованная строка; на первом этапе без геокодирования и отдельных полей адреса |
-| `DeliveryFailureReason` | Непустая нормализованная строка; retryability не классифицируется |
+| `DeliveryFailureReason` | Код закрытого каталога `DeliveryFailureCode` — `customer_unreachable`, `address_not_found`, `no_access`, `customer_refused`, `order_damaged`, `courier_incident`, `other` — и необязательное пояснение (`detail`): пробелы нормализуются, не длиннее 500 символов. Неизвестный или пустой код — ошибка валидации, а не `other`. Строки, записанные до каталога свободным текстом, читаются как `other` с прежним текстом в `detail`. Retryability кодов не классифицируется |
 | `Location` | Широта в [-90, 90] и долгота в [-180, 180], конечные значения; последняя позиция курьера хранится вне aggregate |
 
 Идентификаторы и статусы пока остаются типизированными значениями и перечислениями, а не отдельными value objects. Маршрут, зоны и расчёт расстояния не входят в модель: расстояние до pickup, принадлежность зоне и число активных назначений поставляет порт `CourierLocator`.
@@ -311,7 +325,7 @@ Topic `delivery.v1.delivery-events`, контракт `infrastructure/grpc/nomno
 | `CourierAssignedToDelivery` | `nomnom.delivery.v1.CourierAssignedToDelivery` |
 | `DeliveryPickedUp` | `nomnom.delivery.v1.DeliveryPickedUp` |
 | `DeliveryCompleted` | `nomnom.delivery.v1.DeliveryCompleted` |
-| `DeliveryFailed` | `nomnom.delivery.v1.DeliveryFailed` (с `reason`) |
+| `DeliveryFailed` | `nomnom.delivery.v1.DeliveryFailed`: `reason` — код каталога (до каталога — свободный текст), `detail` (поле 4) — пояснение, пустое, если не указано |
 | `CourierUnassignedFromDelivery` | `nomnom.delivery.v1.CourierUnassignedFromDelivery` (курьер снят без замены) |
 | `DeliveryCancelled` | `nomnom.delivery.v1.DeliveryCancelled` (с `reason`, пустой — причина не указана) |
 
@@ -341,7 +355,7 @@ Kafka headers совпадают с `orders/pkg/messaging/envelope.go`: `event_i
 
 Relay также требует `DATABASE__URL`. Метрики (ADR 13, [инвентарь](../../docs/observability/metric-inventory.md#outbox)): `nomnom_outbox_pending_messages` и `nomnom_outbox_oldest_pending_age_seconds` (label `stream`), `nomnom_outbox_publish_retries_total` (`stream`, `event_type`, `error_class`), histograms `nomnom_outbox_publish_duration_seconds` (`outcome`) и `nomnom_outbox_publish_lag_seconds` (`occurred_at` → ack). Экспорт OTLP gRPC (`pkg/telemetry`) включается только при заданном `OTEL_EXPORTER_OTLP_ENDPOINT` (или `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`); `service.name` — `delivery-relay`, `service.namespace` — `nomnom`.
 
-Бизнес-метрики процесса `delivery` (раздел domain [инвентаря](../../docs/observability/metric-inventory.md), имена — `ops/semconv/model/domain.yaml`): `slices/delivery/infrastructure/observability` — декоратор портов Unit of Work и Outbox (`ObservedOutbox`; в `di::infrastructure` роль `TransactionalStore` слайса закрывает `ObservedStore`, так что Unit of Work и Outbox handlers идут через декоратор). Domain Events, переданные в Outbox внутри Unit of Work, записываются только после commit внешней Unit of Work: rollback и идемпотентный повтор без новых событий ничего не меняют. `DeliveryCreated` → `nomnom.delivery.created`; `CourierAssignedToDelivery` → `assignments` и `assignment.latency` (от `created_at`); `CourierUnassignedFromDelivery` → `reassignments` (`reason=other`: доменной причины снятия нет); `DeliveryOfferAccepted`/`DeliveryOfferRejected` → `offers` (`outcome` accepted/rejected; expiry — функция времени, `expired` не пишется); `DeliveryPickedUp` → `pickups`; `DeliveryCompleted` → `completed` и `duration` (от `created_at`); `DeliveryFailed` → `failed` (`reason` из закрытого набора, иначе `other`; набор пока пуст — причина свободным текстом). `DeliveryCreated` и события offer не имеют контракта и не публикуются. `service.name` — `delivery`.
+Бизнес-метрики процесса `delivery` (раздел domain [инвентаря](../../docs/observability/metric-inventory.md), имена — `ops/semconv/model/domain.yaml`): `slices/delivery/infrastructure/observability` — декоратор портов Unit of Work и Outbox (`ObservedOutbox`; в `di::infrastructure` роль `TransactionalStore` слайса закрывает `ObservedStore`, так что Unit of Work и Outbox handlers идут через декоратор). Domain Events, переданные в Outbox внутри Unit of Work, записываются только после commit внешней Unit of Work: rollback и идемпотентный повтор без новых событий ничего не меняют. `DeliveryCreated` → `nomnom.delivery.created`; `CourierAssignedToDelivery` → `assignments` и `assignment.latency` (от `created_at`); `CourierUnassignedFromDelivery` → `reassignments` (`reason=other`: доменной причины снятия нет); `DeliveryOfferAccepted`/`DeliveryOfferRejected`/`DeliveryOfferExpired` → `offers` (`outcome` accepted/rejected/expired); `DeliveryPickedUp` → `pickups`; `DeliveryCompleted` → `completed` и `duration` (от `created_at`); `DeliveryFailed` → `failed` (`reason` — код каталога Delivery Failure Reason; `detail` никогда не становится атрибутом метрики). Каждый закоммиченный `DeliveryFailed` также пишется одной JSON-записью в stdout (`slices/delivery/infrastructure/failure_log.rs`: `severity=INFO`, `event=delivery.failure_reported`, `delivery_id`, `order_id`, `courier_id`, `reason`, `detail`, `trace_id`/`span_id` из активного OpenTelemetry context — пока процесс не создаёт traces, их нет) и ставит на активный span атрибуты `nomnom.delivery.failure.reason` и `nomnom.delivery.failure.detail` (до 256 символов). `DeliveryCreated` и события offer не имеют контракта и не публикуются. `service.name` — `delivery`.
 
 Integration-тест `tests/outbox_relay.rs` (запись основного процесса → relay → настоящий Kafka, проверка key, headers и payload; advisory lock; retention) выполняется при заданных `DATABASE_URL` и `KAFKA_BROKERS`; `tests/outbox_relay_lock.rs` (обрыв сессии lock замечается до следующей записи, standby захватывает lock) — при `DATABASE_URL`:
 

@@ -50,6 +50,14 @@ grace = "10m"
 # Размер страницы ReadRelationships (1..1000).
 page_size = 500
 
+[offers]
+# Фоновое истечение Delivery Offers основного процесса (Expire Delivery Offers): pending
+# offers с прошедшим expires_at закрываются как expired. Переменные:
+# OFFERS__EXPIRY_INTERVAL, OFFERS__EXPIRY_BATCH. Невалидные значения завершают startup.
+expiry_interval = "15s"
+# Максимум offers одной пачки (1..1000); полные пачки читаются подряд.
+expiry_batch = 100
+
 [database]
 # PostgreSQL delivery (ADR 8, ADR 31, ADR 0001 контекста). Обязательно: пустой url
 # завершает startup процесса и `delivery-migrate`. Не храните URL с паролем в файле:
