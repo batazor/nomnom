@@ -177,7 +177,7 @@ Application use cases наблюдаются декоратором handler в c
 | Проверка | `gcx dev lint run` закоммиченных и live-вариантов, тесты генератора. |
 | Метрики | Только из [инвентаря](observability/metric-inventory.md) со статусом «есть»; остальные панели — TODO со ссылкой на инвентарь. |
 
-Overview отвечает на вопросы incident: работает ли сервис, выросли ли ошибки (transport, application и business rejection раздельно; PaymentDeclined — не ошибка) и latency, какая зависимость деградировала, есть ли backlog, что с Inbox/Outbox и бизнес-потоком, где trace/log/profile. Серверные метрики PostgreSQL, MongoDB и Kafka остаются в community dashboards, на которые ведут ссылки. Alert rules генерирует тот же генератор только на метриках «есть» ([ADR 29](adr/0029-grafana-dashboards-as-code.md)); SLO-based alerting — отдельное решение.
+Overview отвечает на вопросы incident: работает ли сервис, выросли ли ошибки (transport, application и business rejection раздельно; PaymentDeclined — не ошибка) и latency, какая зависимость деградировала, есть ли backlog, что с Inbox/Outbox и бизнес-потоком, где trace/log/profile. Серверные метрики PostgreSQL, MongoDB и Kafka остаются в community dashboards, на которые ведут ссылки. Alert rules генерирует тот же генератор только на метриках «есть» ([ADR 29](adr/0029-grafana-dashboards-as-code.md)); SLO, error budget и burn rate alerts — [ADR 40](adr/0040-service-slo-and-burn-rate-alerts.md).
 
 ## Логи
 
@@ -247,7 +247,7 @@ Observability дополняет, но не меняет принятую Vertic
 - Sampling и retention задаются отдельно для каждого окружения и сигнала. Конкретные rates, tail policies, объёмы и сроки хранения этим документом не определяются.
 - Обычный head sampling принимает решение до результата операции, поэтому не гарантирует сохранение всех ошибочных traces. Если такая гарантия понадобится, потребуется отдельное решение о tail sampling, его ресурсах и отказоустойчивости.
 - Доступ к telemetry и её срок жизни учитывают чувствительность данных. Redaction в приложении предпочтительнее попытки удалить секрет после приёма.
-- SLO, alerts, recording rules и capacity planning определяются отдельными изменениями после появления рабочих сигналов и ожидаемой нагрузки; overview-dashboards определены [ADR 29](adr/0029-grafana-dashboards-as-code.md).
+- SLO входа сервисов приняты [ADR 40](adr/0040-service-slo-and-burn-rate-alerts.md); SLO асинхронных путей, recording rules и capacity planning определяются отдельными изменениями после появления рабочих сигналов и ожидаемой нагрузки; overview-dashboards определены [ADR 29](adr/0029-grafana-dashboards-as-code.md).
 
 ## Отложенные решения
 

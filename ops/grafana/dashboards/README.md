@@ -83,7 +83,7 @@ Environment и version не фильтруются: у Prometheus-метрик �
 
 ## Alerts
 
-Rule group `platform` в folder `nomnom` ([`../alerts/platform.json`](../alerts/platform.json)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения, не SLO.
+Rule group `platform` в folder `nomnom` ([`../alerts/platform.json`](../alerts/platform.json)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения; SLO burn rate — по целям [ADR 40](../../../docs/adr/0040-service-slo-and-burn-rate-alerts.md).
 
 | Alert | Severity | Статус | Недостающие метрики |
 | --- | --- | --- | --- |

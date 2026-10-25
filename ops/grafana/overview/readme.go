@@ -38,7 +38,7 @@ func rowsTable(b *strings.Builder, d Dashboard, root string) {
 
 // alertsTable — alert rules dashboard: какие активны, какие ждут метрик.
 func alertsTable(b *strings.Builder, a AlertGroup, file, root string) {
-	fmt.Fprintf(b, "## Alerts\n\nRule group `%s` в folder `%s` ([`%s`](%s)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения, не SLO.\n\n", a.Name, AlertFolder, file, file)
+	fmt.Fprintf(b, "## Alerts\n\nRule group `%s` в folder `%s` ([`%s`](%s)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения; SLO burn rate — по целям [ADR 40](%sdocs/adr/0040-service-slo-and-burn-rate-alerts.md).\n\n", a.Name, AlertFolder, file, file, root)
 	if len(a.Report) == 0 {
 		b.WriteString("Правил нет.\n\n")
 		return
@@ -87,6 +87,7 @@ func README(o Options, d Dashboard, alerts AlertGroup) string {
 	fmt.Fprintf(&b, "| | |\n| --- | --- |\n| UID | `%s` |\n| Файл | [`dashboards/overview.json`](dashboards/overview.json) |\n| Схема | `dashboard.grafana.app/v2` (Grafana 13) |\n| Доставка | Git Sync, repository [`ops/grafana/git-sync/%s.yaml`](../../../../ops/grafana/git-sync/%s.yaml) |\n| Генератор | [`ops/grafana`](../../../../ops/grafana/README.md), функция `overview.ServiceOverview` |\n| service.name | `%s` |\n\n", d.UID, o.Context, o.Context, strings.Join(o.Services, "`, `"))
 	b.WriteString("JSON — артефакт генератора: правки вносятся в `ops/grafana/overview/services.go` или в инвентарь, затем `make grafana-generate`. CI (`make grafana-check`) падает при расхождении.\n\n")
 
+	sloTable(&b, o)
 	b.WriteString("## Data sources\n\nВыбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Mimir), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).\n\n")
 
 	b.WriteString("## Variables\n\n| Variable | Источник | Назначение |\n| --- | --- | --- |\n")
@@ -117,4 +118,17 @@ func README(o Options, d Dashboard, alerts AlertGroup) string {
 		b.WriteString("- **Серверные метрики зависимостей** — ссылки на community dashboards в шапке; панели не дублируются.\n")
 	}
 	return b.String()
+}
+
+// sloTable — цели сервиса (ADR 40); без SLO раздел отсутствует.
+func sloTable(b *strings.Builder, o Options) {
+	slis := o.slis()
+	if len(slis) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "## SLO\n\nЦели за скользящие %s, решение — [ADR 40](../../../../docs/adr/0040-service-slo-and-burn-rate-alerts.md). Business rejection бюджет не тратит.\n\n| SLI | Цель | Error budget |\n| --- | --- | --- |\n", sloWindow)
+	for _, s := range slis {
+		fmt.Fprintf(b, "| %s | %s | %s |\n", s.name, percent(s.target), percent(1-s.target))
+	}
+	b.WriteString("\n")
 }

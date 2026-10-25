@@ -15,6 +15,14 @@ Overview-dashboard bounded context `bff`: один на сервис, отвеч
 
 JSON — артефакт генератора: правки вносятся в `ops/grafana/overview/services.go` или в инвентарь, затем `make grafana-generate`. CI (`make grafana-check`) падает при расхождении.
 
+## SLO
+
+Цели за скользящие 30d, решение — [ADR 40](../../../../docs/adr/0040-service-slo-and-burn-rate-alerts.md). Business rejection бюджет не тратит.
+
+| SLI | Цель | Error budget |
+| --- | --- | --- |
+| Availability | 99.5% | 0.5% |
+
 ## Data sources
 
 Выбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Mimir), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).
@@ -40,6 +48,14 @@ JSON — артефакт генератора: правки вносятся в
 | Errors by class | TODO | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`router_http_requests_total`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Technical error ratio | TODO | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`router_http_requests_total`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Latency p50 / p95 / p99 | TODO | [`router_http_request_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+
+### SLO
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Availability: SLI / SLO 99.5% | TODO | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`router_http_requests_total`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Availability: error budget remaining (30d) | TODO | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`router_http_requests_total`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| Availability: burn rate | TODO | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`router_http_requests_total`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
 ### Pods
 
@@ -68,13 +84,16 @@ JSON — артефакт генератора: правки вносятся в
 | Time to scheduled renewal | live | — |
 | Ready | live | — |
 
-Живых панелей: 3 из 16. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 3 из 19. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
-Rule group `bff` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения, не SLO.
+Rule group `bff` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения; SLO burn rate — по целям [ADR 40](../../../../docs/adr/0040-service-slo-and-burn-rate-alerts.md).
 
-Правил нет.
+| Alert | Severity | Статус | Недостающие метрики |
+| --- | --- | --- | --- |
+| BFF: Availability SLO burn rate 1h | critical | ждёт метрик | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`router_http_requests_total`](../../../../docs/observability/metric-inventory.md#graphql) |
+| BFF: Availability SLO burn rate 6h | warning | ждёт метрик | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`router_http_requests_total`](../../../../docs/observability/metric-inventory.md#graphql) |
 
 ## Переходы
 

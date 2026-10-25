@@ -65,6 +65,8 @@ type Options struct {
 	Domain       func(Scope) []Panel
 	// DomainAlerts — alert rules бизнес-метрик сервиса (scope без variables).
 	DomainAlerts func(Scope) []Alert
+	// SLO — цели сервиса (ADR 40): row SLO и burn rate alerts.
+	SLO *SLO
 }
 
 type Kafka struct {
@@ -150,6 +152,8 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 
 	rows := []row{
 		{title: "Service health", scope: main, panels: g.health(main)},
+		// SLO относится к сервису целиком: без фильтра instance и version.
+		{title: "SLO", scope: Scope{Var: "service", Services: opts.Services}, panels: g.sloPanels(Scope{Var: "service", Services: opts.Services})},
 		{title: "Runtime", scope: main, collapsed: true, panels: g.runtime(main)},
 		{title: "Pods", scope: servicePods(opts), collapsed: true, panels: pods(servicePods(opts))},
 		{title: "Dependencies", scope: main, collapsed: true, panels: g.dependencies(main)},
@@ -254,6 +258,11 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 		names = append(names, m)
 	}
 	sort.Strings(names)
+	// Константа (цель SLO) без метрик рядом не делает панель живой.
+	if !slices.ContainsFunc(ready, hasMetrics) {
+		pending = append(pending, ready...)
+		ready, traces = nil, nil
+	}
 	summary := PanelSummary{Title: p.Title, Live: len(ready) > 0, Missing: names}
 
 	if p.Description == "" {
@@ -286,6 +295,11 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 		}
 	}
 	return b.Description(description).Data(group).Visualization(viz), summary
+}
+
+func hasMetrics(q Query) bool {
+	a, err := Analyze(q.Expr)
+	return err == nil && len(a.Selectors) > 0
 }
 
 // check проверяет запрос против инвентаря: метрики инвентаризированы, labels

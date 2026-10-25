@@ -29,8 +29,8 @@ const (
 )
 
 // Alert — правило на значении PromQL: срабатывает, когда Value Op Threshold
-// держится For. Пороги — стартовые значения тестового окружения, не SLO
-// (SLO и alerting policy — отдельное решение, docs/observability.md).
+// держится For. Пороги — стартовые значения тестового окружения; burn rate
+// alerts по SLO — slo.go (ADR 40).
 type Alert struct {
 	Slug        string
 	Title       string

@@ -67,6 +67,17 @@ func (s Scope) Rate(metric string, matchers ...string) string {
 	return s.filter("rate(" + s.Sel(metric, matchers...) + "[$__rate_interval])")
 }
 
+// Over — increase() за окно SLO. Environment фильтруется по target_info за то же
+// окно (max_over_time), чтобы instance, завершившиеся внутри окна, оставались в
+// расчёте; version и instance не фильтруются: SLO относится к сервису, а не к выкатке.
+func (s Scope) Over(window, metric string, matchers ...string) string {
+	inner := "increase(" + s.Sel(metric, matchers...) + "[" + window + "])"
+	if s.Job != "" || s.Literal {
+		return inner
+	}
+	return inner + fmt.Sprintf(` and on (job, instance) max_over_time(target_info{%s, deployment_environment_name=~"$environment"}[%s])`, s.job(), window)
+}
+
 // Gauge — значение gauge с фильтром environment/version.
 func (s Scope) Gauge(metric string, matchers ...string) string {
 	return s.filter(s.Sel(metric, matchers...))

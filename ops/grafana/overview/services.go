@@ -14,6 +14,7 @@ func Services() []Options {
 			UseCases: true, UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Temporal: &Temporal{Worker: inventory.OrdersWorker},
 			Domain:   ordersDomain,
+			SLO:      &SLO{Availability: 0.999, Latency: &LatencySLO{Bucket: "0.25", Target: 0.95}},
 		},
 		{
 			Context: "restaurants", Title: "Restaurants", Language: Node,
@@ -22,6 +23,7 @@ func Services() []Options {
 			Kafka:      &Kafka{ConsumerGroup: "restaurants", Consumers: []string{inventory.Restaurants}, Connector: "restaurants-outbox"},
 			UnitOfWork: true, Lifecycle: true, Kitchen: true, Authorization: true,
 			Domain: restaurantsDomain,
+			SLO:    &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},
 		},
 		{
 			Context: "delivery", Title: "Delivery", Language: Rust,
@@ -30,6 +32,7 @@ func Services() []Options {
 			Kafka:      &Kafka{ConsumerGroup: "delivery", Consumers: []string{inventory.Delivery}, Connector: "delivery-outbox"},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: deliveryDomain, DomainAlerts: deliveryAlerts,
+			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},
 		},
 		{
 			Context: "payments", Title: "Payments", Language: Python,
@@ -38,11 +41,14 @@ func Services() []Options {
 			Kafka:      &Kafka{ConsumerGroup: "payments", Consumers: []string{inventory.Payments}, Connector: "payments-outbox"},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: paymentsDomain,
+			SLO:    &SLO{Availability: 0.999, Latency: &LatencySLO{Bucket: "0.25", Target: 0.95}},
 		},
 		{
 			Context: "bff", Title: "BFF", Language: Cosmo,
 			Services: []string{inventory.BFF},
 			GraphQL:  true, Certificates: true,
+			// Latency SLO не принят: границы buckets Cosmo Router не зафиксированы.
+			SLO: &SLO{Availability: 0.995},
 		},
 	}
 }

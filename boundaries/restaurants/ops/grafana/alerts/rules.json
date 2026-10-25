@@ -97,6 +97,198 @@
       "ruleGroup": "restaurants",
       "title": "Restaurants: gRPC p95 latency",
       "uid": "nomnom-restaurants-grpc-latency"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-restaurants-overview",
+        "summary": "Error budget SLO Availability 99.5% расходуется в 14.4 раз быстрее допустимого за 1h и 5m."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "(sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[1h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[1h]))) / 0.005 and (sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[5m]))) / 0.005 > 14.4",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 14.4",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "2m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-restaurants-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "restaurants",
+      "title": "Restaurants: Availability SLO burn rate 1h",
+      "uid": "nomnom-restaurants-slo-availability-fast"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-restaurants-overview",
+        "summary": "Error budget SLO Availability 99.5% расходуется в 6 раз быстрее допустимого за 6h и 30m."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "(sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[6h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[6h]))) / 0.005 and (sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[30m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[30m]))) / 0.005 > 6",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 6",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "15m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-restaurants-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "restaurants",
+      "title": "Restaurants: Availability SLO burn rate 6h",
+      "uid": "nomnom-restaurants-slo-availability-slow"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-restaurants-overview",
+        "summary": "Error budget SLO Latency ≤ 0.5s 95% расходуется в 14.4 раз быстрее допустимого за 1h и 5m."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "(1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\", le=\"0.5\"}[1h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[1h]))) / 0.05 and (1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\", le=\"0.5\"}[5m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[5m]))) / 0.05 > 14.4",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 14.4",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "2m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-restaurants-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "restaurants",
+      "title": "Restaurants: Latency ≤ 0.5s SLO burn rate 1h",
+      "uid": "nomnom-restaurants-slo-latency-fast"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-restaurants-overview",
+        "summary": "Error budget SLO Latency ≤ 0.5s 95% расходуется в 6 раз быстрее допустимого за 6h и 30m."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "(1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\", le=\"0.5\"}[6h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[6h]))) / 0.05 and (1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\", le=\"0.5\"}[30m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[30m]))) / 0.05 > 6",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 6",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "15m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-restaurants-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "restaurants",
+      "title": "Restaurants: Latency ≤ 0.5s SLO burn rate 6h",
+      "uid": "nomnom-restaurants-slo-latency-slow"
     }
   ],
   "title": "restaurants"

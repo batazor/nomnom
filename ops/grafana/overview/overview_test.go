@@ -60,7 +60,7 @@ func TestUIDsAreStable(t *testing.T) {
 
 // Порядок rows задан кодом: у сервисов отличается только набор включённых rows.
 func TestRowOrderIsShared(t *testing.T) {
-	order := []string{"Service health", "Runtime", "Pods", "Dependencies", "Kafka", "Use cases", "Transactions", "Domain Lifecycle", "Domain metrics", "Temporal", "Kitchen", "Authorization", "Certificates"}
+	order := []string{"Service health", "SLO", "Runtime", "Pods", "Dependencies", "Kafka", "Use cases", "Transactions", "Domain Lifecycle", "Domain metrics", "Temporal", "Kitchen", "Authorization", "Certificates"}
 	for ctx, d := range render(t) {
 		last := -1
 		for _, r := range d.Rows {

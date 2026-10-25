@@ -15,6 +15,15 @@ Overview-dashboard bounded context `restaurants`: один на сервис, о
 
 JSON — артефакт генератора: правки вносятся в `ops/grafana/overview/services.go` или в инвентарь, затем `make grafana-generate`. CI (`make grafana-check`) падает при расхождении.
 
+## SLO
+
+Цели за скользящие 30d, решение — [ADR 40](../../../../docs/adr/0040-service-slo-and-burn-rate-alerts.md). Business rejection бюджет не тратит.
+
+| SLI | Цель | Error budget |
+| --- | --- | --- |
+| Availability | 99.5% | 0.5% |
+| Latency ≤ 0.5s | 95% | 5% |
+
 ## Data sources
 
 Выбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Mimir), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).
@@ -42,6 +51,17 @@ JSON — артефакт генератора: правки вносятся в
 | Latency p50 / p95 / p99 | live | — |
 | CPU | live | — |
 | Memory | live | — |
+
+### SLO
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Availability: SLI / SLO 99.5% | live | — |
+| Availability: error budget remaining (30d) | live | — |
+| Availability: burn rate | live | — |
+| Latency ≤ 0.5s: SLI / SLO 95% | live | — |
+| Latency ≤ 0.5s: error budget remaining (30d) | live | — |
+| Latency ≤ 0.5s: burn rate | live | — |
 
 ### Runtime
 
@@ -131,11 +151,11 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 18 из 49. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 24 из 55. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
-Rule group `restaurants` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения, не SLO.
+Rule group `restaurants` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения; SLO burn rate — по целям [ADR 40](../../../../docs/adr/0040-service-slo-and-burn-rate-alerts.md).
 
 | Alert | Severity | Статус | Недостающие метрики |
 | --- | --- | --- | --- |
@@ -147,6 +167,10 @@ Rule group `restaurants` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.
 | Restaurants: mongodb pool wait p95 | warning | ждёт метрик | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
 | Restaurants: mongodb pool checkout timeouts | warning | ждёт метрик | [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db) |
 | Restaurants: mongodb pool cleared | warning | ждёт метрик | [`nomnom_db_client_connection_pool_clears_total`](../../../../docs/observability/metric-inventory.md#db) |
+| Restaurants: Availability SLO burn rate 1h | critical | активно | — |
+| Restaurants: Availability SLO burn rate 6h | warning | активно | — |
+| Restaurants: Latency ≤ 0.5s SLO burn rate 1h | critical | активно | — |
+| Restaurants: Latency ≤ 0.5s SLO burn rate 6h | warning | активно | — |
 
 ## Переходы
 

@@ -125,6 +125,354 @@
         "kind": "Panel",
         "spec": {
           "id": 10,
+          "title": "Latency ≤ 0.5s: SLI / SLO 95%",
+          "description": "Доля хороших событий в шаге графика против цели 95% за 30d (ADR 40).",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "1 - (1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])))",
+                        "legendFormat": "SLI",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "vector(0.95)",
+                        "legendFormat": "SLO",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percentunit",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-11": {
+        "kind": "Panel",
+        "spec": {
+          "id": 11,
+          "title": "Latency ≤ 0.5s: error budget remaining (30d)",
+          "description": "Неизрасходованная доля бюджета 0.05 за скользящие 30d. Ниже нуля — SLO нарушен.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "1 - (1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d]))) / 0.05",
+                        "legendFormat": "remaining",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percentunit",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-12": {
+        "kind": "Panel",
+        "spec": {
+          "id": 12,
+          "title": "Latency ≤ 0.5s: burn rate",
+          "description": "Скорость расхода бюджета: 1 — бюджет кончится ровно за 30d. Пороги: 14.4 за 1h (critical), 6 за 6h (warning), 1 за 3d.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "(1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h]))) / 0.05",
+                        "legendFormat": "1h",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "(1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h]))) / 0.05",
+                        "legendFormat": "6h",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "(1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d]))) / 0.05",
+                        "legendFormat": "3d",
+                        "range": true
+                      }
+                    },
+                    "refId": "C",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-13": {
+        "kind": "Panel",
+        "spec": {
+          "id": 13,
+          "title": "V8 heap used / limit",
+          "description": "Метрики: `v8js_memory_heap_used_bytes`, `v8js_memory_heap_limit_bytes`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`v8js_memory_heap_limit_bytes`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#runtime) | ожидается |\n| [`v8js_memory_heap_used_bytes`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#runtime) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(v8js_memory_heap_used_bytes{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(v8js_memory_heap_limit_bytes{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-14": {
+        "kind": "Panel",
+        "spec": {
+          "id": 14,
+          "title": "Event loop delay p99",
+          "description": "Метрики: `nodejs_eventloop_delay_p99_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nodejs_eventloop_delay_p99_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#runtime) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax by (instance) (nodejs_eventloop_delay_p99_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-15": {
+        "kind": "Panel",
+        "spec": {
+          "id": 15,
+          "title": "GC duration p95",
+          "description": "Метрики: `v8js_gc_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`v8js_gc_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#runtime) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.95, sum by (v8js_gc_type, le) (rate(v8js_gc_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-16": {
+        "kind": "Panel",
+        "spec": {
+          "id": 16,
           "title": "Ready pods",
           "description": "Разрыв ready и pods — pod не проходит readinessProbe и выведен из Service.",
           "links": [],
@@ -205,10 +553,10 @@
           }
         }
       },
-      "panel-11": {
+      "panel-17": {
         "kind": "Panel",
         "spec": {
-          "id": 11,
+          "id": 17,
           "title": "Restarts",
           "description": "Метрики: `kube_pod_container_status_restarts_total`.",
           "links": [],
@@ -269,10 +617,10 @@
           }
         }
       },
-      "panel-12": {
+      "panel-18": {
         "kind": "Panel",
         "spec": {
-          "id": 12,
+          "id": 18,
           "title": "Waiting containers by reason",
           "description": "CrashLoopBackOff, ImagePullBackOff и т. п.: контейнер не запущен.",
           "links": [],
@@ -333,10 +681,10 @@
           }
         }
       },
-      "panel-13": {
+      "panel-19": {
         "kind": "Panel",
         "spec": {
-          "id": 13,
+          "id": 19,
           "title": "CPU by pod",
           "description": "Ядра CPU (cAdvisor), включая то, что runtime не видит (GC, sidecar-процессы контейнера).",
           "links": [],
@@ -391,436 +739,6 @@
                   "unit": "short",
                   "custom": {}
                 },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-14": {
-        "kind": "Panel",
-        "spec": {
-          "id": 14,
-          "title": "Memory working set by pod",
-          "description": "Метрики: `container_memory_working_set_bytes`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (pod) (container_memory_working_set_bytes{job=\"infra/kubernetes\", namespace=\"nomnom-restaurants\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"})",
-                        "legendFormat": "{{pod}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "bytes",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-15": {
-        "kind": "Panel",
-        "spec": {
-          "id": 15,
-          "title": "Network by pod",
-          "description": "Метрики: `container_network_receive_bytes_total`, `container_network_transmit_bytes_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (pod) (rate(container_network_receive_bytes_total{job=\"infra/kubernetes\", namespace=\"nomnom-restaurants\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"}[$__rate_interval]))",
-                        "legendFormat": "{{pod}} rx",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{job=\"infra/kubernetes\", namespace=\"nomnom-restaurants\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"}[$__rate_interval]))",
-                        "legendFormat": "{{pod}} tx",
-                        "range": true
-                      }
-                    },
-                    "refId": "B",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "Bps",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-16": {
-        "kind": "Panel",
-        "spec": {
-          "id": 16,
-          "title": "mongodb: operations",
-          "description": "Метрики: `db_client_operation_duration_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "{{db_operation_name}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (error_type) (rate(db_client_operation_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\", error_type!=\"\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "error {{error_type}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "B",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "ops",
-                  "custom": {}
-                },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "B"
-                    },
-                    "properties": [
-                      {
-                        "id": "links",
-                        "value": [
-                          {
-                            "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dclient+%26%26+span.db.system.name%3D%5C%22mongodb%5C%22+%26%26+span.error.type%3D%5C%22${__field.labels.error_type}%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-                            "targetBlank": true
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        }
-      },
-      "panel-17": {
-        "kind": "Panel",
-        "spec": {
-          "id": 17,
-          "title": "mongodb: p95 by operation",
-          "description": "Метрики: `db_client_operation_duration_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "histogram_quantile(0.95, sum by (db_operation_name, le) (rate(db_client_operation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
-                        "legendFormat": "{{db_operation_name}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "s",
-                  "custom": {}
-                },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "A"
-                    },
-                    "properties": [
-                      {
-                        "id": "links",
-                        "value": [
-                          {
-                            "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dclient+%26%26+span.db.system.name%3D%5C%22mongodb%5C%22+%26%26+span.db.operation.name%3D%5C%22${__field.labels.db_operation_name}%5C%22+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-                            "targetBlank": true
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        }
-      },
-      "panel-18": {
-        "kind": "Panel",
-        "spec": {
-          "id": 18,
-          "title": "mongodb: pool connections",
-          "description": "Сумма по процессам и пулам. Насыщение одного пула — панель «pool saturation».\n\nЧасть запросов ждёт метрик: db_client_connection_idle_min, db_client_connection_max (см. docs/observability/metric-inventory.md).",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (db_client_connection_state) (db_client_connection_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "{{db_client_connection_state}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "short",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-19": {
-        "kind": "Panel",
-        "spec": {
-          "id": 19,
-          "title": "mongodb: pool saturation",
-          "description": "used / max самого загруженного процесса по пулу. Долго около 1 — checkouts ждут в очереди: поднять maxPoolSize процесса или найти долгие операции (use time).",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`db_client_connection_max`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax by (job, db_client_connection_pool_name) (sum by (job, instance, db_client_connection_pool_name) (db_client_connection_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_client_connection_state=\"used\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}) / sum by (job, instance, db_client_connection_pool_name) (db_client_connection_max{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
                 "overrides": []
               }
             }
@@ -990,136 +908,8 @@
         "kind": "Panel",
         "spec": {
           "id": 20,
-          "title": "mongodb: pending checkouts and timeouts",
-          "description": "Ожидающие checkout и checkouts, не получившие соединение за wait timeout (операция завершилась ошибкой).",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`db_client_connection_pending_requests`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n| [`db_client_connection_timeouts_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (job) (db_client_connection_pending_requests{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum by (job) (increase(db_client_connection_timeouts_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-21": {
-        "kind": "Panel",
-        "spec": {
-          "id": 21,
-          "title": "mongodb: pool wait / use / create p95",
-          "description": "wait — ожидание соединения пула, use — от checkout до возврата, create — установка соединения с handshake и auth.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`db_client_connection_create_time_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n| [`db_client_connection_use_time_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n| [`db_client_connection_wait_time_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.95, sum by (le) (rate(db_client_connection_wait_time_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(db_client_connection_use_time_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(db_client_connection_create_time_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-22": {
-        "kind": "Panel",
-        "spec": {
-          "id": 22,
-          "title": "mongodb: pool cleared",
-          "description": "Драйвер пометил сервер недоступным и закрыл соединения его пула: failover, сетевой сбой или рестарт узла replica set.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_db_client_connection_pool_clears_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (job, db_client_connection_pool_name) (increase(nomnom_db_client_connection_pool_clears_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-23": {
-        "kind": "Panel",
-        "spec": {
-          "id": 23,
-          "title": "Consumed",
-          "description": "Метрики: `messaging_client_consumed_messages_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`messaging_client_consumed_messages_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging-otel) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (messaging_destination_name) (rate(messaging_client_consumed_messages_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-24": {
-        "kind": "Panel",
-        "spec": {
-          "id": 24,
-          "title": "Produced (Outbox, Debezium)",
-          "description": "События Outbox, которые коннектор `restaurants-outbox` прочитал из журнала базы и отправил в Kafka (ADR 37).",
+          "title": "Memory working set by pod",
+          "description": "Метрики: `container_memory_working_set_bytes`.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1136,8 +926,8 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum(rate(debezium_metrics_TotalNumberOfEventsSeen{job=\"infra/kafka-connect\", name=\"restaurants-outbox\"}[$__rate_interval]))",
-                        "legendFormat": "events",
+                        "expr": "sum by (pod) (container_memory_working_set_bytes{job=\"infra/kubernetes\", namespace=\"nomnom-restaurants\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"})",
+                        "legendFormat": "{{pod}}",
                         "range": true
                       }
                     },
@@ -1169,7 +959,341 @@
               },
               "fieldConfig": {
                 "defaults": {
+                  "unit": "bytes",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-21": {
+        "kind": "Panel",
+        "spec": {
+          "id": 21,
+          "title": "Network by pod",
+          "description": "Метрики: `container_network_receive_bytes_total`, `container_network_transmit_bytes_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (rate(container_network_receive_bytes_total{job=\"infra/kubernetes\", namespace=\"nomnom-restaurants\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"}[$__rate_interval]))",
+                        "legendFormat": "{{pod}} rx",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{job=\"infra/kubernetes\", namespace=\"nomnom-restaurants\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"}[$__rate_interval]))",
+                        "legendFormat": "{{pod}} tx",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "Bps",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-22": {
+        "kind": "Panel",
+        "spec": {
+          "id": 22,
+          "title": "mongodb: operations",
+          "description": "Метрики: `db_client_operation_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "{{db_operation_name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (error_type) (rate(db_client_operation_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\", error_type!=\"\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "error {{error_type}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
                   "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byFrameRefID",
+                      "options": "B"
+                    },
+                    "properties": [
+                      {
+                        "id": "links",
+                        "value": [
+                          {
+                            "title": "Traces этой серии",
+                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dclient+%26%26+span.db.system.name%3D%5C%22mongodb%5C%22+%26%26+span.error.type%3D%5C%22${__field.labels.error_type}%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "targetBlank": true
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "panel-23": {
+        "kind": "Panel",
+        "spec": {
+          "id": 23,
+          "title": "mongodb: p95 by operation",
+          "description": "Метрики: `db_client_operation_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "histogram_quantile(0.95, sum by (db_operation_name, le) (rate(db_client_operation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
+                        "legendFormat": "{{db_operation_name}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "s",
+                  "custom": {}
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byFrameRefID",
+                      "options": "A"
+                    },
+                    "properties": [
+                      {
+                        "id": "links",
+                        "value": [
+                          {
+                            "title": "Traces этой серии",
+                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dclient+%26%26+span.db.system.name%3D%5C%22mongodb%5C%22+%26%26+span.db.operation.name%3D%5C%22${__field.labels.db_operation_name}%5C%22+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "targetBlank": true
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "panel-24": {
+        "kind": "Panel",
+        "spec": {
+          "id": 24,
+          "title": "mongodb: pool connections",
+          "description": "Сумма по процессам и пулам. Насыщение одного пула — панель «pool saturation».\n\nЧасть запросов ждёт метрик: db_client_connection_idle_min, db_client_connection_max (см. docs/observability/metric-inventory.md).",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (db_client_connection_state) (db_client_connection_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "{{db_client_connection_state}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
                   "custom": {}
                 },
                 "overrides": []
@@ -1182,8 +1306,8 @@
         "kind": "Panel",
         "spec": {
           "id": 25,
-          "title": "Processing failures",
-          "description": "Технические сбои обработки по `error_class` (permanent, deserialization, transient); business rejections подтверждаются (ack) и показаны в Service health отдельно.",
+          "title": "mongodb: pool saturation",
+          "description": "used / max самого загруженного процесса по пулу. Долго около 1 — checkouts ждут в очереди: поднять maxPoolSize процесса или найти долгие операции (use time).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1200,7 +1324,7 @@
             "spec": {
               "options": {
                 "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_messaging_process_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_error_class) (rate(nomnom_messaging_process_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_error_class!~\"|business\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`db_client_connection_max`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax by (job, db_client_connection_pool_name) (sum by (job, instance, db_client_connection_pool_name) (db_client_connection_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_client_connection_state=\"used\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}) / sum by (job, instance, db_client_connection_pool_name) (db_client_connection_max{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1214,8 +1338,8 @@
         "kind": "Panel",
         "spec": {
           "id": 26,
-          "title": "Consumer lag",
-          "description": "Lag consumer group `restaurants` из Alloy Kafka exporter; не путать с очередями предметной области.",
+          "title": "mongodb: pending checkouts and timeouts",
+          "description": "Ожидающие checkout и checkouts, не получившие соединение за wait timeout (операция завершилась ошибкой).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1232,7 +1356,7 @@
             "spec": {
               "options": {
                 "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`kafka_consumergroup_lag`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (topic) (kafka_consumergroup_lag{consumergroup=\"restaurants\"})\n```\n"
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`db_client_connection_pending_requests`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n| [`db_client_connection_timeouts_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (job) (db_client_connection_pending_requests{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum by (job) (increase(db_client_connection_timeouts_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1246,8 +1370,8 @@
         "kind": "Panel",
         "spec": {
           "id": 27,
-          "title": "Retries and poison (DLQ)",
-          "description": "Метрики: `nomnom_messaging_retry_attempts_total`, `nomnom_messaging_poison_messages_total`.",
+          "title": "mongodb: pool wait / use / create p95",
+          "description": "wait — ожидание соединения пула, use — от checkout до возврата, create — установка соединения с handshake и auth.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1264,7 +1388,7 @@
             "spec": {
               "options": {
                 "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_messaging_poison_messages_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n| [`nomnom_messaging_retry_attempts_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_event_type) (rate(nomnom_messaging_retry_attempts_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum by (messaging_destination_name, nomnom_error_class) (rate(nomnom_messaging_poison_messages_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`db_client_connection_create_time_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n| [`db_client_connection_use_time_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n| [`db_client_connection_wait_time_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.95, sum by (le) (rate(db_client_connection_wait_time_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(db_client_connection_use_time_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(db_client_connection_create_time_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1278,8 +1402,8 @@
         "kind": "Panel",
         "spec": {
           "id": 28,
-          "title": "Processing duration p95 by event_type",
-          "description": "Метрики: `nomnom_messaging_process_duration_seconds`.",
+          "title": "mongodb: pool cleared",
+          "description": "Драйвер пометил сервер недоступным и закрыл соединения его пула: failover, сетевой сбой или рестарт узла replica set.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1296,7 +1420,7 @@
             "spec": {
               "options": {
                 "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_messaging_process_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.95, sum by (nomnom_event_type, le) (rate(nomnom_messaging_process_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_db_client_connection_pool_clears_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#db) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (job, db_client_connection_pool_name) (increase(nomnom_db_client_connection_pool_clears_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1310,8 +1434,8 @@
         "kind": "Panel",
         "spec": {
           "id": 29,
-          "title": "Message age at processing p95",
-          "description": "`now − occurred_at` в момент обработки.",
+          "title": "Consumed",
+          "description": "Метрики: `messaging_client_consumed_messages_total`.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1328,7 +1452,7 @@
             "spec": {
               "options": {
                 "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_messaging_message_age_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.95, sum by (nomnom_event_type, le) (rate(nomnom_messaging_message_age_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`messaging_client_consumed_messages_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging-otel) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (messaging_destination_name) (rate(messaging_client_consumed_messages_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1406,6 +1530,230 @@
         "kind": "Panel",
         "spec": {
           "id": 30,
+          "title": "Produced (Outbox, Debezium)",
+          "description": "События Outbox, которые коннектор `restaurants-outbox` прочитал из журнала базы и отправил в Kafka (ADR 37).",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum(rate(debezium_metrics_TotalNumberOfEventsSeen{job=\"infra/kafka-connect\", name=\"restaurants-outbox\"}[$__rate_interval]))",
+                        "legendFormat": "events",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-31": {
+        "kind": "Panel",
+        "spec": {
+          "id": 31,
+          "title": "Processing failures",
+          "description": "Технические сбои обработки по `error_class` (permanent, deserialization, transient); business rejections подтверждаются (ack) и показаны в Service health отдельно.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_messaging_process_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_error_class) (rate(nomnom_messaging_process_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_error_class!~\"|business\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-32": {
+        "kind": "Panel",
+        "spec": {
+          "id": 32,
+          "title": "Consumer lag",
+          "description": "Lag consumer group `restaurants` из Alloy Kafka exporter; не путать с очередями предметной области.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`kafka_consumergroup_lag`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (topic) (kafka_consumergroup_lag{consumergroup=\"restaurants\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-33": {
+        "kind": "Panel",
+        "spec": {
+          "id": 33,
+          "title": "Retries and poison (DLQ)",
+          "description": "Метрики: `nomnom_messaging_retry_attempts_total`, `nomnom_messaging_poison_messages_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_messaging_poison_messages_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n| [`nomnom_messaging_retry_attempts_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_event_type) (rate(nomnom_messaging_retry_attempts_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum by (messaging_destination_name, nomnom_error_class) (rate(nomnom_messaging_poison_messages_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-34": {
+        "kind": "Panel",
+        "spec": {
+          "id": 34,
+          "title": "Processing duration p95 by event_type",
+          "description": "Метрики: `nomnom_messaging_process_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_messaging_process_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.95, sum by (nomnom_event_type, le) (rate(nomnom_messaging_process_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-35": {
+        "kind": "Panel",
+        "spec": {
+          "id": 35,
+          "title": "Message age at processing p95",
+          "description": "`now − occurred_at` в момент обработки.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_messaging_message_age_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#messaging) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.95, sum by (nomnom_event_type, le) (rate(nomnom_messaging_message_age_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-36": {
+        "kind": "Panel",
+        "spec": {
+          "id": 36,
           "title": "Inbox: processed / duplicates",
           "description": "Duplicate = конфликт уникальности `(consumer, event_id)` в Inbox; failures — панель Processing failures.",
           "links": [],
@@ -1434,10 +1782,10 @@
           }
         }
       },
-      "panel-31": {
+      "panel-37": {
         "kind": "Panel",
         "spec": {
-          "id": 31,
+          "id": 37,
           "title": "Outbox CDC lag",
           "description": "Отставание коннектора `restaurants-outbox` от журнала базы: время от commit записи Outbox до её чтения.",
           "links": [],
@@ -1498,10 +1846,10 @@
           }
         }
       },
-      "panel-32": {
+      "panel-38": {
         "kind": "Panel",
         "spec": {
-          "id": 32,
+          "id": 38,
           "title": "Outbox connector tasks",
           "description": "Состояние задачи коннектора `restaurants-outbox`: `failed` — Outbox не доставляется.",
           "links": [],
@@ -1562,10 +1910,10 @@
           }
         }
       },
-      "panel-33": {
+      "panel-39": {
         "kind": "Panel",
         "spec": {
-          "id": 33,
+          "id": 39,
           "title": "Transactions by outcome",
           "description": "committed, rolled_back и commit_failed Unit of Work.",
           "links": [],
@@ -1585,198 +1933,6 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_uow_transactions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_outcome) (rate(nomnom_uow_transactions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-34": {
-        "kind": "Panel",
-        "spec": {
-          "id": 34,
-          "title": "Transaction duration",
-          "description": "Метрики: `nomnom_uow_duration_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_uow_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-35": {
-        "kind": "Panel",
-        "spec": {
-          "id": 35,
-          "title": "Retries by conflict",
-          "description": "serialization, deadlock, write_conflict — классы retry Unit of Work.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_uow_retries_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_reason) (rate(nomnom_uow_retries_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-36": {
-        "kind": "Panel",
-        "spec": {
-          "id": 36,
-          "title": "Transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-37": {
-        "kind": "Panel",
-        "spec": {
-          "id": 37,
-          "title": "Invalid transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_from_state, nomnom_fsm_trigger) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"rejected\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-38": {
-        "kind": "Panel",
-        "spec": {
-          "id": 38,
-          "title": "Terminal transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\", nomnom_fsm_terminal=\"true\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-39": {
-        "kind": "Panel",
-        "spec": {
-          "id": 39,
-          "title": "Restaurant orders: received / accepted / rejected",
-          "description": "Queued / preparing / ready и preparation duration — row Kitchen.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_restaurants_orders_accepted_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_restaurants_orders_received_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_restaurants_orders_rejected_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(rate(nomnom_restaurants_orders_received_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_restaurants_orders_accepted_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_restaurants_orders_rejected_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1949,6 +2105,198 @@
         "kind": "Panel",
         "spec": {
           "id": 40,
+          "title": "Transaction duration",
+          "description": "Метрики: `nomnom_uow_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_uow_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_uow_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-41": {
+        "kind": "Panel",
+        "spec": {
+          "id": 41,
+          "title": "Retries by conflict",
+          "description": "serialization, deadlock, write_conflict — классы retry Unit of Work.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_uow_retries_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#uow) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_reason) (rate(nomnom_uow_retries_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-42": {
+        "kind": "Panel",
+        "spec": {
+          "id": 42,
+          "title": "Transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-43": {
+        "kind": "Panel",
+        "spec": {
+          "id": 43,
+          "title": "Invalid transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_from_state, nomnom_fsm_trigger) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"rejected\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-44": {
+        "kind": "Panel",
+        "spec": {
+          "id": 44,
+          "title": "Terminal transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\", nomnom_fsm_terminal=\"true\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-45": {
+        "kind": "Panel",
+        "spec": {
+          "id": 45,
+          "title": "Restaurant orders: received / accepted / rejected",
+          "description": "Queued / preparing / ready и preparation duration — row Kitchen.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_restaurants_orders_accepted_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_restaurants_orders_received_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_restaurants_orders_rejected_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(rate(nomnom_restaurants_orders_received_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_restaurants_orders_accepted_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_restaurants_orders_rejected_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-46": {
+        "kind": "Panel",
+        "spec": {
+          "id": 46,
           "title": "Rejections by reason",
           "description": "Метрики: `nomnom_restaurants_orders_rejected_total`.",
           "links": [],
@@ -1977,10 +2325,10 @@
           }
         }
       },
-      "panel-41": {
+      "panel-47": {
         "kind": "Panel",
         "spec": {
-          "id": 41,
+          "id": 47,
           "title": "Kitchen queue size",
           "description": "Kitchen Queue Size из Kitchen Board projection; это не Kafka consumer lag.",
           "links": [],
@@ -2009,10 +2357,10 @@
           }
         }
       },
-      "panel-42": {
+      "panel-48": {
         "kind": "Panel",
         "spec": {
-          "id": 42,
+          "id": 48,
           "title": "Oldest queued order age",
           "description": "Метрики: `nomnom_kitchen_queue_oldest_age_seconds`.",
           "links": [],
@@ -2041,10 +2389,10 @@
           }
         }
       },
-      "panel-43": {
+      "panel-49": {
         "kind": "Panel",
         "spec": {
-          "id": 43,
+          "id": 49,
           "title": "Active preparations / ready for pickup",
           "description": "Метрики: `nomnom_kitchen_preparations_active`, `nomnom_kitchen_ready_for_pickup`.",
           "links": [],
@@ -2064,198 +2412,6 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_kitchen_preparations_active`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#kitchen) | ожидается |\n| [`nomnom_kitchen_ready_for_pickup`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#kitchen) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(nomnom_kitchen_preparations_active{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(nomnom_kitchen_ready_for_pickup{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-44": {
-        "kind": "Panel",
-        "spec": {
-          "id": 44,
-          "title": "Preparation duration",
-          "description": "Метрики: `nomnom_kitchen_preparation_duration_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_kitchen_preparation_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#kitchen) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_kitchen_preparation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_kitchen_preparation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_kitchen_preparation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-45": {
-        "kind": "Panel",
-        "spec": {
-          "id": 45,
-          "title": "Delays",
-          "description": "Метрики: `nomnom_kitchen_delays_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_kitchen_delays_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#kitchen) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_reason) (rate(nomnom_kitchen_delays_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-46": {
-        "kind": "Panel",
-        "spec": {
-          "id": 46,
-          "title": "Checks by result",
-          "description": "Метрики: `nomnom_authz_checks_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-47": {
-        "kind": "Panel",
-        "spec": {
-          "id": 47,
-          "title": "Denied by permission",
-          "description": "DENIED — решение политики, не сбой SpiceDB.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-48": {
-        "kind": "Panel",
-        "spec": {
-          "id": 48,
-          "title": "Errors and timeouts",
-          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-49": {
-        "kind": "Panel",
-        "spec": {
-          "id": 49,
-          "title": "Check latency",
-          "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_authz_check_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2323,6 +2479,198 @@
                   "unit": "short",
                   "custom": {}
                 },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-50": {
+        "kind": "Panel",
+        "spec": {
+          "id": 50,
+          "title": "Preparation duration",
+          "description": "Метрики: `nomnom_kitchen_preparation_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_kitchen_preparation_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#kitchen) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_kitchen_preparation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_kitchen_preparation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_kitchen_preparation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-51": {
+        "kind": "Panel",
+        "spec": {
+          "id": 51,
+          "title": "Delays",
+          "description": "Метрики: `nomnom_kitchen_delays_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_kitchen_delays_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#kitchen) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_reason) (rate(nomnom_kitchen_delays_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-52": {
+        "kind": "Panel",
+        "spec": {
+          "id": 52,
+          "title": "Checks by result",
+          "description": "Метрики: `nomnom_authz_checks_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-53": {
+        "kind": "Panel",
+        "spec": {
+          "id": 53,
+          "title": "Denied by permission",
+          "description": "DENIED — решение политики, не сбой SpiceDB.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-54": {
+        "kind": "Panel",
+        "spec": {
+          "id": 54,
+          "title": "Errors and timeouts",
+          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-55": {
+        "kind": "Panel",
+        "spec": {
+          "id": 55,
+          "title": "Check latency",
+          "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nomnom_authz_check_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
                 "overrides": []
               }
             }
@@ -2397,28 +2745,80 @@
         "kind": "Panel",
         "spec": {
           "id": 7,
-          "title": "V8 heap used / limit",
-          "description": "Метрики: `v8js_memory_heap_used_bytes`, `v8js_memory_heap_limit_bytes`.",
+          "title": "Availability: SLI / SLO 99.5%",
+          "description": "Доля хороших событий в шаге графика против цели 99.5% за 30d (ADR 40).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "1 - (sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])))",
+                        "legendFormat": "SLI",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "vector(0.995)",
+                        "legendFormat": "SLO",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`v8js_memory_heap_limit_bytes`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#runtime) | ожидается |\n| [`v8js_memory_heap_used_bytes`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#runtime) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(v8js_memory_heap_used_bytes{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(v8js_memory_heap_limit_bytes{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "percentunit",
+                  "custom": {}
+                },
                 "overrides": []
               }
             }
@@ -2429,28 +2829,60 @@
         "kind": "Panel",
         "spec": {
           "id": 8,
-          "title": "Event loop delay p99",
-          "description": "Метрики: `nodejs_eventloop_delay_p99_seconds`.",
+          "title": "Availability: error budget remaining (30d)",
+          "description": "Неизрасходованная доля бюджета 0.005 за скользящие 30d. Ниже нуля — SLO нарушен.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "1 - (sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d]))) / 0.005",
+                        "legendFormat": "remaining",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`nodejs_eventloop_delay_p99_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#runtime) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nmax by (instance) (nodejs_eventloop_delay_p99_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "percentunit",
+                  "custom": {}
+                },
                 "overrides": []
               }
             }
@@ -2461,28 +2893,100 @@
         "kind": "Panel",
         "spec": {
           "id": 9,
-          "title": "GC duration p95",
-          "description": "Метрики: `v8js_gc_duration_seconds`.",
+          "title": "Availability: burn rate",
+          "description": "Скорость расхода бюджета: 1 — бюджет кончится ровно за 30d. Пороги: 14.4 за 1h (critical), 6 за 6h (warning), 1 за 3d.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "(sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h]))) / 0.005",
+                        "legendFormat": "1h",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "(sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h]))) / 0.005",
+                        "legendFormat": "6h",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "(sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d]))) / 0.005",
+                        "legendFormat": "3d",
+                        "range": true
+                      }
+                    },
+                    "refId": "C",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants` |\n| --- | --- |\n| [`v8js_gc_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#runtime) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.95, sum by (v8js_gc_type, le) (rate(v8js_gc_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "short",
+                  "custom": {}
+                },
                 "overrides": []
               }
             }
@@ -2589,8 +3093,8 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Runtime",
-              "collapse": true,
+              "title": "SLO",
+              "collapse": false,
               "layout": {
                 "kind": "GridLayout",
                 "spec": {
@@ -2633,6 +3137,45 @@
                           "name": "panel-9"
                         }
                       }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-10"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-11"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-12"
+                        }
+                      }
                     }
                   ]
                 }
@@ -2642,7 +3185,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Pods",
+              "title": "Runtime",
               "collapse": true,
               "layout": {
                 "kind": "GridLayout",
@@ -2657,45 +3200,6 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-10"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-11"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 16,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-12"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
                           "name": "panel-13"
                         }
                       }
@@ -2704,7 +3208,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 8,
-                        "y": 8,
+                        "y": 0,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -2717,7 +3221,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 16,
-                        "y": 8,
+                        "y": 0,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -2734,7 +3238,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Dependencies",
+              "title": "Pods",
               "collapse": true,
               "layout": {
                 "kind": "GridLayout",
@@ -2817,6 +3321,98 @@
                           "name": "panel-21"
                         }
                       }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Dependencies",
+              "collapse": true,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-22"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-23"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-24"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-25"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-26"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-27"
+                        }
+                      }
                     },
                     {
                       "kind": "GridLayoutItem",
@@ -2827,7 +3423,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-22"
+                          "name": "panel-28"
                         }
                       }
                     }
@@ -2854,84 +3450,6 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-23"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-24"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 16,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-25"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-26"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-27"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 16,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-28"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 16,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
                           "name": "panel-29"
                         }
                       }
@@ -2940,7 +3458,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 8,
-                        "y": 16,
+                        "y": 0,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -2953,7 +3471,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 16,
-                        "y": 16,
+                        "y": 0,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -2966,7 +3484,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 24,
+                        "y": 8,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -2974,26 +3492,12 @@
                           "name": "panel-32"
                         }
                       }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "kind": "RowsLayoutRow",
-            "spec": {
-              "title": "Transactions",
-              "collapse": true,
-              "layout": {
-                "kind": "GridLayout",
-                "spec": {
-                  "items": [
+                    },
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 0,
-                        "y": 0,
+                        "x": 8,
+                        "y": 8,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -3005,8 +3509,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 8,
-                        "y": 0,
+                        "x": 16,
+                        "y": 8,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -3018,8 +3522,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
-                        "y": 0,
+                        "x": 0,
+                        "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -3027,26 +3531,12 @@
                           "name": "panel-35"
                         }
                       }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "kind": "RowsLayoutRow",
-            "spec": {
-              "title": "Domain Lifecycle",
-              "collapse": true,
-              "layout": {
-                "kind": "GridLayout",
-                "spec": {
-                  "items": [
+                    },
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 0,
-                        "y": 0,
+                        "x": 8,
+                        "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -3058,8 +3548,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 8,
-                        "y": 0,
+                        "x": 16,
+                        "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -3071,8 +3561,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
-                        "y": 0,
+                        "x": 0,
+                        "y": 24,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -3089,8 +3579,8 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Domain metrics",
-              "collapse": false,
+              "title": "Transactions",
+              "collapse": true,
               "layout": {
                 "kind": "GridLayout",
                 "spec": {
@@ -3120,6 +3610,112 @@
                           "name": "panel-40"
                         }
                       }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-41"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Domain Lifecycle",
+              "collapse": true,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-42"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-43"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-44"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Domain metrics",
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-45"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-46"
+                        }
+                      }
                     }
                   ]
                 }
@@ -3144,7 +3740,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-41"
+                          "name": "panel-47"
                         }
                       }
                     },
@@ -3157,7 +3753,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-42"
+                          "name": "panel-48"
                         }
                       }
                     },
@@ -3170,7 +3766,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-43"
+                          "name": "panel-49"
                         }
                       }
                     },
@@ -3183,7 +3779,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-44"
+                          "name": "panel-50"
                         }
                       }
                     },
@@ -3196,7 +3792,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-45"
+                          "name": "panel-51"
                         }
                       }
                     }
@@ -3223,7 +3819,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-46"
+                          "name": "panel-52"
                         }
                       }
                     },
@@ -3236,7 +3832,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-47"
+                          "name": "panel-53"
                         }
                       }
                     },
@@ -3249,7 +3845,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-48"
+                          "name": "panel-54"
                         }
                       }
                     },
@@ -3262,7 +3858,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-49"
+                          "name": "panel-55"
                         }
                       }
                     }

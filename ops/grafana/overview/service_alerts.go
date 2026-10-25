@@ -37,6 +37,7 @@ func ServiceAlerts(o Options) (AlertGroup, error) {
 	if o.Database != "" && o.DatabasePool {
 		alerts = append(alerts, poolAlerts(o, sc, dash)...)
 	}
+	alerts = append(alerts, o.sloAlerts(sc, dash)...)
 	if o.DomainAlerts != nil {
 		alerts = append(alerts, o.DomainAlerts(sc)...)
 	}

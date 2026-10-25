@@ -66,6 +66,102 @@
         "kind": "Panel",
         "spec": {
           "id": 10,
+          "title": "Waiting containers by reason",
+          "description": "CrashLoopBackOff, ImagePullBackOff и т. п.: контейнер не запущен.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`kube_pod_container_status_waiting_reason`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#pods) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (reason) (kube_pod_container_status_waiting_reason{job=\"infra/kubernetes\", namespace=\"nomnom-bff\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-11": {
+        "kind": "Panel",
+        "spec": {
+          "id": 11,
+          "title": "CPU by pod",
+          "description": "Ядра CPU (cAdvisor), включая то, что runtime не видит (GC, sidecar-процессы контейнера).",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`container_cpu_usage_seconds_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#pods) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (pod) (rate(container_cpu_usage_seconds_total{job=\"infra/kubernetes\", namespace=\"nomnom-bff\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"}[$__rate_interval]))\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-12": {
+        "kind": "Panel",
+        "spec": {
+          "id": 12,
+          "title": "Memory working set by pod",
+          "description": "Метрики: `container_memory_working_set_bytes`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`container_memory_working_set_bytes`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#pods) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (pod) (container_memory_working_set_bytes{job=\"infra/kubernetes\", namespace=\"nomnom-bff\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-13": {
+        "kind": "Panel",
+        "spec": {
+          "id": 13,
           "title": "Network by pod",
           "description": "Метрики: `container_network_receive_bytes_total`, `container_network_transmit_bytes_total`.",
           "links": [],
@@ -94,10 +190,10 @@
           }
         }
       },
-      "panel-11": {
+      "panel-14": {
         "kind": "Panel",
         "spec": {
-          "id": 11,
+          "id": 14,
           "title": "Subgraph calls: rate",
           "description": "Метрики: `router_http_requests_total`.",
           "links": [],
@@ -126,10 +222,10 @@
           }
         }
       },
-      "panel-12": {
+      "panel-15": {
         "kind": "Panel",
         "spec": {
-          "id": 12,
+          "id": 15,
           "title": "Subgraph calls: errors",
           "description": "Метрики: `router_http_requests_error_total`.",
           "links": [],
@@ -158,10 +254,10 @@
           }
         }
       },
-      "panel-13": {
+      "panel-16": {
         "kind": "Panel",
         "spec": {
-          "id": 13,
+          "id": 16,
           "title": "Subgraph calls: p95",
           "description": "Метрики: `router_http_request_duration_milliseconds`.",
           "links": [],
@@ -190,10 +286,10 @@
           }
         }
       },
-      "panel-14": {
+      "panel-17": {
         "kind": "Panel",
         "spec": {
-          "id": 14,
+          "id": 17,
           "title": "Time to expiry",
           "description": "До NotAfter. cert-manager продлевает заранее (renewBefore), срок не должен приближаться к нулю.",
           "links": [],
@@ -254,10 +350,10 @@
           }
         }
       },
-      "panel-15": {
+      "panel-18": {
         "kind": "Panel",
         "spec": {
-          "id": 15,
+          "id": 18,
           "title": "Time to scheduled renewal",
           "description": "Отрицательное значение — продление просрочено: issuer не выпускает сертификат.",
           "links": [],
@@ -318,10 +414,10 @@
           }
         }
       },
-      "panel-16": {
+      "panel-19": {
         "kind": "Panel",
         "spec": {
-          "id": 16,
+          "id": 19,
           "title": "Ready",
           "description": "0 — Certificate не Ready: сертификат не выпущен, просрочен или не совпадает со spec.",
           "links": [],
@@ -482,6 +578,102 @@
         "kind": "Panel",
         "spec": {
           "id": 5,
+          "title": "Availability: SLI / SLO 99.5%",
+          "description": "Доля хороших событий в шаге графика против цели 99.5% за 30d (ADR 40).",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`router_http_requests_error_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#graphql) | ожидается |\n| [`router_http_requests_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#graphql) | ожидается |\n| [`target_info`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#resource) | ожидается |\n\nЦелевой PromQL:\n\n```promql\n1 - (sum(increase(router_http_requests_error_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])) / sum(increase(router_http_requests_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])))\nvector(0.995)\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-6": {
+        "kind": "Panel",
+        "spec": {
+          "id": 6,
+          "title": "Availability: error budget remaining (30d)",
+          "description": "Неизрасходованная доля бюджета 0.005 за скользящие 30d. Ниже нуля — SLO нарушен.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`router_http_requests_error_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#graphql) | ожидается |\n| [`router_http_requests_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#graphql) | ожидается |\n| [`target_info`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#resource) | ожидается |\n\nЦелевой PromQL:\n\n```promql\n1 - (sum(increase(router_http_requests_error_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d])) / sum(increase(router_http_requests_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d]))) / 0.005\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-7": {
+        "kind": "Panel",
+        "spec": {
+          "id": 7,
+          "title": "Availability: burn rate",
+          "description": "Скорость расхода бюджета: 1 — бюджет кончится ровно за 30d. Пороги: 14.4 за 1h (critical), 6 за 6h (warning), 1 за 3d.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`router_http_requests_error_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#graphql) | ожидается |\n| [`router_http_requests_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#graphql) | ожидается |\n| [`target_info`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#resource) | ожидается |\n\nЦелевой PromQL:\n\n```promql\n(sum(increase(router_http_requests_error_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h])) / sum(increase(router_http_requests_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h]))) / 0.005\n(sum(increase(router_http_requests_error_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h])) / sum(increase(router_http_requests_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h]))) / 0.005\n(sum(increase(router_http_requests_error_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d])) / sum(increase(router_http_requests_total{job=~\"nomnom/(${service:pipe})\", wg_subgraph_name=\"\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d]))) / 0.005\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-8": {
+        "kind": "Panel",
+        "spec": {
+          "id": 8,
           "title": "Ready pods",
           "description": "Разрыв ready и pods — pod не проходит readinessProbe и выведен из Service.",
           "links": [],
@@ -510,10 +702,10 @@
           }
         }
       },
-      "panel-6": {
+      "panel-9": {
         "kind": "Panel",
         "spec": {
-          "id": 6,
+          "id": 9,
           "title": "Restarts",
           "description": "Метрики: `kube_pod_container_status_restarts_total`.",
           "links": [],
@@ -533,102 +725,6 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`kube_pod_container_status_restarts_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#pods) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (pod) (increase(kube_pod_container_status_restarts_total{job=\"infra/kubernetes\", namespace=\"nomnom-bff\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"}[$__rate_interval]))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-7": {
-        "kind": "Panel",
-        "spec": {
-          "id": 7,
-          "title": "Waiting containers by reason",
-          "description": "CrashLoopBackOff, ImagePullBackOff и т. п.: контейнер не запущен.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`kube_pod_container_status_waiting_reason`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#pods) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (reason) (kube_pod_container_status_waiting_reason{job=\"infra/kubernetes\", namespace=\"nomnom-bff\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-8": {
-        "kind": "Panel",
-        "spec": {
-          "id": 8,
-          "title": "CPU by pod",
-          "description": "Ядра CPU (cAdvisor), включая то, что runtime не видит (GC, sidecar-процессы контейнера).",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`container_cpu_usage_seconds_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#pods) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (pod) (rate(container_cpu_usage_seconds_total{job=\"infra/kubernetes\", namespace=\"nomnom-bff\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"}[$__rate_interval]))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-9": {
-        "kind": "Panel",
-        "spec": {
-          "id": 9,
-          "title": "Memory working set by pod",
-          "description": "Метрики: `container_memory_working_set_bytes`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `bff` |\n| --- | --- |\n| [`container_memory_working_set_bytes`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#pods) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (pod) (container_memory_working_set_bytes{job=\"infra/kubernetes\", namespace=\"nomnom-bff\", pod=~\"(${service:pipe})-[a-z0-9]+-[a-z0-9]+\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -712,8 +808,8 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Pods",
-              "collapse": true,
+              "title": "SLO",
+              "collapse": false,
               "layout": {
                 "kind": "GridLayout",
                 "spec": {
@@ -756,45 +852,6 @@
                           "name": "panel-7"
                         }
                       }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-8"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-9"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 16,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-10"
-                        }
-                      }
                     }
                   ]
                 }
@@ -804,7 +861,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Dependencies",
+              "title": "Pods",
               "collapse": true,
               "layout": {
                 "kind": "GridLayout",
@@ -819,7 +876,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-11"
+                          "name": "panel-8"
                         }
                       }
                     },
@@ -832,7 +889,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-12"
+                          "name": "panel-9"
                         }
                       }
                     },
@@ -841,6 +898,45 @@
                       "spec": {
                         "x": 16,
                         "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-10"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-11"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-12"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 8,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -857,7 +953,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Certificates",
+              "title": "Dependencies",
               "collapse": true,
               "layout": {
                 "kind": "GridLayout",
@@ -899,6 +995,59 @@
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-16"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Certificates",
+              "collapse": true,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-17"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-18"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-19"
                         }
                       }
                     }
