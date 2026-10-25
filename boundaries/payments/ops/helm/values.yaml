@@ -110,17 +110,18 @@ extraEnv: []
 management:
   port: 9084
 
-# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY и
-# SHUTDOWN__DRAIN_TIMEOUT. readinessDelaySeconds должен превышать время, за которое
+# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY,
+# SHUTDOWN__DRAIN_TIMEOUT и SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT. readinessDelaySeconds должен превышать время, за которое
 # readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс распространение
 # EndpointSlice и конфигурации internal gateway.
 shutdown:
   readinessDelaySeconds: 5
   drainTimeoutSeconds: 20
+  telemetryFlushTimeoutSeconds: 5
 
-# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds с запасом на выход процесса;
+# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds + telemetryFlushTimeoutSeconds с запасом на выход процесса;
 # chart отказывается рендериться при нарушении.
-terminationGracePeriodSeconds: 30
+terminationGracePeriodSeconds: 35
 
 # Probes используют health contract на техническом порту. Поля, кроме enabled, передаются
 # в Kubernetes как есть.

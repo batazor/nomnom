@@ -70,6 +70,8 @@ spec:
               value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
             - name: SHUTDOWN__DRAIN_TIMEOUT
               value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
+            - name: SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT
+              value: {{ printf "%ds" (int .Values.shutdown.telemetryFlushTimeoutSeconds) | quote }}
             {{- if .Values.identity.jwksConfigMap }}
             - name: IDENTITY__ISSUER
               value: {{ .Values.identity.issuer | quote }}

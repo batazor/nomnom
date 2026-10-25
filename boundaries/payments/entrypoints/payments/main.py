@@ -2,14 +2,22 @@ import logging
 import sys
 
 from infrastructure.grpc.service import create_default_worker
-from pkg.config import load_settings
+from pkg import telemetry
+from pkg.config import Settings, load_settings
 from pkg.lifecycle import Lifecycle, LifecycleConfig
 
 
 def run() -> None:
     # Невалидная конфигурация завершает процесс до открытия портов.
     settings = load_settings()
+    providers = telemetry.setup()
+    try:
+        serve(settings)
+    finally:
+        providers.shutdown(settings.shutdown.telemetry_flush_timeout.total_seconds())
 
+
+def serve(settings: Settings) -> None:
     worker = create_default_worker(
         ("0.0.0.0", settings.server.port), settings.identity, settings.spicedb
     )

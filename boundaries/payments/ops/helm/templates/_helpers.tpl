@@ -53,12 +53,15 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 и drain timeout с запасом, иначе kubelet отправит SIGKILL посреди drain.
 */}}
 {{- define "payments.validateShutdownBudget" -}}
-{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds -}}
+{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds .Values.shutdown.telemetryFlushTimeoutSeconds -}}
 {{- if le (int .Values.terminationGracePeriodSeconds) (int $budget) -}}
-{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
+{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds + shutdown.telemetryFlushTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
 {{- end -}}
 {{- if le (int .Values.shutdown.drainTimeoutSeconds) 0 -}}
 {{- fail "shutdown.drainTimeoutSeconds must be positive" -}}
+{{- end -}}
+{{- if le (int .Values.shutdown.telemetryFlushTimeoutSeconds) 0 -}}
+{{- fail "shutdown.telemetryFlushTimeoutSeconds must be positive" -}}
 {{- end -}}
 {{- if eq (int .Values.management.port) (int .Values.service.targetPort) -}}
 {{- fail "management.port must differ from service.targetPort" -}}

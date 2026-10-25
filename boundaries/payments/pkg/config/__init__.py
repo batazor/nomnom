@@ -17,6 +17,9 @@ READINESS_DELAY_ENV = "SHUTDOWN__READINESS_DELAY"
 DEFAULT_DRAIN_TIMEOUT = timedelta(seconds=20)
 DRAIN_TIMEOUT_ENV = "SHUTDOWN__DRAIN_TIMEOUT"
 
+DEFAULT_TELEMETRY_FLUSH_TIMEOUT = timedelta(seconds=5)
+TELEMETRY_FLUSH_TIMEOUT_ENV = "SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT"
+
 IDENTITY_ISSUER_ENV = "IDENTITY__ISSUER"
 IDENTITY_AUDIENCE_ENV = "IDENTITY__AUDIENCE"
 IDENTITY_JWKS_FILE_ENV = "IDENTITY__JWKS_FILE"
@@ -92,8 +95,13 @@ class ShutdownSettings(BaseSettings):
         default=DEFAULT_DRAIN_TIMEOUT,
         validation_alias=DRAIN_TIMEOUT_ENV,
     )
+    # Deadline на flush и shutdown telemetry providers после drain.
+    telemetry_flush_timeout: timedelta = Field(
+        default=DEFAULT_TELEMETRY_FLUSH_TIMEOUT,
+        validation_alias=TELEMETRY_FLUSH_TIMEOUT_ENV,
+    )
 
-    @field_validator("readiness_delay", "drain_timeout", mode="before")
+    @field_validator("readiness_delay", "drain_timeout", "telemetry_flush_timeout", mode="before")
     @classmethod
     def _parse_duration(cls, value: object) -> timedelta:
         return _duration(value)
@@ -110,6 +118,13 @@ class ShutdownSettings(BaseSettings):
     def _drain_timeout_positive(cls, value: timedelta) -> timedelta:
         if value <= timedelta(0):
             raise ValueError("shutdown drain timeout must be positive")
+        return value
+
+    @field_validator("telemetry_flush_timeout")
+    @classmethod
+    def _telemetry_flush_timeout_positive(cls, value: timedelta) -> timedelta:
+        if value <= timedelta(0):
+            raise ValueError("shutdown telemetry flush timeout must be positive")
         return value
 
 
