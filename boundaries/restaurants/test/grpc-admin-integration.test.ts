@@ -22,22 +22,26 @@ import {
 } from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import type { Subject } from "../pkg/application/subject.ts";
-import { FixedClock } from "../pkg/infrastructure/memory/clock.ts";
-import { SequentialIdGenerator } from "../pkg/infrastructure/memory/id-generator.ts";
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import {
-  createRestaurantStore,
-  InMemoryRestaurantCatalog,
-  InMemoryRestaurantRepository,
-} from "../slices/restaurant/infrastructure/memory/restaurants.ts";
-import { PICKUP_ADDRESS, startOfDay } from "./support/restaurants.ts";
+  createRestaurantCollection,
+  MongoRestaurantCatalog,
+  MongoRestaurantRepository,
+} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+import { createTestDatabase } from "./support/mongodb.ts";
+import {
+  FixedClock,
+  PICKUP_ADDRESS,
+  SequentialIdGenerator,
+  startOfDay,
+} from "./support/restaurants.ts";
 
 // FR-446 through the gRPC service composed like cmd/restaurants/main.ts:
 // SpiceDbAccessControl and SpiceDbRelationshipWriter over one client and an
-// in-memory repository. Runs against the shared SpiceDB of `make spicedb-dev`
+// MongoDB repository from the testcontainer. Runs against the shared SpiceDB of `make spicedb-dev`
 // (SPICEDB_ENDPOINT=localhost:50051, key `devkey`, plaintext). Ids carry a
 // unique dot-free prefix; created relationships are deleted afterwards.
 const endpoint = process.env.SPICEDB_ENDPOINT?.trim() ?? "";
@@ -132,12 +136,13 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
   });
 
   /** Service with a switchable caller; restaurant ids start with `<run><scope>-`. */
-  const world = (scope: string) => {
+  const world = async (scope: string) => {
     // The adapter with its own consistency, as in production: checks of a
     // restaurant are at_least_as_fresh with its stored revision (FR-447).
     const writer = new SpiceDbRelationshipWriter({ client, timeoutMs: 5000 });
-    const store = createRestaurantStore();
-    const restaurants = new InMemoryRestaurantRepository(store);
+    const { db, unitOfWork } = await createTestDatabase();
+    const store = createRestaurantCollection(db, unitOfWork);
+    const restaurants = new MongoRestaurantRepository(store);
     const accessControl = new SpiceDbAccessControl({
       client,
       revisions: restaurants,
@@ -161,7 +166,7 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
     };
     const service = createRestaurantsService({
       getRestaurant: new GetRestaurantHandler({
-        reader: new InMemoryRestaurantCatalog(store),
+        reader: new MongoRestaurantCatalog(store),
       }),
       getMenu: unused,
       listRestaurants: unused,
@@ -212,7 +217,7 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
   };
 
   test("AC-479 operator registers a restaurant and the owner gets manage", async () => {
-    const { register, can } = world("register");
+    const { register, can } = await world("register");
 
     const response = await register();
 
@@ -225,7 +230,7 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
   });
 
   test("AC-480 AC-482 owner assigns and revokes staff, visible immediately; repeats are changed=false", async () => {
-    const { as, register, can } = world("staff");
+    const { as, register, can } = await world("staff");
     const restaurantId = (await register()).restaurant?.restaurantId ?? "";
     const request = { restaurantId, userId: cook };
 
@@ -257,7 +262,7 @@ describe("FR-446 admin RPCs against SpiceDB", { skip }, () => {
   });
 
   test("AC-481 a user without manage gets PERMISSION_DENIED and staff is unchanged", async () => {
-    const { as, register, restaurants, can } = world("denied");
+    const { as, register, restaurants, can } = await world("denied");
     const restaurantId = (await register()).restaurant?.restaurantId ?? "";
 
     await assert.rejects(

@@ -43,7 +43,7 @@ const receiveRequest = (
   });
 
 test("GetRestaurant maps the application view with the pickup address", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId } = await world.givenKitchen("Pho Bar");
 
   const response = await service.getRestaurant(
@@ -58,7 +58,7 @@ test("GetRestaurant maps the application view with the pickup address", async ()
 });
 
 test("FR-493 GetMenu returns the public menu with prices and availability", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId, phoId } = await world.givenKitchen("Pho Bar");
 
   const response = await service.getMenu(
@@ -76,7 +76,7 @@ test("FR-493 GetMenu returns the public menu with prices and availability", asyn
 });
 
 test("GetMenu maps a restaurant without a menu to NOT_FOUND", async () => {
-  const { service } = createWorld();
+  const { service } = await createWorld();
 
   await assert.rejects(
     async () =>
@@ -89,7 +89,7 @@ test("GetMenu maps a restaurant without a menu to NOT_FOUND", async () => {
 });
 
 test("AC-565 ListRestaurants pages open restaurants with a next page token", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   await world.givenRestaurant("Pho Bar");
   await world.givenRestaurant("Ramen Bar");
   await world.givenRestaurant("Closed Bar", { open: false });
@@ -119,7 +119,7 @@ test("AC-565 ListRestaurants pages open restaurants with a next page token", asy
 });
 
 test("ListRestaurants includes closed restaurants on request with the default page size", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   await world.givenRestaurant("Pho Bar");
   await world.givenRestaurant("Closed Bar", { open: false });
 
@@ -136,7 +136,7 @@ test("ListRestaurants includes closed restaurants on request with the default pa
 });
 
 test("ListRestaurants maps a page size out of range to INVALID_ARGUMENT", async () => {
-  const { service } = createWorld();
+  const { service } = await createWorld();
 
   await assert.rejects(
     async () =>
@@ -149,7 +149,7 @@ test("ListRestaurants maps a page size out of range to INVALID_ARGUMENT", async 
 });
 
 test("GetRestaurant maps missing restaurants to NOT_FOUND", async () => {
-  const { service } = createWorld();
+  const { service } = await createWorld();
 
   await assert.rejects(
     async () =>
@@ -162,7 +162,7 @@ test("GetRestaurant maps missing restaurants to NOT_FOUND", async () => {
 });
 
 test("FR-428 ReceiveOrderRequest is idempotent by order_id", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
 
   const first = await service.receiveOrderRequest(
@@ -178,11 +178,11 @@ test("FR-428 ReceiveOrderRequest is idempotent by order_id", async () => {
   assert.notEqual(first.restaurantOrderId, "");
   assert.equal(repeated.created, false);
   assert.equal(repeated.restaurantOrderId, first.restaurantOrderId);
-  assert.equal(world.orderStore.all().length, 1);
+  assert.equal((await world.orderStore.find({})).length, 1);
 });
 
 test("ReceiveOrderRequest maps a conflicting repeat to ALREADY_EXISTS", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   await service.receiveOrderRequest(
     receiveRequest(restaurantId, phoId),
@@ -204,7 +204,7 @@ test("ReceiveOrderRequest maps a conflicting repeat to ALREADY_EXISTS", async ()
 });
 
 test("ReceiveOrderRequest maps invalid input to INVALID_ARGUMENT", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
 
   await assert.rejects(
@@ -238,11 +238,11 @@ test("ReceiveOrderRequest maps invalid input to INVALID_ARGUMENT", async () => {
       ),
     rejectsWith(Code.InvalidArgument),
   );
-  assert.deepEqual(world.orderStore.all(), []);
+  assert.deepEqual(await world.orderStore.find({}), []);
 });
 
 test("ReceiveOrderRequest maps an unknown restaurant to NOT_FOUND", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   world.kitchenAccessControl.grantFulfillment(ordersService, "missing");
 
   await assert.rejects(
@@ -253,7 +253,7 @@ test("ReceiveOrderRequest maps an unknown restaurant to NOT_FOUND", async () => 
 });
 
 test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE", async () => {
-  const { world, service } = createWorld({
+  const { world, service } = await createWorld({
     subjects: resolverOf({ type: "service", id: "stranger-worker" }),
   });
   const { restaurantId, phoId } = await world.givenKitchen();
@@ -305,7 +305,7 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
 });
 
 test("commands are UNAUTHENTICATED with the default rejecting resolver", async () => {
-  const { world, service } = createWorld({ subjects: null });
+  const { world, service } = await createWorld({ subjects: null });
   const { restaurantId, phoId } = await world.givenKitchen();
 
   await assert.rejects(
@@ -324,11 +324,11 @@ test("commands are UNAUTHENTICATED with the default rejecting resolver", async (
       ),
     rejectsWith(Code.Unauthenticated),
   );
-  assert.deepEqual(world.orderStore.all(), []);
+  assert.deepEqual(await world.orderStore.find({}), []);
 });
 
 test("FR-428 CancelRestaurantOrder cancels once and answers a repeat as cancelled", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const received = await service.receiveOrderRequest(
     receiveRequest(restaurantId, phoId),
@@ -349,15 +349,15 @@ test("FR-428 CancelRestaurantOrder cancels once and answers a repeat as cancelle
     assert.equal(response.rejectionReason, "");
   }
   assert.equal(
-    world.outbox
-      .eventTypes()
-      .filter((type) => type === "RestaurantOrderCancelled").length,
+    (await world.outbox.eventTypes()).filter(
+      (type) => type === "RestaurantOrderCancelled",
+    ).length,
     1,
   );
 });
 
 test("AC-454 CancelRestaurantOrder of a Ready order answers already_ready", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const ready = await world.givenOrderIn("READY", restaurantId, phoId);
 
@@ -375,7 +375,7 @@ test("AC-454 CancelRestaurantOrder of a Ready order answers already_ready", asyn
 });
 
 test("CancelRestaurantOrder of an unknown order is NOT_FOUND", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId } = await world.givenKitchen();
 
   await assert.rejects(
@@ -392,7 +392,7 @@ test("CancelRestaurantOrder of an unknown order is NOT_FOUND", async () => {
 });
 
 test("HTTP/2 worker serves the generated gRPC contract", async () => {
-  const { world, service } = createWorld();
+  const { world, service } = await createWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const server = createServer(
     connectNodeAdapter({

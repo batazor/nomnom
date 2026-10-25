@@ -49,12 +49,11 @@ import {
   MongoKitchenBoard,
   MongoRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
+import { mongoUri } from "./support/mongodb.ts";
 
 // Runs against a MongoDB replica set (transactions), for example
-// `docker run -d -p 27017:27017 mongo:8 --replSet rs0` + `rs.initiate()`:
-// MONGODB_URI=mongodb://localhost:27017/?replicaSet=rs0&directConnection=true
-const uri = process.env.MONGODB_URI?.trim() ?? "";
-const skip = uri === "" ? "MONGODB_URI is not set" : false;
+// the testcontainer of the global setup (test/support/global-mongodb.ts).
+const uri = mongoUri();
 
 const now = new Date(Date.UTC(2026, 9, 25, 9));
 
@@ -72,7 +71,7 @@ test("uuidV5 matches the RFC 4122 test vector", () => {
   );
 });
 
-describe("MongoDB storage", { skip }, () => {
+describe("MongoDB storage", () => {
   let mongo: MongoDbConnection;
   let unitOfWork: MongoUnitOfWork;
 

@@ -26,17 +26,15 @@ import {
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { ORDER_PLACED_EVENT_TYPE } from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
+import { mongoUri } from "./support/mongodb.ts";
 
 // OrderPlaced → Kafka → restaurants-consumer → Inbox + Restaurant Order in
 // MongoDB against real infrastructure (see test/outbox-relay-integration.test.ts):
-// MONGODB_URI=mongodb://localhost:27017/?replicaSet=rs0&directConnection=true
+// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
 // KAFKA_BROKERS=localhost:9092
-const uri = process.env.MONGODB_URI?.trim() ?? "";
+const uri = mongoUri();
 const brokers = process.env.KAFKA_BROKERS?.trim() ?? "";
-const skip =
-  uri === "" || brokers === ""
-    ? "MONGODB_URI or KAFKA_BROKERS is not set"
-    : false;
+const skip = brokers === "" ? "KAFKA_BROKERS is not set" : false;
 
 describe("OrderPlaced consumer with MongoDB and Kafka", { skip }, () => {
   // A topic per run keeps other runs' events out of this consumer group.

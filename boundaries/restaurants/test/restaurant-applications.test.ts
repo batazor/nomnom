@@ -17,6 +17,7 @@ import {
   InvalidRestaurantError,
   InvalidRestaurantReason,
 } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { RESTAURANT_SCHEMA_VERSION } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import {
   createInfrastructure,
   createRestaurantWorld,
@@ -27,7 +28,7 @@ import {
 } from "./support/restaurants.ts";
 
 test("AC-202 register restaurant creates a closed restaurant after the owner relationship", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const calls: string[] = [];
   const register = new RegisterRestaurantHandler({
     accessControl: world.authorization,
@@ -69,11 +70,11 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
   assert.equal(stored?.isOpen, false);
   // FR-447: the owner TOUCH revision is saved with the new restaurant.
   assert.equal(stored?.authorizationRevision, "zed-owner");
-  assert.deepEqual(world.outbox.records, []);
+  assert.deepEqual(await world.outbox.records(), []);
 });
 
 test("register restaurant requires the registration permission", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
 
   await assert.rejects(
     world.register.execute({
@@ -84,12 +85,12 @@ test("register restaurant requires the registration permission", async () => {
     }),
     PermissionDeniedError,
   );
-  assert.deepEqual(world.store.all(), []);
+  assert.deepEqual(await world.store.find({}), []);
   assert.deepEqual(world.authorization.owners, []);
 });
 
 test("AC-203 register restaurant rejects a blank name", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
 
   await assert.rejects(
     world.register.execute({
@@ -100,11 +101,11 @@ test("AC-203 register restaurant rejects a blank name", async () => {
     }),
     InvalidRestaurantError,
   );
-  assert.deepEqual(world.store.all(), []);
+  assert.deepEqual(await world.store.find({}), []);
 });
 
 test("FR-428 register restaurant requires a pickup address", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
 
   await assert.rejects(
     world.register.execute({
@@ -117,12 +118,12 @@ test("FR-428 register restaurant requires a pickup address", async () => {
       error instanceof InvalidRestaurantError &&
       error.reason === InvalidRestaurantReason.EmptyAddress,
   );
-  assert.deepEqual(world.store.all(), []);
+  assert.deepEqual(await world.store.find({}), []);
   assert.deepEqual(world.authorization.owners, []);
 });
 
 test("AC-204 restaurant is not stored when the owner relationship write fails", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const register = new RegisterRestaurantHandler({
     accessControl: world.authorization,
     ownerRelationships: {
@@ -144,18 +145,18 @@ test("AC-204 restaurant is not stored when the owner relationship write fails", 
     }),
     /spicedb unavailable/,
   );
-  assert.deepEqual(world.store.all(), []);
+  assert.deepEqual(await world.store.find({}), []);
 });
 
 test("AC-205 update restaurant renames without touching the opening", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
   const update = new UpdateRestaurantHandler({
     accessControl: world.authorization,
     restaurants: world.restaurants,
     clock: world.clock,
   });
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   const result = await update.execute({
     subject: owner,
@@ -178,18 +179,18 @@ test("AC-205 update restaurant renames without touching the opening", async () =
   });
   assert.equal(unchanged.changed, false);
   assert.equal(unchanged.version, 3);
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("FR-428 update restaurant changes the pickup address", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
   const update = new UpdateRestaurantHandler({
     accessControl: world.authorization,
     restaurants: world.restaurants,
     clock: world.clock,
   });
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   const result = await update.execute({
     subject: owner,
@@ -215,11 +216,11 @@ test("FR-428 update restaurant changes the pickup address", async () => {
     update.execute({ subject: owner, restaurantId, name: "Pho", address: "" }),
     InvalidRestaurantError,
   );
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-206 update of an unknown restaurant is not found", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   world.authorization.grantManager(owner, "missing");
   const update = new UpdateRestaurantHandler({
     accessControl: world.authorization,
@@ -234,7 +235,7 @@ test("AC-206 update of an unknown restaurant is not found", async () => {
 });
 
 test("AC-200 manager commands are denied without the manage permission", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
   const update = new UpdateRestaurantHandler({
     accessControl: world.authorization,
@@ -257,11 +258,11 @@ test("AC-200 manager commands are denied without the manage permission", async (
   const restaurant = await world.restaurants.get(restaurantId);
   assert.equal(restaurant?.name, "Pho Bar");
   assert.equal(restaurant?.isOpen, false);
-  assert.deepEqual(world.outbox.records, []);
+  assert.deepEqual(await world.outbox.records(), []);
 });
 
 test("AC-201 authorization failure fails closed", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
   const update = new UpdateRestaurantHandler({
     accessControl: {
@@ -282,16 +283,14 @@ test("AC-201 authorization failure fails closed", async () => {
 });
 
 test("AC-207 open restaurant publishes RestaurantOpened in the same unit of work", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
-  const commitsBefore = world.unitOfWork.commits;
 
   const result = await world.open.execute({ subject: owner, restaurantId });
 
   assert.equal(result.isOpen, true);
   assert.equal(result.changed, true);
-  assert.equal(world.unitOfWork.commits, commitsBefore + 1);
-  assert.deepEqual(world.outbox.records, [
+  assert.deepEqual(await world.outbox.records(), [
     {
       aggregate: { type: "Restaurant", id: restaurantId, version: 2 },
       event: {
@@ -304,37 +303,37 @@ test("AC-207 open restaurant publishes RestaurantOpened in the same unit of work
 });
 
 test("AC-209 opening an open restaurant is a no-op without a business fact", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
 
   const result = await world.open.execute({ subject: owner, restaurantId });
 
   assert.equal(result.changed, false);
   assert.equal(result.version, 2);
-  assert.deepEqual(world.outbox.eventTypes(), ["RestaurantOpened"]);
+  assert.deepEqual(await world.outbox.eventTypes(), ["RestaurantOpened"]);
 });
 
 test("close restaurant publishes RestaurantClosed", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
 
   const result = await world.close.execute({ subject: owner, restaurantId });
 
   assert.equal(result.isOpen, false);
-  assert.deepEqual(world.outbox.eventTypes(), [
+  assert.deepEqual(await world.outbox.eventTypes(), [
     "RestaurantOpened",
     "RestaurantClosed",
   ]);
 });
 
 test("AC-210 opening is not committed when the outbox write fails", async () => {
-  const infrastructure = createInfrastructure();
+  const infrastructure = await createInfrastructure();
   const failingOutbox: Outbox = {
     add: async () => {
       throw new Error("outbox unavailable");
     },
   };
-  const world = createRestaurantWorld(infrastructure, {
+  const world = await createRestaurantWorld(infrastructure, {
     outbox: failingOutbox,
   });
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
@@ -346,11 +345,10 @@ test("AC-210 opening is not committed when the outbox write fails", async () => 
   const restaurant = await world.restaurants.get(restaurantId);
   assert.equal(restaurant?.isOpen, false);
   assert.equal(restaurant?.version, 1);
-  assert.equal(world.unitOfWork.rollbacks, 1);
 });
 
 test("AC-211 get restaurant returns the public representation", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
   const get = new GetRestaurantHandler({ reader: world.catalog });
 
@@ -363,9 +361,9 @@ test("AC-211 get restaurant returns the public representation", async () => {
 });
 
 test("get restaurant stored before addresses were required returns an empty address", async () => {
-  const world = createRestaurantWorld();
-  world.store.save("legacy", 0, {
-    id: "legacy",
+  const world = await createRestaurantWorld();
+  await world.store.save("legacy", 0, {
+    schemaVersion: RESTAURANT_SCHEMA_VERSION,
     name: "Old Pho",
     ownerId: owner.id,
     isOpen: true,
@@ -377,14 +375,14 @@ test("get restaurant stored before addresses were required returns an empty addr
 });
 
 test("AC-212 get unknown restaurant is not found", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const get = new GetRestaurantHandler({ reader: world.catalog });
 
   await assert.rejects(get.execute({ restaurantId: "missing" }), NotFoundError);
 });
 
 test("AC-213 list restaurants returns only open restaurants by default", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const open = await world.givenRestaurant("Open");
   const closed = await world.givenRestaurant("Closed", { open: false });
   const list = new ListRestaurantsHandler({ reader: world.catalog });
@@ -403,7 +401,7 @@ test("AC-213 list restaurants returns only open restaurants by default", async (
 });
 
 test("AC-214 list restaurants pages with a cursor without repeats", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const ids = [
     await world.givenRestaurant("A"),
     await world.givenRestaurant("B"),

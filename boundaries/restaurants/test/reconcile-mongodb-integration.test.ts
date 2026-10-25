@@ -10,7 +10,6 @@ import {
   type SpiceDbClient,
 } from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
-import { FixedClock } from "../pkg/infrastructure/memory/clock.ts";
 import {
   connectMongoDb,
   type MongoDbConnection,
@@ -24,18 +23,15 @@ import {
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
-import { owner, startOfDay } from "./support/restaurants.ts";
+import { mongoUri } from "./support/mongodb.ts";
+import { FixedClock, owner, startOfDay } from "./support/restaurants.ts";
 
-// Revoke Staff in flight against MongoDB and SpiceDB (AC-700): needs a MongoDB
-// replica set (`MONGODB_URI`, see test/mongodb-integration.test.ts) and the
+// Revoke Staff in flight against MongoDB and SpiceDB (AC-700): needs the MongoDB
+// testcontainer of the global setup and the
 // SpiceDB of `make spicedb-dev` (`SPICEDB_ENDPOINT`, key `devkey`,
 // plaintext). Ids start with a unique prefix the reconciler is scoped to.
-const mongoUri = process.env.MONGODB_URI?.trim() ?? "";
 const endpoint = process.env.SPICEDB_ENDPOINT?.trim() ?? "";
-const skip =
-  mongoUri === "" || endpoint === ""
-    ? "MONGODB_URI or SPICEDB_ENDPOINT is not set"
-    : false;
+const skip = endpoint === "" ? "SPICEDB_ENDPOINT is not set" : false;
 const GRACE = 60_000;
 
 /** MongoDB repository whose save waits for `commit()`. */
@@ -73,7 +69,7 @@ describe("reconciliation against MongoDB and SpiceDB", { skip }, () => {
   before(async () => {
     mongo = await connectMongoDb({
       enabled: true,
-      uri: mongoUri,
+      uri: mongoUri(),
       database: `restaurants_test_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,
     });

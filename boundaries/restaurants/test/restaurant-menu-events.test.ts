@@ -8,7 +8,6 @@ import {
   RestaurantClosedSchema,
   RestaurantOpenedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import type { InMemoryOutboxRecord } from "../pkg/infrastructure/memory/outbox.ts";
 import {
   type OutboxEventMapper,
   outboxEventId,
@@ -32,6 +31,7 @@ import {
   restaurantOrderEventMapper,
 } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import { createMenuWorld } from "./support/menus.ts";
+import type { RecordedOutboxRecord } from "./support/mongodb.ts";
 import { owner } from "./support/restaurants.ts";
 
 const at = new Date("2026-10-25T09:00:00.000Z");
@@ -177,7 +177,7 @@ test("the process mapper dispatches by aggregate type, one topic per aggregate",
 });
 
 /** Outbox records the process would write for the captured port calls. */
-const recordsOf = (records: readonly InMemoryOutboxRecord[]) =>
+const recordsOf = (records: readonly RecordedOutboxRecord[]) =>
   records.flatMap(({ aggregate, event }) => {
     const mapped = processMapper(aggregate, event);
     return mapped === undefined
@@ -196,12 +196,12 @@ const recordsOf = (records: readonly InMemoryOutboxRecord[]) =>
   });
 
 test("Open and Close Restaurant produce restaurant-events records keyed by the restaurant", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
   await world.open.execute({ subject: owner, restaurantId });
   await world.close.execute({ subject: owner, restaurantId });
 
-  const records = recordsOf(world.outbox.records);
+  const records = recordsOf(await world.outbox.records());
   assert.deepEqual(
     records.map(({ payload: _, ...record }) => record),
     [
@@ -238,7 +238,7 @@ test("Open and Close Restaurant produce restaurant-events records keyed by the r
 });
 
 test("Set Availability and Update Menu Item produce menu-events records keyed by the menu", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
 
@@ -270,7 +270,7 @@ test("Set Availability and Update Menu Item produce menu-events records keyed by
     isAvailable: true,
   });
 
-  const records = recordsOf(world.outbox.records).filter(
+  const records = recordsOf(await world.outbox.records()).filter(
     (record) => record.aggregateType === "Menu",
   );
   assert.deepEqual(

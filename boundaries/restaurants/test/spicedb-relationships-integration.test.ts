@@ -14,19 +14,23 @@ import {
 } from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import type { Subject } from "../pkg/application/subject.ts";
-import { FixedClock } from "../pkg/infrastructure/memory/clock.ts";
-import { SequentialIdGenerator } from "../pkg/infrastructure/memory/id-generator.ts";
 import type { RestaurantAccessControl } from "../slices/restaurant/applications/access-control.ts";
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import {
-  createRestaurantStore,
-  InMemoryRestaurantMemberships,
-  InMemoryRestaurantRepository,
-} from "../slices/restaurant/infrastructure/memory/restaurants.ts";
+  createRestaurantCollection,
+  MongoRestaurantMemberships,
+  MongoRestaurantRepository,
+} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
-import { PICKUP_ADDRESS, startOfDay } from "./support/restaurants.ts";
+import { createTestDatabase } from "./support/mongodb.ts";
+import {
+  FixedClock,
+  PICKUP_ADDRESS,
+  SequentialIdGenerator,
+  startOfDay,
+} from "./support/restaurants.ts";
 
 // Runs against the shared SpiceDB of `make spicedb-dev`
 // (SPICEDB_ENDPOINT=localhost:50051, key `devkey`, plaintext). Every id of a
@@ -101,9 +105,10 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
   };
 
   /** Restaurant ids of a world start with `<run><scope>-`. */
-  const world = (scope: string) => {
-    const store = createRestaurantStore();
-    const restaurants = new InMemoryRestaurantRepository(store);
+  const world = async (scope: string) => {
+    const { db, unitOfWork } = await createTestDatabase();
+    const store = createRestaurantCollection(db, unitOfWork);
+    const restaurants = new MongoRestaurantRepository(store);
     const writer = new SpiceDbRelationshipWriter({
       client: spicedb(),
       timeoutMs: 5000,
@@ -148,7 +153,7 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
   const cookSubject: Subject = { type: "user", id: cook };
 
   test("FR-443 FR-447 registration gives the owner restaurant#manage immediately", async () => {
-    const { register, restaurants, adapter } = world("owner");
+    const { register, restaurants, adapter } = await world("owner");
 
     const { restaurantId } = await register.execute({
       subject: operator,
@@ -169,7 +174,8 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
   });
 
   test("AC-476 AC-482 staff gets operate_kitchen right after assign and loses it right after revoke", async () => {
-    const { register, assign, revoke, restaurants, adapter } = world("staff");
+    const { register, assign, revoke, restaurants, adapter } =
+      await world("staff");
     const { restaurantId } = await register.execute({
       subject: operator,
       name: "Pho",
@@ -218,7 +224,7 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
   });
 
   test("AC-478 reconciler restores a lost owner and deletes an orphan after two passes grace apart", async () => {
-    const { store, register, restaurants, adapter } = world("reconcile");
+    const { store, register, restaurants, adapter } = await world("reconcile");
     const { restaurantId } = await register.execute({
       subject: operator,
       name: "Pho",
@@ -261,7 +267,7 @@ describe("SpiceDB restaurant relationships", { skip }, () => {
     const clock = new FixedClock(startOfDay);
     const reconciler = new RelationshipReconciler({
       client: spicedb(),
-      restaurants: new InMemoryRestaurantMemberships(store),
+      restaurants: new MongoRestaurantMemberships(store),
       graceMs: GRACE,
       pageSize: 2,
       timeoutMs: 5000,

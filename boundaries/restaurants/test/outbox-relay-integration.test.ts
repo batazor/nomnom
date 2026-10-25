@@ -26,18 +26,15 @@ import {
   RESTAURANT_ORDER_EVENTS_TOPIC,
   restaurantOrderEventMapper,
 } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+import { mongoUri } from "./support/mongodb.ts";
 
 // Outbox → restaurants-relay → Kafka against real infrastructure, for example
-//   docker run -d -p 27017:27017 mongo:8 --replSet rs0   (+ rs.initiate())
 //   docker run -d -p 9092:9092 apache/kafka:4.1.0
-// MONGODB_URI=mongodb://localhost:27017/?replicaSet=rs0&directConnection=true
+// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
 // KAFKA_BROKERS=localhost:9092
-const uri = process.env.MONGODB_URI?.trim() ?? "";
+const uri = mongoUri();
 const brokers = process.env.KAFKA_BROKERS?.trim() ?? "";
-const skip =
-  uri === "" || brokers === ""
-    ? "MONGODB_URI or KAFKA_BROKERS is not set"
-    : false;
+const skip = brokers === "" ? "KAFKA_BROKERS is not set" : false;
 
 type Received = {
   key: string;

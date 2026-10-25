@@ -16,7 +16,7 @@ import {
 } from "./support/restaurants.ts";
 
 test("AC-221 create menu creates an empty menu of the restaurant", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
   world.menuAccessControl.grantManager(owner, restaurantId);
 
@@ -34,18 +34,18 @@ test("AC-221 create menu creates an empty menu of the restaurant", async () => {
 });
 
 test("AC-222 a restaurant has at most one menu", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
 
   await assert.rejects(
     world.createMenu.execute({ subject: owner, restaurantId }),
     AlreadyExistsError,
   );
-  assert.equal(world.menuStore.all().length, 1);
+  assert.equal((await world.menuStore.find({})).length, 1);
 });
 
 test("AC-223 create menu for an unknown restaurant is not found", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   world.menuAccessControl.grantManager(owner, "missing");
 
   await assert.rejects(
@@ -55,7 +55,7 @@ test("AC-223 create menu for an unknown restaurant is not found", async () => {
 });
 
 test("AC-220 menu changes require the manage-menu permission", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
 
@@ -89,9 +89,9 @@ test("AC-220 menu changes require the manage-menu permission", async () => {
 });
 
 test("AC-226 add menu item creates an available dish by default", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   const result = await world.addMenuItem.execute({
     subject: owner,
@@ -111,11 +111,11 @@ test("AC-226 add menu item creates an available dish by default", async () => {
     version: 2,
     changed: true,
   });
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-224 negative price is rejected without changing the menu", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
 
   await assert.rejects(
@@ -131,7 +131,7 @@ test("AC-224 negative price is rejected without changing the menu", async () => 
 });
 
 test("AC-225 price keeps the exact decimal value", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
 
   await world.addMenuItem.execute({
@@ -146,7 +146,7 @@ test("AC-225 price keeps the exact decimal value", async () => {
 });
 
 test("AC-227 add menu item without a menu is not found", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
   world.menuAccessControl.grantManager(owner, restaurantId);
 
@@ -162,10 +162,10 @@ test("AC-227 add menu item without a menu is not found", async () => {
 });
 
 test("AC-228 update menu item changes the price without a business fact", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   const result = await world.updateMenuItem.execute({
     subject: owner,
@@ -178,11 +178,11 @@ test("AC-228 update menu item changes the price without a business fact", async 
   assert.deepEqual(result.price, { amount: "10.25", currency: "EUR" });
   assert.equal(result.name, "Pho");
   assert.equal(result.isAvailable, true);
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("update menu item availability publishes MenuItemAvailabilityChanged", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
 
@@ -195,7 +195,7 @@ test("update menu item availability publishes MenuItemAvailabilityChanged", asyn
   });
 
   assert.equal(result.isAvailable, false);
-  const last = world.outbox.records.at(-1);
+  const last = (await world.outbox.records()).at(-1);
   assert.equal(last?.event.type, "MenuItemAvailabilityChanged");
   assert.deepEqual(last?.aggregate, {
     type: "Menu",
@@ -205,7 +205,7 @@ test("update menu item availability publishes MenuItemAvailabilityChanged", asyn
 });
 
 test("AC-229 update of an unknown menu item is not found", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
 
   await assert.rejects(
@@ -220,7 +220,7 @@ test("AC-229 update of an unknown menu item is not found", async () => {
 });
 
 test("AC-230 set availability changes only availability and publishes the fact", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
   const before = await world.getMenu.execute({ restaurantId });
@@ -235,7 +235,7 @@ test("AC-230 set availability changes only availability and publishes the fact",
   assert.equal(result.changed, true);
   const after = await world.getMenu.execute({ restaurantId });
   assert.deepEqual(after.items, [{ ...before.items[0], isAvailable: false }]);
-  assert.deepEqual(world.outbox.records.at(-1)?.event, {
+  assert.deepEqual((await world.outbox.records()).at(-1)?.event, {
     type: "MenuItemAvailabilityChanged",
     menuId: "menu-1",
     restaurantId,
@@ -246,10 +246,10 @@ test("AC-230 set availability changes only availability and publishes the fact",
 });
 
 test("AC-231 setting the current availability is a no-op", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
   const version = (await world.menus.findByRestaurantId(restaurantId))?.version;
 
   const result = await world.setAvailability.execute({
@@ -261,7 +261,7 @@ test("AC-231 setting the current availability is a no-op", async () => {
 
   assert.equal(result.changed, false);
   assert.equal(result.version, version);
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("availability change is rolled back when the outbox fails", async () => {
@@ -270,7 +270,7 @@ test("availability change is rolled back when the outbox fails", async () => {
       throw new Error("outbox unavailable");
     },
   };
-  const world = createMenuWorld(createInfrastructure(), {
+  const world = await createMenuWorld(await createInfrastructure(), {
     outbox: failingOutbox,
   });
   const restaurantId = await world.givenRestaurantWithMenu("Pho Bar", {
@@ -292,7 +292,7 @@ test("availability change is rolled back when the outbox fails", async () => {
 });
 
 test("AC-232 get menu returns all items with current prices and availability", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   await world.givenMenuItem(restaurantId, "Pho");
   await world.givenMenuItem(restaurantId, "Ramen", false);
@@ -309,7 +309,7 @@ test("AC-232 get menu returns all items with current prices and availability", a
 });
 
 test("AC-233 get menu of a restaurant without a menu is not found", async () => {
-  const world = createMenuWorld();
+  const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
 
   await assert.rejects(world.getMenu.execute({ restaurantId }), NotFoundError);

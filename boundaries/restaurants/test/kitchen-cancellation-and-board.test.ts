@@ -15,7 +15,7 @@ import {
 import { stranger } from "./support/restaurants.ts";
 
 test("AC-263 cancel before Preparation cancels and publishes RestaurantOrderCancelled", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
 
@@ -32,7 +32,7 @@ test("AC-263 cancel before Preparation cancels and publishes RestaurantOrderCanc
     stage: "QUEUED",
     repeated: false,
   });
-  const event = world.outbox.records.at(-1)?.event;
+  const event = (await world.outbox.records()).at(-1)?.event;
   assert.ok(
     event?.type === "RestaurantOrderCancelled" &&
       "stage" in event &&
@@ -47,7 +47,7 @@ test("AC-263 cancel before Preparation cancels and publishes RestaurantOrderCanc
 });
 
 test("cancel of a received order uses the RECEIVED stage", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
 
@@ -61,7 +61,7 @@ test("cancel of a received order uses the RECEIVED stage", async () => {
 });
 
 test("AC-264 repeated cancel returns the original stage without a new fact", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const command = {
@@ -70,7 +70,7 @@ test("AC-264 repeated cancel returns the original stage without a new fact", asy
     orderId: order.orderId,
   };
   await world.cancel.execute(command);
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   const repeated = await world.cancel.execute(command);
 
@@ -80,14 +80,14 @@ test("AC-264 repeated cancel returns the original stage without a new fact", asy
     stage: "QUEUED",
     repeated: true,
   });
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-265 cancel of a ready order is rejected as already ready", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("READY", restaurantId, phoId);
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   const result = await world.cancel.execute({
     subject: ordersService,
@@ -101,7 +101,7 @@ test("AC-265 cancel of a ready order is rejected as already ready", async () => 
     reason: "already_ready",
     state: "READY",
   });
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
   assert.equal(
     (await world.restaurantOrders.get(order.restaurantOrderId))?.state,
     "READY",
@@ -109,7 +109,7 @@ test("AC-265 cancel of a ready order is rejected as already ready", async () => 
 });
 
 test("cancel of rejected and failed orders is rejected with the terminal reason", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const rejected = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
   await world.reject.execute(rejected);
@@ -138,7 +138,9 @@ test("cancel of rejected and failed orders is rejected with the terminal reason"
 });
 
 test("AC-266 cancel during Preparation is rejected by the reject policy", async () => {
-  const world = createKitchenWorld({ cancellationDuringPreparation: "reject" });
+  const world = await createKitchenWorld({
+    cancellationDuringPreparation: "reject",
+  });
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("PREPARING", restaurantId, phoId);
 
@@ -161,7 +163,9 @@ test("AC-266 cancel during Preparation is rejected by the reject policy", async 
 });
 
 test("AC-267 cancel during Preparation is applied by the allow policy", async () => {
-  const world = createKitchenWorld({ cancellationDuringPreparation: "allow" });
+  const world = await createKitchenWorld({
+    cancellationDuringPreparation: "allow",
+  });
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("ASSEMBLED", restaurantId, phoId);
 
@@ -172,7 +176,7 @@ test("AC-267 cancel during Preparation is applied by the allow policy", async ()
   });
 
   assert.ok(result.outcome === "cancelled" && result.stage === "ASSEMBLED");
-  const event = world.outbox.records.at(-1)?.event;
+  const event = (await world.outbox.records()).at(-1)?.event;
   assert.ok(
     event?.type === "RestaurantOrderCancelled" &&
       "preparationStarted" in event &&
@@ -181,7 +185,7 @@ test("AC-267 cancel during Preparation is applied by the allow policy", async ()
 });
 
 test("cancel requires the fulfillment identity and a known order of the restaurant", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
 
@@ -208,7 +212,7 @@ test("cancel requires the fulfillment identity and a known order of the restaura
 });
 
 test("AC-269 get restaurant order returns composition, state and timeline", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const now = world.clock.now();
@@ -237,7 +241,7 @@ test("AC-269 get restaurant order returns composition, state and timeline", asyn
 });
 
 test("AC-280 kitchen board requires restaurant staff", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId } = await world.givenKitchen();
 
   for (const query of [
@@ -253,7 +257,7 @@ test("AC-280 kitchen board requires restaurant staff", async () => {
 });
 
 test("AC-281 kitchen queue lists queued orders in the policy order", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const other = await world.givenKitchen("Other");
   await world.givenOrderIn("RECEIVED", restaurantId, phoId);
@@ -287,7 +291,7 @@ test("AC-281 kitchen queue lists queued orders in the policy order", async () =>
 });
 
 test("AC-282 active preparations list preparing and assembled orders with delays", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const preparing = await world.givenOrderIn("PREPARING", restaurantId, phoId);
@@ -315,7 +319,7 @@ test("AC-282 active preparations list preparing and assembled orders with delays
 });
 
 test("AC-283 ready orders list only READY orders with ready_at", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   await world.givenOrderIn("PREPARING", restaurantId, phoId);
   const ready = await world.givenOrderIn("READY", restaurantId, phoId);

@@ -45,7 +45,7 @@ const unused = {
  * would write (pkg/telemetry/trace-context.ts).
  */
 const startServer = async () => {
-  const infrastructure = createInfrastructure();
+  const infrastructure = await createInfrastructure();
   const metadata: { traceparent?: string }[] = [];
   const outbox: Outbox = {
     add: async (aggregate, events) => {
@@ -53,7 +53,7 @@ const startServer = async () => {
       await infrastructure.outbox.add(aggregate, events);
     },
   };
-  const world = createRestaurantWorld(infrastructure, { outbox });
+  const world = await createRestaurantWorld(infrastructure, { outbox });
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
   const service = createRestaurantsService({
     getRestaurant: unused,

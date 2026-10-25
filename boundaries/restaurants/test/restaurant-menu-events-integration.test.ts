@@ -34,7 +34,6 @@ import {
   MENU_EVENTS_TOPIC,
   menuEventMapper,
 } from "../slices/menu/infrastructure/integration/menu-events.ts";
-import { InMemoryMenuAccessControl } from "../slices/menu/infrastructure/memory/menus.ts";
 import {
   createMenuCollection,
   MongoMenuRepository,
@@ -54,19 +53,17 @@ import {
   RESTAURANT_ORDER_AGGREGATE_TYPE,
   restaurantOrderEventMapper,
 } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+import { TestMenuAccessControl } from "./support/menus.ts";
+import { mongoUri } from "./support/mongodb.ts";
 
 // Open Restaurant and Set Menu Item Availability → Outbox → restaurants-relay
 // → Kafka against real infrastructure, for example
-//   docker run -d -p 27017:27017 mongo:8 --replSet rs0   (+ rs.initiate())
 //   docker run -d -p 9092:9092 apache/kafka:4.1.0
-// MONGODB_URI=mongodb://localhost:27017/?replicaSet=rs0&directConnection=true
+// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
 // KAFKA_BROKERS=localhost:9092
-const uri = process.env.MONGODB_URI?.trim() ?? "";
+const uri = mongoUri();
 const brokers = process.env.KAFKA_BROKERS?.trim() ?? "";
-const skip =
-  uri === "" || brokers === ""
-    ? "MONGODB_URI or KAFKA_BROKERS is not set"
-    : false;
+const skip = brokers === "" ? "KAFKA_BROKERS is not set" : false;
 
 type Received = {
   topic: string;
@@ -176,7 +173,7 @@ describe("Restaurant and Menu Integration Events reach Kafka", { skip }, () => {
       clock,
     }).execute({ subject: owner, restaurantId });
     const unavailable = await new SetMenuItemAvailabilityHandler({
-      accessControl: new InMemoryMenuAccessControl().grantManager(
+      accessControl: new TestMenuAccessControl().grantManager(
         owner,
         restaurantId,
       ),

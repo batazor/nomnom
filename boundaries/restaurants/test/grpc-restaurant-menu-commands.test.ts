@@ -23,9 +23,9 @@ const unused = {
   execute: async (): Promise<never> => assert.fail("unexpected call"),
 };
 
-/** Restaurant and menu command RPCs over the in-memory world; `as` switches the caller. */
-const createWorld = () => {
-  const world = createMenuWorld();
+/** Restaurant and menu command RPCs over the MongoDB world; `as` switches the caller. */
+const createWorld = async () => {
+  const world = await createMenuWorld();
   let caller: Subject = owner;
   const service = createRestaurantsService({
     getRestaurant: unused,
@@ -58,8 +58,8 @@ const createWorld = () => {
     return service;
   };
   /** Facts of the Menu aggregate written to the Outbox. */
-  const menuFacts = () =>
-    world.outbox.records
+  const menuFacts = async () =>
+    (await world.outbox.records())
       .filter((record) => record.aggregate.type === "Menu")
       .map((record) => record.event.type);
   return { world, as, menuFacts };
@@ -68,7 +68,7 @@ const createWorld = () => {
 const price = { amount: "9.50", currency: "EUR" };
 
 test("FR-203 OpenRestaurant opens a closed restaurant and writes RestaurantOpened", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
 
   const response = await as(owner).openRestaurant(
@@ -80,13 +80,13 @@ test("FR-203 OpenRestaurant opens a closed restaurant and writes RestaurantOpene
   assert.equal(response.restaurant?.restaurantId, restaurantId);
   assert.equal(response.restaurant?.isOpen, true);
   assert.equal(response.version, 2n);
-  assert.deepEqual(world.outbox.eventTypes(), ["RestaurantOpened"]);
+  assert.deepEqual(await world.outbox.eventTypes(), ["RestaurantOpened"]);
 });
 
 test("AC-209 AC-712 a repeated OpenRestaurant succeeds without a new fact", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: true });
-  const before = world.outbox.eventTypes().length;
+  const before = (await world.outbox.eventTypes()).length;
 
   const response = await as(owner).openRestaurant(
     create(OpenRestaurantRequestSchema, { restaurantId }),
@@ -95,11 +95,11 @@ test("AC-209 AC-712 a repeated OpenRestaurant succeeds without a new fact", asyn
 
   assert.equal(response.changed, false);
   assert.equal(response.restaurant?.isOpen, true);
-  assert.equal(world.outbox.eventTypes().length, before);
+  assert.equal((await world.outbox.eventTypes()).length, before);
 });
 
 test("FR-203 CloseRestaurant closes an open restaurant and a repeat is a no-op", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: true });
 
   const closed = await as(owner).closeRestaurant(
@@ -108,7 +108,7 @@ test("FR-203 CloseRestaurant closes an open restaurant and a repeat is a no-op",
   );
   assert.equal(closed.changed, true);
   assert.equal(closed.restaurant?.isOpen, false);
-  assert.equal(world.outbox.eventTypes().at(-1), "RestaurantClosed");
+  assert.equal((await world.outbox.eventTypes()).at(-1), "RestaurantClosed");
 
   const repeated = await as(owner).closeRestaurant(
     create(CloseRestaurantRequestSchema, { restaurantId }),
@@ -117,14 +117,15 @@ test("FR-203 CloseRestaurant closes an open restaurant and a repeat is a no-op",
   assert.equal(repeated.changed, false);
   assert.equal(repeated.version, closed.version);
   assert.equal(
-    world.outbox.eventTypes().filter((type) => type === "RestaurantClosed")
-      .length,
+    (await world.outbox.eventTypes()).filter(
+      (type) => type === "RestaurantClosed",
+    ).length,
     1,
   );
 });
 
 test("AC-200 AC-713 opening commands without restaurant#manage are PERMISSION_DENIED", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
 
   await assert.rejects(
@@ -143,11 +144,11 @@ test("AC-200 AC-713 opening commands without restaurant#manage are PERMISSION_DE
       ),
     rejectsWith(Code.PermissionDenied),
   );
-  assert.deepEqual(world.outbox.eventTypes(), []);
+  assert.deepEqual(await world.outbox.eventTypes(), []);
 });
 
 test("opening commands map a missing restaurant to NOT_FOUND and a blank id to INVALID_ARGUMENT", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   world.authorization.grantManager(owner, "missing");
 
   await assert.rejects(
@@ -169,7 +170,7 @@ test("opening commands map a missing restaurant to NOT_FOUND and a blank id to I
 });
 
 test("opening commands map unavailable authorization to UNAVAILABLE", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
   world.authorization.canManageRestaurant = async () => {
     throw new AuthorizationUnavailableError();
@@ -186,7 +187,7 @@ test("opening commands map unavailable authorization to UNAVAILABLE", async () =
 });
 
 test("FR-211 AC-716 CreateMenu creates the single menu and a repeat is ALREADY_EXISTS", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
   world.menuAccessControl.grantManager(owner, restaurantId);
 
@@ -209,7 +210,7 @@ test("FR-211 AC-716 CreateMenu creates the single menu and a repeat is ALREADY_E
 });
 
 test("AC-223 CreateMenu of a missing restaurant is NOT_FOUND", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   world.menuAccessControl.grantManager(owner, "missing");
 
   await assert.rejects(
@@ -223,7 +224,7 @@ test("AC-223 CreateMenu of a missing restaurant is NOT_FOUND", async () => {
 });
 
 test("FR-213 AddMenuItem adds an available item by default", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
 
   const response = await as(owner).addMenuItem(
@@ -254,7 +255,7 @@ test("FR-213 AddMenuItem adds an available item by default", async () => {
 });
 
 test("AddMenuItem maps invalid input and a missing menu to gRPC errors", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
 
   await assert.rejects(
@@ -307,7 +308,7 @@ test("AddMenuItem maps invalid input and a missing menu to gRPC errors", async (
 });
 
 test("FR-214 UpdateMenuItem changes only the set fields and publishes availability", async () => {
-  const { world, as, menuFacts } = createWorld();
+  const { world, as, menuFacts } = await createWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
 
@@ -322,7 +323,7 @@ test("FR-214 UpdateMenuItem changes only the set fields and publishes availabili
   assert.equal(renamed.changed, true);
   assert.equal(renamed.menuItem?.name, "Pho");
   assert.equal(renamed.menuItem?.price?.amount, "11.00");
-  assert.deepEqual(menuFacts(), [], "AC-228 no business fact");
+  assert.deepEqual(await menuFacts(), [], "AC-228 no business fact");
 
   const unavailable = await as(owner).updateMenuItem(
     create(UpdateMenuItemRequestSchema, {
@@ -335,7 +336,7 @@ test("FR-214 UpdateMenuItem changes only the set fields and publishes availabili
   );
   assert.equal(unavailable.menuItem?.name, "Pho Bo");
   assert.equal(unavailable.menuItem?.available, false);
-  assert.deepEqual(menuFacts(), ["MenuItemAvailabilityChanged"]);
+  assert.deepEqual(await menuFacts(), ["MenuItemAvailabilityChanged"]);
 
   const repeated = await as(owner).updateMenuItem(
     create(UpdateMenuItemRequestSchema, {
@@ -350,7 +351,7 @@ test("FR-214 UpdateMenuItem changes only the set fields and publishes availabili
 });
 
 test("AC-229 UpdateMenuItem of an unknown item is NOT_FOUND", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
 
   await assert.rejects(
@@ -368,7 +369,7 @@ test("AC-229 UpdateMenuItem of an unknown item is NOT_FOUND", async () => {
 });
 
 test("FR-215 AC-714 SetMenuItemAvailability writes the fact once and a repeat is a no-op", async () => {
-  const { world, as, menuFacts } = createWorld();
+  const { world, as, menuFacts } = await createWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
 
@@ -382,7 +383,7 @@ test("FR-215 AC-714 SetMenuItemAvailability writes the fact once and a repeat is
   );
   assert.equal(changed.changed, true);
   assert.equal(changed.menuItem?.available, false);
-  assert.deepEqual(menuFacts(), ["MenuItemAvailabilityChanged"]);
+  assert.deepEqual(await menuFacts(), ["MenuItemAvailabilityChanged"]);
 
   const repeated = await as(owner).setMenuItemAvailability(
     create(SetMenuItemAvailabilityRequestSchema, {
@@ -394,11 +395,11 @@ test("FR-215 AC-714 SetMenuItemAvailability writes the fact once and a repeat is
   );
   assert.equal(repeated.changed, false, "AC-231");
   assert.equal(repeated.version, changed.version);
-  assert.deepEqual(menuFacts(), ["MenuItemAvailabilityChanged"]);
+  assert.deepEqual(await menuFacts(), ["MenuItemAvailabilityChanged"]);
 });
 
 test("AC-220 AC-715 menu commands without restaurant#manage_menu are PERMISSION_DENIED", async () => {
-  const { world, as, menuFacts } = createWorld();
+  const { world, as, menuFacts } = await createWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
   const menuBefore = await world.getMenu.execute({ restaurantId });
@@ -437,11 +438,11 @@ test("AC-220 AC-715 menu commands without restaurant#manage_menu are PERMISSION_
     await assert.rejects(call, rejectsWith(Code.PermissionDenied));
   }
   assert.deepEqual(await world.getMenu.execute({ restaurantId }), menuBefore);
-  assert.deepEqual(menuFacts(), []);
+  assert.deepEqual(await menuFacts(), []);
 });
 
 test("menu commands require restaurant_id and menu_item_id", async () => {
-  const { as } = createWorld();
+  const { as } = await createWorld();
 
   await assert.rejects(
     async () =>

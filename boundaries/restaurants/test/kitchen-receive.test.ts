@@ -13,7 +13,7 @@ import {
 import { cook, createKitchenWorld, ordersService } from "./support/kitchen.ts";
 
 test("AC-242 receive order request creates a RECEIVED restaurant order", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const receivedAt = world.clock.now();
 
@@ -40,7 +40,7 @@ test("AC-242 receive order request creates a RECEIVED restaurant order", async (
 });
 
 test("AC-243 a repeated receive returns the existing order", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const request = {
     subject: ordersService,
@@ -54,11 +54,11 @@ test("AC-243 a repeated receive returns the existing order", async () => {
 
   assert.equal(repeated.created, false);
   assert.deepEqual(repeated.restaurantOrder, first.restaurantOrder);
-  assert.equal(world.orderStore.all().length, 1);
+  assert.equal((await world.orderStore.find({})).length, 1);
 });
 
 test("AC-244 a conflicting repeat is rejected as already exists", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   await world.receive.execute({
     subject: ordersService,
@@ -79,7 +79,7 @@ test("AC-244 a conflicting repeat is rejected as already exists", async () => {
 });
 
 test("concurrent receive that loses the unique orderId race returns the winner", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const items = [{ menuItemId: phoId, quantity: 1 }];
   const original = world.restaurantOrders.findByOrderId.bind(
@@ -111,11 +111,11 @@ test("concurrent receive that loses the unique orderId race returns the winner",
 
   assert.equal(result.created, false);
   assert.equal(result.restaurantOrder.restaurantOrderId, "winner");
-  assert.equal(world.orderStore.all().length, 1);
+  assert.equal((await world.orderStore.find({})).length, 1);
 });
 
 test("AC-245 invalid composition is rejected and nothing is stored", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
 
   for (const items of [
@@ -136,11 +136,11 @@ test("AC-245 invalid composition is rejected and nothing is stored", async () =>
       InvalidRestaurantOrderError,
     );
   }
-  assert.deepEqual(world.orderStore.all(), []);
+  assert.deepEqual(await world.orderStore.find({}), []);
 });
 
 test("receive order request requires the fulfillment service identity and a known restaurant", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   world.kitchenAccessControl.grantFulfillment(ordersService, "missing");
 
@@ -162,5 +162,5 @@ test("receive order request requires the fulfillment service identity and a know
     }),
     NotFoundError,
   );
-  assert.deepEqual(world.orderStore.all(), []);
+  assert.deepEqual(await world.orderStore.find({}), []);
 });

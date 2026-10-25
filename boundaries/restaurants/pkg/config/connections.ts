@@ -42,8 +42,8 @@ export type SpiceDbEnabledConfig = Readonly<{
 }>;
 
 /**
- * `enabled: false` при пустом `SPICEDB__ENDPOINT`: авторизация остаётся на
- * in-memory адаптерах без grants (deny-all).
+ * `enabled: false` при пустом `SPICEDB__ENDPOINT`: `cmd/restaurants` тогда не
+ * стартует (SpiceDB обязателен).
  */
 export type SpiceDbConfig = Readonly<{ enabled: false }> | SpiceDbEnabledConfig;
 

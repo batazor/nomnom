@@ -1,8 +1,16 @@
 import type { Outbox } from "../../pkg/application/outbox.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
 import type { UnitOfWork } from "../../pkg/application/unit-of-work.ts";
-import { SequentialIdGenerator } from "../../pkg/infrastructure/memory/id-generator.ts";
-import { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
+import {
+  type AcceptanceConditionsProvider,
+  AcceptOrderHandler,
+  type ReadyTimeEstimator,
+} from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
+import type {
+  FulfillmentCoordinatorAccess,
+  KitchenStaffAccess,
+  RestaurantOrderViewAccess,
+} from "../../slices/restaurantorder/applications/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import { GetRestaurantOrderHandler } from "../../slices/restaurantorder/applications/get-restaurant-order/get-restaurant-order.ts";
@@ -17,45 +25,50 @@ import { RejectOrderHandler } from "../../slices/restaurantorder/applications/re
 import { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
+import type { AcceptanceConditions } from "../../slices/restaurantorder/domains/restaurantorder/acceptance.ts";
 import type { CancellationPolicy } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { FifoKitchenQueueOrdering } from "../../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
 import {
-  createRestaurantOrderStore,
-  FixedDurationReadyTimeEstimator,
-  InMemoryKitchenAccessControl,
-  InMemoryKitchenBoard,
-  InMemoryRestaurantOrderRepository,
-  StaticAcceptanceConditions,
-} from "../../slices/restaurantorder/infrastructure/memory/restaurant-orders.ts";
+  createRestaurantOrderCollection,
+  MongoKitchenBoard,
+  MongoRestaurantOrderRepository,
+} from "../../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
 import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,
 } from "../../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import { createMenuWorld } from "./menus.ts";
-import { createInfrastructure, type Infrastructure } from "./restaurants.ts";
+import {
+  createInfrastructure,
+  type Infrastructure,
+  SequentialIdGenerator,
+} from "./restaurants.ts";
 
 export const cook: Subject = { type: "user", id: "cook" };
 export const ordersService: Subject = { type: "service", id: "orders-worker" };
 export const PREPARATION_MINUTES = 20;
 export const minutes = (value: number): number => value * 60_000;
 
-export const createKitchenWorld = (
+export const createKitchenWorld = async (
   options: {
     infrastructure?: Infrastructure;
     outbox?: Outbox;
-    /** Unit of Work of the commands; defaults to the in-memory one. */
+    /** Unit of Work of the commands; defaults to the MongoDB one. */
     unitOfWork?: UnitOfWork;
     onRepeat?: RepeatPolicy;
     cancellationDuringPreparation?: CancellationPolicy["duringPreparation"];
   } = {},
 ) => {
-  const infrastructure = options.infrastructure ?? createInfrastructure();
-  const menuWorld = createMenuWorld(infrastructure);
-  const store = createRestaurantOrderStore();
-  infrastructure.unitOfWork.enlist(store);
-  const restaurantOrders = new InMemoryRestaurantOrderRepository(store);
-  const board = new InMemoryKitchenBoard(store);
-  const accessControl = new InMemoryKitchenAccessControl();
+  const infrastructure =
+    options.infrastructure ?? (await createInfrastructure());
+  const menuWorld = await createMenuWorld(infrastructure);
+  const store = createRestaurantOrderCollection(
+    infrastructure.db,
+    infrastructure.unitOfWork,
+  );
+  const restaurantOrders = new MongoRestaurantOrderRepository(store);
+  const board = new MongoKitchenBoard(store);
+  const accessControl = new TestKitchenAccessControl();
   const conditions = new StaticAcceptanceConditions();
   const outbox = options.outbox ?? infrastructure.outbox;
   const ids = new SequentialIdGenerator("restaurant-order");
@@ -199,3 +212,101 @@ export const createKitchenWorld = (
     givenOrderIn,
   };
 };
+
+/**
+ * Test conditions: an always-open schedule with spare capacity unless the
+ * test overrides the restaurant snapshot or a Menu Item offer.
+ */
+export class StaticAcceptanceConditions
+  implements AcceptanceConditionsProvider
+{
+  restaurant: AcceptanceConditions["restaurant"] = {
+    opensAt: new Date(0),
+    closesAt: new Date(8.64e15),
+    currentOrders: 0,
+    maximumOrders: Number.MAX_SAFE_INTEGER,
+    scheduleException: false,
+  };
+  readonly offers = new Map<
+    string,
+    AcceptanceConditions["menuItems"][string]
+  >();
+
+  async load(input: {
+    restaurantId: string;
+    menuItemIds: readonly string[];
+    now: Date;
+  }): Promise<AcceptanceConditions> {
+    const menuItems: Record<string, AcceptanceConditions["menuItems"][string]> =
+      {};
+    for (const menuItemId of input.menuItemIds) {
+      menuItems[menuItemId] = this.offers.get(menuItemId) ?? {
+        availableFrom: new Date(0),
+        availableUntil: new Date(8.64e15),
+        remainingCapacity: Number.MAX_SAFE_INTEGER,
+      };
+    }
+    return { restaurant: this.restaurant, menuItems };
+  }
+}
+
+/** Test estimator: a fixed preparation duration after Acceptance. */
+export class FixedDurationReadyTimeEstimator implements ReadyTimeEstimator {
+  readonly #milliseconds: number;
+
+  constructor(milliseconds: number) {
+    this.#milliseconds = milliseconds;
+  }
+
+  async estimate(input: { acceptedAt: Date }): Promise<Date> {
+    return new Date(input.acceptedAt.getTime() + this.#milliseconds);
+  }
+}
+
+/** Test authorization graph: restaurant staff and fulfillment services. */
+export class TestKitchenAccessControl
+  implements
+    KitchenStaffAccess,
+    FulfillmentCoordinatorAccess,
+    RestaurantOrderViewAccess
+{
+  readonly #staff = new Set<string>();
+  readonly #fulfillment = new Set<string>();
+
+  grantStaff(subject: Subject, restaurantId: string): this {
+    this.#staff.add(`${subject.type}:${subject.id}@${restaurantId}`);
+    return this;
+  }
+
+  grantFulfillment(subject: Subject, restaurantId: string): this {
+    this.#fulfillment.add(`${subject.type}:${subject.id}@${restaurantId}`);
+    return this;
+  }
+
+  async canOperateKitchen(
+    subject: Subject,
+    restaurantId: string,
+  ): Promise<boolean> {
+    return this.#staff.has(`${subject.type}:${subject.id}@${restaurantId}`);
+  }
+
+  async canCoordinateFulfillment(
+    subject: Subject,
+    restaurantId: string,
+  ): Promise<boolean> {
+    return (
+      subject.type === "service" &&
+      this.#fulfillment.has(`${subject.type}:${subject.id}@${restaurantId}`)
+    );
+  }
+
+  async canViewRestaurantOrders(
+    subject: Subject,
+    restaurantId: string,
+  ): Promise<boolean> {
+    return (
+      (await this.canOperateKitchen(subject, restaurantId)) ||
+      (await this.canCoordinateFulfillment(subject, restaurantId))
+    );
+  }
+}

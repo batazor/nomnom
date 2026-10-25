@@ -23,7 +23,7 @@ import {
 } from "./support/restaurants.ts";
 
 test("AC-251 queue restaurant order queues an ACCEPTED order without publishing", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const received = await world.givenReceivedOrder(restaurantId, phoId);
   const order = await world.restaurantOrders.get(received.restaurantOrderId);
@@ -34,7 +34,7 @@ test("AC-251 queue restaurant order queues an ACCEPTED order without publishing"
     eligibility: { satisfied: true, reasons: [] },
   });
   await world.restaurantOrders.save(order);
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
   world.clock.advance(minutes(1));
 
   const result = await world.queue.execute({
@@ -43,11 +43,11 @@ test("AC-251 queue restaurant order queues an ACCEPTED order without publishing"
 
   assert.equal(result.state, "QUEUED");
   assert.deepEqual(result.timeline.queuedAt, world.clock.now());
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-252 queueing a queued order is a no-op", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const before = await world.restaurantOrders.get(order.restaurantOrderId);
@@ -65,7 +65,7 @@ test("AC-252 queueing a queued order is a no-op", async () => {
 });
 
 test("AC-253 start preparation publishes PreparationStarted", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   world.clock.advance(minutes(3));
@@ -74,25 +74,28 @@ test("AC-253 start preparation publishes PreparationStarted", async () => {
 
   assert.equal(result.state, "PREPARING");
   assert.deepEqual(result.timeline.preparationStartedAt, world.clock.now());
-  assert.equal(world.outbox.records.at(-1)?.event.type, "PreparationStarted");
+  assert.equal(
+    (await world.outbox.records()).at(-1)?.event.type,
+    "PreparationStarted",
+  );
 });
 
 test("AC-254 repeated start preparation is a no-op under the no-op policy", async () => {
-  const world = createKitchenWorld({ onRepeat: "succeed-without-event" });
+  const world = await createKitchenWorld({ onRepeat: "succeed-without-event" });
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("PREPARING", restaurantId, phoId);
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
   const before = await world.restaurantOrders.get(order.restaurantOrderId);
 
   const result = await world.startPreparation.execute(order);
 
   assert.equal(result.state, "PREPARING");
   assert.equal(result.version, before?.version);
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-255 repeated start preparation is rejected under the strict policy", async () => {
-  const world = createKitchenWorld({ onRepeat: "reject" });
+  const world = await createKitchenWorld({ onRepeat: "reject" });
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("PREPARING", restaurantId, phoId);
 
@@ -106,15 +109,15 @@ test("AC-255 repeated start preparation is rejected under the strict policy", as
 });
 
 test("AC-256 mark assembled is a local fact without Outbox", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("PREPARING", restaurantId, phoId);
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   const result = await world.markAssembled.execute(order);
 
   assert.equal(result.state, "ASSEMBLED");
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
   await assert.rejects(world.markAssembled.execute(order), AlreadyInStateError);
   await assert.rejects(
     world.markAssembled.execute({ ...order, subject: stranger }),
@@ -123,7 +126,7 @@ test("AC-256 mark assembled is a local fact without Outbox", async () => {
 });
 
 test("AC-257 mark ready publishes RestaurantOrderReady", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("ASSEMBLED", restaurantId, phoId);
   world.clock.advance(minutes(15));
@@ -132,13 +135,16 @@ test("AC-257 mark ready publishes RestaurantOrderReady", async () => {
 
   assert.equal(result.state, "READY");
   assert.deepEqual(result.timeline.readyAt, world.clock.now());
-  assert.equal(world.outbox.records.at(-1)?.event.type, "RestaurantOrderReady");
+  assert.equal(
+    (await world.outbox.records()).at(-1)?.event.type,
+    "RestaurantOrderReady",
+  );
   const repeated = await world.markReady.execute(order);
   assert.equal(repeated.version, result.version);
 });
 
 test("AC-258 an order cannot become ready before Assembly", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("PREPARING", restaurantId, phoId);
 
@@ -150,7 +156,7 @@ test("AC-258 an order cannot become ready before Assembly", async () => {
 });
 
 test("AC-259 report delay moves expected_ready_at and publishes PreparationDelayed", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("PREPARING", restaurantId, phoId);
   const before = await world.restaurantOrders.get(order.restaurantOrderId);
@@ -166,7 +172,7 @@ test("AC-259 report delay moves expected_ready_at and publishes PreparationDelay
 
   assert.equal(result.state, "PREPARING");
   assert.deepEqual(result.timeline.expectedReadyAt, later);
-  const event = world.outbox.records.at(-1)?.event;
+  const event = (await world.outbox.records()).at(-1)?.event;
   assert.ok(
     event?.type === "PreparationDelayed" &&
       "previousExpectedReadyAt" in event &&
@@ -175,13 +181,13 @@ test("AC-259 report delay moves expected_ready_at and publishes PreparationDelay
 });
 
 test("AC-260 report delay rejects a time that is not later", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const before = await world.restaurantOrders.get(order.restaurantOrderId);
   const current = before?.timeline.expectedReadyAt;
   assert.ok(current);
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   for (const expectedReadyAt of [current, new Date(current.getTime() - 1)]) {
     await assert.rejects(
@@ -193,11 +199,11 @@ test("AC-260 report delay rejects a time that is not later", async () => {
   }
   const after = await world.restaurantOrders.get(order.restaurantOrderId);
   assert.equal(after?.version, before?.version);
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-261 report failure stores the reason and publishes the failure fact", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("ASSEMBLED", restaurantId, phoId);
 
@@ -209,13 +215,13 @@ test("AC-261 report failure stores the reason and publishes the failure fact", a
   assert.equal(result.state, "FAILED");
   assert.equal(result.failureReason, "ITEM_UNAVAILABLE");
   assert.equal(
-    world.outbox.records.at(-1)?.event.type,
+    (await world.outbox.records()).at(-1)?.event.type,
     "RestaurantOrderFailed",
   );
 });
 
 test("AC-262 failure before Preparation is an invalid transition", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
 
@@ -234,8 +240,11 @@ test("published kitchen fact is rolled back with the state when the outbox fails
       return world.outbox.add(aggregate, events);
     },
   };
-  const infrastructure = createInfrastructure();
-  const world = createKitchenWorld({ infrastructure, outbox: failingOutbox });
+  const infrastructure = await createInfrastructure();
+  const world = await createKitchenWorld({
+    infrastructure,
+    outbox: failingOutbox,
+  });
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
 
@@ -250,7 +259,7 @@ test("published kitchen fact is rolled back with the state when the outbox fails
 });
 
 test("AC-268 a cancelled order cannot start preparation", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   await world.cancel.execute({
@@ -270,13 +279,16 @@ test("AC-268 a cancelled order cannot start preparation", async () => {
 });
 
 test("AC-208 closing the restaurant does not change accepted orders", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
 
   await world.close.execute({ subject: owner, restaurantId });
 
-  assert.equal(world.outbox.records.at(-1)?.event.type, "RestaurantClosed");
+  assert.equal(
+    (await world.outbox.records()).at(-1)?.event.type,
+    "RestaurantClosed",
+  );
   assert.equal(
     (await world.restaurantOrders.get(order.restaurantOrderId))?.state,
     "QUEUED",

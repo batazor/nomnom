@@ -19,6 +19,7 @@ import {
 } from "../pkg/infrastructure/mongodb/client.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { mongoUri } from "./support/mongodb.ts";
 
 const environment = {
   SPICEDB__ENDPOINT: "127.0.0.1:1",
@@ -214,11 +215,10 @@ test("the consumer container resolves every registration", async () => {
   }
 });
 
-// Runs against a MongoDB replica set, see test/mongodb-integration.test.ts.
-const uri = process.env.MONGODB_URI?.trim() ?? "";
-const skip = uri === "" ? "MONGODB_URI is not set" : false;
+// Runs against the MongoDB testcontainer of the global setup.
+const uri = mongoUri();
 
-describe("composed processes against MongoDB", { skip }, () => {
+describe("composed processes against MongoDB", () => {
   let mongo: MongoDbConnection;
 
   before(async () => {

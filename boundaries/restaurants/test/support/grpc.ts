@@ -20,15 +20,15 @@ const notComposed = {
   },
 };
 
-/** Service over the in-memory kitchen world with an `orders-worker` caller. */
-export const createWorld = (
+/** Service over the MongoDB kitchen world with an `orders-worker` caller. */
+export const createWorld = async (
   options: {
     subjects?: SubjectResolver | null;
-    /** Query over a fake reader; the MongoDB reader has no memory variant. */
+    /** Query over a fake reader instead of the MongoDB one. */
     listIncomingOrders?: Pick<ListIncomingOrdersHandler, "execute">;
   } = {},
 ) => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,

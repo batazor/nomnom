@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { InMemoryInbox } from "../pkg/infrastructure/memory/inbox.ts";
-import { InMemoryUnitOfWork } from "../pkg/infrastructure/memory/unit-of-work.ts";
 import {
   type InboundMessage,
   PermanentMessageError,
@@ -14,7 +11,13 @@ import {
   type EventHandler,
   MessageProcessor,
 } from "../pkg/infrastructure/messaging/processor.ts";
+import {
+  INBOX_COLLECTION,
+  type InboxDocument,
+  MongoInbox,
+} from "../pkg/infrastructure/mongodb/inbox.ts";
 import type { IntegrationMessage } from "../pkg/infrastructure/outbox/relay.ts";
+import { createTestDatabase } from "./support/mongodb.ts";
 
 const TOPIC = "orders.v1.order-events";
 const EVENT_TYPE = "nomnom.orders.v1.OrderPlaced";
@@ -74,9 +77,11 @@ const scripted = (
   return { handler, calls };
 };
 
-const setup = (handler: EventHandler, maxRetries = 2) => {
-  const unitOfWork = new InMemoryUnitOfWork();
-  const inbox = new InMemoryInbox(unitOfWork);
+const setup = async (handler: EventHandler, maxRetries = 2) => {
+  const { db, unitOfWork } = await createTestDatabase();
+  const inbox = new MongoInbox(db, unitOfWork);
+  const inboxRecords = () =>
+    db.collection<InboxDocument>(INBOX_COLLECTION).find({}).toArray();
   const deadLetters: IntegrationMessage[] = [];
   const metrics = new Recorder();
   const processor = new MessageProcessor({
@@ -93,7 +98,7 @@ const setup = (handler: EventHandler, maxRetries = 2) => {
     metrics,
     log: () => {},
   });
-  return { processor, inbox, deadLetters, metrics, unitOfWork };
+  return { processor, inboxRecords, deadLetters, metrics, unitOfWork };
 };
 
 test("parseEnvelope reads the orders Event Envelope headers", () => {
@@ -127,14 +132,14 @@ test("parseEnvelope rejects a missing event_id or a malformed occurred_at", () =
 
 test("ADR 11: a redelivered event_id is a duplicate and the handler runs once", async () => {
   const { handler, calls } = scripted([async () => {}]);
-  const { processor, inbox, metrics } = setup(handler);
+  const { processor, inboxRecords, metrics } = await setup(handler);
 
   assert.equal(await processor.process(message()), "processed");
   assert.equal(await processor.process(message()), "duplicate");
 
   assert.equal(calls.length, 1);
   assert.deepEqual(
-    inbox.records.map((record) => [record.consumer, record.eventId]),
+    (await inboxRecords()).map((record) => [record.consumer, record.eventId]),
     [["restaurants.order-placed", "event-1"]],
   );
   assert.deepEqual(metrics.events, [
@@ -146,7 +151,7 @@ test("ADR 11: a redelivered event_id is a duplicate and the handler runs once", 
 
 test("an event type the consumer does not handle is acknowledged without the Inbox", async () => {
   const { handler, calls } = scripted([async () => {}]);
-  const { processor, inbox } = setup(handler);
+  const { processor, inboxRecords } = await setup(handler);
 
   const outcome = await processor.process(
     message({ event_type: "nomnom.orders.v1.OrderCompleted" }),
@@ -154,12 +159,12 @@ test("an event type the consumer does not handle is acknowledged without the Inb
 
   assert.equal(outcome, "ignored");
   assert.equal(calls.length, 0);
-  assert.equal(inbox.records.length, 0);
+  assert.equal((await inboxRecords()).length, 0);
 });
 
 test("a broken envelope goes to <stream>.dlq with poison metadata", async () => {
   const { handler, calls } = scripted([async () => {}]);
-  const { processor, deadLetters, metrics } = setup(handler);
+  const { processor, deadLetters, metrics } = await setup(handler);
 
   const outcome = await processor.process(message({ event_id: "" }));
 
@@ -185,12 +190,12 @@ test("a permanent handler error is dead-lettered and the Inbox change rolls back
       throw new PermanentMessageError("no items");
     },
   ]);
-  const { processor, inbox, deadLetters } = setup(handler);
+  const { processor, inboxRecords, deadLetters } = await setup(handler);
 
   assert.equal(await processor.process(message()), "dead-lettered");
 
   assert.equal(deadLetters.length, 1);
-  assert.equal(inbox.records.length, 0, "Inbox record rolled back");
+  assert.equal((await inboxRecords()).length, 0, "Inbox record rolled back");
 });
 
 test("a business outcome is acknowledged without dead letter or Inbox record", async () => {
@@ -204,12 +209,13 @@ test("a business outcome is acknowledged without dead letter or Inbox record", a
     ],
     () => "business",
   );
-  const { processor, inbox, deadLetters, metrics } = setup(handler);
+  const { processor, inboxRecords, deadLetters, metrics } =
+    await setup(handler);
 
   assert.equal(await processor.process(message()), "rejected");
 
   assert.equal(deadLetters.length, 0);
-  assert.equal(inbox.records.length, 0);
+  assert.equal((await inboxRecords()).length, 0);
   assert.deepEqual(metrics.events, ["processed:business"]);
 });
 
@@ -220,12 +226,12 @@ test("a transient error is retried in process and then succeeds", async () => {
     },
     async () => {},
   ]);
-  const { processor, inbox, metrics } = setup(handler);
+  const { processor, inboxRecords, metrics } = await setup(handler);
 
   assert.equal(await processor.process(message()), "processed");
 
   assert.equal(calls.length, 2);
-  assert.equal(inbox.records.length, 1);
+  assert.equal((await inboxRecords()).length, 1);
   assert.deepEqual(metrics.events, ["retried", "processed:ok"]);
 });
 
@@ -235,12 +241,12 @@ test("exhausted transient retries reject so that Kafka redelivers the message", 
       throw new Error("mongo unavailable");
     },
   ]);
-  const { processor, inbox, deadLetters } = setup(handler, 2);
+  const { processor, inboxRecords, deadLetters } = await setup(handler, 2);
 
   await assert.rejects(processor.process(message()), /mongo unavailable/);
 
   assert.equal(calls.length, 3, "first attempt and two retries");
-  assert.equal(inbox.records.length, 0);
+  assert.equal((await inboxRecords()).length, 0);
   assert.equal(deadLetters.length, 0);
 });
 
@@ -250,7 +256,7 @@ test("an aborted signal stops retries", async () => {
       throw new Error("mongo unavailable");
     },
   ]);
-  const { processor } = setup(handler, 10);
+  const { processor } = await setup(handler, 10);
   const abort = new AbortController();
   abort.abort();
 
@@ -261,11 +267,12 @@ test("an aborted signal stops retries", async () => {
 
 test("a failed dead letter publish rejects, so the message is not lost", async () => {
   const { handler } = scripted([async () => {}]);
+  const { db, unitOfWork } = await createTestDatabase();
   const processor = new MessageProcessor({
     consumer: "restaurants.order-placed",
     group: "restaurants",
     handlers: [handler],
-    inbox: new InMemoryInbox(new InMemoryUnitOfWork()),
+    inbox: new MongoInbox(db, unitOfWork),
     deadLetters: {
       publish: async () => {
         throw new Error("broker down");

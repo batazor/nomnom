@@ -14,12 +14,11 @@ import {
   connectMongoDb,
   type MongoDbConnection,
 } from "../pkg/infrastructure/mongodb/client.ts";
+import { mongoUri } from "./support/mongodb.ts";
 
 // Runs against a MongoDB replica set, for example
-// `docker run -d -p 27017:27017 mongo:8 --replSet rs0` + `rs.initiate()`:
-// MONGODB_URI=mongodb://localhost:27017/?replicaSet=rs0&directConnection=true
-const uri = process.env.MONGODB_URI?.trim() ?? "";
-const skip = uri === "" ? "MONGODB_URI is not set" : false;
+// the testcontainer of the global setup (test/support/global-mongodb.ts).
+const uri = mongoUri();
 
 class TestReader extends MetricReader {
   protected async onShutdown(): Promise<void> {}
@@ -28,7 +27,7 @@ class TestReader extends MetricReader {
 
 const POOL = "db.client.connection.pool.name";
 
-describe("MongoDB connection pool metrics", { skip }, () => {
+describe("MongoDB connection pool metrics", () => {
   const reader = new TestReader();
   const provider = new MeterProvider({ readers: [reader] });
   const database = `restaurants_pool_${randomUUID().slice(0, 8)}`;

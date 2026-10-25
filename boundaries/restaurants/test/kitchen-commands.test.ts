@@ -24,10 +24,10 @@ const staffCommand = (restaurantId: string, restaurantOrderId: string) => ({
 });
 
 test("AC-246 accept queues the order and publishes only RestaurantOrderAccepted", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const received = await world.givenReceivedOrder(restaurantId, phoId);
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
   const now = world.clock.now();
 
   const result = await world.accept.execute(
@@ -45,7 +45,7 @@ test("AC-246 accept queues the order and publishes only RestaurantOrderAccepted"
     expectedReadyAt,
   });
   assert.equal(result.version, 2);
-  assert.deepEqual(world.outbox.records.slice(outboxBefore), [
+  assert.deepEqual((await world.outbox.records()).slice(outboxBefore), [
     {
       aggregate: {
         type: "RestaurantOrder",
@@ -66,7 +66,7 @@ test("AC-246 accept queues the order and publishes only RestaurantOrderAccepted"
 });
 
 test("AC-247 accept is rejected with reasons when the restaurant is closed or items unavailable", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const received = await world.givenReceivedOrder(restaurantId, phoId);
   await world.close.execute({ subject: owner, restaurantId });
@@ -81,7 +81,7 @@ test("AC-247 accept is rejected with reasons when the restaurant is closed or it
     currentOrders: 5,
     maximumOrders: 5,
   };
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   await assert.rejects(
     world.accept.execute(
@@ -98,11 +98,11 @@ test("AC-247 accept is rejected with reasons when the restaurant is closed or it
   );
   const order = await world.restaurantOrders.get(received.restaurantOrderId);
   assert.equal(order?.state, "RECEIVED");
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("accept reports an item missing from the menu", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId } = await world.givenKitchen();
   const received = await world.givenReceivedOrder(restaurantId, "ghost-item");
 
@@ -121,17 +121,17 @@ test("accept reports an item missing from the menu", async () => {
 });
 
 test("AC-248 accepting an already queued order is an invalid transition", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
-  const outboxBefore = world.outbox.records.length;
+  const outboxBefore = (await world.outbox.records()).length;
 
   await assert.rejects(world.accept.execute(order), InvalidTransitionError);
-  assert.equal(world.outbox.records.length, outboxBefore);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-240 staff of another restaurant cannot accept the order", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const received = await world.givenReceivedOrder(restaurantId, phoId);
 
@@ -150,7 +150,7 @@ test("AC-240 staff of another restaurant cannot accept the order", async () => {
 });
 
 test("AC-241 an order of another restaurant is not disclosed", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const a = await world.givenKitchen("A");
   const b = await world.givenKitchen("B");
   const orderOfB = await world.givenReceivedOrder(b.restaurantId, b.phoId);
@@ -174,7 +174,7 @@ test("AC-241 an order of another restaurant is not disclosed", async () => {
 });
 
 test("kitchen command fails closed when authorization is unavailable", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const received = await world.givenReceivedOrder(restaurantId, phoId);
   world.kitchenAccessControl.canOperateKitchen = async () => {
@@ -194,7 +194,7 @@ test("kitchen command fails closed when authorization is unavailable", async () 
 });
 
 test("AC-249 reject stores the reason and publishes RestaurantOrderRejected", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const received = await world.givenReceivedOrder(restaurantId, phoId);
 
@@ -205,7 +205,7 @@ test("AC-249 reject stores the reason and publishes RestaurantOrderRejected", as
 
   assert.equal(result.state, "REJECTED");
   assert.equal(result.rejectionReason, "kitchen overloaded");
-  const last = world.outbox.records.at(-1)?.event;
+  const last = (await world.outbox.records()).at(-1)?.event;
   assert.ok(
     last?.type === "RestaurantOrderRejected" &&
       "stage" in last &&
@@ -216,7 +216,7 @@ test("AC-249 reject stores the reason and publishes RestaurantOrderRejected", as
 });
 
 test("AC-250 rejection after Acceptance is an invalid transition", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
 

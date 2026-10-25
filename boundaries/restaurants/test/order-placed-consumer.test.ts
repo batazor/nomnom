@@ -4,10 +4,12 @@ import test from "node:test";
 import { create, toBinary } from "@bufbuild/protobuf";
 
 import { OrderPlacedSchema } from "../infrastructure/grpc/gen/nomnom/orders/v1/events_pb.js";
-import { SequentialIdGenerator } from "../pkg/infrastructure/memory/id-generator.ts";
-import { InMemoryInbox } from "../pkg/infrastructure/memory/inbox.ts";
 import type { InboundMessage } from "../pkg/infrastructure/messaging/envelope.ts";
 import { MessageProcessor } from "../pkg/infrastructure/messaging/processor.ts";
+import {
+  INBOX_COLLECTION,
+  MongoInbox,
+} from "../pkg/infrastructure/mongodb/inbox.ts";
 import type { IntegrationMessage } from "../pkg/infrastructure/outbox/relay.ts";
 import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
@@ -21,7 +23,10 @@ import {
 } from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
 import { RepositoryRestaurantExistence } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import { createKitchenWorld, ordersService } from "./support/kitchen.ts";
-import { createInfrastructure } from "./support/restaurants.ts";
+import {
+  createInfrastructure,
+  SequentialIdGenerator,
+} from "./support/restaurants.ts";
 
 type Item = { menuItemId: string; quantity: number };
 
@@ -59,10 +64,10 @@ const orderPlaced = (
   };
 };
 
-/** Consumer over the in-memory kitchen with the event source access control. */
+/** Consumer over the MongoDB kitchen with the event source access control. */
 const setup = async () => {
-  const infrastructure = createInfrastructure();
-  const world = createKitchenWorld({ infrastructure });
+  const infrastructure = await createInfrastructure();
+  const world = await createKitchenWorld({ infrastructure });
   const kitchen = await world.givenKitchen();
   const receiveOrderRequest = new ReceiveOrderRequestHandler({
     accessControl: new OrdersEventSourceAccessControl(),
@@ -71,7 +76,7 @@ const setup = async () => {
     ids: new SequentialIdGenerator("restaurant-order"),
     clock: infrastructure.clock,
   });
-  const inbox = new InMemoryInbox(infrastructure.unitOfWork);
+  const inbox = new MongoInbox(infrastructure.db, infrastructure.unitOfWork);
   const deadLetters: IntegrationMessage[] = [];
   const processor = new MessageProcessor({
     consumer: ORDER_PLACED_CONSUMER,
@@ -86,7 +91,7 @@ const setup = async () => {
     retry: { maxRetries: 0, initialIntervalMs: 1, maxIntervalMs: 1 },
     log: () => {},
   });
-  return { world, kitchen, processor, inbox, deadLetters };
+  return { world, kitchen, processor, deadLetters };
 };
 
 test("OrderPlaced creates a RECEIVED Restaurant Order with the placed items", async () => {
@@ -112,7 +117,7 @@ test("OrderPlaced creates a RECEIVED Restaurant Order with the placed items", as
 });
 
 test("a redelivered OrderPlaced creates the Restaurant Order once", async () => {
-  const { world, kitchen, processor, inbox } = await setup();
+  const { world, kitchen, processor } = await setup();
   const event = orderPlaced({
     restaurantId: kitchen.restaurantId,
     items: [{ menuItemId: kitchen.phoId, quantity: 2 }],
@@ -121,8 +126,8 @@ test("a redelivered OrderPlaced creates the Restaurant Order once", async () => 
   assert.equal(await processor.process(event), "processed");
   assert.equal(await processor.process(event), "duplicate");
 
-  assert.equal(world.orderStore.all().length, 1);
-  assert.equal(inbox.records.length, 1);
+  assert.equal((await world.orderStore.find({})).length, 1);
+  assert.equal(await world.db.collection(INBOX_COLLECTION).countDocuments(), 1);
 });
 
 test("OrderPlaced after ReceiveOrderRequest of the fulfillment process converges on one order", async () => {
@@ -142,7 +147,7 @@ test("OrderPlaced after ReceiveOrderRequest of the fulfillment process converges
   );
 
   assert.equal(outcome, "processed");
-  assert.equal(world.orderStore.all().length, 1);
+  assert.equal((await world.orderStore.find({})).length, 1);
   assert.equal(
     (await world.restaurantOrders.findByOrderId("order-1"))?.id,
     viaRpc.restaurantOrder.restaurantOrderId,
@@ -159,7 +164,7 @@ test("OrderPlaced without items is dead-lettered", async () => {
   assert.equal(outcome, "dead-lettered");
   assert.equal(deadLetters[0]?.topic, `${ORDER_EVENTS_TOPIC}.dlq`);
   assert.match(deadLetters[0]?.headers.reason_poisoned ?? "", /no items/);
-  assert.equal(world.orderStore.all().length, 0);
+  assert.equal((await world.orderStore.find({})).length, 0);
 });
 
 test("an OrderPlaced payload that is not Protobuf is dead-lettered", async () => {
@@ -187,11 +192,11 @@ test("an invalid quantity is dead-lettered without a Restaurant Order", async ()
 
   assert.equal(outcome, "dead-lettered");
   assert.equal(deadLetters.length, 1);
-  assert.equal(world.orderStore.all().length, 0);
+  assert.equal((await world.orderStore.find({})).length, 0);
 });
 
 test("OrderPlaced for an unknown restaurant is a business outcome", async () => {
-  const { world, processor, deadLetters, inbox } = await setup();
+  const { world, processor, deadLetters } = await setup();
 
   const outcome = await processor.process(
     orderPlaced({
@@ -202,8 +207,8 @@ test("OrderPlaced for an unknown restaurant is a business outcome", async () => 
 
   assert.equal(outcome, "rejected");
   assert.equal(deadLetters.length, 0);
-  assert.equal(inbox.records.length, 0);
-  assert.equal(world.orderStore.all().length, 0);
+  assert.equal(await world.db.collection(INBOX_COLLECTION).countDocuments(), 0);
+  assert.equal((await world.orderStore.find({})).length, 0);
 });
 
 test("a conflicting composition for an existing order is a business outcome", async () => {
@@ -226,7 +231,7 @@ test("a conflicting composition for an existing order is a business outcome", as
   );
 
   assert.equal(outcome, "rejected");
-  assert.equal(world.orderStore.all().length, 1);
+  assert.equal((await world.orderStore.find({})).length, 1);
 });
 
 test("the event source access control allows only fulfillment from the orders stream", async () => {

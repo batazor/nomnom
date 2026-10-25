@@ -136,7 +136,7 @@ test("one trace spans the gRPC call, the use case, the Outbox relay and the Kafk
   const { exporter, telemetry, collect } = startTestTelemetry("restaurants");
   try {
     // API: Open Restaurant over HTTP/2 with the caller's traceparent.
-    const infrastructure = createInfrastructure();
+    const infrastructure = await createInfrastructure();
     const metadata: { traceparent?: string }[] = [];
     const outbox: Outbox = {
       add: async (aggregate, events) => {
@@ -144,7 +144,7 @@ test("one trace spans the gRPC call, the use case, the Outbox relay and the Kafk
         await infrastructure.outbox.add(aggregate, events);
       },
     };
-    const world = createRestaurantWorld(infrastructure, { outbox });
+    const world = await createRestaurantWorld(infrastructure, { outbox });
     const restaurantId = await world.givenRestaurant("Pho Bar", {
       open: false,
     });

@@ -31,9 +31,9 @@ const unused = {
   execute: async (): Promise<never> => assert.fail("unexpected call"),
 };
 
-/** Admin RPCs over the in-memory restaurant world; `as` switches the caller. */
-const createWorld = () => {
-  const world = createRestaurantWorld();
+/** Admin RPCs over the MongoDB restaurant world; `as` switches the caller. */
+const createWorld = async () => {
+  const world = await createRestaurantWorld();
   let caller: Subject = operator;
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
@@ -85,7 +85,7 @@ const staffRequest = (restaurantId: string, userId = cook) => ({
 });
 
 test("FR-446 RegisterRestaurant returns the restaurant with address and version", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
 
   const response = await as(operator).registerRestaurant(
     create(RegisterRestaurantRequestSchema, {
@@ -107,7 +107,7 @@ test("FR-446 RegisterRestaurant returns the restaurant with address and version"
 });
 
 test("RegisterRestaurant without platform#register_restaurant is PERMISSION_DENIED", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
 
   await assert.rejects(
     async () =>
@@ -121,11 +121,11 @@ test("RegisterRestaurant without platform#register_restaurant is PERMISSION_DENI
       ),
     rejectsWith(Code.PermissionDenied),
   );
-  assert.equal(world.store.all().length, 0);
+  assert.equal((await world.store.find({})).length, 0);
 });
 
 test("RegisterRestaurant with missing fields is INVALID_ARGUMENT", async () => {
-  const { world, as } = createWorld();
+  const { world, as } = await createWorld();
 
   for (const request of [
     { name: " ", ownerId: owner.id, address: PICKUP_ADDRESS },
@@ -141,11 +141,11 @@ test("RegisterRestaurant with missing fields is INVALID_ARGUMENT", async () => {
       rejectsWith(Code.InvalidArgument),
     );
   }
-  assert.equal(world.store.all().length, 0);
+  assert.equal((await world.store.find({})).length, 0);
 });
 
 test("AssignStaff returns sorted staff; a repeat is changed=false", async () => {
-  const { world, as, register } = createWorld();
+  const { world, as, register } = await createWorld();
   const restaurantId = await register();
   await as(owner).assignStaff(
     create(AssignStaffRequestSchema, staffRequest(restaurantId, "zed")),
@@ -173,7 +173,7 @@ test("AssignStaff returns sorted staff; a repeat is changed=false", async () => 
 });
 
 test("RevokeStaff removes the user; a repeat is changed=false", async () => {
-  const { world, as, register } = createWorld();
+  const { world, as, register } = await createWorld();
   const restaurantId = await register();
   await as(owner).assignStaff(
     create(AssignStaffRequestSchema, staffRequest(restaurantId)),
@@ -196,7 +196,7 @@ test("RevokeStaff removes the user; a repeat is changed=false", async () => {
 });
 
 test("AC-481 AssignStaff without restaurant#manage is PERMISSION_DENIED and staff is unchanged", async () => {
-  const { world, as, register } = createWorld();
+  const { world, as, register } = await createWorld();
   const restaurantId = await register();
 
   for (const call of [
@@ -218,7 +218,7 @@ test("AC-481 AssignStaff without restaurant#manage is PERMISSION_DENIED and staf
 });
 
 test("staff RPCs map missing input to INVALID_ARGUMENT and unknown restaurants to NOT_FOUND", async () => {
-  const { as, register } = createWorld();
+  const { as, register } = await createWorld();
   const restaurantId = await register();
 
   await assert.rejects(
@@ -237,7 +237,7 @@ test("staff RPCs map missing input to INVALID_ARGUMENT and unknown restaurants t
       ),
     rejectsWith(Code.InvalidArgument),
   );
-  const { world } = createWorld();
+  const { world } = await createWorld();
   world.authorization.grantManager(owner, "missing");
   const service = createRestaurantsService({
     getRestaurant: unused,
@@ -331,7 +331,7 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
 });
 
 test("admin RPCs are UNAUTHENTICATED with the default rejecting resolver", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const service = createRestaurantsService({
     getRestaurant: unused,
     getMenu: unused,

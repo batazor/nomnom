@@ -4,7 +4,7 @@ import test from "node:test";
 import { MeterProvider, MetricReader } from "@opentelemetry/sdk-metrics";
 
 import type { UnitOfWork } from "../pkg/application/unit-of-work.ts";
-import { InMemoryInbox } from "../pkg/infrastructure/memory/inbox.ts";
+import { MongoInbox } from "../pkg/infrastructure/mongodb/inbox.ts";
 import {
   ObservedOutbox,
   ObservedUnitOfWork,
@@ -52,16 +52,20 @@ const ACCEPTED = "nomnom.restaurants.orders.accepted";
 const REJECTED = "nomnom.restaurants.orders.rejected";
 const DELAYS = "nomnom.kitchen.delays";
 
-const setup = () => {
+const setup = async () => {
   const reader = new TestReader();
   const provider = new MeterProvider({ readers: [reader] });
   const metrics = new RestaurantOrderDomainMetrics({
     meter: provider.getMeter("test"),
   });
-  const infrastructure = createInfrastructure();
+  const infrastructure = await createInfrastructure();
   const unitOfWork = new ObservedUnitOfWork(infrastructure.unitOfWork, metrics);
   const outbox = new ObservedOutbox(infrastructure.outbox, metrics);
-  const world = createKitchenWorld({ infrastructure, unitOfWork, outbox });
+  const world = await createKitchenWorld({
+    infrastructure,
+    unitOfWork,
+    outbox,
+  });
   const receive = observeReceiveOrderRequest(world.receive, metrics);
   return {
     reader,
@@ -86,7 +90,7 @@ const accepted = (orderId: string) => ({
 const aggregate = (id: string) => ({ type: "RestaurantOrder", id, version: 2 });
 
 test("committed kitchen commands count received, accepted, rejected and delays", async () => {
-  const { reader, world, receive } = setup();
+  const { reader, world, receive } = await setup();
   const { restaurantId, phoId } = await world.givenKitchen();
   const request = (orderId: string) => ({
     subject: ordersService,
@@ -122,7 +126,7 @@ test("committed kitchen commands count received, accepted, rejected and delays",
 });
 
 test("a rolled back Unit of Work records nothing", async () => {
-  const { reader, unitOfWork, outbox } = setup();
+  const { reader, unitOfWork, outbox } = await setup();
 
   await assert.rejects(
     unitOfWork.run(async () => {
@@ -136,7 +140,7 @@ test("a rolled back Unit of Work records nothing", async () => {
 });
 
 test("a nested Unit of Work records its events once, after the outer commit", async () => {
-  const { reader, unitOfWork, outbox } = setup();
+  const { reader, unitOfWork, outbox } = await setup();
 
   await unitOfWork.run(async () => {
     await unitOfWork.run(() =>
@@ -149,7 +153,7 @@ test("a nested Unit of Work records its events once, after the outer commit", as
 });
 
 test("a retried transaction attempt is counted once", async () => {
-  const { reader, metrics } = setup();
+  const { reader, metrics } = await setup();
   // Like the MongoDB driver on TransientTransactionError: `work` runs again.
   const retrying: UnitOfWork = {
     async run(work) {
@@ -166,9 +170,9 @@ test("a retried transaction attempt is counted once", async () => {
 });
 
 test("an idempotent repeat and an Inbox duplicate record nothing more", async () => {
-  const { reader, infrastructure, world, unitOfWork, receive } = setup();
+  const { reader, infrastructure, world, unitOfWork, receive } = await setup();
   const { restaurantId, phoId } = await world.givenKitchen();
-  const inbox = new InMemoryInbox(infrastructure.unitOfWork);
+  const inbox = new MongoInbox(infrastructure.db, infrastructure.unitOfWork);
   const record = {
     consumer: "restaurants.order-placed",
     eventId: "event-1",
@@ -203,7 +207,7 @@ test("an idempotent repeat and an Inbox duplicate record nothing more", async ()
 });
 
 test("a received order inside a rolled back Inbox transaction is not counted", async () => {
-  const { reader, world, unitOfWork, receive } = setup();
+  const { reader, world, unitOfWork, receive } = await setup();
   const { restaurantId, phoId } = await world.givenKitchen();
 
   await assert.rejects(
@@ -222,7 +226,7 @@ test("a received order inside a rolled back Inbox transaction is not counted", a
 });
 
 test("an unknown or missing reason is recorded as other", async () => {
-  const { reader, unitOfWork, outbox } = setup();
+  const { reader, unitOfWork, outbox } = await setup();
   const rejected = (reason: string | undefined) => ({
     type: "RestaurantOrderRejected",
     restaurantOrderId: "ro",
@@ -234,11 +238,13 @@ test("an unknown or missing reason is recorded as other", async () => {
   });
 
   await unitOfWork.run(() =>
-    outbox.add(aggregate("ro-1"), [
-      rejected("Kitchen on fire"),
-      rejected(undefined),
-      rejected("too_busy"),
-    ]),
+    outbox.add(aggregate("ro-1"), [rejected("Kitchen on fire")]),
+  );
+  await unitOfWork.run(() =>
+    outbox.add(aggregate("ro-2"), [rejected(undefined)]),
+  );
+  await unitOfWork.run(() =>
+    outbox.add(aggregate("ro-3"), [rejected("too_busy")]),
   );
   // Events of other aggregates are not Restaurant Order transitions.
   await unitOfWork.run(() =>

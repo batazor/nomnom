@@ -12,7 +12,7 @@
     "start": "node cmd/restaurants/main.ts",
     "relay": "node cmd/restaurants-relay/main.ts",
     "consumer": "node cmd/restaurants-consumer/main.ts",
-    "test": "node --test test/*.test.ts",
+    "test": "node --test --test-global-setup=test/support/global-mongodb.ts test/*.test.ts",
     "migrate": "node cmd/restaurants-migrate/main.ts"
   },
   "engines": {
@@ -20,7 +20,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
+    "@testcontainers/mongodb": "12.2.1",
     "@types/node": "26.6.5",
+    "testcontainers": "12.2.1",
     "typescript": "7.0.2"
   },
   "dependencies": {

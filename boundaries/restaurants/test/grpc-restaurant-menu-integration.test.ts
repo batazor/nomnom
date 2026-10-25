@@ -36,7 +36,6 @@ import {
   MENU_EVENTS_TOPIC,
   menuEventMapper,
 } from "../slices/menu/infrastructure/integration/menu-events.ts";
-import { InMemoryMenuAccessControl } from "../slices/menu/infrastructure/memory/menus.ts";
 import {
   createMenuCollection,
   MongoMenuRepository,
@@ -53,19 +52,20 @@ import {
   createRestaurantCollection,
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+import { TestMenuAccessControl } from "./support/menus.ts";
+import { mongoUri } from "./support/mongodb.ts";
 
 // Open Restaurant and Set Menu Item Availability over HTTP/2 (createGrpcServer
 // as in cmd/restaurants) with the MongoDB Unit of Work and MongoOutbox of the
 // process (Integration Event mapper, trace metadata) against a replica set:
-// MONGODB_URI=mongodb://localhost:27017/?replicaSet=rs0&directConnection=true
-const uri = process.env.MONGODB_URI?.trim() ?? "";
-const skip = uri === "" ? "MONGODB_URI is not set" : false;
+// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
+const uri = mongoUri();
 
 const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
 const TRACEPARENT = `00-${TRACE_ID}-b7ad6b7169203331-01`;
 const manager: Subject = { type: "user", id: "owner" };
 
-describe("restaurant and menu command RPCs over MongoDB", { skip }, () => {
+describe("restaurant and menu command RPCs over MongoDB", () => {
   let mongo: MongoDbConnection;
   let tracing: Tracing;
   let worker: GrpcWorker;
@@ -169,7 +169,7 @@ describe("restaurant and menu command RPCs over MongoDB", { skip }, () => {
       addMenuItem: unused,
       updateMenuItem: unused,
       setMenuItemAvailability: new SetMenuItemAvailabilityHandler({
-        accessControl: new InMemoryMenuAccessControl().grantManager(
+        accessControl: new TestMenuAccessControl().grantManager(
           manager,
           restaurantId,
         ),

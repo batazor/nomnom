@@ -24,7 +24,7 @@ import {
 const cook = "cook";
 
 test("AC-476 assign staff writes TOUCH restaurant#staff before saving", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho", { open: false });
   const calls: string[] = [];
   const assign = new AssignStaffHandler({
@@ -63,7 +63,7 @@ test("AC-476 assign staff writes TOUCH restaurant#staff before saving", async ()
 });
 
 test("assign staff again is a no-op without a SpiceDB write", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho");
   await world.assignStaff.execute({
     subject: owner,
@@ -91,7 +91,7 @@ test("assign staff again is a no-op without a SpiceDB write", async () => {
 });
 
 test("AC-476 revoke staff writes DELETE restaurant#staff before saving", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho");
   await world.assignStaff.execute({
     subject: owner,
@@ -130,7 +130,7 @@ test("AC-476 revoke staff writes DELETE restaurant#staff before saving", async (
 });
 
 test("revoking a user who is not staff is a no-op without a SpiceDB write", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho");
 
   const result = await world.revokeStaff.execute({
@@ -144,7 +144,7 @@ test("revoking a user who is not staff is a no-op without a SpiceDB write", asyn
 });
 
 test("staff changes require restaurant#manage", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho");
 
   for (const handler of [world.assignStaff, world.revokeStaff]) {
@@ -158,7 +158,7 @@ test("staff changes require restaurant#manage", async () => {
 });
 
 test("staff changes of an unknown restaurant fail without a write", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   world.authorization.grantManager(owner, "missing");
 
   await assert.rejects(
@@ -173,7 +173,7 @@ test("staff changes of an unknown restaurant fail without a write", async () => 
 });
 
 test("an empty staff user id is rejected without a write", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho");
 
   await assert.rejects(
@@ -184,7 +184,7 @@ test("an empty staff user id is rejected without a write", async () => {
 });
 
 test("a SpiceDB failure aborts the staff change before saving", async () => {
-  const world = createRestaurantWorld();
+  const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho");
   await world.assignStaff.execute({
     subject: owner,

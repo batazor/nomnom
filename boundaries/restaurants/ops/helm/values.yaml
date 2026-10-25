@@ -200,8 +200,8 @@ identity:
   # Services через запятую, которым разрешено передавать user subject, например bff.
   userDelegates: ""
 
-# Authorization через SpiceDB (ADR 18). Пока endpoint пуст, переменные SPICEDB__* не задаются
-# и приложение остаётся на in-memory адаптере без grants (deny-all, предупреждение в логе).
+# Authorization через SpiceDB (ADR 18), обязательна: при пустом endpoint переменные SPICEDB__*
+# не задаются и процесс restaurants падает на старте.
 # Если endpoint задан, preshared key берётся только из Secret presharedKeySecret.
 spicedb:
   # gRPC endpoint host:port, например spicedb.nomnom-authz.svc.cluster.local:50051.

@@ -45,7 +45,6 @@ import {
 } from "../slices/restaurantorder/infrastructure/acceptance/mvp.ts";
 import { restaurantOrderEventMapper } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import { FifoKitchenQueueOrdering } from "../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
-import { InMemoryKitchenAccessControl } from "../slices/restaurantorder/infrastructure/memory/restaurant-orders.ts";
 import {
   createRestaurantOrderCollection,
   MongoKitchenBoard,
@@ -55,18 +54,19 @@ import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,
 } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
+import { TestKitchenAccessControl } from "./support/kitchen.ts";
+import { mongoUri } from "./support/mongodb.ts";
 
 // Kitchen command RPCs composed as in cmd/restaurants/main.ts (MongoDB Unit of
 // Work, MongoOutbox with the Integration Event mapper) against a replica set:
-// MONGODB_URI=mongodb://localhost:27017/?replicaSet=rs0&directConnection=true
-const uri = process.env.MONGODB_URI?.trim() ?? "";
-const skip = uri === "" ? "MONGODB_URI is not set" : false;
+// MongoDB is the testcontainer of the global setup (test/support/global-mongodb.ts).
+const uri = mongoUri();
 
 const context = undefined as never;
 const cook: Subject = { type: "user", id: "cook" };
 const ordersService: Subject = { type: "service", id: "orders-worker" };
 
-describe("kitchen command RPCs over MongoDB", { skip }, () => {
+describe("kitchen command RPCs over MongoDB", () => {
   let mongo: MongoDbConnection;
   let service: ReturnType<typeof createRestaurantsService>;
   let receive: ReceiveOrderRequestHandler;
@@ -97,7 +97,7 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
       createRestaurantOrderCollection(mongo.db, unitOfWork),
     );
     const clock = { now: () => new Date() };
-    const accessControl = new InMemoryKitchenAccessControl();
+    const accessControl = new TestKitchenAccessControl();
     accessControl.grantStaff(cook, restaurantId);
     accessControl.grantFulfillment(ordersService, restaurantId);
 

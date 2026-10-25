@@ -306,7 +306,7 @@ test("an unreadable or invalid JWKS is a startup error", async () => {
 });
 
 test("a gRPC call with a valid token reaches the handler as the service subject", async () => {
-  const world = createKitchenWorld();
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const resolver = await createResolver();
   const resolved: Subject[] = [];

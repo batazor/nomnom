@@ -19,7 +19,7 @@ import {
 import { cook, minutes } from "./support/kitchen.ts";
 
 test("AC-737 GetKitchenQueue lists the received and accepted order for kitchen staff", async () => {
-  const { world, service } = createWorld({ subjects: resolverOf(cook) });
+  const { world, service } = await createWorld({ subjects: resolverOf(cook) });
   const { restaurantId, phoId } = await world.givenKitchen();
   const other = await world.givenKitchen("Noodle Bar");
   const waiting = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
@@ -62,7 +62,7 @@ test("AC-737 GetKitchenQueue lists the received and accepted order for kitchen s
 });
 
 test("AC-737 GetKitchenQueue of a restaurant with nothing queued is empty", async () => {
-  const { world, service } = createWorld({ subjects: resolverOf(cook) });
+  const { world, service } = await createWorld({ subjects: resolverOf(cook) });
   const { restaurantId, phoId } = await world.givenKitchen();
   await world.givenOrderIn("RECEIVED", restaurantId, phoId);
 
@@ -72,7 +72,7 @@ test("AC-737 GetKitchenQueue of a restaurant with nothing queued is empty", asyn
 });
 
 test("AC-738 GetKitchenQueue without restaurant#operate_kitchen is PERMISSION_DENIED", async () => {
-  const { world, service } = createWorld({
+  const { world, service } = await createWorld({
     subjects: resolverOf({ type: "user", id: "stranger" }),
   });
   const { restaurantId, phoId } = await world.givenKitchen();
@@ -85,7 +85,7 @@ test("AC-738 GetKitchenQueue without restaurant#operate_kitchen is PERMISSION_DE
 });
 
 test("AC-738 GetKitchenQueue without a verified identity is UNAUTHENTICATED", async () => {
-  const { world, service } = createWorld({ subjects: null });
+  const { world, service } = await createWorld({ subjects: null });
   const { restaurantId } = await world.givenKitchen();
 
   await assert.rejects(
@@ -95,7 +95,7 @@ test("AC-738 GetKitchenQueue without a verified identity is UNAUTHENTICATED", as
 });
 
 test("GetKitchenQueue without restaurant_id is INVALID_ARGUMENT", async () => {
-  const { service } = createWorld({ subjects: resolverOf(cook) });
+  const { service } = await createWorld({ subjects: resolverOf(cook) });
 
   await assert.rejects(
     async () => service.getKitchenQueue({ restaurantId: "" }, context),
@@ -125,9 +125,9 @@ const INCOMING: readonly IncomingOrder[] = [
 ];
 
 /** Service whose ListIncomingOrders reads a fake port; `cook` is staff. */
-const createIncomingService = (subjects: SubjectResolver | null) => {
+const createIncomingService = async (subjects: SubjectResolver | null) => {
   const reads: string[] = [];
-  const { service } = createWorld({
+  const { service } = await createWorld({
     subjects,
     listIncomingOrders: new ListIncomingOrdersHandler({
       accessControl: {
@@ -146,7 +146,7 @@ const createIncomingService = (subjects: SubjectResolver | null) => {
 };
 
 test("AC-742 ListIncomingOrders answers the received orders with ids, items, version and received_at", async () => {
-  const { service, reads } = createIncomingService(resolverOf(cook));
+  const { service, reads } = await createIncomingService(resolverOf(cook));
 
   const response = await service.listIncomingOrders(
     { restaurantId: INCOMING_RESTAURANT },
@@ -185,7 +185,7 @@ test("AC-742 ListIncomingOrders answers the received orders with ids, items, ver
 });
 
 test("AC-743 ListIncomingOrders without restaurant#operate_kitchen is PERMISSION_DENIED", async () => {
-  const { service, reads } = createIncomingService(
+  const { service, reads } = await createIncomingService(
     resolverOf({ type: "user", id: "stranger" }),
   );
 
@@ -201,7 +201,7 @@ test("AC-743 ListIncomingOrders without restaurant#operate_kitchen is PERMISSION
 });
 
 test("AC-743 ListIncomingOrders without a verified identity is UNAUTHENTICATED", async () => {
-  const { service, reads } = createIncomingService(null);
+  const { service, reads } = await createIncomingService(null);
 
   await assert.rejects(
     async () =>
@@ -215,7 +215,7 @@ test("AC-743 ListIncomingOrders without a verified identity is UNAUTHENTICATED",
 });
 
 test("ListIncomingOrders without restaurant_id is INVALID_ARGUMENT", async () => {
-  const { service, reads } = createIncomingService(resolverOf(cook));
+  const { service, reads } = await createIncomingService(resolverOf(cook));
 
   await assert.rejects(
     async () => service.listIncomingOrders({ restaurantId: "" }, context),
