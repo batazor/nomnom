@@ -31,6 +31,18 @@ const (
 	ReasonOperatorDecision            = "operator_decision"
 )
 
+// ReasonCodes lists every reason code the process can record on an Order.
+func ReasonCodes() []string {
+	return []string{
+		ReasonPaymentDeclined, ReasonPaymentCaptureDeclined,
+		ReasonRestaurantRejected, ReasonRestaurantAcceptanceTimeout,
+		ReasonPreparationFailed, ReasonPreparationTimeout,
+		ReasonCourierAssignmentExhausted, ReasonPickupTimeout,
+		ReasonDeliveryFailed, ReasonDeliveryTimeout,
+		ReasonCustomerRequested, ReasonOperatorDecision,
+	}
+}
+
 type negative struct {
 	outcome Outcome
 	code    string

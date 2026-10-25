@@ -114,3 +114,22 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 	placedAt, err := time.Parse(time.RFC3339Nano, stamp)
 	return placedAt, id, err
 }
+
+// CountByState — число Orders в каждом состоянии для gauge nomnom.orders.in_state.
+func (s *Store) CountByState(ctx context.Context) (map[order.State]int64, error) {
+	rows, err := s.q(ctx).Query(ctx, `SELECT state, count(*) FROM orders GROUP BY state`)
+	if err != nil {
+		return nil, fmt.Errorf("count orders by state: %w", err)
+	}
+	defer rows.Close()
+	counts := map[order.State]int64{}
+	for rows.Next() {
+		var state string
+		var n int64
+		if err := rows.Scan(&state, &n); err != nil {
+			return nil, fmt.Errorf("count orders by state: %w", err)
+		}
+		counts[order.State(state)] = n
+	}
+	return counts, rows.Err()
+}

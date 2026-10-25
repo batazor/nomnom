@@ -40,7 +40,7 @@ func TestCompleteOrderOnceWithOutboxRecord(t *testing.T) {
 		AggregateType:    "order",
 		AggregateID:      "order-1",
 		AggregateVersion: 2,
-		Event:            order.OrderCompleted{OrderID: "order-1"},
+		Event:            order.OrderCompleted{OrderID: "order-1", PlacedAt: ordertest.PlacedAt},
 	}}, store.OutboxRecords())
 }
 

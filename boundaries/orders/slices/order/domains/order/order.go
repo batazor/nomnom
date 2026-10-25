@@ -152,7 +152,7 @@ func (o *Order) Complete() (TransitionResult, error) {
 	if err != nil {
 		return TransitionResult{}, err
 	}
-	o.events = append(o.events, OrderCompleted{OrderID: o.id})
+	o.events = append(o.events, OrderCompleted{OrderID: o.id, PlacedAt: o.placedAt})
 	return result, nil
 }
 

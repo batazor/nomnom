@@ -37,17 +37,17 @@ var (
 // `make generate`.
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
-	wire.Build(configSet, orderdi.PostgresSet, orderdi.TelemetrySet, orderdi.APISet, temporalAPISet, grpcSet, NewApp)
+	wire.Build(configSet, orderdi.PostgresSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, temporalAPISet, grpcSet, NewApp)
 	return nil, nil, nil
 }
 
 func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
-	wire.Build(configSet, orderdi.PostgresSet, orderdi.TelemetrySet, fulfillmentdi.WorkerSet, NewTemporalWorker)
+	wire.Build(configSet, orderdi.PostgresSet, NewReasonCodes, orderdi.TelemetrySet, fulfillmentdi.WorkerSet, NewTemporalWorker)
 	return nil, nil, nil
 }
 
 func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
-	wire.Build(configSet, orderdi.PostgresSet, orderdi.TelemetrySet, orderdi.ConsumerSet, NewKafkaConsumer)
+	wire.Build(configSet, orderdi.PostgresSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.ConsumerSet, NewKafkaConsumer)
 	return nil, nil, nil
 }
 

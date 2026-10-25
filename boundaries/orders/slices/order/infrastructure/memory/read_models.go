@@ -99,3 +99,13 @@ func (s *Store) ListCustomerOrders(ctx context.Context, request listcustomerorde
 	}
 	return page, nil
 }
+
+// CountByState — число Orders в каждом состоянии.
+func (s *Store) CountByState(ctx context.Context) (map[order.State]int64, error) {
+	defer s.lock(ctx)()
+	counts := map[order.State]int64{}
+	for _, snapshot := range s.state.orders {
+		counts[snapshot.State]++
+	}
+	return counts, nil
+}

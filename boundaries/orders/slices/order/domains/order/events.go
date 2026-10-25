@@ -30,6 +30,8 @@ func (OrderCancelled) isOrderDomainEvent() {}
 
 type OrderCompleted struct {
 	OrderID ID
+	// PlacedAt is the start of fulfillment, carried for its duration.
+	PlacedAt time.Time
 }
 
 func (OrderCompleted) isOrderDomainEvent() {}

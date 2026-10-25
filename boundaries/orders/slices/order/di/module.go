@@ -29,6 +29,7 @@ type Dependencies struct {
 	Clock      application.Clock
 	IDs        placeorder.IDGenerator
 	Telemetry  *telemetry.UseCases
+	Metrics    *observability.DomainMetrics
 }
 
 // NewModule собирает handlers под декоратором телеметрии use cases. Get Order
@@ -54,10 +55,15 @@ func NewModule(deps Dependencies) *Module {
 		Clock:      deps.Clock,
 		Workflow:   deps.Workflow,
 	})
+	if deps.Metrics != nil {
+		// Gauge состояний — только у API: одна роль на процесс, без дублей.
+		observability.ObserveOrdersInState(store.CountByState)
+	}
 	return &Module{
-		PlaceOrder:               telemetry.Instrument(uc, observability.PlaceOrder, placeOrder.Handle),
-		RequestOrderCancellation: telemetry.Instrument(uc, observability.RequestOrderCancellation, requestCancellation.Handle),
-		GetOrder:                 telemetry.Instrument(uc, observability.GetOrder, getorder.NewHandler(authorizer, store, deps.Policy).Handle),
-		ListCustomerOrders:       telemetry.Instrument(uc, observability.ListCustomerOrders, listcustomerorders.NewHandler(authorizer, store).Handle),
+		PlaceOrder: telemetry.Instrument(uc, observability.PlaceOrder, placeOrder.Handle),
+		RequestOrderCancellation: telemetry.Instrument(uc, observability.RequestOrderCancellation,
+			observability.CancellationRequests(deps.Metrics, requestCancellation.Handle)),
+		GetOrder:           telemetry.Instrument(uc, observability.GetOrder, getorder.NewHandler(authorizer, store, deps.Policy).Handle),
+		ListCustomerOrders: telemetry.Instrument(uc, observability.ListCustomerOrders, listcustomerorders.NewHandler(authorizer, store).Handle),
 	}
 }
