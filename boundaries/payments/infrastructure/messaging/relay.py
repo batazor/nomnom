@@ -18,7 +18,11 @@ from datetime import UTC, datetime, timedelta
 from .kafka_publisher import DEFAULT_DELIVERY_TIMEOUT, KafkaPublisher
 from .outbox import (
     WATERMILL_UUID_HEADER,
+    OutboxBacklog,
+    OutboxLease,
+    OutboxQueue,
     OutboxRecord,
+    OutboxRetention,
     OutboxStore,
     Publisher,
     PublishError,
@@ -36,8 +40,12 @@ __all__ = [
     "WATERMILL_UUID_HEADER",
     "CycleResult",
     "KafkaPublisher",
+    "OutboxBacklog",
+    "OutboxLease",
+    "OutboxQueue",
     "OutboxRecord",
     "OutboxRelay",
+    "OutboxRetention",
     "OutboxStore",
     "PostgresOutboxStore",
     "PublishError",
@@ -141,14 +149,14 @@ class RelayWorker:
     def __init__(
         self,
         relay: OutboxRelay,
-        store: OutboxStore,
+        lease: OutboxLease,
         publisher: Publisher,
         *,
         batch_size: int,
         poll_interval: float,
     ) -> None:
         self._relay = relay
-        self._store = store
+        self._lease = lease
         self._publisher = publisher
         self._batch_size = batch_size
         self._poll_interval = poll_interval
@@ -190,6 +198,6 @@ class RelayWorker:
         finally:
             # A cycle still running owns the lock session; process exit releases it.
             if stopped:
-                self._store.unlock()
+                self._lease.unlock()
         if not stopped:
             raise TimeoutError("outbox relay cycle did not finish before the drain deadline")

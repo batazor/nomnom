@@ -1,4 +1,4 @@
-"""Outbox record, its Event Envelope headers and the relay's ports (ADR 31)."""
+"""Outbox record, its Event Envelope headers and the relay's ports by role (ADR 31)."""
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -68,8 +68,8 @@ class PublishError(Exception):
         self.retriable = retriable
 
 
-class OutboxStore(Protocol):
-    """Storage port of the relay: the single-active-replica lock and the Outbox queries."""
+class OutboxLease(Protocol):
+    """Single-active-replica lock of the relay."""
 
     def try_lock(self) -> bool:
         """Hold or acquire the relay lock; ``False`` means this replica is standby."""
@@ -78,6 +78,10 @@ class OutboxStore(Protocol):
     def unlock(self) -> None:
         """Release the relay lock if held; never raises on a lost session."""
         ...
+
+
+class OutboxQueue(Protocol):
+    """Unpublished records in ``seq`` order and the result of publishing each of them."""
 
     def fetch_pending(self, limit: int) -> list[OutboxRecord]:
         """Return up to ``limit`` unpublished records in ``seq`` order."""
@@ -91,13 +95,29 @@ class OutboxStore(Protocol):
         """Count a failed publish attempt and keep the (truncated) error."""
         ...
 
+
+class OutboxRetention(Protocol):
+    """Removal of records published long enough ago."""
+
     def delete_published_before(self, cutoff: datetime) -> int:
         """Delete records published before ``cutoff`` and return their number."""
         ...
 
+
+class OutboxBacklog(Protocol):
+    """Per-topic backlog of unpublished records for the relay metrics."""
+
     def backlog(self) -> list[TopicBacklog]:
         """Return the per-topic backlog of unpublished records."""
         ...
+
+
+class OutboxStore(OutboxLease, OutboxQueue, OutboxRetention, OutboxBacklog, Protocol):
+    """Every role one relay cycle uses; the PostgreSQL store implements all of them.
+
+    Components that need one role depend on that role only: ``RelayWorker`` releases the
+    lock through ``OutboxLease`` (AC-640).
+    """
 
 
 class Publisher(Protocol):

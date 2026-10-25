@@ -1,5 +1,7 @@
 """Outbox relay logic of ADR 31: headers, head-of-line, retention, single active instance."""
 
+import threading
+import time
 import unittest
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
@@ -261,8 +263,6 @@ class RelayCycleTest(unittest.TestCase):
 
 class RelayWorkerTest(unittest.TestCase):
     def test_shutdown_stops_loop_and_releases_lock(self) -> None:
-        import threading
-        import time
 
         store = FakeStore([_record(1)])
         publisher = FakePublisher()
@@ -282,6 +282,30 @@ class RelayWorkerTest(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(publisher.sent, [1])
         self.assertTrue(store.unlocked)
+
+    def test_shutdown_releases_lock_through_lease_only(self) -> None:
+        # AC-640: the worker needs the lock role only, not the whole Outbox store.
+        class Lease:
+            def __init__(self) -> None:
+                self.unlocked = False
+
+            def try_lock(self) -> bool:
+                return False
+
+            def unlock(self) -> None:
+                self.unlocked = True
+
+        lease = Lease()
+        publisher = FakePublisher()
+        relay = OutboxRelay(FakeStore([]), publisher, batch_size=10, retention=timedelta(days=7))
+        worker = RelayWorker(relay, lease, publisher, batch_size=10, poll_interval=0.01)
+        thread = threading.Thread(target=worker.run)
+        thread.start()
+        worker.shutdown(time.monotonic() + 2)
+        thread.join(2)
+
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(lease.unlocked)
 
 
 class RelayConfigTest(unittest.TestCase):
