@@ -341,6 +341,290 @@ type OrderConnection {
   pageInfo: PageInfo!
 }
 
+"""
+Stage of a restaurant order in the kitchen
+"""
+enum KitchenOrderStage {
+  """
+  Order arrived and waits for the kitchen to accept or reject it
+  """
+  RECEIVED
+  """
+  Order is accepted and waits in the kitchen queue
+  """
+  QUEUED
+  """
+  Kitchen is preparing the order
+  """
+  PREPARING
+  """
+  Order is assembled and waits to be marked ready
+  """
+  ASSEMBLED
+  """
+  Order is ready for pickup
+  """
+  READY
+}
+
+"""
+Line of a restaurant order as the kitchen sees it
+"""
+type KitchenOrderItem {
+  """
+  Display name of the menu item, empty if it is no longer in the menu
+  """
+  name: String!
+  """
+  Number of units
+  """
+  quantity: Int!
+}
+
+"""
+Order of a restaurant as its kitchen sees it
+"""
+type KitchenOrder {
+  """
+  Restaurant order identifier, used by the kitchen commands
+  """
+  id: ID!
+  """
+  Customer order identifier
+  """
+  orderId: ID!
+  """
+  Current stage in the kitchen
+  """
+  stage: KitchenOrderStage!
+  """
+  Ordered items
+  """
+  items: [KitchenOrderItem!]!
+  """
+  Moment the restaurant received the order in RFC 3339
+  """
+  receivedAt: String!
+}
+
+"""
+Active orders of one restaurant for its kitchen staff
+"""
+type Kitchen {
+  """
+  Restaurant the kitchen belongs to; menu is null
+  """
+  restaurant: Restaurant!
+  """
+  Orders in RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY: RECEIVED by ascending
+  receivedAt, then the kitchen queue order, then the rest by ascending receivedAt
+  """
+  orders: [KitchenOrder!]!
+}
+
+"""
+Command of the kitchen over one restaurant order
+"""
+enum KitchenAction {
+  """
+  Accept a RECEIVED order into the kitchen queue
+  """
+  ACCEPT
+  """
+  Reject a RECEIVED order
+  """
+  REJECT
+  """
+  Start preparing a QUEUED order
+  """
+  START_PREPARATION
+  """
+  Mark a PREPARING order assembled
+  """
+  MARK_ASSEMBLED
+  """
+  Mark an ASSEMBLED order ready for pickup
+  """
+  MARK_READY
+}
+
+input KitchenActionInput {
+  """
+  Restaurant of the order
+  """
+  restaurantId: ID!
+  """
+  Restaurant order identifier (KitchenOrder.id)
+  """
+  kitchenOrderId: ID!
+  """
+  Command to apply
+  """
+  action: KitchenAction!
+}
+
+"""
+Business reason why a kitchen command cannot be applied
+"""
+enum KitchenActionProblemCode {
+  """
+  The order is not in a stage that allows this command
+  """
+  ORDER_STAGE_CONFLICT
+}
+
+type KitchenActionPayload {
+  """
+  Order after the command; null if problem is set or the order left the kitchen
+  """
+  order: KitchenOrder
+  """
+  Business problem, null on success
+  """
+  problem: KitchenActionProblemCode
+}
+
+"""
+Availability of a courier for new deliveries
+"""
+enum CourierAvailability {
+  """
+  Courier receives delivery offers
+  """
+  AVAILABLE
+  """
+  Courier is on a delivery
+  """
+  BUSY
+  """
+  Courier does not receive delivery offers
+  """
+  UNAVAILABLE
+}
+
+"""
+Delivery offered to the courier, valid until expiresAt
+"""
+type DeliveryOffer {
+  """
+  Offer identifier
+  """
+  id: ID!
+  """
+  Delivery the offer is for
+  """
+  deliveryId: ID!
+  """
+  Where to pick the order up
+  """
+  pickupAddress: String!
+  """
+  Where to deliver the order
+  """
+  dropoffAddress: String!
+  """
+  Moment in RFC 3339 after which the offer cannot be accepted
+  """
+  expiresAt: String!
+}
+
+"""
+Stage of a delivery assigned to the courier
+"""
+enum CourierDeliveryStage {
+  """
+  Courier is going to the restaurant
+  """
+  ASSIGNED
+  """
+  Courier has the order and is going to the customer
+  """
+  PICKED_UP
+}
+
+"""
+Delivery the courier is currently carrying out
+"""
+type CourierDelivery {
+  """
+  Delivery identifier
+  """
+  id: ID!
+  """
+  Customer order identifier
+  """
+  orderId: ID!
+  """
+  Current stage
+  """
+  stage: CourierDeliveryStage!
+  """
+  Where to pick the order up
+  """
+  pickupAddress: String!
+  """
+  Where to deliver the order
+  """
+  dropoffAddress: String!
+}
+
+"""
+Work of the current courier
+"""
+type Courier {
+  """
+  Current availability
+  """
+  availability: CourierAvailability!
+  """
+  Pending delivery offers, empty unless AVAILABLE
+  """
+  offers: [DeliveryOffer!]!
+  """
+  Delivery in progress, null if none
+  """
+  currentDelivery: CourierDelivery
+}
+
+"""
+Command of the courier over the current delivery
+"""
+enum CourierDeliveryAction {
+  """
+  Confirm the order is picked up at the restaurant
+  """
+  CONFIRM_PICKUP
+  """
+  Confirm the order is handed to the customer
+  """
+  CONFIRM_DELIVERY
+}
+
+"""
+Business reason why a courier command cannot be applied
+"""
+enum CourierProblemCode {
+  """
+  The offer expired or was taken
+  """
+  OFFER_NOT_AVAILABLE
+  """
+  The delivery is not in a stage that allows this command
+  """
+  DELIVERY_STAGE_CONFLICT
+}
+
+type CourierPayload {
+  """
+  Courier after the command
+  """
+  courier: Courier!
+  """
+  Business problem, null on success
+  """
+  problem: CourierProblemCode
+}
+
 type Query {
   """
   Metadata for the client BFF
@@ -366,6 +650,15 @@ type Query {
   Restaurants the current user owns, open and closed, ordered by identifier; menu is null
   """
   myRestaurants(first: Int!, after: String): RestaurantConnection!
+  """
+  Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
+  restaurant, null if the restaurant does not exist or the user may not operate its kitchen
+  """
+  kitchen(restaurantId: ID!): Kitchen
+  """
+  Work of the current user as a courier, null if the user is not a registered courier
+  """
+  courier: Courier
 }
 
 input OrderLineInput {
@@ -538,4 +831,21 @@ type Mutation {
   Close a restaurant of the current user for new orders; repeating it changes nothing
   """
   closeRestaurant(restaurantId: ID!): RestaurantOpeningPayload!
+  """
+  Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
+  changes nothing
+  """
+  applyKitchenAction(input: KitchenActionInput!): KitchenActionPayload!
+  """
+  Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
+  """
+  setCourierAvailability(availability: CourierAvailability!): CourierPayload!
+  """
+  Accept a delivery offer addressed to the current courier
+  """
+  acceptDeliveryOffer(offerId: ID!): CourierPayload!
+  """
+  Apply a command to the current delivery of the courier
+  """
+  applyCourierDeliveryAction(deliveryId: ID!, action: CourierDeliveryAction!): CourierPayload!
 }
