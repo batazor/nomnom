@@ -27,7 +27,7 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	assert.Equal(t, order.StatePlaced, loaded.State())
 	assert.Equal(t, "20", loaded.Total().Amount().String())
 
-	_, err = loaded.Confirm()
+	_, err = loaded.Confirm(ordertest.PlacedAt.Add(time.Minute))
 	require.NoError(t, err)
 	_, err = loaded.RecordPreparationStarted(ordertest.PlacedAt.Add(time.Minute))
 	require.NoError(t, err)
@@ -76,9 +76,9 @@ func TestRepositoryOptimisticConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	second, err := store.Get(ctx, id)
 	require.NoError(t, err)
-	_, err = first.Confirm()
+	_, err = first.Confirm(ordertest.PlacedAt.Add(time.Minute))
 	require.NoError(t, err)
-	_, err = second.Confirm()
+	_, err = second.Confirm(ordertest.PlacedAt.Add(time.Minute))
 	require.NoError(t, err)
 
 	require.NoError(t, store.Save(ctx, first))

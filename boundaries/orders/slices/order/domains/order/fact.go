@@ -10,6 +10,7 @@ import (
 type FulfillmentFact string
 
 const (
+	FactRestaurantAccepted FulfillmentFact = "restaurant_accepted"
 	FactRestaurantRejected FulfillmentFact = "restaurant_rejected"
 	FactPreparationStarted FulfillmentFact = "preparation_started"
 	FactReadyForPickup     FulfillmentFact = "ready_for_pickup"
@@ -20,6 +21,7 @@ const (
 )
 
 var allFacts = [...]FulfillmentFact{
+	FactRestaurantAccepted,
 	FactRestaurantRejected,
 	FactPreparationStarted,
 	FactReadyForPickup,

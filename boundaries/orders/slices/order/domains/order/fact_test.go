@@ -22,7 +22,10 @@ func TestRecordFactFollowsStateAndRecordsOnce(t *testing.T) {
 			return o.RecordDeliveryFailure(at, "customer_unreachable")
 		},
 	}
-	require.Len(t, recorders, len(allFacts))
+	// restaurant_accepted is recorded by Confirm with its transition, not by
+	// TriggerRecordFact (TestConfirmRecordsRestaurantAcceptance).
+	require.Len(t, recorders, len(allFacts)-1)
+	require.NotContains(t, recorders, FactRestaurantAccepted)
 
 	for fact, record := range recorders {
 		for _, state := range allStates {

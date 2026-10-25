@@ -143,8 +143,18 @@ func calculateTotal(items []Item) (vo.Money, error) {
 	return total, nil
 }
 
-func (o *Order) Confirm() (TransitionResult, error) {
-	return o.apply(TriggerConfirm, TransitionInput{})
+// Confirm reflects restaurant Order Acceptance and records when it happened
+// as the restaurant_accepted fact, in the same change of the Order.
+func (o *Order) Confirm(occurredAt time.Time) (TransitionResult, error) {
+	if occurredAt.IsZero() {
+		return TransitionResult{}, GuardFailed{Reason: "occurred_at_required"}
+	}
+	result, err := o.apply(TriggerConfirm, TransitionInput{})
+	if err != nil {
+		return TransitionResult{}, err
+	}
+	o.facts = append(o.facts, RecordedFact{Fact: FactRestaurantAccepted, OccurredAt: occurredAt})
+	return result, nil
 }
 
 func (o *Order) Complete() (TransitionResult, error) {

@@ -157,7 +157,7 @@ func (r concurrentWriter) Get(ctx context.Context, id order.ID) (*order.Order, e
 	if err != nil {
 		return nil, err
 	}
-	if _, err := other.Confirm(); err != nil {
+	if _, err := other.Confirm(ordertest.PlacedAt.Add(time.Minute)); err != nil {
 		return nil, err
 	}
 	return loaded, r.Save(ctx, other)

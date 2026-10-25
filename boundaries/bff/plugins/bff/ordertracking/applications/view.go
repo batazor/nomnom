@@ -43,6 +43,7 @@ type MilestoneKind string
 
 const (
 	MilestonePlaced             MilestoneKind = "PLACED"
+	MilestoneConfirmed          MilestoneKind = "CONFIRMED"
 	MilestonePreparationStarted MilestoneKind = "PREPARATION_STARTED"
 	MilestoneReadyForPickup     MilestoneKind = "READY_FOR_PICKUP"
 	MilestoneCourierAssigned    MilestoneKind = "COURIER_ASSIGNED"
@@ -81,6 +82,7 @@ type ItemView struct {
 }
 
 var milestoneOfFact = map[string]MilestoneKind{
+	"restaurant_accepted": MilestoneConfirmed,
 	"preparation_started": MilestonePreparationStarted,
 	"ready_for_pickup":    MilestoneReadyForPickup,
 	"courier_assigned":    MilestoneCourierAssigned,
@@ -139,7 +141,8 @@ func endReason(order OrderSnapshot) EndReason {
 }
 
 // milestones lists PLACED, the facts that are milestones and ENDED by time.
-// There is no CONFIRMED: orders does not publish when the Order was confirmed.
+// CONFIRMED comes from restaurant_accepted; Orders confirmed before orders
+// recorded that fact have none.
 func milestones(order OrderSnapshot) []Milestone {
 	result := []Milestone{{Kind: MilestonePlaced, OccurredAt: order.PlacedAt}}
 	for _, fact := range order.Facts {

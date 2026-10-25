@@ -103,6 +103,19 @@ func TestEndReasonByReasonCode(t *testing.T) {
 	assert.Empty(t, view(t, snapshot("placed"), at(1)).EndReason)
 }
 
+// AC-564: the acceptance moment becomes CONFIRMED between PLACED and later facts.
+func TestRestaurantAcceptanceIsConfirmedMilestone(t *testing.T) {
+	order := snapshot("confirmed", Fact{"preparation_started", at(4)}, Fact{"restaurant_accepted", at(3)})
+
+	got := view(t, order, at(5))
+
+	assert.Equal(t, []Milestone{
+		{MilestonePlaced, placedAt},
+		{MilestoneConfirmed, at(3)},
+		{MilestonePreparationStarted, at(4)},
+	}, got.Milestones)
+}
+
 // AC-557: preparing with a courier assigned; milestones in time order.
 func TestPreparingOrderWithCourierMilestones(t *testing.T) {
 	order := snapshot("confirmed", Fact{"courier_assigned", at(8)}, Fact{"preparation_started", at(3)})

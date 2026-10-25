@@ -137,7 +137,7 @@ gateway не доверяет. Политика контрактов, генер
 
 Минимальные состояния `Order`: `placed`, `confirmed`, `cancelled`, `completed`. На первом этапе агрегат поддерживает оформление, подтверждение, отмену и завершение заказа.
 
-Кроме state, `Order` хранит время оформления, отражённые факты fulfillment (`restaurant_rejected`, `preparation_started`, `ready_for_pickup`, `courier_assigned`, `picked_up`, `delivery_completed`, `delivery_failed`) и причину отрицательного итога. Факты — данные `Order`, а не новые states: допустимость их записи по state задаёт строка FSM `record_fact` (только `placed`/`confirmed`), повтор факта — ошибка `FactAlreadyRecorded`. Cancellation и Failure пока завершаются одним state `cancelled` с сохранённым видом итога (`cancellation`/`failure`) и кодом причины; отдельный `failed` state не согласован. Domain Events: `OrderPlaced`, `OrderCancelled`, `OrderCompleted`.
+Кроме state, `Order` хранит время оформления, отражённые факты fulfillment (`restaurant_accepted`, `restaurant_rejected`, `preparation_started`, `ready_for_pickup`, `courier_assigned`, `picked_up`, `delivery_completed`, `delivery_failed`) и причину отрицательного итога. Факты — данные `Order`, а не новые states: допустимость их записи по state задаёт строка FSM `record_fact` (только `placed`/`confirmed`), повтор факта — ошибка `FactAlreadyRecorded`. `restaurant_accepted` записывает Confirm Order вместе с переходом `placed → confirmed` и моментом события Order Acceptance; заказы, подтверждённые раньше, его не имеют. Cancellation и Failure пока завершаются одним state `cancelled` с сохранённым видом итога (`cancellation`/`failure`) и кодом причины; отдельный `failed` state не согласован. Domain Events: `OrderPlaced`, `OrderCancelled`, `OrderCompleted`.
 
 Инварианты:
 

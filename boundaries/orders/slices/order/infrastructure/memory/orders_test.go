@@ -26,7 +26,7 @@ func TestRepositoryUsesOptimisticConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), first.Version())
 
-	_, err = first.Confirm()
+	_, err = first.Confirm(ordertest.PlacedAt.Add(time.Minute))
 	require.NoError(t, err)
 	require.NoError(t, store.Save(ctx, first))
 	snapshot, _ := store.Snapshot("order-1")

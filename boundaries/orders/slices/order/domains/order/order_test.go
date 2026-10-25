@@ -24,11 +24,11 @@ func TestTransitionTableIsComplete(t *testing.T) {
 func TestOrderLifecycleUsesStrictTypedOutcomes(t *testing.T) {
 	order := newTestOrder(t)
 
-	confirmed, err := order.Confirm()
+	confirmed, err := order.Confirm(testNow)
 	require.NoError(t, err)
 	assert.Equal(t, TransitionResult{From: StatePlaced, Trigger: TriggerConfirm, To: StateConfirmed}, confirmed)
 
-	_, err = order.Confirm()
+	_, err = order.Confirm(testNow)
 	var already AlreadyInState
 	require.True(t, errors.As(err, &already))
 	assert.Equal(t, StateConfirmed, already.State)
@@ -86,4 +86,21 @@ func TestOnlyCancelledAndCompletedAreFinal(t *testing.T) {
 	for _, state := range allStates {
 		assert.Equal(t, final[state], state.IsFinal(), state)
 	}
+}
+
+// AC-563: confirmation keeps the moment of Order Acceptance as a fact.
+func TestConfirmRecordsRestaurantAcceptance(t *testing.T) {
+	order := newTestOrder(t)
+	acceptedAt := testNow.Add(3 * time.Minute)
+
+	_, err := order.Confirm(acceptedAt)
+	require.NoError(t, err)
+	assert.Equal(t, []RecordedFact{{Fact: FactRestaurantAccepted, OccurredAt: acceptedAt}}, order.Facts())
+
+	_, err = order.Confirm(acceptedAt.Add(time.Minute))
+	require.ErrorAs(t, err, new(AlreadyInState))
+	assert.Len(t, order.Facts(), 1, "a repeated confirmation records nothing")
+
+	_, err = newTestOrder(t).Confirm(time.Time{})
+	assert.Equal(t, GuardFailed{Reason: "occurred_at_required"}, err)
 }

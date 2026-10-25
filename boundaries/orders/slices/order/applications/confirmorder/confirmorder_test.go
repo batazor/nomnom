@@ -61,6 +61,17 @@ func TestConfirmOrderByState(t *testing.T) {
 	}
 }
 
+// AC-563: the moment of Order Acceptance is kept as the restaurant_accepted fact.
+func TestConfirmOrderRecordsAcceptanceMoment(t *testing.T) {
+	handler, store, _ := setup(t, order.StatePlaced)
+
+	_, err := handler.Handle(context.Background(), input("event-1"))
+
+	require.NoError(t, err)
+	snapshot, _ := store.Snapshot("order-1")
+	assert.Equal(t, []order.RecordedFact{{Fact: order.FactRestaurantAccepted, OccurredAt: occurredAt}}, snapshot.Facts)
+}
+
 // confirmorder.feature @AC-003: acceptance received again has no additional business effect.
 func TestConfirmOrderReceivedAgainHasNoAdditionalEffect(t *testing.T) {
 	handler, store, workflow := setup(t, order.StatePlaced)
