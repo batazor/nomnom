@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
-import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
@@ -242,18 +243,40 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
     ]);
   });
 
-  test("AC-742 ListIncomingOrders lists received orders until Acceptance moves them to GetKitchenQueue", async () => {
+  test("AC-742 ListIncomingOrders lists received orders by received_at until Acceptance moves them to GetKitchenQueue", async () => {
     const first = await received("order-incoming-1");
+    // Distinct received_at, so the order is by time and not by random id.
+    await delay(5);
     const second = await received("order-incoming-2");
     const ids = new Set([first.restaurantOrderId, second.restaurantOrderId]);
+    const incoming = async () =>
+      (
+        await service.listIncomingOrders({ restaurantId }, context)
+      ).orders.filter((order) =>
+        ids.has(order.restaurantOrder?.restaurantOrderId ?? ""),
+      );
     const incomingIds = async () =>
-      (await service.listIncomingOrders({ restaurantId }, context)).orders
-        .map((order) => order.restaurantOrder?.restaurantOrderId ?? "")
-        .filter((id) => ids.has(id))
-        .sort();
+      (await incoming()).map(
+        (order) => order.restaurantOrder?.restaurantOrderId,
+      );
 
-    // Orders received within one millisecond tie on received_at.
-    assert.deepEqual(await incomingIds(), [...ids].sort());
+    const waiting = await incoming();
+    assert.deepEqual(
+      waiting.map((order) => order.restaurantOrder?.restaurantOrderId),
+      [first.restaurantOrderId, second.restaurantOrderId],
+    );
+    assert.equal(waiting[0]?.restaurantOrder?.orderId, "order-incoming-1");
+    assert.equal(waiting[0]?.restaurantOrder?.version, 1n);
+    assert.deepEqual(
+      waiting[0]?.items.map((item) => [item.menuItemId, item.quantity]),
+      [["pho", 1]],
+    );
+    const [firstAt, secondAt] = waiting.map((order) =>
+      order.receivedAt === undefined
+        ? 0
+        : timestampDate(order.receivedAt).getTime(),
+    );
+    assert.ok((firstAt ?? 0) > 0 && (firstAt ?? 0) < (secondAt ?? 0));
     await service.acceptRestaurantOrder(first, context);
 
     assert.deepEqual(await incomingIds(), [second.restaurantOrderId]);

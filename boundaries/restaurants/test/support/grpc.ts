@@ -5,6 +5,7 @@ import type { SubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
 import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
+import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import { createKitchenWorld, ordersService } from "./kitchen.ts";
 
 export const context = undefined as never;
@@ -13,9 +14,19 @@ export const resolverOf = (subject: Subject): SubjectResolver => ({
   resolve: async () => subject,
 });
 
+const notComposed = {
+  execute: async (): Promise<never> => {
+    throw new Error("query not composed in this test world");
+  },
+};
+
 /** Service over the in-memory kitchen world with an `orders-worker` caller. */
 export const createWorld = (
-  options: { subjects?: SubjectResolver | null } = {},
+  options: {
+    subjects?: SubjectResolver | null;
+    /** Query over a fake reader; the MongoDB reader has no memory variant. */
+    listIncomingOrders?: Pick<ListIncomingOrdersHandler, "execute">;
+  } = {},
 ) => {
   const world = createKitchenWorld();
   const service = createRestaurantsService({
@@ -32,7 +43,7 @@ export const createWorld = (
     reportPreparationDelay: world.reportDelay,
     reportPreparationFailure: world.reportFailure,
     getKitchenQueue: world.getKitchenQueue,
-    listIncomingOrders: world.listIncomingOrders,
+    listIncomingOrders: options.listIncomingOrders ?? notComposed,
     registerRestaurant: world.register,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,

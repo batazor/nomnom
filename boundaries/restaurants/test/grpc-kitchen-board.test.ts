@@ -5,6 +5,11 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
 
 import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
+import {
+  type IncomingOrder,
+  ListIncomingOrdersHandler,
+} from "../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import {
   context,
   createWorld,
@@ -98,79 +103,123 @@ test("GetKitchenQueue without restaurant_id is INVALID_ARGUMENT", async () => {
   );
 });
 
-test("AC-742 ListIncomingOrders lists received orders by received time without accepted ones", async () => {
-  const { world, service } = createWorld({ subjects: resolverOf(cook) });
-  const { restaurantId, phoId } = await world.givenKitchen();
-  const other = await world.givenKitchen("Noodle Bar");
-  const receivedAt = world.clock.now();
-  const first = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
-  world.clock.advance(minutes(1));
-  const second = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
-  const accepted = await world.givenOrderIn("QUEUED", restaurantId, phoId);
-  await world.givenOrderIn("RECEIVED", other.restaurantId, other.phoId);
+// ListIncomingOrders is read only from MongoDB: the transport is tested over a
+// fake reader port, the adapter in grpc-kitchen-integration.test.ts.
+const INCOMING_RESTAURANT = "restaurant-incoming";
+const RECEIVED_AT = new Date("2026-10-25T12:00:00Z");
+const INCOMING: readonly IncomingOrder[] = [
+  {
+    restaurantOrderId: "restaurant-order-1",
+    orderId: "order-1",
+    items: [{ menuItemId: "pho", quantity: 2, options: ["spicy"] }],
+    receivedAt: RECEIVED_AT,
+    version: 1,
+  },
+  {
+    restaurantOrderId: "restaurant-order-2",
+    orderId: "order-2",
+    items: [{ menuItemId: "tea", quantity: 1, options: [] }],
+    receivedAt: new Date(RECEIVED_AT.getTime() + minutes(1)),
+    version: 1,
+  },
+];
 
-  const response = await service.listIncomingOrders({ restaurantId }, context);
+/** Service whose ListIncomingOrders reads a fake port; `cook` is staff. */
+const createIncomingService = (subjects: SubjectResolver | null) => {
+  const reads: string[] = [];
+  const { service } = createWorld({
+    subjects,
+    listIncomingOrders: new ListIncomingOrdersHandler({
+      accessControl: {
+        canOperateKitchen: async (subject, restaurantId) =>
+          subject.id === cook.id && restaurantId === INCOMING_RESTAURANT,
+      },
+      reader: {
+        listIncoming: async (restaurantId) => {
+          reads.push(restaurantId);
+          return restaurantId === INCOMING_RESTAURANT ? INCOMING : [];
+        },
+      },
+    }),
+  });
+  return { service, reads };
+};
 
+test("AC-742 ListIncomingOrders answers the received orders with ids, items, version and received_at", async () => {
+  const { service, reads } = createIncomingService(resolverOf(cook));
+
+  const response = await service.listIncomingOrders(
+    { restaurantId: INCOMING_RESTAURANT },
+    context,
+  );
+
+  assert.deepEqual(reads, [INCOMING_RESTAURANT]);
   assert.deepEqual(
     response.orders.map((order) => [
       order.restaurantOrder?.restaurantOrderId,
       order.restaurantOrder?.orderId,
     ]),
     [
-      [first.restaurantOrderId, first.orderId],
-      [second.restaurantOrderId, second.orderId],
+      ["restaurant-order-1", "order-1"],
+      ["restaurant-order-2", "order-2"],
     ],
   );
-  assert.ok(
-    response.orders.every(
-      (order) =>
-        order.restaurantOrder?.restaurantOrderId !== accepted.restaurantOrderId,
-    ),
-  );
   const [incoming] = response.orders;
-  assert.equal(incoming?.restaurantOrder?.restaurantId, restaurantId);
+  assert.equal(incoming?.restaurantOrder?.restaurantId, INCOMING_RESTAURANT);
   assert.equal(incoming?.restaurantOrder?.state, RestaurantOrderState.RECEIVED);
   assert.equal(incoming?.restaurantOrder?.version, 1n);
   assert.equal(incoming?.restaurantOrder?.expectedReadyAt, undefined);
   assert.deepEqual(
-    incoming?.items.map((item) => [item.menuItemId, item.quantity]),
-    [[phoId, 2]],
+    incoming?.items.map((item) => [
+      item.menuItemId,
+      item.quantity,
+      item.options,
+    ]),
+    [["pho", 2, ["spicy"]]],
   );
   assert.ok(incoming?.receivedAt !== undefined);
   assert.equal(
     timestampDate(incoming.receivedAt).getTime(),
-    receivedAt.getTime(),
+    RECEIVED_AT.getTime(),
   );
 });
 
 test("AC-743 ListIncomingOrders without restaurant#operate_kitchen is PERMISSION_DENIED", async () => {
-  const { world, service } = createWorld({
-    subjects: resolverOf({ type: "user", id: "stranger" }),
-  });
-  const { restaurantId, phoId } = await world.givenKitchen();
-  await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+  const { service, reads } = createIncomingService(
+    resolverOf({ type: "user", id: "stranger" }),
+  );
 
   await assert.rejects(
-    async () => service.listIncomingOrders({ restaurantId }, context),
+    async () =>
+      service.listIncomingOrders(
+        { restaurantId: INCOMING_RESTAURANT },
+        context,
+      ),
     rejectsWith(Code.PermissionDenied),
   );
+  assert.deepEqual(reads, []);
 });
 
 test("AC-743 ListIncomingOrders without a verified identity is UNAUTHENTICATED", async () => {
-  const { world, service } = createWorld({ subjects: null });
-  const { restaurantId } = await world.givenKitchen();
+  const { service, reads } = createIncomingService(null);
 
   await assert.rejects(
-    async () => service.listIncomingOrders({ restaurantId }, context),
+    async () =>
+      service.listIncomingOrders(
+        { restaurantId: INCOMING_RESTAURANT },
+        context,
+      ),
     rejectsWith(Code.Unauthenticated),
   );
+  assert.deepEqual(reads, []);
 });
 
 test("ListIncomingOrders without restaurant_id is INVALID_ARGUMENT", async () => {
-  const { service } = createWorld({ subjects: resolverOf(cook) });
+  const { service, reads } = createIncomingService(resolverOf(cook));
 
   await assert.rejects(
     async () => service.listIncomingOrders({ restaurantId: "" }, context),
     rejectsWith(Code.InvalidArgument),
   );
+  assert.deepEqual(reads, []);
 });
