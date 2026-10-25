@@ -169,8 +169,8 @@ const file_nomnom_delivery_v1_delivery_proto_rawDesc = "" +
 	"\x18DELIVERY_STATE_PICKED_UP\x10\x03\x12\x1c\n" +
 	"\x18DELIVERY_STATE_COMPLETED\x10\x04\x12\x19\n" +
 	"\x15DELIVERY_STATE_FAILED\x10\x05\x12\x1c\n" +
-	"\x18DELIVERY_STATE_CANCELLED\x10\x06B\xfa\x01\n" +
-	"\x16com.nomnom.delivery.v1B\rDeliveryProtoP\x01Zgnomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/delivery/v1;deliveryv1\xa2\x02\x03NDX\xaa\x02\x12Nomnom.Delivery.V1\xca\x02\x12Nomnom\\Delivery\\V1\xe2\x02\x1eNomnom\\Delivery\\V1\\GPBMetadata\xea\x02\x14Nomnom::Delivery::V1b\x06proto3"
+	"\x18DELIVERY_STATE_CANCELLED\x10\x06B\xce\x01\n" +
+	"\x16com.nomnom.delivery.v1B\rDeliveryProtoP\x01Z;nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1;deliveryv1\xa2\x02\x03NDX\xaa\x02\x12Nomnom.Delivery.V1\xca\x02\x12Nomnom\\Delivery\\V1\xe2\x02\x1eNomnom\\Delivery\\V1\\GPBMetadata\xea\x02\x14Nomnom::Delivery::V1b\x06proto3"
 
 var (
 	file_nomnom_delivery_v1_delivery_proto_rawDescOnce sync.Once

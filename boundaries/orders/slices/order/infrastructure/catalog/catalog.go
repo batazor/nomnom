@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"nomnom/orders/pkg/application"
-	restaurantsv1 "nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/restaurants/v1"
+	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"

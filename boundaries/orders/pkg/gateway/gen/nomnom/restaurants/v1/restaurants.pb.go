@@ -240,8 +240,8 @@ const file_nomnom_restaurants_v1_restaurants_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x122\n" +
 	"\x05price\x18\x04 \x01(\v2\x1c.nomnom.restaurants.v1.MoneyR\x05price\x12\x1c\n" +
-	"\tavailable\x18\x05 \x01(\bR\tavailableB\x92\x02\n" +
-	"\x19com.nomnom.restaurants.v1B\x10RestaurantsProtoP\x01Zmnomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/restaurants/v1;restaurantsv1\xa2\x02\x03NRX\xaa\x02\x15Nomnom.Restaurants.V1\xca\x02\x15Nomnom\\Restaurants\\V1\xe2\x02!Nomnom\\Restaurants\\V1\\GPBMetadata\xea\x02\x17Nomnom::Restaurants::V1b\x06proto3"
+	"\tavailable\x18\x05 \x01(\bR\tavailableB\xe6\x01\n" +
+	"\x19com.nomnom.restaurants.v1B\x10RestaurantsProtoP\x01ZAnomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1;restaurantsv1\xa2\x02\x03NRX\xaa\x02\x15Nomnom.Restaurants.V1\xca\x02\x15Nomnom\\Restaurants\\V1\xe2\x02!Nomnom\\Restaurants\\V1\\GPBMetadata\xea\x02\x17Nomnom::Restaurants::V1b\x06proto3"
 
 var (
 	file_nomnom_restaurants_v1_restaurants_proto_rawDescOnce sync.Once

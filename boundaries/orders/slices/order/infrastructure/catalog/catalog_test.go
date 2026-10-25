@@ -3,6 +3,7 @@ package catalog_test
 import (
 	"context"
 	"net"
+	"nomnom/orders/pkg/gateway"
 	"os"
 	"path/filepath"
 	"sync"
@@ -20,8 +21,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
-	restaurantsv1 "nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/restaurants/v1"
+	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -170,7 +170,7 @@ func TestSnapshotCallsCarryServiceToken(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "nomnom.restaurants"), []byte("token-1\n"), 0o600))
 	server := &fakeRestaurants{open: true, items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}
-	adapter := catalog.New(dial(t, server, grpc.WithUnaryInterceptor(grpcclient.ServiceToken(dir))), limits, time.Second)
+	adapter := catalog.New(dial(t, server, grpc.WithUnaryInterceptor(gateway.ServiceToken(dir))), limits, time.Second)
 
 	_, err := adapter.Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
 	require.NoError(t, err)

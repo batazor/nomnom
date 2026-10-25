@@ -1940,8 +1940,8 @@ const file_nomnom_restaurants_v1_service_proto_rawDesc = "" +
 	"\x18ReportPreparationFailure\x126.nomnom.restaurants.v1.ReportPreparationFailureRequest\x1a7.nomnom.restaurants.v1.ReportPreparationFailureResponse\x12y\n" +
 	"\x12RegisterRestaurant\x120.nomnom.restaurants.v1.RegisterRestaurantRequest\x1a1.nomnom.restaurants.v1.RegisterRestaurantResponse\x12d\n" +
 	"\vAssignStaff\x12).nomnom.restaurants.v1.AssignStaffRequest\x1a*.nomnom.restaurants.v1.AssignStaffResponse\x12d\n" +
-	"\vRevokeStaff\x12).nomnom.restaurants.v1.RevokeStaffRequest\x1a*.nomnom.restaurants.v1.RevokeStaffResponseB\x8e\x02\n" +
-	"\x19com.nomnom.restaurants.v1B\fServiceProtoP\x01Zmnomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/restaurants/v1;restaurantsv1\xa2\x02\x03NRX\xaa\x02\x15Nomnom.Restaurants.V1\xca\x02\x15Nomnom\\Restaurants\\V1\xe2\x02!Nomnom\\Restaurants\\V1\\GPBMetadata\xea\x02\x17Nomnom::Restaurants::V1b\x06proto3"
+	"\vRevokeStaff\x12).nomnom.restaurants.v1.RevokeStaffRequest\x1a*.nomnom.restaurants.v1.RevokeStaffResponseB\xe2\x01\n" +
+	"\x19com.nomnom.restaurants.v1B\fServiceProtoP\x01ZAnomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1;restaurantsv1\xa2\x02\x03NRX\xaa\x02\x15Nomnom.Restaurants.V1\xca\x02\x15Nomnom\\Restaurants\\V1\xe2\x02!Nomnom\\Restaurants\\V1\\GPBMetadata\xea\x02\x17Nomnom::Restaurants::V1b\x06proto3"
 
 var (
 	file_nomnom_restaurants_v1_service_proto_rawDescOnce sync.Once

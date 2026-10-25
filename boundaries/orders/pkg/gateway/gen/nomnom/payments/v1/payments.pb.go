@@ -376,8 +376,8 @@ const file_nomnom_payments_v1_payments_proto_rawDesc = "" +
 	"$PAYMENT_OPERATION_STATUS_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"PAYMENT_OPERATION_STATUS_SUCCEEDED\x10\x01\x12%\n" +
 	"!PAYMENT_OPERATION_STATUS_DECLINED\x10\x02\x12$\n" +
-	" PAYMENT_OPERATION_STATUS_PENDING\x10\x03B\xfa\x01\n" +
-	"\x16com.nomnom.payments.v1B\rPaymentsProtoP\x01Zgnomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/payments/v1;paymentsv1\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3"
+	" PAYMENT_OPERATION_STATUS_PENDING\x10\x03B\xce\x01\n" +
+	"\x16com.nomnom.payments.v1B\rPaymentsProtoP\x01Z;nomnom/orders/pkg/gateway/gen/nomnom/payments/v1;paymentsv1\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3"
 
 var (
 	file_nomnom_payments_v1_payments_proto_rawDescOnce sync.Once

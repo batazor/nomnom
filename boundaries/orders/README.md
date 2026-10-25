@@ -464,7 +464,7 @@ make temporal-dev-stop
 `jti` → `Subject{user, sub}`. Повторный или пустой assertion и любое нарушение — `UNAUTHENTICATED`; принятие и
 отказ пишутся в log с делегатом и `jti`, без самих tokens.
 
-`FULFILLMENT__NEIGHBOURS=unavailable` (по умолчанию) — вызовы соседей завершаются retryable ошибкой, workflow ждёт на текущем шаге; `simulated` одобряет вызовы без эффекта и предназначен только для локальной проверки; `grpc` вызывает командные API `payments`, `restaurants`, `delivery` через `INTERNAL_GATEWAY_ADDR` клиентами [`neighbours/grpcclient`](slices/fulfillment/infrastructure/neighbours/grpcclient) (Go-код генерируется `make generate` из workspace-модулей до публикации в BSR). Клиент прикладывает projected token целевого контекста из `IDENTITY__TOKEN_DIR` (ADR 27); `UNAUTHENTICATED` и `PERMISSION_DENIED` клиент считает retryable.
+`FULFILLMENT__NEIGHBOURS=unavailable` (по умолчанию) — вызовы соседей завершаются retryable ошибкой, workflow ждёт на текущем шаге; `simulated` одобряет вызовы без эффекта и предназначен только для локальной проверки; `grpc` вызывает командные API `payments`, `restaurants`, `delivery` через `INTERNAL_GATEWAY_ADDR` клиентами [`neighbours/grpcclient`](slices/fulfillment/infrastructure/neighbours/grpcclient). Подключение к gateway, projected token целевого контекста из `IDENTITY__TOKEN_DIR` (ADR 27) и сгенерированные клиенты соседей лежат в общем пакете [`pkg/gateway`](pkg/gateway) (Go-код генерируется `make proto-generate` из workspace-модулей до публикации в BSR): им пользуются и Activities fulfillment, и каталог Place Order, поэтому слайс `order` не зависит от слайса `fulfillment`; `UNAUTHENTICATED` и `PERMISSION_DENIED` клиент считает retryable.
 
 ## Проверка
 

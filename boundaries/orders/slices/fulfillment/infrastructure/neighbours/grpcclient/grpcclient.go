@@ -10,41 +10,20 @@ import (
 	"fmt"
 	"log"
 
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"nomnom/orders/pkg/application"
-	deliveryv1 "nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/delivery/v1"
-	paymentsv1 "nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/payments/v1"
-	restaurantsv1 "nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/restaurants/v1"
+	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
+	paymentsv1 "nomnom/orders/pkg/gateway/gen/nomnom/payments/v1"
+	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 )
 
 // ErrOperationPending is retryable: the Activity repeats the same idempotency key
 // until the provider answers.
 var ErrOperationPending = errors.New("payment operation is pending")
-
-// Dial opens a lazy connection to the internal gateway; no I/O happens here.
-// With a non-empty tokenDir every call carries the projected token of the
-// target context (ADR 27).
-func Dial(address, tokenDir string) (*grpc.ClientConn, error) {
-	options := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// Client-side метрики зависимостей через internal gateway (глобальный MeterProvider).
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-	}
-	if tokenDir != "" {
-		options = append(options, grpc.WithUnaryInterceptor(ServiceToken(tokenDir)))
-	}
-	conn, err := grpc.NewClient(address, options...)
-	if err != nil {
-		return nil, fmt.Errorf("dial internal gateway %s: %w", address, err)
-	}
-	return conn, nil
-}
 
 // Payments implements temporal.Payments. Every operation first resolves the
 // Payment of the Order by the idempotent CreatePayment.

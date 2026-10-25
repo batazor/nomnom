@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	gatewayclient "nomnom/orders/pkg/gateway"
 	"strings"
 
 	"github.com/google/wire"
@@ -13,7 +14,6 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
@@ -144,7 +144,7 @@ func NewCatalog(cfg config.FulfillmentConfig, gateway config.InternalGatewayConf
 	if err != nil {
 		return nil, nil, fmt.Errorf("catalog maximum_total: %w", err)
 	}
-	conn, err := grpcclient.Dial(gateway.Address, identity.TokenDir)
+	conn, err := gatewayclient.Dial(gateway.Address, identity.TokenDir)
 	if err != nil {
 		return nil, nil, err
 	}

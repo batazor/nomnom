@@ -4,6 +4,7 @@ package di
 
 import (
 	"log"
+	gatewayclient "nomnom/orders/pkg/gateway"
 
 	"github.com/google/wire"
 
@@ -36,7 +37,7 @@ type Neighbours struct {
 func NewNeighbours(cfg config.FulfillmentConfig, gateway config.InternalGatewayConfig, identity config.IdentityConfig) (Neighbours, func(), error) {
 	switch cfg.Neighbours {
 	case config.NeighboursGRPC:
-		conn, err := grpcclient.Dial(gateway.Address, identity.TokenDir)
+		conn, err := gatewayclient.Dial(gateway.Address, identity.TokenDir)
 		if err != nil {
 			return Neighbours{}, nil, err
 		}

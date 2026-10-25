@@ -469,8 +469,8 @@ const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"\x19GetCourierCurrentDelivery\x124.nomnom.delivery.v1.GetCourierCurrentDeliveryRequest\x1a5.nomnom.delivery.v1.GetCourierCurrentDeliveryResponse\x12g\n" +
 	"\x0eCreateDelivery\x12).nomnom.delivery.v1.CreateDeliveryRequest\x1a*.nomnom.delivery.v1.CreateDeliveryResponse\x12g\n" +
 	"\x0eReplanDelivery\x12).nomnom.delivery.v1.ReplanDeliveryRequest\x1a*.nomnom.delivery.v1.ReplanDeliveryResponse\x12g\n" +
-	"\x0eCancelDelivery\x12).nomnom.delivery.v1.CancelDeliveryRequest\x1a*.nomnom.delivery.v1.CancelDeliveryResponseB\xf9\x01\n" +
-	"\x16com.nomnom.delivery.v1B\fServiceProtoP\x01Zgnomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/delivery/v1;deliveryv1\xa2\x02\x03NDX\xaa\x02\x12Nomnom.Delivery.V1\xca\x02\x12Nomnom\\Delivery\\V1\xe2\x02\x1eNomnom\\Delivery\\V1\\GPBMetadata\xea\x02\x14Nomnom::Delivery::V1b\x06proto3"
+	"\x0eCancelDelivery\x12).nomnom.delivery.v1.CancelDeliveryRequest\x1a*.nomnom.delivery.v1.CancelDeliveryResponseB\xcd\x01\n" +
+	"\x16com.nomnom.delivery.v1B\fServiceProtoP\x01Z;nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1;deliveryv1\xa2\x02\x03NDX\xaa\x02\x12Nomnom.Delivery.V1\xca\x02\x12Nomnom\\Delivery\\V1\xe2\x02\x1eNomnom\\Delivery\\V1\\GPBMetadata\xea\x02\x14Nomnom::Delivery::V1b\x06proto3"
 
 var (
 	file_nomnom_delivery_v1_service_proto_rawDescOnce sync.Once

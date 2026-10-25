@@ -71,7 +71,7 @@ proto-check:
 
 proto-generate:
 	cd infrastructure/grpc && buf generate --template buf.gen.yaml
-	cd slices/fulfillment/infrastructure/neighbours/grpcclient && buf generate --template buf.gen.yaml
+	cd pkg/gateway && buf generate --template buf.gen.yaml
 	cd slices/order/infrastructure/messaging && buf generate --template buf.gen.yaml
 
 test:

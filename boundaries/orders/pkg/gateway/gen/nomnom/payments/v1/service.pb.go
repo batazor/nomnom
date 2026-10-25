@@ -654,8 +654,8 @@ const file_nomnom_payments_v1_service_proto_rawDesc = "" +
 	"\x10AuthorizePayment\x12+.nomnom.payments.v1.AuthorizePaymentRequest\x1a,.nomnom.payments.v1.AuthorizePaymentResponse\x12g\n" +
 	"\x0eCapturePayment\x12).nomnom.payments.v1.CapturePaymentRequest\x1a*.nomnom.payments.v1.CapturePaymentResponse\x12v\n" +
 	"\x13CancelAuthorization\x12..nomnom.payments.v1.CancelAuthorizationRequest\x1a/.nomnom.payments.v1.CancelAuthorizationResponse\x12d\n" +
-	"\rRefundPayment\x12(.nomnom.payments.v1.RefundPaymentRequest\x1a).nomnom.payments.v1.RefundPaymentResponseB\xf9\x01\n" +
-	"\x16com.nomnom.payments.v1B\fServiceProtoP\x01Zgnomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/payments/v1;paymentsv1\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3"
+	"\rRefundPayment\x12(.nomnom.payments.v1.RefundPaymentRequest\x1a).nomnom.payments.v1.RefundPaymentResponseB\xcd\x01\n" +
+	"\x16com.nomnom.payments.v1B\fServiceProtoP\x01Z;nomnom/orders/pkg/gateway/gen/nomnom/payments/v1;paymentsv1\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3"
 
 var (
 	file_nomnom_payments_v1_service_proto_rawDescOnce sync.Once

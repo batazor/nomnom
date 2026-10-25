@@ -355,8 +355,8 @@ const file_nomnom_payments_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reasonB\xf8\x01\n" +
-	"\x16com.nomnom.payments.v1B\vEventsProtoP\x01Zgnomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient/gen/nomnom/payments/v1;paymentsv1\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3"
+	"\x06reason\x18\x03 \x01(\tR\x06reasonB\xcc\x01\n" +
+	"\x16com.nomnom.payments.v1B\vEventsProtoP\x01Z;nomnom/orders/pkg/gateway/gen/nomnom/payments/v1;paymentsv1\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3"
 
 var (
 	file_nomnom_payments_v1_events_proto_rawDescOnce sync.Once
