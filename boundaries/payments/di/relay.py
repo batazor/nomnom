@@ -1,40 +1,60 @@
-"""Composition root of ``payments-relay``: Outbox → Kafka (ADR 31).
+"""Container of ``payments-relay``: Outbox → Kafka (ADR 31, ADR 5)."""
 
-Owns the database for the process lifetime. The Kafka producer is created here and
-flushed by ``RelayWorker.shutdown`` as part of the drain contract.
-"""
+from collections.abc import Iterator
 
-from di import resources
+from dependency_injector import containers, providers
+
+from di.resources import (
+    ProcessResource,
+    TelemetryResource,
+    create_lifecycle,
+    postgres_database,
+    seconds,
+    telemetry_providers,
+)
 from infrastructure.messaging import KafkaPublisher, OutboxRelay, PostgresOutboxStore, RelayWorker
 from infrastructure.postgres import PostgresDatabase
-from pkg.config import RelaySettings, load_relay_settings
+from pkg.config import KafkaSettings
 
 
-def create_relay_worker(settings: RelaySettings, database: PostgresDatabase) -> RelayWorker:
-    store = PostgresOutboxStore(database, settings.database.url)
-    publisher = KafkaPublisher(settings.kafka.brokers, settings.kafka.client_id)
-    relay = OutboxRelay(
+def kafka_producer(settings: KafkaSettings, database: PostgresDatabase) -> Iterator[KafkaPublisher]:
+    """Idempotent producer, opened once the Outbox database is reachable.
+
+    ``database`` only orders the resources: the producer starts after the database
+    check and is released before the pool closes. Pending messages are flushed by
+    ``RelayWorker.shutdown`` within the drain deadline, so release adds nothing.
+    """
+    yield KafkaPublisher(settings.brokers, settings.client_id)
+
+
+class RelayContainer(containers.DeclarativeContainer):
+    """One instance per ``payments-relay`` process; ``config`` holds ``RelaySettings``.
+
+    One replica is active (advisory lock), the others are failover.
+    """
+
+    config = providers.Configuration(strict=True)
+
+    telemetry = TelemetryResource(
+        telemetry_providers, config.shutdown.provided.telemetry_flush_timeout
+    )
+    database = ProcessResource(postgres_database, config.database)
+    publisher = ProcessResource(kafka_producer, config.kafka, database)
+
+    store = providers.Singleton(PostgresOutboxStore, database, config.database.provided.url)
+    relay = providers.Singleton(
+        OutboxRelay,
         store,
         publisher,
-        batch_size=settings.outbox.batch_size,
-        retention=settings.outbox.retention,
+        batch_size=config.outbox.provided.batch_size,
+        retention=config.outbox.provided.retention,
     )
-    return RelayWorker(
+    worker = providers.Singleton(
+        RelayWorker,
         relay,
         store,
         publisher,
-        batch_size=settings.outbox.batch_size,
-        poll_interval=settings.outbox.poll_interval.total_seconds(),
+        batch_size=config.outbox.provided.batch_size,
+        poll_interval=providers.Callable(seconds, config.outbox.provided.poll_interval),
     )
-
-
-def serve(settings: RelaySettings) -> None:
-    with resources.postgres_database(settings.database) as database:
-        worker = create_relay_worker(settings, database)
-        resources.lifecycle(settings.management, settings.shutdown).run(worker)
-
-
-def run() -> None:
-    settings = load_relay_settings()
-    with resources.telemetry_providers(settings.shutdown.telemetry_flush_timeout):
-        serve(settings)
+    lifecycle = providers.Singleton(create_lifecycle, config.management, config.shutdown)

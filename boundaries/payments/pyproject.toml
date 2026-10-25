@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "authzed>=1.25.0",
     "confluent-kafka>=2.16.0",
+    "dependency-injector>=4.49.1",
     "grpcio>=1.84.1",
     "opentelemetry-exporter-otlp-proto-grpc>=1.45.1",
     "opentelemetry-sdk>=1.45.1",

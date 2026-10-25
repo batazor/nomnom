@@ -1,35 +1,76 @@
-"""Process resources shared by the payments composition roots.
+"""Resources and configuration shared by the payments containers (ADR 5).
 
-Each resource is a context manager: entering initializes it, leaving releases it, so a
-composition root owns the resource by the ``with`` block around its workers.
+Resources are generator initializers of ``providers.Resource``: code before ``yield``
+initializes, code after it releases. Two Resource provider types fix the order the
+runtime contract requires (docs/cloud-native-runtime.md): ``TelemetryResource`` is
+initialized first and shut down last, ``ProcessResource`` (database, clients) lives
+inside it. An entrypoint therefore calls::
+
+    container.init_resources(TelemetryResource)
+    try:
+        container.init_resources(ProcessResource)
+        ...
+    finally:
+        try:
+            container.shutdown_resources(ProcessResource)
+        finally:
+            container.shutdown_resources(TelemetryResource)
+
+Within a type, ``shutdown_resources`` releases dependents before their dependencies.
 """
 
-from collections.abc import Generator
-from contextlib import contextmanager
+from collections.abc import Iterator
+from dataclasses import fields
 from datetime import timedelta
+from typing import Any
+
+from dependency_injector import providers
 
 from infrastructure.postgres import PostgresDatabase, create_database
 from pkg import telemetry
-from pkg.config import DatabaseSettings, ManagementSettings, ShutdownSettings
+from pkg.config import (
+    DatabaseSettings,
+    ManagementSettings,
+    RelaySettings,
+    Settings,
+    ShutdownSettings,
+)
 from pkg.lifecycle import Lifecycle, LifecycleConfig
 
 
-@contextmanager
-def telemetry_providers(flush_timeout: timedelta) -> Generator[telemetry.Telemetry, None, None]:
-    """Global tracer and meter providers; flushed within ``flush_timeout`` on exit.
+class TelemetryResource(providers.Resource):
+    """Telemetry providers: initialized before and flushed after every other resource."""
 
-    Telemetry shutdown is the last step of the runtime contract
-    (docs/cloud-native-runtime.md, step 8), so it is the outermost resource.
+
+class ProcessResource(providers.Resource):
+    """Process-wide client or pool, owned for the lifetime of the workers."""
+
+
+# ``Configuration.provider`` is the provider's own attribute, so the section is renamed.
+_SECTION_KEYS = {"provider": "payment_provider"}
+
+
+def sections(settings: Settings | RelaySettings) -> dict[str, Any]:
+    """Validated pydantic settings by section for ``providers.Configuration.from_dict``.
+
+    Sections stay typed settings objects: adapters receive ``config.<section>`` as is.
     """
-    providers = telemetry.setup()
+    return {
+        _SECTION_KEYS.get(field.name, field.name): getattr(settings, field.name)
+        for field in fields(settings)
+    }
+
+
+def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetry]:
+    """Global tracer and meter providers; flushed within ``flush_timeout`` on shutdown."""
+    owner = telemetry.setup()
     try:
-        yield providers
+        yield owner
     finally:
-        providers.shutdown(flush_timeout.total_seconds())
+        owner.shutdown(flush_timeout.total_seconds())
 
 
-@contextmanager
-def postgres_database(settings: DatabaseSettings) -> Generator[PostgresDatabase, None, None]:
+def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
     """psycopg pool; an unreachable database stops the process before ports open.
 
     The schema is applied by ``payments-migrate`` (init container), not here.
@@ -42,7 +83,15 @@ def postgres_database(settings: DatabaseSettings) -> Generator[PostgresDatabase,
         database.close()
 
 
-def lifecycle(management: ManagementSettings, shutdown: ShutdownSettings) -> Lifecycle:
+def listen_all(port: int) -> tuple[str, int]:
+    return ("0.0.0.0", port)
+
+
+def seconds(value: timedelta) -> float:
+    return value.total_seconds()
+
+
+def create_lifecycle(management: ManagementSettings, shutdown: ShutdownSettings) -> Lifecycle:
     return Lifecycle(
         LifecycleConfig(
             management_port=management.port,
