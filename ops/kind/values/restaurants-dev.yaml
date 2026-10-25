@@ -1,0 +1,4 @@
+# Профиль dev (make kind-dev): образ stage dev запускает TypeScript без сборки dist.
+mongodb:
+  migrate:
+    command: ["node", "cmd/restaurants-migrate/main.ts"]

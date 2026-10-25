@@ -16,6 +16,7 @@
     "infrastructure/grpc/service.ts",
     "infrastructure/grpc/subject.ts",
     "infrastructure/grpc/worker.ts",
+    "infrastructure/mongodb/**/*.ts",
     "infrastructure/spicedb/**/*.ts",
     "pkg/**/*.ts",
     "slices/**/*.ts"

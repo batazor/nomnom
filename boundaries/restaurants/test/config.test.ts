@@ -51,3 +51,33 @@ test("rejects an invalid shutdown budget", () => {
 test("rejects a management port equal to the server port", () => {
   assert.throws(() => loadConfig({ MANAGEMENT__PORT: "8082" }));
 });
+
+test("MongoDB is disabled without MONGODB__URI", () => {
+  assert.deepEqual(loadConfig({}).mongodb, { enabled: false });
+  assert.deepEqual(loadConfig({ MONGODB__URI: "  " }).mongodb, {
+    enabled: false,
+  });
+});
+
+test("MongoDB config defaults the database and timeout", () => {
+  assert.deepEqual(
+    loadConfig({ MONGODB__URI: "mongodb://mongo:27017/?replicaSet=rs0" })
+      .mongodb,
+    {
+      enabled: true,
+      uri: "mongodb://mongo:27017/?replicaSet=rs0",
+      database: "restaurants",
+      timeoutMs: 5000,
+    },
+  );
+});
+
+test("MongoDB config rejects malformed values", () => {
+  assert.throws(() => loadConfig({ MONGODB__URI: "http://mongo" }));
+  assert.throws(() =>
+    loadConfig({ MONGODB__URI: "mongodb://m", MONGODB__DATABASE: "a/b" }),
+  );
+  assert.throws(() =>
+    loadConfig({ MONGODB__URI: "mongodb://m", MONGODB__TIMEOUT: "0s" }),
+  );
+});

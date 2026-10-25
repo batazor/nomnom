@@ -20,7 +20,7 @@ TypeScript.
 
 ## Use Cases
 
-Статус реализации: application handlers всех сценариев, кроме **Start / Complete Preparation Item** и **Reject After Acceptance**, реализованы change [`implement-restaurants-application-layer`](../../openspec/changes/implement-restaurants-application-layer/) поверх портов и in-memory адаптеров; transport, хранилище и брокер не подключены (см. [Статус реализации](#статус-реализации)). Новые handlers, контракты и adapters по-прежнему создаются только вместе с SDD change; пустые программные scaffolds не используются.
+Статус реализации: application handlers всех сценариев, кроме **Start / Complete Preparation Item** и **Reject After Acceptance**, реализованы change [`implement-restaurants-application-layer`](../../openspec/changes/implement-restaurants-application-layer/) поверх портов; хранилище — MongoDB, брокер не подключён, к transport подключена часть handlers (см. [Статус реализации](#статус-реализации)). Новые handlers, контракты и adapters по-прежнему создаются только вместе с SDD change; пустые программные scaffolds не используются.
 
 ### Commands
 
@@ -166,11 +166,11 @@ Change [`add-restaurant-delivery-relationships`](../../openspec/changes/add-rest
 | `restaurant:<id>#owner@user:<ownerId>` | `Restaurant.ownerId` | Register Restaurant: `TOUCH` до сохранения |
 | `restaurant:<id>#staff@user:<userId>` | `Restaurant.staff` (множество user id) | Assign Staff: `TOUCH`, Revoke Staff: `DELETE` — до сохранения |
 
-Writer — `SpiceDbRelationshipWriter` (`infrastructure/spicedb/relationships.ts`), реализует порты `OwnerRelationshipWriter` и `StaffRelationshipWriter` слайса `restaurant`. Запись синхронная, с deadline `SPICEDB__TIMEOUT`; ошибка или timeout — `AuthorizationUnavailableError`, команда отменяется без сохранения (fail closed). Assign/Revoke Staff требуют `restaurant#manage`; повтор — no-op без записи. `cmd/restaurants` собирает Register Restaurant, Assign Staff и Revoke Staff с `SpiceDbAccessControl` и этим writer над одним SpiceDB-клиентом и тем же in-memory хранилищем, что читает reconciler.
+Writer — `SpiceDbRelationshipWriter` (`infrastructure/spicedb/relationships.ts`), реализует порты `OwnerRelationshipWriter` и `StaffRelationshipWriter` слайса `restaurant`. Запись синхронная, с deadline `SPICEDB__TIMEOUT`; ошибка или timeout — `AuthorizationUnavailableError`, команда отменяется без сохранения (fail closed). Assign/Revoke Staff требуют `restaurant#manage`; повтор — no-op без записи. `cmd/restaurants` собирает Register Restaurant, Assign Staff и Revoke Staff с `SpiceDbAccessControl` и этим writer над одним SpiceDB-клиентом и той же MongoDB-коллекцией `restaurants`, что читает reconciler.
 
 `RelationshipReconciler` (`slices/restaurant/infrastructure/reconcile`) повторяет алгоритм `orders`: graph → business — постраничный `ReadRelationships` (`fully_consistent`) по `restaurant#owner` и `restaurant#staff` с проверкой по хранилищу; business → graph — по всем ресторанам. Orphan или stale связь удаляется только если она была сиротой на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` сразу; id, не подходящие под SpiceDB object id `^[a-zA-Z0-9/_|\-=+]+$`, пропускаются и считаются `unrepairable`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`, `missing_repaired`, `unrepairable`.
 
-Хранилище пока в памяти процесса, поэтому reconciler — фоновый цикл (`PeriodicLoop`, `pkg/lifecycle/periodic.ts`) внутри основного процесса: первый проход через `min(10s, RECONCILER__INTERVAL)` после старта, следующие — через интервал после окончания предыдущего; ошибка прохода пишется в log, цикл продолжается. При shutdown цикл останавливается (текущий проход прерывается между вызовами SpiceDB) до drain gRPC. Следствие in-memory хранилища: после рестарта процесса ресторанов нет, и их связи удаляются как сироты через grace.
+Reconciler — фоновый цикл (`PeriodicLoop`, `pkg/lifecycle/periodic.ts`) внутри основного процесса: первый проход через `min(10s, RECONCILER__INTERVAL)` после старта, следующие — через интервал после окончания предыдущего; ошибка прохода пишется в log, цикл продолжается. При shutdown цикл останавливается (текущий проход прерывается между вызовами SpiceDB) до drain gRPC.
 
 | Переменная | Значение | По умолчанию |
 | --- | --- | --- |
@@ -246,7 +246,17 @@ MongoDB предлагается как основное логическое х
 
 Направление для кухни: aggregate `RestaurantOrder` — отдельный document; Kitchen Queue и read models kitchen board — projections; один документ на ресторан вместе с меню и заказами не используется ([Kitchen](../../docs/kitchen.md#temporal-и-persistence)). Конкретные collections, поля, document boundaries и indexes проектируются по согласованным SDD-сценариям. Реализации репозиториев, BSON-модели и преобразования находятся в `infrastructure`; доменная модель и прикладные контракты не зависят от BSON, MongoDB driver или ODM.
 
-Решение имеет статус Proposed в [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md). Версия MongoDB, driver, ODM, инструменты schema evolution и реализация репозиториев относятся к следующим шагам.
+Решение имеет статус Proposed в [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); коллекции, границы документов, validators, индексы, эволюция схемы и атомарность конкретизированы в локальном [ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md).
+
+Реализация: официальный драйвер `mongodb` без ODM. Общие части — `pkg/infrastructure/mongodb` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекции `outbox`, `outbox_counters`, `outbox_leases` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет), `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts`), адаптеры слайсов — `slices/<slice>/infrastructure/mongodb`, реестр коллекций и миграций — `infrastructure/mongodb/collections.ts`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `outbox`, `outbox_counters`, `outbox_leases`, `schema_migrations`. Транзакции требуют replica set.
+
+| Переменная | Значение | По умолчанию |
+| --- | --- | --- |
+| `MONGODB__URI` | connection string replica set; обязателен — без него `restaurants` и `restaurants-migrate` не стартуют | — |
+| `MONGODB__DATABASE` | имя базы | `restaurants` |
+| `MONGODB__TIMEOUT` | server selection timeout; недоступная MongoDB останавливает старт | `5s` |
+
+Коллекции, validators и индексы создаёт `npm run migrate` (`cmd/restaurants-migrate`, идемпотентно); основной процесс схему не меняет.
 
 ## Событийная интеграция
 
@@ -273,14 +283,20 @@ Inbox-адаптер находится в `infrastructure/`, а транзак�
 - **Domain:** aggregate `Restaurant`; aggregate `Menu` с entity `MenuItem` и VO `Money` на `decimal.js` (меню — отдельный aggregate slice `menu`, одно на ресторан); aggregate `RestaurantOrder` с чистой FSM в виде transition table, VO `Quantity`, domain service `evaluateOrderAcceptance` поверх `RestaurantAcceptingOrders` и `MenuItemAvailable`, Domain Events с `pullEvents()`; контракты repositories в `domains/`.
 - **Application:** по одному handler на use case в `slices/<slice>/applications/<usecase>/`: Register/Update/Open/Close Restaurant, Assign/Revoke Staff, Get/List Restaurants; Create Menu, Add/Update Menu Item, Set Menu Item Availability, Get Menu; Receive Order Request, Accept Order (с Queue в одной UoW), Reject Order, Queue Restaurant Order, Start Preparation, Mark Assembled, Mark Ready for Pickup, Report Preparation Delay/Failure, Cancel Restaurant Order, Get Restaurant Order, Get Kitchen Queue, List Active Preparations, List Ready Orders.
 - **Порты:** `UnitOfWork`, `Outbox`, `Clock`, `IdGenerator`, `Subject` и application errors в `pkg/application`; узкие authorization ports в `applications/access-control.ts` каждого слайса и `OwnerRelationshipWriter`; query/read-model ports рядом с queries; ports открытых решений — `AcceptanceConditionsProvider`, `ReadyTimeEstimator`, `KitchenQueueOrdering`. Политика повтора Start Preparation/Mark Ready и политика отмены во время Preparation — обязательные параметры handlers без значения по умолчанию.
-- **Адаптеры:** только in-memory (`pkg/infrastructure/memory`, `slices/*/infrastructure/memory`) с откатом UoW, optimistic concurrency по `version` и уникальностью `orderId`; SpiceDB adapter authorization ports подключается при заданном `SPICEDB__ENDPOINT` (см. [Authorization: SpiceDB](#authorization-spicedb)); writer relationships `restaurant#owner`/`staff` и фоновый reconciler (см. [Relationships и reconciliation](#relationships-и-reconciliation)); MongoDB, Kafka/Outbox publisher и Integration Event mappers не реализованы. `GetRestaurant`, `ReceiveOrderRequest`, `CancelRestaurantOrder`, `RegisterRestaurant`, `AssignStaff` и `RevokeStaff` подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `ServiceTokenSubjectResolver` при заданной конфигурации identity, иначе с `RejectingSubjectResolver`), остальные handlers к transport пока не подключены.
+- **Адаптеры:** MongoDB (`pkg/infrastructure/mongodb`, `slices/*/infrastructure/mongodb`, см. [Хранилище: MongoDB](#хранилище-mongodb)) — UoW как транзакция, Outbox-коллекция, optimistic concurrency по `version`, уникальность `orderId` и меню на ресторан индексами; in-memory адаптеры (`pkg/infrastructure/memory`, `slices/*/infrastructure/memory`) — только для unit-тестов; SpiceDB adapter authorization ports подключается при заданном `SPICEDB__ENDPOINT` (см. [Authorization: SpiceDB](#authorization-spicedb)); writer relationships `restaurant#owner`/`staff` и фоновый reconciler (см. [Relationships и reconciliation](#relationships-и-reconciliation)); Kafka/Outbox relay и Integration Event mappers не реализованы. `GetRestaurant`, `ReceiveOrderRequest`, `CancelRestaurantOrder`, `RegisterRestaurant`, `AssignStaff` и `RevokeStaff` подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `ServiceTokenSubjectResolver` при заданной конфигурации identity, иначе с `RejectingSubjectResolver`), остальные handlers к transport пока не подключены.
 - **Не реализованы:** Start / Complete Preparation Item (item-level model не входит в MVP) и Reject After Acceptance (не разрешён до продуктового решения); courier projection в List Ready Orders; BDD `.feature`.
 
 ## Запуск
 
 Требуется Node.js 22.6 или новее с поддержкой запуска TypeScript через type stripping.
 
+Нужны MongoDB replica set и SpiceDB. Локальный single-node replica set:
+
 ```bash
+docker run -d --name restaurants-mongo -p 27017:27017 mongo:8 --replSet rs0
+docker exec restaurants-mongo mongosh --quiet --eval 'rs.initiate()'
+export MONGODB__URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true'
+npm run migrate
 npm start
 ```
 
@@ -289,6 +305,12 @@ npm start
 ```bash
 npm test
 npm run check
+```
+
+Интеграционные тесты MongoDB (`test/mongodb-integration.test.ts`) пропускаются без `MONGODB_URI`; каждый запуск создаёт и удаляет временную базу:
+
+```bash
+MONGODB_URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true' npm test
 ```
 
 Автоформатирование:

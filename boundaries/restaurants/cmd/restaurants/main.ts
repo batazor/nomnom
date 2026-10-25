@@ -14,17 +14,18 @@ import {
 } from "../../infrastructure/spicedb/access-control.ts";
 import { SpiceDbRelationshipWriter } from "../../infrastructure/spicedb/relationships.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
-import { InMemoryOutbox } from "../../pkg/infrastructure/memory/outbox.ts";
-import { InMemoryUnitOfWork } from "../../pkg/infrastructure/memory/unit-of-work.ts";
+import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
+import { MongoOutbox } from "../../pkg/infrastructure/mongodb/outbox.ts";
+import { MongoUnitOfWork } from "../../pkg/infrastructure/mongodb/unit-of-work.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../../pkg/lifecycle/periodic.ts";
 import type { KitchenAccessControl } from "../../slices/kitchenorder/applications/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../../slices/kitchenorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import { ReceiveOrderRequestHandler } from "../../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
 import {
-  createRestaurantOrderStore,
-  InMemoryRestaurantOrderRepository,
-} from "../../slices/kitchenorder/infrastructure/memory/restaurant-orders.ts";
+  createRestaurantOrderCollection,
+  MongoRestaurantOrderRepository,
+} from "../../slices/kitchenorder/infrastructure/mongodb/restaurant-orders.ts";
 import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
@@ -35,11 +36,11 @@ import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-r
 import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import {
-  createRestaurantStore,
-  InMemoryRestaurantCatalog,
-  InMemoryRestaurantMemberships,
-  InMemoryRestaurantRepository,
-} from "../../slices/restaurant/infrastructure/memory/restaurants.ts";
+  createRestaurantCollection,
+  MongoRestaurantCatalog,
+  MongoRestaurantMemberships,
+  MongoRestaurantRepository,
+} from "../../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 
 /** First reconciliation pass shortly after start. */
@@ -54,15 +55,24 @@ const subjects = await createSubjectResolver(config.identity, (message) =>
   console.warn(`restaurants ${message}`),
 );
 
+// MongoDB (ADR 8, local ADR 1) is required; collections, validators and
+// indexes are created by restaurants-migrate before the process starts.
+if (!config.mongodb.enabled) {
+  throw new Error(
+    "MONGODB__URI is required: restaurants stores its data in MongoDB",
+  );
+}
+const mongo = await connectMongoDb(config.mongodb);
+
 const clock = { now: () => new Date() };
-const unitOfWork = new InMemoryUnitOfWork();
-const outbox = new InMemoryOutbox(unitOfWork);
-const restaurantStore = createRestaurantStore();
-const orderStore = createRestaurantOrderStore();
-unitOfWork.enlist(restaurantStore);
-unitOfWork.enlist(orderStore);
-const restaurants = new InMemoryRestaurantRepository(restaurantStore);
-const restaurantOrders = new InMemoryRestaurantOrderRepository(orderStore);
+const unitOfWork = new MongoUnitOfWork(mongo.client);
+// Protobuf mappers and restaurants-relay come with the event contracts
+// (ADR 31); until then no Domain Event is written to the Outbox.
+const outbox = new MongoOutbox(mongo.db, unitOfWork);
+const restaurantCollection = createRestaurantCollection(mongo.db, unitOfWork);
+const orderCollection = createRestaurantOrderCollection(mongo.db, unitOfWork);
+const restaurants = new MongoRestaurantRepository(restaurantCollection);
+const restaurantOrders = new MongoRestaurantOrderRepository(orderCollection);
 // SpiceDB (ADR 18) is required; errors and timeouts fail closed as
 // UNAVAILABLE. Without SPICEDB__ENDPOINT the process does not start.
 let spicedb: SpiceDbClient | undefined;
@@ -89,7 +99,7 @@ if (config.spicedb.enabled) {
   });
   reconciler = new RelationshipReconciler({
     client: spicedb,
-    restaurants: new InMemoryRestaurantMemberships(restaurantStore),
+    restaurants: new MongoRestaurantMemberships(restaurantCollection),
     graceMs: config.reconciler.graceMs,
     pageSize: config.reconciler.pageSize,
     timeoutMs: config.spicedb.timeoutMs,
@@ -105,7 +115,7 @@ if (config.spicedb.enabled) {
 const service = createRestaurantsService({
   subjects,
   getRestaurant: new GetRestaurantHandler({
-    reader: new InMemoryRestaurantCatalog(restaurantStore),
+    reader: new MongoRestaurantCatalog(restaurantCollection),
   }),
   receiveOrderRequest: new ReceiveOrderRequestHandler({
     accessControl: kitchenAccessControl,
@@ -153,8 +163,8 @@ try {
     readinessDelayMs: config.shutdown.readinessDelayMs,
     drainTimeoutMs: config.shutdown.drainTimeoutMs,
   }).run(
-    // Storage is in process memory, so reconciliation (FR-445) runs here and
-    // stops before the gRPC drain.
+    // Reconciliation (FR-445) runs in this process and stops before the
+    // gRPC drain.
     new WorkerWithLoops(new GrpcWorker(server, config.server.port), [
       new PeriodicLoop(
         async (signal) => {
@@ -179,4 +189,5 @@ try {
   process.exitCode = 1;
 } finally {
   spicedb?.close();
+  await mongo.close();
 }

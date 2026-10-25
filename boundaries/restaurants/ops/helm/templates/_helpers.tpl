@@ -97,3 +97,42 @@ SpiceDB (ADR 18): с endpoint приложению нужен preshared key из
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+MongoDB (ADR 8): переменные подключения из Secret. Без uriSecret.name ничего не
+задаётся, и процессы restaurants и restaurants-migrate не стартуют (MONGODB__URI обязателен).
+*/}}
+{{- define "restaurants.mongodbEnv" -}}
+{{- with .Values.mongodb }}
+{{- if .uriSecret.name }}
+- name: MONGODB__URI
+  valueFrom:
+    secretKeyRef:
+      name: {{ .uriSecret.name | quote }}
+      key: {{ .uriSecret.key | quote }}
+- name: MONGODB__DATABASE
+  value: {{ .database | quote }}
+- name: MONGODB__TIMEOUT
+  value: {{ .timeout | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+MongoDB: имя базы и timeout в формате приложения.
+*/}}
+{{- define "restaurants.validateMongoDb" -}}
+{{- with .Values.mongodb -}}
+{{- if .uriSecret.name -}}
+{{- if not .uriSecret.key -}}
+{{- fail "mongodb.uriSecret.key is required when mongodb.uriSecret.name is set" -}}
+{{- end -}}
+{{- if not (regexMatch "^[A-Za-z0-9_-]{1,63}$" (toString .database)) -}}
+{{- fail (printf "mongodb.database must match ^[A-Za-z0-9_-]{1,63}$, got %q" (toString .database)) -}}
+{{- end -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .timeout)) -}}
+{{- fail (printf "mongodb.timeout must be a positive duration like 500ms, 5s or 1m, got %q" (toString .timeout)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

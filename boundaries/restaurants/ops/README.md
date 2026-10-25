@@ -40,9 +40,22 @@ Authorization через SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-au
 `spicedb.presharedKeySecret.name` или с неверным `spicedb.timeout` chart не рендерится.
 `spicedb.insecure: true` — только для kind.
 
+Хранилище MongoDB ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
+[локальный ADR 2](../docs/adr/0002-mongodb-collections-and-document-boundaries.md)) задаётся
+`mongodb.uriSecret` (`name`, `key` — по умолчанию `uri`), `mongodb.database` (по умолчанию
+`restaurants`) и `mongodb.timeout` (по умолчанию `5s`). Нужен replica set: Unit of Work использует
+multi-document транзакции. Пока `mongodb.uriSecret.name` пуст, `MONGODB__*` не задаются и
+приложение не стартует: `MONGODB__URI` обязателен. Если Secret задан, рендерятся `MONGODB__URI` из
+`secretKeyRef` (Secret chart не создаёт), `MONGODB__DATABASE`, `MONGODB__TIMEOUT` и — при
+`mongodb.migrate.enabled` (по умолчанию) — init container `migrate` с командой
+`mongodb.migrate.command` (по умолчанию `node dist/cmd/restaurants-migrate/main.js`; для dev-образа
+— `["node", "cmd/restaurants-migrate/main.ts"]`). Он идемпотентно создаёт коллекции, JSON Schema
+validators, индексы и применяет миграции документов до старта процесса, как `orders-migrate`.
+С неверным `mongodb.database` или `mongodb.timeout` chart не рендерится.
+
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
 к `Service` напрямую и проходят через internal gateway. Ingress, `HTTPRoute`/`GRPCRoute`,
-базы данных, Kafka, Temporal, service mesh и observability collector в chart не входят.
+MongoDB и её Secret, Kafka, Temporal, service mesh и observability collector в chart не входят.
 
 ## Команды
 
@@ -122,11 +135,11 @@ envFrom:
       name: restaurants-secrets
 
 extraEnv:
-  - name: DATABASE_PASSWORD
+  - name: SOME_TOKEN
     valueFrom:
       secretKeyRef:
-        name: restaurants-database
-        key: password
+        name: restaurants-secrets
+        key: token
 ```
 
 Secret-ресурсы chart не создаёт.

@@ -97,11 +97,11 @@ envFrom: []
 
 # Отдельные переменные окружения, включая valueFrom из внешних Secret:
 # extraEnv:
-#   - name: DATABASE_PASSWORD
+#   - name: SOME_TOKEN
 #     valueFrom:
 #       secretKeyRef:
-#         name: restaurants-database
-#         key: password
+#         name: restaurants-secrets
+#         key: token
 extraEnv: []
 
 # Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
@@ -183,6 +183,27 @@ spicedb:
     # Существующий Secret с preshared key SpiceDB; обязателен при заданном endpoint.
     name: ""
     key: "preshared-key"
+
+# Хранилище MongoDB (ADR 8, локальный ADR 1): replica set обязателен — Unit of Work
+# использует multi-document транзакции. Пока uriSecret.name пуст, MONGODB__* не задаются
+# и процесс не стартует (MONGODB__URI обязателен). Connection string (с учётными данными)
+# берётся только из Secret.
+mongodb:
+  uriSecret:
+    # Существующий Secret с connection string, например
+    # mongodb://restaurants:<password>@mongodb-restaurants.nomnom-data.svc.cluster.local:27017/restaurants?replicaSet=rs0&authSource=restaurants
+    name: ""
+    key: "uri"
+  database: "restaurants"
+  # Server selection timeout при старте и запросах (500ms, 5s, 1m).
+  timeout: "5s"
+  # init container migrate: коллекции, JSON Schema validators, индексы и миграции
+  # документов перед стартом процесса; шаги идемпотентны, параллельные реплики безопасны.
+  migrate:
+    enabled: true
+    # Команда production-образа; для dev-образа (исходники .ts) —
+    # ["node", "cmd/restaurants-migrate/main.ts"].
+    command: ["node", "dist/cmd/restaurants-migrate/main.js"]
 
 volumes: []
 volumeMounts: []

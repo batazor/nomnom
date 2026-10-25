@@ -18,6 +18,11 @@ export const SPICEDB_PRESHARED_KEY_ENV = "SPICEDB__PRESHARED_KEY";
 export const SPICEDB_INSECURE_ENV = "SPICEDB__INSECURE";
 export const SPICEDB_TIMEOUT_ENV = "SPICEDB__TIMEOUT";
 export const DEFAULT_SPICEDB_TIMEOUT = "2s";
+export const MONGODB_URI_ENV = "MONGODB__URI";
+export const MONGODB_DATABASE_ENV = "MONGODB__DATABASE";
+export const DEFAULT_MONGODB_DATABASE = "restaurants";
+export const MONGODB_TIMEOUT_ENV = "MONGODB__TIMEOUT";
+export const DEFAULT_MONGODB_TIMEOUT = "5s";
 export const RECONCILER_INTERVAL_ENV = "RECONCILER__INTERVAL";
 export const DEFAULT_RECONCILER_INTERVAL = "5m";
 export const RECONCILER_GRACE_ENV = "RECONCILER__GRACE";
@@ -89,9 +94,25 @@ export type SpiceDbEnabledConfig = Readonly<{
  */
 export type SpiceDbConfig = Readonly<{ enabled: false }> | SpiceDbEnabledConfig;
 
+/** Подключение к MongoDB (ADR 8, локальный ADR 1), когда задан `MONGODB__URI`. */
+export type MongoDbEnabledConfig = Readonly<{
+  enabled: true;
+  /** Connection string replica set; приходит из Secret, не из values. */
+  uri: string;
+  database: string;
+  /** Server selection timeout: недоступная MongoDB останавливает старт. */
+  timeoutMs: number;
+}>;
+
 /**
- * Background reconciliation of `restaurant#owner`/`staff` with the in-memory
- * restaurants (FR-445); runs inside the main process while storage is in memory.
+ * `enabled: false` при пустом `MONGODB__URI`; процессы `restaurants` и
+ * `restaurants-migrate` в этом случае не стартуют.
+ */
+export type MongoDbConfig = Readonly<{ enabled: false }> | MongoDbEnabledConfig;
+
+/**
+ * Background reconciliation of `restaurant#owner`/`staff` with the stored
+ * restaurants (FR-445); runs inside the main process.
  */
 export interface ReconcilerConfig {
   readonly intervalMs: number;
@@ -107,6 +128,7 @@ export interface AppConfig {
   readonly shutdown: ShutdownConfig;
   readonly identity: IdentityConfig;
   readonly spicedb: SpiceDbConfig;
+  readonly mongodb: MongoDbConfig;
   readonly reconciler: ReconcilerConfig;
 }
 
@@ -142,6 +164,7 @@ export function loadConfig(
     shutdown: loadShutdownConfig(environment),
     identity: loadIdentityConfig(environment),
     spicedb: loadSpiceDbConfig(environment),
+    mongodb: loadMongoDbConfig(environment),
     reconciler: loadReconcilerConfig(environment),
   });
 }
@@ -176,6 +199,33 @@ export function loadSpiceDbConfig(
     insecure,
     timeoutMs,
   });
+}
+
+const MONGODB_DATABASE_NAME = /^[A-Za-z0-9_-]{1,63}$/;
+
+export function loadMongoDbConfig(
+  environment: Record<string, string | undefined>,
+): MongoDbConfig {
+  const uri = environment[MONGODB_URI_ENV]?.trim() ?? "";
+  if (uri === "") {
+    return Object.freeze({ enabled: false });
+  }
+  if (!/^mongodb(\+srv)?:\/\//.test(uri)) {
+    throw new Error(
+      `${MONGODB_URI_ENV} must be a mongodb:// or mongodb+srv:// connection string`,
+    );
+  }
+  const database =
+    environment[MONGODB_DATABASE_ENV]?.trim() || DEFAULT_MONGODB_DATABASE;
+  if (!MONGODB_DATABASE_NAME.test(database)) {
+    throw new Error(
+      `${MONGODB_DATABASE_ENV}: invalid database name "${database}"`,
+    );
+  }
+  const timeoutMs = durationSchema
+    .refine((value) => value > 0, "MongoDB timeout must be positive")
+    .parse(environment[MONGODB_TIMEOUT_ENV]?.trim() || DEFAULT_MONGODB_TIMEOUT);
+  return Object.freeze({ enabled: true, uri, database, timeoutMs });
 }
 
 export function loadReconcilerConfig(

@@ -27,6 +27,7 @@ spec:
       {{- include "restaurants.validateShutdownBudget" . }}
       {{- include "restaurants.validateIdentity" . }}
       {{- include "restaurants.validateSpiceDb" . }}
+      {{- include "restaurants.validateMongoDb" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -37,6 +38,21 @@ spec:
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if and .Values.mongodb.migrate.enabled .Values.mongodb.uriSecret.name }}
+      # Коллекции, validators и индексы MongoDB до старта процесса (restaurants-migrate).
+      initContainers:
+        - name: migrate
+          image: {{ include "restaurants.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- toYaml .Values.mongodb.migrate.command | nindent 12 }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "restaurants.mongodbEnv" . | trim | nindent 12 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -95,6 +111,7 @@ spec:
                   key: {{ .presharedKeySecret.key | quote }}
             {{- end }}
             {{- end }}
+            {{- include "restaurants.mongodbEnv" . | trim | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
