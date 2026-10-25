@@ -59,10 +59,11 @@ type Catalog interface {
 	Snapshot(ctx context.Context, restaurantID order.RestaurantID, menuItemIDs []order.MenuItemID) (CatalogSnapshot, error)
 }
 
-// Relationships writes the creation relationship Customer → Order before commit
-// and returns the revision of that write.
+// Relationships writes the creation relationships order#customer and
+// order#restaurant in one request before commit and returns the revision of
+// that write.
 type Relationships interface {
-	GrantOrderCustomer(ctx context.Context, orderID order.ID, customerID order.CustomerID) (application.AuthorizationRevision, error)
+	GrantOrderRelationships(ctx context.Context, orderID order.ID, customerID order.CustomerID, restaurantID order.RestaurantID) (application.AuthorizationRevision, error)
 }
 
 // Revisions stores the authorization revision with the Order in the active
@@ -137,9 +138,9 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	revision, err := h.deps.Relationships.GrantOrderCustomer(ctx, orderID, customerID)
+	revision, err := h.deps.Relationships.GrantOrderRelationships(ctx, orderID, customerID, in.RestaurantID)
 	if err != nil {
-		return Result{}, fmt.Errorf("write order customer relationship: %w", err)
+		return Result{}, fmt.Errorf("write order relationships: %w", err)
 	}
 
 	// Events are pulled once so that a retried transaction writes them again.

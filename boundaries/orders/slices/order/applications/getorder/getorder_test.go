@@ -35,7 +35,7 @@ func setupWithPolicy(t *testing.T, policy getorder.CancellationPolicy, seeded ..
 	authorizer := memory.NewAuthorizer()
 	for _, o := range seeded {
 		require.NoError(t, store.Add(context.Background(), o))
-		_, err := authorizer.GrantOrderCustomer(context.Background(), o.ID(), o.CustomerID())
+		_, err := authorizer.GrantOrderRelationships(context.Background(), o.ID(), o.CustomerID(), o.RestaurantID())
 		require.NoError(t, err)
 	}
 	return getorder.NewHandler(authorizer, store, policy), authorizer

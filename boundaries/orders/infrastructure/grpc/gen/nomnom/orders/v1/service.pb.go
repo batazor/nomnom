@@ -21,6 +21,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type CancellationRequestOutcome int32
+
+const (
+	CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED       CancellationRequestOutcome = 0
+	CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_REQUESTED         CancellationRequestOutcome = 1
+	CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_ALREADY_CANCELLED CancellationRequestOutcome = 2
+)
+
+// Enum value maps for CancellationRequestOutcome.
+var (
+	CancellationRequestOutcome_name = map[int32]string{
+		0: "CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED",
+		1: "CANCELLATION_REQUEST_OUTCOME_REQUESTED",
+		2: "CANCELLATION_REQUEST_OUTCOME_ALREADY_CANCELLED",
+	}
+	CancellationRequestOutcome_value = map[string]int32{
+		"CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED":       0,
+		"CANCELLATION_REQUEST_OUTCOME_REQUESTED":         1,
+		"CANCELLATION_REQUEST_OUTCOME_ALREADY_CANCELLED": 2,
+	}
+)
+
+func (x CancellationRequestOutcome) Enum() *CancellationRequestOutcome {
+	p := new(CancellationRequestOutcome)
+	*p = x
+	return p
+}
+
+func (x CancellationRequestOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CancellationRequestOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_nomnom_orders_v1_service_proto_enumTypes[0].Descriptor()
+}
+
+func (CancellationRequestOutcome) Type() protoreflect.EnumType {
+	return &file_nomnom_orders_v1_service_proto_enumTypes[0]
+}
+
+func (x CancellationRequestOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CancellationRequestOutcome.Descriptor instead.
+func (CancellationRequestOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{0}
+}
+
 type GetOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -221,6 +270,296 @@ func (x *ListCustomerOrdersResponse) GetNextPageToken() string {
 	return ""
 }
 
+type PlaceOrderItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MenuItemId    string                 `protobuf:"bytes,1,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	Quantity      int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlaceOrderItem) Reset() {
+	*x = PlaceOrderItem{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlaceOrderItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlaceOrderItem) ProtoMessage() {}
+
+func (x *PlaceOrderItem) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlaceOrderItem.ProtoReflect.Descriptor instead.
+func (*PlaceOrderItem) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PlaceOrderItem) GetMenuItemId() string {
+	if x != nil {
+		return x.MenuItemId
+	}
+	return ""
+}
+
+func (x *PlaceOrderItem) GetQuantity() int32 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
+type PlaceOrderRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Chosen by the client and unique per Customer; a repeated request returns
+	// the Order it already placed.
+	IdempotencyKey  string            `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	RestaurantId    string            `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	Items           []*PlaceOrderItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	DeliveryAddress string            `protobuf:"bytes,4,opt,name=delivery_address,json=deliveryAddress,proto3" json:"delivery_address,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PlaceOrderRequest) Reset() {
+	*x = PlaceOrderRequest{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlaceOrderRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlaceOrderRequest) ProtoMessage() {}
+
+func (x *PlaceOrderRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlaceOrderRequest.ProtoReflect.Descriptor instead.
+func (*PlaceOrderRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *PlaceOrderRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *PlaceOrderRequest) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *PlaceOrderRequest) GetItems() []*PlaceOrderItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *PlaceOrderRequest) GetDeliveryAddress() string {
+	if x != nil {
+		return x.DeliveryAddress
+	}
+	return ""
+}
+
+type PlaceOrderResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	// True when idempotency_key already identified a placed Order.
+	Replayed bool `protobuf:"varint,2,opt,name=replayed,proto3" json:"replayed,omitempty"`
+	// False when the fulfillment start failed after commit; repeating the
+	// request with the same idempotency_key retries the start.
+	FulfillmentStarted bool `protobuf:"varint,3,opt,name=fulfillment_started,json=fulfillmentStarted,proto3" json:"fulfillment_started,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PlaceOrderResponse) Reset() {
+	*x = PlaceOrderResponse{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlaceOrderResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlaceOrderResponse) ProtoMessage() {}
+
+func (x *PlaceOrderResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlaceOrderResponse.ProtoReflect.Descriptor instead.
+func (*PlaceOrderResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *PlaceOrderResponse) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+func (x *PlaceOrderResponse) GetReplayed() bool {
+	if x != nil {
+		return x.Replayed
+	}
+	return false
+}
+
+func (x *PlaceOrderResponse) GetFulfillmentStarted() bool {
+	if x != nil {
+		return x.FulfillmentStarted
+	}
+	return false
+}
+
+type RequestOrderCancellationRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	// Client idempotency key of this Cancellation Request.
+	RequestId     string `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestOrderCancellationRequest) Reset() {
+	*x = RequestOrderCancellationRequest{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestOrderCancellationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestOrderCancellationRequest) ProtoMessage() {}
+
+func (x *RequestOrderCancellationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestOrderCancellationRequest.ProtoReflect.Descriptor instead.
+func (*RequestOrderCancellationRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RequestOrderCancellationRequest) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+func (x *RequestOrderCancellationRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *RequestOrderCancellationRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type RequestOrderCancellationResponse struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Outcome       CancellationRequestOutcome `protobuf:"varint,1,opt,name=outcome,proto3,enum=nomnom.orders.v1.CancellationRequestOutcome" json:"outcome,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestOrderCancellationResponse) Reset() {
+	*x = RequestOrderCancellationResponse{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestOrderCancellationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestOrderCancellationResponse) ProtoMessage() {}
+
+func (x *RequestOrderCancellationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestOrderCancellationResponse.ProtoReflect.Descriptor instead.
+func (*RequestOrderCancellationResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RequestOrderCancellationResponse) GetOutcome() CancellationRequestOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED
+}
+
 var File_nomnom_orders_v1_service_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_service_proto_rawDesc = "" +
@@ -238,10 +577,37 @@ const file_nomnom_orders_v1_service_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"|\n" +
 	"\x1aListCustomerOrdersResponse\x126\n" +
 	"\x06orders\x18\x01 \x03(\v2\x1e.nomnom.orders.v1.OrderSummaryR\x06orders\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xd3\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"N\n" +
+	"\x0ePlaceOrderItem\x12 \n" +
+	"\fmenu_item_id\x18\x01 \x01(\tR\n" +
+	"menuItemId\x12\x1a\n" +
+	"\bquantity\x18\x02 \x01(\x05R\bquantity\"\xc4\x01\n" +
+	"\x11PlaceOrderRequest\x12'\n" +
+	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12#\n" +
+	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x126\n" +
+	"\x05items\x18\x03 \x03(\v2 .nomnom.orders.v1.PlaceOrderItemR\x05items\x12)\n" +
+	"\x10delivery_address\x18\x04 \x01(\tR\x0fdeliveryAddress\"|\n" +
+	"\x12PlaceOrderResponse\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1a\n" +
+	"\breplayed\x18\x02 \x01(\bR\breplayed\x12/\n" +
+	"\x13fulfillment_started\x18\x03 \x01(\bR\x12fulfillmentStarted\"s\n" +
+	"\x1fRequestOrderCancellationRequest\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tR\trequestId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"j\n" +
+	" RequestOrderCancellationResponse\x12F\n" +
+	"\aoutcome\x18\x01 \x01(\x0e2,.nomnom.orders.v1.CancellationRequestOutcomeR\aoutcome*\xaa\x01\n" +
+	"\x1aCancellationRequestOutcome\x12,\n" +
+	"(CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED\x10\x00\x12*\n" +
+	"&CANCELLATION_REQUEST_OUTCOME_REQUESTED\x10\x01\x122\n" +
+	".CANCELLATION_REQUEST_OUTCOME_ALREADY_CANCELLED\x10\x022\xb0\x03\n" +
 	"\rOrdersService\x12Q\n" +
 	"\bGetOrder\x12!.nomnom.orders.v1.GetOrderRequest\x1a\".nomnom.orders.v1.GetOrderResponse\x12o\n" +
-	"\x12ListCustomerOrders\x12+.nomnom.orders.v1.ListCustomerOrdersRequest\x1a,.nomnom.orders.v1.ListCustomerOrdersResponseB\xc7\x01\n" +
+	"\x12ListCustomerOrders\x12+.nomnom.orders.v1.ListCustomerOrdersRequest\x1a,.nomnom.orders.v1.ListCustomerOrdersResponse\x12W\n" +
+	"\n" +
+	"PlaceOrder\x12#.nomnom.orders.v1.PlaceOrderRequest\x1a$.nomnom.orders.v1.PlaceOrderResponse\x12\x81\x01\n" +
+	"\x18RequestOrderCancellation\x121.nomnom.orders.v1.RequestOrderCancellationRequest\x1a2.nomnom.orders.v1.RequestOrderCancellationResponseB\xc7\x01\n" +
 	"\x14com.nomnom.orders.v1B\fServiceProtoP\x01Z?nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1;ordersv1\xa2\x02\x03NOX\xaa\x02\x10Nomnom.Orders.V1\xca\x02\x10Nomnom\\Orders\\V1\xe2\x02\x1cNomnom\\Orders\\V1\\GPBMetadata\xea\x02\x12Nomnom::Orders::V1b\x06proto3"
 
 var (
@@ -256,27 +622,40 @@ func file_nomnom_orders_v1_service_proto_rawDescGZIP() []byte {
 	return file_nomnom_orders_v1_service_proto_rawDescData
 }
 
-var file_nomnom_orders_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_nomnom_orders_v1_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_nomnom_orders_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_nomnom_orders_v1_service_proto_goTypes = []any{
-	(*GetOrderRequest)(nil),            // 0: nomnom.orders.v1.GetOrderRequest
-	(*GetOrderResponse)(nil),           // 1: nomnom.orders.v1.GetOrderResponse
-	(*ListCustomerOrdersRequest)(nil),  // 2: nomnom.orders.v1.ListCustomerOrdersRequest
-	(*ListCustomerOrdersResponse)(nil), // 3: nomnom.orders.v1.ListCustomerOrdersResponse
-	(*Order)(nil),                      // 4: nomnom.orders.v1.Order
-	(*OrderSummary)(nil),               // 5: nomnom.orders.v1.OrderSummary
+	(CancellationRequestOutcome)(0),          // 0: nomnom.orders.v1.CancellationRequestOutcome
+	(*GetOrderRequest)(nil),                  // 1: nomnom.orders.v1.GetOrderRequest
+	(*GetOrderResponse)(nil),                 // 2: nomnom.orders.v1.GetOrderResponse
+	(*ListCustomerOrdersRequest)(nil),        // 3: nomnom.orders.v1.ListCustomerOrdersRequest
+	(*ListCustomerOrdersResponse)(nil),       // 4: nomnom.orders.v1.ListCustomerOrdersResponse
+	(*PlaceOrderItem)(nil),                   // 5: nomnom.orders.v1.PlaceOrderItem
+	(*PlaceOrderRequest)(nil),                // 6: nomnom.orders.v1.PlaceOrderRequest
+	(*PlaceOrderResponse)(nil),               // 7: nomnom.orders.v1.PlaceOrderResponse
+	(*RequestOrderCancellationRequest)(nil),  // 8: nomnom.orders.v1.RequestOrderCancellationRequest
+	(*RequestOrderCancellationResponse)(nil), // 9: nomnom.orders.v1.RequestOrderCancellationResponse
+	(*Order)(nil),                            // 10: nomnom.orders.v1.Order
+	(*OrderSummary)(nil),                     // 11: nomnom.orders.v1.OrderSummary
 }
 var file_nomnom_orders_v1_service_proto_depIdxs = []int32{
-	4, // 0: nomnom.orders.v1.GetOrderResponse.order:type_name -> nomnom.orders.v1.Order
-	5, // 1: nomnom.orders.v1.ListCustomerOrdersResponse.orders:type_name -> nomnom.orders.v1.OrderSummary
-	0, // 2: nomnom.orders.v1.OrdersService.GetOrder:input_type -> nomnom.orders.v1.GetOrderRequest
-	2, // 3: nomnom.orders.v1.OrdersService.ListCustomerOrders:input_type -> nomnom.orders.v1.ListCustomerOrdersRequest
-	1, // 4: nomnom.orders.v1.OrdersService.GetOrder:output_type -> nomnom.orders.v1.GetOrderResponse
-	3, // 5: nomnom.orders.v1.OrdersService.ListCustomerOrders:output_type -> nomnom.orders.v1.ListCustomerOrdersResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	10, // 0: nomnom.orders.v1.GetOrderResponse.order:type_name -> nomnom.orders.v1.Order
+	11, // 1: nomnom.orders.v1.ListCustomerOrdersResponse.orders:type_name -> nomnom.orders.v1.OrderSummary
+	5,  // 2: nomnom.orders.v1.PlaceOrderRequest.items:type_name -> nomnom.orders.v1.PlaceOrderItem
+	0,  // 3: nomnom.orders.v1.RequestOrderCancellationResponse.outcome:type_name -> nomnom.orders.v1.CancellationRequestOutcome
+	1,  // 4: nomnom.orders.v1.OrdersService.GetOrder:input_type -> nomnom.orders.v1.GetOrderRequest
+	3,  // 5: nomnom.orders.v1.OrdersService.ListCustomerOrders:input_type -> nomnom.orders.v1.ListCustomerOrdersRequest
+	6,  // 6: nomnom.orders.v1.OrdersService.PlaceOrder:input_type -> nomnom.orders.v1.PlaceOrderRequest
+	8,  // 7: nomnom.orders.v1.OrdersService.RequestOrderCancellation:input_type -> nomnom.orders.v1.RequestOrderCancellationRequest
+	2,  // 8: nomnom.orders.v1.OrdersService.GetOrder:output_type -> nomnom.orders.v1.GetOrderResponse
+	4,  // 9: nomnom.orders.v1.OrdersService.ListCustomerOrders:output_type -> nomnom.orders.v1.ListCustomerOrdersResponse
+	7,  // 10: nomnom.orders.v1.OrdersService.PlaceOrder:output_type -> nomnom.orders.v1.PlaceOrderResponse
+	9,  // 11: nomnom.orders.v1.OrdersService.RequestOrderCancellation:output_type -> nomnom.orders.v1.RequestOrderCancellationResponse
+	8,  // [8:12] is the sub-list for method output_type
+	4,  // [4:8] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_service_proto_init() }
@@ -290,13 +669,14 @@ func file_nomnom_orders_v1_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_orders_v1_service_proto_rawDesc), len(file_nomnom_orders_v1_service_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   4,
+			NumEnums:      1,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_nomnom_orders_v1_service_proto_goTypes,
 		DependencyIndexes: file_nomnom_orders_v1_service_proto_depIdxs,
+		EnumInfos:         file_nomnom_orders_v1_service_proto_enumTypes,
 		MessageInfos:      file_nomnom_orders_v1_service_proto_msgTypes,
 	}.Build()
 	File_nomnom_orders_v1_service_proto = out.File

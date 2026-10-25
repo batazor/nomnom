@@ -23,6 +23,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpickup"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
+	"nomnom/orders/slices/order/infrastructure/memory"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
@@ -98,7 +99,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	}
 	type fact func(ctx context.Context, eventID string) error
 	confirm := confirmorder.NewHandler(store, store, store, port)
-	assign := recordcourierassignment.NewHandler(store, store, store, port)
+	assign := recordcourierassignment.NewHandler(store, store, store, port, store, memory.NewAuthorizer())
 	ready := recordorderready.NewHandler(store, store, store, port)
 	pickup := recordpickup.NewHandler(store, store, store, port)
 	complete := recorddeliverycompletion.NewHandler(store, store, store, port)

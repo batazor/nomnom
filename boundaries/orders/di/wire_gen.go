@@ -35,10 +35,23 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	module := di.NewModule(diStore, authorizer, v)
+	catalog := di.NewCatalog()
+	temporalConfig := cfg.Temporal
+	client, cleanup3, err := NewTemporalClient(temporalConfig)
+	if err != nil {
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	fulfillmentConfig := cfg.Fulfillment
+	workflow := NewFulfillmentWorkflow(client, fulfillmentConfig)
+	clock := di.NewClock()
+	idGenerator := di.NewOrderIDs()
+	module := di.NewModule(diStore, authorizer, v, catalog, workflow, clock, idGenerator)
 	identityConfig := cfg.Identity
 	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
 	if err != nil {
+		cleanup3()
 		cleanup2()
 		cleanup()
 		return nil, nil, err
@@ -46,6 +59,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	server := NewGRPCServer(module, subjectResolver)
 	app := NewApp(serverConfig, server, module)
 	return app, func() {
+		cleanup3()
 		cleanup2()
 		cleanup()
 	}, nil
@@ -77,8 +91,15 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 		return nil, nil, err
 	}
 	diStore := di.NewStore(store)
-	kafkaConsumer := NewKafkaConsumer(cfg, diStore)
+	spiceDBConfig := cfg.SpiceDB
+	v, cleanup2, err := di.NewCourierRelationships(spiceDBConfig)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	kafkaConsumer := NewKafkaConsumer(cfg, diStore, v)
 	return kafkaConsumer, func() {
+		cleanup2()
 		cleanup()
 	}, nil
 }

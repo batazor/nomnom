@@ -2,6 +2,8 @@ package reconcile
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"strconv"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/postgres"
@@ -50,22 +53,36 @@ func newEnv(t *testing.T) *env {
 	return e
 }
 
-func (e *env) touch(orderID, customer string) {
+var customerRelation, courierRelation, deliveryRelation = Relations[0], Relations[2], Relations[3]
+
+func (e *env) touch(orderID, customer string) { e.touchRelation(customerRelation, orderID, customer) }
+
+func (e *env) touchRelation(relation Relation, orderID, subject string) {
 	e.t.Helper()
-	_, err := e.permissions.WriteRelationships(e.ctx, writeRequest(v1.RelationshipUpdate_OPERATION_TOUCH, orderID, customer))
+	_, err := e.permissions.WriteRelationships(e.ctx, writeRequest(relation, v1.RelationshipUpdate_OPERATION_TOUCH, orderID, subject))
 	require.NoError(e.t, err)
 }
 
 func (e *env) hasRelationship(orderID, customer string) bool {
+	return e.hasRelation(customerRelation, orderID, customer)
+}
+
+func (e *env) hasRelation(relation Relation, orderID, subject string) bool {
 	e.t.Helper()
-	resp, err := e.permissions.CheckPermission(e.ctx, &v1.CheckPermissionRequest{
+	stream, err := e.permissions.ReadRelationships(e.ctx, &v1.ReadRelationshipsRequest{
 		Consistency: &v1.Consistency{Requirement: &v1.Consistency_FullyConsistent{FullyConsistent: true}},
-		Resource:    &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: orderID},
-		Permission:  "view",
-		Subject:     &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: subjectUser, ObjectId: customer}},
+		RelationshipFilter: &v1.RelationshipFilter{
+			ResourceType: resourceOrder, OptionalResourceId: orderID, OptionalRelation: string(relation.Name),
+			OptionalSubjectFilter: &v1.SubjectFilter{SubjectType: relation.SubjectType, OptionalSubjectId: subject},
+		},
 	})
 	require.NoError(e.t, err)
-	return resp.GetPermissionship() == v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION
+	_, err = stream.Recv()
+	if errors.Is(err, io.EOF) {
+		return false
+	}
+	require.NoError(e.t, err)
+	return true
 }
 
 func (e *env) pass(after time.Duration) Stats {
@@ -114,4 +131,27 @@ func TestReconcileOrderCustomerRelationships(t *testing.T) {
 	assert.False(t, e.hasRelationship(stale, "customer-wrong"))
 	assert.True(t, e.hasRelationship(stale, "customer-stale"))
 	assert.True(t, e.hasRelationship(committing, "customer-committing"), "a committed Order keeps its relationship")
+}
+
+// AC-524: courier and delivery relationships follow the stored Courier
+// Assignment; restaurant follows the Order.
+func TestReconcileCourierAndRestaurantRelationships(t *testing.T) {
+	e := newEnv(t)
+	assigned := id("assigned")
+	require.NoError(t, e.store.Add(e.ctx, ordertest.New(t, order.ID(assigned))))
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(assigned), recordcourierassignment.Assignment{
+		DeliveryID: "delivery-1", CourierID: "courier-new", AssignedAt: e.now,
+	}, ""))
+	// The previous courier survived a lost DELETE.
+	e.touchRelation(courierRelation, assigned, "courier-old")
+
+	e.pass(0)
+	assert.True(t, e.hasRelation(courierRelation, assigned, "courier-new"), "missing courier is restored")
+	assert.True(t, e.hasRelation(deliveryRelation, assigned, "delivery-1"), "missing delivery is restored")
+	assert.True(t, e.hasRelation(Relations[1], assigned, "restaurant-1"), "missing restaurant is restored")
+	assert.True(t, e.hasRelation(courierRelation, assigned, "courier-old"), "first sighting only marks a candidate")
+
+	e.pass(11 * time.Minute)
+	assert.False(t, e.hasRelation(courierRelation, assigned, "courier-old"), "stale courier is deleted after grace")
+	assert.True(t, e.hasRelation(courierRelation, assigned, "courier-new"))
 }

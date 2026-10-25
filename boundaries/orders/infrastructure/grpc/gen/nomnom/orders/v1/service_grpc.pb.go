@@ -19,8 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	OrdersService_GetOrder_FullMethodName           = "/nomnom.orders.v1.OrdersService/GetOrder"
-	OrdersService_ListCustomerOrders_FullMethodName = "/nomnom.orders.v1.OrdersService/ListCustomerOrders"
+	OrdersService_GetOrder_FullMethodName                 = "/nomnom.orders.v1.OrdersService/GetOrder"
+	OrdersService_ListCustomerOrders_FullMethodName       = "/nomnom.orders.v1.OrdersService/ListCustomerOrders"
+	OrdersService_PlaceOrder_FullMethodName               = "/nomnom.orders.v1.OrdersService/PlaceOrder"
+	OrdersService_RequestOrderCancellation_FullMethodName = "/nomnom.orders.v1.OrdersService/RequestOrderCancellation"
 )
 
 // OrdersServiceClient is the client API for OrdersService service.
@@ -29,6 +31,12 @@ const (
 type OrdersServiceClient interface {
 	GetOrder(ctx context.Context, in *GetOrderRequest, opts ...grpc.CallOption) (*GetOrderResponse, error)
 	ListCustomerOrders(ctx context.Context, in *ListCustomerOrdersRequest, opts ...grpc.CallOption) (*ListCustomerOrdersResponse, error)
+	// PlaceOrder places an Order for the calling Customer; the Customer is the
+	// verified subject of the call, never a request field.
+	PlaceOrder(ctx context.Context, in *PlaceOrderRequest, opts ...grpc.CallOption) (*PlaceOrderResponse, error)
+	// RequestOrderCancellation hands a Cancellation Request to the fulfillment
+	// workflow; the Order is cancelled by the workflow, not by this call.
+	RequestOrderCancellation(ctx context.Context, in *RequestOrderCancellationRequest, opts ...grpc.CallOption) (*RequestOrderCancellationResponse, error)
 }
 
 type ordersServiceClient struct {
@@ -59,12 +67,38 @@ func (c *ordersServiceClient) ListCustomerOrders(ctx context.Context, in *ListCu
 	return out, nil
 }
 
+func (c *ordersServiceClient) PlaceOrder(ctx context.Context, in *PlaceOrderRequest, opts ...grpc.CallOption) (*PlaceOrderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PlaceOrderResponse)
+	err := c.cc.Invoke(ctx, OrdersService_PlaceOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ordersServiceClient) RequestOrderCancellation(ctx context.Context, in *RequestOrderCancellationRequest, opts ...grpc.CallOption) (*RequestOrderCancellationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestOrderCancellationResponse)
+	err := c.cc.Invoke(ctx, OrdersService_RequestOrderCancellation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrdersServiceServer is the server API for OrdersService service.
 // All implementations must embed UnimplementedOrdersServiceServer
 // for forward compatibility.
 type OrdersServiceServer interface {
 	GetOrder(context.Context, *GetOrderRequest) (*GetOrderResponse, error)
 	ListCustomerOrders(context.Context, *ListCustomerOrdersRequest) (*ListCustomerOrdersResponse, error)
+	// PlaceOrder places an Order for the calling Customer; the Customer is the
+	// verified subject of the call, never a request field.
+	PlaceOrder(context.Context, *PlaceOrderRequest) (*PlaceOrderResponse, error)
+	// RequestOrderCancellation hands a Cancellation Request to the fulfillment
+	// workflow; the Order is cancelled by the workflow, not by this call.
+	RequestOrderCancellation(context.Context, *RequestOrderCancellationRequest) (*RequestOrderCancellationResponse, error)
 	mustEmbedUnimplementedOrdersServiceServer()
 }
 
@@ -80,6 +114,12 @@ func (UnimplementedOrdersServiceServer) GetOrder(context.Context, *GetOrderReque
 }
 func (UnimplementedOrdersServiceServer) ListCustomerOrders(context.Context, *ListCustomerOrdersRequest) (*ListCustomerOrdersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListCustomerOrders not implemented")
+}
+func (UnimplementedOrdersServiceServer) PlaceOrder(context.Context, *PlaceOrderRequest) (*PlaceOrderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PlaceOrder not implemented")
+}
+func (UnimplementedOrdersServiceServer) RequestOrderCancellation(context.Context, *RequestOrderCancellationRequest) (*RequestOrderCancellationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestOrderCancellation not implemented")
 }
 func (UnimplementedOrdersServiceServer) mustEmbedUnimplementedOrdersServiceServer() {}
 func (UnimplementedOrdersServiceServer) testEmbeddedByValue()                       {}
@@ -138,6 +178,42 @@ func _OrdersService_ListCustomerOrders_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OrdersService_PlaceOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PlaceOrderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrdersServiceServer).PlaceOrder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrdersService_PlaceOrder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrdersServiceServer).PlaceOrder(ctx, req.(*PlaceOrderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OrdersService_RequestOrderCancellation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestOrderCancellationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrdersServiceServer).RequestOrderCancellation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrdersService_RequestOrderCancellation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrdersServiceServer).RequestOrderCancellation(ctx, req.(*RequestOrderCancellationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // OrdersService_ServiceDesc is the grpc.ServiceDesc for OrdersService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -152,6 +228,14 @@ var OrdersService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListCustomerOrders",
 			Handler:    _OrdersService_ListCustomerOrders_Handler,
+		},
+		{
+			MethodName: "PlaceOrder",
+			Handler:    _OrdersService_PlaceOrder_Handler,
+		},
+		{
+			MethodName: "RequestOrderCancellation",
+			Handler:    _OrdersService_RequestOrderCancellation_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

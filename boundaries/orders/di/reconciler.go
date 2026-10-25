@@ -15,8 +15,8 @@ import (
 )
 
 // RelationshipReconciler — lifecycle.Worker процесса orders-reconciler: сверяет
-// order#customer в SpiceDB с заказами PostgreSQL сразу после старта и затем
-// каждые interval. Ошибка прохода логируется; следующий проход повторит его.
+// relations order (customer, restaurant, courier, delivery) в SpiceDB с заказами
+// PostgreSQL сразу после старта и затем каждые interval. Ошибка прохода логируется; следующий проход повторит его.
 type RelationshipReconciler struct {
 	reconciler *reconcile.Reconciler
 	interval   time.Duration
@@ -48,9 +48,9 @@ func (r *RelationshipReconciler) Run() error {
 		case r.ctx.Err() != nil:
 			return nil
 		case err != nil:
-			log.Printf("reconcile order#customer failed: %v", err)
+			log.Printf("reconcile order relationships failed: %v", err)
 		default:
-			log.Printf("reconcile order#customer: checked=%d orphans_pending=%d orphans_deleted=%d missing_repaired=%d unrepairable=%d",
+			log.Printf("reconcile order relationships: checked=%d orphans_pending=%d orphans_deleted=%d missing_repaired=%d unrepairable=%d",
 				stats.Checked, stats.OrphansPending, stats.OrphansDeleted, stats.MissingRepaired, stats.Unrepairable)
 		}
 		select {

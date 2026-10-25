@@ -316,6 +316,68 @@ func (x *RestaurantOrderReady) GetOrderId() string {
 	return ""
 }
 
+// Kitchen Order отменён по запросу orders (Cancel Restaurant Order);
+// preparation_started — отмена произошла после начала Preparation.
+type RestaurantOrderCancelled struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	OrderId            string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Reason             string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	PreparationStarted bool                   `protobuf:"varint,3,opt,name=preparation_started,json=preparationStarted,proto3" json:"preparation_started,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *RestaurantOrderCancelled) Reset() {
+	*x = RestaurantOrderCancelled{}
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestaurantOrderCancelled) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestaurantOrderCancelled) ProtoMessage() {}
+
+func (x *RestaurantOrderCancelled) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestaurantOrderCancelled.ProtoReflect.Descriptor instead.
+func (*RestaurantOrderCancelled) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RestaurantOrderCancelled) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+func (x *RestaurantOrderCancelled) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *RestaurantOrderCancelled) GetPreparationStarted() bool {
+	if x != nil {
+		return x.PreparationStarted
+	}
+	return false
+}
+
 var File_nomnom_restaurants_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_events_proto_rawDesc = "" +
@@ -335,7 +397,11 @@ const file_nomnom_restaurants_v1_events_proto_rawDesc = "" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"1\n" +
 	"\x14RestaurantOrderReady\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderIdB\xfb\x01\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\"~\n" +
+	"\x18RestaurantOrderCancelled\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12/\n" +
+	"\x13preparation_started\x18\x03 \x01(\bR\x12preparationStartedB\xfb\x01\n" +
 	"\x19com.nomnom.restaurants.v1B\vEventsProtoP\x01Z[nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1;restaurantsv1\xa2\x02\x03NRX\xaa\x02\x15Nomnom.Restaurants.V1\xca\x02\x15Nomnom\\Restaurants\\V1\xe2\x02!Nomnom\\Restaurants\\V1\\GPBMetadata\xea\x02\x17Nomnom::Restaurants::V1b\x06proto3"
 
 var (
@@ -350,18 +416,19 @@ func file_nomnom_restaurants_v1_events_proto_rawDescGZIP() []byte {
 	return file_nomnom_restaurants_v1_events_proto_rawDescData
 }
 
-var file_nomnom_restaurants_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_nomnom_restaurants_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_nomnom_restaurants_v1_events_proto_goTypes = []any{
-	(*RestaurantOrderAccepted)(nil), // 0: nomnom.restaurants.v1.RestaurantOrderAccepted
-	(*RestaurantOrderRejected)(nil), // 1: nomnom.restaurants.v1.RestaurantOrderRejected
-	(*PreparationStarted)(nil),      // 2: nomnom.restaurants.v1.PreparationStarted
-	(*PreparationDelayed)(nil),      // 3: nomnom.restaurants.v1.PreparationDelayed
-	(*PreparationFailed)(nil),       // 4: nomnom.restaurants.v1.PreparationFailed
-	(*RestaurantOrderReady)(nil),    // 5: nomnom.restaurants.v1.RestaurantOrderReady
-	(*timestamppb.Timestamp)(nil),   // 6: google.protobuf.Timestamp
+	(*RestaurantOrderAccepted)(nil),  // 0: nomnom.restaurants.v1.RestaurantOrderAccepted
+	(*RestaurantOrderRejected)(nil),  // 1: nomnom.restaurants.v1.RestaurantOrderRejected
+	(*PreparationStarted)(nil),       // 2: nomnom.restaurants.v1.PreparationStarted
+	(*PreparationDelayed)(nil),       // 3: nomnom.restaurants.v1.PreparationDelayed
+	(*PreparationFailed)(nil),        // 4: nomnom.restaurants.v1.PreparationFailed
+	(*RestaurantOrderReady)(nil),     // 5: nomnom.restaurants.v1.RestaurantOrderReady
+	(*RestaurantOrderCancelled)(nil), // 6: nomnom.restaurants.v1.RestaurantOrderCancelled
+	(*timestamppb.Timestamp)(nil),    // 7: google.protobuf.Timestamp
 }
 var file_nomnom_restaurants_v1_events_proto_depIdxs = []int32{
-	6, // 0: nomnom.restaurants.v1.PreparationDelayed.expected_ready_at:type_name -> google.protobuf.Timestamp
+	7, // 0: nomnom.restaurants.v1.PreparationDelayed.expected_ready_at:type_name -> google.protobuf.Timestamp
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -380,7 +447,7 @@ func file_nomnom_restaurants_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_restaurants_v1_events_proto_rawDesc), len(file_nomnom_restaurants_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

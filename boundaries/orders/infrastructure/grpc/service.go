@@ -13,8 +13,11 @@ import (
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/application"
+	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/requestordercancellation"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -69,6 +72,63 @@ func (s *Service) ListCustomerOrders(ctx context.Context, request *ordersv1.List
 		response.Orders = append(response.Orders, orderSummary(summary))
 	}
 	return response, nil
+}
+
+// PlaceOrder places an Order for the verified subject. Only a user subject is a
+// Customer; until the BFF user identity exists, service subjects get
+// PERMISSION_DENIED from the use case.
+func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRequest) (*ordersv1.PlaceOrderResponse, error) {
+	subject, err := s.subjects.Resolve(ctx)
+	if err != nil {
+		return nil, transportError(err)
+	}
+	items := make([]placeorder.ItemInput, 0, len(request.GetItems()))
+	for _, item := range request.GetItems() {
+		items = append(items, placeorder.ItemInput{MenuItemID: order.MenuItemID(item.GetMenuItemId()), Quantity: int(item.GetQuantity())})
+	}
+	result, err := s.module.PlaceOrder.Handle(ctx, placeorder.Input{
+		Subject:         subject,
+		IdempotencyKey:  request.GetIdempotencyKey(),
+		RestaurantID:    order.RestaurantID(request.GetRestaurantId()),
+		Items:           items,
+		DeliveryAddress: request.GetDeliveryAddress(),
+	})
+	if err != nil {
+		return nil, transportError(err)
+	}
+	return &ordersv1.PlaceOrderResponse{
+		OrderId:            string(result.OrderID),
+		Replayed:           result.Replayed,
+		FulfillmentStarted: result.FulfillmentStarted,
+	}, nil
+}
+
+func (s *Service) RequestOrderCancellation(ctx context.Context, request *ordersv1.RequestOrderCancellationRequest) (*ordersv1.RequestOrderCancellationResponse, error) {
+	subject, err := s.subjects.Resolve(ctx)
+	if err != nil {
+		return nil, transportError(err)
+	}
+	result, err := s.module.RequestOrderCancellation.Handle(ctx, requestordercancellation.Input{
+		Subject:   subject,
+		OrderID:   order.ID(request.GetOrderId()),
+		RequestID: request.GetRequestId(),
+		Reason:    request.GetReason(),
+	})
+	if err != nil {
+		return nil, transportError(err)
+	}
+	return &ordersv1.RequestOrderCancellationResponse{Outcome: cancellationOutcome(result.Outcome)}, nil
+}
+
+func cancellationOutcome(outcome requestordercancellation.Outcome) ordersv1.CancellationRequestOutcome {
+	switch outcome {
+	case requestordercancellation.OutcomeRequested:
+		return ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_REQUESTED
+	case requestordercancellation.OutcomeAlreadyCancelled:
+		return ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_ALREADY_CANCELLED
+	default:
+		return ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED
+	}
 }
 
 func orderView(view getorder.OrderView) *ordersv1.Order {
@@ -142,13 +202,27 @@ func orderState(state order.State) ordersv1.OrderState {
 	}
 }
 
+// transportError maps application and domain errors to the API error table of
+// the README. An unavailable dependency is checked before permission denial:
+// fail-closed authorization wraps it, and the caller may retry it.
 func transportError(err error) error {
 	code, reason, message := codes.Internal, "INTERNAL_ERROR", "internal error"
+	var notOrderable order.NotOrderable
+	var invalidTransition order.InvalidTransition
+	var cancellationNotAllowed order.CancellationNotAllowed
 	switch {
 	case errors.Is(err, ErrUnauthenticated):
 		code, reason, message = codes.Unauthenticated, "AUTHENTICATION_REQUIRED", err.Error()
+	case errors.Is(err, application.ErrDependencyUnavailable), errors.Is(err, fulfillment.ErrWorkflowNotFound):
+		code, reason, message = codes.Unavailable, "DEPENDENCY_UNAVAILABLE", "dependency unavailable"
 	case errors.Is(err, application.ErrInvalidInput):
 		code, reason, message = codes.InvalidArgument, "INVALID_ARGUMENT", err.Error()
+	case errors.Is(err, vo.ErrInvalidValue), errors.As(err, &notOrderable),
+		errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem):
+		code, reason, message = codes.InvalidArgument, "INVALID_ORDER", err.Error()
+	case errors.As(err, &invalidTransition), errors.As(err, &cancellationNotAllowed),
+		errors.Is(err, fulfillment.ErrCancellationRefused):
+		code, reason, message = codes.FailedPrecondition, "ORDER_STATE_CONFLICT", err.Error()
 	case errors.Is(err, application.ErrPermissionDenied):
 		code, reason, message = codes.PermissionDenied, "OPERATION_NOT_ALLOWED", err.Error()
 	case errors.Is(err, order.ErrOrderNotFound):

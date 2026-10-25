@@ -7,8 +7,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-// ReconcilerConfig drives the reconciliation of order#customer relationships
-// (docs/security.md). Grace must exceed the longest placement transaction.
+// ReconcilerConfig drives the reconciliation of the order relationships
+// (docs/security.md). Grace must exceed the longest transaction that writes a
+// relationship before its commit: placement and courier assignment.
 type ReconcilerConfig struct {
 	Interval time.Duration `mapstructure:"interval"`
 	Grace    time.Duration `mapstructure:"grace"`

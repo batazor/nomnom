@@ -1,6 +1,7 @@
-// Package reconcile keeps the authorization graph order#customer consistent
-// with the Orders in PostgreSQL (docs/security.md, relationship lifecycle):
-// it deletes orphan and stale relationships after a grace period and restores
+// Package reconcile keeps the order relationships of the authorization graph
+// (order#customer, order#restaurant, order#courier, order#delivery) consistent
+// with the Orders in PostgreSQL (docs/security.md, relationship lifecycle): it
+// deletes orphan and stale relationships after a grace period and restores
 // missing ones. SpiceDB stays a derived graph; PostgreSQL is the source of truth.
 package reconcile
 
@@ -20,26 +21,36 @@ import (
 	"nomnom/orders/slices/order/infrastructure/postgres"
 )
 
-const (
-	resourceOrder    = "order"
-	relationCustomer = "customer"
-	subjectUser      = "user"
-)
+const resourceOrder = "order"
+
+// Relation is one reconciled relation of order and the object type of its subject.
+type Relation struct {
+	Name        postgres.Relation
+	SubjectType string
+}
+
+// Relations are the order relations written by orders, in reconciliation order.
+var Relations = []Relation{
+	{Name: postgres.RelationCustomer, SubjectType: "user"},
+	{Name: postgres.RelationRestaurant, SubjectType: "restaurant"},
+	{Name: postgres.RelationCourier, SubjectType: "user"},
+	{Name: postgres.RelationDelivery, SubjectType: "delivery"},
+}
 
 // Orders is the business side of the reconciliation.
 type Orders interface {
-	CustomersOf(ctx context.Context, ids []string) (map[string]string, error)
-	OrderCustomerPage(ctx context.Context, afterID string, limit int) ([]postgres.OrderCustomer, error)
+	SubjectsOf(ctx context.Context, relation postgres.Relation, ids []string) (map[string]string, error)
+	RelationPage(ctx context.Context, relation postgres.Relation, afterID string, limit int) ([]postgres.RelationSubject, error)
 	RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error
 }
 
-// Stats are the drift counters of one pass.
+// Stats are the drift counters of one pass over all relations.
 type Stats struct {
 	Checked         int
 	OrphansPending  int
 	OrphansDeleted  int
 	MissingRepaired int
-	// Unrepairable counts Orders whose id SpiceDB cannot store; their placement
+	// Unrepairable counts Orders whose ids SpiceDB cannot store; their writers
 	// could not have written a relationship either.
 	Unrepairable int
 }
@@ -48,8 +59,8 @@ type Stats struct {
 var objectID = regexp.MustCompile(`^[a-zA-Z0-9/_|\-=+]+$`)
 
 // Reconciler remembers orphan candidates between passes: a relationship is
-// deleted only when it stayed orphan for at least grace, because placement
-// writes it before the Order commits.
+// deleted only when it stayed orphan for at least grace, because placement and
+// the courier assignment consumer write it before their transaction commits.
 type Reconciler struct {
 	permissions v1.PermissionsServiceClient
 	orders      Orders
@@ -66,17 +77,34 @@ func New(permissions v1.PermissionsServiceClient, orders Orders, grace time.Dura
 	}
 }
 
-// Reconcile runs one pass: graph → business (orphans), then business → graph (missing).
+// Reconcile runs one pass over every relation. A candidate of a relation that
+// is no longer orphan is forgotten by the pass of that relation.
 func (r *Reconciler) Reconcile(ctx context.Context) (Stats, error) {
 	var stats Stats
-	present := map[string]bool{} // "order:customer" of every relationship seen
 	orphans := map[string]bool{}
+	for _, relation := range Relations {
+		if err := r.reconcile(ctx, relation, &stats, orphans); err != nil {
+			return stats, err
+		}
+	}
+	for key := range r.candidates {
+		if !orphans[key] {
+			delete(r.candidates, key)
+		}
+	}
+	return stats, nil
+}
+
+// reconcile runs graph → business (orphans), then business → graph (missing)
+// for one relation.
+func (r *Reconciler) reconcile(ctx context.Context, relation Relation, stats *Stats, orphans map[string]bool) error {
+	present := map[string]bool{} // "order:subject" of every relationship seen
 
 	var cursor *v1.Cursor
 	for {
-		page, next, err := r.readPage(ctx, cursor)
+		page, next, err := r.readPage(ctx, relation, cursor)
 		if err != nil {
-			return stats, err
+			return err
 		}
 		if len(page) == 0 {
 			break
@@ -85,18 +113,18 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Stats, error) {
 		for _, rel := range page {
 			ids = append(ids, rel.GetResource().GetObjectId())
 		}
-		customers, err := r.orders.CustomersOf(ctx, ids)
+		subjects, err := r.orders.SubjectsOf(ctx, relation.Name, ids)
 		if err != nil {
-			return stats, err
+			return err
 		}
 		for _, rel := range page {
 			stats.Checked++
-			id, customer := rel.GetResource().GetObjectId(), rel.GetSubject().GetObject().GetObjectId()
-			present[id+":"+customer] = true
-			if stored, ok := customers[id]; ok && stored == customer {
+			id, subject := rel.GetResource().GetObjectId(), rel.GetSubject().GetObject().GetObjectId()
+			present[id+":"+subject] = true
+			if stored, ok := subjects[id]; ok && stored == subject {
 				continue
 			}
-			key := id + ":" + customer
+			key := string(relation.Name) + ":" + id + ":" + subject
 			orphans[key] = true
 			first, seen := r.candidates[key]
 			if !seen {
@@ -108,8 +136,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Stats, error) {
 				stats.OrphansPending++
 				continue
 			}
-			if err := r.write(ctx, v1.RelationshipUpdate_OPERATION_DELETE, id, customer); err != nil {
-				return stats, err
+			if err := r.write(ctx, relation, v1.RelationshipUpdate_OPERATION_DELETE, id, subject); err != nil {
+				return err
 			}
 			delete(r.candidates, key)
 			stats.OrphansDeleted++
@@ -119,53 +147,47 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Stats, error) {
 		}
 		cursor = next
 	}
-	// A candidate that is no longer orphan (its Order committed) is forgotten.
-	for key := range r.candidates {
-		if !orphans[key] {
-			delete(r.candidates, key)
-		}
-	}
 
 	after := ""
 	for {
-		page, err := r.orders.OrderCustomerPage(ctx, after, r.pageSize)
+		page, err := r.orders.RelationPage(ctx, relation.Name, after, r.pageSize)
 		if err != nil {
-			return stats, err
+			return err
 		}
 		for _, row := range page {
-			if present[row.OrderID+":"+row.CustomerID] {
+			if present[row.OrderID+":"+row.SubjectID] {
 				continue
 			}
-			if !objectID.MatchString(row.OrderID) || !objectID.MatchString(row.CustomerID) {
-				log.Printf("reconcile: order %q of customer %q has an id SpiceDB cannot store", row.OrderID, row.CustomerID)
+			if !objectID.MatchString(row.OrderID) || !objectID.MatchString(row.SubjectID) {
+				log.Printf("reconcile: order %q with %s %q has an id SpiceDB cannot store", row.OrderID, relation.Name, row.SubjectID)
 				stats.Unrepairable++
 				continue
 			}
-			revision, err := r.touch(ctx, row.OrderID, row.CustomerID)
+			revision, err := r.touch(ctx, relation, row.OrderID, row.SubjectID)
 			if err != nil {
-				return stats, err
+				return err
 			}
 			if err := r.orders.RememberRevision(ctx, order.ID(row.OrderID), revision); err != nil {
-				return stats, err
+				return err
 			}
 			stats.MissingRepaired++
 		}
 		if len(page) < r.pageSize {
-			return stats, nil
+			return nil
 		}
 		after = page[len(page)-1].OrderID
 	}
 }
 
-func (r *Reconciler) readPage(ctx context.Context, cursor *v1.Cursor) ([]*v1.Relationship, *v1.Cursor, error) {
+func (r *Reconciler) readPage(ctx context.Context, relation Relation, cursor *v1.Cursor) ([]*v1.Relationship, *v1.Cursor, error) {
 	stream, err := r.permissions.ReadRelationships(ctx, &v1.ReadRelationshipsRequest{
 		Consistency:        &v1.Consistency{Requirement: &v1.Consistency_FullyConsistent{FullyConsistent: true}},
-		RelationshipFilter: &v1.RelationshipFilter{ResourceType: resourceOrder, OptionalRelation: relationCustomer},
+		RelationshipFilter: &v1.RelationshipFilter{ResourceType: resourceOrder, OptionalRelation: string(relation.Name)},
 		OptionalLimit:      uint32(r.pageSize), //nolint:gosec // page size is a small positive configuration value.
 		OptionalCursor:     cursor,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("read order#customer relationships: %w", err)
+		return nil, nil, fmt.Errorf("read order#%s relationships: %w", relation.Name, err)
 	}
 	var (
 		page []*v1.Relationship
@@ -177,35 +199,35 @@ func (r *Reconciler) readPage(ctx context.Context, cursor *v1.Cursor) ([]*v1.Rel
 			return page, next, nil
 		}
 		if err != nil {
-			return nil, nil, fmt.Errorf("read order#customer relationships: %w", err)
+			return nil, nil, fmt.Errorf("read order#%s relationships: %w", relation.Name, err)
 		}
 		page = append(page, resp.GetRelationship())
 		next = resp.GetAfterResultCursor()
 	}
 }
 
-func (r *Reconciler) touch(ctx context.Context, orderID, customer string) (application.AuthorizationRevision, error) {
-	resp, err := r.permissions.WriteRelationships(ctx, writeRequest(v1.RelationshipUpdate_OPERATION_TOUCH, orderID, customer))
+func (r *Reconciler) touch(ctx context.Context, relation Relation, orderID, subject string) (application.AuthorizationRevision, error) {
+	resp, err := r.permissions.WriteRelationships(ctx, writeRequest(relation, v1.RelationshipUpdate_OPERATION_TOUCH, orderID, subject))
 	if err != nil {
-		return "", fmt.Errorf("restore order:%s#customer: %w", orderID, err)
+		return "", fmt.Errorf("restore order:%s#%s: %w", orderID, relation.Name, err)
 	}
 	return application.AuthorizationRevision(resp.GetWrittenAt().GetToken()), nil
 }
 
-func (r *Reconciler) write(ctx context.Context, op v1.RelationshipUpdate_Operation, orderID, customer string) error {
-	if _, err := r.permissions.WriteRelationships(ctx, writeRequest(op, orderID, customer)); err != nil {
-		return fmt.Errorf("delete order:%s#customer@user:%s: %w", orderID, customer, err)
+func (r *Reconciler) write(ctx context.Context, relation Relation, op v1.RelationshipUpdate_Operation, orderID, subject string) error {
+	if _, err := r.permissions.WriteRelationships(ctx, writeRequest(relation, op, orderID, subject)); err != nil {
+		return fmt.Errorf("delete order:%s#%s@%s:%s: %w", orderID, relation.Name, relation.SubjectType, subject, err)
 	}
 	return nil
 }
 
-func writeRequest(op v1.RelationshipUpdate_Operation, orderID, customer string) *v1.WriteRelationshipsRequest {
+func writeRequest(relation Relation, op v1.RelationshipUpdate_Operation, orderID, subject string) *v1.WriteRelationshipsRequest {
 	return &v1.WriteRelationshipsRequest{Updates: []*v1.RelationshipUpdate{{
 		Operation: op,
 		Relationship: &v1.Relationship{
 			Resource: &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: orderID},
-			Relation: relationCustomer,
-			Subject:  &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: subjectUser, ObjectId: customer}},
+			Relation: string(relation.Name),
+			Subject:  &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: relation.SubjectType, ObjectId: subject}},
 		},
 	}}}
 }

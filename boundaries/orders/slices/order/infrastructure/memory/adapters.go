@@ -10,6 +10,7 @@ import (
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -28,10 +29,13 @@ type Authorizer struct {
 	checks     []application.AccessCheck
 	checkError error
 	writeError error
+	// restaurants are the written order#restaurant relationships.
+	restaurants map[order.ID]order.RestaurantID
+	writes      int
 }
 
 func NewAuthorizer() *Authorizer {
-	return &Authorizer{grants: make(map[grant]struct{})}
+	return &Authorizer{grants: make(map[grant]struct{}), restaurants: make(map[order.ID]order.RestaurantID)}
 }
 
 func (a *Authorizer) Allow(subject application.Subject, permission application.Permission, resource application.Resource) {
@@ -68,17 +72,49 @@ func (a *Authorizer) Check(_ context.Context, check application.AccessCheck) err
 		check.Subject, check.Permission, check.Resource.Type, check.Resource.ID)
 }
 
-func (a *Authorizer) GrantOrderCustomer(_ context.Context, orderID order.ID, customerID order.CustomerID) (application.AuthorizationRevision, error) {
+func (a *Authorizer) GrantOrderRelationships(_ context.Context, orderID order.ID, customerID order.CustomerID, restaurantID order.RestaurantID) (application.AuthorizationRevision, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.writeError != nil {
 		return "", a.writeError
 	}
+	a.restaurants[orderID] = restaurantID
 	customer := application.Subject{Kind: application.SubjectUser, ID: string(customerID)}
 	resource := application.Resource{Type: getorder.ResourceOrder, ID: string(orderID)}
 	a.grants[grant{subject: customer, permission: getorder.PermissionView, resource: resource}] = struct{}{}
 	a.grants[grant{subject: customer, permission: requestordercancellation.PermissionCancel, resource: resource}] = struct{}{}
 	return application.AuthorizationRevision("memory:" + string(orderID)), nil
+}
+
+// AssignCourier grants view on the Order to the next courier and revokes it
+// from the previous one, as order#courier would.
+func (a *Authorizer) AssignCourier(_ context.Context, orderID order.ID, next recordcourierassignment.Assignment, previous *recordcourierassignment.Assignment) (application.AuthorizationRevision, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.writeError != nil {
+		return "", a.writeError
+	}
+	resource := application.Resource{Type: getorder.ResourceOrder, ID: string(orderID)}
+	if previous != nil && previous.CourierID != next.CourierID {
+		delete(a.grants, grant{subject: application.Subject{Kind: application.SubjectUser, ID: previous.CourierID}, permission: getorder.PermissionView, resource: resource})
+	}
+	a.grants[grant{subject: application.Subject{Kind: application.SubjectUser, ID: next.CourierID}, permission: getorder.PermissionView, resource: resource}] = struct{}{}
+	a.writes++
+	return application.AuthorizationRevision(fmt.Sprintf("memory:%s:courier:%d", orderID, a.writes)), nil
+}
+
+// CourierWrites counts AssignCourier writes.
+func (a *Authorizer) CourierWrites() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.writes
+}
+
+// RestaurantOf returns the written order#restaurant subject.
+func (a *Authorizer) RestaurantOf(orderID order.ID) order.RestaurantID {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.restaurants[orderID]
 }
 
 func (a *Authorizer) Checks() []application.AccessCheck {

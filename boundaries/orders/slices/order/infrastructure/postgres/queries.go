@@ -13,6 +13,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
@@ -184,43 +185,122 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 	return placedAt, id, err
 }
 
-// OrderCustomer is the business association reconciled with order#customer.
-type OrderCustomer struct {
-	OrderID    string
-	CustomerID string
+// CourierAssignment reads the Courier Assignment of an Order and locks its row
+// until the end of the active transaction, so reassignments of one Order apply
+// one after another.
+func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (recordcourierassignment.Assignment, bool, error) {
+	var (
+		deliveryID, courierID *string
+		assignedAt            *time.Time
+	)
+	err := s.q(ctx).QueryRow(ctx, `
+		SELECT delivery_id, courier_id, courier_assigned_at FROM orders WHERE id = $1 FOR UPDATE`, orderID,
+	).Scan(&deliveryID, &courierID, &assignedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordcourierassignment.Assignment{}, false, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
+	}
+	if err != nil {
+		return recordcourierassignment.Assignment{}, false, fmt.Errorf("read courier assignment of %s: %w", orderID, err)
+	}
+	if deliveryID == nil || courierID == nil || assignedAt == nil {
+		return recordcourierassignment.Assignment{}, false, nil
+	}
+	return recordcourierassignment.Assignment{DeliveryID: *deliveryID, CourierID: *courierID, AssignedAt: assignedAt.UTC()}, true, nil
 }
 
-// CustomersOf returns the customer of each existing Order among ids.
-func (s *Store) CustomersOf(ctx context.Context, ids []string) (map[string]string, error) {
-	rows, err := s.q(ctx).Query(ctx, `SELECT id, customer_id FROM orders WHERE id = ANY($1)`, ids)
+// RememberCourierAssignment replaces the Courier Assignment of an Order and
+// the ZedToken of its relationship write in the active transaction.
+func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment recordcourierassignment.Assignment, revision application.AuthorizationRevision) error {
+	tag, err := s.q(ctx).Exec(ctx, `
+		UPDATE orders
+		SET delivery_id = $2, courier_id = $3, courier_assigned_at = $4,
+		    authorization_revision = COALESCE(NULLIF($5, ''), authorization_revision)
+		WHERE id = $1`,
+		orderID, assignment.DeliveryID, assignment.CourierID, assignment.AssignedAt, string(revision))
 	if err != nil {
-		return nil, fmt.Errorf("read customers of orders: %w", err)
+		return fmt.Errorf("remember courier assignment of %s: %w", orderID, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
+	}
+	return nil
+}
+
+// Relation is an Order relation in SpiceDB whose subject is a column of the
+// Order row: the business association the reconciliation compares with.
+type Relation string
+
+const (
+	RelationCustomer   Relation = "customer"
+	RelationRestaurant Relation = "restaurant"
+	RelationCourier    Relation = "courier"
+	RelationDelivery   Relation = "delivery"
+)
+
+// relationColumns is the closed set of columns a relation may read; it keeps
+// query text out of reach of the caller.
+var relationColumns = map[Relation]string{
+	RelationCustomer:   "customer_id",
+	RelationRestaurant: "restaurant_id",
+	RelationCourier:    "courier_id",
+	RelationDelivery:   "delivery_id",
+}
+
+func (r Relation) column() (string, error) {
+	column, ok := relationColumns[r]
+	if !ok {
+		return "", fmt.Errorf("unknown order relation %q", r)
+	}
+	return column, nil
+}
+
+// RelationSubject is one Order and the subject id of its relation.
+type RelationSubject struct {
+	OrderID   string
+	SubjectID string
+}
+
+// SubjectsOf returns the subject id of relation for each Order among ids that
+// has one; an Order without the subject (no courier yet) is absent.
+func (s *Store) SubjectsOf(ctx context.Context, relation Relation, ids []string) (map[string]string, error) {
+	column, err := relation.column()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.q(ctx).Query(ctx,
+		`SELECT id, `+column+` FROM orders WHERE id = ANY($1) AND `+column+` IS NOT NULL`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("read order %s subjects: %w", relation, err)
 	}
 	defer rows.Close()
-	customers := make(map[string]string, len(ids))
+	subjects := make(map[string]string, len(ids))
 	for rows.Next() {
-		var id, customer string
-		if err := rows.Scan(&id, &customer); err != nil {
-			return nil, fmt.Errorf("scan order customer: %w", err)
+		var id, subject string
+		if err := rows.Scan(&id, &subject); err != nil {
+			return nil, fmt.Errorf("scan order %s subject: %w", relation, err)
 		}
-		customers[id] = customer
+		subjects[id] = subject
 	}
-	return customers, rows.Err()
+	return subjects, rows.Err()
 }
 
-// OrderCustomerPage pages Orders by id after afterID.
-func (s *Store) OrderCustomerPage(ctx context.Context, afterID string, limit int) ([]OrderCustomer, error) {
-	rows, err := s.q(ctx).Query(ctx, `
-		SELECT id, customer_id FROM orders WHERE id > $1 ORDER BY id LIMIT $2`, afterID, limit)
+// RelationPage pages Orders with a subject of relation by id after afterID.
+func (s *Store) RelationPage(ctx context.Context, relation Relation, afterID string, limit int) ([]RelationSubject, error) {
+	column, err := relation.column()
 	if err != nil {
-		return nil, fmt.Errorf("page orders: %w", err)
+		return nil, err
+	}
+	rows, err := s.q(ctx).Query(ctx,
+		`SELECT id, `+column+` FROM orders WHERE id > $1 AND `+column+` IS NOT NULL ORDER BY id LIMIT $2`, afterID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("page order %s subjects: %w", relation, err)
 	}
 	defer rows.Close()
-	var page []OrderCustomer
+	var page []RelationSubject
 	for rows.Next() {
-		var row OrderCustomer
-		if err := rows.Scan(&row.OrderID, &row.CustomerID); err != nil {
-			return nil, fmt.Errorf("scan order: %w", err)
+		var row RelationSubject
+		if err := rows.Scan(&row.OrderID, &row.SubjectID); err != nil {
+			return nil, fmt.Errorf("scan order %s subject: %w", relation, err)
 		}
 		page = append(page, row)
 	}

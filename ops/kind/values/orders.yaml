@@ -14,6 +14,10 @@ env:
   # Traces → приёмник проверок kind (manifests/observability/trace-capture.yaml); metrics
   # по-прежнему уходят только в Alloy профиля grafana-cloud.
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://trace-capture.nomnom-observability.svc.cluster.local:4317
+  # Place Order и Request Order Cancellation обращаются к fulfillment workflow; client
+  # lazy, поэтому старт API от Temporal не зависит.
+  TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
+  TEMPORAL__NAMESPACE: default
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # создаёт scripts/identity-jwks.sh) и allowlist вызывающих workloads.

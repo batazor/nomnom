@@ -12,8 +12,10 @@ import (
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
 	wire.Build(
-		wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Postgres", "Cancellation"),
+		wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Temporal", "Fulfillment"),
 		orderdi.ProviderSet,
+		NewTemporalClient,
+		NewFulfillmentWorkflow,
 		grpcadapter.NewSubjectResolver,
 		NewGRPCServer,
 		NewApp,
@@ -34,9 +36,10 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 
 func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	wire.Build(
-		wire.FieldsOf(new(config.Config), "Postgres"),
+		wire.FieldsOf(new(config.Config), "Postgres", "SpiceDB"),
 		orderdi.NewPostgresStore,
 		orderdi.NewStore,
+		orderdi.NewCourierRelationships,
 		NewKafkaConsumer,
 	)
 	return nil, nil, nil

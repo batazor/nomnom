@@ -13,3 +13,11 @@ env:
 postgres:
   dsnSecret:
     name: orders-postgres
+
+# ADR 18: Record Courier Assignment пишет order#courier/order#delivery в SpiceDB до
+# commit Inbox; без endpoint consumer не стартует. Secret создаёт scripts/authz.sh.
+spicedb:
+  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
+  insecure: true
+  presharedKeySecret:
+    name: spicedb-preshared-key

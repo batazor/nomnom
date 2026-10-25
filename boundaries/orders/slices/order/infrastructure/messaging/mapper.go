@@ -60,7 +60,13 @@ func toPreparationFailed(e messaging.Envelope, event *restaurantsv1.PreparationF
 }
 
 func toRecordCourierAssignment(e messaging.Envelope, event *deliveryv1.CourierAssignedToDelivery) recordcourierassignment.Input {
-	return recordcourierassignment.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
+	return recordcourierassignment.Input{
+		EventID:    e.EventID,
+		OrderID:    order.ID(event.GetOrderId()),
+		OccurredAt: e.OccurredAt,
+		DeliveryID: event.GetDeliveryId(),
+		CourierID:  event.GetCourierId(),
+	}
 }
 
 func toRecordPickup(e messaging.Envelope, event *deliveryv1.DeliveryPickedUp) recordpickup.Input {

@@ -1,11 +1,12 @@
 // Package spicedb implements the authorization ports of the order slice on
-// SpiceDB (ADR 18): permission checks of the use cases and the creation-time
-// order#customer relationship. Schema: authorization/schema.zed.
+// SpiceDB (ADR 18): permission checks of the use cases, the creation-time
+// order#customer and order#restaurant relationships and the order#courier and
+// order#delivery relationships of the Courier Assignment.
+// Schema: authorization/schema.zed.
 package spicedb
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -17,15 +18,22 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 // ErrUnavailable means SpiceDB did not answer; use cases fail closed on it.
-var ErrUnavailable = errors.New("authorization service unavailable")
+var ErrUnavailable = fmt.Errorf("authorization service: %w", application.ErrDependencyUnavailable)
 
 const (
-	resourceOrder    = "order"
-	relationCustomer = "customer"
+	resourceOrder      = "order"
+	relationCustomer   = "customer"
+	relationRestaurant = "restaurant"
+	relationCourier    = "courier"
+	relationDelivery   = "delivery"
+	subjectUser        = "user"
+	subjectRestaurant  = "restaurant"
+	subjectDelivery    = "delivery"
 )
 
 // RevisionReader returns the authorization revision stored with an Order.
@@ -97,27 +105,59 @@ func (a *Authorizer) Check(ctx context.Context, check application.AccessCheck) e
 	return nil
 }
 
-// GrantOrderCustomer writes order#customer before the local commit and returns
-// the ZedToken of the write; TOUCH is idempotent, so a retried Place Order
-// repeats it safely.
-func (a *Authorizer) GrantOrderCustomer(ctx context.Context, orderID order.ID, customerID order.CustomerID) (application.AuthorizationRevision, error) {
+// GrantOrderRelationships writes order#customer and order#restaurant in one
+// atomic request before the local commit and returns the ZedToken of the write;
+// TOUCH is idempotent, so a retried Place Order repeats it safely.
+func (a *Authorizer) GrantOrderRelationships(ctx context.Context, orderID order.ID, customerID order.CustomerID, restaurantID order.RestaurantID) (application.AuthorizationRevision, error) {
+	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
+	return a.write(ctx, fmt.Sprintf("touch order:%s#customer,restaurant", orderID),
+		touch(resource, relationCustomer, objectSubject(subjectUser, string(customerID))),
+		touch(resource, relationRestaurant, objectSubject(subjectRestaurant, string(restaurantID))),
+	)
+}
+
+// AssignCourier writes order#courier and order#delivery of next and deletes
+// those of previous that differ, in one atomic request: a reassignment never
+// leaves the Order visible to both couriers or to none. TOUCH and DELETE are
+// idempotent, so a redelivered event repeats the request safely.
+func (a *Authorizer) AssignCourier(ctx context.Context, orderID order.ID, next recordcourierassignment.Assignment, previous *recordcourierassignment.Assignment) (application.AuthorizationRevision, error) {
+	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
+	updates := []*v1.RelationshipUpdate{
+		touch(resource, relationCourier, objectSubject(subjectUser, next.CourierID)),
+		touch(resource, relationDelivery, objectSubject(subjectDelivery, next.DeliveryID)),
+	}
+	if previous != nil && previous.CourierID != next.CourierID {
+		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationCourier, objectSubject(subjectUser, previous.CourierID)))
+	}
+	if previous != nil && previous.DeliveryID != next.DeliveryID {
+		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, previous.DeliveryID)))
+	}
+	return a.write(ctx, fmt.Sprintf("assign courier of order:%s", orderID), updates...)
+}
+
+// write applies updates in one WriteRelationships request, which SpiceDB
+// commits atomically, and returns the ZedToken of the write.
+func (a *Authorizer) write(ctx context.Context, operation string, updates ...*v1.RelationshipUpdate) (application.AuthorizationRevision, error) {
 	ctx, cancel := context.WithTimeout(ctx, a.timeout)
 	defer cancel()
 
-	resp, err := a.permissions.WriteRelationships(ctx, &v1.WriteRelationshipsRequest{
-		Updates: []*v1.RelationshipUpdate{{
-			Operation: v1.RelationshipUpdate_OPERATION_TOUCH,
-			Relationship: &v1.Relationship{
-				Resource: &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)},
-				Relation: relationCustomer,
-				Subject:  subject(application.Subject{Kind: application.SubjectUser, ID: string(customerID)}),
-			},
-		}},
-	})
+	resp, err := a.permissions.WriteRelationships(ctx, &v1.WriteRelationshipsRequest{Updates: updates})
 	if err != nil {
-		return "", fmt.Errorf("%w: touch order:%s#customer: %w", ErrUnavailable, orderID, err)
+		return "", fmt.Errorf("%w: %s: %w", ErrUnavailable, operation, err)
 	}
 	return application.AuthorizationRevision(resp.GetWrittenAt().GetToken()), nil
+}
+
+func touch(resource *v1.ObjectReference, relation string, subject *v1.SubjectReference) *v1.RelationshipUpdate {
+	return update(v1.RelationshipUpdate_OPERATION_TOUCH, resource, relation, subject)
+}
+
+func update(op v1.RelationshipUpdate_Operation, resource *v1.ObjectReference, relation string, subject *v1.SubjectReference) *v1.RelationshipUpdate {
+	return &v1.RelationshipUpdate{Operation: op, Relationship: &v1.Relationship{Resource: resource, Relation: relation, Subject: subject}}
+}
+
+func objectSubject(objectType, id string) *v1.SubjectReference {
+	return &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: objectType, ObjectId: id}}
 }
 
 func subject(s application.Subject) *v1.SubjectReference {

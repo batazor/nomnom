@@ -1,7 +1,8 @@
 # Kafka consumer orders (ADR 28): отдельный release того же chart.
 #   helm upgrade --install orders-consumer ops/helm -f ops/helm/values-consumer.yaml
 # Brokers (KAFKA__BROKERS), адрес и namespace Temporal (TEMPORAL__HOST_PORT, TEMPORAL__NAMESPACE)
-# задаются values окружения через env.
+# задаются values окружения через env; SpiceDB (spicedb.*) обязателен: consumer пишет
+# relationships курьера.
 component: consumer
 
 command:

@@ -196,7 +196,7 @@ func handlersOf(store *memory.Store, workflow fulfillment.Notifier) ordermessagi
 		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
 		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
-		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, memory.NewAuthorizer()),
 		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),

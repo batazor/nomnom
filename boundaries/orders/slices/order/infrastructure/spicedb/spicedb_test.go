@@ -3,6 +3,7 @@ package spicedb_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
@@ -85,22 +87,72 @@ func (r revisions) Revision(_ context.Context, id string) (application.Authoriza
 }
 
 // AC-472: the stored revision of an Order makes the check at least as fresh.
-func TestGrantOrderCustomerTouchesAndReadsItsWrite(t *testing.T) {
+// AC-516: customer and restaurant are written in one request.
+func TestGrantOrderRelationshipsTouchesAndReadsItsWrite(t *testing.T) {
 	fake := &fakePermissions{permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION}
 	stored := revisions{}
 	a := spicedb.NewAuthorizer(fake, stored, time.Second)
 
-	revision, err := a.GrantOrderCustomer(context.Background(), "order-1", "customer-1")
+	revision, err := a.GrantOrderRelationships(context.Background(), "order-1", "customer-1", "restaurant-1")
 	require.NoError(t, err)
 	assert.Equal(t, application.AuthorizationRevision("zed-1"), revision)
 	stored["order-1"] = revision
 	require.NoError(t, a.Check(context.Background(), customerCheck))
 
-	update := fake.writes[0].GetUpdates()[0]
-	assert.Equal(t, v1.RelationshipUpdate_OPERATION_TOUCH, update.GetOperation())
-	assert.Equal(t, "customer", update.GetRelationship().GetRelation())
-	assert.Equal(t, "customer-1", update.GetRelationship().GetSubject().GetObject().GetObjectId())
+	require.Len(t, fake.writes, 1, "customer and restaurant are written in one request")
+	updates := fake.writes[0].GetUpdates()
+	require.Len(t, updates, 2)
+	assert.Equal(t, v1.RelationshipUpdate_OPERATION_TOUCH, updates[0].GetOperation())
+	assert.Equal(t, "customer", updates[0].GetRelationship().GetRelation())
+	assert.Equal(t, "customer-1", updates[0].GetRelationship().GetSubject().GetObject().GetObjectId())
+	assert.Equal(t, v1.RelationshipUpdate_OPERATION_TOUCH, updates[1].GetOperation())
+	assert.Equal(t, "restaurant", updates[1].GetRelationship().GetRelation())
+	assert.Equal(t, "restaurant", updates[1].GetRelationship().GetSubject().GetObject().GetObjectType())
+	assert.Equal(t, "restaurant-1", updates[1].GetRelationship().GetSubject().GetObject().GetObjectId())
 	assert.Equal(t, "zed-1", fake.checks[0].GetConsistency().GetAtLeastAsFresh().GetToken())
+}
+
+func relationships(updates []*v1.RelationshipUpdate) []string {
+	var out []string
+	for _, u := range updates {
+		r := u.GetRelationship()
+		out = append(out, fmt.Sprintf("%s %s#%s@%s:%s", u.GetOperation(), r.GetResource().GetObjectId(), r.GetRelation(),
+			r.GetSubject().GetObject().GetObjectType(), r.GetSubject().GetObject().GetObjectId()))
+	}
+	return out
+}
+
+// AC-519: a reassignment touches the new courier and deletes the previous one
+// in one request; an unchanged delivery is only touched.
+func TestAssignCourierReplacesPreviousInOneRequest(t *testing.T) {
+	fake := &fakePermissions{}
+	a := spicedb.NewAuthorizer(fake, nil, time.Second)
+	next := recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-2"}
+
+	_, err := a.AssignCourier(context.Background(), "order-1", next, nil)
+	require.NoError(t, err)
+	revision, err := a.AssignCourier(context.Background(), "order-1", next, &recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1"})
+	require.NoError(t, err)
+
+	assert.Equal(t, application.AuthorizationRevision("zed-1"), revision)
+	assert.Equal(t, []string{
+		"OPERATION_TOUCH order-1#courier@user:courier-2",
+		"OPERATION_TOUCH order-1#delivery@delivery:delivery-1",
+	}, relationships(fake.writes[0].GetUpdates()))
+	assert.Equal(t, []string{
+		"OPERATION_TOUCH order-1#courier@user:courier-2",
+		"OPERATION_TOUCH order-1#delivery@delivery:delivery-1",
+		"OPERATION_DELETE order-1#courier@user:courier-1",
+	}, relationships(fake.writes[1].GetUpdates()))
+}
+
+func TestAssignCourierFailsAsUnavailable(t *testing.T) {
+	a := spicedb.NewAuthorizer(&fakePermissions{err: errors.New("unavailable")}, nil, time.Second)
+
+	_, err := a.AssignCourier(context.Background(), "order-1", recordcourierassignment.Assignment{DeliveryID: "d", CourierID: "c"}, nil)
+
+	require.ErrorIs(t, err, spicedb.ErrUnavailable)
+	require.ErrorIs(t, err, application.ErrDependencyUnavailable)
 }
 
 // AC-465, AC-467 against the SpiceDB of `make spicedb-dev`.
@@ -125,12 +177,43 @@ func TestAgainstSpiceDB(t *testing.T) {
 	customer := application.Subject{Kind: application.SubjectUser, ID: "customer-" + orderID}
 
 	require.ErrorIs(t, check(customer, "view"), application.ErrPermissionDenied)
-	revision, err := a.GrantOrderCustomer(ctx, order.ID(orderID), order.CustomerID(customer.ID))
+	revision, err := a.GrantOrderRelationships(ctx, order.ID(orderID), order.CustomerID(customer.ID), "restaurant-1")
 	require.NoError(t, err)
 	stored[orderID] = revision
 	require.NoError(t, check(customer, "view"))
 	require.NoError(t, check(customer, "cancel"))
 	require.ErrorIs(t, check(application.Subject{Kind: application.SubjectUser, ID: "stranger"}, "view"), application.ErrPermissionDenied)
+
+	// AC-522: restaurant staff view through order#restaurant; the assigned
+	// courier views until reassignment; nobody but the customer cancels.
+	restaurantID := "restaurant-" + orderID
+	owner := application.Subject{Kind: application.SubjectUser, ID: "owner-" + orderID}
+	_, err = client.WriteRelationships(ctx, &v1.WriteRelationshipsRequest{Updates: []*v1.RelationshipUpdate{{
+		Operation: v1.RelationshipUpdate_OPERATION_TOUCH,
+		Relationship: &v1.Relationship{
+			Resource: &v1.ObjectReference{ObjectType: "restaurant", ObjectId: restaurantID},
+			Relation: "owner",
+			Subject:  &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: "user", ObjectId: owner.ID}},
+		},
+	}}})
+	require.NoError(t, err)
+	stored[orderID], err = a.GrantOrderRelationships(ctx, order.ID(orderID), order.CustomerID(customer.ID), order.RestaurantID(restaurantID))
+	require.NoError(t, err)
+	require.NoError(t, check(owner, "view"))
+	require.ErrorIs(t, check(owner, "cancel"), application.ErrPermissionDenied)
+
+	first := recordcourierassignment.Assignment{DeliveryID: "delivery-" + orderID, CourierID: "courier-1-" + orderID}
+	second := recordcourierassignment.Assignment{DeliveryID: first.DeliveryID, CourierID: "courier-2-" + orderID}
+	stored[orderID], err = a.AssignCourier(ctx, order.ID(orderID), first, nil)
+	require.NoError(t, err)
+	courier1 := application.Subject{Kind: application.SubjectUser, ID: first.CourierID}
+	courier2 := application.Subject{Kind: application.SubjectUser, ID: second.CourierID}
+	require.NoError(t, check(courier1, "view"))
+	require.ErrorIs(t, check(courier1, "cancel"), application.ErrPermissionDenied)
+	stored[orderID], err = a.AssignCourier(ctx, order.ID(orderID), second, &first)
+	require.NoError(t, err)
+	require.ErrorIs(t, check(courier1, "view"), application.ErrPermissionDenied, "the stored revision makes the revocation visible")
+	require.NoError(t, check(courier2, "view"))
 
 	worker := application.Subject{Kind: application.SubjectService, ID: "orders-worker"}
 	require.NoError(t, a.Check(ctx, application.AccessCheck{

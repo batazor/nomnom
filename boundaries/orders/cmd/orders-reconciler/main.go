@@ -1,5 +1,5 @@
-// Command orders-reconciler сверяет relationships order#customer в SpiceDB
-// с заказами PostgreSQL (docs/security.md). Работает одним экземпляром.
+// Command orders-reconciler сверяет relationships order#customer, #restaurant,
+// #courier и #delivery в SpiceDB с заказами PostgreSQL (docs/security.md). Работает одним экземпляром.
 package main
 
 import (

@@ -14,6 +14,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -44,6 +45,7 @@ type state struct {
 	outbox      []OutboxRecord
 	idempotency map[idempotencyKey]order.ID
 	revisions   map[order.ID]application.AuthorizationRevision
+	assignments map[order.ID]recordcourierassignment.Assignment
 }
 
 // clone copies the containers; stored snapshots are replaced, never mutated.
@@ -54,6 +56,7 @@ func (s state) clone() state {
 		outbox:      append([]OutboxRecord(nil), s.outbox...),
 		idempotency: make(map[idempotencyKey]order.ID, len(s.idempotency)),
 		revisions:   make(map[order.ID]application.AuthorizationRevision, len(s.revisions)),
+		assignments: make(map[order.ID]recordcourierassignment.Assignment, len(s.assignments)),
 	}
 	for id, snapshot := range s.orders {
 		cloned.orders[id] = snapshot
@@ -66,6 +69,9 @@ func (s state) clone() state {
 	}
 	for id, revision := range s.revisions {
 		cloned.revisions[id] = revision
+	}
+	for id, assignment := range s.assignments {
+		cloned.assignments[id] = assignment
 	}
 	return cloned
 }
@@ -340,4 +346,25 @@ func (s *Store) Revision(ctx context.Context, orderID string) (application.Autho
 	defer s.lock(ctx)()
 	revision, ok := s.state.revisions[order.ID(orderID)]
 	return revision, ok, nil
+}
+
+// CourierAssignment returns the stored Courier Assignment of an Order, if any.
+func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (recordcourierassignment.Assignment, bool, error) {
+	defer s.lock(ctx)()
+	assignment, ok := s.state.assignments[orderID]
+	return assignment, ok, nil
+}
+
+// RememberCourierAssignment replaces the Courier Assignment and the
+// authorization revision of an Order.
+func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment recordcourierassignment.Assignment, revision application.AuthorizationRevision) error {
+	defer s.lock(ctx)()
+	if _, ok := s.state.orders[orderID]; !ok {
+		return fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
+	}
+	s.state.assignments[orderID] = assignment
+	if revision != "" {
+		s.state.revisions[orderID] = revision
+	}
+	return nil
 }

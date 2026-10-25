@@ -20,6 +20,7 @@ import (
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/postgres"
@@ -247,6 +248,57 @@ func TestAuthorizationRevision(t *testing.T) {
 }
 
 // AC-470: the Forwarder publishes the committed OrderPlaced with its envelope.
+// AC-523: the Courier Assignment replaces the previous one with its revision
+// and is the source of the courier and delivery relations.
+func TestCourierAssignment(t *testing.T) {
+	store := open(t)
+	ctx := context.Background()
+	id := uniqueID("assigned")
+	require.NoError(t, store.Add(ctx, ordertest.New(t, id)))
+
+	_, found, err := store.CourierAssignment(ctx, id)
+	require.NoError(t, err)
+	assert.False(t, found)
+	subjects, err := store.SubjectsOf(ctx, postgres.RelationCourier, []string{string(id)})
+	require.NoError(t, err)
+	assert.Empty(t, subjects, "an Order without courier has no courier subject")
+
+	at := time.Date(2026, 10, 25, 13, 0, 0, 0, time.UTC)
+	for _, courier := range []string{"courier-1", "courier-2"} {
+		err := store.Do(ctx, func(ctx context.Context) error {
+			if _, _, err := store.CourierAssignment(ctx, id); err != nil {
+				return err
+			}
+			return store.RememberCourierAssignment(ctx, id, recordcourierassignment.Assignment{
+				DeliveryID: "delivery-1", CourierID: courier, AssignedAt: at,
+			}, application.AuthorizationRevision("zed-"+courier))
+		})
+		require.NoError(t, err)
+	}
+
+	stored, found, err := store.CourierAssignment(ctx, id)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-2", AssignedAt: at}, stored)
+	revision, _, err := store.Revision(ctx, string(id))
+	require.NoError(t, err)
+	assert.Equal(t, application.AuthorizationRevision("zed-courier-2"), revision)
+
+	for relation, want := range map[postgres.Relation]string{
+		postgres.RelationCustomer: "customer-1", postgres.RelationRestaurant: "restaurant-1",
+		postgres.RelationCourier: "courier-2", postgres.RelationDelivery: "delivery-1",
+	} {
+		subjects, err := store.SubjectsOf(ctx, relation, []string{string(id)})
+		require.NoError(t, err)
+		assert.Equal(t, want, subjects[string(id)], relation)
+	}
+	page, err := store.RelationPage(ctx, postgres.RelationCourier, string(id)[:len(id)-1], 1000)
+	require.NoError(t, err)
+	assert.Contains(t, page, postgres.RelationSubject{OrderID: string(id), SubjectID: "courier-2"})
+	_, err = store.SubjectsOf(ctx, postgres.Relation("owner"), []string{string(id)})
+	require.Error(t, err)
+}
+
 func TestOutboxForwarderPublishesOrderPlaced(t *testing.T) {
 	store := open(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -13,18 +13,24 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
+	"nomnom/orders/slices/order/infrastructure/neighbours"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
+	"nomnom/orders/slices/order/infrastructure/system"
 )
 
 // ProviderSet собирает компоненты слайса order. Provider'ы handlers
 // добавляются сюда вместе с реализацией соответствующих use cases.
-var ProviderSet = wire.NewSet(NewPostgresStore, NewStore, NewAuthorizer, NewCancellationPolicy, NewModule)
+var ProviderSet = wire.NewSet(NewPostgresStore, NewStore, NewAuthorizer, NewCancellationPolicy, NewCatalog, NewClock, NewOrderIDs, NewModule)
 
 // Store — persistence-порты слайса: Unit of Work, repository, Inbox, Outbox,
 // idempotency keys, read models и authorization revision. В процессах — общий
@@ -38,6 +44,7 @@ type Store interface {
 	RememberOrder(ctx context.Context, customerID order.CustomerID, key string, orderID order.ID) error
 	RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error
 	Revision(ctx context.Context, orderID string) (application.AuthorizationRevision, bool, error)
+	recordcourierassignment.Assignments
 	OrderView(ctx context.Context, id order.ID) (getorder.OrderView, error)
 	ListCustomerOrders(ctx context.Context, request listcustomerorders.PageRequest) (listcustomerorders.Page, error)
 }
@@ -45,7 +52,7 @@ type Store interface {
 // Authorizer — permission checks use cases и creation-time relationships слайса.
 type Authorizer interface {
 	Check(ctx context.Context, check application.AccessCheck) error
-	GrantOrderCustomer(ctx context.Context, orderID order.ID, customerID order.CustomerID) (application.AuthorizationRevision, error)
+	GrantOrderRelationships(ctx context.Context, orderID order.ID, customerID order.CustomerID, restaurantID order.RestaurantID) (application.AuthorizationRevision, error)
 }
 
 // CancellationPolicy — окно отмены, общее для Get Order и Request Order
@@ -62,10 +69,29 @@ func NewCancellationPolicy(cfg config.CancellationConfig) (CancellationPolicy, e
 	return cancellationpolicy.Observe(policy, slog.Default()), nil
 }
 
+// Workflow — Order Fulfillment Workflow для command use cases API: Place Order
+// запускает его, Request Order Cancellation передаёт ему запрос.
+type Workflow interface {
+	fulfillment.Starter
+	fulfillment.CancellationRequester
+}
+
+// NewCatalog — catalog snapshot Place Order. У restaurants нет API чтения меню,
+// поэтому adapter fail-closed: Place Order отвечает UNAVAILABLE.
+func NewCatalog() placeorder.Catalog { return neighbours.UnavailableCatalog{} }
+
+// NewClock — системные часы use cases.
+func NewClock() application.Clock { return system.Clock{} }
+
+// NewOrderIDs — генератор UUIDv7 идентификаторов Order.
+func NewOrderIDs() placeorder.IDGenerator { return system.OrderIDs{} }
+
 // Module — собранный слайс order, который получает composition root процесса.
 type Module struct {
-	GetOrder           application.Handler[getorder.Query, getorder.OrderView]
-	ListCustomerOrders application.Handler[listcustomerorders.Query, listcustomerorders.Page]
+	PlaceOrder               application.Handler[placeorder.Input, placeorder.Result]
+	RequestOrderCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
+	GetOrder                 application.Handler[getorder.Query, getorder.OrderView]
+	ListCustomerOrders       application.Handler[listcustomerorders.Query, listcustomerorders.Page]
 }
 
 // NewPostgresStore — общий store API, worker'а, consumer'а и forwarder'а;
@@ -95,11 +121,58 @@ func NewAuthorizer(cfg config.SpiceDBConfig, store Store) (Authorizer, func(), e
 	return spicedb.NewAuthorizer(client, store, cfg.Timeout), func() { _ = client.Close() }, nil
 }
 
-// NewModule собирает handlers под декоратором телеметрии use cases.
-func NewModule(store Store, authorizer Authorizer, policy CancellationPolicy) *Module {
+// CourierRelationships — writer order#courier и order#delivery процесса
+// orders-consumer.
+type CourierRelationships = recordcourierassignment.Relationships
+
+// NewCourierRelationships подключает consumer к SpiceDB: связи курьера пишутся
+// в Inbox unit of work до commit, поэтому без SPICEDB__ENDPOINT процесс не стартует.
+func NewCourierRelationships(cfg config.SpiceDBConfig) (CourierRelationships, func(), error) {
+	if strings.TrimSpace(cfg.Endpoint) == "" {
+		return nil, nil, fmt.Errorf("%s is required: orders-consumer writes courier relationships to SpiceDB", config.EnvSpiceDBEndpoint)
+	}
+	client, err := spicedb.Dial(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return spicedb.NewAuthorizer(client, nil, cfg.Timeout), func() { _ = client.Close() }, nil
+}
+
+// NewModule собирает handlers под декоратором телеметрии use cases. Get Order
+// и Request Order Cancellation получают один экземпляр cancellation policy.
+func NewModule(
+	store Store,
+	authorizer Authorizer,
+	policy CancellationPolicy,
+	catalog placeorder.Catalog,
+	workflow Workflow,
+	clock application.Clock,
+	ids placeorder.IDGenerator,
+) *Module {
 	uc := observability.UseCases()
+	placeOrder := placeorder.NewHandler(placeorder.Dependencies{
+		UnitOfWork:      store,
+		Orders:          store,
+		Outbox:          store,
+		IdempotencyKeys: store,
+		Catalog:         catalog,
+		Relationships:   authorizer,
+		Revisions:       store,
+		IDs:             ids,
+		Clock:           clock,
+		Workflow:        workflow,
+	})
+	requestCancellation := requestordercancellation.NewHandler(requestordercancellation.Dependencies{
+		Authorizer: authorizer,
+		Orders:     store,
+		Policy:     policy,
+		Clock:      clock,
+		Workflow:   workflow,
+	})
 	return &Module{
-		GetOrder:           telemetry.Instrument(uc, observability.GetOrder, getorder.NewHandler(authorizer, store, policy).Handle),
-		ListCustomerOrders: telemetry.Instrument(uc, observability.ListCustomerOrders, listcustomerorders.NewHandler(authorizer, store).Handle),
+		PlaceOrder:               telemetry.Instrument(uc, observability.PlaceOrder, placeOrder.Handle),
+		RequestOrderCancellation: telemetry.Instrument(uc, observability.RequestOrderCancellation, requestCancellation.Handle),
+		GetOrder:                 telemetry.Instrument(uc, observability.GetOrder, getorder.NewHandler(authorizer, store, policy).Handle),
+		ListCustomerOrders:       telemetry.Instrument(uc, observability.ListCustomerOrders, listcustomerorders.NewHandler(authorizer, store).Handle),
 	}
 }

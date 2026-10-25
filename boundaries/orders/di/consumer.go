@@ -34,8 +34,9 @@ import (
 // подключается к Temporal и Kafka и собирает Watermill Router с handler groups
 // слайса order; Shutdown закрывает Router, дожидаясь начатых сообщений.
 type KafkaConsumer struct {
-	cfg   config.Config
-	store orderdi.Store
+	cfg           config.Config
+	store         orderdi.Store
+	relationships orderdi.CourierRelationships
 
 	dial          func(ctx context.Context, options client.Options) (client.Client, error)
 	newSubscriber func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error)
@@ -52,11 +53,12 @@ type KafkaConsumer struct {
 }
 
 // NewKafkaConsumer собирает consumer поверх общего store orders (PostgreSQL).
-func NewKafkaConsumer(cfg config.Config, store orderdi.Store) *KafkaConsumer {
+func NewKafkaConsumer(cfg config.Config, store orderdi.Store, relationships orderdi.CourierRelationships) *KafkaConsumer {
 	return &KafkaConsumer{
-		cfg:   cfg,
-		store: store,
-		dial:  client.DialContext,
+		cfg:           cfg,
+		store:         store,
+		relationships: relationships,
+		dial:          client.DialContext,
 		newSubscriber: func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
 			return messaging.NewSubscriber(cfg, logger)
 		},
@@ -71,8 +73,9 @@ func NewKafkaConsumer(cfg config.Config, store orderdi.Store) *KafkaConsumer {
 }
 
 // ConsumerHandlers собирает application handlers, которые читают Kafka, под
-// декоратором телеметрии use cases.
-func ConsumerHandlers(store orderdi.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
+// декоратором телеметрии use cases. Record Courier Assignment пишет связи
+// курьера в SpiceDB внутри своего Inbox unit of work.
+func ConsumerHandlers(store orderdi.Store, workflow fulfillment.Notifier, relationships orderdi.CourierRelationships) ordermessaging.Handlers {
 	uc := observability.UseCases()
 	return ordermessaging.Handlers{
 		ConfirmOrder:             telemetry.Instrument(uc, observability.ConfirmOrder, confirmorder.NewHandler(store, store, store, workflow).Handle),
@@ -80,7 +83,7 @@ func ConsumerHandlers(store orderdi.Store, workflow fulfillment.Notifier) orderm
 		RecordPreparationStarted: telemetry.Instrument(uc, observability.RecordPreparationStarted, recordpreparationstarted.NewHandler(store, store, store, workflow).Handle),
 		RecordOrderReady:         telemetry.Instrument(uc, observability.RecordOrderReady, recordorderready.NewHandler(store, store, store, workflow).Handle),
 		RelayPreparationIssue:    telemetry.Instrument(uc, observability.RelayPreparationIssue, relaypreparationissue.NewHandler(workflow).Handle),
-		RecordCourierAssignment:  telemetry.Instrument(uc, observability.RecordCourierAssignment, recordcourierassignment.NewHandler(store, store, store, workflow).Handle),
+		RecordCourierAssignment:  telemetry.Instrument(uc, observability.RecordCourierAssignment, recordcourierassignment.NewHandler(store, store, store, workflow, store, relationships).Handle),
 		RecordPickup:             telemetry.Instrument(uc, observability.RecordPickup, recordpickup.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryCompletion: telemetry.Instrument(uc, observability.RecordDeliveryCompletion, recorddeliverycompletion.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryFailure:    telemetry.Instrument(uc, observability.RecordDeliveryFailure, recorddeliveryfailure.NewHandler(store, store, store, workflow).Handle),
@@ -117,7 +120,7 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 	}
 
 	workflow := fulfillorder.NewClient(temporal, NewFulfillmentPolicy(c.cfg.Fulfillment))
-	streams := ordermessaging.Streams(ConsumerHandlers(c.store, workflow))
+	streams := ordermessaging.Streams(ConsumerHandlers(c.store, workflow, c.relationships))
 	c.router, err = messaging.NewConsumerRouter(messaging.ConsumerConfig{
 		ConsumerGroup: c.cfg.Kafka.ConsumerGroup,
 		Retry:         messaging.DefaultRetryPolicy,

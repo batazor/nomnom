@@ -37,8 +37,17 @@ definition platform {
 definition order {
 	/** Written by orders when the Order is placed (creation-time TOUCH). */
 	relation customer: user
+	/** Written with customer in the same placement request. */
+	relation restaurant: restaurant
+	/**
+	 * Assigned courier and its Delivery; written by the orders consumer from
+	 * delivery.v1 CourierAssignedToDelivery (reassignment replaces both).
+	 */
+	relation courier: user
+	relation delivery: delivery
 
-	permission view = customer
+	/** Restaurant staff and the assigned courier read the Order; only the customer cancels it. */
+	permission view = customer + restaurant->view_orders + courier + delivery->act_as_courier
 	permission cancel = customer
 }
 

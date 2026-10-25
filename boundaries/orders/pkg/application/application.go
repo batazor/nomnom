@@ -16,6 +16,9 @@ var (
 	ErrPermissionDenied = errors.New("permission denied")
 	// ErrConcurrencyConflict marks a save against a stale aggregate version.
 	ErrConcurrencyConflict = errors.New("concurrency conflict")
+	// ErrDependencyUnavailable marks a dependency that did not answer: SpiceDB,
+	// the restaurant catalog or the fulfillment workflow. The call may be retried.
+	ErrDependencyUnavailable = errors.New("dependency unavailable")
 )
 
 // InvalidInput wraps ErrInvalidInput with the offending field.

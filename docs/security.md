@@ -196,7 +196,7 @@ Authorization revision сохраняется рядом с resource как те
 
 `fully_consistent` не является способом скрыть отсутствие lifecycle design: он дороже и используется только с явным обоснованием.
 
-Реализация: `orders` хранит revision `order#customer` в строке `Order`; `restaurants` — revision `restaurant#owner/staff` в `Restaurant`; `delivery` — revision `courier#self` в `Courier` и `delivery#courier` в `Delivery`. Revision сохраняется и после `DELETE` (Revoke Staff, Reassign Courier, Cancel Delivery), поэтому отзыв доступа виден следующей проверке сразу. Проверки `platform:nomnom` и ресурсов без revision — `minimize_latency`.
+Реализация: `orders` хранит в строке `Order` revision последней записи его relationships (`order#customer`/`restaurant` при оформлении, `order#courier`/`delivery` при назначении курьера); `restaurants` — revision `restaurant#owner/staff` в `Restaurant`; `delivery` — revision `courier#self` в `Courier` и `delivery#courier` в `Delivery`. Revision сохраняется и после `DELETE` (Revoke Staff, Reassign Courier, Cancel Delivery, переназначение курьера в `orders`), поэтому отзыв доступа виден следующей проверке сразу. Проверки `platform:nomnom` и ресурсов без revision — `minimize_latency`.
 
 ## Relationship lifecycle
 
@@ -216,7 +216,8 @@ Business storage bounded context остаётся source of truth; SpiceDB — �
 | Relation | Source of truth / writer | Create/delete и отказ |
 | --- | --- | --- |
 | `restaurant#owner@user` | Restaurant ownership в `restaurants`; writer `restaurants`. | Creation-time `TOUCH` до local commit; удаление/архивация удаляет relationships по resource. Failed write aborts commit; failed commit leaves orphan for reconciliation. |
-| `order#customer@user`, `order#restaurant@restaurant` | Создаваемый Order в `orders`; writer `orders`. | Creation-time associations до commit, если нужны для немедленного доступа. Compensation/removal follows Order lifecycle; orphan безопасен до reconciliation. |
+| `order#customer@user`, `order#restaurant@restaurant` | Создаваемый Order в `orders`; writer — Place Order. | Один `WriteRelationships` с двумя `TOUCH` до commit. Failed write aborts placement; failed commit leaves orphan for reconciliation. |
+| `order#courier@user`, `order#delivery@delivery` | `Order.courier_id`/`delivery_id` в `orders` из `delivery.v1` `CourierAssignedToDelivery`; writer — Record Courier Assignment в `orders-consumer`. | Derived relationship: `TOUCH` нового и `DELETE` прежнего subject одним запросом внутри Inbox unit of work до commit; событие старше сохранённого назначения пропускается. Снятие курьера без замены не наблюдаемо, пока `delivery` не публикует `CourierUnassignedFromDelivery`/`DeliveryCancelled`. |
 | `restaurant#staff@user` | `Restaurant.staff` в `restaurants`; writer — use cases Assign Staff / Revoke Staff. | Синхронный `TOUCH`/`DELETE` до сохранения; расхождение исправляет reconciliation `restaurants`. |
 | `delivery#courier@user` | `Delivery.courier_id` в `delivery`; writer — use cases Accept Delivery Offer, Reassign Courier, Cancel Delivery. | Синхронный `TOUCH`/`DELETE` до commit (change `add-restaurant-delivery-relationships`); расхождение исправляет reconciliation `delivery`. |
 | `delivery#order@order` | Delivery association в `delivery`; writer `delivery`. | Стратегия определяется use case: sync at creation when required immediately, otherwise Outbox. |
@@ -244,9 +245,9 @@ business transaction + Outbox commit
 Kafka → dedicated consumer + Inbox → SpiceDB TOUCH/DELETE
 ```
 
-Consumer side effect в SpiceDB находится вне Inbox transaction, поэтому write должен быть идемпотентным и retryable. `TOUCH` заменяет `CREATE`; повторный `DELETE` при отсутствии relation успешен. Inbox фиксирует completion только после успешного side effect либо применяется эквивалентная recoverable state machine, чтобы crash не потерял update.
+Consumer side effect в SpiceDB находится вне Inbox transaction, поэтому write должен быть идемпотентным и retryable. `TOUCH` заменяет `CREATE`; повторный `DELETE` при отсутствии relation успешен. Inbox фиксирует completion только после успешного side effect либо применяется эквивалентная recoverable state machine, чтобы crash не потерял update. В `orders` write выполняется внутри Inbox unit of work до commit: ошибка SpiceDB откатывает Inbox record, а crash после write и до commit повторяется redelivery.
 
-При удалении/архивировании resource выполняется delete relationships по resource filter. Reconciliation периодически сравнивает business state и graph, исправляет missing/stale/orphan relationships и сообщает drift metric. Он не заменяет основной write path. Для `order#customer` он реализован в `orders` (`cmd/orders-reconciler`), для `restaurant#owner/staff`, `courier#self` и `delivery#courier` — фоновым циклом процессов `restaurants` и `delivery` (до постоянного хранилища): orphan/stale relationship удаляется только после двух проходов с интервалом не меньше grace, потому что creation-time `TOUCH` предшествует commit; missing восстанавливается сразу с обновлением authorization revision.
+При удалении/архивировании resource выполняется delete relationships по resource filter. Reconciliation периодически сравнивает business state и graph, исправляет missing/stale/orphan relationships и сообщает drift metric. Он не заменяет основной write path. Для `order#customer`, `order#restaurant`, `order#courier` и `order#delivery` он реализован в `orders` (`cmd/orders-reconciler`), для `restaurant#owner/staff`, `courier#self` и `delivery#courier` — фоновым циклом процессов `restaurants` и `delivery` (до постоянного хранилища): orphan/stale relationship удаляется только после двух проходов с интервалом не меньше grace, потому что creation-time `TOUCH` предшествует commit; missing восстанавливается сразу с обновлением authorization revision.
 
 ## Network and runtime
 

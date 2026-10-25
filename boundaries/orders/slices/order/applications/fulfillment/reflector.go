@@ -70,6 +70,19 @@ func NewReflector(uow application.UnitOfWork, inbox application.Inbox, orders or
 }
 
 func (r Reflector) Reflect(ctx context.Context, fact InboundFact, apply func(*order.Order) error) (Reflection, error) {
+	return r.ReflectWith(ctx, fact, apply, nil)
+}
+
+// InTransaction runs inside the Inbox unit of work after the fact was applied
+// or found already applied, before commit. Its error rolls the event back, so
+// redelivery repeats it; it must therefore be idempotent. It does not run for
+// a duplicate or a late fact.
+type InTransaction func(ctx context.Context, current *order.Order, outcome Outcome) error
+
+// ReflectWith is Reflect with a step inside the unit of work, for side effects
+// that must commit together with the Inbox record: a relationship write of the
+// dual-write rule in docs/security.md and the business data it derives from.
+func (r Reflector) ReflectWith(ctx context.Context, fact InboundFact, apply func(*order.Order) error, inTransaction InTransaction) (Reflection, error) {
 	if err := fact.validate(); err != nil {
 		return Reflection{}, err
 	}
@@ -93,10 +106,15 @@ func (r Reflector) Reflect(ctx context.Context, fact InboundFact, apply func(*or
 		if err != nil {
 			return err
 		}
-		if outcome != OutcomeApplied {
+		if outcome == OutcomeApplied {
+			if err := r.orders.Save(ctx, current); err != nil {
+				return err
+			}
+		}
+		if inTransaction == nil || (outcome != OutcomeApplied && outcome != OutcomeAlreadyApplied) {
 			return nil
 		}
-		return r.orders.Save(ctx, current)
+		return inTransaction(ctx, current, outcome)
 	})
 	if err != nil {
 		return Reflection{}, err

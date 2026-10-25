@@ -81,9 +81,27 @@ Temporal workflow относится к прикладному процессу 
 | Неожиданная внутренняя ошибка | `INTERNAL` | `INTERNAL_ERROR` |
 | Внешняя зависимость недоступна | `UNAVAILABLE` | `DEPENDENCY_UNAVAILABLE` |
 
+Недоступная зависимость (SpiceDB, catalog, отсутствующий workflow) проверяется раньше отказа
+доступа: fail-closed check оборачивает её в отказ, но вызывающий получает retryable `UNAVAILABLE`.
+`INVALID_ORDER` — ошибки value objects, `NotOrderable`, пустой состав и повтор `menu_item_id`;
+`ORDER_STATE_CONFLICT` — запрет FSM, закрытое окно отмены (`CancellationNotAllowed`) и отказ
+workflow принять Cancellation Request.
+
 В `google.rpc.ErrorInfo.domain` передаётся `nomnom.orders.v1`. Реализованы Buf-модуль,
-сгенерированные Go stubs и RPC `GetOrder` / `ListCustomerOrders`. Оба RPC вызывают
-application handlers и используют структурированные `ErrorInfo`.
+сгенерированные Go stubs и RPC `GetOrder`, `ListCustomerOrders`, `PlaceOrder` и
+`RequestOrderCancellation`; все вызывают application handlers и используют структурированные
+`ErrorInfo`. Остальные Commands в API не публикуются: Confirm/Reject Order, Record … и Relay
+Preparation Issue вызывает Kafka consumer, Complete Order и Fail or Cancel Order — только
+fulfillment workflow.
+
+`PlaceOrder` оформляет заказ для verified subject: поля customer в запросе нет. Пока resolver
+выдаёт только service subjects (ADR 27), вызов отвечает `PERMISSION_DENIED`. У `restaurants` нет
+API чтения меню, поэтому production catalog fail-closed и `PlaceOrder` отвечает
+`UNAVAILABLE`/`DEPENDENCY_UNAVAILABLE`. `order_id` — UUIDv7. Temporal client API lazy: процесс
+стартует без Temporal; если start workflow не удался после commit, ответ содержит
+`fulfillment_started=false`, а повтор с тем же `idempotency_key` повторяет start.
+`RequestOrderCancellation` возвращает outcome `REQUESTED` или `ALREADY_CANCELLED` и использует тот
+же экземпляр cancellation policy, что `GetOrder`.
 
 `GetOrder` возвращает `Order.cancellation_window { opens_at, closes_at }`, пока Order State
 допускает Order Cancellation (`placed`, `confirmed`); для `cancelled` и `completed` поля нет.
@@ -337,14 +355,33 @@ repository с optimistic concurrency, Inbox, idempotency keys, read models, auth
 и Transactional Outbox с процессом `cmd/orders-forwarder`; миграции — `cmd/orders-migrate`.
 In-memory store остаётся для unit-тестов.
 
-Не реализованы: user identity через BFF, остальные command RPC, writers relationships
-`restaurant`/`courier`/`delivery` и их reconciliation.
+OpenSpec change `add-order-command-rpcs-and-relationships` (FR-464…FR-470, AC-508…AC-524)
+опубликовал `PlaceOrder` и `RequestOrderCancellation` и добавил relationships заказа
+(`authorization/schema.zed`):
 
-Reconciliation `order#customer` — [`slices/order/infrastructure/reconcile`](slices/order/infrastructure/reconcile)
-и процесс `cmd/orders-reconciler` (Helm `values-reconciler.yaml`): orphan и stale relationships
-удаляются, только если остались такими на двух проходах с интервалом не меньше `RECONCILER__GRACE`
-(связь пишется до commit заказа); missing relationship восстанавливается `TOUCH` с обновлением
-`authorization_revision`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`,
+| Relation | Writer | Когда |
+| --- | --- | --- |
+| `order#customer@user`, `order#restaurant@restaurant` | Place Order | один `WriteRelationships` до commit заказа |
+| `order#courier@user`, `order#delivery@delivery` | Record Courier Assignment (`orders-consumer`) | из `CourierAssignedToDelivery` внутри Inbox unit of work до commit |
+
+`view = customer + restaurant->view_orders + courier + delivery->act_as_courier`, `cancel` — только
+customer. Назначение хранится в `orders.delivery_id`, `courier_id`, `courier_assigned_at`
+(миграция `00002`); reassignment — один атомарный запрос `TOUCH` нового и `DELETE` прежнего
+курьера, событие старше сохранённого назначения пропускается, ZedToken записи сохраняется в
+`authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
+
+Не реализованы: user identity через BFF и API меню `restaurants` (Place Order пока недоступен
+клиентам). `delivery` не публикует `CourierUnassignedFromDelivery`/`DeliveryCancelled`, поэтому
+снятие курьера без нового назначения не наблюдаемо: `order#courier` прежнего курьера остаётся до
+следующего назначения.
+
+Reconciliation `order#customer`, `order#restaurant`, `order#courier` и `order#delivery` —
+[`slices/order/infrastructure/reconcile`](slices/order/infrastructure/reconcile)
+и процесс `cmd/orders-reconciler` (Helm `values-reconciler.yaml`): для каждой relation orphan и
+stale relationships удаляются, только если остались такими на двух проходах с интервалом не
+меньше `RECONCILER__GRACE` (связь пишется до commit); missing relationship восстанавливается
+`TOUCH` с обновлением `authorization_revision`. Business-сторона — колонки `customer_id`,
+`restaurant_id`, `courier_id`, `delivery_id`; заказ без курьера не ожидает `courier`/`delivery`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`,
 `missing_repaired`, `unrepairable`. Query handlers зарегистрированы в DI и доступны
 через gRPC. `.feature` сценарии `confirmorder` и
 `recordcourierassignment` покрыты unit-тестами handlers; Gherkin runner не подключён.
@@ -381,8 +418,8 @@ make temporal-dev-stop
 | `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` | —, `nomnom.orders`, — | Проверка входящего projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)); без них все вызовы `UNAUTHENTICATED` |
 | `IDENTITY__SERVICE_ACCOUNTS` | — | Allowlist `namespace/serviceaccount=service-name,…` |
 | `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker); пусто — без credentials |
-| `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer` при оформлении; обязателен для API-процесса: без endpoint он не стартует |
-| `RECONCILER__INTERVAL`, `RECONCILER__GRACE`, `RECONCILER__PAGE_SIZE` | `5m`, `10m`, `500` | `cmd/orders-reconciler`: сверка `order#customer` SpiceDB ↔ PostgreSQL |
+| `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#courier`/`delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
+| `RECONCILER__INTERVAL`, `RECONCILER__GRACE`, `RECONCILER__PAGE_SIZE` | `5m`, `10m`, `500` | `cmd/orders-reconciler`: сверка relations `order` SpiceDB ↔ PostgreSQL |
 | `POSTGRES__DSN`, `POSTGRES__MAX_CONNS` | —, `10` | PostgreSQL orders (обязателен для всех процессов); локально — `make postgres-dev`, `make migrate` |
 | `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` | `false`, `2s` | Plaintext (только kind/локально) и deadline проверки; ошибка или timeout — отказ |
 
