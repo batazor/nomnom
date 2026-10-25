@@ -23,7 +23,7 @@ pub mod service;
 
 pub use http_worker::HttpWorker;
 pub use infrastructure::{
-    InfrastructureModule, ProcessAuthorization, ProcessRelationships, ProcessStore,
+    CourierStore, InfrastructureModule, ProcessAuthorization, ProcessRelationships, ProcessStores,
 };
 pub use reconciling_worker::ReconcilingWorker;
 pub use server::{postgres, spicedb, spicedb_authorization};

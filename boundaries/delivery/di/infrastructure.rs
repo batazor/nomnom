@@ -1,6 +1,7 @@
 //! Порты слайсов и их реализации: [`InfrastructureModule`] закрывает
-//! `CourierDependencies` и `DeliveryDependencies` одним хранилищем, одной
-//! авторизацией и одним writer'ом relationships на процесс.
+//! `CourierDependencies` и `DeliveryDependencies` ролями одного хранилища
+//! ([`ProcessStores`]), одной авторизацией и одним writer'ом relationships на
+//! процесс.
 //!
 //! Реализации выбирает composition root процесса ([`super::server`]) или
 //! тестовый граф ([`super::build`]) и передаёт их параметрами компонентов.
@@ -10,10 +11,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use shaku::{Component, Interface, module};
 
-use crate::infrastructure::memory::{MemoryStore, RecordingRelationships, StaticAuthorization};
-use crate::infrastructure::reconcile::ReconciliationStore;
-use crate::pkg::application::{Clock, IdGenerator, TransactionScope};
-use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::infrastructure::memory::{RecordingRelationships, StaticAuthorization};
+use crate::pkg::application::{Clock, IdGenerator};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
@@ -21,13 +20,11 @@ use crate::slices::courier::di::{CourierDependencies, CourierPorts};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
-use crate::slices::delivery::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
-use crate::slices::delivery::applications::list_available_delivery_offers::PendingDeliveryOffersReadModel;
-use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
-use crate::slices::delivery::di::{DeliveryDependencies, DeliveryPorts, DeliverySettings};
-use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, DeliveryRepository};
+use crate::slices::delivery::di::{
+    DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
+};
 
 /// Локальные значения политики назначения до появления продуктовых настроек.
 const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
@@ -36,68 +33,36 @@ const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
     offer_ttl_seconds: 60,
 };
 
-/// Все порты хранилища процесса: репозитории, Outbox, read models, Unit of
-/// Work и чтение reconciliation. Закрывается одним адаптером
+/// Роль хранилища, которую видит слайс `courier`: `Courier` и последние
+/// позиции курьеров.
+pub trait CourierStore: CourierRepository + CourierLocationStore + Send + Sync {}
+
+impl<T: CourierRepository + CourierLocationStore + Send + Sync> CourierStore for T {}
+
+/// Роли хранилища процесса над одним адаптером
 /// ([`PostgresStore`](crate::infrastructure::postgres::PostgresStore) в
-/// процессе, [`MemoryStore`] в тестах), поэтому Unit of Work охватывает
-/// записи обоих слайсов и Outbox.
-pub trait ProcessStore:
-    CourierRepository
-    + CourierAssignment
-    + CourierLocationStore
-    + CourierCurrentDeliveryReadModel
-    + DeliveryRepository
-    + DeliveryOfferRepository
-    + PendingDeliveryOffersReadModel
-    + DeliveryOutbox
-    + TransactionScope
-    + ReconciliationStore
-    + Send
-    + Sync
-{
+/// процессе, [`MemoryStore`](crate::infrastructure::memory::MemoryStore) в
+/// тестах), поэтому Unit of Work охватывает записи обоих слайсов и Outbox.
+/// Каждый потребитель получает только свою роль; reconciliation и revisions
+/// авторизации composition root разрешает над тем же `Arc` отдельно.
+pub struct ProcessStores {
+    pub couriers: Arc<dyn CourierStore>,
+    pub transactional: Arc<dyn TransactionalStore>,
+    pub read_models: Arc<dyn DeliveryReadModels>,
 }
 
-impl<T> ProcessStore for T where
-    T: CourierRepository
-        + CourierAssignment
-        + CourierLocationStore
-        + CourierCurrentDeliveryReadModel
-        + DeliveryRepository
-        + DeliveryOfferRepository
-        + PendingDeliveryOffersReadModel
-        + DeliveryOutbox
-        + TransactionScope
-        + ReconciliationStore
-        + Send
-        + Sync
-{
-}
-
-/// Общее хранилище: одно на процесс, чтобы Unit of Work, репозитории и
-/// Outbox обоих слайсов работали с одними данными.
-pub trait SharedStore: Interface {
-    fn store(&self) -> &dyn ProcessStore;
-
-    /// Владение тем же хранилищем для компонентов процесса, которые живут
-    /// дольше одного вызова (reconciler, revisions авторизации).
-    fn shared(&self) -> Arc<dyn ProcessStore>;
-}
-
-#[derive(Component)]
-#[shaku(interface = SharedStore)]
-pub struct LocalStore {
-    /// Shared with the reconciler, which reads business state of the process.
-    #[shaku(default = Arc::new(MemoryStore::new()))]
-    store: Arc<dyn ProcessStore>,
-}
-
-impl SharedStore for LocalStore {
-    fn store(&self) -> &dyn ProcessStore {
-        &*self.store
-    }
-
-    fn shared(&self) -> Arc<dyn ProcessStore> {
-        Arc::clone(&self.store)
+impl ProcessStores {
+    /// Все роли слайсов над одним хранилищем.
+    #[must_use]
+    pub fn over<S>(store: &Arc<S>) -> Self
+    where
+        S: CourierStore + TransactionalStore + DeliveryReadModels + 'static,
+    {
+        Self {
+            couriers: Arc::clone(store) as _,
+            transactional: Arc::clone(store) as _,
+            read_models: Arc::clone(store) as _,
+        }
     }
 }
 
@@ -205,8 +170,7 @@ impl Clock for SystemClock {
 #[derive(Component)]
 #[shaku(interface = CourierPorts)]
 pub struct LocalCourierPorts {
-    #[shaku(inject)]
-    store: Arc<dyn SharedStore>,
+    store: Arc<dyn CourierStore>,
     #[shaku(inject)]
     authorization: Arc<dyn SharedAuthorization>,
     #[shaku(inject)]
@@ -221,11 +185,11 @@ impl CourierPorts for LocalCourierPorts {
     }
 
     fn couriers(&self) -> &dyn CourierRepository {
-        self.store.store()
+        &*self.store
     }
 
     fn locations(&self) -> &dyn CourierLocationStore {
-        self.store.store()
+        &*self.store
     }
 
     fn clock(&self) -> &dyn Clock {
@@ -240,8 +204,8 @@ impl CourierPorts for LocalCourierPorts {
 #[derive(Component)]
 #[shaku(interface = DeliveryPorts)]
 pub struct LocalDeliveryPorts {
-    #[shaku(inject)]
-    store: Arc<dyn SharedStore>,
+    store: Arc<dyn TransactionalStore>,
+    read_models: Arc<dyn DeliveryReadModels>,
     #[shaku(inject)]
     authorization: Arc<dyn SharedAuthorization>,
     #[shaku(inject)]
@@ -261,32 +225,12 @@ impl DeliveryPorts for LocalDeliveryPorts {
         self.authorization.courier()
     }
 
-    fn transactions(&self) -> &dyn TransactionScope {
-        self.store.store()
+    fn store(&self) -> &dyn TransactionalStore {
+        &*self.store
     }
 
-    fn deliveries(&self) -> &dyn DeliveryRepository {
-        self.store.store()
-    }
-
-    fn offers(&self) -> &dyn DeliveryOfferRepository {
-        self.store.store()
-    }
-
-    fn pending_offers(&self) -> &dyn PendingDeliveryOffersReadModel {
-        self.store.store()
-    }
-
-    fn current_deliveries(&self) -> &dyn CourierCurrentDeliveryReadModel {
-        self.store.store()
-    }
-
-    fn courier_assignment(&self) -> &dyn CourierAssignment {
-        self.store.store()
-    }
-
-    fn outbox(&self) -> &dyn DeliveryOutbox {
-        self.store.store()
+    fn read_models(&self) -> &dyn DeliveryReadModels {
+        &*self.read_models
     }
 
     fn locator(&self) -> &dyn CourierLocator {
@@ -319,7 +263,6 @@ impl DeliverySettings for LocalDeliverySettings {
 module! {
     pub InfrastructureModule: CourierDependencies {
         components = [
-            LocalStore,
             LocalAuthorization,
             LocalRelationships,
             SystemClock,
@@ -333,12 +276,12 @@ module! {
 
 impl DeliveryDependencies for InfrastructureModule {}
 
-/// Собирает порты процесса над выбранными реализациями. Хранилище
-/// принадлежит модулю на всё время процесса; транзакции открывает Unit of
+/// Собирает порты процесса над выбранными реализациями. Роли хранилища
+/// принадлежат модулю на всё время процесса; транзакции открывает Unit of
 /// Work на время одного use case.
 #[must_use]
 pub(super) fn infrastructure(
-    store: Arc<dyn ProcessStore>,
+    stores: ProcessStores,
     ids: Box<dyn ProcessIds>,
     locator: Box<dyn ProcessLocator>,
     authorization: Box<dyn ProcessAuthorization>,
@@ -346,14 +289,18 @@ pub(super) fn infrastructure(
 ) -> Arc<InfrastructureModule> {
     Arc::new(
         InfrastructureModule::builder()
-            .with_component_parameters::<LocalStore>(LocalStoreParameters { store })
             .with_component_parameters::<LocalAuthorization>(LocalAuthorizationParameters {
                 authorization,
             })
             .with_component_parameters::<LocalRelationships>(LocalRelationshipsParameters {
                 relationships,
             })
+            .with_component_parameters::<LocalCourierPorts>(LocalCourierPortsParameters {
+                store: stores.couriers,
+            })
             .with_component_parameters::<LocalDeliveryPorts>(LocalDeliveryPortsParameters {
+                store: stores.transactional,
+                read_models: stores.read_models,
                 locator,
                 ids,
             })

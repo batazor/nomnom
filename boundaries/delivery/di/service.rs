@@ -13,7 +13,7 @@ use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
 
 use super::infrastructure::{
-    InfrastructureModule, ProcessAuthorization, infrastructure, local_authorization,
+    InfrastructureModule, ProcessAuthorization, ProcessStores, infrastructure, local_authorization,
 };
 
 module! {
@@ -65,7 +65,7 @@ pub fn build() -> ServiceModule {
 #[must_use]
 pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) -> ServiceModule {
     service(infrastructure(
-        Arc::new(MemoryStore::new()),
+        ProcessStores::over(&Arc::new(MemoryStore::new())),
         Box::new(SequentialIdGenerator::new("delivery")),
         Box::new(StaticCourierLocator::new(Vec::new())),
         authorization,
@@ -77,7 +77,7 @@ pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) ->
 #[cfg(test)]
 pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule {
     service(infrastructure(
-        Arc::new(MemoryStore::new()),
+        ProcessStores::over(&Arc::new(MemoryStore::new())),
         Box::new(SequentialIdGenerator::new("delivery")),
         Box::new(locator),
         Box::new(local_authorization()),

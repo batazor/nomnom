@@ -24,18 +24,18 @@ use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver}
 use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
 use crate::infrastructure::postgres::PostgresStore;
-use crate::infrastructure::reconcile::{Reconciler, Schedule};
+use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
 use crate::infrastructure::spicedb::{
     RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization, SpiceDbClient,
     SpiceDbConfigError, SpiceDbRelationships,
 };
 use crate::pkg::config::{AppConfig, DatabaseConfig, SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
+use crate::slices::courier::domains::courier::CourierRepository;
+use crate::slices::delivery::domains::delivery::DeliveryRepository;
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 
 use super::ReconcilingWorker;
-use super::infrastructure::{
-    InfrastructureModule, ProcessIds, ProcessLocator, ProcessStore, SharedStore, infrastructure,
-};
+use super::infrastructure::{ProcessIds, ProcessLocator, ProcessStores, infrastructure};
 use super::service::{ServiceModule, service};
 
 /// Первый проход reconciliation вскоре после старта.
@@ -62,11 +62,12 @@ pub fn postgres(config: &DatabaseConfig) -> Result<PostgresStore, String> {
 
 /// SpiceDB-авторизация процесса: checks `courier:<id>` и `delivery:<id>`
 /// видят собственные записи relationships по revision из `store` (FR-447).
+/// Хранилище видно только через роль [`RevisionReader`].
 #[must_use]
-pub fn spicedb_authorization(
-    client: SpiceDbClient,
-    store: Arc<dyn ProcessStore>,
-) -> SpiceDbAuthorization {
+pub fn spicedb_authorization<S>(client: SpiceDbClient, store: Arc<S>) -> SpiceDbAuthorization
+where
+    S: ?Sized + CourierRepository + DeliveryRepository + Send + Sync + 'static,
+{
     SpiceDbAuthorization::new(Box::new(client))
         .with_revisions(Arc::new(RepositoryRevisions(store)) as Arc<dyn RevisionReader>)
 }
@@ -124,9 +125,8 @@ pub trait RelationshipReconciliation: Interface {
 #[derive(Component)]
 #[shaku(interface = RelationshipReconciliation)]
 pub struct SpiceDbReconciliation {
-    /// То же хранилище, что у портов слайсов.
-    #[shaku(inject)]
-    store: Arc<dyn SharedStore>,
+    /// То же хранилище, что у портов слайсов, в роли reconciliation.
+    store: Arc<dyn ReconciliationStore>,
     graph: Arc<dyn RelationshipGraph>,
     grace: Duration,
     page_size: u32,
@@ -138,14 +138,14 @@ impl RelationshipReconciliation for SpiceDbReconciliation {
         vec![
             Reconciler::couriers(
                 Arc::clone(&self.graph),
-                self.store.shared() as _,
+                Arc::clone(&self.store),
                 self.grace,
                 self.page_size,
                 Arc::new(Instant::now),
             ),
             Reconciler::deliveries(
                 Arc::clone(&self.graph),
-                self.store.shared() as _,
+                Arc::clone(&self.store),
                 self.grace,
                 self.page_size,
                 Arc::new(Instant::now),
@@ -190,12 +190,7 @@ where
 module! {
     pub ServerModule {
         components = [TonicTransport, SpiceDbReconciliation],
-        providers = [DeliveryWorkerProvider],
-
-        use InfrastructureModule {
-            components = [dyn SharedStore],
-            providers = []
-        }
+        providers = [DeliveryWorkerProvider]
     }
 }
 
@@ -218,24 +213,25 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // PostgreSQL обязателен: пустой DATABASE__URL или недоступная база
     // прерывают startup. Revisions записей relationships хранятся с Courier и
     // Delivery; checks читают их из того же хранилища (FR-447).
-    let postgres = Arc::new(postgres(&config.database)?);
-    let store: Arc<dyn ProcessStore> = Arc::clone(&postgres) as _;
-    let (ids, locator) = assignment_adapters(postgres);
+    // Каждая роль хранилища разрешается отдельно над одним `PostgresStore`.
+    let store = Arc::new(postgres(&config.database)?);
+    let (ids, locator) = assignment_adapters(Arc::clone(&store) as _);
     let infrastructure = infrastructure(
-        Arc::clone(&store),
+        ProcessStores::over(&store),
         ids,
         locator,
-        Box::new(spicedb_authorization(spicedb, store)),
+        Box::new(spicedb_authorization(spicedb, Arc::clone(&store))),
         Box::new(SpiceDbRelationships::new(Arc::clone(&graph))),
     );
     let use_cases = Arc::new(service(Arc::clone(&infrastructure)));
-    Ok(ServerModule::builder(infrastructure)
+    Ok(ServerModule::builder()
         .with_component_parameters::<TonicTransport>(TonicTransportParameters {
             use_cases,
             subjects,
             port: config.server.port,
         })
         .with_component_parameters::<SpiceDbReconciliation>(SpiceDbReconciliationParameters {
+            store,
             graph,
             grace: config.reconciler.grace,
             page_size: config.reconciler.page_size,
@@ -266,7 +262,7 @@ mod tests {
     fn process(store: &Arc<MemoryStore>) -> ServiceModule {
         let (ids, locator) = assignment_adapters(Arc::clone(store) as _);
         service(infrastructure(
-            Arc::clone(store) as _,
+            ProcessStores::over(store),
             ids,
             locator,
             Box::new(local_authorization()),
