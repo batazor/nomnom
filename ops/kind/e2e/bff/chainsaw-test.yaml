@@ -132,7 +132,7 @@ spec:
             check:
               ($error): ~
               # Лог orders — JSON по записи на строку.
-              (split(trim_space($stdout), '\n')[?starts_with(@, '{')] | map(&json_parse(@), @)[?message == 'user assertion accepted' && delegate == 'bff'] | length(@) > `0`): true
+              (split($stdout, '\n')[?contains(@, '"message":"user assertion accepted"') && contains(@, '"delegate":"bff"')] | length(@) > `0`): true
     - name: 7.9-7.10 same user assertion from another workload
       try:
         - script:
@@ -176,7 +176,7 @@ spec:
               ($error): ~
               # Запись «caller identity rejected» с error.message
               # «user assertion from grpc-caller: service is not an allowed delegate».
-              (split(trim_space($stdout), '\n')[?contains(@, 'caller identity rejected') && contains(@, 'user assertion from grpc-caller') && contains(@, 'service is not an allowed delegate')] | length(@) > `0`): true
+              (split($stdout, '\n')[?contains(@, 'caller identity rejected') && contains(@, 'user assertion from grpc-caller') && contains(@, 'service is not an allowed delegate')] | length(@) > `0`): true
   catch:
     - podLogs:
         namespace: nomnom-bff
