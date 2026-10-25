@@ -20,3 +20,47 @@
   width: min(14rem, 80%);
   height: 10rem;
 }
+
+/* Fades in when it appears, then drifts gently: vehicles and couriers move
+   sideways, everything else floats. */
+.illustration {
+  animation: illustration-enter var(--motion-standard) var(--motion-easing) both;
+}
+
+.illustration svg {
+  animation: illustration-float 4s ease-in-out 0.3s infinite;
+}
+
+.illustration:is([data-name="delivery-truck"], [data-name="on-the-way"]) svg {
+  animation-name: illustration-drive;
+  animation-duration: 3s;
+}
+
+@keyframes illustration-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.97);
+  }
+}
+
+@keyframes illustration-float {
+  50% {
+    transform: translateY(-0.25rem);
+  }
+}
+
+@keyframes illustration-drive {
+  25% {
+    transform: translateX(0.25rem) rotate(0.4deg);
+  }
+  75% {
+    transform: translateX(-0.25rem) rotate(-0.4deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .illustration,
+  .illustration svg {
+    animation: none;
+  }
+}

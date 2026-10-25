@@ -32,6 +32,7 @@ export function Illustration({ name, size = "md" }: IllustrationProps) {
       dangerouslySetInnerHTML={{
         __html: sources[`./illustrations/${name}.svg`],
       }}
+      data-name={name}
       data-size={size}
     />
   );
