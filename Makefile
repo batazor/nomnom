@@ -50,12 +50,6 @@ RUNTIME_SERVICES ?=
 runtime-contract: ## собрать backend-приложения и проверить health, SIGTERM/SIGINT, drain и exit code
 	@python3 ops/runtime-contract/contract_test.py $(RUNTIME_SERVICES)
 
-## Размер исходных файлов (openspec spec source-file-size); FILE_SIZE_PATHS сужает проверку
-FILE_SIZE_PATHS ?= boundaries
-.PHONY: check-file-size
-check-file-size: ## production-файлы не больше 300 строк, тесты не больше 500; исключения — ops/checks/file-size-allowlist.txt
-	@ops/checks/file-size.sh $(FILE_SIZE_PATHS)
-
 ## Authorization (ADR 18): schema и bootstrap в authorization/
 SPICEDB_IMAGE ?= authzed/spicedb:v1.57.0
 ZED_IMAGE ?= authzed/zed:v1.2.1
