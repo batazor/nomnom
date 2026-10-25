@@ -1,6 +1,6 @@
 use super::*;
 
-fn offer() -> DeliveryOffer {
+fn new_offer() -> DeliveryOffer {
     DeliveryOffer::new(
         DeliveryOfferId::new("offer-1"),
         DeliveryId::new("delivery-1"),
@@ -9,6 +9,28 @@ fn offer() -> DeliveryOffer {
         1_060,
     )
     .expect("offer")
+}
+
+/// A stored pending offer: its creation fact is already in the Outbox.
+fn offer() -> DeliveryOffer {
+    let mut offer = new_offer();
+    offer.pull_events();
+    offer
+}
+
+#[test]
+fn new_offer_records_the_offer_fact() {
+    let mut offer = new_offer();
+    assert_eq!(
+        offer.pull_events(),
+        vec![DomainEvent::DeliveryOffered {
+            delivery_id: DeliveryId::new("delivery-1"),
+            offer_id: DeliveryOfferId::new("offer-1"),
+            courier_id: CourierId::new("courier-1"),
+            expires_at_epoch_seconds: 1_060,
+        }]
+    );
+    assert!(offer.pull_events().is_empty());
 }
 
 fn conditions(now: i64) -> OfferAcceptanceConditions {

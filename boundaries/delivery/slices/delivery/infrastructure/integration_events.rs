@@ -29,6 +29,7 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             // Facts without a contract message: they feed business metrics
             // only and are not published.
             DomainEvent::DeliveryCreated { .. }
+            | DomainEvent::DeliveryOffered { .. }
             | DomainEvent::DeliveryOfferAccepted { .. }
             | DomainEvent::DeliveryOfferRejected { .. }
             | DomainEvent::DeliveryOfferExpired { .. } => return None,

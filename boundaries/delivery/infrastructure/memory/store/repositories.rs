@@ -159,7 +159,7 @@ impl DeliveryOfferRepository for MemoryStore {
         if state.offers.iter().any(|stored| stored.id() == offer.id()) {
             return Err(RepositoryError::Conflict);
         }
-        state.offers.push(offer.clone());
+        state.offers.push(snapshot(offer, offer.version())?);
         Ok(())
     }
 
@@ -173,9 +173,23 @@ impl DeliveryOfferRepository for MemoryStore {
         if stored.version() != offer.version() {
             return Err(RepositoryError::ConcurrentModification);
         }
-        *stored = offer.clone().with_version(offer.version() + 1);
+        *stored = snapshot(offer, offer.version() + 1)?;
         Ok(())
     }
+}
+
+/// Persistence copy of an offer: domain events are never stored.
+fn snapshot(offer: &DeliveryOffer, version: u64) -> Result<DeliveryOffer, RepositoryError> {
+    DeliveryOffer::restore(
+        offer.id().clone(),
+        offer.delivery_id().clone(),
+        offer.courier_id().clone(),
+        offer.offered_at_epoch_seconds(),
+        offer.expires_at_epoch_seconds(),
+        offer.state(),
+    )
+    .map(|stored| stored.with_version(version))
+    .map_err(|error| RepositoryError::Unavailable(format!("corrupt delivery offer: {error}")))
 }
 
 impl DeliveryOutbox for MemoryStore {

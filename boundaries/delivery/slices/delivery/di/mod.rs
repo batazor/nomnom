@@ -231,9 +231,11 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     ) -> Result<offer_delivery::Output, DeliveryApplicationError> {
         offer_delivery::Handler {
             authorization: self.ports.authorization(),
+            unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             offers: self.ports.store(),
+            outbox: self.ports.store(),
             ids: self.ports.ids(),
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
