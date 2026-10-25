@@ -85,22 +85,14 @@ tcp() {
 # customer_id=c1; дополнительные curl-аргументы — $1. Результат:
 # "<curl exit code> <HTTP status> <grpc-status> <grpc-message>".
 grpc_orders_authenticated() {
-  local result rc attempt
-  # Изредка Envoy получает RST от orders до headers (grpc-status 14, remote reset) на любом
-  # вызове: это отдельная проблема соединения gateway ↔ orders, не проверяемое свойство.
-  # Повтор только на этот ответ, каждый случай попадает в отчёт.
-  for attempt in 1 2 3; do
-    rc=0
-    result="$(k -n nomnom-bff exec deploy/grpc-caller -- sh -c \
-      "printf '\\000\\000\\000\\000\\004\\012\\002c1' | curl -sS -o /dev/null \
-        -w '%{http_code} %header{grpc-status} %header{grpc-message}' \
-        --connect-timeout 3 --max-time 5 --http2-prior-knowledge -X POST \
-        -H 'content-type: application/grpc' -H 'te: trailers' \
-        -H \"authorization: Bearer \$(cat /var/run/secrets/nomnom/identity/nomnom.orders)\" ${1:-} \
-        --data-binary @- '${GATEWAY}/nomnom.orders.v1.OrdersService/ListCustomerOrders'" 2>/dev/null)" || rc=$?
-    [[ "${result}" == *"reset reason: remote reset"* ]] || break
-    printf 'NOTE     orders сбросил stream до headers (попытка %s)\n' "${attempt}" | tee -a "${REPORT}" >&2
-  done
+  local result rc=0
+  result="$(k -n nomnom-bff exec deploy/grpc-caller -- sh -c \
+    "printf '\\000\\000\\000\\000\\004\\012\\002c1' | curl -sS -o /dev/null \
+      -w '%{http_code} %header{grpc-status} %header{grpc-message}' \
+      --connect-timeout 3 --max-time 5 --http2-prior-knowledge -X POST \
+      -H 'content-type: application/grpc' -H 'te: trailers' \
+      -H \"authorization: Bearer \$(cat /var/run/secrets/nomnom/identity/nomnom.orders)\" ${1:-} \
+      --data-binary @- '${GATEWAY}/nomnom.orders.v1.OrdersService/ListCustomerOrders'" 2>/dev/null)" || rc=$?
   # shellcheck disable=SC2086 # нормализация пробелов: при timeout grpc-status пуст
   printf '%s %s\n' "${rc}" "$(echo ${result:-000})"
 }
@@ -193,10 +185,18 @@ for _ in $(seq 1 20); do
   sleep 1
 done
 expect "4.2 traceparent вызывающего продолжен server span orders через gateway" yes "${captured}"
-# Текст context deadline exceeded формирует gRPC server orders, а не Envoy (upstream request
-# timeout): deadline вызывающего дошёл до backend, а не сработал route timeout gateway.
-expect "5.1 deadline вызывающего (grpc-timeout 1u) соблюдается backend'ом" \
-  "0 200 4 context deadline exceeded" "$(grpc_orders_authenticated "-H 'grpc-timeout: 1u'")"
+# Истёкший deadline gRPC server orders завершает одним из двух способов: статусом
+# DEADLINE_EXCEEDED, если handler успел ответить, или RST_STREAM до headers, который Envoy
+# отдаёт как UNAVAILABLE (remote reset). Обычный gRPC-клиент сам соблюдает deadline и в
+# обоих случаях вернёт DEADLINE_EXCEEDED; curl deadline не отслеживает. Оба исхода
+# формирует backend: route timeout gateway (300s) за 1 мкс не срабатывает, а тот же вызов
+# без grpc-timeout получает PERMISSION_DENIED (4.1).
+deadline_result="$(grpc_orders_authenticated "-H 'grpc-timeout: 1u'")"
+case "${deadline_result}" in
+  "0 200 4 context deadline exceeded" | "0 200 14 "*"reset reason: remote reset")
+    pass "5.1 deadline вызывающего (grpc-timeout 1u) соблюдается backend'ом: ${deadline_result}" ;;
+  *) fail "5.1 deadline вызывающего (grpc-timeout 1u) соблюдается backend'ом (got '${deadline_result}')" ;;
+esac
 blocked "5a retries: в реестре нет методов, для которых они включены"
 
 section "6. Инфраструктурные подключения под политиками"
