@@ -2,7 +2,7 @@
 
 FROM ghcr.io/astral-sh/uv:0.12.7 AS uv
 
-FROM python:3.15.0-slim-bookworm AS build
+FROM python:3.14.9-slim-bookworm AS build
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
@@ -18,7 +18,7 @@ FROM build AS build-dev
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --group watch --no-install-project
 
-FROM python:3.15.0-slim-bookworm AS base
+FROM python:3.14.9-slim-bookworm AS base
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \

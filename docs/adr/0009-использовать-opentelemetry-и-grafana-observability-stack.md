@@ -51,7 +51,7 @@ Profiles имеют отдельный путь, потому что Pyroscope S
 
 OpenTelemetry и profiling-интеграции выбираются и проверяются отдельно для каждого runtime. Для `orders` используется Go instrumentation, включая поддерживаемую Temporal SDK интеграцию; рекомендуемая Temporal OTel v2 интеграция на дату решения имеет pre-release статус, поэтому package/version и совместимость history фиксируются при реализации. Watermill переносит W3C-поля через message metadata и Kafka headers. Для continuous CPU profiling планируются Go SDK, Node.js SDK/agent, Rust client с pprof backend и Python SDK/agent соответственно.
 
-Нельзя предполагать одинаковые типы profiles, overhead, platform/runtime compatibility и точную span-to-profile correlation для Go, Node.js, Rust и Python. Из языков проекта официальные Span Profiles документированы для Go и Python и только для CPU; Node.js и Rust ограничиваются корреляцией по service/version/time. Особенно отдельно проверяются community/native зависимости Rust, native profiler Node.js и поддержка целевого Python 3.15. BFF получает profiling-подход после выбора его runtime.
+Нельзя предполагать одинаковые типы profiles, overhead, platform/runtime compatibility и точную span-to-profile correlation для Go, Node.js, Rust и Python. Из языков проекта официальные Span Profiles документированы для Go и Python и только для CPU; Node.js и Rust ограничиваются корреляцией по service/version/time. Особенно отдельно проверяются community/native зависимости Rust, native profiler Node.js и поддержка целевого Python 3.14. BFF получает profiling-подход после выбора его runtime.
 
 ### Отложено до реализации
 

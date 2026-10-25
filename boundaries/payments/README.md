@@ -202,7 +202,7 @@ Helm values `spicedb.*` описаны в [ops/README.md](ops/README.md#authoriz
 - **Use cases.** `PaymentsHandlers`, `PaymentOperationExecutor` и `ApplyProviderCallbackHandler` — `Singleton`/`Factory` провайдеры на процесс; зависимости передаются через конструкторы. Выбор реализаций — `create_subject_resolver` (identity), `create_permission_checker` (SpiceDB; ошибка старта без `SPICEDB__ENDPOINT`), `create_provider` (`PROVIDER__KIND`), `PaymentEventsMapper` — описан только в `PaymentsContainer`.
 - **Границы.** `@inject` и wiring не используются; `slices/`, `pkg/` и `infrastructure/` не импортируют `di` и `dependency_injector`. Тесты собирают handlers напрямую с fakes (`tests/payment_fakes.py`) или через контейнер с `override()` (`tests/test_di_containers.py`: разрешение графа, подмена fakes, порядок ресурсов в entrypoints).
 
-Поддержка Python 3.15 upstream не объявлена: 4.49.1 заявляет поддержку до 3.14 в changelog, классификаторах PyPI, `tox.ini` и CI. На CPython 3.15.0rc1 и в базовом образе `python:3.15.0-slim-bookworm` (3.15.0, aarch64) wheel `cp310-abi3` устанавливается, upstream-тесты `tests/unit/providers` и `tests/unit/containers` проходят (1198 passed, 3 skipped). Сборка runtime-образа на 3.15 сейчас блокирует `confluent-kafka` 2.16.0: wheels для 3.15 нет, а в build stage нет `gcc` для сборки из sdist. Риск и fallback — вручную написанные composition roots, как в коммите `bb45bc6`, — описаны в ADR 5.
+Runtime — Python 3.14 (`python:3.14.9-slim-bookworm`): Dependency Injector 4.49.1 и `confluent-kafka` 2.16.0 официально поддерживают его, а для 3.15 у `confluent-kafka` нет wheels и образ не собирается. Обоснование и fallback (composition roots вручную, как в `bb45bc6`) — в ADR 5.
 
 ## Событийная интеграция
 
@@ -242,7 +242,7 @@ docker stop payments-kafka
 
 ## Observability
 
-Инструментирование Python транспорта, PostgreSQL, Kafka и платёжного провайдера размещается в `infrastructure/`; токены, платёжные реквизиты и payload провайдера исключаются из telemetry. OpenTelemetry и Pyroscope зависимости должны отдельно подтвердить поддержку целевого Python 3.15. Общие потоки и правила описаны в [документации observability](../../docs/observability.md).
+Инструментирование Python транспорта, PostgreSQL, Kafka и платёжного провайдера размещается в `infrastructure/`; токены, платёжные реквизиты и payload провайдера исключаются из telemetry. OpenTelemetry и Pyroscope зависимости должны отдельно подтвердить поддержку целевого Python 3.14. Общие потоки и правила описаны в [документации observability](../../docs/observability.md).
 
 ## Статус реализации
 

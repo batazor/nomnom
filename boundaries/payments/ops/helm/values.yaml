@@ -48,7 +48,7 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  # Runtime-образ: python:3.15-slim-bookworm, пользователь app (10001) из Dockerfile. Числовой UID нужен для проверки runAsNonRoot.
+  # Runtime-образ: python:3.14-slim-bookworm, пользователь app (10001) из Dockerfile. Числовой UID нужен для проверки runAsNonRoot.
   runAsUser: 10001
   runAsGroup: 10001
   seccompProfile:
