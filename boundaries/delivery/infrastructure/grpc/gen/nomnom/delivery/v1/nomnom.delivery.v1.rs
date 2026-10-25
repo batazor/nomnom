@@ -93,6 +93,28 @@ pub struct DeliveryFailed {
     #[prost(string, tag="3")]
     pub reason: ::prost::alloc::string::String,
 }
+/// Курьер снят с Delivery без замены (Courier Reassignment); Delivery вернулась
+/// в поиск курьера. Доменной причины снятия нет.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CourierUnassignedFromDelivery {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+/// Delivery отменена до Pickup (Cancel Delivery); назначенный курьер, если был,
+/// освобождён. reason пуст, если причина не указана.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeliveryCancelled {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub reason: ::prost::alloc::string::String,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetCourierCurrentDeliveryRequest {
     #[prost(string, tag="1")]

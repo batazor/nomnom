@@ -418,6 +418,7 @@ Application-слой всех четырёх boundaries уже реализов�
 | `confirmorder`, `rejectorder` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordpreparationstarted`, `recordorderready` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordcourierassignment`, `recordpickup`, `recorddeliverycompletion`, `recorddeliveryfailure` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
+| `recordcourierrelease` | Да | Inbox + назначение курьера в `orders` + DELETE relationships SpiceDB до commit; `Order` и workflow не меняются |
 | `completeorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
 | `failorcancelorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
 | `fulfillorder` | Нет | Workflow; Activities вызывают handlers |

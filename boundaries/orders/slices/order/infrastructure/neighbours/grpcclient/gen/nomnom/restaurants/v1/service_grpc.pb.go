@@ -19,12 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RestaurantsService_GetRestaurant_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/GetRestaurant"
-	RestaurantsService_ReceiveOrderRequest_FullMethodName   = "/nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest"
-	RestaurantsService_CancelRestaurantOrder_FullMethodName = "/nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder"
-	RestaurantsService_RegisterRestaurant_FullMethodName    = "/nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant"
-	RestaurantsService_AssignStaff_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/AssignStaff"
-	RestaurantsService_RevokeStaff_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/RevokeStaff"
+	RestaurantsService_GetRestaurant_FullMethodName                = "/nomnom.restaurants.v1.RestaurantsService/GetRestaurant"
+	RestaurantsService_ReceiveOrderRequest_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest"
+	RestaurantsService_CancelRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder"
+	RestaurantsService_AcceptRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder"
+	RestaurantsService_RejectRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/RejectRestaurantOrder"
+	RestaurantsService_StartPreparation_FullMethodName             = "/nomnom.restaurants.v1.RestaurantsService/StartPreparation"
+	RestaurantsService_MarkRestaurantOrderAssembled_FullMethodName = "/nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderAssembled"
+	RestaurantsService_MarkRestaurantOrderReady_FullMethodName     = "/nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderReady"
+	RestaurantsService_ReportPreparationDelay_FullMethodName       = "/nomnom.restaurants.v1.RestaurantsService/ReportPreparationDelay"
+	RestaurantsService_ReportPreparationFailure_FullMethodName     = "/nomnom.restaurants.v1.RestaurantsService/ReportPreparationFailure"
+	RestaurantsService_RegisterRestaurant_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant"
+	RestaurantsService_AssignStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/AssignStaff"
+	RestaurantsService_RevokeStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/RevokeStaff"
 )
 
 // RestaurantsServiceClient is the client API for RestaurantsService service.
@@ -35,6 +42,18 @@ type RestaurantsServiceClient interface {
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(ctx context.Context, in *ReceiveOrderRequestRequest, opts ...grpc.CallOption) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(ctx context.Context, in *CancelRestaurantOrderRequest, opts ...grpc.CallOption) (*CancelRestaurantOrderResponse, error)
+	// Kitchen commands of restaurant staff over one Restaurant Order addressed by
+	// restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
+	// an order of another restaurant is NOT_FOUND, a forbidden transition is
+	// FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
+	// succeeds without a new fact; other repeats are FAILED_PRECONDITION.
+	AcceptRestaurantOrder(ctx context.Context, in *AcceptRestaurantOrderRequest, opts ...grpc.CallOption) (*AcceptRestaurantOrderResponse, error)
+	RejectRestaurantOrder(ctx context.Context, in *RejectRestaurantOrderRequest, opts ...grpc.CallOption) (*RejectRestaurantOrderResponse, error)
+	StartPreparation(ctx context.Context, in *StartPreparationRequest, opts ...grpc.CallOption) (*StartPreparationResponse, error)
+	MarkRestaurantOrderAssembled(ctx context.Context, in *MarkRestaurantOrderAssembledRequest, opts ...grpc.CallOption) (*MarkRestaurantOrderAssembledResponse, error)
+	MarkRestaurantOrderReady(ctx context.Context, in *MarkRestaurantOrderReadyRequest, opts ...grpc.CallOption) (*MarkRestaurantOrderReadyResponse, error)
+	ReportPreparationDelay(ctx context.Context, in *ReportPreparationDelayRequest, opts ...grpc.CallOption) (*ReportPreparationDelayResponse, error)
+	ReportPreparationFailure(ctx context.Context, in *ReportPreparationFailureRequest, opts ...grpc.CallOption) (*ReportPreparationFailureResponse, error)
 	// Restaurant administration. RegisterRestaurant requires platform#register_restaurant
 	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
 	// and write restaurant#staff before saving. Staff commands are idempotent.
@@ -81,6 +100,76 @@ func (c *restaurantsServiceClient) CancelRestaurantOrder(ctx context.Context, in
 	return out, nil
 }
 
+func (c *restaurantsServiceClient) AcceptRestaurantOrder(ctx context.Context, in *AcceptRestaurantOrderRequest, opts ...grpc.CallOption) (*AcceptRestaurantOrderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcceptRestaurantOrderResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_AcceptRestaurantOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) RejectRestaurantOrder(ctx context.Context, in *RejectRestaurantOrderRequest, opts ...grpc.CallOption) (*RejectRestaurantOrderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RejectRestaurantOrderResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_RejectRestaurantOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) StartPreparation(ctx context.Context, in *StartPreparationRequest, opts ...grpc.CallOption) (*StartPreparationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartPreparationResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_StartPreparation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) MarkRestaurantOrderAssembled(ctx context.Context, in *MarkRestaurantOrderAssembledRequest, opts ...grpc.CallOption) (*MarkRestaurantOrderAssembledResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkRestaurantOrderAssembledResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_MarkRestaurantOrderAssembled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) MarkRestaurantOrderReady(ctx context.Context, in *MarkRestaurantOrderReadyRequest, opts ...grpc.CallOption) (*MarkRestaurantOrderReadyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkRestaurantOrderReadyResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_MarkRestaurantOrderReady_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ReportPreparationDelay(ctx context.Context, in *ReportPreparationDelayRequest, opts ...grpc.CallOption) (*ReportPreparationDelayResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportPreparationDelayResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ReportPreparationDelay_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ReportPreparationFailure(ctx context.Context, in *ReportPreparationFailureRequest, opts ...grpc.CallOption) (*ReportPreparationFailureResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportPreparationFailureResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ReportPreparationFailure_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *restaurantsServiceClient) RegisterRestaurant(ctx context.Context, in *RegisterRestaurantRequest, opts ...grpc.CallOption) (*RegisterRestaurantResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterRestaurantResponse)
@@ -119,6 +208,18 @@ type RestaurantsServiceServer interface {
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(context.Context, *ReceiveOrderRequestRequest) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(context.Context, *CancelRestaurantOrderRequest) (*CancelRestaurantOrderResponse, error)
+	// Kitchen commands of restaurant staff over one Restaurant Order addressed by
+	// restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
+	// an order of another restaurant is NOT_FOUND, a forbidden transition is
+	// FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
+	// succeeds without a new fact; other repeats are FAILED_PRECONDITION.
+	AcceptRestaurantOrder(context.Context, *AcceptRestaurantOrderRequest) (*AcceptRestaurantOrderResponse, error)
+	RejectRestaurantOrder(context.Context, *RejectRestaurantOrderRequest) (*RejectRestaurantOrderResponse, error)
+	StartPreparation(context.Context, *StartPreparationRequest) (*StartPreparationResponse, error)
+	MarkRestaurantOrderAssembled(context.Context, *MarkRestaurantOrderAssembledRequest) (*MarkRestaurantOrderAssembledResponse, error)
+	MarkRestaurantOrderReady(context.Context, *MarkRestaurantOrderReadyRequest) (*MarkRestaurantOrderReadyResponse, error)
+	ReportPreparationDelay(context.Context, *ReportPreparationDelayRequest) (*ReportPreparationDelayResponse, error)
+	ReportPreparationFailure(context.Context, *ReportPreparationFailureRequest) (*ReportPreparationFailureResponse, error)
 	// Restaurant administration. RegisterRestaurant requires platform#register_restaurant
 	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
 	// and write restaurant#staff before saving. Staff commands are idempotent.
@@ -143,6 +244,27 @@ func (UnimplementedRestaurantsServiceServer) ReceiveOrderRequest(context.Context
 }
 func (UnimplementedRestaurantsServiceServer) CancelRestaurantOrder(context.Context, *CancelRestaurantOrderRequest) (*CancelRestaurantOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelRestaurantOrder not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) AcceptRestaurantOrder(context.Context, *AcceptRestaurantOrderRequest) (*AcceptRestaurantOrderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AcceptRestaurantOrder not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) RejectRestaurantOrder(context.Context, *RejectRestaurantOrderRequest) (*RejectRestaurantOrderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RejectRestaurantOrder not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) StartPreparation(context.Context, *StartPreparationRequest) (*StartPreparationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartPreparation not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) MarkRestaurantOrderAssembled(context.Context, *MarkRestaurantOrderAssembledRequest) (*MarkRestaurantOrderAssembledResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkRestaurantOrderAssembled not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) MarkRestaurantOrderReady(context.Context, *MarkRestaurantOrderReadyRequest) (*MarkRestaurantOrderReadyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkRestaurantOrderReady not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ReportPreparationDelay(context.Context, *ReportPreparationDelayRequest) (*ReportPreparationDelayResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportPreparationDelay not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ReportPreparationFailure(context.Context, *ReportPreparationFailureRequest) (*ReportPreparationFailureResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportPreparationFailure not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) RegisterRestaurant(context.Context, *RegisterRestaurantRequest) (*RegisterRestaurantResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterRestaurant not implemented")
@@ -228,6 +350,132 @@ func _RestaurantsService_CancelRestaurantOrder_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RestaurantsService_AcceptRestaurantOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcceptRestaurantOrderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).AcceptRestaurantOrder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_AcceptRestaurantOrder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).AcceptRestaurantOrder(ctx, req.(*AcceptRestaurantOrderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_RejectRestaurantOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RejectRestaurantOrderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).RejectRestaurantOrder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_RejectRestaurantOrder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).RejectRestaurantOrder(ctx, req.(*RejectRestaurantOrderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_StartPreparation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartPreparationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).StartPreparation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_StartPreparation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).StartPreparation(ctx, req.(*StartPreparationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_MarkRestaurantOrderAssembled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkRestaurantOrderAssembledRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).MarkRestaurantOrderAssembled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_MarkRestaurantOrderAssembled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).MarkRestaurantOrderAssembled(ctx, req.(*MarkRestaurantOrderAssembledRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_MarkRestaurantOrderReady_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkRestaurantOrderReadyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).MarkRestaurantOrderReady(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_MarkRestaurantOrderReady_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).MarkRestaurantOrderReady(ctx, req.(*MarkRestaurantOrderReadyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ReportPreparationDelay_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportPreparationDelayRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ReportPreparationDelay(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ReportPreparationDelay_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ReportPreparationDelay(ctx, req.(*ReportPreparationDelayRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ReportPreparationFailure_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportPreparationFailureRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ReportPreparationFailure(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ReportPreparationFailure_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ReportPreparationFailure(ctx, req.(*ReportPreparationFailureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RestaurantsService_RegisterRestaurant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterRestaurantRequest)
 	if err := dec(in); err != nil {
@@ -300,6 +548,34 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelRestaurantOrder",
 			Handler:    _RestaurantsService_CancelRestaurantOrder_Handler,
+		},
+		{
+			MethodName: "AcceptRestaurantOrder",
+			Handler:    _RestaurantsService_AcceptRestaurantOrder_Handler,
+		},
+		{
+			MethodName: "RejectRestaurantOrder",
+			Handler:    _RestaurantsService_RejectRestaurantOrder_Handler,
+		},
+		{
+			MethodName: "StartPreparation",
+			Handler:    _RestaurantsService_StartPreparation_Handler,
+		},
+		{
+			MethodName: "MarkRestaurantOrderAssembled",
+			Handler:    _RestaurantsService_MarkRestaurantOrderAssembled_Handler,
+		},
+		{
+			MethodName: "MarkRestaurantOrderReady",
+			Handler:    _RestaurantsService_MarkRestaurantOrderReady_Handler,
+		},
+		{
+			MethodName: "ReportPreparationDelay",
+			Handler:    _RestaurantsService_ReportPreparationDelay_Handler,
+		},
+		{
+			MethodName: "ReportPreparationFailure",
+			Handler:    _RestaurantsService_ReportPreparationFailure_Handler,
 		},
 		{
 			MethodName: "RegisterRestaurant",

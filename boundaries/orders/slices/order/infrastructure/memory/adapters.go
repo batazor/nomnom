@@ -95,7 +95,7 @@ func (a *Authorizer) AssignCourier(_ context.Context, orderID order.ID, next rec
 		return "", a.writeError
 	}
 	resource := application.Resource{Type: getorder.ResourceOrder, ID: string(orderID)}
-	if previous != nil && previous.CourierID != next.CourierID {
+	if previous != nil && previous.CourierID != "" && previous.CourierID != next.CourierID {
 		delete(a.grants, grant{subject: application.Subject{Kind: application.SubjectUser, ID: previous.CourierID}, permission: getorder.PermissionView, resource: resource})
 	}
 	a.grants[grant{subject: application.Subject{Kind: application.SubjectUser, ID: next.CourierID}, permission: getorder.PermissionView, resource: resource}] = struct{}{}
@@ -103,7 +103,21 @@ func (a *Authorizer) AssignCourier(_ context.Context, orderID order.ID, next rec
 	return application.AuthorizationRevision(fmt.Sprintf("memory:%s:courier:%d", orderID, a.writes)), nil
 }
 
-// CourierWrites counts AssignCourier writes.
+// ReleaseCourier revokes view on the Order from the released courier, as a
+// DELETE of order#courier would; order#delivery is not modelled.
+func (a *Authorizer) ReleaseCourier(_ context.Context, orderID order.ID, released recordcourierassignment.Assignment, _ bool) (application.AuthorizationRevision, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.writeError != nil {
+		return "", a.writeError
+	}
+	resource := application.Resource{Type: getorder.ResourceOrder, ID: string(orderID)}
+	delete(a.grants, grant{subject: application.Subject{Kind: application.SubjectUser, ID: released.CourierID}, permission: getorder.PermissionView, resource: resource})
+	a.writes++
+	return application.AuthorizationRevision(fmt.Sprintf("memory:%s:courier:%d", orderID, a.writes)), nil
+}
+
+// CourierWrites counts AssignCourier and ReleaseCourier writes.
 func (a *Authorizer) CourierWrites() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()

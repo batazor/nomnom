@@ -299,6 +299,8 @@ Topic `delivery.v1.delivery-events`, контракт `infrastructure/grpc/nomno
 | `CourierUnassignedFromDelivery` | `nomnom.delivery.v1.CourierUnassignedFromDelivery` (курьер снят без замены) |
 | `DeliveryCancelled` | `nomnom.delivery.v1.DeliveryCancelled` (с `reason`, пустой — причина не указана) |
 
+`orders` удаляет по двум последним событиям `order#courier` (и `order#delivery` при отмене) — use case Record Courier Release.
+
 Mapper — явный allowlist: новый Domain Event не публикуется, пока для него нет контракта (match без wildcard не скомпилируется). Все события одной транзакции получают один `aggregate_version`; `event_id` различается через `event_type` (ADR 31).
 
 `delivery-relay` (`cmd/delivery-relay`, тот же образ, runtime contract `pkg/lifecycle`) — polling relay ADR 31:

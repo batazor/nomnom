@@ -22,6 +22,7 @@ import (
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
 	"nomnom/orders/slices/order/applications/recordorderready"
@@ -197,6 +198,7 @@ func handlersOf(store *memory.Store, workflow fulfillment.Notifier) ordermessagi
 		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
 		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, memory.NewAuthorizer()),
+		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, memory.NewAuthorizer()),
 		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),

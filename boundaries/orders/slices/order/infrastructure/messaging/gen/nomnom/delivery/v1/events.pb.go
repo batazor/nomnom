@@ -249,6 +249,130 @@ func (x *DeliveryFailed) GetReason() string {
 	return ""
 }
 
+// Курьер снят с Delivery без замены (Courier Reassignment); Delivery вернулась
+// в поиск курьера. Доменной причины снятия нет.
+type CourierUnassignedFromDelivery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	DeliveryId    string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	CourierId     string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CourierUnassignedFromDelivery) Reset() {
+	*x = CourierUnassignedFromDelivery{}
+	mi := &file_nomnom_delivery_v1_events_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CourierUnassignedFromDelivery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CourierUnassignedFromDelivery) ProtoMessage() {}
+
+func (x *CourierUnassignedFromDelivery) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_delivery_v1_events_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CourierUnassignedFromDelivery.ProtoReflect.Descriptor instead.
+func (*CourierUnassignedFromDelivery) Descriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_events_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CourierUnassignedFromDelivery) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+func (x *CourierUnassignedFromDelivery) GetDeliveryId() string {
+	if x != nil {
+		return x.DeliveryId
+	}
+	return ""
+}
+
+func (x *CourierUnassignedFromDelivery) GetCourierId() string {
+	if x != nil {
+		return x.CourierId
+	}
+	return ""
+}
+
+// Delivery отменена до Pickup (Cancel Delivery); назначенный курьер, если был,
+// освобождён. reason пуст, если причина не указана.
+type DeliveryCancelled struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	DeliveryId    string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliveryCancelled) Reset() {
+	*x = DeliveryCancelled{}
+	mi := &file_nomnom_delivery_v1_events_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliveryCancelled) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliveryCancelled) ProtoMessage() {}
+
+func (x *DeliveryCancelled) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_delivery_v1_events_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliveryCancelled.ProtoReflect.Descriptor instead.
+func (*DeliveryCancelled) Descriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_events_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DeliveryCancelled) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+func (x *DeliveryCancelled) GetDeliveryId() string {
+	if x != nil {
+		return x.DeliveryId
+	}
+	return ""
+}
+
+func (x *DeliveryCancelled) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 var File_nomnom_delivery_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_events_proto_rawDesc = "" +
@@ -272,6 +396,17 @@ const file_nomnom_delivery_v1_events_proto_rawDesc = "" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"z\n" +
+	"\x1dCourierUnassignedFromDelivery\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
+	"\vdelivery_id\x18\x02 \x01(\tR\n" +
+	"deliveryId\x12\x1d\n" +
+	"\n" +
+	"courier_id\x18\x03 \x01(\tR\tcourierId\"g\n" +
+	"\x11DeliveryCancelled\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
+	"\vdelivery_id\x18\x02 \x01(\tR\n" +
+	"deliveryId\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reasonB\xe6\x01\n" +
 	"\x16com.nomnom.delivery.v1B\vEventsProtoP\x01ZUnomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1;deliveryv1\xa2\x02\x03NDX\xaa\x02\x12Nomnom.Delivery.V1\xca\x02\x12Nomnom\\Delivery\\V1\xe2\x02\x1eNomnom\\Delivery\\V1\\GPBMetadata\xea\x02\x14Nomnom::Delivery::V1b\x06proto3"
 
@@ -287,12 +422,14 @@ func file_nomnom_delivery_v1_events_proto_rawDescGZIP() []byte {
 	return file_nomnom_delivery_v1_events_proto_rawDescData
 }
 
-var file_nomnom_delivery_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_nomnom_delivery_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_nomnom_delivery_v1_events_proto_goTypes = []any{
-	(*CourierAssignedToDelivery)(nil), // 0: nomnom.delivery.v1.CourierAssignedToDelivery
-	(*DeliveryPickedUp)(nil),          // 1: nomnom.delivery.v1.DeliveryPickedUp
-	(*DeliveryCompleted)(nil),         // 2: nomnom.delivery.v1.DeliveryCompleted
-	(*DeliveryFailed)(nil),            // 3: nomnom.delivery.v1.DeliveryFailed
+	(*CourierAssignedToDelivery)(nil),     // 0: nomnom.delivery.v1.CourierAssignedToDelivery
+	(*DeliveryPickedUp)(nil),              // 1: nomnom.delivery.v1.DeliveryPickedUp
+	(*DeliveryCompleted)(nil),             // 2: nomnom.delivery.v1.DeliveryCompleted
+	(*DeliveryFailed)(nil),                // 3: nomnom.delivery.v1.DeliveryFailed
+	(*CourierUnassignedFromDelivery)(nil), // 4: nomnom.delivery.v1.CourierUnassignedFromDelivery
+	(*DeliveryCancelled)(nil),             // 5: nomnom.delivery.v1.DeliveryCancelled
 }
 var file_nomnom_delivery_v1_events_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -313,7 +450,7 @@ func file_nomnom_delivery_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_delivery_v1_events_proto_rawDesc), len(file_nomnom_delivery_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

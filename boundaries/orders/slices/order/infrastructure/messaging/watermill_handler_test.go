@@ -13,10 +13,12 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
 	"nomnom/orders/slices/order/applications/recordorderready"
@@ -35,10 +37,11 @@ import (
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type consumer struct {
-	pubSub   *gochannel.GoChannel
-	store    *memory.Store
-	workflow *memory.Workflow
-	poison   chan *message.Message
+	pubSub     *gochannel.GoChannel
+	store      *memory.Store
+	workflow   *memory.Workflow
+	authorizer *memory.Authorizer
+	poison     chan *message.Message
 }
 
 // startConsumer wires the order slice streams to gochannel: the same router
@@ -50,13 +53,15 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		require.NoError(t, store.Add(context.Background(), o))
 	}
 	workflow := memory.NewWorkflow()
+	authorizer := memory.NewAuthorizer()
 	handlers := ordermessaging.Handlers{
 		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
 		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
 		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
-		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, memory.NewAuthorizer()),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, authorizer),
+		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, authorizer),
 		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
@@ -87,7 +92,7 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		_ = router.Close()
 	})
 	<-router.Running()
-	return consumer{pubSub: pubSub, store: store, workflow: workflow, poison: poison}
+	return consumer{pubSub: pubSub, store: store, workflow: workflow, authorizer: authorizer, poison: poison}
 }
 
 func (c consumer) publish(t *testing.T, topic, eventID string, event proto.Message) {
@@ -174,6 +179,37 @@ func TestDeliveryStreamKeepsOrderOfOneAggregate(t *testing.T) {
 	assert.Equal(t, []fulfillment.Kind{
 		fulfillment.KindCourierAssigned, fulfillment.KindPickedUp, fulfillment.KindDeliveryCompleted,
 	}, kinds(c.workflow.Notifications()))
+	assert.Equal(t, 3, c.store.InboxSize())
+	c.noPoison(t)
+}
+
+func courierCanView(c consumer, courierID string) bool {
+	return c.authorizer.Check(context.Background(), application.AccessCheck{
+		Subject:    application.Subject{Kind: application.SubjectUser, ID: courierID},
+		Permission: "view",
+		Resource:   application.Resource{Type: "order", ID: "order-1"},
+	}) == nil
+}
+
+// AC-534, AC-535: CourierUnassignedFromDelivery and DeliveryCancelled revoke
+// the courier relationships without notifying the workflow.
+func TestCourierReleaseEventsRevokeCourierAccess(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed)))
+	assigned := &deliveryv1.CourierAssignedToDelivery{OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1"}
+
+	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-1", assigned)
+	require.True(t, courierCanView(c, "courier-1"))
+	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-2",
+		&deliveryv1.CourierUnassignedFromDelivery{OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1"})
+	assert.False(t, courierCanView(c, "courier-1"))
+	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-3",
+		&deliveryv1.DeliveryCancelled{OrderId: "order-1", DeliveryId: "delivery-1", Reason: "customer request"})
+
+	stored, found, err := c.store.CourierAssignment(context.Background(), "order-1")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, recordcourierassignment.Assignment{AssignedAt: occurredAt}, stored)
+	assert.Equal(t, []fulfillment.Kind{fulfillment.KindCourierAssigned}, kinds(c.workflow.Notifications()))
 	assert.Equal(t, 3, c.store.InboxSize())
 	c.noPoison(t)
 }

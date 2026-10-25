@@ -13,8 +13,9 @@ README `orders` перечисляет как нереализованные о�
 - Place Order пишет `order#customer` и `order#restaurant` одним `WriteRelationships`.
 - `orders-consumer` пишет `order#courier` и `order#delivery` из `CourierAssignedToDelivery` внутри Inbox unit of work до commit; назначение хранится в `orders` (миграция `00002`). Reassignment — один атомарный запрос `TOUCH` нового и `DELETE` прежнего курьера; событие старше сохранённого назначения пропускается.
 - Reconciler обобщается на четыре relation с тем же двухпроходным grace-алгоритмом.
+- `delivery` публикует `CourierUnassignedFromDelivery` и `DeliveryCancelled` (аддитивное расширение `events.proto`); новый use case Record Courier Release в `orders-consumer` удаляет `order#courier` (и `order#delivery` при отмене) в Inbox unit of work, если событие относится к сохранённому назначению и не старше его. Order и fulfillment workflow не меняются: отмену Delivery запрашивает сам workflow как компенсацию, а снятие курьера возвращает Delivery в поиск без факта для `orders`.
 
-Не входит: user identity через BFF (PlaceOrder для service subject отвечает `PERMISSION_DENIED`), API меню `restaurants`, снятие курьера без замены — `delivery` не публикует `CourierUnassignedFromDelivery`/`DeliveryCancelled`, поэтому такое снятие не наблюдаемо.
+Не входит: user identity через BFF (PlaceOrder для service subject отвечает `PERMISSION_DENIED`), API меню `restaurants`.
 
 ## Capabilities
 
@@ -25,8 +26,9 @@ README `orders` перечисляет как нереализованные о�
 ### Modified Capabilities
 
 - `order-use-cases`: gRPC RPC Place Order и Request Order Cancellation, маппинг ошибок.
-- `spicedb-authorization`: relations `order#restaurant`, `order#courier`, `order#delivery` и их writers.
-- `order-relationship-reconciliation`: reconciliation всех relations `order`.
+- `spicedb-authorization`: relations `order#restaurant`, `order#courier`, `order#delivery`, их writers и отзыв при снятии курьера.
+- `order-relationship-reconciliation`: reconciliation всех relations `order`, снятый курьер как отсутствующая relation.
+- `delivery-assignment`: публикация `CourierUnassignedFromDelivery` и `DeliveryCancelled`.
 
 ## Impact
 

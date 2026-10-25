@@ -12,7 +12,7 @@ Kafka → Subscriber → EventGroupProcessor → watermill_handler → mapper �
 | Handler group | Топик | Событие → use case |
 | --- | --- | --- |
 | `orders.restaurant-order-events` | `restaurants.v1.restaurant-order-events` | `RestaurantOrderAccepted` → `confirmorder`; `RestaurantOrderRejected` → `rejectorder`; `PreparationStarted` → `recordpreparationstarted`; `RestaurantOrderReady` → `recordorderready`; `PreparationDelayed`, `PreparationFailed` → `relaypreparationissue` |
-| `orders.delivery-events` | `delivery.v1.delivery-events` | `CourierAssignedToDelivery` → `recordcourierassignment`; `DeliveryPickedUp` → `recordpickup`; `DeliveryCompleted` → `recorddeliverycompletion`; `DeliveryFailed` → `recorddeliveryfailure` |
+| `orders.delivery-events` | `delivery.v1.delivery-events` | `CourierAssignedToDelivery` → `recordcourierassignment`; `CourierUnassignedFromDelivery`, `DeliveryCancelled` → `recordcourierrelease`; `DeliveryPickedUp` → `recordpickup`; `DeliveryCompleted` → `recorddeliverycompletion`; `DeliveryFailed` → `recorddeliveryfailure` |
 
 Имена топиков предварительные до integration specification `restaurants` и `delivery`. Контракты — `events.proto` модулей publisher'ов; Go-типы генерируются в `gen/` (`make proto-generate`).
 

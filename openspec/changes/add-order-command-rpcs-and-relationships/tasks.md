@@ -25,9 +25,14 @@
 - [x] 4.1 Обновить README `orders` и `docs/security.md`; зафиксировать known gap снятия курьера.
 - [x] 4.2 `go vet ./...`, `make lint`, `go test ./...`; integration-тесты PostgreSQL, SpiceDB, reconcile и Kafka против временных контейнеров.
 
+## 5. Снятие курьера
+
+- [x] 5.1 `delivery`: `CourierUnassignedFromDelivery`, `DeliveryCancelled` в `events.proto`, mapper `DeliveryIntegrationEvents`, тесты event_id и relay (`FR-475`, `AC-532`, `AC-533`).
+- [x] 5.2 `orders`: `make proto-generate`; use case Record Courier Release, `spicedb.ReleaseCourier`, NULL-семантика `RememberCourierAssignment` (`FR-476`, `AC-534`…`AC-537`).
+- [x] 5.3 Reconciler удаляет остаток снятого курьера (`FR-477`, `AC-538`); README, `docs/security.md`.
+
 ## Workflow follow-up
 
 - User identity через BFF, после чего Place Order станет доступен клиентам.
 - RPC меню в `restaurants` и production `Catalog`.
-- Integration events `CourierUnassignedFromDelivery`/`DeliveryCancelled` в `delivery` и их обработка в `orders`.
 - После review реализации архивировать change через OpenSpec archive workflow.

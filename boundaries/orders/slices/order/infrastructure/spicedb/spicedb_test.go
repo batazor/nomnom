@@ -155,6 +155,45 @@ func TestAssignCourierFailsAsUnavailable(t *testing.T) {
 	require.ErrorIs(t, err, application.ErrDependencyUnavailable)
 }
 
+// AC-534, AC-535: an unassignment deletes only order#courier, a cancellation
+// also order#delivery; a release without subjects writes nothing.
+func TestReleaseCourierDeletesRelationships(t *testing.T) {
+	fake := &fakePermissions{}
+	a := spicedb.NewAuthorizer(fake, nil, time.Second)
+	released := recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1"}
+
+	_, err := a.ReleaseCourier(context.Background(), "order-1", released, false)
+	require.NoError(t, err)
+	_, err = a.ReleaseCourier(context.Background(), "order-1", released, true)
+	require.NoError(t, err)
+	revision, err := a.ReleaseCourier(context.Background(), "order-1", recordcourierassignment.Assignment{}, true)
+	require.NoError(t, err)
+
+	assert.Equal(t, application.AuthorizationRevision(""), revision)
+	require.Len(t, fake.writes, 2)
+	assert.Equal(t, []string{"OPERATION_DELETE order-1#courier@user:courier-1"}, relationships(fake.writes[0].GetUpdates()))
+	assert.Equal(t, []string{
+		"OPERATION_DELETE order-1#courier@user:courier-1",
+		"OPERATION_DELETE order-1#delivery@delivery:delivery-1",
+	}, relationships(fake.writes[1].GetUpdates()))
+}
+
+// An assignment after a release has no previous courier to delete.
+func TestAssignCourierAfterReleaseDeletesNothing(t *testing.T) {
+	fake := &fakePermissions{}
+	a := spicedb.NewAuthorizer(fake, nil, time.Second)
+
+	_, err := a.AssignCourier(context.Background(), "order-1",
+		recordcourierassignment.Assignment{DeliveryID: "delivery-2", CourierID: "courier-2"},
+		&recordcourierassignment.Assignment{})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"OPERATION_TOUCH order-1#courier@user:courier-2",
+		"OPERATION_TOUCH order-1#delivery@delivery:delivery-2",
+	}, relationships(fake.writes[0].GetUpdates()))
+}
+
 // AC-465, AC-467 against the SpiceDB of `make spicedb-dev`.
 func TestAgainstSpiceDB(t *testing.T) {
 	endpoint := os.Getenv("SPICEDB_ENDPOINT")
@@ -214,6 +253,11 @@ func TestAgainstSpiceDB(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, check(courier1, "view"), application.ErrPermissionDenied, "the stored revision makes the revocation visible")
 	require.NoError(t, check(courier2, "view"))
+
+	// AC-534: the unassigned courier loses view at the stored revision.
+	stored[orderID], err = a.ReleaseCourier(ctx, order.ID(orderID), second, false)
+	require.NoError(t, err)
+	require.ErrorIs(t, check(courier2, "view"), application.ErrPermissionDenied)
 
 	worker := application.Subject{Kind: application.SubjectService, ID: "orders-worker"}
 	require.NoError(t, a.Check(ctx, application.AccessCheck{

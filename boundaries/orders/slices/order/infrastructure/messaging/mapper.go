@@ -5,6 +5,7 @@ import (
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
 	"nomnom/orders/slices/order/applications/recordorderready"
@@ -66,6 +67,28 @@ func toRecordCourierAssignment(e messaging.Envelope, event *deliveryv1.CourierAs
 		OccurredAt: e.OccurredAt,
 		DeliveryID: event.GetDeliveryId(),
 		CourierID:  event.GetCourierId(),
+	}
+}
+
+func toCourierUnassignment(e messaging.Envelope, event *deliveryv1.CourierUnassignedFromDelivery) recordcourierrelease.Input {
+	return recordcourierrelease.Input{
+		EventID:    e.EventID,
+		OrderID:    order.ID(event.GetOrderId()),
+		OccurredAt: e.OccurredAt,
+		DeliveryID: event.GetDeliveryId(),
+		CourierID:  event.GetCourierId(),
+	}
+}
+
+// toDeliveryCancellation drops the reason: no fulfillment fact of orders
+// derives from it (the cancellation is a compensation orders requested).
+func toDeliveryCancellation(e messaging.Envelope, event *deliveryv1.DeliveryCancelled) recordcourierrelease.Input {
+	return recordcourierrelease.Input{
+		EventID:           e.EventID,
+		OrderID:           order.ID(event.GetOrderId()),
+		OccurredAt:        e.OccurredAt,
+		DeliveryID:        event.GetDeliveryId(),
+		DeliveryCancelled: true,
 	}
 }
 

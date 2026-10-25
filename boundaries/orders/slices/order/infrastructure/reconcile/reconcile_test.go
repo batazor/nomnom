@@ -155,3 +155,30 @@ func TestReconcileCourierAndRestaurantRelationships(t *testing.T) {
 	assert.False(t, e.hasRelation(courierRelation, assigned, "courier-old"), "stale courier is deleted after grace")
 	assert.True(t, e.hasRelation(courierRelation, assigned, "courier-new"))
 }
+
+// AC-538: after Record Courier Release the courier (and, for a cancelled
+// Delivery, the delivery) column is NULL, so a surviving relationship is an
+// orphan and is deleted after grace.
+func TestReconcileReleasedCourier(t *testing.T) {
+	e := newEnv(t)
+	unassigned, cancelled := id("unassigned"), id("cancelled")
+	for _, orderID := range []string{unassigned, cancelled} {
+		require.NoError(t, e.store.Add(e.ctx, ordertest.New(t, order.ID(orderID))))
+		e.touchRelation(courierRelation, orderID, "courier-1")
+		e.touchRelation(deliveryRelation, orderID, "delivery-1")
+	}
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(unassigned), recordcourierassignment.Assignment{
+		DeliveryID: "delivery-1", AssignedAt: e.now,
+	}, ""))
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(cancelled), recordcourierassignment.Assignment{
+		AssignedAt: e.now,
+	}, ""))
+
+	e.pass(0)
+	assert.True(t, e.hasRelation(courierRelation, unassigned, "courier-1"), "first sighting only marks a candidate")
+	e.pass(11 * time.Minute)
+	assert.False(t, e.hasRelation(courierRelation, unassigned, "courier-1"), "released courier is deleted")
+	assert.True(t, e.hasRelation(deliveryRelation, unassigned, "delivery-1"), "the delivery stays after an unassignment")
+	assert.False(t, e.hasRelation(courierRelation, cancelled, "courier-1"))
+	assert.False(t, e.hasRelation(deliveryRelation, cancelled, "delivery-1"), "a cancelled delivery is deleted")
+}

@@ -70,6 +70,28 @@ Reassignment — один атомарный запрос: заказ никог
 
 `reconcile.Relations` перечисляет `customer`, `restaurant`, `courier`, `delivery` и object type subject. Для каждой relation выполняется тот же проход: graph → business (orphan/stale удаляется, только если остался таким на двух проходах с интервалом ≥ grace), затем business → graph (`TOUCH` missing с обновлением `authorization_revision`). Business-сторона — колонка строки `orders` из закрытого списка `postgres.Relation`; `NULL` (курьера ещё нет) означает отсутствие ожидаемого subject.
 
+## Снятие курьера и отмена Delivery
+
+`delivery` публикует `CourierUnassignedFromDelivery {order_id, delivery_id, courier_id}` (доменной причины снятия нет) и `DeliveryCancelled {order_id, delivery_id, reason}` (пустой `reason` — причина не указана). Все события одной транзакции имеют один `aggregate_version`; `event_id` различается через `event_type` (ADR 31), поэтому снятие и назначение в одной версии не сталкиваются. Reassign Courier сейчас только снимает курьера (`assigned → waiting`); новое назначение — отдельная транзакция Accept Delivery Offer.
+
+Оба события обрабатывает новый use case Record Courier Release (`orders.recordcourierrelease`) без `fulfillment.Reflector`:
+
+```text
+UoW { Inbox.Accept → CourierAssignment FOR UPDATE
+      → skip (ignored_stale), если delivery_id другой, назначение новее события
+        или (для снятия) courier_id другой
+      → SpiceDB { DELETE order#courier; DELETE order#delivery при отмене }
+      → UPDATE courier_id = NULL (delivery_id = NULL при отмене),
+               courier_assigned_at = occurred_at, authorization_revision }
+commit
+```
+
+Решения:
+
+- Новый use case, а не ветка Record Courier Assignment: ни одно событие не является fulfillment-фактом `Order`. Отмену Delivery запрашивает сам Order Fulfillment workflow (компенсация `CancelDelivery`), а снятие курьера возвращает Delivery в поиск; `recorddeliveryfailure` (`DeliveryFailed`) — другой бизнес-исход после Pickup. Поэтому Order и workflow не меняются и не уведомляются.
+- `courier_assigned_at` после снятия хранит время снятия: более старое `CourierAssignedToDelivery`, доставленное позже, пропускается тем же правилом «старше сохранённого». Строка с `courier_assigned_at`, но без `courier_id`, читается как назначение без курьера; `AssignCourier` не удаляет пустой прежний subject.
+- Reconciler не меняется: `NULL` колонки — отсутствующая relation, поэтому остаток в SpiceDB удаляется как orphan после grace.
+
 ## Known gap
 
-`delivery` не публикует `CourierUnassignedFromDelivery` и `DeliveryCancelled`. Снятие курьера без назначения нового не наблюдаемо для `orders`: `order#courier` прежнего курьера остаётся до следующего назначения. Путь `delivery->act_as_courier` при этом корректен, потому что `delivery#courier` пишет владелец. Закрыть разрыв может только новое integration event `delivery`.
+Закрыт: снятие курьера без замены и отмена Delivery наблюдаемы через `CourierUnassignedFromDelivery`/`DeliveryCancelled` (FR-475…FR-477). Остаётся: событие, пришедшее раньше `CourierAssignedToDelivery` той же Delivery (нарушение порядка внутри partition невозможно, но возможно после ручного replay), пропускается как `ignored_stale`, и последующее назначение снова выдаёт доступ до следующего снятия.

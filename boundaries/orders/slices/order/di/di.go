@@ -18,6 +18,7 @@ import (
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
@@ -122,8 +123,12 @@ func NewAuthorizer(cfg config.SpiceDBConfig, store Store) (Authorizer, func(), e
 }
 
 // CourierRelationships — writer order#courier и order#delivery процесса
-// orders-consumer.
-type CourierRelationships = recordcourierassignment.Relationships
+// orders-consumer: назначение (Record Courier Assignment) и снятие без замены
+// или отмена Delivery (Record Courier Release).
+type CourierRelationships interface {
+	recordcourierassignment.Relationships
+	recordcourierrelease.Relationships
+}
 
 // NewCourierRelationships подключает consumer к SpiceDB: связи курьера пишутся
 // в Inbox unit of work до commit, поэтому без SPICEDB__ENDPOINT процесс не стартует.

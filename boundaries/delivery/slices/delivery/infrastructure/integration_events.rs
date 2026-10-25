@@ -1,7 +1,7 @@
 //! Domain Event → Integration Event of `nomnom/delivery/v1/events.proto`
-//! (ADR 25, ADR 31). Published types are an explicit allowlist: a Domain Event
-//! without a contract (`CourierUnassignedFromDelivery`, `DeliveryCancelled`)
-//! is not written to the Outbox.
+//! (ADR 25, ADR 31). Published types are an explicit allowlist: every Domain
+//! Event of the Delivery aggregate has a contract message; a new variant fails
+//! to compile until it is mapped or explicitly excluded.
 
 use prost::Message;
 
@@ -15,6 +15,9 @@ pub const COURIER_ASSIGNED_TO_DELIVERY: &str = "nomnom.delivery.v1.CourierAssign
 pub const DELIVERY_PICKED_UP: &str = "nomnom.delivery.v1.DeliveryPickedUp";
 pub const DELIVERY_COMPLETED: &str = "nomnom.delivery.v1.DeliveryCompleted";
 pub const DELIVERY_FAILED: &str = "nomnom.delivery.v1.DeliveryFailed";
+pub const COURIER_UNASSIGNED_FROM_DELIVERY: &str =
+    "nomnom.delivery.v1.CourierUnassignedFromDelivery";
+pub const DELIVERY_CANCELLED: &str = "nomnom.delivery.v1.DeliveryCancelled";
 
 /// Mapper of the `delivery.v1.delivery-events` stream.
 #[derive(Clone, Copy, Debug, Default)]
@@ -74,8 +77,36 @@ impl OutboxMapper for DeliveryIntegrationEvents {
                 }
                 .encode_to_vec(),
             ),
-            DomainEvent::CourierUnassignedFromDelivery { .. }
-            | DomainEvent::DeliveryCancelled { .. } => return None,
+            DomainEvent::CourierUnassignedFromDelivery {
+                delivery_id,
+                order_id,
+                courier_id,
+            } => (
+                COURIER_UNASSIGNED_FROM_DELIVERY,
+                v1::CourierUnassignedFromDelivery {
+                    order_id: order_id.as_str().to_owned(),
+                    delivery_id: delivery_id.as_str().to_owned(),
+                    courier_id: courier_id.as_str().to_owned(),
+                }
+                .encode_to_vec(),
+            ),
+            DomainEvent::DeliveryCancelled {
+                delivery_id,
+                order_id,
+                reason,
+                ..
+            } => (
+                DELIVERY_CANCELLED,
+                v1::DeliveryCancelled {
+                    order_id: order_id.as_str().to_owned(),
+                    delivery_id: delivery_id.as_str().to_owned(),
+                    reason: reason
+                        .as_ref()
+                        .map(|reason| reason.as_str().to_owned())
+                        .unwrap_or_default(),
+                }
+                .encode_to_vec(),
+            ),
         };
         Some(OutboxRecord {
             event_type: event_type.to_owned(),
@@ -184,24 +215,88 @@ mod tests {
     }
 
     #[test]
-    fn events_without_contract_are_not_published() {
+    fn maps_courier_unassignment() {
         let (delivery_id, order_id, courier_id) = ids();
+        let record = map(DomainEvent::CourierUnassignedFromDelivery {
+            delivery_id,
+            order_id,
+            courier_id,
+        })
+        .expect("published");
+        assert_eq!(record.event_type, COURIER_UNASSIGNED_FROM_DELIVERY);
         assert_eq!(
-            map(DomainEvent::CourierUnassignedFromDelivery {
-                delivery_id: delivery_id.clone(),
-                order_id: order_id.clone(),
-                courier_id: courier_id.clone(),
-            }),
-            None
+            v1::CourierUnassignedFromDelivery::decode(record.payload.as_slice()).expect("decode"),
+            v1::CourierUnassignedFromDelivery {
+                order_id: "order-1".to_owned(),
+                delivery_id: "delivery-1".to_owned(),
+                courier_id: "courier-1".to_owned(),
+            }
         );
+    }
+
+    #[test]
+    fn maps_cancellation_with_and_without_reason() {
+        let (delivery_id, order_id, courier_id) = ids();
+        let record = map(DomainEvent::DeliveryCancelled {
+            delivery_id: delivery_id.clone(),
+            order_id: order_id.clone(),
+            released_courier_id: Some(courier_id),
+            reason: DeliveryCancellationReason::new("customer request"),
+        })
+        .expect("published");
+        assert_eq!(record.event_type, DELIVERY_CANCELLED);
         assert_eq!(
-            map(DomainEvent::DeliveryCancelled {
-                delivery_id,
-                order_id,
-                released_courier_id: Some(courier_id),
-                reason: DeliveryCancellationReason::new("customer request"),
-            }),
-            None
+            v1::DeliveryCancelled::decode(record.payload.as_slice()).expect("decode"),
+            v1::DeliveryCancelled {
+                order_id: "order-1".to_owned(),
+                delivery_id: "delivery-1".to_owned(),
+                reason: "customer request".to_owned(),
+            }
+        );
+
+        let without_reason = map(DomainEvent::DeliveryCancelled {
+            delivery_id,
+            order_id,
+            released_courier_id: None,
+            reason: None,
+        })
+        .expect("published");
+        assert_eq!(
+            v1::DeliveryCancelled::decode(without_reason.payload.as_slice()).expect("decode"),
+            v1::DeliveryCancelled {
+                order_id: "order-1".to_owned(),
+                delivery_id: "delivery-1".to_owned(),
+                reason: String::new(),
+            }
+        );
+    }
+
+    /// ADR 31: two events of one transaction share the aggregate version, so
+    /// `event_type` keeps their ids apart (unassignment followed by a new
+    /// assignment on the same version would not collide).
+    #[test]
+    fn unassignment_and_assignment_on_one_version_have_distinct_ids() {
+        let unassigned = crate::infrastructure::postgres::event_id(
+            "delivery",
+            "delivery-1",
+            5,
+            COURIER_UNASSIGNED_FROM_DELIVERY,
+        );
+        let assigned = crate::infrastructure::postgres::event_id(
+            "delivery",
+            "delivery-1",
+            5,
+            COURIER_ASSIGNED_TO_DELIVERY,
+        );
+        assert_ne!(unassigned, assigned);
+        assert_ne!(
+            crate::infrastructure::postgres::event_id(
+                "delivery",
+                "delivery-1",
+                5,
+                DELIVERY_CANCELLED
+            ),
+            unassigned
         );
     }
 
@@ -240,6 +335,20 @@ mod tests {
 
     #[test]
     fn event_types_are_full_protobuf_names() {
+        fn full_name<T>() -> String {
+            format!(
+                "nomnom.delivery.v1.{}",
+                std::any::type_name::<T>()
+                    .rsplit("::")
+                    .next()
+                    .expect("name")
+            )
+        }
+        assert_eq!(
+            COURIER_UNASSIGNED_FROM_DELIVERY,
+            full_name::<v1::CourierUnassignedFromDelivery>()
+        );
+        assert_eq!(DELIVERY_CANCELLED, full_name::<v1::DeliveryCancelled>());
         assert_eq!(
             COURIER_ASSIGNED_TO_DELIVERY,
             format!(

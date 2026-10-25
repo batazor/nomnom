@@ -41,6 +41,7 @@ Workflow относится к прикладному процессу. Доме
 | **Record Preparation Started** | Kafka consumer `orders` | Отразить начало Preparation | Стадия приготовления отражена в `Order` один раз | Integration event от `restaurants`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Order Ready** | Kafka consumer `orders` | Отразить готовность `Kitchen Order` к Pickup | Готовность отражена в `Order` один раз | Integration event от `restaurants`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Courier Assignment** | Kafka consumer `orders` | Отразить Courier Assignment | Назначение отражено в `Order` один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
+| **Record Courier Release** | Kafka consumer `orders` | Отозвать доступ курьера, снятого без замены или освобождённого отменой Delivery | `order#courier` (и `order#delivery` при отмене) удалены, если событие называет сохранённое назначение | Integration events `CourierUnassignedFromDelivery`/`DeliveryCancelled` от `delivery`, Transactional Inbox; `Order` и workflow не меняются |
 | **Record Pickup** | Kafka consumer `orders` | Отразить Pickup | Получение заказа курьером отражено один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Delivery Completion** | Kafka consumer `orders` | Отразить Delivery Completion | Завершение доставки отражено один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Delivery Failure** | Kafka consumer `orders` | Отразить неудачу Delivery | Бизнес-неудача доставки и причина отражены один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
@@ -269,6 +270,7 @@ Kafka(event_id) → orders consumer → Transactional Inbox → application hand
 | `PreparationDelayed`, `PreparationFailed` | `restaurants` | — (только workflow) |
 | `RestaurantOrderReady` | `restaurants` | Record Order Ready |
 | `CourierAssignedToDelivery` | `delivery` | Record Courier Assignment |
+| `CourierUnassignedFromDelivery` / `DeliveryCancelled` | `delivery` | Record Courier Release (не сигнал workflow: снятие возвращает Delivery в поиск, отмену запрашивает сам workflow) |
 | `DeliveryPickedUp` / `DeliveryCompleted` / `DeliveryFailed` | `delivery` | Record Pickup / Delivery Completion / Delivery Failure |
 | `CancellationRequested` (Update) | клиент через `orders` | Request Order Cancellation |
 | `OperatorDecision` | оператор через `orders` | — |
@@ -362,7 +364,7 @@ OpenSpec change `add-order-command-rpcs-and-relationships` (FR-464…FR-470, AC-
 | Relation | Writer | Когда |
 | --- | --- | --- |
 | `order#customer@user`, `order#restaurant@restaurant` | Place Order | один `WriteRelationships` до commit заказа |
-| `order#courier@user`, `order#delivery@delivery` | Record Courier Assignment (`orders-consumer`) | из `CourierAssignedToDelivery` внутри Inbox unit of work до commit |
+| `order#courier@user`, `order#delivery@delivery` | Record Courier Assignment, Record Courier Release (`orders-consumer`) | из `CourierAssignedToDelivery` (`TOUCH`), `CourierUnassignedFromDelivery`/`DeliveryCancelled` (`DELETE`) внутри Inbox unit of work до commit |
 
 `view = customer + restaurant->view_orders + courier + delivery->act_as_courier`, `cancel` — только
 customer. Назначение хранится в `orders.delivery_id`, `courier_id`, `courier_assigned_at`
@@ -371,9 +373,13 @@ customer. Назначение хранится в `orders.delivery_id`, `courie
 `authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
 
 Не реализованы: выпуск user assertions в BFF (verifier в `orders` готов) и API меню `restaurants` (Place Order пока недоступен
-клиентам). `delivery` не публикует `CourierUnassignedFromDelivery`/`DeliveryCancelled`, поэтому
-снятие курьера без нового назначения не наблюдаемо: `order#courier` прежнего курьера остаётся до
-следующего назначения.
+клиентам).
+
+Снятие курьера без замены (`CourierUnassignedFromDelivery`) удаляет `order#courier` и очищает
+`courier_id`, отмена Delivery (`DeliveryCancelled`) — ещё и `order#delivery`/`delivery_id`; событие
+применяется, только если называет сохранённые Delivery и курьера и не старше назначения, а
+`courier_assigned_at` хранит время снятия, поэтому более старое назначение после него пропускается
+(миграция `00003`). См. [Record Courier Release](slices/order/applications/recordcourierrelease/README.md).
 
 Reconciliation `order#customer`, `order#restaurant`, `order#courier` и `order#delivery` —
 [`slices/order/infrastructure/reconcile`](slices/order/infrastructure/reconcile)

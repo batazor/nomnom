@@ -32,3 +32,19 @@ message DeliveryFailed {
   string delivery_id = 2;
   string reason = 3;
 }
+
+// Курьер снят с Delivery без замены (Courier Reassignment); Delivery вернулась
+// в поиск курьера. Доменной причины снятия нет.
+message CourierUnassignedFromDelivery {
+  string order_id = 1;
+  string delivery_id = 2;
+  string courier_id = 3;
+}
+
+// Delivery отменена до Pickup (Cancel Delivery); назначенный курьер, если был,
+// освобождён. reason пуст, если причина не указана.
+message DeliveryCancelled {
+  string order_id = 1;
+  string delivery_id = 2;
+  string reason = 3;
+}

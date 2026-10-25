@@ -33,7 +33,10 @@ type Result struct {
 }
 
 // Assignment is the Courier Assignment of an Order as reported by delivery.
-// CourierID is a user id: the courier is checked as user:<id>.
+// CourierID is a user id: the courier is checked as user:<id>. After Record
+// Courier Release CourierID (and, for a cancelled Delivery, DeliveryID) is
+// empty and AssignedAt is the time of the release: the stored assignment
+// orders every later courier event of the Order.
 type Assignment struct {
 	DeliveryID string
 	CourierID  string
@@ -48,7 +51,7 @@ type Assignments interface {
 }
 
 // Relationships writes order#courier and order#delivery of next and deletes
-// those of previous (when they differ) in one atomic request, returning the
+// those of previous (when they differ and are set) in one atomic request, returning the
 // revision of the write. Repeating the request is idempotent.
 type Relationships interface {
 	AssignCourier(ctx context.Context, orderID order.ID, next Assignment, previous *Assignment) (application.AuthorizationRevision, error)

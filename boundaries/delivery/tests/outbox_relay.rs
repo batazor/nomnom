@@ -108,7 +108,8 @@ async fn relay_publishes_outbox_rows_with_envelope_headers() {
             order_id: OrderId::new(&order_id),
             courier_id: CourierId::new(&courier_id),
         },
-        // No contract: not written.
+        // Same transaction, same aggregate version: `event_type` keeps the
+        // ids apart (ADR 31).
         DomainEvent::CourierUnassignedFromDelivery {
             delivery_id: DeliveryId::new(&delivery_id),
             order_id: OrderId::new(&order_id),
@@ -137,9 +138,12 @@ async fn relay_publishes_outbox_rows_with_envelope_headers() {
         rows.iter().map(|row| row.1.as_str()).collect::<Vec<_>>(),
         vec![
             "nomnom.delivery.v1.CourierAssignedToDelivery",
+            "nomnom.delivery.v1.CourierUnassignedFromDelivery",
             "nomnom.delivery.v1.DeliveryPickedUp"
         ]
     );
+    let ids: std::collections::HashSet<&str> = rows.iter().map(|row| row.0.as_str()).collect();
+    assert_eq!(ids.len(), rows.len(), "event_id is unique per event_type");
     for (id, event_type, version) in &rows {
         assert_eq!(
             id,
@@ -198,7 +202,7 @@ async fn relay_publishes_outbox_rows_with_envelope_headers() {
     consumer.subscribe(&[OUTBOX_TOPIC]).expect("subscribe");
     let mut received = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(60);
-    while received.len() < 2 {
+    while received.len() < rows.len() {
         let remaining = deadline.saturating_duration_since(Instant::now());
         let message = tokio::time::timeout(remaining, consumer.recv())
             .await
@@ -240,11 +244,19 @@ async fn relay_publishes_outbox_rows_with_envelope_headers() {
         v1::CourierAssignedToDelivery {
             order_id: order_id.clone(),
             delivery_id: delivery_id.clone(),
+            courier_id: courier_id.clone(),
+        }
+    );
+    assert_eq!(
+        v1::CourierUnassignedFromDelivery::decode(received[1].1.as_slice()).expect("decode"),
+        v1::CourierUnassignedFromDelivery {
+            order_id: order_id.clone(),
+            delivery_id: delivery_id.clone(),
             courier_id,
         }
     );
     assert_eq!(
-        v1::DeliveryPickedUp::decode(received[1].1.as_slice()).expect("decode"),
+        v1::DeliveryPickedUp::decode(received[2].1.as_slice()).expect("decode"),
         v1::DeliveryPickedUp {
             order_id,
             delivery_id,

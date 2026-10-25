@@ -202,18 +202,29 @@ func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (record
 	if err != nil {
 		return recordcourierassignment.Assignment{}, false, fmt.Errorf("read courier assignment of %s: %w", orderID, err)
 	}
-	if deliveryID == nil || courierID == nil || assignedAt == nil {
+	// A released assignment keeps its time with an empty courier (and, for a
+	// cancelled Delivery, an empty delivery): it still orders later events.
+	if assignedAt == nil {
 		return recordcourierassignment.Assignment{}, false, nil
 	}
-	return recordcourierassignment.Assignment{DeliveryID: *deliveryID, CourierID: *courierID, AssignedAt: assignedAt.UTC()}, true, nil
+	return recordcourierassignment.Assignment{DeliveryID: deref(deliveryID), CourierID: deref(courierID), AssignedAt: assignedAt.UTC()}, true, nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // RememberCourierAssignment replaces the Courier Assignment of an Order and
-// the ZedToken of its relationship write in the active transaction.
+// the ZedToken of its relationship write in the active transaction. An empty
+// delivery or courier is stored as NULL, so the relation is absent for the
+// reconciliation.
 func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment recordcourierassignment.Assignment, revision application.AuthorizationRevision) error {
 	tag, err := s.q(ctx).Exec(ctx, `
 		UPDATE orders
-		SET delivery_id = $2, courier_id = $3, courier_assigned_at = $4,
+		SET delivery_id = NULLIF($2, ''), courier_id = NULLIF($3, ''), courier_assigned_at = $4,
 		    authorization_revision = COALESCE(NULLIF($5, ''), authorization_revision)
 		WHERE id = $1`,
 		orderID, assignment.DeliveryID, assignment.CourierID, assignment.AssignedAt, string(revision))

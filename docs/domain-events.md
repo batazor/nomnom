@@ -277,10 +277,11 @@ Domain Events, которые application-слой передаёт в Outbox po
 | `orders` | `OrderCompleted` | Complete Order | |
 | `orders` | `OrderCancelled` | Fail or Cancel Order | Содержит вид итога (Cancellation или Failure) и код причины |
 | `delivery` | `CourierAssignedToDelivery` | Accept Delivery Offer | Источник relation `delivery#courier` по [security](security.md#relationship-lifecycle) |
-| `delivery` | `CourierUnassignedFromDelivery` | Reassign Courier | |
+| `delivery` | `CourierUnassignedFromDelivery` | Reassign Courier | Опубликован как `nomnom.delivery.v1.CourierUnassignedFromDelivery`; `orders` удаляет `order#courier` (Record Courier Release) |
 | `delivery` | `DeliveryPickedUp` | Confirm Pickup | |
 | `delivery` | `DeliveryCompleted` | Confirm Delivery | |
 | `delivery` | `DeliveryFailed` | Report Delivery Failure | Причина без классификации retryability |
+| `delivery` | `DeliveryCancelled` | Cancel Delivery | Опубликован как `nomnom.delivery.v1.DeliveryCancelled` (пустой `reason` — не указана); `orders` удаляет `order#courier` и `order#delivery` (Record Courier Release) |
 | `payments` | `PaymentAuthorized`, `PaymentFailed` | Authorize Payment | Отказ Authorization записывает `PaymentFailed` и `PaymentOperationDeclined` |
 | `payments` | `PaymentCaptured` | Capture Payment | |
 | `payments` | `PaymentAuthorizationCancelled` | Cancel Authorization | |

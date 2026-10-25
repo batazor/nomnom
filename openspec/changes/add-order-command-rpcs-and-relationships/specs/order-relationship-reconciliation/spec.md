@@ -18,3 +18,14 @@ Reconciler SHALL сверять `order#customer`, `order#restaurant`, `order#cou
 
 - **WHEN** в графе остался прежний курьер, а relationships текущего курьера, delivery и ресторана потеряны
 - **THEN** первый проход восстанавливает missing, а прежний курьер удаляется после grace
+
+### Requirement: Снятый курьер отсутствует для reconciliation
+**ID:** FR-477
+
+Reconciler SHALL считать relation `courier` (и `delivery` после отмены Delivery) отсутствующей, когда Record Courier Release очистил колонку: оставшийся в SpiceDB subject MUST удаляться как orphan после grace.
+
+#### Scenario: Остаток снятого курьера
+**ID:** AC-538
+
+- **WHEN** `order#courier` остался в SpiceDB, а `courier_id` заказа `NULL`
+- **THEN** reconciler удаляет relationship после двух проходов с интервалом ≥ grace

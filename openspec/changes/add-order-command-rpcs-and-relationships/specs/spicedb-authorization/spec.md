@@ -58,3 +58,32 @@ Record Courier Assignment SHALL в Inbox unit of work до commit записыв
 
 - **WHEN** adapter пишет placement и назначения в SpiceDB со schema `authorization/schema.zed`
 - **THEN** owner ресторана видит заказ, курьер видит его до переназначения, никто кроме customer не имеет `cancel`
+
+### Requirement: Снятие курьера отзывает relationships курьера
+**ID:** FR-476
+
+Record Courier Release SHALL в Inbox unit of work до commit удалять `order#courier` по `CourierUnassignedFromDelivery` и `order#courier` с `order#delivery` по `DeliveryCancelled`, если сохранённое назначение относится к той же Delivery и курьеру и не новее события. Order и fulfillment workflow MUST NOT меняться.
+
+#### Scenario: Снятие курьера без замены
+**ID:** AC-534
+
+- **WHEN** consumer обрабатывает `CourierUnassignedFromDelivery` назначенного курьера
+- **THEN** курьер теряет `view`, `order#delivery` остаётся, `courier_id` очищен, revision сохранена, workflow не уведомляется
+
+#### Scenario: Отмена Delivery
+**ID:** AC-535
+
+- **WHEN** consumer обрабатывает `DeliveryCancelled` Delivery сохранённого назначения
+- **THEN** `order#courier` и `order#delivery` удалены, `courier_id` и `delivery_id` очищены
+
+#### Scenario: Событие не относится к сохранённому назначению
+**ID:** AC-536
+
+- **WHEN** событие называет другую Delivery или другого курьера либо старше сохранённого назначения, или после снятия приходит более старое назначение
+- **THEN** relationships и назначение не меняются, Inbox record фиксируется
+
+#### Scenario: SpiceDB недоступен при снятии
+**ID:** AC-537
+
+- **WHEN** удаление relationships завершается ошибкой
+- **THEN** транзакция откатывается вместе с Inbox record, а redelivery повторяет событие
