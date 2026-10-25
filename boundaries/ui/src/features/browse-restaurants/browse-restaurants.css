@@ -1,6 +1,7 @@
 .catalog-picker {
   display: grid;
   gap: var(--space-2);
+  justify-items: start;
 }
 
 .catalog-message {
@@ -15,8 +16,18 @@
   margin: 0;
 }
 
+/* A slider: cards keep a readable width and the next one peeks in, so it is
+   clear the row scrolls. */
 .catalog-list {
   display: flex;
+  justify-self: stretch;
+  scrollbar-width: thin;
+  padding-inline-end: var(--space-8);
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - var(--space-8)),
+    transparent
+  );
   gap: var(--space-2);
   margin: 0;
   padding: 0 0 var(--space-1);
@@ -26,14 +37,14 @@
 }
 
 .catalog-list > li {
-  flex: 0 0 auto;
+  flex: 0 0 min(12rem, 78%);
   scroll-snap-align: start;
 }
 
 .catalog-card {
   display: grid;
   gap: 0.15rem;
-  width: 12rem;
+  width: 100%;
   min-height: 3.75rem;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);

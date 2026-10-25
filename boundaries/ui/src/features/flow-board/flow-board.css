@@ -362,6 +362,7 @@ button.board-card-head {
 
 .board-courier-state {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
   justify-content: space-between;
@@ -373,9 +374,11 @@ button.board-card-head {
   align-items: center;
   margin: 0;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .board-state-dot {
+  flex-shrink: 0;
   width: 0.6rem;
   height: 0.6rem;
   border-radius: 50%;

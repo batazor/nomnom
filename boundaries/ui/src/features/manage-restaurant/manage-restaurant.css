@@ -61,9 +61,14 @@
   background: var(--color-surface);
 }
 
+/* The state and its button share a row while both fit; in a narrow board
+   column the button wraps below instead of squeezing the state. */
 .manage-opening {
-  display: grid;
-  gap: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  justify-content: space-between;
 }
 
 .manage-opening h2 {
@@ -80,9 +85,11 @@
   margin: 0;
   color: var(--color-foreground);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .manage-state-dot {
+  flex-shrink: 0;
   width: 0.625rem;
   height: 0.625rem;
   border-radius: 50%;
@@ -125,15 +132,6 @@
 .manage-skeleton .manage-skeleton-title {
   width: 60%;
   height: 2rem;
-}
-
-@container style(--viewport: sm) or style(--viewport: md) or style(
-  --viewport: lg
-) {
-  .manage-opening {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
