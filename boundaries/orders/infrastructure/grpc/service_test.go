@@ -18,6 +18,7 @@ import (
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/application"
 	orderdi "nomnom/orders/slices/order/di"
+	"nomnom/orders/slices/order/infrastructure/memory"
 )
 
 type fixedSubject struct {
@@ -33,7 +34,7 @@ func newClient(t *testing.T, subjects grpcadapter.SubjectResolver) ordersv1.Orde
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
-	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(orderdi.NewModule(orderdi.NewStore()), subjects))
+	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(orderdi.NewModule(memory.NewStore(), memory.NewAuthorizer()), subjects))
 	go func() {
 		_ = server.Serve(listener)
 	}()

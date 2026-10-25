@@ -33,3 +33,28 @@ fulfillment:
 # Адрес internal gateway (env INTERNAL_GATEWAY_ADDR); обязателен при neighbours: grpc.
 internal_gateway:
   address: ""
+# Service identity (ADR 27). Без issuer, audience и jwks_file все вызовы отклоняются.
+identity:
+  issuer: ""
+  audience: nomnom.orders
+  jwks_file: ""
+  # namespace/serviceaccount=service-name через запятую.
+  service_accounts: ""
+  # Каталог projected tokens по audience целевых контекстов (worker).
+  token_dir: ""
+# SpiceDB (ADR 18). Пустой endpoint — все authorization checks отклоняются.
+spicedb:
+  endpoint: ""
+  # Preshared key передаётся через SPICEDB__PRESHARED_KEY из Secret, не через файл.
+  preshared_key: ""
+  insecure: false
+  timeout: 2s
+# PostgreSQL (ADR 8). DSN обязателен; передаётся через POSTGRES__DSN из Secret.
+postgres:
+  dsn: ""
+  max_conns: 10
+# Reconciliation order#customer (cmd/orders-reconciler). grace > самой долгой транзакции оформления.
+reconciler:
+  interval: 5m
+  grace: 10m
+  page_size: 500

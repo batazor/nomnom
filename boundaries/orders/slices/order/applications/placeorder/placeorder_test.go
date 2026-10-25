@@ -56,6 +56,7 @@ func newEnv(t *testing.T) env {
 		IdempotencyKeys: e.store,
 		Catalog:         e.catalog,
 		Relationships:   e.authorizer,
+		Revisions:       e.store,
 		IDs:             &memory.IDs{},
 		Clock:           memory.NewClock(now),
 		Workflow:        e.workflow,
@@ -301,6 +302,7 @@ func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
 		IdempotencyKeys: keys,
 		Catalog:         e.catalog,
 		Relationships:   e.authorizer,
+		Revisions:       e.store,
 		IDs:             &memory.IDs{},
 		Clock:           memory.NewClock(now),
 		Workflow:        e.workflow,
@@ -311,4 +313,17 @@ func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true, FulfillmentStarted: true}, result)
 	assertNothingPlaced(t, env{store: e.store, workflow: memory.NewWorkflow()})
+}
+
+// FR-440: the revision of the creation-time relationship is stored with the Order.
+func TestPlaceOrderStoresAuthorizationRevision(t *testing.T) {
+	e := newEnv(t)
+
+	result, err := e.handler.Handle(context.Background(), validInput())
+
+	require.NoError(t, err)
+	revision, found, err := e.store.Revision(context.Background(), string(result.OrderID))
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, application.AuthorizationRevision("memory:"+string(result.OrderID)), revision)
 }

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package nomnom.orders.v1;
+
+import "google/protobuf/timestamp.proto";
+import "nomnom/orders/v1/orders.proto";
+
+// Integration Events стрима orders.v1.order-events (ADR 13, ADR 25). Envelope
+// (event_id, event_type, occurred_at, aggregate_*) передаётся в Kafka headers;
+// event_type — полное имя сообщения ниже, partition key — order_id.
+
+// Заказ оформлен.
+message OrderPlaced {
+  string order_id = 1;
+  string customer_id = 2;
+  string restaurant_id = 3;
+  Money total = 4;
+  google.protobuf.Timestamp placed_at = 5;
+}
+
+// Заказ успешно завершён.
+message OrderCompleted {
+  string order_id = 1;
+}
+
+// Заказ завершён отрицательным итогом: отменой или неудачей.
+message OrderCancelled {
+  string order_id = 1;
+  Cancellation cancellation = 2;
+}

@@ -43,6 +43,7 @@ type state struct {
 	inbox       map[inboxKey]struct{}
 	outbox      []OutboxRecord
 	idempotency map[idempotencyKey]order.ID
+	revisions   map[order.ID]application.AuthorizationRevision
 }
 
 // clone copies the containers; stored snapshots are replaced, never mutated.
@@ -52,6 +53,7 @@ func (s state) clone() state {
 		inbox:       make(map[inboxKey]struct{}, len(s.inbox)),
 		outbox:      append([]OutboxRecord(nil), s.outbox...),
 		idempotency: make(map[idempotencyKey]order.ID, len(s.idempotency)),
+		revisions:   make(map[order.ID]application.AuthorizationRevision, len(s.revisions)),
 	}
 	for id, snapshot := range s.orders {
 		cloned.orders[id] = snapshot
@@ -61,6 +63,9 @@ func (s state) clone() state {
 	}
 	for key, id := range s.idempotency {
 		cloned.idempotency[key] = id
+	}
+	for id, revision := range s.revisions {
+		cloned.revisions[id] = revision
 	}
 	return cloned
 }
@@ -318,4 +323,21 @@ func (s *Store) Snapshot(id order.ID) (order.Snapshot, bool) {
 	defer s.mu.Unlock()
 	snapshot, ok := s.state.orders[id]
 	return snapshot, ok
+}
+
+// RememberRevision keeps the authorization revision of an Order.
+func (s *Store) RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error {
+	defer s.lock(ctx)()
+	if _, ok := s.state.orders[orderID]; !ok {
+		return fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
+	}
+	s.state.revisions[orderID] = revision
+	return nil
+}
+
+// Revision returns the authorization revision of an Order, if any.
+func (s *Store) Revision(ctx context.Context, orderID string) (application.AuthorizationRevision, bool, error) {
+	defer s.lock(ctx)()
+	revision, ok := s.state.revisions[order.ID(orderID)]
+	return revision, ok, nil
 }

@@ -2,6 +2,10 @@ package grpcadapter
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -108,4 +112,20 @@ func TestSubjectResolverRejectsUnusableJWKS(t *testing.T) {
 	cfg.JWKSFile = empty
 	_, err = NewSubjectResolver(cfg)
 	require.Error(t, err)
+}
+
+func TestLoadJWKSReadsP256Keys(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	raw, err := key.PublicKey.Bytes()
+	require.NoError(t, err)
+	encode := base64.RawURLEncoding.EncodeToString
+	path := filepath.Join(t.TempDir(), "jwks.json")
+	jwks := `{"keys":[{"kty":"EC","crv":"P-256","kid":"ec-1","x":"` + encode(raw[1:33]) + `","y":"` + encode(raw[33:]) + `"}]}`
+	require.NoError(t, os.WriteFile(path, []byte(jwks), 0o600))
+
+	keys, err := LoadJWKS(path)
+
+	require.NoError(t, err)
+	assert.True(t, key.PublicKey.Equal(keys["ec-1"]))
 }

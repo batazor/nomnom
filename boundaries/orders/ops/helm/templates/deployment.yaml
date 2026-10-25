@@ -36,6 +36,20 @@ spec:
       securityContext:
         {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 8 }}
       {{- end }}
+      {{- if and .Values.postgres.migrate .Values.postgres.dsnSecret.name }}
+      # Миграции PostgreSQL до старта процесса; goose сериализует реплики advisory lock'ом.
+      initContainers:
+        - name: migrate
+          image: {{ include "orders.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/orders-migrate"]
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "orders.postgresEnv" . | nindent 12 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "orders.image" . | quote }}
@@ -74,6 +88,38 @@ spec:
               value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
             - name: SHUTDOWN__DRAIN_TIMEOUT
               value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
+            {{- with .Values.identity }}
+            {{- if .jwksConfigMap }}
+            - name: IDENTITY__ISSUER
+              value: {{ .issuer | quote }}
+            - name: IDENTITY__AUDIENCE
+              value: {{ .audience | quote }}
+            - name: IDENTITY__JWKS_FILE
+              value: /etc/nomnom/identity/jwks.json
+            - name: IDENTITY__SERVICE_ACCOUNTS
+              value: {{ .serviceAccounts | quote }}
+            {{- end }}
+            {{- if .tokenAudiences }}
+            - name: IDENTITY__TOKEN_DIR
+              value: /var/run/secrets/nomnom/identity
+            {{- end }}
+            {{- end }}
+            {{- include "orders.postgresEnv" . | nindent 12 }}
+            {{- with .Values.spicedb }}
+            {{- if .endpoint }}
+            - name: SPICEDB__ENDPOINT
+              value: {{ .endpoint | quote }}
+            - name: SPICEDB__INSECURE
+              value: {{ .insecure | quote }}
+            - name: SPICEDB__TIMEOUT
+              value: {{ .timeout | quote }}
+            - name: SPICEDB__PRESHARED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "spicedb.presharedKeySecret.name is required when spicedb.endpoint is set" .presharedKeySecret.name }}
+                  key: {{ .presharedKeySecret.key }}
+            {{- end }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
@@ -89,13 +135,47 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
+          {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap .Values.identity.tokenAudiences }}
           volumeMounts:
+            {{- if .Values.identity.jwksConfigMap }}
+            - name: identity-jwks
+              mountPath: /etc/nomnom/identity
+              readOnly: true
+            {{- end }}
+            {{- if .Values.identity.tokenAudiences }}
+            - name: identity-tokens
+              mountPath: /var/run/secrets/nomnom/identity
+              readOnly: true
+            {{- end }}
+            {{- with .Values.volumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- with .Values.volumes }}
+      {{- if or .Values.volumes .Values.identity.jwksConfigMap .Values.identity.tokenAudiences }}
       volumes:
+        {{- with .Values.identity.jwksConfigMap }}
+        - name: identity-jwks
+          configMap:
+            name: {{ . }}
+            items:
+              - key: jwks.json
+                path: jwks.json
+        {{- end }}
+        {{- with .Values.identity.tokenAudiences }}
+        # ADR 27: one projected ServiceAccount token per target context; kubelet rotates them.
+        - name: identity-tokens
+          projected:
+            sources:
+              {{- range . }}
+              - serviceAccountToken:
+                  audience: {{ . }}
+                  path: {{ . }}
+                  expirationSeconds: {{ $.Values.identity.tokenExpirationSeconds }}
+              {{- end }}
+        {{- end }}
+        {{- with .Values.volumes }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

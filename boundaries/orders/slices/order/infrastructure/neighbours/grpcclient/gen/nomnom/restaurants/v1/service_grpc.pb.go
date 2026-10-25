@@ -22,6 +22,9 @@ const (
 	RestaurantsService_GetRestaurant_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/GetRestaurant"
 	RestaurantsService_ReceiveOrderRequest_FullMethodName   = "/nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest"
 	RestaurantsService_CancelRestaurantOrder_FullMethodName = "/nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder"
+	RestaurantsService_RegisterRestaurant_FullMethodName    = "/nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant"
+	RestaurantsService_AssignStaff_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/AssignStaff"
+	RestaurantsService_RevokeStaff_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/RevokeStaff"
 )
 
 // RestaurantsServiceClient is the client API for RestaurantsService service.
@@ -32,6 +35,12 @@ type RestaurantsServiceClient interface {
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(ctx context.Context, in *ReceiveOrderRequestRequest, opts ...grpc.CallOption) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(ctx context.Context, in *CancelRestaurantOrderRequest, opts ...grpc.CallOption) (*CancelRestaurantOrderResponse, error)
+	// Restaurant administration. RegisterRestaurant requires platform#register_restaurant
+	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
+	// and write restaurant#staff before saving. Staff commands are idempotent.
+	RegisterRestaurant(ctx context.Context, in *RegisterRestaurantRequest, opts ...grpc.CallOption) (*RegisterRestaurantResponse, error)
+	AssignStaff(ctx context.Context, in *AssignStaffRequest, opts ...grpc.CallOption) (*AssignStaffResponse, error)
+	RevokeStaff(ctx context.Context, in *RevokeStaffRequest, opts ...grpc.CallOption) (*RevokeStaffResponse, error)
 }
 
 type restaurantsServiceClient struct {
@@ -72,6 +81,36 @@ func (c *restaurantsServiceClient) CancelRestaurantOrder(ctx context.Context, in
 	return out, nil
 }
 
+func (c *restaurantsServiceClient) RegisterRestaurant(ctx context.Context, in *RegisterRestaurantRequest, opts ...grpc.CallOption) (*RegisterRestaurantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterRestaurantResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_RegisterRestaurant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) AssignStaff(ctx context.Context, in *AssignStaffRequest, opts ...grpc.CallOption) (*AssignStaffResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AssignStaffResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_AssignStaff_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) RevokeStaff(ctx context.Context, in *RevokeStaffRequest, opts ...grpc.CallOption) (*RevokeStaffResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeStaffResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_RevokeStaff_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RestaurantsServiceServer is the server API for RestaurantsService service.
 // All implementations must embed UnimplementedRestaurantsServiceServer
 // for forward compatibility.
@@ -80,6 +119,12 @@ type RestaurantsServiceServer interface {
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(context.Context, *ReceiveOrderRequestRequest) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(context.Context, *CancelRestaurantOrderRequest) (*CancelRestaurantOrderResponse, error)
+	// Restaurant administration. RegisterRestaurant requires platform#register_restaurant
+	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
+	// and write restaurant#staff before saving. Staff commands are idempotent.
+	RegisterRestaurant(context.Context, *RegisterRestaurantRequest) (*RegisterRestaurantResponse, error)
+	AssignStaff(context.Context, *AssignStaffRequest) (*AssignStaffResponse, error)
+	RevokeStaff(context.Context, *RevokeStaffRequest) (*RevokeStaffResponse, error)
 	mustEmbedUnimplementedRestaurantsServiceServer()
 }
 
@@ -98,6 +143,15 @@ func (UnimplementedRestaurantsServiceServer) ReceiveOrderRequest(context.Context
 }
 func (UnimplementedRestaurantsServiceServer) CancelRestaurantOrder(context.Context, *CancelRestaurantOrderRequest) (*CancelRestaurantOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelRestaurantOrder not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) RegisterRestaurant(context.Context, *RegisterRestaurantRequest) (*RegisterRestaurantResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterRestaurant not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) AssignStaff(context.Context, *AssignStaffRequest) (*AssignStaffResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AssignStaff not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) RevokeStaff(context.Context, *RevokeStaffRequest) (*RevokeStaffResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeStaff not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) mustEmbedUnimplementedRestaurantsServiceServer() {}
 func (UnimplementedRestaurantsServiceServer) testEmbeddedByValue()                            {}
@@ -174,6 +228,60 @@ func _RestaurantsService_CancelRestaurantOrder_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RestaurantsService_RegisterRestaurant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterRestaurantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).RegisterRestaurant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_RegisterRestaurant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).RegisterRestaurant(ctx, req.(*RegisterRestaurantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_AssignStaff_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AssignStaffRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).AssignStaff(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_AssignStaff_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).AssignStaff(ctx, req.(*AssignStaffRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_RevokeStaff_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeStaffRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).RevokeStaff(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_RevokeStaff_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).RevokeStaff(ctx, req.(*RevokeStaffRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RestaurantsService_ServiceDesc is the grpc.ServiceDesc for RestaurantsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -192,6 +300,18 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelRestaurantOrder",
 			Handler:    _RestaurantsService_CancelRestaurantOrder_Handler,
+		},
+		{
+			MethodName: "RegisterRestaurant",
+			Handler:    _RestaurantsService_RegisterRestaurant_Handler,
+		},
+		{
+			MethodName: "AssignStaff",
+			Handler:    _RestaurantsService_AssignStaff_Handler,
+		},
+		{
+			MethodName: "RevokeStaff",
+			Handler:    _RestaurantsService_RevokeStaff_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

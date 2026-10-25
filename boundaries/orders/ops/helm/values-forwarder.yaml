@@ -1,0 +1,12 @@
+# Outbox forwarder orders (ADR 13): отдельный release того же chart, один активный экземпляр.
+#   helm upgrade --install orders-forwarder ops/helm -f ops/helm/values-forwarder.yaml
+# Kafka и PostgreSQL задаются values окружения (env KAFKA__*, postgres.dsnSecret).
+component: forwarder
+
+replicaCount: 1
+
+command:
+  - /orders-forwarder
+
+service:
+  enabled: false

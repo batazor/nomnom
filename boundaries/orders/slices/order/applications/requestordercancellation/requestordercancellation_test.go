@@ -37,7 +37,8 @@ func newEnv(t *testing.T, state order.State, policy requestordercancellation.Can
 	}
 	ctx := context.Background()
 	require.NoError(t, e.store.Add(ctx, ordertest.New(t, "order-1", ordertest.WithState(state))))
-	require.NoError(t, e.authorizer.GrantOrderCustomer(ctx, "order-1", "customer-1"))
+	_, err := e.authorizer.GrantOrderCustomer(ctx, "order-1", "customer-1")
+	require.NoError(t, err)
 	e.handler = requestordercancellation.NewHandler(requestordercancellation.Dependencies{
 		Authorizer: e.authorizer,
 		Orders:     e.store,

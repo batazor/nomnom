@@ -68,17 +68,17 @@ func (a *Authorizer) Check(_ context.Context, check application.AccessCheck) err
 		check.Subject, check.Permission, check.Resource.Type, check.Resource.ID)
 }
 
-func (a *Authorizer) GrantOrderCustomer(_ context.Context, orderID order.ID, customerID order.CustomerID) error {
+func (a *Authorizer) GrantOrderCustomer(_ context.Context, orderID order.ID, customerID order.CustomerID) (application.AuthorizationRevision, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.writeError != nil {
-		return a.writeError
+		return "", a.writeError
 	}
 	customer := application.Subject{Kind: application.SubjectUser, ID: string(customerID)}
 	resource := application.Resource{Type: getorder.ResourceOrder, ID: string(orderID)}
 	a.grants[grant{subject: customer, permission: getorder.PermissionView, resource: resource}] = struct{}{}
 	a.grants[grant{subject: customer, permission: requestordercancellation.PermissionCancel, resource: resource}] = struct{}{}
-	return nil
+	return application.AuthorizationRevision("memory:" + string(orderID)), nil
 }
 
 func (a *Authorizer) Checks() []application.AccessCheck {

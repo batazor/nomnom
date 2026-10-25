@@ -59,9 +59,16 @@ type Catalog interface {
 	Snapshot(ctx context.Context, restaurantID order.RestaurantID, menuItemIDs []order.MenuItemID) (CatalogSnapshot, error)
 }
 
-// Relationships writes the creation relationship Customer → Order before commit.
+// Relationships writes the creation relationship Customer → Order before commit
+// and returns the revision of that write.
 type Relationships interface {
-	GrantOrderCustomer(ctx context.Context, orderID order.ID, customerID order.CustomerID) error
+	GrantOrderCustomer(ctx context.Context, orderID order.ID, customerID order.CustomerID) (application.AuthorizationRevision, error)
+}
+
+// Revisions stores the authorization revision with the Order in the active
+// transaction, so later checks read at least as fresh as the relationship.
+type Revisions interface {
+	RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error
 }
 
 type IDGenerator interface {
@@ -85,6 +92,7 @@ type Dependencies struct {
 	IdempotencyKeys IdempotencyKeys
 	Catalog         Catalog
 	Relationships   Relationships
+	Revisions       Revisions
 	IDs             IDGenerator
 	Clock           application.Clock
 	Workflow        fulfillment.Starter
@@ -129,7 +137,8 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if err := h.deps.Relationships.GrantOrderCustomer(ctx, orderID, customerID); err != nil {
+	revision, err := h.deps.Relationships.GrantOrderCustomer(ctx, orderID, customerID)
+	if err != nil {
 		return Result{}, fmt.Errorf("write order customer relationship: %w", err)
 	}
 
@@ -152,6 +161,11 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		}
 		if err := h.deps.IdempotencyKeys.RememberOrder(ctx, customerID, in.IdempotencyKey, orderID); err != nil {
 			return fmt.Errorf("remember idempotency key: %w", err)
+		}
+		if revision != "" {
+			if err := h.deps.Revisions.RememberRevision(ctx, orderID, revision); err != nil {
+				return fmt.Errorf("remember authorization revision: %w", err)
+			}
 		}
 		return h.deps.Outbox.Append(ctx, orderID, placed.Version()+1, events)
 	})

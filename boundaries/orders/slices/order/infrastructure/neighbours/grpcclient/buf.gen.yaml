@@ -19,4 +19,12 @@ plugins:
 inputs:
   - directory: ../../../../../../payments/infrastructure/grpc
   - directory: ../../../../../../restaurants/infrastructure/grpc
+    # Integration Events генерирует messaging/buf.gen.yaml: второй пакет того же proto file
+    # даёт panic регистрации в protoregistry.
+    exclude_paths:
+      - ../../../../../../restaurants/infrastructure/grpc/nomnom/restaurants/v1/events.proto
   - directory: ../../../../../../delivery/infrastructure/grpc
+    # Integration Events генерирует messaging/buf.gen.yaml: второй пакет того же proto file
+    # даёт panic регистрации в protoregistry.
+    exclude_paths:
+      - ../../../../../../delivery/infrastructure/grpc/nomnom/delivery/v1/events.proto

@@ -18,6 +18,9 @@ type Config struct {
 
 	InternalGateway InternalGatewayConfig `mapstructure:"internal_gateway"`
 	Identity        IdentityConfig        `mapstructure:"identity"`
+	SpiceDB         SpiceDBConfig         `mapstructure:"spicedb"`
+	Postgres        PostgresConfig        `mapstructure:"postgres"`
+	Reconciler      ReconcilerConfig      `mapstructure:"reconciler"`
 }
 
 func Load() (Config, error) {
@@ -47,6 +50,15 @@ func Load() (Config, error) {
 	}
 	if err := configureIdentity(loader); err != nil {
 		return Config{}, fmt.Errorf("configure identity: %w", err)
+	}
+	if err := configureSpiceDB(loader); err != nil {
+		return Config{}, fmt.Errorf("configure spicedb: %w", err)
+	}
+	if err := configurePostgres(loader); err != nil {
+		return Config{}, fmt.Errorf("configure postgres: %w", err)
+	}
+	if err := configureReconciler(loader); err != nil {
+		return Config{}, fmt.Errorf("configure reconciler: %w", err)
 	}
 
 	if path := os.Getenv("CONFIG_FILE"); path != "" {
@@ -82,6 +94,15 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := cfg.Identity.Validate(); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.SpiceDB.Validate(); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.Postgres.Validate(); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.Reconciler.Validate(); err != nil {
 		return Config{}, err
 	}
 	if cfg.Fulfillment.Neighbours == NeighboursGRPC && strings.TrimSpace(cfg.InternalGateway.Address) == "" {

@@ -1,0 +1,13 @@
+# Reconciliation order#customer SpiceDB ↔ PostgreSQL: отдельный release того же chart.
+#   helm upgrade --install orders-reconciler ops/helm -f ops/helm/values-reconciler.yaml
+# SpiceDB (spicedb.*) и PostgreSQL (postgres.dsnSecret) задаются values окружения;
+# интервал и grace — env RECONCILER__INTERVAL, RECONCILER__GRACE.
+component: reconciler
+
+replicaCount: 1
+
+command:
+  - /orders-reconciler
+
+service:
+  enabled: false

@@ -166,3 +166,35 @@ volumeMounts: []
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Service identity (ADR 27). Пустой jwksConfigMap — проверка выключена, все вызовы
+# отклоняются (fail closed). Окружение задаёт issuer кластера, ConfigMap с JWKS кластера
+# (ключ jwks.json) и allowlist "namespace/serviceaccount=service-name,…".
+identity:
+  issuer: ""
+  audience: nomnom.orders
+  serviceAccounts: ""
+  jwksConfigMap: ""
+  # Audiences целевых контекстов, для которых Pod получает projected token
+  # (/var/run/secrets/nomnom/identity/<audience>); нужно только worker'у.
+  tokenAudiences: []
+  tokenExpirationSeconds: 3600
+
+# SpiceDB (ADR 18). Пустой endpoint — authorization отклоняет все проверки (fail closed).
+# Preshared key берётся из внешнего Secret и не хранится в values.
+spicedb:
+  endpoint: ""
+  insecure: false
+  timeout: 2s
+  presharedKeySecret:
+    name: ""
+    key: preshared-key
+
+# PostgreSQL (ADR 8). DSN берётся из внешнего Secret; без него процесс не стартует.
+# migrate: init container /orders-migrate перед каждым workload'ом.
+postgres:
+  dsnSecret:
+    name: ""
+    key: dsn
+  maxConns: 10
+  migrate: true

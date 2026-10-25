@@ -139,12 +139,16 @@ func LoadJWKS(path string) (map[string]crypto.PublicKey, error) {
 			}
 			keys[k.Kid] = &rsa.PublicKey{N: n, E: int(e.Int64())}
 		case "EC":
-			x, errX := decodeInt(k.X)
-			y, errY := decodeInt(k.Y)
-			if k.Crv != "P-256" || errX != nil || errY != nil {
+			x, errX := base64.RawURLEncoding.DecodeString(k.X)
+			y, errY := base64.RawURLEncoding.DecodeString(k.Y)
+			if k.Crv != "P-256" || errX != nil || errY != nil || len(x) != 32 || len(y) != 32 {
 				return nil, fmt.Errorf("jwks %s: invalid EC key %q", path, k.Kid)
 			}
-			keys[k.Kid] = &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}
+			key, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), append(append([]byte{4}, x...), y...))
+			if err != nil {
+				return nil, fmt.Errorf("jwks %s: invalid EC key %q: %w", path, k.Kid, err)
+			}
+			keys[k.Kid] = key
 		}
 	}
 	if len(keys) == 0 {

@@ -16,27 +16,93 @@ import (
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
 	serverConfig := cfg.Server
-	store := di.NewStore()
-	module := di.NewModule(store)
+	postgresConfig := cfg.Postgres
+	store, cleanup, err := di.NewPostgresStore(postgresConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	diStore := di.NewStore(store)
+	spiceDBConfig := cfg.SpiceDB
+	authorizer, cleanup2, err := di.NewAuthorizer(spiceDBConfig, diStore)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	module := di.NewModule(diStore, authorizer)
 	identityConfig := cfg.Identity
 	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
 	if err != nil {
+		cleanup2()
+		cleanup()
 		return nil, nil, err
 	}
 	server := NewGRPCServer(module, subjectResolver)
 	app := NewApp(serverConfig, server, module)
 	return app, func() {
+		cleanup2()
+		cleanup()
 	}, nil
 }
 
 func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
-	store := di.NewStore()
-	activities, cleanup, err := NewActivities(store, cfg)
+	postgresConfig := cfg.Postgres
+	store, cleanup, err := di.NewPostgresStore(postgresConfig)
 	if err != nil {
+		return nil, nil, err
+	}
+	diStore := di.NewStore(store)
+	activities, cleanup2, err := NewActivities(diStore, cfg)
+	if err != nil {
+		cleanup()
 		return nil, nil, err
 	}
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
+		cleanup2()
+		cleanup()
+	}, nil
+}
+
+func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
+	postgresConfig := cfg.Postgres
+	store, cleanup, err := di.NewPostgresStore(postgresConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	diStore := di.NewStore(store)
+	kafkaConsumer := NewKafkaConsumer(cfg, diStore)
+	return kafkaConsumer, func() {
+		cleanup()
+	}, nil
+}
+
+func InitializeForwarder(cfg config.Config) (*OutboxForwarder, func(), error) {
+	postgresConfig := cfg.Postgres
+	store, cleanup, err := di.NewPostgresStore(postgresConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	outboxForwarder := NewOutboxForwarder(cfg, store)
+	return outboxForwarder, func() {
+		cleanup()
+	}, nil
+}
+
+func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), error) {
+	postgresConfig := cfg.Postgres
+	store, cleanup, err := di.NewPostgresStore(postgresConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	spiceDBConfig := cfg.SpiceDB
+	client, cleanup2, err := NewSpiceDBClient(spiceDBConfig)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	relationshipReconciler := NewRelationshipReconciler(cfg, store, client)
+	return relationshipReconciler, func() {
+		cleanup2()
 		cleanup()
 	}, nil
 }

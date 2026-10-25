@@ -1,0 +1,26 @@
+package di
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"nomnom/orders/pkg/config"
+	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/postgres"
+)
+
+var (
+	_ Store = (*memory.Store)(nil)
+	_ Store = (*postgres.Store)(nil)
+)
+
+func TestNewAuthorizerRequiresEndpoint(t *testing.T) {
+	_, _, err := NewAuthorizer(config.SpiceDBConfig{}, nil)
+	require.ErrorContains(t, err, config.EnvSpiceDBEndpoint)
+}
+
+func TestNewPostgresStoreRequiresDSN(t *testing.T) {
+	_, _, err := NewPostgresStore(config.PostgresConfig{MaxConns: 1})
+	require.ErrorContains(t, err, config.EnvPostgresDSN)
+}

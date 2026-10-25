@@ -12,7 +12,7 @@ import (
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
 	wire.Build(
-		wire.FieldsOf(new(config.Config), "Server", "Identity"),
+		wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Postgres"),
 		orderdi.ProviderSet,
 		grpcadapter.NewSubjectResolver,
 		NewGRPCServer,
@@ -23,9 +23,40 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 
 func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	wire.Build(
+		wire.FieldsOf(new(config.Config), "Postgres"),
+		orderdi.NewPostgresStore,
 		orderdi.NewStore,
 		NewActivities,
 		NewTemporalWorker,
+	)
+	return nil, nil, nil
+}
+
+func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
+	wire.Build(
+		wire.FieldsOf(new(config.Config), "Postgres"),
+		orderdi.NewPostgresStore,
+		orderdi.NewStore,
+		NewKafkaConsumer,
+	)
+	return nil, nil, nil
+}
+
+func InitializeForwarder(cfg config.Config) (*OutboxForwarder, func(), error) {
+	wire.Build(
+		wire.FieldsOf(new(config.Config), "Postgres"),
+		orderdi.NewPostgresStore,
+		NewOutboxForwarder,
+	)
+	return nil, nil, nil
+}
+
+func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), error) {
+	wire.Build(
+		wire.FieldsOf(new(config.Config), "Postgres", "SpiceDB"),
+		orderdi.NewPostgresStore,
+		NewSpiceDBClient,
+		NewRelationshipReconciler,
 	)
 	return nil, nil, nil
 }

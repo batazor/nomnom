@@ -60,6 +60,17 @@ helm uninstall orders
 
 Из корня репозитория путь к chart — `boundaries/orders/ops/helm`.
 
+## PostgreSQL и Outbox forwarder
+
+DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`/`key` (env `POSTGRES__DSN`); без него
+процесс не стартует. При `postgres.migrate: true` каждый workload получает init container
+`/orders-migrate` (goose под advisory lock). Forwarder Outbox → Kafka — отдельный release с
+`values-forwarder.yaml` (один экземпляр, без Service):
+
+```bash
+helm upgrade --install orders-forwarder ops/helm -f ops/helm/values-forwarder.yaml
+```
+
 ## Temporal worker
 
 Worker `cmd/orders-worker` разворачивается отдельным release того же chart с `values-worker.yaml`:

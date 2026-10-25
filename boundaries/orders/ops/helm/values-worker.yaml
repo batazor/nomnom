@@ -9,3 +9,9 @@ command:
 
 service:
   enabled: false
+
+identity:
+  tokenAudiences:
+    - nomnom.payments
+    - nomnom.restaurants
+    - nomnom.delivery

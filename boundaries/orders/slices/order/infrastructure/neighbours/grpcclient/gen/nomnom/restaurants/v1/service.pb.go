@@ -396,6 +396,345 @@ func (x *CancelRestaurantOrderResponse) GetRejectionReason() string {
 	return ""
 }
 
+type RegisterRestaurantRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	OwnerId       string                 `protobuf:"bytes,2,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
+	Address       string                 `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterRestaurantRequest) Reset() {
+	*x = RegisterRestaurantRequest{}
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterRestaurantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterRestaurantRequest) ProtoMessage() {}
+
+func (x *RegisterRestaurantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterRestaurantRequest.ProtoReflect.Descriptor instead.
+func (*RegisterRestaurantRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RegisterRestaurantRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RegisterRestaurantRequest) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *RegisterRestaurantRequest) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+type RegisterRestaurantResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Restaurant    *Restaurant            `protobuf:"bytes,1,opt,name=restaurant,proto3" json:"restaurant,omitempty"`
+	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterRestaurantResponse) Reset() {
+	*x = RegisterRestaurantResponse{}
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterRestaurantResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterRestaurantResponse) ProtoMessage() {}
+
+func (x *RegisterRestaurantResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterRestaurantResponse.ProtoReflect.Descriptor instead.
+func (*RegisterRestaurantResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RegisterRestaurantResponse) GetRestaurant() *Restaurant {
+	if x != nil {
+		return x.Restaurant
+	}
+	return nil
+}
+
+func (x *RegisterRestaurantResponse) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type AssignStaffRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RestaurantId  string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AssignStaffRequest) Reset() {
+	*x = AssignStaffRequest{}
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AssignStaffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AssignStaffRequest) ProtoMessage() {}
+
+func (x *AssignStaffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AssignStaffRequest.ProtoReflect.Descriptor instead.
+func (*AssignStaffRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *AssignStaffRequest) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *AssignStaffRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type AssignStaffResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RestaurantId string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	// User ids of the staff after the command, sorted.
+	Staff []string `protobuf:"bytes,2,rep,name=staff,proto3" json:"staff,omitempty"`
+	// false when the user was already staff.
+	Changed       bool `protobuf:"varint,3,opt,name=changed,proto3" json:"changed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AssignStaffResponse) Reset() {
+	*x = AssignStaffResponse{}
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AssignStaffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AssignStaffResponse) ProtoMessage() {}
+
+func (x *AssignStaffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AssignStaffResponse.ProtoReflect.Descriptor instead.
+func (*AssignStaffResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AssignStaffResponse) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *AssignStaffResponse) GetStaff() []string {
+	if x != nil {
+		return x.Staff
+	}
+	return nil
+}
+
+func (x *AssignStaffResponse) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+type RevokeStaffRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RestaurantId  string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeStaffRequest) Reset() {
+	*x = RevokeStaffRequest{}
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeStaffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeStaffRequest) ProtoMessage() {}
+
+func (x *RevokeStaffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeStaffRequest.ProtoReflect.Descriptor instead.
+func (*RevokeStaffRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RevokeStaffRequest) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *RevokeStaffRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type RevokeStaffResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RestaurantId string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	Staff        []string               `protobuf:"bytes,2,rep,name=staff,proto3" json:"staff,omitempty"`
+	// false when the user was not staff.
+	Changed       bool `protobuf:"varint,3,opt,name=changed,proto3" json:"changed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeStaffResponse) Reset() {
+	*x = RevokeStaffResponse{}
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeStaffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeStaffResponse) ProtoMessage() {}
+
+func (x *RevokeStaffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeStaffResponse.ProtoReflect.Descriptor instead.
+func (*RevokeStaffResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RevokeStaffResponse) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *RevokeStaffResponse) GetStaff() []string {
+	if x != nil {
+		return x.Staff
+	}
+	return nil
+}
+
+func (x *RevokeStaffResponse) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
 var File_nomnom_restaurants_v1_service_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_service_proto_rawDesc = "" +
@@ -425,11 +764,37 @@ const file_nomnom_restaurants_v1_service_proto_rawDesc = "" +
 	"\x1dCancelRestaurantOrderResponse\x12.\n" +
 	"\x13restaurant_order_id\x18\x01 \x01(\tR\x11restaurantOrderId\x12\x1c\n" +
 	"\tcancelled\x18\x02 \x01(\bR\tcancelled\x12)\n" +
-	"\x10rejection_reason\x18\x03 \x01(\tR\x0frejectionReason2\x83\x03\n" +
+	"\x10rejection_reason\x18\x03 \x01(\tR\x0frejectionReason\"d\n" +
+	"\x19RegisterRestaurantRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
+	"\bowner_id\x18\x02 \x01(\tR\aownerId\x12\x18\n" +
+	"\aaddress\x18\x03 \x01(\tR\aaddress\"y\n" +
+	"\x1aRegisterRestaurantResponse\x12A\n" +
+	"\n" +
+	"restaurant\x18\x01 \x01(\v2!.nomnom.restaurants.v1.RestaurantR\n" +
+	"restaurant\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"R\n" +
+	"\x12AssignStaffRequest\x12#\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"j\n" +
+	"\x13AssignStaffResponse\x12#\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x14\n" +
+	"\x05staff\x18\x02 \x03(\tR\x05staff\x12\x18\n" +
+	"\achanged\x18\x03 \x01(\bR\achanged\"R\n" +
+	"\x12RevokeStaffRequest\x12#\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"j\n" +
+	"\x13RevokeStaffResponse\x12#\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x14\n" +
+	"\x05staff\x18\x02 \x03(\tR\x05staff\x12\x18\n" +
+	"\achanged\x18\x03 \x01(\bR\achanged2\xca\x05\n" +
 	"\x12RestaurantsService\x12j\n" +
 	"\rGetRestaurant\x12+.nomnom.restaurants.v1.GetRestaurantRequest\x1a,.nomnom.restaurants.v1.GetRestaurantResponse\x12|\n" +
 	"\x13ReceiveOrderRequest\x121.nomnom.restaurants.v1.ReceiveOrderRequestRequest\x1a2.nomnom.restaurants.v1.ReceiveOrderRequestResponse\x12\x82\x01\n" +
-	"\x15CancelRestaurantOrder\x123.nomnom.restaurants.v1.CancelRestaurantOrderRequest\x1a4.nomnom.restaurants.v1.CancelRestaurantOrderResponseB\x88\x02\n" +
+	"\x15CancelRestaurantOrder\x123.nomnom.restaurants.v1.CancelRestaurantOrderRequest\x1a4.nomnom.restaurants.v1.CancelRestaurantOrderResponse\x12y\n" +
+	"\x12RegisterRestaurant\x120.nomnom.restaurants.v1.RegisterRestaurantRequest\x1a1.nomnom.restaurants.v1.RegisterRestaurantResponse\x12d\n" +
+	"\vAssignStaff\x12).nomnom.restaurants.v1.AssignStaffRequest\x1a*.nomnom.restaurants.v1.AssignStaffResponse\x12d\n" +
+	"\vRevokeStaff\x12).nomnom.restaurants.v1.RevokeStaffRequest\x1a*.nomnom.restaurants.v1.RevokeStaffResponseB\x88\x02\n" +
 	"\x19com.nomnom.restaurants.v1B\fServiceProtoP\x01Zgnomnom/orders/slices/order/infrastructure/neighbours/grpcclient/gen/nomnom/restaurants/v1;restaurantsv1\xa2\x02\x03NRX\xaa\x02\x15Nomnom.Restaurants.V1\xca\x02\x15Nomnom\\Restaurants\\V1\xe2\x02!Nomnom\\Restaurants\\V1\\GPBMetadata\xea\x02\x17Nomnom::Restaurants::V1b\x06proto3"
 
 var (
@@ -444,7 +809,7 @@ func file_nomnom_restaurants_v1_service_proto_rawDescGZIP() []byte {
 	return file_nomnom_restaurants_v1_service_proto_rawDescData
 }
 
-var file_nomnom_restaurants_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_nomnom_restaurants_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_nomnom_restaurants_v1_service_proto_goTypes = []any{
 	(*GetRestaurantRequest)(nil),          // 0: nomnom.restaurants.v1.GetRestaurantRequest
 	(*GetRestaurantResponse)(nil),         // 1: nomnom.restaurants.v1.GetRestaurantResponse
@@ -453,22 +818,35 @@ var file_nomnom_restaurants_v1_service_proto_goTypes = []any{
 	(*ReceiveOrderRequestResponse)(nil),   // 4: nomnom.restaurants.v1.ReceiveOrderRequestResponse
 	(*CancelRestaurantOrderRequest)(nil),  // 5: nomnom.restaurants.v1.CancelRestaurantOrderRequest
 	(*CancelRestaurantOrderResponse)(nil), // 6: nomnom.restaurants.v1.CancelRestaurantOrderResponse
-	(*Restaurant)(nil),                    // 7: nomnom.restaurants.v1.Restaurant
+	(*RegisterRestaurantRequest)(nil),     // 7: nomnom.restaurants.v1.RegisterRestaurantRequest
+	(*RegisterRestaurantResponse)(nil),    // 8: nomnom.restaurants.v1.RegisterRestaurantResponse
+	(*AssignStaffRequest)(nil),            // 9: nomnom.restaurants.v1.AssignStaffRequest
+	(*AssignStaffResponse)(nil),           // 10: nomnom.restaurants.v1.AssignStaffResponse
+	(*RevokeStaffRequest)(nil),            // 11: nomnom.restaurants.v1.RevokeStaffRequest
+	(*RevokeStaffResponse)(nil),           // 12: nomnom.restaurants.v1.RevokeStaffResponse
+	(*Restaurant)(nil),                    // 13: nomnom.restaurants.v1.Restaurant
 }
 var file_nomnom_restaurants_v1_service_proto_depIdxs = []int32{
-	7, // 0: nomnom.restaurants.v1.GetRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
-	2, // 1: nomnom.restaurants.v1.ReceiveOrderRequestRequest.items:type_name -> nomnom.restaurants.v1.OrderRequestItem
-	0, // 2: nomnom.restaurants.v1.RestaurantsService.GetRestaurant:input_type -> nomnom.restaurants.v1.GetRestaurantRequest
-	3, // 3: nomnom.restaurants.v1.RestaurantsService.ReceiveOrderRequest:input_type -> nomnom.restaurants.v1.ReceiveOrderRequestRequest
-	5, // 4: nomnom.restaurants.v1.RestaurantsService.CancelRestaurantOrder:input_type -> nomnom.restaurants.v1.CancelRestaurantOrderRequest
-	1, // 5: nomnom.restaurants.v1.RestaurantsService.GetRestaurant:output_type -> nomnom.restaurants.v1.GetRestaurantResponse
-	4, // 6: nomnom.restaurants.v1.RestaurantsService.ReceiveOrderRequest:output_type -> nomnom.restaurants.v1.ReceiveOrderRequestResponse
-	6, // 7: nomnom.restaurants.v1.RestaurantsService.CancelRestaurantOrder:output_type -> nomnom.restaurants.v1.CancelRestaurantOrderResponse
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	13, // 0: nomnom.restaurants.v1.GetRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
+	2,  // 1: nomnom.restaurants.v1.ReceiveOrderRequestRequest.items:type_name -> nomnom.restaurants.v1.OrderRequestItem
+	13, // 2: nomnom.restaurants.v1.RegisterRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
+	0,  // 3: nomnom.restaurants.v1.RestaurantsService.GetRestaurant:input_type -> nomnom.restaurants.v1.GetRestaurantRequest
+	3,  // 4: nomnom.restaurants.v1.RestaurantsService.ReceiveOrderRequest:input_type -> nomnom.restaurants.v1.ReceiveOrderRequestRequest
+	5,  // 5: nomnom.restaurants.v1.RestaurantsService.CancelRestaurantOrder:input_type -> nomnom.restaurants.v1.CancelRestaurantOrderRequest
+	7,  // 6: nomnom.restaurants.v1.RestaurantsService.RegisterRestaurant:input_type -> nomnom.restaurants.v1.RegisterRestaurantRequest
+	9,  // 7: nomnom.restaurants.v1.RestaurantsService.AssignStaff:input_type -> nomnom.restaurants.v1.AssignStaffRequest
+	11, // 8: nomnom.restaurants.v1.RestaurantsService.RevokeStaff:input_type -> nomnom.restaurants.v1.RevokeStaffRequest
+	1,  // 9: nomnom.restaurants.v1.RestaurantsService.GetRestaurant:output_type -> nomnom.restaurants.v1.GetRestaurantResponse
+	4,  // 10: nomnom.restaurants.v1.RestaurantsService.ReceiveOrderRequest:output_type -> nomnom.restaurants.v1.ReceiveOrderRequestResponse
+	6,  // 11: nomnom.restaurants.v1.RestaurantsService.CancelRestaurantOrder:output_type -> nomnom.restaurants.v1.CancelRestaurantOrderResponse
+	8,  // 12: nomnom.restaurants.v1.RestaurantsService.RegisterRestaurant:output_type -> nomnom.restaurants.v1.RegisterRestaurantResponse
+	10, // 13: nomnom.restaurants.v1.RestaurantsService.AssignStaff:output_type -> nomnom.restaurants.v1.AssignStaffResponse
+	12, // 14: nomnom.restaurants.v1.RestaurantsService.RevokeStaff:output_type -> nomnom.restaurants.v1.RevokeStaffResponse
+	9,  // [9:15] is the sub-list for method output_type
+	3,  // [3:9] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_restaurants_v1_service_proto_init() }
@@ -483,7 +861,7 @@ func file_nomnom_restaurants_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_restaurants_v1_service_proto_rawDesc), len(file_nomnom_restaurants_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

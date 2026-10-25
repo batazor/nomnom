@@ -5,6 +5,7 @@ package di
 import (
 	"context"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -22,17 +23,19 @@ import (
 	"nomnom/orders/slices/order/applications/recordpickup"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/memory"
+	"nomnom/orders/slices/order/infrastructure/postgres"
 	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
 )
 
 // AC-446: the worker runs the Order Fulfillment Workflow end to end against a
 // real Temporal Server; inbound facts go through the application handlers.
-// Run with `make test-integration` or TEMPORAL_ADDRESS=host:port.
+// AC-471: the Order lives in PostgreSQL, so another process placed it and the
+// worker completes it there. Run with `make test-integration` or
+// TEMPORAL_ADDRESS=host:port POSTGRES_DSN=….
 func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
-	address := os.Getenv("TEMPORAL_ADDRESS")
-	if address == "" {
-		t.Skip("TEMPORAL_ADDRESS is not set")
+	address, dsn := os.Getenv("TEMPORAL_ADDRESS"), os.Getenv("POSTGRES_DSN")
+	if address == "" || dsn == "" {
+		t.Skip("TEMPORAL_ADDRESS and POSTGRES_DSN are not set")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -58,9 +61,18 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 		Shutdown: config.ShutdownConfig{DrainTimeout: 5 * time.Second},
 	}
 
-	orderID := order.ID("order-" + time.Now().UTC().Format("20060102T150405.000000000"))
-	store := memory.NewStore()
-	require.NoError(t, store.Add(ctx, ordertest.New(t, orderID)))
+	orderID := order.ID("order-" + time.Now().UTC().Format("20060102T150405") + "-" + strconv.FormatInt(time.Now().UnixNano(), 36))
+	pg := config.PostgresConfig{DSN: dsn, MaxConns: 5}
+	require.NoError(t, postgres.Migrate(ctx, pg))
+	placing, err := postgres.Open(ctx, pg)
+	require.NoError(t, err)
+	defer placing.Close()
+	require.NoError(t, placing.Add(ctx, ordertest.New(t, orderID)))
+
+	// The worker process has its own pool on the same database.
+	store, err := postgres.Open(ctx, pg)
+	require.NoError(t, err)
+	defer store.Close()
 
 	activities, cleanup, err := NewActivities(store, cfg)
 	require.NoError(t, err)
@@ -90,7 +102,9 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	ready := recordorderready.NewHandler(store, store, store, port)
 	pickup := recordpickup.NewHandler(store, store, store, port)
 	complete := recorddeliverycompletion.NewHandler(store, store, store, port)
-	send := func(eventID string, f fact) { require.NoError(t, f(ctx, eventID)) }
+	// Inbox в PostgreSQL переживает прогоны: event_id уникален для заказа, иначе
+	// повторный прогон на той же базе принимает факты за duplicates.
+	send := func(eventID string, f fact) { require.NoError(t, f(ctx, string(orderID)+":"+eventID)) }
 	now := time.Now().UTC()
 
 	require.NoError(t, port.Start(ctx, fulfillment.StartRequest{OrderID: orderID}))
@@ -122,8 +136,9 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	require.NoError(t, temporalClient.GetWorkflow(ctx, workflowID, "").Get(ctx, &result))
 	assert.Equal(t, fulfillorder.Result{Outcome: fulfillorder.OutcomeCompleted}, result)
 
-	snapshot, _ := store.Snapshot(orderID)
-	assert.Equal(t, order.StateCompleted, snapshot.State)
+	completed, err := placing.Get(ctx, orderID)
+	require.NoError(t, err)
+	assert.Equal(t, order.StateCompleted, completed.State())
 
 	description, err := temporalClient.DescribeWorkflow(ctx, workflowID, "")
 	require.NoError(t, err)

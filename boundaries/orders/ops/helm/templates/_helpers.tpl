@@ -64,3 +64,21 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- fail "management.port must differ from service.targetPort" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+PostgreSQL env (ADR 8): DSN из внешнего Secret. Без dsnSecret.name переменная не
+задаётся, и процесс orders не стартует (POSTGRES__DSN обязателен).
+*/}}
+{{- define "orders.postgresEnv" -}}
+{{- with .Values.postgres }}
+{{- if .dsnSecret.name }}
+- name: POSTGRES__DSN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .dsnSecret.name }}
+      key: {{ .dsnSecret.key }}
+- name: POSTGRES__MAX_CONNS
+  value: {{ .maxConns | quote }}
+{{- end }}
+{{- end }}
+{{- end }}

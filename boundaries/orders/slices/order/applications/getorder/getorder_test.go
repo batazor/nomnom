@@ -28,7 +28,8 @@ func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *memory.Auth
 	authorizer := memory.NewAuthorizer()
 	for _, o := range seeded {
 		require.NoError(t, store.Add(context.Background(), o))
-		require.NoError(t, authorizer.GrantOrderCustomer(context.Background(), o.ID(), o.CustomerID()))
+		_, err := authorizer.GrantOrderCustomer(context.Background(), o.ID(), o.CustomerID())
+		require.NoError(t, err)
 	}
 	return getorder.NewHandler(authorizer, store), authorizer
 }

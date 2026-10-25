@@ -11,7 +11,6 @@ import (
 	"nomnom/orders/di"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/lifecycle"
-	orderdi "nomnom/orders/slices/order/di"
 )
 
 func main() {
@@ -26,7 +25,12 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	consumer := di.NewKafkaConsumer(cfg, orderdi.NewStore())
+	consumer, cleanup, err := di.InitializeConsumer(cfg)
+	if err != nil {
+		return fmt.Errorf("initialize consumer: %w", err)
+	}
+	defer cleanup()
+
 	return lifecycle.New(lifecycle.Config{
 		ManagementAddr: fmt.Sprintf(":%d", cfg.Management.Port),
 		ReadinessDelay: cfg.Shutdown.ReadinessDelay,
