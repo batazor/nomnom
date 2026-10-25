@@ -75,25 +75,13 @@ Place Order SHALL записывать `order#customer` и `order#restaurant` о
 ### Requirement: Courier Assignment пишет relationships курьера
 **ID:** FR-469
 
-Record Courier Assignment SHALL в Inbox unit of work до commit записывать `order#delivery` из `CourierAssignedToDelivery` и сохранять `delivery_id`, `courier_id`, `courier_assigned_at`, Delivery `aggregate_version` события и `authorization_revision`. Смена Delivery MUST выполняться одним атомарным запросом `TOUCH` новой и `DELETE` прежней; переназначение в пределах той же Delivery MUST NOT писать в SpiceDB. Событие с версией Delivery ниже сохранённого назначения или снятия MUST NOT менять relationships (FR-564).
+Record Courier Assignment SHALL в Inbox unit of work до commit записывать `order#delivery` из `CourierAssignedToDelivery` и сохранять `delivery_id`, `courier_id`, `courier_assigned_at`, Delivery `aggregate_version` события и `authorization_revision`.
 
 #### Scenario: Назначение курьера
 **ID:** AC-518
 
 - **WHEN** consumer обрабатывает `CourierAssignedToDelivery`
 - **THEN** `order#delivery` записан, назначение сохранено в `orders`, и курьер видит заказ через `delivery#courier`
-
-#### Scenario: Переназначение
-**ID:** AC-519
-
-- **WHEN** приходит назначение другого курьера той же Delivery
-- **THEN** назначение в `orders` обновлено, а запросов к SpiceDB нет
-
-#### Scenario: Событие не по порядку
-**ID:** AC-520
-
-- **WHEN** приходит назначение с версией Delivery ниже сохранённой
-- **THEN** relationships и назначение не меняются
 
 #### Scenario: SpiceDB недоступен
 **ID:** AC-521
@@ -106,6 +94,23 @@ Record Courier Assignment SHALL в Inbox unit of work до commit записыв
 
 - **WHEN** adapter пишет placement и назначения в SpiceDB со schema `authorization/schema.zed`
 - **THEN** owner ресторана видит заказ, курьер видит его, пока у него есть `delivery#courier`, никто кроме customer не имеет `cancel`
+
+### Requirement: Смена Delivery атомарна, переназначение в той же Delivery не пишет в SpiceDB
+**ID:** FR-574
+
+Смена Delivery MUST выполняться одним атомарным запросом `TOUCH` новой и `DELETE` прежней; переназначение в пределах той же Delivery MUST NOT писать в SpiceDB. Событие с версией Delivery ниже сохранённого назначения или снятия MUST NOT менять relationships (FR-564).
+
+#### Scenario: Переназначение
+**ID:** AC-519
+
+- **WHEN** приходит назначение другого курьера той же Delivery
+- **THEN** назначение в `orders` обновлено, а запросов к SpiceDB нет
+
+#### Scenario: Событие не по порядку
+**ID:** AC-520
+
+- **WHEN** приходит назначение с версией Delivery ниже сохранённой
+- **THEN** relationships и назначение не меняются
 
 ### Requirement: Снятие курьера отзывает relationships курьера
 **ID:** FR-476

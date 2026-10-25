@@ -1,7 +1,7 @@
 # user-identity Specification
 
 ## Purpose
-TBD - created by archiving change add-user-identity-assertions. Update Purpose after archive.
+Identity покупателя в вызовах контекстов: BFF подписывает короткоживущий user assertion, а контекст принимает `Subject{user}` только от разрешённого делегата с проверенной service identity (ADR 27, ADR 32).
 
 ## Requirements
 

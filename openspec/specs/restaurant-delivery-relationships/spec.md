@@ -48,13 +48,18 @@ Register Courier SHALL выполнять `TOUCH courier#self@user`. `delivery#c
 ### Requirement: Relationships restaurants и delivery сверяются с business state
 **ID:** FR-445
 
-Каждый контекст SHALL периодически удалять orphan/stale relationships своих definitions после grace на двух проходах и восстанавливать missing relationships. Reconciler `restaurants` MUST восстанавливать missing `restaurant#owner` и `restaurant#staff` с revision, только если связь отсутствовала у того же пользователя на двух проходах не реже grace и оба прохода видели одну версию документа ресторана; другая версия MUST начинать grace заново. Собственная запись revision reconciler'а MAY переносить кандидатов на записанную версию. Кандидат, ставший present или исчезнувший из ресторана, MUST забываться.
+Каждый контекст SHALL периодически удалять orphan/stale relationships своих definitions после grace на двух проходах и восстанавливать missing relationships.
 
 #### Scenario: Потерянная связь владельца
 **ID:** AC-478
 
 - **WHEN** ресторан существует, а `restaurant#owner` в SpiceDB отсутствует на двух проходах с интервалом не меньше grace
 - **THEN** после второго прохода владелец снова имеет `restaurant#manage`
+
+### Requirement: Reconciler restaurants восстанавливает связь только при неизменной версии ресторана
+**ID:** FR-572
+
+Reconciler `restaurants` MUST восстанавливать missing `restaurant#owner` и `restaurant#staff` с revision, только если связь отсутствовала у того же пользователя на двух проходах не реже grace и оба прохода видели одну версию документа ресторана; другая версия MUST начинать grace заново. Собственная запись revision reconciler'а MAY переносить кандидатов на записанную версию. Кандидат, ставший present или исчезнувший из ресторана, MUST забываться.
 
 #### Scenario: Снятие персонала в полёте
 **ID:** AC-700
@@ -77,7 +82,7 @@ Register Courier SHALL выполнять `TOUCH courier#self@user`. `delivery#c
 ### Requirement: Missing relationship delivery восстанавливается после grace
 **ID:** FR-563
 
-Reconciler `delivery` SHALL восстанавливать missing `courier#self` и `delivery#courier` с сохранением revision, только если relationship отсутствовала при том же subject на двух проходах с интервалом не меньше grace (writers делают `DELETE` до commit без row lock). Ожидаемый subject `delivery#courier` MUST строиться из активного назначения (FR-444): связь закрытой доставки MUST удаляться как stale и MUST NOT восстанавливаться. Кандидат, ставший present или потерявший subject, MUST забываться.
+Reconciler `delivery` SHALL восстанавливать missing `courier#self` и `delivery#courier` с сохранением revision, только если relationship отсутствовала при том же subject на двух проходах с интервалом не меньше grace (writers делают `DELETE` до commit без row lock). Кандидат, ставший present или потерявший subject, MUST забываться.
 
 #### Scenario: Снятие курьера в полёте
 **ID:** AC-668
@@ -90,6 +95,11 @@ Reconciler `delivery` SHALL восстанавливать missing `courier#self
 
 - **WHEN** доставка назначена курьеру, а `delivery#courier` отсутствует на двух проходах с интервалом не меньше grace
 - **THEN** reconciler восстанавливает relationship и сохраняет её revision
+
+### Requirement: Связь курьера с доставкой следует активному назначению
+**ID:** FR-573
+
+Ожидаемый subject `delivery#courier` MUST строиться из активного назначения (FR-444): связь закрытой доставки MUST удаляться как stale и MUST NOT восстанавливаться.
 
 #### Scenario: Закрытая доставка
 **ID:** AC-693

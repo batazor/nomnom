@@ -1,7 +1,7 @@
 # customer-order-resolvers Specification
 
 ## Purpose
-TBD - created by archiving change add-bff-order-tracking-resolvers. Update Purpose after archive.
+Resolvers customer GraphQL API в BFF: каталог ресторанов, оформление, отслеживание и отмена заказа от имени покупателя через internal gateway, с отказами в `problems` вместо транспортных ошибок.
 
 ## Requirements
 
