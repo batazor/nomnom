@@ -33,9 +33,10 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-317.
-- **Порты:** `DeliveryAuthorization` (`ReportDeliveryFailure` над `Courier(id)` для курьера или `Delivery(id)` для диспетчера), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
-- **Транзакция:** UoW: `Delivery` (`failed` с причиной) + освобождение `Courier` (`release_assignment` с `Revoke::Keep`) + Outbox (`DeliveryFailed`).
-- **Relationship:** `delivery#courier` не отзывается: `Delivery.courier_id` сохраняется, а связь следует за ним (FR-444); revision не меняется (FR-447 касается только записей relationship).
+- **Порты:** `DeliveryAuthorization` (`ReportDeliveryFailure` над `Courier(id)` для курьера или `Delivery(id)` для диспетчера), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`, `DeliveryRelationshipWriter`.
+- **Транзакция:** UoW: `Delivery` (`failed` с причиной) + освобождение `Courier` и DELETE `delivery#courier` до commit (`release_assignment`) + Outbox (`DeliveryFailed`).
+- **Relationship:** курьер теряет `delivery#act_as_courier` и `order#view` при отчёте курьера и диспетчера (AC-691); revision `DELETE` сохраняется (FR-447); неудачный `DELETE` откатывает UoW.
+- **Авторизация диспетчера:** `Delivery(id)` для `ReportDeliveryFailure` проверяется как `platform:nomnom#dispatch_delivery` (`operator`, AC-694), а не `delivery#act_as_courier`.
 - **Допущение:** Причина не классифицируется как retryable — решение остаётся за `orders`; неудача фиксируется только для `assigned`/`pickedUp`, курьер освобождается.
 
 ## Acceptance

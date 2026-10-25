@@ -13,7 +13,7 @@ use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{Delivery, DeliveryId, DeliveryRepository};
 
-use super::assignment::{Revoke, release_assignment};
+use super::assignment::release_assignment;
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -86,12 +86,7 @@ pub fn end_assignment(
     let released_courier_id = assigned.ok_or_else(|| {
         DeliveryApplicationError::Internal("unassigned delivery had no courier".to_owned())
     })?;
-    release_assignment(
-        delivery,
-        &released_courier_id,
-        couriers,
-        Revoke::Relationship(relationships),
-    )?;
+    release_assignment(delivery, &released_courier_id, couriers, relationships)?;
 
     deliveries.save(delivery)?;
     publish(outbox, delivery.pull_events())?;

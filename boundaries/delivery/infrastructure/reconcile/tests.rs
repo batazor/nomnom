@@ -416,6 +416,74 @@ fn delivery_reconciler_stores_revision_of_restored_assignment() {
     );
 }
 
+/// FR-563, AC-693: a delivered or failed delivery keeps `courier_id`, but
+/// its `delivery#courier` is stale: a remaining one is deleted after grace and
+/// a missing one is never restored. The active assignment is kept.
+#[test]
+fn closed_delivery_relationship_is_stale_and_never_restored() {
+    use crate::slices::courier::domains::courier::CourierId;
+    use crate::slices::delivery::domains::delivery::{
+        Address, Delivery, DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter,
+        OrderId,
+    };
+    let store = Arc::new(MemoryStore::new());
+    let delivery = |id: &str, courier: &str| {
+        let mut delivery = Delivery::new(
+            DeliveryId::new(id),
+            OrderId::new(format!("order-of-{id}")),
+            Address::new("Restaurant street 1").expect("pickup"),
+            Address::new("Customer street 2").expect("dropoff"),
+        );
+        delivery.assign(CourierId::new(courier)).expect("assign");
+        delivery
+    };
+    let mut delivered = delivery("delivered", "courier-1");
+    delivered
+        .confirm_pickup(&CourierId::new("courier-1"))
+        .expect("pickup");
+    delivered
+        .complete(&CourierId::new("courier-1"))
+        .expect("complete");
+    let mut failed = delivery("failed", "courier-2");
+    failed
+        .fail(
+            DeliveryFailureReason::new("customer unreachable").expect("reason"),
+            &FailureReporter::Dispatcher,
+        )
+        .expect("fail");
+    for closed in [&delivered, &failed, &delivery("active", "courier-3")] {
+        DeliveryRepository::add(&*store, closed).expect("add");
+    }
+    // The link of the delivered delivery remained; the failed one has none.
+    let remained = delivery_courier("delivered", "courier-1");
+    let active = delivery_courier("active", "courier-3");
+    let graph = Arc::new(FakeGraph::with([remained.clone(), active.clone()]));
+    let clock = Arc::new(Mutex::new(Instant::now()));
+    let now_clock = Arc::clone(&clock);
+    let mut reconciler = Reconciler::deliveries(
+        Arc::clone(&graph) as Arc<dyn RelationshipGraph>,
+        Arc::clone(&store) as _,
+        GRACE,
+        500,
+        Arc::new(move || *now_clock.lock().expect("clock")),
+    );
+
+    let first = reconciler.reconcile(&|| false).expect("pass");
+    assert_eq!(first.orphans_pending, 1);
+    assert_eq!(
+        first.missing_pending, 0,
+        "a closed delivery has nothing missing"
+    );
+    *clock.lock().expect("clock") += GRACE;
+    let second = reconciler.reconcile(&|| false).expect("pass");
+
+    assert_eq!(second.orphans_deleted, 1);
+    assert_eq!(second.missing_repaired, 0);
+    assert!(!graph.contains(&remained));
+    assert!(!graph.contains(&delivery_courier("failed", "courier-2")));
+    assert!(graph.contains(&active));
+}
+
 #[tokio::test]
 async fn loop_stops_on_shutdown() {
     let (stop_tx, stop_rx) = watch::channel(false);

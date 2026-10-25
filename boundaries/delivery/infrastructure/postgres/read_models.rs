@@ -12,9 +12,9 @@ use crate::slices::delivery::applications::get_courier_current_delivery::{
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
-use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId};
+use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId, State};
 
-use super::rows::{address, column, courier_status, parse_delivery_state};
+use super::rows::{address, column, courier_status, delivery_state, parse_delivery_state};
 use super::{PostgresStore, corrupt, limit, storage_error};
 
 impl CourierCurrentDeliveryReadModel for PostgresStore {
@@ -117,19 +117,22 @@ impl ReconciliationStore for PostgresStore {
     ) -> Result<Vec<(String, String)>, RepositoryError> {
         sql!(self, |connection| sqlx::query_as(
             "SELECT id, courier_id FROM deliveries
-             WHERE id > $1 AND courier_id IS NOT NULL ORDER BY id LIMIT $2"
+             WHERE id > $1 AND courier_id IS NOT NULL AND state = ANY($3)
+             ORDER BY id LIMIT $2"
         )
         .bind(after)
         .bind(limit(size))
+        .bind(active_assignment_states())
         .fetch_all(connection))
     }
 
     fn assigned_couriers(&self, ids: &[String]) -> Result<Vec<(String, String)>, RepositoryError> {
         sql!(self, |connection| sqlx::query_as(
             "SELECT id, courier_id FROM deliveries
-             WHERE id = ANY($1) AND courier_id IS NOT NULL"
+             WHERE id = ANY($1) AND courier_id IS NOT NULL AND state = ANY($2)"
         )
         .bind(ids)
+        .bind(active_assignment_states())
         .fetch_all(connection))
     }
 
@@ -156,12 +159,22 @@ impl ReconciliationStore for PostgresStore {
     ) -> Result<bool, RepositoryError> {
         let updated = sql!(self, |connection| sqlx::query(
             "UPDATE deliveries SET authorization_revision = $3, version = version + 1
-             WHERE id = $1 AND courier_id = $2"
+             WHERE id = $1 AND courier_id = $2 AND state = ANY($4)"
         )
         .bind(delivery_id)
         .bind(courier_id)
         .bind(revision.as_str())
+        .bind(active_assignment_states())
         .execute(connection))?;
         Ok(updated.rows_affected() > 0)
     }
+}
+
+/// Stored states of an active assignment: `delivery#courier` exists only for
+/// them (FR-444); the set comes from the domain.
+fn active_assignment_states() -> Vec<&'static str> {
+    State::WITH_ACTIVE_ASSIGNMENT
+        .iter()
+        .map(|state| delivery_state(*state))
+        .collect()
 }

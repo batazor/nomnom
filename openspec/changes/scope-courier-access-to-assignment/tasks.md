@@ -6,11 +6,11 @@
 
 ## 2. delivery
 
-- [ ] 2.1 `Delivery::active_courier()` в домене: `courier_id` при assigned или picked up; тесты по всем состояниям.
-- [ ] 2.2 Confirm Delivery и Report Delivery Failure отзывают `delivery#courier` через `release_assignment` с записью revision; `Revoke::Keep` удалён. Тесты AC-690, AC-691, AC-692.
-- [ ] 2.3 Reconciler строит ожидаемые `delivery#courier` из `active_courier()`; тест AC-693.
-- [ ] 2.4 Report Delivery Failure от диспетчера проверяет `platform#dispatch_delivery`; SpiceDB mapping и тест AC-694.
-- [ ] 2.5 README delivery, use-case README Confirm Delivery и Report Delivery Failure.
+- [x] 2.1 `Delivery::active_courier()` в домене: `courier_id` при assigned или picked up; тесты по всем состояниям.
+- [x] 2.2 Confirm Delivery и Report Delivery Failure отзывают `delivery#courier` через `release_assignment` с записью revision; `Revoke::Keep` удалён. Тесты AC-690, AC-691, AC-692.
+- [x] 2.3 Reconciler строит ожидаемые `delivery#courier` из `active_courier()`; тест AC-693.
+- [x] 2.4 Report Delivery Failure от диспетчера проверяет `platform#dispatch_delivery`; SpiceDB mapping и тест AC-694.
+- [x] 2.5 README delivery, use-case README Confirm Delivery и Report Delivery Failure.
 
 ## 3. orders
 

@@ -337,6 +337,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             outbox: self.ports.store(),
+            relationships: self.ports.relationships(),
         }
         .execute(subject, input)
     }
@@ -352,6 +353,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             outbox: self.ports.store(),
+            relationships: self.ports.relationships(),
         }
         .execute(subject, input)
     }

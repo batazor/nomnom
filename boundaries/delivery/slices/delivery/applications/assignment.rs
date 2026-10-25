@@ -10,35 +10,22 @@ use crate::slices::delivery::domains::delivery::Delivery;
 use super::error::DeliveryApplicationError;
 use super::relationships::DeliveryRelationshipWriter;
 
-/// Whether the release revokes `delivery:<id>#courier@user:<courier_id>`.
-/// The relationship follows `Delivery.courier_id` (FR-444).
-pub enum Revoke<'a> {
-    /// The transition cleared `Delivery.courier_id` (Reassign, Replan,
-    /// Cancel): the relationship is deleted before commit and the revision
-    /// of the DELETE is stored with the delivery, so the next check sees the
-    /// revocation at once (AC-477, FR-447, AC-483). A failed delete fails the
-    /// release and rolls the Unit of Work back (fail closed).
-    Relationship(&'a dyn DeliveryRelationshipWriter),
-    /// The transition closed the delivery and kept `Delivery.courier_id`
-    /// (Confirm Delivery, Report Delivery Failure): the relationship stays,
-    /// and the closed state forbids any further courier action.
-    Keep,
-}
-
-/// Makes the courier available again and, if asked, revokes its access to
-/// the delivery.
+/// Makes the courier available again and revokes its access to the
+/// delivery. `delivery#courier` follows the active assignment (FR-444): every
+/// end of an assignment deletes `delivery:<id>#courier@user:<courier_id>`
+/// before commit, including Confirm Delivery and Report Delivery Failure,
+/// where `Delivery.courier_id` stays as the fact of who carried it. The
+/// revision of the DELETE is stored with the delivery, so the next check sees
+/// the revocation at once (AC-477, FR-447, AC-483). A failed delete fails the
+/// release and rolls the Unit of Work back (fail closed, AC-692).
 pub fn release_assignment(
     delivery: &mut Delivery,
     courier_id: &CourierId,
     couriers: &dyn CourierAssignment,
-    revoke: Revoke<'_>,
+    relationships: &dyn DeliveryRelationshipWriter,
 ) -> Result<(), DeliveryApplicationError> {
     couriers.release(courier_id)?;
-    if let Revoke::Relationship(relationships) = revoke {
-        // Revoke access before commit; the revision of the DELETE makes the
-        // revocation visible to the next check (FR-447, AC-483).
-        let revision = relationships.unassign_courier(delivery.id(), courier_id)?;
-        delivery.record_authorization_revision(revision);
-    }
+    let revision = relationships.unassign_courier(delivery.id(), courier_id)?;
+    delivery.record_authorization_revision(revision);
     Ok(())
 }

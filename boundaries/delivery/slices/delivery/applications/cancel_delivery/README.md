@@ -41,7 +41,7 @@ sequenceDiagram
 
 - **Handler:** `mod.rs` — `Input { order_id, reason }`, `Output { delivery_id, outcome }`, `Outcome::Cancelled { released_courier_id, already_cancelled }` | `Outcome::Rejected(CancellationRejection)`; требования FR-429.
 - **Порты:** `DeliveryAuthorization` (`CancelDelivery` над `Order(order_id)`), `UnitOfWork`, `DeliveryRepository` (`find_by_order`), `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
-- **Транзакция:** UoW: `Delivery` (`waiting|assigned → cancelled`) + освобождение `Courier` и DELETE `delivery#courier` до commit (`release_assignment` с `Revoke::Relationship`, FR-444, FR-447) + Outbox (`DeliveryCancelled`).
+- **Транзакция:** UoW: `Delivery` (`waiting|assigned → cancelled`) + освобождение `Courier` и DELETE `delivery#courier` до commit (`release_assignment`, FR-444, FR-447) + Outbox (`DeliveryCancelled`).
 - **Ошибки:** пустой `order_id` — `InvalidRequest`; нет доставки для заказа — `DeliveryForOrderNotFound`; отказ прав — `PermissionDenied`.
 - **Допущения:** `reason` необязателен (пустой — без причины) и публикуется только в событии, не хранится в `Delivery`; отказ по состоянию — успешный ответ, не ошибка.
 

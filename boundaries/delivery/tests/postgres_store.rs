@@ -442,6 +442,46 @@ fn offers_locations_and_reconciliation_reads() {
     );
 }
 
+/// FR-563, AC-693: a delivered delivery keeps `courier_id` but is not an
+/// active assignment for reconciliation.
+#[test]
+fn reconciliation_reads_only_active_assignments() {
+    let Some(store) = store() else { return };
+    let courier = unique("courier");
+    let courier_id = CourierId::new(&courier);
+    let delivery = new_delivery(&unique("delivery"));
+    DeliveryRepository::add(&store, &delivery).expect("delivery");
+    DeliveryRepository::save(&store, &assigned(&delivery, &courier)).expect("assign");
+    let id = delivery.id().as_str().to_owned();
+    assert_eq!(
+        store.assigned_couriers(std::slice::from_ref(&id)),
+        Ok(vec![(id.clone(), courier.clone())])
+    );
+
+    let mut closed = DeliveryRepository::get(&store, delivery.id())
+        .expect("get")
+        .expect("delivery");
+    closed.confirm_pickup(&courier_id).expect("pickup");
+    closed.complete(&courier_id).expect("complete");
+    DeliveryRepository::save(&store, &closed).expect("deliver");
+
+    assert_eq!(
+        store.assigned_couriers(std::slice::from_ref(&id)),
+        Ok(vec![])
+    );
+    assert!(
+        store
+            .assignment_page("", 10_000)
+            .expect("page")
+            .iter()
+            .all(|(delivery_id, _)| delivery_id != &id)
+    );
+    assert_eq!(
+        store.record_assignment_revision(&id, &courier, AuthorizationRevision::new("zed-c")),
+        Ok(false)
+    );
+}
+
 /// FR-542: the locator reads latest positions of available couriers only.
 #[test]
 fn available_positions_are_positions_of_available_couriers() {
