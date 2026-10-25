@@ -320,6 +320,8 @@ profiles:
         path: /build/artifacts/3/sync
         value:
           manual:
+            - src: "di/**/*.py"
+              dest: .
             - src: "entrypoints/**/*.py"
               dest: .
             - src: "infrastructure/**/*.py"

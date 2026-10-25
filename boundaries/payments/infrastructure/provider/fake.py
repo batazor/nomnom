@@ -3,9 +3,7 @@
 import threading
 from decimal import Decimal
 
-from pkg.config import ProviderSettings
 from slices.payment.applications.ports import (
-    PaymentProviderGateway,
     ProviderOperationOutcome,
     ProviderOperationRequest,
     ProviderUnavailable,
@@ -50,9 +48,3 @@ class FakePaymentProvider:
         return ProviderOperationOutcome.succeeded(
             f"fake_{request.kind.value}_{request.operation_id}"
         )
-
-
-def create_provider(settings: ProviderSettings | None) -> PaymentProviderGateway:
-    if settings is not None and settings.kind == "fake":
-        return FakePaymentProvider()
-    return UnconfiguredProvider()

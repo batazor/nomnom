@@ -8,12 +8,11 @@ import grpc
 from authzed.api.v1 import CheckPermissionRequest, CheckPermissionResponse
 from pydantic import ValidationError
 
+from di.payments import SpiceDBConfigurationError, create_permission_checker
 from infrastructure.authorization import (
     PERMISSION_MAPPING,
     DenyAllPermissions,
-    SpiceDBConfigurationError,
     SpiceDBPermissionChecker,
-    create_permission_checker,
 )
 from pkg.application import AuthorizationUnavailable, PermissionDenied, Subject, SubjectKind
 from pkg.config import SpiceDBSettings, load_settings

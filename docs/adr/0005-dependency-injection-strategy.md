@@ -23,7 +23,7 @@ DI должен дополнять Vertical Slice Architecture: срез ост�
 - `orders` (Go): compile-time DI через [`github.com/google/wire`](https://github.com/google/wire);
 - `restaurants` (TypeScript): Awilix;
 - `delivery` (Rust): compile-time DI через [`shaku`](https://github.com/AzureMarker/shaku);
-- `payments` (Python): Dependency Injector как кандидат, окончательное утверждение которого остаётся открытым.
+- `payments` (Python): Dependency Injector как кандидат, окончательное утверждение которого остаётся открытым; до утверждения — вручную написанные composition roots.
 
 ### Общие правила
 
@@ -60,6 +60,10 @@ Shaku хранит компоненты как `Arc<dyn Interface>` и треб�
 Dependency Injector остаётся кандидатом со статусом Proposed. Контейнер собирается в composition root, после чего зависимости явно передаются в прикладные компоненты. Доменная модель не зависит от контейнера и механизма wiring. Контейнер управляет инициализацией и освобождением ресурсов и позволяет подменять зависимости в тестах.
 
 Python 3.15 выбран как точная целевая версия runtime. До окончательного утверждения Dependency Injector необходимо дождаться или получить подтверждение upstream-поддержки 3.15, а затем проверить установку и выполнение библиотеки в целевых окружениях. `Requires-Python`, наличие версии в upstream-тестах и wheels рассматриваются как разные свидетельства и не подменяют эту проверку.
+
+Проверка 2026-10-25 (образ `payments` — `python:3.15.0-slim-bookworm`): последний релиз Dependency Injector 4.49.1 (2026-06-18) по-прежнему заявляет поддержку только до Python 3.14 — в [changelog](https://python-dependency-injector.ets-labs.org/main/changelog.html) (4.49.0: «Python 3.14 support»), классификаторах [PyPI](https://pypi.org/project/dependency-injector/), [`tox.ini`](https://github.com/ets-labs/python-dependency-injector/blob/master/tox.ini) и CI-матрице `tests-and-linters.yml`; issue или релиза с поддержкой 3.15 нет. Эмпирически wheel `cp310-abi3` устанавливается и работает на CPython 3.15.0rc1 (uv-managed; pull образа `python:3.15.0-slim-bookworm` для повторной проверки на 3.15.0 не завершился): smoke-тест `Resource` (init/shutdown), `Factory` и `override`, а также 1198 upstream unit-тестов `tests/unit/providers` и `tests/unit/containers` проходят. Это свидетельство целевой среды, но не upstream-подтверждение, поэтому кандидат остаётся открытым, а библиотека не добавлена в зависимости.
+
+До утверждения кандидата composition roots `payments` написаны вручную по общим правилам: пакет `boundaries/payments/di` содержит модуль на каждый процесс (`payments` с webhook worker в `di/webhooks.py`, `relay`, `migrate`), только в нём выбираются реализации портов (SpiceDB или deny-all, payment provider, identity, PostgreSQL, Outbox mapper), а ресурсы процесса (telemetry providers, psycopg pool) описаны в `di/resources.py` как context managers с инициализацией и освобождением. Use cases создаются фабричными функциями `di` и получают зависимости явно; `slices/`, `pkg/` и `infrastructure/` не импортируют `di`. Эта структура соответствует `DeclarativeContainer` с `Resource`- и `Factory`-провайдерами и переносится на Dependency Injector без изменения прикладного кода после upstream-подтверждения Python 3.15.
 
 ## Alternatives
 

@@ -1,5 +1,7 @@
 """HTTP endpoint of provider webhooks: verify, map, apply through the use case.
 
+The worker serving it is assembled by ``di.webhooks``.
+
 A non-2xx answer makes the provider redeliver; permanent rejections are 4xx.
 """
 
@@ -8,21 +10,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler
-from typing import Optional
 
-from infrastructure.postgres import (
-    NoPublishedContracts,
-    OutboxEventMapper,
-    PostgresDatabase,
-    PostgresPaymentOperationRepository,
-    PostgresPaymentOutbox,
-    PostgresPaymentRepository,
-    PostgresProviderMessageInbox,
-    PostgresUnitOfWork,
-)
-from pkg.application.clock import SystemClock
-from pkg.config import ProviderSettings
-from pkg.lifecycle import HttpWorker
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.applications.errors import (
     InvalidPaymentRequest,
@@ -31,7 +19,6 @@ from slices.payment.applications.errors import (
     PaymentStateConflict,
     ProviderResultConflict,
 )
-from slices.payment.applications.operation_flow import ProviderResultApplier
 
 from .webhook import SIGNATURE_HEADER, InvalidWebhook, WebhookVerifier, parse_callback
 
@@ -97,29 +84,3 @@ def create_webhook_handler(
             logger.debug(format, *args)
 
     return WebhookHandler
-
-
-def create_webhook_worker(
-    address: tuple[str, int],
-    settings: ProviderSettings,
-    database: PostgresDatabase,
-    outbox_mapper: Optional[OutboxEventMapper] = None,
-) -> HttpWorker:
-    """Without ``PROVIDER__WEBHOOK_SECRET`` the port opens but every webhook is 400.
-
-    ``outbox_mapper`` selects the published Integration Events (none by default).
-    """
-    clock = SystemClock()
-    applier = ProviderResultApplier(
-        PostgresPaymentRepository(database),
-        PostgresPaymentOperationRepository(database),
-        PostgresPaymentOutbox(database, outbox_mapper or NoPublishedContracts()),
-        clock,
-    )
-    callbacks = ApplyProviderCallbackHandler(
-        PostgresUnitOfWork(database), PostgresProviderMessageInbox(database), applier
-    )
-    verifier = WebhookVerifier(settings.webhook_secret, settings.webhook_tolerance)
-    return HttpWorker(
-        address, create_webhook_handler(verifier, callbacks, clock.now), name="provider webhooks"
-    )

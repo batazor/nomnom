@@ -40,6 +40,7 @@ FROM base AS dev
 
 RUN chown app:app /app
 COPY --from=build-dev --chown=app:app /app/.venv /app/.venv
+COPY --chown=app:app di ./di
 COPY --chown=app:app entrypoints ./entrypoints
 COPY --chown=app:app infrastructure ./infrastructure
 COPY --chown=app:app pkg ./pkg
@@ -47,11 +48,12 @@ COPY --chown=app:app slices ./slices
 
 USER app:app
 CMD ["watchfiles", "--filter", "python", "python -m entrypoints.payments.main", \
-     "entrypoints", "infrastructure", "pkg", "slices"]
+     "di", "entrypoints", "infrastructure", "pkg", "slices"]
 
 FROM base AS runtime
 
 COPY --from=build --chown=app:app /app/.venv /app/.venv
+COPY --chown=app:app di ./di
 COPY --chown=app:app entrypoints ./entrypoints
 COPY --chown=app:app infrastructure ./infrastructure
 COPY --chown=app:app pkg ./pkg

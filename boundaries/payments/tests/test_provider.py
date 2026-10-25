@@ -6,13 +6,13 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
+from di.payments import create_provider
 from infrastructure.provider import (
     DECLINE_AMOUNT,
     FakePaymentProvider,
     InvalidWebhook,
     UnconfiguredProvider,
     WebhookVerifier,
-    create_provider,
     parse_callback,
     sign_payload,
 )

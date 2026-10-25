@@ -22,7 +22,6 @@ from pkg.application import AuthorizationUnavailable, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
 from slices.payment.applications.ports import (
     PaymentPermission,
-    PaymentPermissionChecker,
     PaymentResource,
 )
 
@@ -132,25 +131,3 @@ def create_spicedb_client(settings: SpiceDBSettings) -> Any:
     if settings.insecure:
         return InsecureClient(settings.endpoint, settings.preshared_key)
     return SyncClient(settings.endpoint, bearer_token_credentials(settings.preshared_key))
-
-
-class SpiceDBConfigurationError(RuntimeError):
-    """The process checks permissions but SpiceDB is not configured."""
-
-
-def create_permission_checker(settings: SpiceDBSettings | None) -> PaymentPermissionChecker:
-    """Composition of the authorization port.
-
-    ``None`` is the test composition without SpiceDB and denies everything. A
-    process with settings requires ``SPICEDB__ENDPOINT`` and refuses to start
-    without it.
-    """
-    if settings is None:
-        return DenyAllPermissions()
-    if not settings.enabled:
-        raise SpiceDBConfigurationError(
-            "SPICEDB__ENDPOINT is required: payments checks permissions in SpiceDB"
-        )
-    return SpiceDBPermissionChecker(
-        create_spicedb_client(settings), settings.timeout.total_seconds()
-    )

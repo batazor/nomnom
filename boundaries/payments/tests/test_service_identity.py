@@ -15,6 +15,7 @@ from jwt.algorithms import ECAlgorithm
 from payment_fakes import PaymentsTestKit, unreachable_database
 from pydantic import ValidationError
 
+from di.payments import create_grpc_worker
 from infrastructure.grpc import identity
 from infrastructure.grpc.identity import (
     IdentityConfigError,
@@ -26,7 +27,6 @@ from infrastructure.grpc.identity import (
 from infrastructure.grpc.service import (
     GrpcWorker,
     PaymentsHandlers,
-    create_default_worker,
     payments_pb2,
     service_pb2,
     service_pb2_grpc,
@@ -338,7 +338,7 @@ class IdentityConfigTest(unittest.TestCase):
         database = unreachable_database()
         self.addCleanup(database.close)
         with self.assertRaises(IdentityConfigError):
-            create_default_worker(("127.0.0.1", 0), settings, database=database)
+            create_grpc_worker(("127.0.0.1", 0), settings, database=database)
 
 
 def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:

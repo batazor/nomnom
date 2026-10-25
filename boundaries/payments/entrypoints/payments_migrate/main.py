@@ -1,18 +1,17 @@
 """Применяет миграции PostgreSQL payments и завершается.
 
 В Kubernetes запускается init container'ом перед процессом; advisory lock сериализует
-параллельные запуски реплик.
+параллельные запуски реплик. Composition root — ``di.migrate``.
 """
 
 import sys
 
-from infrastructure.postgres import migrate
-from pkg.config import DatabaseSettings
+from di import migrate
 
 
 def main() -> int:
     try:
-        applied = migrate(DatabaseSettings().url)
+        applied = migrate.run()
     except Exception as error:
         print(f"payments-migrate: {error}", file=sys.stderr)
         return 1
