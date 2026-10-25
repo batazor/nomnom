@@ -52,7 +52,7 @@ export const messages = {
     "checkout.retry": "Отправить ещё раз",
     "checkout.sending": "Оформляем заказ",
     "checkout.transportError":
-      "Не удалось отправить заказ. Проверьте соединение и отправьте ещё раз: второй заказ не появится.",
+      "Не удалось отправить заказ. Проверьте соединение и попробуйте ещё раз.",
     "checkout.itemProblems":
       "Некоторые блюда нельзя заказать: они отмечены в корзине.",
     "checkout.problem.ORDER_ITEM_UNAVAILABLE":
@@ -226,7 +226,7 @@ export const messages = {
     "checkout.retry": "Send again",
     "checkout.sending": "Placing the order",
     "checkout.transportError":
-      "Could not send the order. Check your connection and send it again: it will not create a second order.",
+      "Could not send the order. Check your connection and try again.",
     "checkout.itemProblems":
       "Some dishes cannot be ordered: they are marked in the cart.",
     "checkout.problem.ORDER_ITEM_UNAVAILABLE":
