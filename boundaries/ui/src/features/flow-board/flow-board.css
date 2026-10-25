@@ -111,26 +111,38 @@
   list-style: none;
 }
 
+/* The bar on top of a step is a fill over a track; reaching the step grows
+   the fill from the left, so the progress runs along the strip. */
 .board-steps > li {
+  --step-fill: var(--color-primary);
+  --step-filled: 0%;
+
   display: grid;
   gap: 0.1rem;
-  padding: var(--space-2) 0 0;
-  border-top: 3px solid var(--color-border);
+  padding: calc(var(--space-2) + 3px) 0 0;
+  background:
+    linear-gradient(var(--step-fill), var(--step-fill)) left top /
+    var(--step-filled) 3px no-repeat,
+    linear-gradient(var(--color-border), var(--color-border)) left top / 100%
+    3px no-repeat;
   color: var(--color-muted);
 }
 
 .board-steps > li[data-state="done"] {
-  border-top-color: var(--color-primary);
+  --step-filled: 100%;
+
   color: var(--color-foreground);
 }
 
 .board-steps > li[data-state="current"] {
-  border-top-color: var(--color-primary);
+  --step-filled: 100%;
+
   color: var(--color-primary);
 }
 
 .board-steps > li[data-state="ended"] {
-  border-top-color: var(--color-danger);
+  --step-fill: var(--color-danger);
+  --step-filled: 100%;
 }
 
 .board-step-label {
@@ -352,6 +364,22 @@ button.board-card-head {
   list-style: none;
 }
 
+.board-countdown {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.board-countdown-track {
+  stroke: var(--color-border);
+}
+
+.board-countdown-left {
+  stroke: var(--color-primary);
+}
+
 .board-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -419,4 +447,16 @@ button.board-card-head {
 .board-route dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+@property --step-filled {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .board-steps > li {
+    transition: --step-filled var(--motion-standard) var(--motion-easing);
+  }
 }

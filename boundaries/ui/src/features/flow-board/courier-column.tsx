@@ -1,3 +1,4 @@
+import { m } from "motion/react";
 import { useState } from "react";
 import { useMutation, useQuery } from "urql";
 
@@ -164,6 +165,7 @@ export function CourierColumn({
                   <span className="board-card-title">
                     {t("board.courier.offer")}
                   </span>
+                  <OfferCountdown expiresAt={offer.expiresAt} />
                 </div>
                 <Route from={offer.pickupAddress} to={offer.dropoffAddress} />
                 <div className="board-card-actions">
@@ -199,6 +201,35 @@ export function CourierColumn({
         </p>
       ) : null}
     </div>
+  );
+}
+
+// A ring that empties until the offer expires. The remaining time is taken
+// once per offer, so polling does not restart it.
+function OfferCountdown({ expiresAt }: { expiresAt: string }) {
+  const [seconds] = useState(() =>
+    Math.max(0, (Date.parse(expiresAt) - Date.now()) / 1000),
+  );
+  return (
+    <svg
+      aria-hidden="true"
+      className="board-countdown"
+      fill="none"
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <circle className="board-countdown-track" cx="12" cy="12" r="9" />
+      <m.circle
+        animate={{ pathLength: 0 }}
+        className="board-countdown-left"
+        cx="12"
+        cy="12"
+        initial={{ pathLength: 1 }}
+        r="9"
+        transform="rotate(-90 12 12)"
+        transition={{ duration: seconds, ease: "linear" }}
+      />
+    </svg>
   );
 }
 

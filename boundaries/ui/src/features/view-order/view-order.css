@@ -136,7 +136,11 @@
   bottom: -0.1rem;
   left: calc(0.625rem - 1px);
   width: 2px;
-  background: var(--color-border-strong);
+  /* The connector fills top-down once the step is done. */
+  background:
+    linear-gradient(var(--color-primary), var(--color-primary)) top / 100%
+    var(--connector-filled, 0%) no-repeat,
+    var(--color-border-strong);
   content: "";
 }
 
@@ -159,7 +163,10 @@
   line-height: 1.5;
 }
 
-.order-progress [data-state="done"]::before,
+.order-progress [data-state="done"]::before {
+  --connector-filled: 100%;
+}
+
 .order-progress [data-state="done"] .order-progress-marker {
   border-color: var(--color-primary);
   background: var(--color-primary);
@@ -391,7 +398,10 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .order-progress li::before,
+  .order-progress li::before {
+    transition: --connector-filled var(--motion-standard) var(--motion-easing);
+  }
+
   .order-progress-marker {
     transition:
       background-color var(--motion-standard) var(--motion-easing),
@@ -409,4 +419,10 @@
   to {
     opacity: 0.55;
   }
+}
+
+@property --connector-filled {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
 }
