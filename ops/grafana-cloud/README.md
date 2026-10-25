@@ -34,6 +34,7 @@ Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) доб
 | Инфраструктура — только allowlist метрик (`prometheus.relabel`): SpiceDB без health-check и buckets datastore, PostgreSQL только база владельца, Envoy internal gateway только clusters GRPCRoute (~420 series), pods только прикладных неймспейсов и `condition="true"` readiness; kube-state-metrics генерирует три метрики pods | `alloy.yaml` |
 | Экспорт раз в 60 s | `OTEL_METRIC_EXPORT_INTERVAL` |
 | Values профиля получают все releases orders, restaurants, delivery и payments (BFF — Cosmo, своя telemetry) | `skaffold.yaml`, `values/grafana-cloud.yaml` |
+| BFF (Cosmo Router): из метрик Router остаются `router.http.requests`, `.requests.error`, `.request.duration_milliseconds` с labels `wg.operation.type`, `wg.subgraph.name`, `http.status_code` | `values/bff-grafana-cloud.yaml`, `otelcol.processor.filter "nomnom"`, `otelcol.processor.transform "bff_metrics"` |
 | Отправка выключается без удаления кластера | `make kind-grafana-cloud-stop` |
 
 Расход виден в stack (**Cost management → Usage**) или запросом `count by (job) ({job=~"(nomnom|infra)/.+"})`: OTLP ingestion собирает `job` из `service.namespace/service.name`, у Prometheus scrape инфраструктуры `job` — `infra/spicedb`, `infra/postgresql`, `infra/internal-gateway`, `infra/kubernetes`.
@@ -55,6 +56,7 @@ Internal gateway (EnvoyProxy `internal-gateway`, [`gateway.yaml`](../kind/manife
 | SpiceDB | scrape `:9090` pod в `nomnom-authz` | `infra/spicedb` |
 | PostgreSQL | `prometheus.exporter.postgres` на владельца (`orders`, `payments`, `delivery`), DSN из Secret `alloy-postgres` (chart [`ops/kind/bootstrap`](../kind/bootstrap) из тех же паролей, что базы) | `infra/postgresql` |
 | Internal gateway | scrape stats Envoy `:19001/stats/prometheus` pod `owning-gateway-name=internal` в `envoy-gateway-system` (NetworkPolicy `internal-gateway-ingress` пускает только Alloy): requests, класс ответа, retries, pending overflow, timeouts, connect failures, latency по clusters GRPCRoute. gRPC-ошибки приходят с HTTP 200 — статус вызова смотрится по метрикам сервисов | `infra/internal-gateway` |
+| Kafka consumer lag | `prometheus.exporter.kafka` к брокеру `kafka.nomnom-infra`, только groups `orders` и `restaurants` (delivery и payments Kafka не читают) и только `kafka_consumergroup_lag` | `infra/kafka` |
 | Pods | cAdvisor kubelet через API server proxy (ClusterRole `nomnom-alloy`: `nodes/proxy`) и kube-state-metrics v2.20.0 в `nomnom-observability` | `infra/kubernetes` |
 
 Инфраструктурные неймспейсы без NetworkPolicy, поэтому отдельных разрешений Alloy не нужно.

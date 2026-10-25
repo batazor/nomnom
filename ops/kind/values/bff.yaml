@@ -16,6 +16,10 @@ serviceAccount:
 internalGateway:
   address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
 
+# Router metrics без профиля grafana-cloud не экспортируются: Alloy нет (values/bff-grafana-cloud.yaml).
+env:
+  BFF__METRICS_OTLP_ENABLED: "false"
+
 # ADR 36: Router читает orders.v1.order-changes для подписок orderChanged
 # (egress — manifests/netpol/app-infrastructure.yaml).
 kafka:

@@ -49,13 +49,13 @@ OTel resource в Prometheus: `job="nomnom/<service.name>"`, `instance=<service.i
 
 ## GraphQL / HTTP (BFF, Cosmo Router)
 
-Встроенная telemetry Cosmo Router. Router экспортирует метрики по умолчанию, но OTLP exporter к Alloy в `config.yaml` не настроен и Alloy не развёрнут — метрики не доставляются.
+Встроенная telemetry Cosmo Router: OTLP к Alloy в профиле grafana-cloud (`BFF__METRICS_OTLP_ENABLED`). Alloy оставляет три инструмента и labels `wg_operation_type`, `wg_subgraph_name`, `http_status_code` — operation name, клиент и версии router отбрасываются ради квоты series.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `router_http_requests_total` | Cosmo `router.http.requests` | counter | `wg_operation_type`, `wg_operation_name`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | `wg_operation_name` ограничен persisted operations клиента. |
-| `router_http_requests_error_total` | Cosmo `router.http.requests.error` | counter | `wg_operation_type`, `wg_operation_name`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | GraphQL errors в ответе 200. |
-| `router_http_request_duration_milliseconds` | Cosmo `router.http.request.duration_milliseconds` | histogram | `wg_operation_type`, `wg_operation_name`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway). |
+| `router_http_requests_total` | Cosmo `router.http.requests` | counter | `wg_operation_type`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | — |
+| `router_http_requests_error_total` | Cosmo `router.http.requests.error` | counter | `wg_operation_type`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | GraphQL errors в ответе 200. |
+| `router_http_request_duration_milliseconds` | Cosmo `router.http.request.duration_milliseconds` | histogram | `wg_operation_type`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway). |
 
 <a id="runtime"></a>
 

@@ -99,14 +99,33 @@ data:
     otelcol.processor.filter "nomnom" {
       error_mode = "ignore"
       metrics {
-        metric = ["resource.attributes[\"service.namespace\"] != \"nomnom\""]
+        metric = [
+          "resource.attributes[\"service.namespace\"] != \"nomnom\"",
+          // Cosmo Router (BFF): только инструменты overview, остальное — квота series.
+          "resource.attributes[\"service.name\"] == \"bff\" and not IsMatch(name, \"^router\\\\.http\\\\.(requests|requests\\\\.error|request\\\\.duration_milliseconds)$\")",
+        ]
       }
       traces {
         span = ["resource.attributes[\"service.namespace\"] != \"nomnom\""]
       }
       output {
-        metrics = [otelcol.processor.batch.default.input]
+        metrics = [otelcol.processor.transform.bff_metrics.input]
         traces  = [otelcol.processor.batch.signals.input]
+      }
+    }
+
+    // Labels Router: клиент, версии router и operation name/hash размножают series, а
+    // dashboards BFF группируют только по типу операции, subgraph и HTTP-статусу.
+    otelcol.processor.transform "bff_metrics" {
+      error_mode = "ignore"
+      metric_statements {
+        context    = "datapoint"
+        statements = [
+          "keep_keys(attributes, [\"wg.operation.type\", \"wg.subgraph.name\", \"http.status_code\"]) where resource.attributes[\"service.name\"] == \"bff\"",
+        ]
+      }
+      output {
+        metrics = [otelcol.processor.batch.default.input]
       }
     }
 
@@ -386,6 +405,30 @@ data:
       rule {
         source_labels = ["__name__"]
         regex         = "kafka_connect_(connector_status|connector_task_status|worker_.+)|debezium_metrics_(MilliSecondsBehindSource|TotalNumberOfEventsSeen|QueueRemainingCapacity|QueueTotalCapacity|Connected|MilliSecondsSinceLastEvent)"
+        action        = "keep"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
+    // Lag consumer groups контекстов, которые читают Kafka сами (orders-consumer — Watermill,
+    // restaurants); delivery и payments только публикуют Outbox через Debezium. Только
+    // kafka_consumergroup_lag: остальные метрики exporter'а дашборды не используют.
+    prometheus.exporter.kafka "infra" {
+      kafka_uris          = ["kafka.nomnom-infra.svc.cluster.local:9092"]
+      groups_filter_regex = ["^(orders|restaurants)$"]
+    }
+
+    prometheus.scrape "kafka" {
+      targets         = prometheus.exporter.kafka.infra.targets
+      job_name        = "infra/kafka"
+      scrape_interval = "60s"
+      forward_to      = [prometheus.relabel.kafka.receiver]
+    }
+
+    prometheus.relabel "kafka" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "kafka_consumergroup_lag"
         action        = "keep"
       }
       forward_to = [otelcol.receiver.prometheus.infra.receiver]

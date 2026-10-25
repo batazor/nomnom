@@ -73,10 +73,15 @@ Router в образе слушает `0.0.0.0:3010` ([`config.production.yaml`]
 
 ```yaml
 env:
-  OTEL_SERVICE_NAME: bff
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-  OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+  BFF__METRICS_OTLP_ENABLED: "true"
+  BFF__OTLP_METRICS_ENDPOINT: http://alloy.nomnom-observability.svc.cluster.local:4318
+  BFF__OTLP_TRACES_ENDPOINT: http://alloy.nomnom-observability.svc.cluster.local:4318
+  BFF__DEPLOYMENT_ENVIRONMENT: kind
 ```
+
+`env.BFF__METRICS_OTLP_ENABLED` обязателен: chart падает без него, а с `"true"` требует
+`env.BFF__OTLP_METRICS_ENDPOINT`. Router metrics уходят по OTLP/HTTP; какие из них остаются, решает Alloy
+([ops/grafana-cloud](../../../ops/grafana-cloud/README.md)).
 
 Адрес Alloy и другие значения OpenTelemetry задаются окружением и не хардкодятся в chart;
 Alloy sidecar не добавляется — collector разворачивается отдельно.

@@ -52,9 +52,15 @@ telemetry:
     exporters:
       - exporter: http
         endpoint: "${BFF__OTLP_TRACES_ENDPOINT}"
+  # Router metrics по OTLP включает env BFF__METRICS_OTLP_ENABLED (chart требует его явно);
+  # Alloy оставляет только router.http.requests, .requests.error и .request.duration_milliseconds.
   metrics:
     otlp:
-      enabled: false
+      enabled: ${BFF__METRICS_OTLP_ENABLED}
+      router_runtime: false
+      exporters:
+        - exporter: http
+          endpoint: "${BFF__OTLP_METRICS_ENDPOINT}"
     prometheus:
       enabled: false
 

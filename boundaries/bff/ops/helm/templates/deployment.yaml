@@ -61,6 +61,12 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
+          {{- if not (hasKey .Values.env "BFF__METRICS_OTLP_ENABLED") }}
+          {{- fail "env.BFF__METRICS_OTLP_ENABLED is required: \"true\" exports Router metrics to env.BFF__OTLP_METRICS_ENDPOINT" }}
+          {{- end }}
+          {{- if and (eq (toString .Values.env.BFF__METRICS_OTLP_ENABLED) "true") (not .Values.env.BFF__OTLP_METRICS_ENDPOINT) }}
+          {{- fail "env.BFF__OTLP_METRICS_ENDPOINT is required with BFF__METRICS_OTLP_ENABLED=true" }}
+          {{- end }}
           env:
             # ADR 36: Cosmo Streams; образ без брокера Router не запускает.
             - name: BFF__KAFKA_BROKERS
