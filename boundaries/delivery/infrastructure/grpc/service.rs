@@ -2,7 +2,6 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use shaku::HasComponent;
 use tokio::sync::watch;
 use tonic::metadata::MetadataMap;
 use tonic::transport::server::TcpIncoming;
@@ -13,7 +12,6 @@ use crate::pkg::application::Subject;
 use crate::pkg::lifecycle::{Worker, wait_for_stop};
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::get_courier_current_delivery;
-use crate::slices::courier::di::CourierUseCases;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{cancel_delivery, create_delivery, replan_delivery};
 use crate::slices::delivery::di::DeliveryUseCases;
@@ -57,7 +55,7 @@ impl DeliveryService for DeliveryGrpcService {
     ) -> Result<Response<GetCourierCurrentDeliveryResponse>, Status> {
         let subject = self.subjects.resolve(request.metadata())?;
         let courier_id = request.into_inner().courier_id;
-        let use_cases: &dyn CourierUseCases = self.module.resolve_ref();
+        let use_cases = self.module.couriers();
         let output = use_cases
             .get_courier_current_delivery(
                 &subject,
@@ -149,7 +147,7 @@ impl DeliveryService for DeliveryGrpcService {
 
 impl DeliveryGrpcService {
     fn deliveries(&self) -> &dyn DeliveryUseCases {
-        self.module.resolve_ref()
+        self.module.deliveries()
     }
 }
 
@@ -346,7 +344,7 @@ mod tests {
                 active_assignments: 0,
             }],
         )));
-        let couriers: &dyn CourierUseCases = module.resolve_ref();
+        let couriers = module.couriers();
         couriers
             .register_courier(
                 &Subject::User("operator-1".to_owned()),
@@ -413,7 +411,7 @@ mod tests {
         assert_eq!(replan.offered_courier_id, courier);
 
         let courier_subject = Subject::User(courier.to_owned());
-        let deliveries: &dyn DeliveryUseCases = running.module.resolve_ref();
+        let deliveries = running.module.deliveries();
         let offers = deliveries
             .list_available_delivery_offers(
                 &courier_subject,
@@ -546,7 +544,7 @@ mod tests {
             .expect("current delivery")
             .into_inner();
         assert_eq!(current.delivery, None);
-        let couriers: &dyn CourierUseCases = running.module.resolve_ref();
+        let couriers = running.module.couriers();
         let availability = couriers
             .set_courier_availability(
                 &Subject::User("courier-1".to_owned()),
@@ -575,7 +573,7 @@ mod tests {
     async fn cancel_after_pickup_is_a_business_rejection() {
         let mut running = start_with_courier("courier-1").await;
         let delivery_id = assigned_over_grpc(&mut running, "order-1", "courier-1").await;
-        let deliveries: &dyn DeliveryUseCases = running.module.resolve_ref();
+        let deliveries = running.module.deliveries();
         deliveries
             .confirm_pickup(
                 &Subject::User("courier-1".to_owned()),

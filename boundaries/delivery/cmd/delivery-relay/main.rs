@@ -6,14 +6,10 @@
 use std::error::Error;
 use std::net::SocketAddr;
 use std::process::ExitCode;
-use std::sync::Arc;
 
-use delivery::infrastructure::outbox::{KafkaPublisher, PgOutbox, RelayMetrics, RelayWorker};
+use delivery::di::relay::{self, SERVICE_NAME};
 use delivery::pkg::config;
 use delivery::pkg::lifecycle::{Lifecycle, Settings};
-use delivery::pkg::telemetry;
-
-const SERVICE_NAME: &str = "delivery-relay";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -30,13 +26,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let config = config::load().map_err(|error| format!("load config: {error}"))?;
     // Kafka и PostgreSQL обязательны: пустой KAFKA__BROKERS или DATABASE__URL
     // завершают startup до открытия портов.
-    config.kafka.require()?;
-    let publisher = Arc::new(KafkaPublisher::new(
-        &config.kafka,
-        config.outbox.publish_timeout,
-    )?);
-    let outbox = Arc::new(PgOutbox::connect(&config.database).await?);
-    let telemetry = telemetry::start(SERVICE_NAME)?;
+    let process = relay::compose(&config.database, &config.kafka, config.outbox.clone()).await?;
 
     let lifecycle = Lifecycle::bind(Settings {
         management_addr: SocketAddr::from(([0, 0, 0, 0], config.management.port)),
@@ -52,17 +42,10 @@ async fn run() -> Result<(), Box<dyn Error>> {
         config.outbox.poll_interval,
         config.outbox.batch_size,
         config.outbox.retention,
-        telemetry.exporting()
+        process.telemetry().exporting()
     );
-    let worker = RelayWorker::new(
-        outbox,
-        Arc::clone(&publisher),
-        config.outbox,
-        RelayMetrics::global(),
-    );
-    let result = lifecycle.run(worker).await;
-    publisher.flush();
-    telemetry.shutdown();
+    let result = lifecycle.run(process.worker()?).await;
+    process.shutdown();
     result?;
     Ok(())
 }

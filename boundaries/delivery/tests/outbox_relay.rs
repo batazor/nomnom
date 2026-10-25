@@ -8,7 +8,6 @@
 //! база и topic могут быть общими.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -20,9 +19,7 @@ use tokio::sync::watch;
 
 use delivery::di;
 use delivery::infrastructure::grpc::v1;
-use delivery::infrastructure::outbox::{
-    KafkaPublisher, PgOutbox, RelayMetrics, RelayWorker, WATERMILL_UUID_HEADER,
-};
+use delivery::infrastructure::outbox::{PgOutbox, WATERMILL_UUID_HEADER};
 use delivery::infrastructure::postgres::{OUTBOX_TOPIC, event_id, migrate};
 use delivery::pkg::config::{DatabaseConfig, KafkaConfig, OutboxConfig};
 use delivery::pkg::lifecycle::Worker as _;
@@ -169,17 +166,18 @@ async fn relay_publishes_outbox_rows_with_envelope_headers() {
         .create()
         .expect("consumer");
 
-    // Relay worker under the advisory lock.
-    let outbox = Arc::new(PgOutbox::connect(&env.database).await.expect("outbox"));
-    let publisher = KafkaPublisher::new(&env.kafka, Duration::from_secs(30)).expect("publisher");
+    // Relay worker of the `delivery-relay` composition root, under the
+    // advisory lock.
     let config = OutboxConfig {
         poll_interval: Duration::from_millis(100),
+        publish_timeout: Duration::from_secs(30),
         ..OutboxConfig::default()
     };
+    let process = di::relay::compose(&env.database, &env.kafka, config)
+        .await
+        .expect("relay process");
     let (stop_tx, stop_rx) = watch::channel(false);
-    let relay = tokio::spawn(
-        RelayWorker::new(outbox, publisher, config, RelayMetrics::global()).run(stop_rx),
-    );
+    let relay = tokio::spawn(process.worker().expect("relay worker").run(stop_rx));
 
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
@@ -198,6 +196,7 @@ async fn relay_publishes_outbox_rows_with_envelope_headers() {
     }
     stop_tx.send(true).expect("stop");
     relay.await.expect("join").expect("relay");
+    process.shutdown();
 
     consumer.subscribe(&[OUTBOX_TOPIC]).expect("subscribe");
     let mut received = Vec::new();
