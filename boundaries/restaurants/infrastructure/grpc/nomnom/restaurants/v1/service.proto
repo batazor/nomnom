@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package nomnom.restaurants.v1;
+
+import "nomnom/restaurants/v1/restaurants.proto";
+
+service RestaurantsService {
+  rpc GetRestaurant(GetRestaurantRequest) returns (GetRestaurantResponse);
+
+  // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
+  rpc ReceiveOrderRequest(ReceiveOrderRequestRequest) returns (ReceiveOrderRequestResponse);
+  rpc CancelRestaurantOrder(CancelRestaurantOrderRequest) returns (CancelRestaurantOrderResponse);
+}
+
+message GetRestaurantRequest {
+  string restaurant_id = 1;
+}
+
+message GetRestaurantResponse {
+  Restaurant restaurant = 1;
+}
+
+message OrderRequestItem {
+  string menu_item_id = 1;
+  int32 quantity = 2;
+}
+
+message ReceiveOrderRequestRequest {
+  string restaurant_id = 1;
+  string order_id = 2;
+  repeated OrderRequestItem items = 3;
+}
+
+message ReceiveOrderRequestResponse {
+  string restaurant_order_id = 1;
+  // false when the request repeated an already received order.
+  bool created = 2;
+}
+
+message CancelRestaurantOrderRequest {
+  string restaurant_id = 1;
+  string order_id = 2;
+  string reason = 3;
+}
+
+message CancelRestaurantOrderResponse {
+  string restaurant_order_id = 1;
+  // true when the order is cancelled, including a repeated cancellation.
+  bool cancelled = 2;
+  // Business reason when cancellation is rejected by stage, for example already_ready.
+  string rejection_reason = 3;
+}

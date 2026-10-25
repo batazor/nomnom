@@ -1,0 +1,31 @@
+{
+  "name": "@nomnom/restaurants",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.json && cp -R infrastructure/grpc/gen dist/infrastructure/grpc/",
+    "check": "npm run proto:check && biome check .",
+    "format": "biome format --write .",
+    "generate:proto": "cd infrastructure/grpc && buf generate --template buf.gen.yaml",
+    "lint": "biome lint .",
+    "proto:check": "cd ../.. && buf format --diff --exit-code && buf lint && buf build",
+    "start": "node cmd/restaurants/main.ts",
+    "test": "node --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@types/node": "26.6.5",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0",
+    "@connectrpc/connect": "2.2.0",
+    "@connectrpc/connect-node": "2.2.0",
+    "decimal.js": "^10.6.0",
+    "jose": "6.2.13",
+    "zod": "^4.6.7"
+  }
+}

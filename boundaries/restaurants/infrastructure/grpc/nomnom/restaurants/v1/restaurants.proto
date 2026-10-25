@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package nomnom.restaurants.v1;
+
+message Restaurant {
+  string restaurant_id = 1;
+  string name = 2;
+  bool is_open = 3;
+  // Pickup address of Restaurant Orders; delivery uses it as the pickup point.
+  string address = 4;
+}
