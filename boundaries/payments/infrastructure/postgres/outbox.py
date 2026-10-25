@@ -1,9 +1,9 @@
 """Outbox seam of ADR 31: Domain Event → Integration Event mapping and record identity.
 
 ``OutboxEventMapper`` is the extension point for the Protobuf mappers of
-``nomnom/payments/v1/events.proto`` (topic ``payments.v1.payment-events``). Until they
-exist the composition root uses ``NoPublishedContracts``: no Domain Event has a
-contract, so nothing is written to the Outbox.
+``nomnom/payments/v1/events.proto`` (topic ``payments.v1.payment-events``); the
+entrypoint injects ``infrastructure.messaging.PaymentEventsMapper``. Factories default
+to ``NoPublishedContracts``: no Domain Event has a contract, nothing is written.
 """
 
 import uuid
@@ -38,7 +38,7 @@ class OutboxEventMapper(Protocol):
 
 
 class NoPublishedContracts:
-    """Default mapper: no published contracts yet, so no event reaches the Outbox."""
+    """Default mapper of the factories: no event reaches the Outbox."""
 
     def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> Optional[OutboxMessage]:
         return None

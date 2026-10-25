@@ -186,7 +186,33 @@ Inbox не защищает вызовы платёжного провайдер
 
 Unit of Work охватывает только локальные изменения: payment state, operation record и Outbox. Вызов провайдера выполняется вне транзакции, обычно между записью операции и фиксацией её результата; порядок определяется use case и idempotency policy — см. [документацию Unit of Work](../../docs/unit-of-work.md#payments) и [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md).
 
-Хранилище `payments` — PostgreSQL ([локальный ADR 1](docs/adr/0001-use-postgresql-for-payments-storage.md)): таблица `inbox` с первичным ключом `(consumer, event_id)` и таблица `outbox` записываются в той же локальной транзакции, что и `payments`/`payment_operations`. Provider callbacks уже дедуплицируются через `inbox` (consumer `payment-provider`); Kafka-клиент и Outbox publisher относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+Хранилище `payments` — PostgreSQL ([локальный ADR 1](docs/adr/0001-use-postgresql-for-payments-storage.md)): таблица `inbox` с первичным ключом `(consumer, event_id)` и таблица `outbox` записываются в той же локальной транзакции, что и `payments`/`payment_operations`. Provider callbacks дедуплицируются через `inbox` (consumer `payment-provider`). Kafka consumers ещё нет. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+
+### Публикация Integration Events
+
+По [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) `payments` публикует в topic `payments.v1.payment-events` контракт [`nomnom/payments/v1/events.proto`](infrastructure/grpc/nomnom/payments/v1/events.proto): `PaymentAuthorized`, `PaymentCaptured`, `PaymentAuthorizationCancelled`, `PaymentRefunded` (с `Money`), `PaymentFailed` (с `reason`). `PaymentOperationDeclined` — внутренний факт и не публикуется.
+
+- `PaymentEventsMapper` (`infrastructure/messaging/events.py`) — явный allowlist Domain Event → Protobuf; composition root `entrypoints/payments/main.py` передаёт его gRPC handlers и webhook worker, поэтому событие пишется в Outbox в той же транзакции, что и Payment.
+- `payments-relay` (`python -m entrypoints.payments_relay.main`, тот же образ) — polling relay с runtime contract `pkg/lifecycle` и техническим портом `MANAGEMENT__PORT`. Активен один экземпляр: session-level `pg_try_advisory_lock`, остальные реплики — failover. Цикл читает до `OUTBOX__BATCH_SIZE` записей с `published_at IS NULL` в порядке `seq`, публикует по одной idempotent producer'ом `confluent-kafka` (`acks=all`, key — `aggregate_id`) и выставляет `published_at` только после delivery report. Первая неудача останавливает пачку (head-of-line): `attempts`/`last_error` обновляются, следующий цикл начинает с неё. Раз в минуту удаляются опубликованные записи старше `OUTBOX__RETENTION`.
+- Kafka headers совпадают с `orders/pkg/messaging/envelope.go`: `event_id`, `event_type`, `occurred_at` (RFC 3339 nano, UTC), `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent` (если был span), плюс `_watermill_message_uuid` = `event_id` для Watermill consumers.
+- Конфигурация relay: `DATABASE__URL` и `KAFKA__BROKERS` (через запятую) обязательны — пустое значение завершает процесс на старте; `KAFKA__CLIENT_ID` (`payments-relay`), `OUTBOX__POLL_INTERVAL` (`1s`), `OUTBOX__BATCH_SIZE` (`100`), `OUTBOX__RETENTION` (7 дней; общий формат длительности — `10080m`). Основной процесс к Kafka не подключается.
+- Метрики (OTel, `pkg/telemetry`, label `stream` = topic): `nomnom_outbox_pending_messages`, `nomnom_outbox_oldest_pending_age_seconds` (только активный экземпляр), `nomnom_outbox_publish_retries_total` (`error_class`: transient | permanent), `nomnom_outbox_publish_duration_seconds` и `nomnom_outbox_publish_lag_seconds` (`occurred_at` → подтверждение брокера; плюс `event_type`).
+- `tests/test_kafka_relay_integration.py` при заданных `DATABASE_URL` и `KAFKA_BROKERS` проводит Authorize через Outbox и relay в реальную Kafka и читает headers обратно:
+
+```bash
+docker run -d --rm --name payments-kafka -p 59092:9092 \
+  -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller \
+  -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+  -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:59092 \
+  -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+  -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+  -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
+  -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 apache/kafka:4.1.0
+DATABASE_URL=postgresql://payments:payments@localhost:55432/payments \
+  KAFKA_BROKERS=localhost:59092 make test
+docker stop payments-kafka
+```
 
 ## Observability
 
@@ -216,7 +242,7 @@ Unit of Work охватывает только локальные изменен
 
 - Схема — `infrastructure/postgres/migrations/*.sql` (forward-only), применяется `python -m entrypoints.payments_migrate.main` под advisory lock; версии — в `schema_migrations`. Таблицы `payments`, `payment_operations`, `outbox`, `inbox`.
 - `PostgresUnitOfWork` — одна локальная транзакция; repositories, Outbox и Inbox внутри `run` используют её соединение (context variable), вложенный `run` присоединяется. Вне Unit of Work каждый вызов берёт своё соединение из пула.
-- Outbox по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md): `seq`, `event_id` (UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`), `event_type` (полное имя Protobuf-сообщения), `topic`, `payload` (Protobuf, `BYTEA`), `metadata` (`traceparent`), `published_at`, `attempts`, `last_error`. Какие Domain Events публикуются, решает внедряемый `OutboxEventMapper` (`infrastructure/postgres/outbox.py`); событие без контракта (mapper вернул `None`) в Outbox не пишется. Пока Protobuf-контрактов нет, composition root использует `NoPublishedContracts` — Outbox остаётся пустым; Protobuf mappers и `payments-relay` добавляются отдельно (`create_default_handlers(outbox_mapper=...)`).
+- Outbox по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md): `seq`, `event_id` (UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`), `event_type` (полное имя Protobuf-сообщения), `topic`, `payload` (Protobuf, `BYTEA`), `metadata` (`traceparent`), `published_at`, `attempts`, `last_error`. Какие Domain Events публикуются, решает внедряемый `OutboxEventMapper` (`infrastructure/postgres/outbox.py`); событие без контракта (mapper вернул `None`) в Outbox не пишется. `NoPublishedContracts` остаётся значением по умолчанию фабрик (`create_default_handlers`, `create_default_worker`, `create_webhook_worker`); entrypoint передаёт `PaymentEventsMapper` — см. [Публикация Integration Events](#публикация-integration-events).
 - Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePayment`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKey`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPending`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflict`.
 - `DATABASE__URL` обязателен: пустое значение завершает процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). `DATABASE__MAX_CONNS` — размер пула (по умолчанию `10`).
 - Integration-тесты `tests/test_postgres_integration.py` запускаются при заданном `DATABASE_URL`:
@@ -228,12 +254,13 @@ DATABASE_URL=postgresql://payments:payments@localhost:55432/payments make test
 docker stop payments-pg
 ```
 
-Не реализованы: provider client, проверка подписи webhooks, user identity через BFF, Outbox publisher, Kafka, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения провайдера composition root (`create_default_worker`) собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+Не реализованы: provider client, проверка подписи webhooks, user identity через BFF, Kafka consumers (Inbox для integration events), Helm-развёртывание `payments-relay`, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения провайдера composition root (`create_default_worker`) собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
 
 ## Запуск
 
 ```bash
-make run
+make run        # payments: gRPC + provider webhooks
+make run-relay  # payments-relay: Outbox → Kafka
 ```
 
 ## Проверка
@@ -265,8 +292,9 @@ docker run --rm -p 8084:8084 -p 9084:9084 \
 
 Контейнер запускается непривилегированным пользователем `app`; `tini` пересылает сигналы
 приложению. Конфигурация передаётся
-переменными окружения; `.env` в образ не копируется. Текущий HTTP-каркас не требует БД,
-Kafka или подключения к платёжному провайдеру.
+переменными окружения; `.env` в образ не копируется. Основной процесс требует `DATABASE__URL`; тот же образ запускает
+`python -m entrypoints.payments_relay.main` (дополнительно `KAFKA__BROKERS`) и
+`python -m entrypoints.payments_migrate.main`.
 
 ## Развёртывание
 

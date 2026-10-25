@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: check run generate proto-check test lint typecheck format format-check lint-fix
+.PHONY: check run run-relay generate proto-check test lint typecheck format format-check lint-fix
 
 check: proto-check test lint typecheck format-check
 
@@ -12,6 +12,9 @@ proto-check:
 
 run:
 	$(UV) run python -m entrypoints.payments.main
+
+run-relay:
+	$(UV) run python -m entrypoints.payments_relay.main
 
 test:
 	$(UV) run python -m unittest discover -s tests

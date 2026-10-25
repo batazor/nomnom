@@ -8,9 +8,11 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler
+from typing import Optional
 
 from infrastructure.postgres import (
     NoPublishedContracts,
+    OutboxEventMapper,
     PostgresDatabase,
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
@@ -98,14 +100,20 @@ def create_webhook_handler(
 
 
 def create_webhook_worker(
-    address: tuple[str, int], settings: ProviderSettings, database: PostgresDatabase
+    address: tuple[str, int],
+    settings: ProviderSettings,
+    database: PostgresDatabase,
+    outbox_mapper: Optional[OutboxEventMapper] = None,
 ) -> HttpWorker:
-    """Without ``PROVIDER__WEBHOOK_SECRET`` the port opens but every webhook is 400."""
+    """Without ``PROVIDER__WEBHOOK_SECRET`` the port opens but every webhook is 400.
+
+    ``outbox_mapper`` selects the published Integration Events (none by default).
+    """
     clock = SystemClock()
     applier = ProviderResultApplier(
         PostgresPaymentRepository(database),
         PostgresPaymentOperationRepository(database),
-        PostgresPaymentOutbox(database, NoPublishedContracts()),
+        PostgresPaymentOutbox(database, outbox_mapper or NoPublishedContracts()),
         clock,
     )
     callbacks = ApplyProviderCallbackHandler(

@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package nomnom.payments.v1;
+
+import "nomnom/payments/v1/payments.proto";
+
+// Integration Events стрима payments.v1.payment-events (ADR 25, ADR 31).
+// Envelope (event_id, event_type, occurred_at, aggregate_*) передаётся в Kafka
+// headers; event_type — полное имя сообщения ниже, partition key — aggregate_id
+// Payment. Отказ отдельной операции провайдера (PaymentOperationDeclined) не
+// публикуется: это внутренний факт payments.
+
+// Сумма авторизована у провайдера (Authorization).
+message PaymentAuthorized {
+  string payment_id = 1;
+  string order_id = 2;
+  Money amount = 3;
+}
+
+// Авторизованная сумма списана (Capture).
+message PaymentCaptured {
+  string payment_id = 1;
+  string order_id = 2;
+  Money amount = 3;
+}
+
+// Авторизация отменена до списания (Authorization Cancellation).
+message PaymentAuthorizationCancelled {
+  string payment_id = 1;
+  string order_id = 2;
+  Money amount = 3;
+}
+
+// Списанная сумма возвращена (Refund).
+message PaymentRefunded {
+  string payment_id = 1;
+  string order_id = 2;
+  Money amount = 3;
+}
+
+// Payment завершился неудачей по бизнес-причине.
+message PaymentFailed {
+  string payment_id = 1;
+  string order_id = 2;
+  string reason = 3;
+}

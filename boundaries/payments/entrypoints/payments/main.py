@@ -2,6 +2,7 @@ import logging
 import sys
 
 from infrastructure.grpc.service import create_default_worker
+from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.postgres import create_database
 from infrastructure.provider import create_webhook_worker
 from pkg import telemetry
@@ -25,15 +26,18 @@ def serve(settings: Settings) -> None:
         # Недоступная база завершает процесс до открытия портов; схему применяет
         # entrypoints.payments_migrate (init container).
         database.check()
+        # Integration Events payments.v1.payment-events (ADR 31); publishes payments-relay.
+        mapper = PaymentEventsMapper()
         worker = create_default_worker(
             ("0.0.0.0", settings.server.port),
             settings.identity,
             settings.spicedb,
             settings.provider,
             database=database,
+            outbox_mapper=mapper,
         )
         webhooks = create_webhook_worker(
-            ("0.0.0.0", settings.provider.webhook_port), settings.provider, database
+            ("0.0.0.0", settings.provider.webhook_port), settings.provider, database, mapper
         )
         Lifecycle(
             LifecycleConfig(

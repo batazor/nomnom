@@ -355,6 +355,7 @@ def create_default_worker(
     provider: ProviderSettings | None = None,
     *,
     database: PostgresDatabase,
+    outbox_mapper: OutboxEventMapper | None = None,
 ) -> GrpcWorker:
     """Composition root of the gRPC worker.
 
@@ -364,11 +365,14 @@ def create_default_worker(
     case checks SpiceDB and fails closed (``UNAVAILABLE``) on error or timeout.
     Without ``PROVIDER__KIND=fake`` every financial operation is ``UNAVAILABLE``.
     Storage is the PostgreSQL ``database`` owned (opened, checked, closed) by the caller.
+    ``outbox_mapper`` selects the published Integration Events (none by default).
     """
     subjects = (
         create_subject_resolver(identity) if identity is not None else RejectingSubjectResolver()
     )
     permissions = create_permission_checker(spicedb)
     return GrpcWorker(
-        address, create_default_handlers(database, permissions, create_provider(provider)), subjects
+        address,
+        create_default_handlers(database, permissions, create_provider(provider), outbox_mapper),
+        subjects,
     )
