@@ -32,7 +32,7 @@ func newCheckout(customers *identity.Identity, getenv func(string) string, track
 	if customers == nil || address == "" || tracking == nil {
 		return nil, nil
 	}
-	conn, err := gateway.Dial(address, "nomnom.orders", customers)
+	conn, err := gateway.Dial(address, "nomnom.orders", customers.Outgoing)
 	if err != nil {
 		return nil, err
 	}

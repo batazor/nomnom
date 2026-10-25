@@ -45,11 +45,11 @@ func newOrderTracking(customers *identity.Identity, getenv func(string) string) 
 		log.Printf("%s or BFF identity is not set: customer order operations are unavailable", envInternalGateway)
 		return nil, nil
 	}
-	ordersConn, err := gateway.Dial(address, "nomnom.orders", customers)
+	ordersConn, err := gateway.Dial(address, "nomnom.orders", customers.Outgoing)
 	if err != nil {
 		return nil, err
 	}
-	restaurantsConn, err := gateway.Dial(address, "nomnom.restaurants", customers)
+	restaurantsConn, err := gateway.Dial(address, "nomnom.restaurants", customers.Outgoing)
 	if err != nil {
 		return nil, err
 	}

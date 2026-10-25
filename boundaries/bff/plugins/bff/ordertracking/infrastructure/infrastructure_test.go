@@ -72,7 +72,7 @@ func (s *restaurantsServer) GetMenu(context.Context, *restaurantsv1.GetMenuReque
 	return &restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{{MenuItemId: "menu-tea", Name: "Чай"}}}, nil
 }
 
-func customers(t *testing.T) *identity.Identity {
+func credentials(t *testing.T) identity.OutgoingCredentials {
 	t.Helper()
 	dir := t.TempDir()
 	for _, audience := range []string{"nomnom.orders", "nomnom.restaurants"} {
@@ -80,7 +80,7 @@ func customers(t *testing.T) *identity.Identity {
 	}
 	signer, err := identity.NewAssertionSigner(filepath.Join(fixtures, "bff-signing-key.pem"), "nomnom-bff-test-key")
 	require.NoError(t, err)
-	return &identity.Identity{Assertions: signer, ServiceTokens: identity.ServiceTokens{Dir: dir}}
+	return identity.OutgoingCredentials{ServiceTokens: identity.ServiceTokens{Dir: dir}, Signer: signer}
 }
 
 func connect(t *testing.T, audience string, register func(*grpc.Server)) *grpc.ClientConn {
@@ -90,11 +90,11 @@ func connect(t *testing.T, audience string, register func(*grpc.Server)) *grpc.C
 	register(server)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
-	ids := customers(t)
+	ids := credentials(t)
 	conn, err := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(identity.UnaryClientInterceptor(audience, ids.ServiceTokens, ids.Assertions)),
+		grpc.WithUnaryInterceptor(identity.UnaryClientInterceptor(audience, ids.ServiceTokens, ids.Signer)),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })

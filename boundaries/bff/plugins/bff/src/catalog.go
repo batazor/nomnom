@@ -41,7 +41,7 @@ func newRestaurantCatalog(customers *identity.Identity, getenv func(string) stri
 		log.Printf("%s or BFF identity is not set: catalog operations are unavailable", envInternalGateway)
 		return nil, nil
 	}
-	conn, err := gateway.Dial(address, "nomnom.restaurants", customers)
+	conn, err := gateway.Dial(address, "nomnom.restaurants", customers.Outgoing)
 	if err != nil {
 		return nil, err
 	}

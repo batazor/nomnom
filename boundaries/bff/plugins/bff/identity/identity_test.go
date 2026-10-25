@@ -157,6 +157,28 @@ func TestInterceptorSendsServiceTokenAndAssertionForUser(t *testing.T) {
 	assert.Error(t, err)
 }
 
+type fakeSigner struct{ audience string }
+
+func (f *fakeSigner) Sign(user User, audience string) (string, error) {
+	f.audience = audience
+	return "assertion-of-" + user.ID, nil
+}
+
+// The interceptor depends on the Signer interface, not on a key.
+func TestInterceptorUsesAnySigner(t *testing.T) {
+	signer := &fakeSigner{}
+	interceptor := UnaryClientInterceptor("nomnom.orders", fixedTokens{"nomnom.orders": "service-token"}, signer)
+	var sent metadata.MD
+	err := interceptor(WithUser(context.Background(), User{ID: "customer-1"}), "/m", nil, nil, nil,
+		func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
+			sent, _ = metadata.FromOutgoingContext(ctx)
+			return nil
+		})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"assertion-of-customer-1"}, sent.Get(AssertionMetadata))
+	assert.Equal(t, "nomnom.orders", signer.audience)
+}
+
 func TestServiceTokensReadFilePerAudience(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "nomnom.orders"), []byte("token\n"), 0o600))
@@ -183,5 +205,8 @@ func TestLoadRequiresCompleteConfig(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, full.AccessTokens)
-	assert.WithinDuration(t, time.Now(), full.Assertions.now(), time.Second)
+	assert.IsType(t, ServiceTokens{}, full.Outgoing.ServiceTokens)
+	signer, ok := full.Outgoing.Signer.(*AssertionSigner)
+	require.True(t, ok)
+	assert.WithinDuration(t, time.Now(), signer.now(), time.Second)
 }
