@@ -34,7 +34,7 @@ export const OTHER_REASON = "other";
 
 /**
  * Closed sets of the `nomnom.reason` label. Reject Order and Report
- * Preparation Delay take an opaque reason (a catalog is not agreed yet), so
+ * Preparation Delay take an opaque reason; the approved closed sets below (ops/semconv) are counted, so
  * any other value is recorded as {@link OTHER_REASON}: a typo or free text
  * never creates a new series.
  */

@@ -212,7 +212,7 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_kitchen_preparations_active` | Kitchen Board projection | gauge | — | `restaurants`: ожидается | — |
 | `nomnom_kitchen_ready_for_pickup` | Kitchen Board projection | gauge | — | `restaurants`: ожидается | — |
 | `nomnom_kitchen_preparation_duration_seconds` | Kitchen use case decorator | histogram | — | `restaurants`: ожидается | — |
-| `nomnom_kitchen_delays_total` | Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox) | counter | `nomnom_reason` | `restaurants`: ожидается | `nomnom_reason` — временный закрытый набор `too_busy | item_unavailable`, остальное `other`. |
+| `nomnom_kitchen_delays_total` | Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox) | counter | `nomnom_reason` | `restaurants`: ожидается | `nomnom_reason` — утверждённый закрытый набор `too_busy | item_unavailable`, остальное `other`. |
 
 <a id="authz"></a>
 
@@ -252,7 +252,7 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_orders_in_state` | projection/polling | gauge | `nomnom_order_state` | `orders`: ожидается | Требует отдельной projection; PromQL по counters не эмулируется. |
 | `nomnom_restaurants_orders_received_total` | Receive Order Request после commit (`created: true`) | counter | — | `restaurants`: ожидается | Пишут `restaurants` (gRPC) и `restaurants-consumer` (OrderPlaced): каждый заказ один раз, на dashboard — сумма обоих. |
 | `nomnom_restaurants_orders_accepted_total` | Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox) | counter | — | `restaurants`: ожидается | — |
-| `nomnom_restaurants_orders_rejected_total` | Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox) | counter | `nomnom_reason` | `restaurants`: ожидается | `nomnom_reason` — временный закрытый набор `too_busy | item_unavailable | restaurant_closed`, остальное `other`; каталог причин не согласован. |
+| `nomnom_restaurants_orders_rejected_total` | Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox) | counter | `nomnom_reason` | `restaurants`: ожидается | `nomnom_reason` — утверждённый закрытый набор `too_busy | item_unavailable | restaurant_closed`, остальное `other`. |
 | `nomnom_delivery_created_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | — | `delivery`: ожидается | — |
 | `nomnom_delivery_assignments_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | — | `delivery`: ожидается | — |
 | `nomnom_delivery_reassignments_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | `nomnom_reason` | `delivery`: ожидается | `nomnom_reason` всегда `other`: у снятия курьера в домене нет причины. |

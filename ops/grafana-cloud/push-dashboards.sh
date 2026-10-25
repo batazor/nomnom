@@ -42,3 +42,19 @@ done
 jq --arg folder "${folder}" '.metadata.annotations["grafana.app/folder"] = $folder' \
   "${root}/ops/grafana/dashboards/platform.json" >"${config_dir}/dashboards/platform.json"
 g resources push -p "${config_dir}/dashboards" -o text
+
+# Alert rules (ADR 29): rule groups генератора через provisioning API. В артефактах вместо UID
+# datasource — placeholder ${metrics}: подставляется UID Prometheus-datasource stack.
+api="${GRAFANA_CLOUD_STACK_URL%/}/api"
+auth=(-H "Authorization: Bearer ${GRAFANA_CLOUD_SA_TOKEN}")
+metrics_uid="$(curl -sf "${auth[@]}" "${api}/datasources" | jq -r '[.[] | select(.type == "prometheus")][0].uid')"
+[[ -n "${metrics_uid}" && "${metrics_uid}" != null ]] || { echo "grafana-cloud: no prometheus datasource" >&2; exit 1; }
+for source in "${root}"/boundaries/*/ops/grafana/alerts/rules.json "${root}"/ops/grafana/alerts/platform.json; do
+  group="$(jq -r .title "${source}")"
+  body="$(jq --arg uid "${metrics_uid}" '(.rules[]?.data[] | select(.datasourceUid == "${metrics}") | .datasourceUid) = $uid' "${source}")"
+  status="$(curl -s -o "${config_dir}/alert-response.json" -w '%{http_code}' -X PUT "${auth[@]}" \
+    -H 'Content-Type: application/json' -d "${body}" \
+    "${api}/v1/provisioning/folder/${folder}/rule-groups/${group}")"
+  [[ "${status}" == 200 ]] || { echo "grafana-cloud: rule group ${group}: HTTP ${status} $(cat "${config_dir}/alert-response.json")" >&2; exit 1; }
+  echo "alert rule group ${group}: $(jq '.rules | length' "${source}") rules"
+done

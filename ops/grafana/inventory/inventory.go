@@ -221,7 +221,7 @@ var Metrics = []Metric{
 	{Name: "nomnom_kitchen_preparations_active", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
 	{Name: "nomnom_kitchen_ready_for_pickup", Section: "kitchen", Type: Gauge, Source: "Kitchen Board projection", Status: expected(Restaurants)},
 	{Name: "nomnom_kitchen_preparation_duration_seconds", Section: "kitchen", Type: Histogram, Source: "Kitchen use case decorator", Status: expected(Restaurants)},
-	{Name: "nomnom_kitchen_delays_total", Section: "kitchen", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox)", Labels: []string{"nomnom_reason"}, Status: expected(Restaurants), Note: "`nomnom_reason` — временный закрытый набор `too_busy | item_unavailable`, остальное `other`."},
+	{Name: "nomnom_kitchen_delays_total", Section: "kitchen", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox)", Labels: []string{"nomnom_reason"}, Status: expected(Restaurants), Note: "`nomnom_reason` — утверждённый закрытый набор `too_busy | item_unavailable`, остальное `other`."},
 
 	// authz
 	{Name: "nomnom_authz_checks_total", Section: "authz", Type: Counter, Source: "Authorization port decorator", Labels: []string{"nomnom_authz_permission", "nomnom_authz_resource_type", "nomnom_authz_result"}, Status: expected(contextServices...), Note: "`result`: allowed | denied | error | timeout."},
@@ -241,7 +241,7 @@ var Metrics = []Metric{
 	// domain: restaurants
 	{Name: "nomnom_restaurants_orders_received_total", Section: "domain", Type: Counter, Source: "Receive Order Request после commit (`created: true`)", Status: expected(Restaurants), Note: "Пишут `restaurants` (gRPC) и `restaurants-consumer` (OrderPlaced): каждый заказ один раз, на dashboard — сумма обоих."},
 	{Name: "nomnom_restaurants_orders_accepted_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox)", Status: expected(Restaurants)},
-	{Name: "nomnom_restaurants_orders_rejected_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox)", Labels: []string{"nomnom_reason"}, Status: expected(Restaurants), Note: "`nomnom_reason` — временный закрытый набор `too_busy | item_unavailable | restaurant_closed`, остальное `other`; каталог причин не согласован."},
+	{Name: "nomnom_restaurants_orders_rejected_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox)", Labels: []string{"nomnom_reason"}, Status: expected(Restaurants), Note: "`nomnom_reason` — утверждённый закрытый набор `too_busy | item_unavailable | restaurant_closed`, остальное `other`."},
 	// domain: delivery
 	{Name: "nomnom_delivery_created_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedOutbox)", Status: expected(Delivery)},
 	{Name: "nomnom_delivery_assignments_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedOutbox)", Status: expected(Delivery)},

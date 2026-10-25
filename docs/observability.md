@@ -175,7 +175,7 @@ Application use cases наблюдаются декоратором handler в c
 | Проверка | `gcx dev lint run` закоммиченных и live-вариантов, тесты генератора. |
 | Метрики | Только из [инвентаря](observability/metric-inventory.md) со статусом «есть»; остальные панели — TODO со ссылкой на инвентарь. |
 
-Overview отвечает на вопросы incident: работает ли сервис, выросли ли ошибки (transport, application и business rejection раздельно; PaymentDeclined — не ошибка) и latency, какая зависимость деградировала, есть ли backlog, что с Inbox/Outbox и бизнес-потоком, где trace/log/profile. Серверные метрики PostgreSQL, MongoDB и Kafka остаются в community dashboards, на которые ведут ссылки. Alert rules создаются следующим шагом тем же генератором.
+Overview отвечает на вопросы incident: работает ли сервис, выросли ли ошибки (transport, application и business rejection раздельно; PaymentDeclined — не ошибка) и latency, какая зависимость деградировала, есть ли backlog, что с Inbox/Outbox и бизнес-потоком, где trace/log/profile. Серверные метрики PostgreSQL, MongoDB и Kafka остаются в community dashboards, на которые ведут ссылки. Alert rules генерирует тот же генератор только на метриках «есть» ([ADR 29](adr/0029-grafana-dashboards-as-code.md)); SLO-based alerting — отдельное решение.
 
 ## Логи
 

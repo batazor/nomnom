@@ -114,6 +114,16 @@ JSON — артефакт генератора: правки вносятся в
 
 Живых панелей: 6 из 40. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
+## Alerts
+
+Rule group `delivery` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)), push — `make grafana-cloud-push`. Правило создаётся, только когда его метрики «есть»: alert без данных ничего не защищает. Пороги — стартовые для тестового окружения, не SLO.
+
+| Alert | Severity | Статус | Недостающие метрики |
+| --- | --- | --- | --- |
+| Delivery: gRPC technical errors | critical | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc), [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| Delivery: gRPC p95 latency | warning | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
+| Delivery: messages sent to DLQ | warning | ждёт метрик | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging) |
+
 ## Переходы
 
 - **Logs** — Explore Loki по `service_name`, `deployment_environment_name`, `service_version` и интервалу dashboard. Переход log → trace — derived field `trace_id` data source Loki.

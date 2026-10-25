@@ -79,7 +79,7 @@ groups:
     type: metric
     metric_name: nomnom.restaurants.orders.rejected
     stability: development
-    brief: "Order requests rejected by restaurants."
+    brief: "Order requests rejected by restaurants; nomnom.reason: too_busy, item_unavailable, restaurant_closed, other."
     instrument: counter
     unit: "{order}"
     attributes:

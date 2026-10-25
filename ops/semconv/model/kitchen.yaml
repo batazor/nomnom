@@ -39,7 +39,7 @@ groups:
     type: metric
     metric_name: nomnom.kitchen.delays
     stability: development
-    brief: "Preparation delays by reason."
+    brief: "Preparation delays; nomnom.reason: too_busy, item_unavailable, other."
     instrument: counter
     unit: "{delay}"
     attributes:
