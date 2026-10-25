@@ -5,7 +5,11 @@ import type { Subject } from "../../pkg/application/subject.ts";
 import type { SpiceDbEnabledConfig } from "../../pkg/config/config.ts";
 import type { MenuAccessControl } from "../../slices/menu/applications/access-control.ts";
 import type { RestaurantAccessControl } from "../../slices/restaurant/applications/access-control.ts";
-import type { KitchenAccessControl } from "../../slices/restaurantorder/applications/access-control.ts";
+import type {
+  FulfillmentCoordinatorAccess,
+  KitchenStaffAccess,
+  RestaurantOrderViewAccess,
+} from "../../slices/restaurantorder/applications/access-control.ts";
 
 /** Singleton object of `definition platform` (authorization/schema.zed). */
 export const PLATFORM_ID = "nomnom";
@@ -95,7 +99,12 @@ export interface SpiceDbAccessControlOptions {
  * closed like a failed check.
  */
 export class SpiceDbAccessControl
-  implements RestaurantAccessControl, MenuAccessControl, KitchenAccessControl
+  implements
+    RestaurantAccessControl,
+    MenuAccessControl,
+    KitchenStaffAccess,
+    FulfillmentCoordinatorAccess,
+    RestaurantOrderViewAccess
 {
   readonly #client: PermissionsClient;
   readonly #revisions: RevisionReader;

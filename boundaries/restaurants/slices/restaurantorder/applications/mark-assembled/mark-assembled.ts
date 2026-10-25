@@ -1,13 +1,13 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { RestaurantOrderRepository } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { KitchenAccessControl } from "../access-control.ts";
+import type { KitchenStaffAccess } from "../access-control.ts";
+import type { KitchenCommand } from "../kitchen-command.ts";
+import { loadRestaurantOrder } from "../load-restaurant-order.ts";
 import {
-  authorize,
-  type KitchenCommand,
-  loadRestaurantOrder,
   type RestaurantOrderView,
   toRestaurantOrderView,
-} from "../restaurant-order-support.ts";
+} from "../restaurant-order-view.ts";
 
 export type MarkAssembled = KitchenCommand;
 
@@ -17,12 +17,12 @@ export type MarkAssembled = KitchenCommand;
  * Unit of Work or Outbox is used. A repeat is rejected as already in state.
  */
 export class MarkAssembledHandler {
-  readonly #accessControl: KitchenAccessControl;
+  readonly #accessControl: KitchenStaffAccess;
   readonly #restaurantOrders: RestaurantOrderRepository;
   readonly #clock: Clock;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
+    accessControl: KitchenStaffAccess;
     restaurantOrders: RestaurantOrderRepository;
     clock: Clock;
   }) {
@@ -32,7 +32,7 @@ export class MarkAssembledHandler {
   }
 
   async execute(command: MarkAssembled): Promise<RestaurantOrderView> {
-    await authorize(
+    await requirePermission(
       this.#accessControl.canOperateKitchen(
         command.subject,
         command.restaurantId,

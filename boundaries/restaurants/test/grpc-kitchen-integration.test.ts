@@ -46,6 +46,10 @@ import {
   createRestaurantOrderCollection,
   MongoRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
+import {
+  RepositoryAcceptanceFactsReader,
+  RepositoryRestaurantExistence,
+} from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 
 // Kitchen command RPCs composed as in cmd/restaurants/main.ts (MongoDB Unit of
 // Work, MongoOutbox with the Integration Event mapper) against a replica set:
@@ -121,7 +125,7 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
     };
     receive = new ReceiveOrderRequestHandler({
       accessControl,
-      restaurants,
+      restaurants: new RepositoryRestaurantExistence(restaurants),
       restaurantOrders,
       ids: { next: () => randomUUID() },
       clock,
@@ -141,8 +145,7 @@ describe("kitchen command RPCs over MongoDB", { skip }, () => {
       revokeStaff: unused,
       acceptRestaurantOrder: new AcceptOrderHandler({
         ...commands,
-        restaurants,
-        menus,
+        facts: new RepositoryAcceptanceFactsReader({ restaurants, menus }),
         conditions: new UnconstrainedAcceptanceConditions(),
         readyTimeEstimator: new FixedPreparationTimeEstimator(20 * 60_000),
       }),

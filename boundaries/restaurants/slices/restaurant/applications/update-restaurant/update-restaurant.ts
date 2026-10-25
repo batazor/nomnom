@@ -1,5 +1,5 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
-import { PermissionDeniedError } from "../../../../pkg/application/errors.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
 import type { RestaurantRepository } from "../../domains/restaurant/restaurant.ts";
 import type { RestaurantAccessControl } from "../access-control.ts";
@@ -34,14 +34,13 @@ export class UpdateRestaurantHandler {
   }
 
   async execute(command: UpdateRestaurant): Promise<RestaurantChangeResult> {
-    if (
-      !(await this.#accessControl.canManageRestaurant(
+    await requirePermission(
+      this.#accessControl.canManageRestaurant(
         command.subject,
         command.restaurantId,
-      ))
-    ) {
-      throw new PermissionDeniedError("update restaurant");
-    }
+      ),
+      "update restaurant",
+    );
     const restaurant = await loadRestaurant(
       this.#restaurants,
       command.restaurantId,

@@ -1,5 +1,5 @@
 import type { RestaurantOrderState } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { KitchenAccessControl } from "../access-control.ts";
+import type { KitchenStaffAccess } from "../access-control.ts";
 import {
   authorizeKitchenBoard,
   type KitchenBoardItem,
@@ -29,11 +29,11 @@ export interface ActivePreparationsReader {
 }
 
 export class ListActivePreparationsHandler {
-  readonly #accessControl: KitchenAccessControl;
+  readonly #accessControl: KitchenStaffAccess;
   readonly #reader: ActivePreparationsReader;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
+    accessControl: KitchenStaffAccess;
     reader: ActivePreparationsReader;
   }) {
     this.#accessControl = dependencies.accessControl;

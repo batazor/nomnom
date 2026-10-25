@@ -1,12 +1,12 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
 import type { Outbox } from "../../../../pkg/application/outbox.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
 import type { MenuRepository } from "../../domains/menu/menu.ts";
 import { Money, type MoneyValue } from "../../domains/menu/vo/money.ts";
 import type { MenuAccessControl } from "../access-control.ts";
 import {
-  authorizeMenu,
   loadMenu,
   type MenuItemChangeResult,
   requireMenuItem,
@@ -51,10 +51,8 @@ export class UpdateMenuItemHandler {
   }
 
   async execute(command: UpdateMenuItem): Promise<MenuItemChangeResult> {
-    await authorizeMenu(
-      this.#accessControl,
-      command.subject,
-      command.restaurantId,
+    await requirePermission(
+      this.#accessControl.canManageMenu(command.subject, command.restaurantId),
       "update menu item",
     );
     const price =

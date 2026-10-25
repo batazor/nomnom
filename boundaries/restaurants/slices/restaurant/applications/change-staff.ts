@@ -1,4 +1,4 @@
-import { PermissionDeniedError } from "../../../pkg/application/errors.ts";
+import { requirePermission } from "../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../pkg/application/subject.ts";
 import type {
   Restaurant,
@@ -51,14 +51,13 @@ export const changeStaff = async (
     input: { restaurantId: string; userId: string },
   ) => Promise<AuthorizationRevision>,
 ): Promise<StaffChangeResult> => {
-  if (
-    !(await dependencies.accessControl.canManageRestaurant(
+  await requirePermission(
+    dependencies.accessControl.canManageRestaurant(
       command.subject,
       command.restaurantId,
-    ))
-  ) {
-    throw new PermissionDeniedError(action);
-  }
+    ),
+    action,
+  );
   const restaurant = await loadRestaurant(
     dependencies.restaurants,
     command.restaurantId,

@@ -16,18 +16,26 @@ import type { MenuRepository } from "../../menu/domains/menu/menu.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import {
   type AcceptanceConditionsProvider,
+  type AcceptanceFactsReader,
   AcceptOrderHandler,
   type ReadyTimeEstimator,
 } from "../applications/accept-order/accept-order.ts";
-import type { KitchenAccessControl } from "../applications/access-control.ts";
+import type {
+  FulfillmentCoordinatorAccess,
+  KitchenStaffAccess,
+  RestaurantOrderViewAccess,
+} from "../applications/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import type { KitchenCommandDependencies } from "../applications/kitchen-command.ts";
 import { MarkAssembledHandler } from "../applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
-import { ReceiveOrderRequestHandler } from "../applications/receive-order-request/receive-order-request.ts";
+import {
+  ReceiveOrderRequestHandler,
+  type RestaurantExistence,
+} from "../applications/receive-order-request/receive-order-request.ts";
 import { RejectOrderHandler } from "../applications/reject-order/reject-order.ts";
 import { ReportPreparationDelayHandler } from "../applications/report-preparation-delay/report-preparation-delay.ts";
 import { ReportPreparationFailureHandler } from "../applications/report-preparation-failure/report-preparation-failure.ts";
-import type { KitchenCommandDependencies } from "../applications/restaurant-order-support.ts";
 import { StartPreparationHandler } from "../applications/start-preparation/start-preparation.ts";
 import type { RestaurantOrderRepository } from "../domains/restaurantorder/restaurantorder.ts";
 import {
@@ -44,6 +52,15 @@ import {
   type ReceiveOrderRequestPort,
   type RestaurantOrderDomainMetrics,
 } from "../infrastructure/observability/domain-metrics.ts";
+import {
+  RepositoryAcceptanceFactsReader,
+  RepositoryRestaurantExistence,
+} from "../infrastructure/restaurant-facts/restaurant-facts.ts";
+
+/** Access ports of the slice, implemented together by the process adapter. */
+export type KitchenAccess = KitchenStaffAccess &
+  FulfillmentCoordinatorAccess &
+  RestaurantOrderViewAccess;
 
 /** Application-scope dependencies the slice takes from the process. */
 export interface RestaurantOrderDependencies {
@@ -52,7 +69,7 @@ export interface RestaurantOrderDependencies {
   readonly outbox: Outbox;
   readonly clock: Clock;
   readonly ids: IdGenerator;
-  readonly kitchenAccessControl: KitchenAccessControl;
+  readonly kitchenAccessControl: KitchenAccess;
   readonly restaurants: RestaurantRepository;
   readonly menus: MenuRepository;
   readonly kitchenConfig: KitchenConfig;
@@ -69,6 +86,9 @@ export interface RestaurantOrderCradle {
    */
   readonly restaurantOrderOutboxEventMapper: OutboxEventMapper;
   readonly restaurantOrders: RestaurantOrderRepository;
+  /** Facts of the `restaurant` and `menu` slices read by Restaurant Orders. */
+  readonly restaurantExistence: RestaurantExistence;
+  readonly acceptanceFacts: AcceptanceFactsReader;
   readonly acceptanceConditions: AcceptanceConditionsProvider;
   readonly readyTimeEstimator: ReadyTimeEstimator;
   readonly receiveOrderRequest: ReceiveOrderRequestPort;
@@ -91,7 +111,7 @@ const commandDependencies = ({
   restaurantOrders,
   outbox,
   clock,
-}: Cradle): KitchenCommandDependencies => ({
+}: Cradle): KitchenCommandDependencies & { accessControl: KitchenAccess } => ({
   accessControl: kitchenAccessControl,
   unitOfWork,
   restaurantOrders,
@@ -110,6 +130,14 @@ export const registerRestaurantOrder = (
           createRestaurantOrderCollection(db, unitOfWork),
         ),
     ).singleton(),
+    restaurantExistence: asFunction(
+      ({ restaurants }: Cradle) =>
+        new RepositoryRestaurantExistence(restaurants),
+    ).singleton(),
+    acceptanceFacts: asFunction(
+      ({ restaurants, menus }: Cradle) =>
+        new RepositoryAcceptanceFactsReader({ restaurants, menus }),
+    ).singleton(),
     acceptanceConditions: asFunction(
       () => new UnconstrainedAcceptanceConditions(),
     ).singleton(),
@@ -120,7 +148,7 @@ export const registerRestaurantOrder = (
     receiveOrderRequest: asFunction(
       ({
         kitchenAccessControl,
-        restaurants,
+        restaurantExistence,
         restaurantOrders,
         ids,
         clock,
@@ -129,7 +157,7 @@ export const registerRestaurantOrder = (
         observeReceiveOrderRequest(
           new ReceiveOrderRequestHandler({
             accessControl: kitchenAccessControl,
-            restaurants,
+            restaurants: restaurantExistence,
             restaurantOrders,
             ids,
             clock,
@@ -149,8 +177,7 @@ export const registerRestaurantOrder = (
       (cradle: Cradle) =>
         new AcceptOrderHandler({
           ...commandDependencies(cradle),
-          restaurants: cradle.restaurants,
-          menus: cradle.menus,
+          facts: cradle.acceptanceFacts,
           conditions: cradle.acceptanceConditions,
           readyTimeEstimator: cradle.readyTimeEstimator,
         }),

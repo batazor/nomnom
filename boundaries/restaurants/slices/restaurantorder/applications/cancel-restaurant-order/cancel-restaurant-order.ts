@@ -1,6 +1,7 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
 import { NotFoundError } from "../../../../pkg/application/errors.ts";
 import type { Outbox } from "../../../../pkg/application/outbox.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
 import {
@@ -11,8 +12,8 @@ import {
   type RestaurantOrderRepository,
   RestaurantOrderState,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { KitchenAccessControl } from "../access-control.ts";
-import { authorize, saveAndPublish } from "../restaurant-order-support.ts";
+import type { FulfillmentCoordinatorAccess } from "../access-control.ts";
+import { saveAndPublish } from "../publish-order-change.ts";
 
 export type CancelRestaurantOrder = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */
@@ -66,7 +67,7 @@ const TERMINAL_REJECTIONS: Partial<
  * Receive.
  */
 export class CancelRestaurantOrderHandler {
-  readonly #accessControl: KitchenAccessControl;
+  readonly #accessControl: FulfillmentCoordinatorAccess;
   readonly #unitOfWork: UnitOfWork;
   readonly #restaurantOrders: RestaurantOrderRepository;
   readonly #outbox: Outbox;
@@ -74,7 +75,7 @@ export class CancelRestaurantOrderHandler {
   readonly #policy: CancellationPolicy;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
+    accessControl: FulfillmentCoordinatorAccess;
     unitOfWork: UnitOfWork;
     restaurantOrders: RestaurantOrderRepository;
     outbox: Outbox;
@@ -94,7 +95,7 @@ export class CancelRestaurantOrderHandler {
   async execute(
     command: CancelRestaurantOrder,
   ): Promise<CancelRestaurantOrderResult> {
-    await authorize(
+    await requirePermission(
       this.#accessControl.canCoordinateFulfillment(
         command.subject,
         command.restaurantId,

@@ -1,11 +1,6 @@
-import {
-  NotFoundError,
-  PermissionDeniedError,
-} from "../../../pkg/application/errors.ts";
-import type { Subject } from "../../../pkg/application/subject.ts";
+import { NotFoundError } from "../../../pkg/application/errors.ts";
 import type { Menu, MenuItem, MenuRepository } from "../domains/menu/menu.ts";
 import type { MoneyValue } from "../domains/menu/vo/money.ts";
-import type { MenuAccessControl } from "./access-control.ts";
 
 export type MenuItemView = Readonly<{
   menuItemId: string;
@@ -36,17 +31,6 @@ export const toMenuItemView = (item: MenuItem): MenuItemView => ({
   price: item.price.toValue(),
   isAvailable: item.isAvailable,
 });
-
-export const authorizeMenu = async (
-  accessControl: MenuAccessControl,
-  subject: Subject,
-  restaurantId: string,
-  action: string,
-): Promise<void> => {
-  if (!(await accessControl.canManageMenu(subject, restaurantId))) {
-    throw new PermissionDeniedError(action);
-  }
-};
 
 export const loadMenu = async (
   menus: MenuRepository,

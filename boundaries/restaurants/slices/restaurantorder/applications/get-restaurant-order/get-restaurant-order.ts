@@ -1,10 +1,8 @@
 import { NotFoundError } from "../../../../pkg/application/errors.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
-import type { KitchenAccessControl } from "../access-control.ts";
-import {
-  authorize,
-  type RestaurantOrderView,
-} from "../restaurant-order-support.ts";
+import type { RestaurantOrderViewAccess } from "../access-control.ts";
+import type { RestaurantOrderView } from "../restaurant-order-view.ts";
 
 export type GetRestaurantOrder = Readonly<{
   subject: Subject;
@@ -22,11 +20,11 @@ export interface RestaurantOrderReader {
 
 /** Returns composition, State, timeline and stored reasons of one order. */
 export class GetRestaurantOrderHandler {
-  readonly #accessControl: KitchenAccessControl;
+  readonly #accessControl: RestaurantOrderViewAccess;
   readonly #reader: RestaurantOrderReader;
 
   constructor(dependencies: {
-    accessControl: KitchenAccessControl;
+    accessControl: RestaurantOrderViewAccess;
     reader: RestaurantOrderReader;
   }) {
     this.#accessControl = dependencies.accessControl;
@@ -34,7 +32,7 @@ export class GetRestaurantOrderHandler {
   }
 
   async execute(query: GetRestaurantOrder): Promise<RestaurantOrderView> {
-    await authorize(
+    await requirePermission(
       this.#accessControl.canViewRestaurantOrders(
         query.subject,
         query.restaurantId,

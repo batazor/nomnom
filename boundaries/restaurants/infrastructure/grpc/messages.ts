@@ -3,7 +3,7 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import type { MenuView } from "../../slices/menu/applications/menu-support.ts";
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type { RestaurantView } from "../../slices/restaurant/applications/restaurant-view.ts";
-import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-support.ts";
+import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-view.ts";
 import {
   MenuItemSchema,
   RestaurantSchema,

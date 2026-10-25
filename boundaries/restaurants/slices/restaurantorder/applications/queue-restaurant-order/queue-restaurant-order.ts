@@ -7,7 +7,7 @@ import {
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
-} from "../restaurant-order-support.ts";
+} from "../restaurant-order-view.ts";
 
 export type QueueRestaurantOrder = Readonly<{ restaurantOrderId: string }>;
 

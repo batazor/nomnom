@@ -1,11 +1,11 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
 import type { IdGenerator } from "../../../../pkg/application/id-generator.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
 import type { MenuRepository } from "../../domains/menu/menu.ts";
 import { Money, type MoneyValue } from "../../domains/menu/vo/money.ts";
 import type { MenuAccessControl } from "../access-control.ts";
 import {
-  authorizeMenu,
   loadMenu,
   type MenuItemChangeResult,
   toMenuItemView,
@@ -41,10 +41,8 @@ export class AddMenuItemHandler {
   }
 
   async execute(command: AddMenuItem): Promise<MenuItemChangeResult> {
-    await authorizeMenu(
-      this.#accessControl,
-      command.subject,
-      command.restaurantId,
+    await requirePermission(
+      this.#accessControl.canManageMenu(command.subject, command.restaurantId),
       "add menu item",
     );
     const price = Money.from(command.price);

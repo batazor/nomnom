@@ -62,8 +62,8 @@ import {
   registerRestaurant,
 } from "../slices/restaurant/di/registrations.ts";
 import { RESTAURANT_AGGREGATE_TYPE } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
-import type { KitchenAccessControl } from "../slices/restaurantorder/applications/access-control.ts";
 import {
+  type KitchenAccess,
   type RestaurantOrderCradle,
   registerRestaurantOrder,
 } from "../slices/restaurantorder/di/registrations.ts";
@@ -107,7 +107,7 @@ export interface InfrastructureCradle {
   readonly outbox: Outbox;
   readonly spicedb: SpiceDbClient;
   readonly spicedbAccessControl: SpiceDbAccessControl;
-  readonly kitchenAccessControl: KitchenAccessControl;
+  readonly kitchenAccessControl: KitchenAccess;
   readonly restaurantAccessControl: RestaurantAccessControl;
   readonly relationshipWriter: SpiceDbRelationshipWriter;
   readonly ownerRelationships: OwnerRelationshipWriter;

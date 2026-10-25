@@ -188,21 +188,16 @@ test("the consumer container resolves every registration", async () => {
     }
     const { cradle } = container;
     assert.equal(cradle.worker, cradle.worker, "worker is a singleton");
-    // Receive Order Request is authorized only for the orders event stream.
+    // Receive Order Request is authorized only for the orders event stream;
+    // the consumer has no kitchen staff or read access at all.
     assert.equal(
-      await cradle.kitchenAccessControl.canCoordinateFulfillment(
+      await cradle.fulfillmentAccess.canCoordinateFulfillment(
         { type: "service", id: "orders" },
         "any",
       ),
       true,
     );
-    assert.equal(
-      await cradle.kitchenAccessControl.canOperateKitchen(
-        { type: "user", id: "cook" },
-        "any",
-      ),
-      false,
-    );
+    assert.equal("canOperateKitchen" in cradle.fulfillmentAccess, false);
   } finally {
     await container.dispose();
     await mongo.close();

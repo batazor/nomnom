@@ -2,8 +2,8 @@ import {
   executeKitchenCommand,
   type KitchenCommand,
   type KitchenCommandDependencies,
-  type RestaurantOrderView,
-} from "../restaurant-order-support.ts";
+} from "../kitchen-command.ts";
+import type { RestaurantOrderView } from "../restaurant-order-view.ts";
 
 export type ReportPreparationDelay = KitchenCommand &
   Readonly<{

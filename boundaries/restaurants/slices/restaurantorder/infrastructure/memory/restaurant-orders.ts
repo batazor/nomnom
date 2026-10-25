@@ -7,7 +7,11 @@ import type {
   AcceptanceConditionsProvider,
   ReadyTimeEstimator,
 } from "../../applications/accept-order/accept-order.ts";
-import type { KitchenAccessControl } from "../../applications/access-control.ts";
+import type {
+  FulfillmentCoordinatorAccess,
+  KitchenStaffAccess,
+  RestaurantOrderViewAccess,
+} from "../../applications/access-control.ts";
 import type {
   KitchenQueueEntry,
   KitchenQueueOrdering,
@@ -25,7 +29,7 @@ import type {
 import {
   type RestaurantOrderView,
   snapshotToView,
-} from "../../applications/restaurant-order-support.ts";
+} from "../../applications/restaurant-order-view.ts";
 import type { AcceptanceConditions } from "../../domains/restaurantorder/acceptance.ts";
 import {
   DuplicateOrderIdError,
@@ -247,7 +251,12 @@ export class FixedDurationReadyTimeEstimator implements ReadyTimeEstimator {
 }
 
 /** Test authorization graph: restaurant staff and fulfillment services. */
-export class InMemoryKitchenAccessControl implements KitchenAccessControl {
+export class InMemoryKitchenAccessControl
+  implements
+    KitchenStaffAccess,
+    FulfillmentCoordinatorAccess,
+    RestaurantOrderViewAccess
+{
   readonly #staff = new Set<string>();
   readonly #fulfillment = new Set<string>();
 
