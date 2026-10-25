@@ -14,6 +14,8 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	trackingapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 	trackinginfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/infrastructure"
+	managementapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
+	managementinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/infrastructure"
 )
 
 // envInternalGateway is the address of the internal gateway (ADR 15) through
@@ -81,6 +83,12 @@ type checkout struct {
 	placeOrder placeOrderHandler
 }
 
+// restaurantManagement holds the scenarios of the restaurant owner screen.
+type restaurantManagement struct {
+	openRestaurant  openingHandler
+	closeRestaurant openingHandler
+}
+
 // newBffService assembles BFF from cfg. A partial identity configuration is an
 // error: customer operations must not run without a verified customer
 // (ADR 32). Without BFF identity or a gateway address the slices stay nil:
@@ -97,7 +105,7 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 		service.accessTokens = customers.AccessTokens
 	}
 	if customers == nil || cfg.internalGateway == "" {
-		log.Printf("%s or BFF identity is not set: catalog, checkout and order operations are unavailable", envInternalGateway)
+		log.Printf("%s or BFF identity is not set: catalog, checkout, order and restaurant management operations are unavailable", envInternalGateway)
 		return service, nil
 	}
 	orders, err := dial(cfg.internalGateway, audienceOrders, customers.Outgoing)
@@ -112,6 +120,7 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	service.catalog = newRestaurantCatalog(restaurants)
 	// The payload of checkout reuses the GetOrder scenario of order tracking.
 	service.checkout = newCheckout(orders, service.tracking.getOrder)
+	service.management = newRestaurantManagement(restaurants)
 	return service, nil
 }
 
@@ -133,4 +142,12 @@ func newRestaurantCatalog(restaurants grpc.ClientConnInterface) *restaurantCatal
 
 func newCheckout(orders grpc.ClientConnInterface, views checkoutapp.OrderViews) *checkout {
 	return &checkout{placeOrder: checkoutapp.NewPlaceOrder(checkoutinfra.NewOrders(orders), views)}
+}
+
+func newRestaurantManagement(restaurants grpc.ClientConnInterface) *restaurantManagement {
+	restaurantsAPI := managementinfra.NewRestaurants(restaurants)
+	return &restaurantManagement{
+		openRestaurant:  managementapp.NewOpenRestaurant(restaurantsAPI),
+		closeRestaurant: managementapp.NewCloseRestaurant(restaurantsAPI),
+	}
 }

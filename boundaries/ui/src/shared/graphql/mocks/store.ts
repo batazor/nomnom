@@ -1,10 +1,14 @@
+import { GraphQLError } from "graphql";
+
 import {
   bffInfoFixture,
   createOrderScenarios,
   deliveryAddressFixture,
   liveOrderAt,
   liveOrderId,
+  managedRestaurantIds,
   type MockOrder,
+  type MockRestaurant,
   orderLine,
   orderTotal,
   restaurantFixtures,
@@ -42,6 +46,16 @@ type CancellationPayload = {
   problem: { code: string } | null;
 };
 
+type OpeningPayload = { restaurant: MockRestaurant; changed: boolean };
+
+// The error shape Cosmo Router gives for a gRPC error of the BFF plugin: the
+// code sits under extensions.errors[].extensions.code.
+export function bffError(code: string, message: string): GraphQLError {
+  return new GraphQLError("Failed to fetch from Subgraph 'bff'.", {
+    extensions: { errors: [{ message, extensions: { code } }] },
+  });
+}
+
 function paginate<T extends { id: string }>(
   items: readonly T[],
   { first, after }: PageArgs,
@@ -69,6 +83,8 @@ function initialState(now: Date) {
     liveCancelled: null as MockOrder | null,
     placed: new Map<string, PlaceOrderPayload>(),
     cancellations: new Map<string, CancellationPayload>(),
+    // Opening state changed by openRestaurant/closeRestaurant, by restaurant id.
+    opening: new Map<string, boolean>(),
   };
 }
 
@@ -90,6 +106,38 @@ export function createMockStore({
 
   function findOrder(id: string): MockOrder | undefined {
     return id === liveOrderId ? liveOrder() : state.orders.get(id);
+  }
+
+  function currentRestaurant(id: string): MockRestaurant | undefined {
+    const restaurant = restaurantFixtures.find((r) => r.id === id);
+    if (!restaurant) return undefined;
+    const open = state.opening.get(id);
+    return open === undefined
+      ? restaurant
+      : { ...restaurant, acceptingOrders: open };
+  }
+
+  function currentRestaurants(): MockRestaurant[] {
+    return restaurantFixtures.flatMap((r) => currentRestaurant(r.id) ?? []);
+  }
+
+  // Like restaurants OpenRestaurant/CloseRestaurant through the BFF: only the
+  // owner may change the opening, a repeat answers changed = false.
+  function setOpening(restaurantId: string, open: boolean): OpeningPayload {
+    const restaurant = currentRestaurant(restaurantId);
+    if (!restaurant) throw bffError("NotFound", "restaurant not found");
+    if (!managedRestaurantIds.has(restaurantId)) {
+      throw bffError(
+        "PermissionDenied",
+        "restaurant management is not permitted",
+      );
+    }
+    const changed = restaurant.acceptingOrders !== open;
+    state.opening.set(restaurantId, open);
+    return {
+      restaurant: { ...restaurant, acceptingOrders: open, menu: null },
+      changed,
+    };
   }
 
   function cancelled(order: MockOrder): MockOrder {
@@ -124,9 +172,7 @@ export function createMockStore({
   }
 
   function placeOrder(input: PlaceOrderInput): PlaceOrderPayload {
-    const restaurant = restaurantFixtures.find(
-      (r) => r.id === input.restaurantId,
-    );
+    const restaurant = currentRestaurant(input.restaurantId);
     if (!restaurant) throw new Error("Restaurant not found");
     if (input.items.some((line) => line.quantity < 1)) {
       throw new Error("Quantity must be at least 1");
@@ -185,11 +231,10 @@ export function createMockStore({
     // Like ListRestaurants by default, the catalog lists open restaurants only.
     restaurants: (args: PageArgs) =>
       paginate(
-        restaurantFixtures.filter((restaurant) => restaurant.acceptingOrders),
+        currentRestaurants().filter((restaurant) => restaurant.acceptingOrders),
         args,
       ),
-    restaurant: ({ id }: { id: string }) =>
-      restaurantFixtures.find((restaurant) => restaurant.id === id) ?? null,
+    restaurant: ({ id }: { id: string }) => currentRestaurant(id) ?? null,
     order: ({ id }: { id: string }) => {
       const order = findOrder(id) ?? null;
       if (id === liveOrderId && !state.liveCancelled) state.liveStep += 1;
@@ -218,6 +263,10 @@ export function createMockStore({
       state.cancellations.set(input.requestId, payload);
       return payload;
     },
+    openRestaurant: ({ restaurantId }: { restaurantId: string }) =>
+      setOpening(restaurantId, true),
+    closeRestaurant: ({ restaurantId }: { restaurantId: string }) =>
+      setOpening(restaurantId, false),
   };
 
   return {

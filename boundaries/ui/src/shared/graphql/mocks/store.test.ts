@@ -1,7 +1,7 @@
 import { execute, parse } from "graphql";
 import { describe, expect, it } from "vitest";
 
-import { kitchenEight, nightBakery } from "./fixtures";
+import { kitchenEight, nightBakery, restaurantFixtures } from "./fixtures";
 import { publicSchema } from "./schema";
 import { createMockStore, type MockStore } from "./store";
 
@@ -35,6 +35,20 @@ async function run<T>(
   expect(result.errors).toBeUndefined();
   return result.data as T;
 }
+
+type OpeningData = {
+  openRestaurant: {
+    changed: boolean;
+    restaurant: { id: string; acceptingOrders: boolean };
+  };
+};
+
+const openRestaurant = `mutation ($restaurantId: ID!) {
+  openRestaurant(restaurantId: $restaurantId) { changed restaurant { id acceptingOrders } }
+}`;
+const closeRestaurant = `mutation ($restaurantId: ID!) {
+  closeRestaurant(restaurantId: $restaurantId) { changed restaurant { id acceptingOrders } }
+}`;
 
 const orderStatus =
   "query ($id: ID!) { order(id: $id) { id status endReason } }";
@@ -216,6 +230,62 @@ describe("mock store", () => {
     });
     expect(data.requestOrderCancellation.problem).toEqual({
       code: "ORDER_ALREADY_FINAL",
+    });
+  });
+
+  it("opens and closes an owned restaurant idempotently", async () => {
+    const store = createMockStore();
+    const open = await run<OpeningData>(store, openRestaurant, {
+      restaurantId: nightBakery.id,
+    });
+    expect(open.openRestaurant).toEqual({
+      changed: true,
+      restaurant: { id: nightBakery.id, acceptingOrders: true },
+    });
+    const again = await run<OpeningData>(store, openRestaurant, {
+      restaurantId: nightBakery.id,
+    });
+    expect(again.openRestaurant.changed).toBe(false);
+    const catalog = await run<{ restaurants: { edges: unknown[] } }>(
+      store,
+      "{ restaurants(first: 100) { edges { cursor } } }",
+    );
+    expect(catalog.restaurants.edges).toHaveLength(restaurantFixtures.length);
+
+    store.reset();
+    expect(
+      (
+        await run<{ restaurant: { acceptingOrders: boolean } }>(
+          store,
+          "query ($id: ID!) { restaurant(id: $id) { acceptingOrders } }",
+          { id: nightBakery.id },
+        )
+      ).restaurant.acceptingOrders,
+    ).toBe(false);
+  });
+
+  it("refuses a closed restaurant's orders after closing it", async () => {
+    const store = createMockStore();
+    await run(store, closeRestaurant, { restaurantId: kitchenEight.id });
+    const data = await run<PlaceOrderData>(store, placeOrder, placeInput());
+    expect(data.placeOrder.problems).toEqual([
+      { code: "RESTAURANT_NOT_ACCEPTING_ORDERS", menuItemIds: [] },
+    ]);
+  });
+
+  it.each([
+    ["restaurant-green-bowl", "PermissionDenied"],
+    ["restaurant-missing", "NotFound"],
+  ])("answers %s with the BFF error %s", async (restaurantId, code) => {
+    const result = await execute({
+      schema: publicSchema,
+      document: parse(openRestaurant),
+      rootValue: createMockStore().rootValue,
+      variableValues: { restaurantId },
+    });
+    expect(result.data).toBeNull();
+    expect(result.errors?.[0]?.extensions).toEqual({
+      errors: [{ message: expect.any(String), extensions: { code } }],
     });
   });
 });

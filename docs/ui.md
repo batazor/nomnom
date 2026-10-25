@@ -2,7 +2,7 @@
 
 ## Граница приложения
 
-Customer UI — самостоятельная application boundary в [`boundaries/ui/`](../boundaries/ui/README.md). Она предоставляет пользовательский web-интерфейс ресторанов, меню, корзины и заказов. Courier, restaurant и operator UI будут отдельными приложениями.
+Customer UI — самостоятельная application boundary в [`boundaries/ui/`](../boundaries/ui/README.md). Она предоставляет пользовательский web-интерфейс ресторанов, меню, корзины и заказов. Courier, restaurant и operator UI будут отдельными приложениями; до restaurant UI здесь живёт только экран открытия ресторана владельцем (см. «Feature organization»).
 
 UI не является источником бизнес-правил, authorization или состояния заказа. Единственная business API boundary — публичный GraphQL API BFF на WunderGraph Cosmo: `browser → edge → Cosmo Router → BFF plugin → internal gateway → bounded context`. Решение зафиксировано в [ADR BFF о Cosmo](../boundaries/bff/docs/adr/0003-use-wundergraph-cosmo-for-the-bff.md).
 
@@ -18,7 +18,7 @@ UI не является источником бизнес-правил, authori
 
 ## Feature organization
 
-Vertical UI slices: `browse-restaurants` (`/`), `view-restaurant` с корзиной (`/restaurants/:restaurantId`), `place-order` и `view-order` с отменой (`/orders/:orderId`); позже — `order-history`. GraphQL documents, UI, tests и presentation mapping одной feature colocated внутри `src/features/<feature>/`. Если одна feature встраивает другую (`view-restaurant` показывает `place-order` под корзиной), она импортирует только публичный `index.ts` этой feature.
+Vertical UI slices: `browse-restaurants` (`/`), `view-restaurant` с корзиной (`/restaurants/:restaurantId`), `place-order` и `view-order` с отменой (`/orders/:orderId`); позже — `order-history`. Исключение из customer-границы — `manage-restaurant` (`/manage/restaurants/:restaurantId`), экран открытия ресторана владельцем: до отдельного restaurant UI он живёт здесь изолированной feature под префиксом `/manage/` без ссылок из customer-навигации и переносится целиком, когда restaurant UI появится (FR-001, FR-602). GraphQL documents, UI, tests и presentation mapping одной feature colocated внутри `src/features/<feature>/`. Если одна feature встраивает другую (`view-restaurant` показывает `place-order` под корзиной), она импортирует только публичный `index.ts` этой feature.
 
 `src/shared/` содержит только реально переиспользуемые механизмы: UI façade, tokens, GraphQL transport/generated artifacts, config и i18n. Глобальные `components/`, `hooks/`, `services/` и `utils/` запрещены. Feature не импортирует внутренности другой feature.
 

@@ -140,6 +140,33 @@ export const messages = {
     "order.cancel.transportError":
       "Не удалось отправить запрос. Проверьте соединение.",
     "order.cancel.retry": "Повторить отмену",
+    "manage.eyebrow": "Управление рестораном",
+    "manage.viewAsCustomer": "Как видят покупатели",
+    "manage.loading": "Загружаем ресторан",
+    "manage.loadError.title": "Не удалось загрузить ресторан",
+    "manage.loadError.detail": "Проверьте соединение и попробуйте ещё раз.",
+    "manage.retry": "Повторить",
+    "manage.opening.title": "Приём заказов",
+    "manage.state.open": "Открыт",
+    "manage.state.closed": "Закрыт",
+    "manage.hint.open":
+      "Покупатели видят ресторан в каталоге и могут заказать.",
+    "manage.hint.closed":
+      "Ресторана нет в каталоге, новые заказы не принимаются. Принятые заказы остаются в работе.",
+    "manage.open": "Открыть ресторан",
+    "manage.close": "Закрыть ресторан",
+    "manage.sending.open": "Открываем ресторан…",
+    "manage.sending.close": "Закрываем ресторан…",
+    "manage.done.opened": "Ресторан открыт и принимает заказы.",
+    "manage.done.alreadyOpen": "Ресторан уже был открыт.",
+    "manage.done.closed": "Ресторан закрыт для новых заказов.",
+    "manage.done.alreadyClosed": "Ресторан уже был закрыт.",
+    "manage.error.notFound": "Ресторан не найден. Возможно, ссылка устарела.",
+    "manage.error.notPermitted": "У вас нет прав управлять этим рестораном.",
+    "manage.error.unauthenticated":
+      "Войдите в аккаунт владельца, чтобы управлять рестораном.",
+    "manage.error.failed":
+      "Не удалось изменить статус. Проверьте соединение и попробуйте ещё раз.",
   },
   en: {
     "app.brand": "BiteRoute",
@@ -285,6 +312,35 @@ export const messages = {
     "order.cancel.transportError":
       "Could not send the request. Check your connection.",
     "order.cancel.retry": "Retry cancellation",
+    "manage.eyebrow": "Restaurant management",
+    "manage.viewAsCustomer": "As customers see it",
+    "manage.loading": "Loading the restaurant",
+    "manage.loadError.title": "Could not load the restaurant",
+    "manage.loadError.detail": "Check your connection and try again.",
+    "manage.retry": "Try again",
+    "manage.opening.title": "Taking orders",
+    "manage.state.open": "Open",
+    "manage.state.closed": "Closed",
+    "manage.hint.open":
+      "Customers see the restaurant in the catalog and can order.",
+    "manage.hint.closed":
+      "The restaurant is hidden from the catalog and takes no new orders. Accepted orders stay in progress.",
+    "manage.open": "Open restaurant",
+    "manage.close": "Close restaurant",
+    "manage.sending.open": "Opening the restaurant…",
+    "manage.sending.close": "Closing the restaurant…",
+    "manage.done.opened": "The restaurant is open and takes orders.",
+    "manage.done.alreadyOpen": "The restaurant was already open.",
+    "manage.done.closed": "The restaurant is closed for new orders.",
+    "manage.done.alreadyClosed": "The restaurant was already closed.",
+    "manage.error.notFound":
+      "Restaurant not found. The link may be out of date.",
+    "manage.error.notPermitted":
+      "You do not have permission to manage this restaurant.",
+    "manage.error.unauthenticated":
+      "Sign in as the owner to manage the restaurant.",
+    "manage.error.failed":
+      "Could not change the status. Check your connection and try again.",
   },
 } as const;
 

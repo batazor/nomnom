@@ -14,6 +14,7 @@ import {
   kitchenEight,
   liveOrderAt,
   liveOrderStepCount,
+  nightBakery,
   restaurantFixtures,
 } from "./fixtures";
 import { publicSchema } from "./schema";
@@ -42,6 +43,9 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   BrowseRestaurants: { first: 2 },
   ViewRestaurant: { id: kitchenEight.id },
   MockCustomerOrders: { first: 3 },
+  ManageRestaurant: { id: nightBakery.id },
+  OpenRestaurant: { restaurantId: nightBakery.id },
+  CloseRestaurant: { restaurantId: kitchenEight.id },
   PlaceOrder: {
     input: {
       restaurantId: kitchenEight.id,

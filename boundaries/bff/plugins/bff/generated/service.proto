@@ -7,6 +7,10 @@ import "google/protobuf/wrappers.proto";
 
 // Service definition for BffService
 service BffService {
+  // Close a restaurant of the current user for new orders; repeating it changes nothing
+  rpc MutationCloseRestaurant(MutationCloseRestaurantRequest) returns (MutationCloseRestaurantResponse) {}
+  // Open a restaurant of the current user for new orders; repeating it changes nothing
+  rpc MutationOpenRestaurant(MutationOpenRestaurantRequest) returns (MutationOpenRestaurantResponse) {}
   // Place an order for the current customer
   rpc MutationPlaceOrder(MutationPlaceOrderRequest) returns (MutationPlaceOrderResponse) {}
   // Request cancellation of an order of the current customer
@@ -86,6 +90,24 @@ message MutationRequestOrderCancellationRequest {
 message MutationRequestOrderCancellationResponse {
   // Request cancellation of an order of the current customer
   RequestOrderCancellationPayload request_order_cancellation = 1;
+}
+// Request message for openRestaurant operation: Open a restaurant of the current user for new orders; repeating it changes nothing.
+message MutationOpenRestaurantRequest {
+  string restaurant_id = 1;
+}
+// Response message for openRestaurant operation: Open a restaurant of the current user for new orders; repeating it changes nothing.
+message MutationOpenRestaurantResponse {
+  // Open a restaurant of the current user for new orders; repeating it changes nothing
+  RestaurantOpeningPayload open_restaurant = 1;
+}
+// Request message for closeRestaurant operation: Close a restaurant of the current user for new orders; repeating it changes nothing.
+message MutationCloseRestaurantRequest {
+  string restaurant_id = 1;
+}
+// Response message for closeRestaurant operation: Close a restaurant of the current user for new orders; repeating it changes nothing.
+message MutationCloseRestaurantResponse {
+  // Close a restaurant of the current user for new orders; repeating it changes nothing
+  RestaurantOpeningPayload close_restaurant = 1;
 }
 
 message BffInfo {
@@ -179,6 +201,14 @@ message RequestOrderCancellationPayload {
   OrderCancellationOutcome outcome = 1;
   // Business problem, null if outcome is set
   OrderCancellationProblem problem = 2;
+}
+
+// Result of opening or closing a restaurant by its owner
+message RestaurantOpeningPayload {
+  // Restaurant after the command; acceptingOrders is its opening state, menu is null
+  Restaurant restaurant = 1;
+  // False when the restaurant was already in the requested state
+  bool changed = 2;
 }
 
 // Exact monetary amount
