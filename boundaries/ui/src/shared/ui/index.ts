@@ -10,7 +10,6 @@ export type { TextFieldProps } from "./text-field";
 export { TextField } from "./text-field";
 export type { AnimatedNumberProps } from "./animated-number";
 export { AnimatedNumber } from "./animated-number";
-export { PointerHalo } from "./pointer-halo";
 export { ToastProvider, useToast } from "./toast";
 export type { DishIconProps } from "./dish-icon";
 export { DishIcon } from "./dish-icon";

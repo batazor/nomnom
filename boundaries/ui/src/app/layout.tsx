@@ -1,7 +1,6 @@
 import { Link, Outlet } from "react-router-dom";
 
 import { useI18n } from "../shared/i18n/i18n";
-import { PointerHalo } from "../shared/ui";
 
 export function AppLayout() {
   const { t } = useI18n();
@@ -24,7 +23,6 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
-      <PointerHalo />
     </div>
   );
 }

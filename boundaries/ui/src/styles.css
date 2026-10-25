@@ -382,15 +382,6 @@ a,
   grid-area: 1 / 1;
 }
 
-.nomnom-pointer-halo {
-  position: fixed;
-  z-index: 100;
-  top: 0;
-  left: 0;
-  border: 1.5px solid var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-  pointer-events: none;
-}
 
 .nomnom-toasts {
   position: fixed;
