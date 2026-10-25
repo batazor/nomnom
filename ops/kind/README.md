@@ -262,7 +262,10 @@ Traces браузера идут через тот же фильтр `service.na
 В том же profile BFF (Cosmo Router) пишет traces в Alloy по OTLP/HTTP
 (`values/bff-grafana-cloud.yaml`) и продолжает `traceparent` браузера: в Tempo корневой span —
 fetch `customer-ui`, под ним `query <Operation>` сервиса `bff`, вызов plugin `bff-plugin` и его
-gRPC client span, затем server span и usecase контекста (например `restaurants`). Для проверки из браузера —
+gRPC client span, `ingress`/`egress` internal gateway, затем server span и usecase контекста
+(`restaurants`, `orders` с SpiceDB и SQL). Цепочка целая только после `make kind-deploy
+GRAFANA_CLOUD=1`: без profile internal gateway и контексты пишут в trace-capture, и в Tempo
+остаются только spans BFF. Для проверки из браузера —
 конфигурация `customer-ui-kind` в `.claude/launch.json` (BFF на `localhost:3010`, Faro на
 `localhost:12347` через port-forward).
 
