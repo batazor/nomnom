@@ -38,6 +38,13 @@ export function redactItem(item: TransportItem): TransportItem {
   };
 }
 
+// OpenTelemetry compares a string with the whole request URL, and urql sends
+// queries as GET with a query string: match the BFF origin as a prefix.
+export function bffUrlPattern(graphqlUrl: string): RegExp {
+  const origin = new URL(graphqlUrl).origin;
+  return new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/`);
+}
+
 export function initTelemetry(config: RuntimeConfig): Faro | undefined {
   if (!config.telemetryUrl || config.enableMocks) return undefined;
 
@@ -56,7 +63,7 @@ export function initTelemetry(config: RuntimeConfig): Faro | undefined {
       new TracingInstrumentation({
         instrumentationOptions: {
           propagateTraceHeaderCorsUrls: [
-            new URL(config.publicGraphqlUrl).origin,
+            bffUrlPattern(config.publicGraphqlUrl),
           ],
         },
       }),

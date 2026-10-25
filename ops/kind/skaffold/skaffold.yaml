@@ -15,23 +15,32 @@ deploy:
   helm:
     releases:
       # Параметры для kind по официальной инструкции Cilium; kube-proxy сохраняется.
+      # upgradeOnChange: Skaffold по умолчанию не обновляет установленный remote chart, и
+      # правка values платформы не доходила бы до существующего кластера.
       - name: cilium
         remoteChart: oci://quay.io/cilium/charts/cilium
         version: 1.20.4
         namespace: kube-system
+        upgradeOnChange: true
         wait: true
         setValues:
           image.pullPolicy: IfNotPresent
           ipam.mode: kubernetes
           operator.replicas: 1
           hubble.enabled: true
-          hubble.relay.enabled: false
+          # Relay — hubble observe по всему кластеру (cilium hubble port-forward), UI не нужен.
+          hubble.relay.enabled: true
           hubble.ui.enabled: false
+          # Метрики Hubble на :9965 агента; scrape — Alloy (manifests/observability).
+          # Context namespace, не pod: число series не растёт с перезапусками pods.
+          hubble.metrics.enabled[0]: drop:sourceContext=namespace;destinationContext=namespace
+          hubble.metrics.enabled[1]: flow:sourceContext=namespace;destinationContext=namespace
       - name: envoy-gateway
         remoteChart: oci://docker.io/envoyproxy/gateway-helm
         version: v1.9.2
         namespace: envoy-gateway-system
         createNamespace: true
+        upgradeOnChange: true
         wait: true
       # После Envoy Gateway: поддержка Gateway API включается, только если CRD уже есть.
       # Выпускает сертификаты public gateway от локального CA и ключ user assertions BFF
@@ -41,6 +50,7 @@ deploy:
         version: v1.21.3
         namespace: cert-manager
         createNamespace: true
+        upgradeOnChange: true
         wait: true
         setValues:
           crds.enabled: true
@@ -115,10 +125,13 @@ manifests:
   # каждый deploy перезапускал бы их с пустыми данными уже после миграций приложений.
   rawYaml:
     - ../manifests/base/namespaces.yaml
-    - ../manifests/gateway/gateway.yaml
     - ../manifests/gateway/public-gateway.yaml
     - ../manifests/fixtures/net-probe.yaml
     - ../manifests/observability/trace-capture.yaml
+  # Internal gateway: profile grafana-cloud заменяет путь на ../manifests/observability,
+  # которая включает его и переключает spans gateway на Alloy.
+  kustomize:
+    paths: [../manifests/gateway]
 deploy:
   statusCheckDeadlineSeconds: 300
   kubectl:
@@ -327,7 +340,7 @@ profiles:
     patches:
       # Alloy и Secret grafana-cloud-otlp из ops/grafana-cloud/.env.grafana-cloud (kustomize
       # secretGenerator, ADR 34); Secret alloy-postgres создаёт chart ../bootstrap.
-      - op: add
+      - op: replace
         path: /manifests/kustomize
         value:
           paths: [../manifests/observability]
@@ -365,6 +378,10 @@ profiles:
       - op: add
         path: /deploy/helm/releases/10/valuesFiles/-
         value: ../values/grafana-cloud.yaml
+      # BFF (Cosmo Router): свои переменные telemetry, не OTEL_* charts сервисов.
+      - op: add
+        path: /deploy/helm/releases/11/valuesFiles/-
+        value: ../values/bff-grafana-cloud.yaml
   # make kind-dev: restaurants и payments собираются из stage dev и получают file sync —
   # правка исходников копируется в контейнер, процесс перезапускает node --watch / watchfiles.
   # Go и Rust компилируются (а orders на distroless без tar), поэтому идут через пересборку.

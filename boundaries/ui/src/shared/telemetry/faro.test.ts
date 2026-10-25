@@ -1,7 +1,7 @@
 import type { TransportItem } from "@grafana/faro-react";
 import { describe, expect, it } from "vitest";
 
-import { initTelemetry, redactItem, redactUrl } from "./faro";
+import { bffUrlPattern, initTelemetry, redactItem, redactUrl } from "./faro";
 
 describe("redactUrl", () => {
   it("keeps the route shape without resource ids and query", () => {
@@ -45,5 +45,16 @@ describe("initTelemetry", () => {
         telemetryUrl: "https://telemetry.test/collect",
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("bffUrlPattern", () => {
+  it("matches every request to the BFF origin and nothing else", () => {
+    const pattern = bffUrlPattern("http://localhost:3010/graphql");
+    expect(pattern.test("http://localhost:3010/graphql?query=x")).toBe(true);
+    expect(pattern.test("http://localhost:3010/graphql")).toBe(true);
+    expect(pattern.test("http://localhost:30100/graphql")).toBe(false);
+    expect(pattern.test("http://localhostX3010/graphql")).toBe(false);
+    expect(pattern.test("http://localhost:12347/collect")).toBe(false);
   });
 });

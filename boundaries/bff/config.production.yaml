@@ -33,14 +33,25 @@ plugins:
   enabled: true
   path: plugins
 
-# No Cosmo control plane: no usage metrics and no telemetry exporters by default.
-# Exporters are configured when the observability of BFF is decided.
+# No Cosmo control plane: no usage metrics. Traces go only to the OTLP collector of the
+# environment: TRACING_ENABLED (false in the image, Dockerfile) turns them on, the
+# endpoint comes from BFF__OTLP_TRACES_ENDPOINT (OTLP/HTTP, e.g. Alloy :4318). With an
+# exporter listed the Router never falls back to the Cosmo Cloud default exporter.
+# The Router continues W3C trace context of the caller (browser Faro spans, ADR 2).
 graphql_metrics:
   enabled: false
 
 telemetry:
+  service_name: bff
+  resource_attributes:
+    - key: service.namespace
+      value: nomnom
+    - key: deployment.environment.name
+      value: "${BFF__DEPLOYMENT_ENVIRONMENT}"
   tracing:
-    enabled: false
+    exporters:
+      - exporter: http
+        endpoint: "${BFF__OTLP_TRACES_ENDPOINT}"
   metrics:
     otlp:
       enabled: false

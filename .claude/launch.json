@@ -4,11 +4,40 @@
     {
       "name": "customer-ui-mocks",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--prefix", "boundaries/ui", "vite", "boundaries/ui", "--port", "4173", "--strictPort"],
+      "runtimeArgs": [
+        "--prefix",
+        "boundaries/ui",
+        "vite",
+        "boundaries/ui",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
       "env": {
         "VITE_PUBLIC_GRAPHQL_URL": "http://localhost:4173/graphql",
         "VITE_LOCALE": "ru",
         "VITE_ENABLE_MOCKS": "true"
+      },
+      "port": 4173
+    },
+    {
+      "name": "customer-ui-kind",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--prefix",
+        "boundaries/ui",
+        "vite",
+        "boundaries/ui",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "env": {
+        "VITE_PUBLIC_GRAPHQL_URL": "http://localhost:3010/graphql",
+        "VITE_LOCALE": "ru",
+        "VITE_ENABLE_MOCKS": "false",
+        "VITE_FARO_URL": "http://localhost:12347/collect",
+        "VITE_DEPLOYMENT_ENVIRONMENT": "kind"
       },
       "port": 4173
     }

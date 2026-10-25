@@ -1,0 +1,7 @@
+# Values профиля grafana-cloud для BFF (Cosmo Router): traces в Alloy по OTLP/HTTP
+# (manifests/observability/alloy.yaml); config.production.yaml читает переменные.
+# Метрики Router не экспортируются: квота series free tier.
+env:
+  TRACING_ENABLED: "true"
+  BFF__OTLP_TRACES_ENDPOINT: http://alloy.nomnom-observability.svc.cluster.local:4318
+  BFF__DEPLOYMENT_ENVIRONMENT: kind

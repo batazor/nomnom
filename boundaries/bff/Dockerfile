@@ -77,6 +77,8 @@ COPY --from=plugin /out/plugins/ /app/plugins/
 COPY --from=config /out/config.json /app/config.json
 COPY config.production.yaml /app/config.yaml
 
+# Tracing is opt-in per environment (config.production.yaml, telemetry.tracing).
+ENV TRACING_ENABLED=false
 EXPOSE 3010
 USER nonroot:nonroot
 ENTRYPOINT ["/app/router"]

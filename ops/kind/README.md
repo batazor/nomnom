@@ -255,6 +255,12 @@ Traces браузера идут через тот же фильтр `service.na
 `VITE_FARO_URL=https://telemetry.nomnom.localhost:18085/collect`; браузер должен доверять
 корню из `make kind-local-ca`.
 
+В том же profile BFF (Cosmo Router) пишет traces в Alloy по OTLP/HTTP
+(`values/bff-grafana-cloud.yaml`) и продолжает `traceparent` браузера: в Tempo корневой span —
+fetch `customer-ui`, под ним `query <Operation>` сервиса `bff`. Для проверки из браузера —
+конфигурация `customer-ui-kind` в `.claude/launch.json` (BFF на `localhost:3010`, Faro на
+`localhost:12347` через port-forward).
+
 ## Проверки
 
 `make kind-test` запускает тесты Kyverno Chainsaw из `e2e/`
