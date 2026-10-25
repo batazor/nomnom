@@ -18,9 +18,9 @@
 - [x] 3.2 Gateway routes: команды кухни, `GetKitchenQueue`, `ListIncomingOrders`, API курьера, `RegisterRestaurant`, `AssignStaff`, `RegisterCourier`; тест реестра маршрутов.
 - [x] 3.3 Fixture `e2e-driver`, kind-values allowlist и `userDelegates` `restaurants`/`delivery`; AC-741.
 - [x] 3.4 `ops/kind/authz/bootstrap-kind.yaml` с `platform:nomnom#operator@user:kind-operator`, слияние с общим bootstrap в chart `ops/kind/bootstrap` (`--set-file authz.kindBootstrap`).
-- [ ] 3.5 Chainsaw `e2e/order-lifecycle`: AC-740; прогон в `nomnom-test`.
+- [x] 3.5 Chainsaw `e2e/order-lifecycle`: AC-740; прогон в `nomnom-test`.
 
 ## 4. Документация
 
-- [ ] 4.1 README `delivery`, `restaurants`, `ops/kind/README.md`, `docs/use-cases.md` (момент начала поиска курьера решён Dispatch).
-- [ ] 4.2 `openspec validate close-order-lifecycle-in-kind --strict`.
+- [x] 4.1 README `delivery`, `restaurants`, `ops/kind/README.md`, `docs/use-cases.md` (момент начала поиска курьера решён Dispatch).
+- [x] 4.2 `openspec validate close-order-lifecycle-in-kind --strict`.
