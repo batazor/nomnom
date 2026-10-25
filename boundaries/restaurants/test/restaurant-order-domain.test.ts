@@ -251,6 +251,46 @@ test("cancel stores the stage and whether preparation started", () => {
   );
 });
 
+test("cancel decides the outcome by stage without throwing", () => {
+  const order = receive();
+  order.accept({
+    acceptedAt: at(1),
+    expectedReadyAt: at(30),
+    eligibility: accepted,
+  });
+  order.queue({ queuedAt: at(1) });
+  order.startPreparation({ startedAt: at(2) });
+  const policy = { duringPreparation: "reject" } as const;
+
+  assert.deepEqual(order.cancel({ cancelledAt: at(3), policy }), {
+    outcome: "rejected",
+    reason: "cancellation_during_preparation_not_allowed",
+    state: "PREPARING",
+  });
+  order.markAssembled({ assembledAt: at(4) });
+  order.markReady({ readyAt: at(5) });
+  order.pullEvents();
+
+  // AC-637: a Ready order is rejected with `already_ready`.
+  assert.deepEqual(order.cancel({ cancelledAt: at(6), policy }), {
+    outcome: "rejected",
+    reason: "already_ready",
+    state: "READY",
+  });
+  assert.equal(order.state, "READY");
+  assert.deepEqual(order.pullEvents(), []);
+
+  const queued = receive();
+  assert.deepEqual(queued.cancel({ cancelledAt: at(1), policy }), {
+    outcome: "cancelled",
+    stage: "RECEIVED",
+  });
+  assert.deepEqual(queued.cancel({ cancelledAt: at(2), policy }), {
+    outcome: "repeated",
+    stage: "RECEIVED",
+  });
+});
+
 test("snapshot round trip restores the aggregate without events", () => {
   const order = receive();
   order.accept({
