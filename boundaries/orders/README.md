@@ -78,7 +78,12 @@ Temporal workflow относится к прикладному процессу 
 
 Адаптер генерирует серверные Go stubs из локальной схемы и преобразует request messages в commands/queries, а прикладные результаты — в response messages. Protobuf-типы остаются в `infrastructure` и не используются моделями `Order`, handlers или Temporal workflow. Клиенты других контекстов получают схему только из BSR по закреплённому commit ref.
 
-Маппинг ошибок API:
+Маппинг ошибок API. Вид ошибки (`application.ErrorKind`: invalid input, not found, already exists,
+conflict, domain rule, unavailable, permission, internal) определяет одна функция
+[`errorkind.Classify`](slices/order/applications/errorkind/errorkind.go); gRPC, Kafka consumer,
+Temporal Activities и телеметрия переводят вид своими таблицами, тест каждой проверяет полноту.
+Уточнения этого API (`RESTAURANT_*`, `INVALID_ORDER`, metadata `ORDER_NOT_ORDERABLE`, правило окна
+отмены) остаются в gRPC-адаптере.
 
 | Ошибка `orders` | gRPC code | `ErrorInfo.reason` |
 | --- | --- | --- |
@@ -100,7 +105,7 @@ Temporal workflow относится к прикладному процессу 
 `codes` — каждый код один раз в верхнем регистре (`ORDER_ITEM_UNAVAILABLE`,
 `ORDER_TOTAL_BELOW_MINIMUM`, `ORDER_TOTAL_ABOVE_MAXIMUM`), `menu_item_ids` — позиции, к которым
 относятся причины (пусто, если причины касаются только суммы);
-`ORDER_STATE_CONFLICT` — запрет FSM и отказ workflow принять Cancellation Request; отказ по окну
+`ORDER_STATE_CONFLICT` — запрет FSM (включая нарушенный guard `GuardFailed`) и отказ workflow принять Cancellation Request; отказ по окну
 отмены (`CancellationNotAllowed`) называет нарушенное правило, чтобы клиент отличил его от
 завершённого заказа.
 
