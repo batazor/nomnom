@@ -2,15 +2,15 @@
 
 ## 1. delivery
 
-- [ ] 1.1 proto `nomnom.delivery.v1`: RPC и сообщения API курьера (design, раздел 2); генерация.
-- [ ] 1.2 gRPC handlers API курьера поверх существующих use cases; тесты AC-730–AC-733.
-- [ ] 1.3 Use case Dispatch Deliveries и выбор ожидающих доставок без pending-предложения только в PostgreSQL (без memory-реализации); тесты AC-734–AC-736: use case — на моках порта, репозиторий — через testcontainers.
-- [ ] 1.4 Worker Dispatch в процессе `delivery` (`OFFERS__DISPATCH_INTERVAL`), Helm values и README.
+- [x] 1.1 proto `nomnom.delivery.v1`: RPC и сообщения API курьера (design, раздел 2); генерация.
+- [x] 1.2 gRPC handlers API курьера поверх существующих use cases; тесты AC-730–AC-733.
+- [x] 1.3 Use case Dispatch Deliveries и выбор ожидающих доставок без pending-предложения только в PostgreSQL (без memory-реализации); тесты AC-734–AC-736: use case — на моках порта, репозиторий — через testcontainers.
+- [x] 1.4 Worker Dispatch в процессе `delivery` (`OFFERS__DISPATCH_INTERVAL`), Helm values и README.
 
 ## 2. restaurants
 
-- [ ] 2.1 proto и gRPC `GetKitchenQueue` поверх существующего query; тесты AC-737, AC-738.
-- [ ] 2.2 Query List Incoming Orders только на MongoDB (без memory-реализации) и gRPC `ListIncomingOrders`; тесты AC-742, AC-743: query — на моках порта, MongoDB — через testcontainers.
+- [x] 2.1 proto и gRPC `GetKitchenQueue` поверх существующего query; тесты AC-737, AC-738.
+- [x] 2.2 Query List Incoming Orders только на MongoDB (без memory-реализации) и gRPC `ListIncomingOrders`; тесты AC-742, AC-743: query — на моках порта, MongoDB — через testcontainers.
 
 ## 3. kind
 
