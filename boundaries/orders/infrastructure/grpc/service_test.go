@@ -67,7 +67,8 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
 	module := orderdi.NewModule(orderdi.Dependencies{
-		Store:      store,
+		Commands:   store,
+		ReadModels: store,
 		Authorizer: authorizer,
 		Policy:     memory.FixedWindow{Duration: cancellationWindow},
 		Catalog:    ports.catalog,

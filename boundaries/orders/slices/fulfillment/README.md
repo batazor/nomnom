@@ -29,6 +29,6 @@ slices/fulfillment/
 
 ## Зависимости
 
-`infrastructure` → `domains/fulfillment`, порт `slices/order/applications/fulfillment` (его реализует `Client`) и use cases `order/applications/{completeorder,failorcancelorder}` (их вызывают Activities). `di` использует `Store` и телеметрию слайса `order`. Слайс `order` не импортирует `fulfillment`.
+`infrastructure` → `domains/fulfillment`, порт `slices/order/applications/fulfillment` (его реализует `Client`) и use cases `order/applications/{completeorder,failorcancelorder}` (их вызывают Activities). `di` объявляет роль хранилища Activities (`Store`: Unit of Work, repository, Outbox) и использует телеметрию слайса `order`; composition root связывает роль с `ProcessStore` слайса `order`. Слайс `order` не импортирует `fulfillment`.
 
 Temporal-адаптер и его внешние имена описаны в [`infrastructure/temporal`](infrastructure/temporal/README.md).

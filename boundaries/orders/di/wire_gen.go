@@ -26,9 +26,9 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	}
 	reasonCodes := NewReasonCodes()
 	domainMetrics := observability.NewDomainMetrics(reasonCodes)
-	diStore := di.NewObservedStore(store, domainMetrics)
+	processStore := di.NewProcessStore(store, domainMetrics)
 	spiceDBConfig := cfg.SpiceDB
-	authorizer, cleanup2, err := di.NewAuthorizer(spiceDBConfig, diStore)
+	authorizer, cleanup2, err := di.NewAuthorizer(spiceDBConfig, processStore)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -63,7 +63,8 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	idGenerator := di.NewOrderIDs()
 	useCases := observability.UseCases()
 	dependencies := di.Dependencies{
-		Store:      diStore,
+		Commands:   processStore,
+		ReadModels: processStore,
 		Authorizer: authorizer,
 		Policy:     v,
 		Catalog:    catalog,
@@ -100,7 +101,7 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	}
 	reasonCodes := NewReasonCodes()
 	domainMetrics := observability.NewDomainMetrics(reasonCodes)
-	diStore := di.NewObservedStore(store, domainMetrics)
+	processStore := di.NewProcessStore(store, domainMetrics)
 	fulfillmentConfig := cfg.Fulfillment
 	internalGatewayConfig := cfg.InternalGateway
 	identityConfig := cfg.Identity
@@ -110,7 +111,7 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 		return nil, nil, err
 	}
 	useCases := observability.UseCases()
-	activities := di2.NewActivities(diStore, neighbours, useCases)
+	activities := di2.NewActivities(processStore, neighbours, useCases)
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
 		cleanup2()
@@ -126,7 +127,7 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	}
 	reasonCodes := NewReasonCodes()
 	domainMetrics := observability.NewDomainMetrics(reasonCodes)
-	diStore := di.NewObservedStore(store, domainMetrics)
+	processStore := di.NewProcessStore(store, domainMetrics)
 	spiceDBConfig := cfg.SpiceDB
 	courierRelationships, cleanup2, err := di.NewCourierRelationships(spiceDBConfig)
 	if err != nil {
@@ -135,7 +136,7 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	}
 	useCases := observability.UseCases()
 	consumer := di.Consumer{
-		Store:         diStore,
+		Store:         processStore,
 		Relationships: courierRelationships,
 		Telemetry:     useCases,
 	}
@@ -204,4 +205,7 @@ var (
 	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
 	// spiceDBSet — клиент SpiceDB процесса orders-reconciler.
 	spiceDBSet = wire.NewSet(NewSpiceDBClient)
+	// workerStoreSet — store процесса слайса order, в том числе в роли хранилища
+	// Activities fulfillment.
+	workerStoreSet = wire.NewSet(di.PostgresSet, wire.Bind(new(di2.Store), new(*di.ProcessStore)))
 )
