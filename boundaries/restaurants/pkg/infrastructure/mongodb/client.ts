@@ -6,6 +6,7 @@ import {
   type MongoDbEnabledConfig,
   type MongoDbPoolConfig,
 } from "../../config/config.ts";
+import { MongoCommandTelemetry } from "./command-telemetry.ts";
 import { MongoPoolMetrics } from "./pool-metrics.ts";
 
 export type MongoDbConnection = Readonly<{
@@ -52,7 +53,8 @@ export const mongoPoolName = (address: string, database: string) =>
  * Opens the client and pings the primary, so an unreachable or misconfigured
  * MongoDB stops startup instead of failing the first request. Pool limits come
  * from MONGODB__* (pkg/config); CMAP events feed the db.client.connection.*
- * metrics.
+ * metrics, command monitoring events the client spans and
+ * db.client.operation.duration (command-telemetry.ts).
  */
 export async function connectMongoDb(
   config: MongoDbConnectConfig,
@@ -64,8 +66,13 @@ export async function connectMongoDb(
     // Optional domain fields are omitted instead of being stored as null.
     ignoreUndefined: true,
     serverSelectionTimeoutMS: config.timeoutMs,
+    // Command events for spans and operation metrics; their payload is not read.
+    monitorCommands: true,
     ...mongoPoolOptions(pool),
   });
+  new MongoCommandTelemetry(
+    options.meter === undefined ? {} : { meter: options.meter },
+  ).instrument(client);
   new MongoPoolMetrics({
     ...(options.meter === undefined ? {} : { meter: options.meter }),
     poolName: (address) => mongoPoolName(address, config.database),

@@ -16,6 +16,7 @@ import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/mongodb/outbox.ts";
 import type { MongoUnitOfWork } from "../../../pkg/infrastructure/mongodb/unit-of-work.ts";
 import type { VersionedCollection } from "../../../pkg/infrastructure/mongodb/versioned-collection.ts";
+import type { Logger } from "../../../pkg/telemetry/logger.ts";
 import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
@@ -51,6 +52,7 @@ export interface RestaurantDependencies {
   readonly spicedb: RelationshipsClient;
   readonly spicedbConfig: SpiceDbEnabledConfig;
   readonly reconcilerConfig: ReconcilerConfig;
+  readonly logger: Logger;
 }
 
 /** What the slice provides to the process and to other slices. */
@@ -184,6 +186,7 @@ export const registerRestaurant = (
         reconcilerConfig,
         spicedbConfig,
         clock,
+        logger,
       }: Cradle) =>
         new RelationshipReconciler({
           client: spicedb,
@@ -192,7 +195,7 @@ export const registerRestaurant = (
           pageSize: reconcilerConfig.pageSize,
           timeoutMs: spicedbConfig.timeoutMs,
           clock,
-          log: (message) => console.log(`restaurants ${message}`),
+          log: logger.child({ operation: "reconcile" }).info,
         }),
     ).singleton(),
   };

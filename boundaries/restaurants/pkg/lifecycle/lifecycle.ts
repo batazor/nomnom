@@ -105,7 +105,7 @@ export class Lifecycle {
    * shutdown, reject — non-zero exit.
    */
   async run(worker: Worker, options: RunOptions = {}): Promise<void> {
-    const log = options.log ?? console.log;
+    const log = options.log ?? (() => {});
     const stopRequested = new AbortController();
     const onSignal = () => {
       // Повторный сигнал больше не перехватывается и завершает процесс сразу.

@@ -1,6 +1,8 @@
 import kafka from "@confluentinc/kafka-javascript";
+import { context } from "@opentelemetry/api";
 
 import type { KafkaConfig } from "../../config/config.ts";
+import { injectContext, SpanKind, withSpan } from "../../telemetry/tracing.ts";
 import type { IntegrationMessage, MessagePublisher } from "../outbox/relay.ts";
 
 type Producer = ReturnType<
@@ -10,7 +12,10 @@ type Producer = ReturnType<
 /**
  * Idempotent Kafka producer with `acks=all` (ADR 31): `publish` resolves after
  * the broker acknowledged the message, so the relay sets `publishedAt` only
- * for confirmed records.
+ * for confirmed records. Each publish is a PRODUCER span `send <topic>` that
+ * continues the active context (the Outbox relay activates the context
+ * captured when the event was written); its W3C `traceparent`/`tracestate`
+ * replace those of `message.headers`.
  */
 export class KafkaPublisher implements MessagePublisher {
   readonly #producer: Producer;
@@ -57,23 +62,61 @@ export class KafkaPublisher implements MessagePublisher {
   }
 
   async publish(message: IntegrationMessage): Promise<void> {
-    await this.#producer.send({
-      topic: message.topic,
-      messages: [
-        {
-          key: message.key,
-          value: Buffer.from(
-            message.value.buffer,
-            message.value.byteOffset,
-            message.value.byteLength,
-          ),
-          headers: { ...message.headers },
-        },
-      ],
-    });
+    await sendWithTraceContext(message, (headers) =>
+      this.#producer.send({
+        topic: message.topic,
+        messages: [
+          {
+            key: message.key,
+            value: Buffer.from(
+              message.value.buffer,
+              message.value.byteOffset,
+              message.value.byteLength,
+            ),
+            headers,
+          },
+        ],
+      }),
+    );
   }
 
   async close(): Promise<void> {
     await this.#producer.disconnect();
   }
 }
+
+/**
+ * PRODUCER span `send <topic>` around `send`, which receives the message
+ * headers with the W3C context of that span injected.
+ */
+export const sendWithTraceContext = (
+  message: IntegrationMessage,
+  send: (headers: Record<string, string>) => Promise<unknown>,
+): Promise<void> =>
+  withSpan(
+    `send ${message.topic}`,
+    {
+      parent: context.active(),
+      kind: SpanKind.PRODUCER,
+      attributes: producerAttributes(message),
+    },
+    async () => {
+      const headers = { ...message.headers };
+      injectContext(context.active(), headers);
+      await send(headers);
+    },
+  );
+
+/** Semconv messaging attributes of a publish; never the payload. */
+export const producerAttributes = (
+  message: IntegrationMessage,
+): Record<string, string> => ({
+  "messaging.system": "kafka",
+  "messaging.operation.type": "send",
+  "messaging.operation.name": "send",
+  "messaging.destination.name": message.topic,
+  "messaging.kafka.message.key": message.key,
+  ...(message.headers.event_id === undefined
+    ? {}
+    : { "messaging.message.id": message.headers.event_id }),
+});

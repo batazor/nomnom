@@ -154,8 +154,12 @@ test("a gRPC request with traceparent writes an Outbox record in the same trace"
   assert.equal(span.kind, SpanKind.SERVER);
   assert.equal(span.spanContext().traceId, TRACE_ID);
   assert.equal(span.parentSpanContext?.spanId, CALLER_SPAN_ID);
-  assert.equal(span.attributes["rpc.method"], "OpenRestaurant");
-  assert.equal(span.attributes["rpc.grpc.status_code"], 0);
+  assert.equal(span.attributes["rpc.system.name"], "grpc");
+  assert.equal(
+    span.attributes["rpc.method"],
+    "nomnom.restaurants.v1.RestaurantsService/OpenRestaurant",
+  );
+  assert.equal(span.attributes["rpc.response.status_code"], "OK");
 
   assert.equal(metadata.length, 1);
   const [version, traceId, spanId, flags] = (
@@ -210,7 +214,7 @@ test("restaurants-consumer continues the traceparent of a Kafka message", async 
   await worker.shutdown(AbortSignal.timeout(1000));
 
   const [span] = exporter.getFinishedSpans();
-  assert.equal(span?.name, "orders.v1.order-events process");
+  assert.equal(span?.name, "process orders.v1.order-events");
   assert.equal(span?.kind, SpanKind.CONSUMER);
   assert.equal(span?.parentSpanContext?.spanId, CALLER_SPAN_ID);
   assert.equal(

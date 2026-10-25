@@ -7,9 +7,17 @@ import { createSubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
+import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
+import { telemetryResource } from "../../pkg/telemetry/resource.ts";
 import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 
+const SERVICE_NAME = "restaurants";
+
 loadLocalEnv();
+// JSON logs to stdout with the telemetry resource; a startup failure is one
+// ERROR record.
+const logger = createLogger({ resource: telemetryResource(SERVICE_NAME) });
+logUncaughtErrors(logger);
 const config = loadConfig();
 // MongoDB (ADR 8, local ADR 1) is required; collections, validators and
 // indexes are created by restaurants-migrate before the process starts.
@@ -25,18 +33,19 @@ if (!config.spicedb.enabled) {
     "SPICEDB__ENDPOINT is required: restaurants checks permissions in SpiceDB",
   );
 }
+// Telemetry starts before the application (docs/cloud-native-runtime.md):
+// OTLP metrics and traces are exported only with OTEL_EXPORTER_OTLP_*.
+const telemetry = startTelemetry(SERVICE_NAME);
 // Projected ServiceAccount token verification (ADR 27) and BFF user
 // assertions (ADR 32). Without issuer, audience and JWKS the
 // RejectingSubjectResolver keeps commands fail closed; an invalid JWKS or
 // allowlist stops startup.
+const identityLog = logger.child({ operation: "identity" });
 const subjects = await createSubjectResolver(
   config.identity,
-  (message) => console.warn(`restaurants ${message}`),
-  { audit: (message) => console.info(`restaurants ${message}`) },
+  identityLog.warn,
+  { audit: identityLog.info },
 );
-// OTLP metrics (business counters of Kitchen Orders among them) are exported
-// only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
-const telemetry = startTelemetry("restaurants");
 const mongo = await connectMongoDb(config.mongodb);
 const container = createRestaurantsContainer({
   server: config.server,
@@ -45,6 +54,7 @@ const container = createRestaurantsContainer({
   kitchen: config.kitchen,
   mongo,
   subjects,
+  logger,
 });
 
 try {
@@ -53,14 +63,15 @@ try {
     readinessDelayMs: config.shutdown.readinessDelayMs,
     drainTimeoutMs: config.shutdown.drainTimeoutMs,
   }).run(container.cradle.worker, {
-    log: (message) => console.log(`restaurants ${message}`),
+    log: logger.child({ operation: "lifecycle" }).info,
   });
 } catch (error) {
-  console.error("restaurants stopped with error", error);
+  logger.error("stopped with error", { operation: "lifecycle", error });
   process.exitCode = 1;
 } finally {
-  // The container closes the SpiceDB client before MongoDB disconnects.
+  // The container closes the SpiceDB client before MongoDB disconnects;
+  // telemetry is flushed last, within its own deadline.
   await container.dispose();
   await mongo.close();
-  await telemetry.shutdown();
+  await telemetry.shutdown(config.shutdown.telemetryFlushTimeoutMs);
 }

@@ -17,6 +17,7 @@ import {
   connectMongoDb,
   type MongoDbConnection,
 } from "../pkg/infrastructure/mongodb/client.ts";
+import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 
 const environment = {
@@ -43,6 +44,7 @@ const resourcesOf = (
     kitchen: config.kitchen,
     mongo,
     subjects: new RejectingSubjectResolver(),
+    logger: silentLogger,
   };
 };
 
@@ -61,6 +63,10 @@ test("the restaurants container resolves every registration in the application s
     }
     const { cradle } = container;
     assert.equal(cradle.worker, cradle.worker, "worker is a singleton");
+    // Use cases are decorated by UseCaseTelemetry (di/usecases.ts).
+    assert.ok(Object.hasOwn(cradle.acceptRestaurantOrder, "execute"));
+    assert.ok(Object.hasOwn(cradle.getRestaurant, "execute"));
+    assert.equal(cradle.getRestaurant, cradle.getRestaurant, "singleton");
     assert.equal(cradle.kitchenAccessControl, cradle.spicedbAccessControl);
     assert.equal(cradle.restaurantAccessControl, cradle.spicedbAccessControl);
     assert.equal(cradle.ownerRelationships, cradle.relationshipWriter);
@@ -152,9 +158,12 @@ test("the relay and migrate containers resolve every registration", async () => 
     outbox: loadConfig({}).outbox,
     db: mongo.db,
     publisher: { publish: async () => {} },
-    log: () => {},
+    logger: silentLogger,
   });
-  const migrate = createMigrateContainer({ db: mongo.db, log: () => {} });
+  const migrate = createMigrateContainer({
+    db: mongo.db,
+    logger: silentLogger,
+  });
   try {
     for (const container of [relay, migrate]) {
       for (const name of Object.keys(container.registrations)) {
@@ -180,7 +189,7 @@ test("the consumer container resolves every registration", async () => {
       disconnect: async () => {},
     },
     deadLetters: { publish: async () => {} },
-    log: () => {},
+    logger: silentLogger,
   });
   try {
     for (const name of Object.keys(container.registrations)) {
@@ -188,6 +197,7 @@ test("the consumer container resolves every registration", async () => {
     }
     const { cradle } = container;
     assert.equal(cradle.worker, cradle.worker, "worker is a singleton");
+    assert.ok(Object.hasOwn(cradle.receiveOrderRequest, "execute"));
     // Receive Order Request is authorized only for the orders event stream;
     // the consumer has no kitchen staff or read access at all.
     assert.equal(
@@ -227,7 +237,10 @@ describe("composed processes against MongoDB", { skip }, () => {
   });
 
   test("migrate prepares the database the restaurants graph reads", async () => {
-    const migrate = createMigrateContainer({ db: mongo.db, log: () => {} });
+    const migrate = createMigrateContainer({
+      db: mongo.db,
+      logger: silentLogger,
+    });
     await migrate.cradle.migration.run();
     await migrate.dispose();
 

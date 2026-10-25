@@ -28,6 +28,7 @@ test("uses default management port and shutdown budget", () => {
   assert.deepEqual(config.shutdown, {
     readinessDelayMs: 5000,
     drainTimeoutMs: 20000,
+    telemetryFlushTimeoutMs: 5000,
   });
 });
 
@@ -35,17 +36,20 @@ test("reads shutdown budget from the environment", () => {
   const config = loadConfig({
     SHUTDOWN__READINESS_DELAY: "0s",
     SHUTDOWN__DRAIN_TIMEOUT: "1500ms",
+    SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT: "2s",
   });
 
   assert.deepEqual(config.shutdown, {
     readinessDelayMs: 0,
     drainTimeoutMs: 1500,
+    telemetryFlushTimeoutMs: 2000,
   });
 });
 
 test("rejects an invalid shutdown budget", () => {
   assert.throws(() => loadConfig({ SHUTDOWN__DRAIN_TIMEOUT: "0s" }));
   assert.throws(() => loadConfig({ SHUTDOWN__READINESS_DELAY: "5" }));
+  assert.throws(() => loadConfig({ SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT: "0s" }));
 });
 
 test("rejects a management port equal to the server port", () => {

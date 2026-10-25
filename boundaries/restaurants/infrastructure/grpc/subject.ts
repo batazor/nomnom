@@ -92,8 +92,8 @@ export class ServiceTokenSubjectResolver implements SubjectResolver {
             audience: options.audience,
             now,
           });
-    this.#log = options.log ?? ((message) => console.warn(message));
-    this.#audit = options.audit ?? ((message) => console.info(message));
+    this.#log = options.log ?? (() => {});
+    this.#audit = options.audit ?? (() => {});
   }
 
   async resolve(context: HandlerContext): Promise<Subject> {
@@ -150,7 +150,7 @@ function loggedJti(assertion: string): string {
 }
 
 export interface CreateSubjectResolverOptions {
-  /** Принятые user assertions; по умолчанию `console.info`. */
+  /** Принятые user assertions; по умолчанию не пишутся. */
   readonly audit?: (message: string) => void;
   /** Текущее время для проверки токенов; по умолчанию системное. */
   readonly now?: () => Date;
@@ -163,7 +163,7 @@ export interface CreateSubjectResolverOptions {
  */
 export async function createSubjectResolver(
   identity: IdentityConfig,
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void = () => {},
   options: CreateSubjectResolverOptions = {},
 ): Promise<SubjectResolver> {
   if (!identity.enabled) {

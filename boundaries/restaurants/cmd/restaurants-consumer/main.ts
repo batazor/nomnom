@@ -21,11 +21,15 @@ import {
 import { KafkaPublisher } from "../../pkg/infrastructure/kafka/publisher.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
+import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
+import { telemetryResource } from "../../pkg/telemetry/resource.ts";
 import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 
-const log = (message: string) => console.log(`restaurants-consumer ${message}`);
+const SERVICE_NAME = "restaurants-consumer";
 
 loadLocalEnv();
+const logger = createLogger({ resource: telemetryResource(SERVICE_NAME) });
+logUncaughtErrors(logger);
 const config = loadConfig(process.env, { process: "consumer" });
 // MongoDB and Kafka are required: without them the process does not start.
 // Collections and indexes, the Inbox included, are created by
@@ -41,7 +45,7 @@ if (!config.kafka.enabled) {
   );
 }
 
-const telemetry = startTelemetry("restaurants-consumer");
+const telemetry = startTelemetry(SERVICE_NAME);
 const mongo = await connectMongoDb(config.mongodb);
 let deadLetters: KafkaPublisher | undefined;
 let kafkaConsumer: ConsumerClient | undefined;
@@ -61,15 +65,17 @@ try {
     mongo,
     kafkaConsumer,
     deadLetters,
-    log,
+    logger,
   });
   await new Lifecycle({
     managementPort: config.management.port,
     readinessDelayMs: config.shutdown.readinessDelayMs,
     drainTimeoutMs: config.shutdown.drainTimeoutMs,
-  }).run(container.cradle.worker, { log });
+  }).run(container.cradle.worker, {
+    log: logger.child({ operation: "lifecycle" }).info,
+  });
 } catch (error) {
-  console.error("restaurants-consumer stopped with error", error);
+  logger.error("stopped with error", { operation: "lifecycle", error });
   process.exitCode = 1;
 } finally {
   // The worker has disconnected the consumer (and committed offsets) on a
@@ -78,5 +84,5 @@ try {
   await container?.dispose();
   await deadLetters?.close();
   await mongo.close();
-  await telemetry.shutdown();
+  await telemetry.shutdown(config.shutdown.telemetryFlushTimeoutMs);
 }

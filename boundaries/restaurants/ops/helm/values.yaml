@@ -87,11 +87,10 @@ resources:
   limits: {}
 
 # Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
-# Пример:
+# OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT и OTEL_RESOURCE_ATTRIBUTES задаются
+# секцией telemetry, а не здесь. Пример:
 # env:
-#   OTEL_SERVICE_NAME: restaurants
-#   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-#   OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+#   KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
 env: {}
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
@@ -115,17 +114,34 @@ extraEnv: []
 management:
   port: 9082
 
-# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY и
-# SHUTDOWN__DRAIN_TIMEOUT. readinessDelaySeconds должен превышать время, за которое
-# readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс распространение
-# EndpointSlice и конфигурации internal gateway.
+# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY,
+# SHUTDOWN__DRAIN_TIMEOUT и SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT. readinessDelaySeconds должен
+# превышать время, за которое readinessProbe замечает not ready (periodSeconds ×
+# failureThreshold), плюс распространение EndpointSlice и конфигурации internal gateway.
+# telemetryFlushTimeoutSeconds — deadline финального экспорта traces и metrics после drain.
 shutdown:
   readinessDelaySeconds: 5
   drainTimeoutSeconds: 20
+  telemetryFlushTimeoutSeconds: 5
 
-# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds с запасом на выход процесса;
-# chart отказывается рендериться при нарушении.
-terminationGracePeriodSeconds: 30
+# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds + telemetryFlushTimeoutSeconds
+# с запасом на выход процесса; chart отказывается рендериться при нарушении.
+terminationGracePeriodSeconds: 35
+
+# OpenTelemetry (ADR 9, docs/observability.md). Chart задаёт OTEL_SERVICE_NAME,
+# OTEL_RESOURCE_ATTRIBUTES (service.instance.id — имя pod через downward API,
+# service.version — image.tag, плюс resourceAttributes) и, если endpoint задан,
+# OTEL_EXPORTER_OTLP_ENDPOINT. Явные переменные chart перекрывают одноимённые из env
+# (ConfigMap), поэтому OTEL_* через env не задаются.
+telemetry:
+  # service.name процесса: restaurants, restaurants-consumer, restaurants-relay.
+  serviceName: restaurants
+  # OTLP/gRPC endpoint Alloy для traces и metrics, например
+  # http://alloy.nomnom-observability.svc.cluster.local:4317. Пусто — экспорт выключен,
+  # W3C trace context всё равно передаётся; логи всегда идут JSON в stdout.
+  endpoint: ""
+  # Атрибуты окружения, например deployment.environment.name: local.
+  resourceAttributes: {}
 
 # Probes используют health contract на техническом порту. Поля, кроме enabled, передаются
 # в Kubernetes как есть.

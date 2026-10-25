@@ -34,6 +34,8 @@ import { MongoInbox } from "../pkg/infrastructure/mongodb/inbox.ts";
 import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import type { MessagePublisher } from "../pkg/infrastructure/outbox/relay.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
+import type { Logger } from "../pkg/telemetry/logger.ts";
+import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
 import type { RestaurantRepository } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   createRestaurantCollection,
@@ -62,6 +64,7 @@ import {
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
 import { RepositoryRestaurantExistence } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
+import { CONSUMER_USE_CASES, instrumentUseCases } from "./usecases.ts";
 
 /** Configuration and resources the composition root hands to the container. */
 export type ConsumerResources = Readonly<{
@@ -71,7 +74,7 @@ export type ConsumerResources = Readonly<{
   kafkaConsumer: ConsumerClient;
   /** Producer of `<stream>.dlq` dead letters. */
   deadLetters: MessagePublisher;
-  log: (message: string) => void;
+  logger: Logger;
 }>;
 
 export interface ConsumerCradle {
@@ -80,7 +83,10 @@ export interface ConsumerCradle {
   readonly db: Db;
   readonly kafkaConsumer: ConsumerClient;
   readonly deadLetters: MessagePublisher;
-  readonly log: (message: string) => void;
+  /** Structured stdout logs (pkg/telemetry/logger.ts). */
+  readonly logger: Logger;
+  /** Span and duration of every use case listed in di/usecases.ts. */
+  readonly useCaseTelemetry: UseCaseTelemetry;
   readonly clock: Clock;
   readonly ids: IdGenerator;
   readonly domainMetrics: RestaurantOrderDomainMetrics;
@@ -109,7 +115,8 @@ export const createConsumerContainer = (
     db: asValue(resources.mongo.db),
     kafkaConsumer: asValue(resources.kafkaConsumer),
     deadLetters: asValue(resources.deadLetters),
-    log: asValue(resources.log),
+    logger: asValue(resources.logger),
+    useCaseTelemetry: asFunction(() => new UseCaseTelemetry()).singleton(),
     clock: asValue<Clock>({ now: () => new Date() }),
     ids: asValue<IdGenerator>({ next: () => randomUUID() }),
     // `nomnom.restaurants.orders.received` is recorded after the Inbox
@@ -175,9 +182,13 @@ export const createConsumerContainer = (
         inbox,
         deadLetters,
         consumerMetrics,
-        log,
-      }: ConsumerCradle) =>
-        new MessageProcessor({
+        logger,
+      }: ConsumerCradle) => {
+        const log = logger.child({
+          operation: "kafka.consume",
+          "messaging.consumer.group.name": consumerConfig.groupId,
+        });
+        return new MessageProcessor({
           consumer: ORDER_PLACED_CONSUMER,
           group: consumerConfig.groupId,
           handlers: [orderPlaced],
@@ -189,18 +200,22 @@ export const createConsumerContainer = (
             maxIntervalMs: consumerConfig.retryMaxIntervalMs,
           },
           metrics: consumerMetrics,
-          log,
-        }),
+          log: log.info,
+          warn: log.warn,
+        });
+      },
     ).singleton(),
     worker: asFunction(
-      ({ kafkaConsumer, messageProcessor }: ConsumerCradle) =>
+      ({ kafkaConsumer, messageProcessor, consumerConfig }: ConsumerCradle) =>
         new KafkaConsumerWorker({
           client: kafkaConsumer,
           topics: [ORDER_EVENTS_TOPIC],
           handler: messageProcessor,
+          groupId: consumerConfig.groupId,
         }),
     ).singleton(),
   };
   container.register(registrations);
+  instrumentUseCases(container, CONSUMER_USE_CASES);
   return container;
 };

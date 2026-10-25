@@ -11,6 +11,9 @@ command: ["/usr/bin/tini", "--", "node", "dist/cmd/restaurants-relay/main.js"]
 service:
   enabled: false
 
+telemetry:
+  serviceName: restaurants-relay
+
 mongodb:
   pool:
     # Один батч Outbox за цикл плюс продление lease и очистка.

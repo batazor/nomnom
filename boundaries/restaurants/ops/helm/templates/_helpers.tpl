@@ -49,16 +49,19 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- end }}
 
 {{/*
-Бюджет shutdown runtime contract: terminationGracePeriodSeconds покрывает readiness delay
-и drain timeout с запасом, иначе kubelet отправит SIGKILL посреди drain.
+Бюджет shutdown runtime contract: terminationGracePeriodSeconds покрывает readiness delay,
+drain timeout и flush telemetry с запасом, иначе kubelet отправит SIGKILL посреди drain.
 */}}
 {{- define "restaurants.validateShutdownBudget" -}}
-{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds -}}
+{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds .Values.shutdown.telemetryFlushTimeoutSeconds -}}
 {{- if le (int .Values.terminationGracePeriodSeconds) (int $budget) -}}
-{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
+{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds + shutdown.telemetryFlushTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
 {{- end -}}
 {{- if le (int .Values.shutdown.drainTimeoutSeconds) 0 -}}
 {{- fail "shutdown.drainTimeoutSeconds must be positive" -}}
+{{- end -}}
+{{- if le (int .Values.shutdown.telemetryFlushTimeoutSeconds) 0 -}}
+{{- fail "shutdown.telemetryFlushTimeoutSeconds must be positive" -}}
 {{- end -}}
 {{- if eq (int .Values.management.port) (int .Values.service.targetPort) -}}
 {{- fail "management.port must differ from service.targetPort" -}}
@@ -174,6 +177,53 @@ MongoDB: имя базы, timeout и лимиты пула в формате п�
 {{- fail (printf "mongodb.pool.%s must be a positive duration like 500ms, 5s or 5m, got %q" $name (toString $value)) -}}
 {{- end -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+OpenTelemetry resource (ADR 9), как orders.otelEnv: service.instance.id — имя pod
+(downward API), service.version — неизменяемый image.tag (или digest), остальное —
+telemetry.resourceAttributes. Явная env имеет приоритет над envFrom, поэтому
+OTEL_RESOURCE_ATTRIBUTES из env (ConfigMap) была бы перекрыта.
+*/}}
+{{- define "restaurants.otelResourceEnv" -}}
+{{- $version := .Values.image.tag | default .Values.image.digest | default "unknown" -}}
+{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" $version) -}}
+{{- range $key, $value := .Values.telemetry.resourceAttributes }}
+{{- $attrs = append $attrs (printf "%s=%s" $key (toString $value)) -}}
+{{- end }}
+- name: POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: {{ join "," $attrs | quote }}
+{{- end }}
+
+{{/*
+OTEL_* процесса: service.name, resource и OTLP endpoint (traces и metrics), если задан.
+*/}}
+{{- define "restaurants.otelEnv" -}}
+- name: OTEL_SERVICE_NAME
+  value: {{ .Values.telemetry.serviceName | quote }}
+{{- with .Values.telemetry.endpoint }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ . | quote }}
+{{- end }}
+{{ include "restaurants.otelResourceEnv" . }}
+{{- end }}
+
+{{/*
+telemetry: service.name обязателен; service.instance.id и service.version chart задаёт сам.
+*/}}
+{{- define "restaurants.validateTelemetry" -}}
+{{- if not .Values.telemetry.serviceName -}}
+{{- fail "telemetry.serviceName is required" -}}
+{{- end -}}
+{{- range $key := list "service.instance.id" "service.version" "service.name" "service.namespace" -}}
+{{- if hasKey $.Values.telemetry.resourceAttributes $key -}}
+{{- fail (printf "telemetry.resourceAttributes must not set %s: the chart and the application set it" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

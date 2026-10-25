@@ -116,6 +116,7 @@ export class MessageProcessor {
   readonly #retry: RetryPolicy;
   readonly #metrics: ConsumerMetrics;
   readonly #log: (message: string) => void;
+  readonly #warn: (message: string) => void;
   readonly #now: () => Date;
 
   constructor(options: {
@@ -129,6 +130,8 @@ export class MessageProcessor {
     retry: RetryPolicy;
     metrics?: ConsumerMetrics;
     log?: (message: string) => void;
+    /** Dead letters and business rejections; `log` by default. */
+    warn?: (message: string) => void;
     now?: () => Date;
   }) {
     this.#consumer = options.consumer;
@@ -140,7 +143,8 @@ export class MessageProcessor {
     this.#deadLetters = options.deadLetters;
     this.#retry = options.retry;
     this.#metrics = options.metrics ?? noConsumerMetrics;
-    this.#log = options.log ?? console.log;
+    this.#log = options.log ?? (() => {});
+    this.#warn = options.warn ?? this.#log;
     this.#now = options.now ?? (() => new Date());
   }
 
@@ -194,7 +198,7 @@ export class MessageProcessor {
           return "dead-lettered";
         }
         if (errorClass === "business") {
-          this.#log(
+          this.#warn(
             `${this.#consumer} rejected ${envelope.eventType} event_id=${envelope.eventId}: ${describe(error)}`,
           );
           this.#metrics.processed(labels, elapsed(), "business");
@@ -242,7 +246,7 @@ export class MessageProcessor {
       },
     });
     this.#metrics.poisoned(labels, errorClass);
-    this.#log(
+    this.#warn(
       `${this.#consumer} dead-lettered ${labels.eventType || "message"} ${message.topic}/${message.partition}@${message.offset} (${errorClass}): ${describe(error)}`,
     );
   }
