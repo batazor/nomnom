@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "alg": "RS256",
+      "use": "sig",
+      "kid": "nomnom-test-key",
+      "n": "tEbmVR8S_5t6cw1r_tc6tutvzmE8voWQFP8j-mRK8d98L7WK6rFQz8pFydv3STnYDMOcaS9uxb8usQaqKM3qTJQWyqZuRms5q4gWiVRk3HNRjSAE3IzJYFZyxcft0Qy9soJOhbFq6duoiCOsakI6O0jfCQBumw7e2KKz29mUnauC0BsD-I53L0bceoJRSuPo05y9S32u-ioqW0Kk8q44kZ1p8551UT0kZyPBBvzVXf-IoNG_5CsONDUvtNw5FfzDrv_wIZMrshlLi5uRLM75uO2OH4wGgAxn6SKwbz6gEkDO_am0zEQpc2JMk4-RhvJ6hJV-34lgMwpz1s8FbZqLCw",
+      "e": "AQAB"
+    }
+  ]
+}
