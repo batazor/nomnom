@@ -22,15 +22,14 @@ type Query struct {
 
 // OrderView is the read model of this query and its Application DTO.
 type OrderView struct {
-	OrderID         order.ID
-	CustomerID      order.CustomerID
-	RestaurantID    order.RestaurantID
-	Items           []ItemView
-	DeliveryAddress string
-	Total           vo.Money
-	State           order.State
-	PlacedAt        time.Time
-	Facts           []FactView
+	OrderID      order.ID
+	CustomerID   order.CustomerID
+	RestaurantID order.RestaurantID
+	Items        []ItemView
+	Total        vo.Money
+	State        order.State
+	PlacedAt     time.Time
+	Facts        []FactView
 	// Cancellation is nil unless the Order is cancelled.
 	Cancellation *CancellationView
 	// CancellationWindow is nil when the Order State does not admit Order

@@ -75,7 +75,7 @@ var busyCourier = applications.CourierView{
 	Offers:       []applications.Offer{},
 	CurrentDelivery: &applications.Delivery{
 		ID: "delivery-1", OrderID: "order-1", Stage: applications.StagePickedUp,
-		PickupAddress: "ул. Садовая, 8", DropoffAddress: "ул. Лесная, 12",
+		PickupAddress: "ул. Садовая, 8",
 	},
 }
 
@@ -83,7 +83,7 @@ func TestCourierIsTheVerifiedUser(t *testing.T) {
 	fake := &fakeCourierScenarios{view: applications.CourierView{
 		Availability: applications.AvailabilityAvailable,
 		Offers: []applications.Offer{{
-			ID: "offer-1", DeliveryID: "delivery-1", OrderID: "order-1", PickupAddress: "a", DropoffAddress: "b",
+			ID: "offer-1", DeliveryID: "delivery-1", OrderID: "order-1", PickupAddress: "a",
 			ExpiresAt: time.Date(2026, 10, 25, 12, 5, 0, 0, time.UTC),
 		}},
 	}}
@@ -107,7 +107,6 @@ func TestCourierIsTheVerifiedUser(t *testing.T) {
 	delivery := response.GetCourier().GetCurrentDelivery()
 	assert.Equal(t, service.CourierAvailability_COURIER_AVAILABILITY_BUSY, response.GetCourier().GetAvailability())
 	assert.Equal(t, service.CourierDeliveryStage_COURIER_DELIVERY_STAGE_PICKED_UP, delivery.GetStage())
-	assert.Equal(t, "ул. Лесная, 12", delivery.GetDropoffAddress())
 	assert.Equal(t, "order-1", delivery.GetOrderId())
 }
 

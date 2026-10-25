@@ -177,7 +177,7 @@ export function CourierColumn({
               )}
             </span>
           </button>
-          <Route from={delivery.pickupAddress} to={delivery.dropoffAddress} />
+          <Route from={delivery.pickupAddress} />
           <div className="board-card-actions">
             <Button
               isPending={acting.fetching}
@@ -223,7 +223,7 @@ export function CourierColumn({
                     </span>
                     <OfferCountdown expiresAt={offer.expiresAt} />
                   </div>
-                  <Route from={offer.pickupAddress} to={offer.dropoffAddress} />
+                  <Route from={offer.pickupAddress} />
                   <div className="board-card-actions">
                     <Button
                       isPending={accepting.fetching}
@@ -300,17 +300,13 @@ function OfferCountdown({ expiresAt }: { expiresAt: string }) {
   );
 }
 
-function Route({ from, to }: { from: string; to: string }) {
+function Route({ from }: { from: string }) {
   const { t } = useI18n();
   return (
     <dl className="board-route">
       <div>
         <dt>{t("board.courier.from")}</dt>
         <dd>{from}</dd>
-      </div>
-      <div>
-        <dt>{t("board.courier.to")}</dt>
-        <dd>{to}</dd>
       </div>
     </dl>
   );

@@ -326,12 +326,11 @@ type PlaceOrderRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Chosen by the client and unique per Customer; a repeated request returns
 	// the Order it already placed.
-	IdempotencyKey  string            `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	RestaurantId    string            `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
-	Items           []*PlaceOrderItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	DeliveryAddress string            `protobuf:"bytes,4,opt,name=delivery_address,json=deliveryAddress,proto3" json:"delivery_address,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	IdempotencyKey string            `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	RestaurantId   string            `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	Items          []*PlaceOrderItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PlaceOrderRequest) Reset() {
@@ -383,13 +382,6 @@ func (x *PlaceOrderRequest) GetItems() []*PlaceOrderItem {
 		return x.Items
 	}
 	return nil
-}
-
-func (x *PlaceOrderRequest) GetDeliveryAddress() string {
-	if x != nil {
-		return x.DeliveryAddress
-	}
-	return ""
 }
 
 type PlaceOrderResponse struct {
@@ -581,12 +573,11 @@ const file_nomnom_orders_v1_service_proto_rawDesc = "" +
 	"\x0ePlaceOrderItem\x12 \n" +
 	"\fmenu_item_id\x18\x01 \x01(\tR\n" +
 	"menuItemId\x12\x1a\n" +
-	"\bquantity\x18\x02 \x01(\x05R\bquantity\"\xc4\x01\n" +
+	"\bquantity\x18\x02 \x01(\x05R\bquantity\"\xb1\x01\n" +
 	"\x11PlaceOrderRequest\x12'\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x126\n" +
-	"\x05items\x18\x03 \x03(\v2 .nomnom.orders.v1.PlaceOrderItemR\x05items\x12)\n" +
-	"\x10delivery_address\x18\x04 \x01(\tR\x0fdeliveryAddress\"|\n" +
+	"\x05items\x18\x03 \x03(\v2 .nomnom.orders.v1.PlaceOrderItemR\x05itemsJ\x04\b\x04\x10\x05R\x10delivery_address\"|\n" +
 	"\x12PlaceOrderResponse\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1a\n" +
 	"\breplayed\x18\x02 \x01(\bR\breplayed\x12/\n" +

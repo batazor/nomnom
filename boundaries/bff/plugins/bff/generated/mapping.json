@@ -524,10 +524,6 @@
           "mapped": "total"
         },
         {
-          "original": "deliveryAddress",
-          "mapped": "delivery_address"
-        },
-        {
           "original": "placedAt",
           "mapped": "placed_at"
         },
@@ -672,10 +668,6 @@
           "mapped": "pickup_address"
         },
         {
-          "original": "dropoffAddress",
-          "mapped": "dropoff_address"
-        },
-        {
           "original": "expiresAt",
           "mapped": "expires_at"
         }
@@ -699,10 +691,6 @@
         {
           "original": "pickupAddress",
           "mapped": "pickup_address"
-        },
-        {
-          "original": "dropoffAddress",
-          "mapped": "dropoff_address"
         }
       ]
     },
@@ -763,10 +751,6 @@
         {
           "original": "items",
           "mapped": "items"
-        },
-        {
-          "original": "deliveryAddress",
-          "mapped": "delivery_address"
         },
         {
           "original": "idempotencyKey",

@@ -49,7 +49,6 @@ export type MockOrder = {
   restaurant: MockRestaurant;
   items: MockOrderItem[];
   total: MockMoney;
-  deliveryAddress: string;
   placedAt: string;
   milestones: MockOrderMilestone[];
   cancellation: { availableUntil: string } | null;
@@ -218,8 +217,6 @@ export const managedRestaurantIds: ReadonlySet<string> = new Set([
   kitchenEight.id,
   nightBakery.id,
 ]);
-
-export const deliveryAddressFixture = "ул. Лесная, 12, кв. 47";
 
 export function orderLine(item: MockMenuItem, quantity: number): MockOrderItem {
   return {

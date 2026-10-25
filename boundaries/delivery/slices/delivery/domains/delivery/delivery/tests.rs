@@ -5,7 +5,6 @@ fn delivery() -> Delivery {
         DeliveryId::new("delivery-1"),
         OrderId::new("order-1"),
         Address::new(" Restaurant  street 1 ").expect("pickup address"),
-        Address::new("Customer street 2").expect("dropoff address"),
     )
 }
 
@@ -258,7 +257,6 @@ fn restore_validates_courier_and_failure_reason() {
             OrderId::new("order-1"),
             courier.map(CourierId::new),
             Address::new("a").expect("address"),
-            Address::new("b").expect("address"),
             state,
             reason,
         )
@@ -297,7 +295,6 @@ fn active_courier_exists_only_while_assigned_or_picked_up() {
             OrderId::new("order-1"),
             courier_id,
             Address::new("a").expect("address"),
-            Address::new("b").expect("address"),
             state,
             reason,
         )

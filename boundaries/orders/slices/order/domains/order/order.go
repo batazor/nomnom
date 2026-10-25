@@ -46,19 +46,18 @@ func (e NotOrderable) Error() string {
 }
 
 type Order struct {
-	id              ID
-	customerID      CustomerID
-	restaurantID    RestaurantID
-	items           []Item
-	deliveryAddress vo.DeliveryAddress
-	total           vo.Money
-	placedAt        time.Time
-	state           State
-	version         uint64
-	facts           []RecordedFact
-	cancellation    CancellationReason
-	cancelledAt     time.Time
-	events          []DomainEvent
+	id           ID
+	customerID   CustomerID
+	restaurantID RestaurantID
+	items        []Item
+	total        vo.Money
+	placedAt     time.Time
+	state        State
+	version      uint64
+	facts        []RecordedFact
+	cancellation CancellationReason
+	cancelledAt  time.Time
+	events       []DomainEvent
 }
 
 // New builds an Order without recording a domain event; use Place for a new placement.
@@ -67,20 +66,18 @@ func New(
 	customerID CustomerID,
 	restaurantID RestaurantID,
 	items []Item,
-	deliveryAddress vo.DeliveryAddress,
 ) (*Order, error) {
 	total, err := calculateTotal(items)
 	if err != nil {
 		return nil, err
 	}
 	return &Order{
-		id:              id,
-		customerID:      customerID,
-		restaurantID:    restaurantID,
-		items:           append([]Item(nil), items...),
-		deliveryAddress: deliveryAddress,
-		total:           total,
-		state:           StatePlaced,
+		id:           id,
+		customerID:   customerID,
+		restaurantID: restaurantID,
+		items:        append([]Item(nil), items...),
+		total:        total,
+		state:        StatePlaced,
 	}, nil
 }
 
@@ -90,14 +87,13 @@ func Place(
 	customerID CustomerID,
 	restaurantID RestaurantID,
 	items []Item,
-	deliveryAddress vo.DeliveryAddress,
 	placedAt time.Time,
 	orderability OrderabilityContext,
 ) (*Order, error) {
 	if placedAt.IsZero() {
 		return nil, ErrPlacedAtRequired
 	}
-	order, err := New(id, customerID, restaurantID, items, deliveryAddress)
+	order, err := New(id, customerID, restaurantID, items)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +180,6 @@ func (o *Order) Version() uint64                        { return o.version }
 func (o *Order) Total() vo.Money                        { return o.total }
 func (o *Order) CustomerID() CustomerID                 { return o.customerID }
 func (o *Order) RestaurantID() RestaurantID             { return o.restaurantID }
-func (o *Order) DeliveryAddress() vo.DeliveryAddress    { return o.deliveryAddress }
 func (o *Order) PlacedAt() time.Time                    { return o.placedAt }
 func (o *Order) CancellationReason() CancellationReason { return o.cancellation }
 func (o *Order) CancelledAt() time.Time                 { return o.cancelledAt }

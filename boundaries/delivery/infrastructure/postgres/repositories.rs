@@ -145,15 +145,14 @@ impl DeliveryRepository for PostgresStore {
         // duplicate id or order id.
         let inserted = sql!(self, "INSERT", |connection| sqlx::query(
             "INSERT INTO deliveries (id, order_id, courier_id, pickup_address,
-                 dropoff_address, state, failure_reason, authorization_revision, version,
+                 state, failure_reason, authorization_revision, version,
                  created_at, failure_detail)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT DO NOTHING"
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING"
         )
         .bind(delivery.id().as_str())
         .bind(delivery.order_id().as_str())
         .bind(delivery.courier_id().map(CourierId::as_str))
         .bind(delivery.pickup_address().as_str())
-        .bind(delivery.dropoff_address().as_str())
         .bind(delivery_state(delivery.state()))
         .bind(delivery.failure_reason().map(DeliveryFailureReason::as_str))
         .bind(

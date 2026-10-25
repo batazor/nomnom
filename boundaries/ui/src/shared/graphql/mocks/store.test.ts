@@ -64,7 +64,6 @@ function placeInput(overrides: Record<string, unknown> = {}) {
     input: {
       restaurantId: kitchenEight.id,
       items: [{ menuItemId: "menu-tom-yum", quantity: 2 }],
-      deliveryAddress: "ул. Лесная, 12",
       idempotencyKey: "checkout-1",
       ...overrides,
     },

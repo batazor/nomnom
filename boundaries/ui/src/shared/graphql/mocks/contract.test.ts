@@ -20,8 +20,8 @@ import {
   nightBakery,
   restaurantFixtures,
 } from "./fixtures";
-import { publicSchema } from "./schema";
 import { mockCourierId } from "./fulfillment";
+import { publicSchema } from "./schema";
 import { createMockStore } from "./store";
 
 const documents = {
@@ -74,7 +74,6 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
     input: {
       restaurantId: kitchenEight.id,
       items: [{ menuItemId: "menu-bao", quantity: 1 }],
-      deliveryAddress: "ул. Лесная, 12",
       idempotencyKey: "contract-place",
     },
   },

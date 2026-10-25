@@ -354,7 +354,6 @@ fn idempotent_repeat_is_recorded_once() {
     let input = || create_delivery::Input {
         order_id: "order-1".to_owned(),
         pickup_address: "Pickup street 1".to_owned(),
-        dropoff_address: "Dropoff street 2".to_owned(),
     };
     let subject = Subject::Service("fulfillment".to_owned());
 

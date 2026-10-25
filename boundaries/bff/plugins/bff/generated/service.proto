@@ -334,6 +334,7 @@ message MutationApplyCourierDeliveryActionResponse {
  * subscription events of the events subgraph (ADR 36)
  */
 message Order {
+  reserved 7;
   // Order identifier
   string id = 1;
   // Customer-facing lifecycle status
@@ -346,8 +347,6 @@ message Order {
   repeated OrderItem items = 5;
   // Total amount of the order
   Money total = 6;
-  // Delivery address as entered by the customer
-  string delivery_address = 7;
   // Moment the order was placed in RFC 3339
   string placed_at = 8;
   // Milestones in chronological order
@@ -423,12 +422,11 @@ message OrderConnection {
 }
 
 message PlaceOrderInput {
+  reserved 3;
   // Restaurant to order from
   string restaurant_id = 1;
   // Ordered items
   repeated OrderLineInput items = 2;
-  // Delivery address
-  string delivery_address = 3;
   // Client-generated key of this checkout attempt, reused on manual retry
   string idempotency_key = 4;
 }
@@ -696,14 +694,13 @@ enum CourierAvailability {
 
 // Delivery offered to the courier, valid until expiresAt
 message DeliveryOffer {
+  reserved 4;
   // Offer identifier
   string id = 1;
   // Delivery the offer is for
   string delivery_id = 2;
   // Where to pick the order up
   string pickup_address = 3;
-  // Where to deliver the order
-  string dropoff_address = 4;
   // Moment in RFC 3339 after which the offer cannot be accepted
   string expires_at = 5;
   // Customer order the delivery is for
@@ -721,6 +718,7 @@ enum CourierDeliveryStage {
 
 // Delivery the courier is currently carrying out
 message CourierDelivery {
+  reserved 5;
   // Delivery identifier
   string id = 1;
   // Customer order identifier
@@ -729,8 +727,6 @@ message CourierDelivery {
   CourierDeliveryStage stage = 3;
   // Where to pick the order up
   string pickup_address = 4;
-  // Where to deliver the order
-  string dropoff_address = 5;
 }
 
 // Command of the courier over the current delivery

@@ -79,11 +79,10 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 		items = append(items, placeorder.ItemInput{MenuItemID: order.MenuItemID(item.GetMenuItemId()), Quantity: int(item.GetQuantity())})
 	}
 	result, err := s.module.PlaceOrder.Handle(ctx, placeorder.Input{
-		Subject:         subject,
-		IdempotencyKey:  request.GetIdempotencyKey(),
-		RestaurantID:    order.RestaurantID(request.GetRestaurantId()),
-		Items:           items,
-		DeliveryAddress: request.GetDeliveryAddress(),
+		Subject:        subject,
+		IdempotencyKey: request.GetIdempotencyKey(),
+		RestaurantID:   order.RestaurantID(request.GetRestaurantId()),
+		Items:          items,
 	})
 	if err != nil {
 		return nil, transportError(err)
@@ -129,7 +128,6 @@ func orderView(view getorder.OrderView) *ordersv1.Order {
 		CustomerId:       string(view.CustomerID),
 		RestaurantId:     string(view.RestaurantID),
 		Items:            make([]*ordersv1.OrderItem, 0, len(view.Items)),
-		DeliveryAddress:  view.DeliveryAddress,
 		Total:            money(view.Total),
 		State:            orderState(view.State),
 		PlacedAt:         timestamppb.New(view.PlacedAt),

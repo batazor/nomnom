@@ -19,7 +19,7 @@ Handler: [`getorder.go`](getorder.go), unit-тесты: [`getorder_test.go`](get
 
 - **Вход:** `Query{Subject, OrderID}`.
 - **Порядок:** authorization `view` на `order:<id>` до чтения (fail closed, не раскрывает существование) → `Reader.OrderView`. UoW не используется.
-- **Результат:** `OrderView` — read model и Application DTO: состав, total, Delivery Address, Order State, `placedAt`, отражённые факты и причина отрицательного итога.
+- **Результат:** `OrderView` — read model и Application DTO: состав, total, Order State, `placedAt`, отражённые факты и причина отрицательного итога.
 - **Требования:** FR-115; AC-126, AC-127 в OpenSpec change `implement-orders-application-layer`.
 
 ## Acceptance

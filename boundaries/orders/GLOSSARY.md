@@ -31,7 +31,3 @@ _Avoid_: Technical error, retry
 **Fulfillment Fact**:
 Сообщённый соседним контекстом результат шага исполнения заказа, сохранённый в заказе как данные без смены его состояния.
 _Avoid_: Order state, workflow stage
-
-**Delivery Address**:
-Адрес, по которому должен быть доставлен заказ.
-_Avoid_: Restaurant address, coordinates

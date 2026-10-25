@@ -22,7 +22,6 @@ pub struct Delivery {
     order_id: OrderId,
     courier_id: Option<CourierId>,
     pickup_address: Address,
-    dropoff_address: Address,
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
     /// Creation time; `None` for a Delivery stored before it was recorded.
@@ -36,18 +35,12 @@ pub struct Delivery {
 
 impl Delivery {
     #[must_use]
-    pub fn new(
-        id: DeliveryId,
-        order_id: OrderId,
-        pickup_address: Address,
-        dropoff_address: Address,
-    ) -> Self {
+    pub fn new(id: DeliveryId, order_id: OrderId, pickup_address: Address) -> Self {
         Self {
             id,
             order_id,
             courier_id: None,
             pickup_address,
-            dropoff_address,
             state: State::Waiting,
             failure_reason: None,
             created_at_epoch_seconds: None,
@@ -64,11 +57,10 @@ impl Delivery {
         id: DeliveryId,
         order_id: OrderId,
         pickup_address: Address,
-        dropoff_address: Address,
         created_at_epoch_seconds: i64,
     ) -> Self {
-        let mut delivery = Self::new(id, order_id, pickup_address, dropoff_address)
-            .with_created_at(Some(created_at_epoch_seconds));
+        let mut delivery =
+            Self::new(id, order_id, pickup_address).with_created_at(Some(created_at_epoch_seconds));
         delivery.events.push(DomainEvent::DeliveryCreated {
             delivery_id: delivery.id.clone(),
             order_id: delivery.order_id.clone(),
@@ -82,7 +74,6 @@ impl Delivery {
         order_id: OrderId,
         courier_id: Option<CourierId>,
         pickup_address: Address,
-        dropoff_address: Address,
         state: State,
         failure_reason: Option<DeliveryFailureReason>,
     ) -> Result<Self, DeliveryValidationError> {
@@ -106,7 +97,6 @@ impl Delivery {
             order_id,
             courier_id,
             pickup_address,
-            dropoff_address,
             state,
             failure_reason,
             created_at_epoch_seconds: None,
@@ -318,11 +308,6 @@ impl Delivery {
     #[must_use]
     pub fn pickup_address(&self) -> &Address {
         &self.pickup_address
-    }
-
-    #[must_use]
-    pub fn dropoff_address(&self) -> &Address {
-        &self.dropoff_address
     }
 
     #[must_use]

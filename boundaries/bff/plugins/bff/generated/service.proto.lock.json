@@ -180,11 +180,13 @@
         "restaurant": 4,
         "items": 5,
         "total": 6,
-        "deliveryAddress": 7,
         "placedAt": 8,
         "milestones": 9,
         "cancellation": 10
-      }
+      },
+      "reservedNumbers": [
+        7
+      ]
     },
     "OrderConnection": {
       "fields": {
@@ -196,9 +198,11 @@
       "fields": {
         "restaurantId": 1,
         "items": 2,
-        "deliveryAddress": 3,
         "idempotencyKey": 4
-      }
+      },
+      "reservedNumbers": [
+        3
+      ]
     },
     "PlaceOrderPayload": {
       "fields": {
@@ -439,17 +443,17 @@
     },
     "Kitchen": {
       "fields": {
+        "restaurantId": 3,
         "restaurant": 1,
-        "orders": 2,
-        "restaurantId": 3
+        "orders": 2
       }
     },
     "Courier": {
       "fields": {
+        "id": 4,
         "availability": 1,
         "offers": 2,
-        "currentDelivery": 3,
-        "id": 4
+        "currentDelivery": 3
       }
     },
     "KitchenActionInput": {
@@ -492,18 +496,22 @@
         "deliveryId": 2,
         "orderId": 6,
         "pickupAddress": 3,
-        "dropoffAddress": 4,
         "expiresAt": 5
-      }
+      },
+      "reservedNumbers": [
+        4
+      ]
     },
     "CourierDelivery": {
       "fields": {
         "id": 1,
         "orderId": 2,
         "stage": 3,
-        "pickupAddress": 4,
-        "dropoffAddress": 5
-      }
+        "pickupAddress": 4
+      },
+      "reservedNumbers": [
+        5
+      ]
     },
     "LookupOrderByIdRequestKey": {
       "fields": {

@@ -19,7 +19,7 @@
 ### Requirement: Идемпотентный Create Delivery
 **ID:** FR-306
 
-Fulfillment process SHALL создавать `Delivery` в состоянии waiting из `Order ID`, pickup и dropoff адресов. Ключ идемпотентности — `Order ID`: повтор с теми же данными MUST возвращать уже созданную `Delivery`, повтор с другими адресами MUST отклоняться как already exists. Создание MUST NOT запускать поиск курьера.
+Fulfillment process SHALL создавать `Delivery` в состоянии waiting из `Order ID` и pickup-адреса ресторана. Ключ идемпотентности — `Order ID`: повтор с теми же данными MUST возвращать уже созданную `Delivery`, повтор с другим адресом MUST отклоняться как already exists. Создание MUST NOT запускать поиск курьера.
 
 #### Scenario: Первый запрос доставки
 **ID:** AC-313
@@ -42,7 +42,7 @@ Fulfillment process SHALL создавать `Delivery` в состоянии wa
 #### Scenario: Пустой адрес
 **ID:** AC-316
 
-- **WHEN** pickup или dropoff адрес пуст после нормализации пробелов
+- **WHEN** pickup-адрес пуст после нормализации пробелов
 - **THEN** сценарий отклоняется как некорректный запрос и `Delivery` не создаётся
 
 ### Requirement: Find Courier
@@ -180,7 +180,7 @@ Fulfillment process SHALL создавать `Delivery` в состоянии wa
 **ID:** AC-333
 
 - **WHEN** курьер с pending непросроченным offer запрашивает доступные offers
-- **THEN** возвращён этот offer с pickup и dropoff адресами и моментом истечения
+- **THEN** возвращён этот offer с pickup-адресом и моментом истечения
 
 #### Scenario: Закрытые и чужие offers не видны
 **ID:** AC-334

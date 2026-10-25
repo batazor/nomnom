@@ -72,10 +72,9 @@ func refusal(code codes.Code, reason string, metadata map[string]string) error {
 }
 
 var input = applications.Input{
-	RestaurantID:    "restaurant-1",
-	Lines:           []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
-	DeliveryAddress: "ул. Садовая, 8",
-	IdempotencyKey:  "attempt-1",
+	RestaurantID:   "restaurant-1",
+	Lines:          []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
+	IdempotencyKey: "attempt-1",
 }
 
 // FR-500: PlaceOrder goes to orders on behalf of the customer with the key.
@@ -88,7 +87,6 @@ func TestPlaceOrderCarriesCustomerAndIdempotencyKey(t *testing.T) {
 	assert.Equal(t, "order-1", orderID)
 	assert.Equal(t, "attempt-1", server.got.GetIdempotencyKey())
 	assert.Equal(t, "restaurant-1", server.got.GetRestaurantId())
-	assert.Equal(t, "ул. Садовая, 8", server.got.GetDeliveryAddress())
 	assert.Equal(t, "menu-pho", server.got.GetItems()[0].GetMenuItemId())
 	assert.Equal(t, int32(2), server.got.GetItems()[0].GetQuantity())
 	assert.Equal(t, []string{"Bearer token-nomnom.orders"}, server.seenMD.Get("authorization"))

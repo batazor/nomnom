@@ -67,11 +67,10 @@ func newEnv(t *testing.T) env {
 
 func validInput() placeorder.Input {
 	return placeorder.Input{
-		Subject:         customer,
-		IdempotencyKey:  "key-1",
-		RestaurantID:    "restaurant-1",
-		Items:           []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 2}, {MenuItemID: "soup", Quantity: 1}},
-		DeliveryAddress: " Main  street 1 ",
+		Subject:        customer,
+		IdempotencyKey: "key-1",
+		RestaurantID:   "restaurant-1",
+		Items:          []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 2}, {MenuItemID: "soup", Quantity: 1}},
 	}
 }
 
@@ -88,7 +87,6 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 	assert.Equal(t, order.StatePlaced, placed.State)
 	assert.Equal(t, order.CustomerID("customer-1"), placed.CustomerID)
 	assert.Equal(t, now, placed.PlacedAt)
-	assert.Equal(t, "Main street 1", placed.DeliveryAddress.String())
 
 	records := e.store.OutboxRecords()
 	require.Len(t, records, 1)
@@ -176,7 +174,6 @@ func TestPlaceOrderValidatesInputBeforeCatalog(t *testing.T) {
 			mutate:  func(in *placeorder.Input) { in.Items[1].MenuItemID = in.Items[0].MenuItemID },
 			wantErr: order.ErrDuplicateMenuItem,
 		},
-		{name: "empty address", mutate: func(in *placeorder.Input) { in.DeliveryAddress = "  " }, wantErr: vo.ErrInvalidDeliveryAddress},
 		{name: "no idempotency key", mutate: func(in *placeorder.Input) { in.IdempotencyKey = "" }, wantErr: application.ErrInvalidInput},
 		{name: "no restaurant", mutate: func(in *placeorder.Input) { in.RestaurantID = "" }, wantErr: application.ErrInvalidInput},
 		{

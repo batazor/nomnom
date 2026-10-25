@@ -54,9 +54,8 @@ type Line struct {
 }
 
 type Input struct {
-	RestaurantID    string
-	Lines           []Line
-	DeliveryAddress string
+	RestaurantID string
+	Lines        []Line
 	// IdempotencyKey identifies the checkout attempt; a retry with the same key
 	// returns the Order placed by the first attempt.
 	IdempotencyKey string

@@ -4,7 +4,6 @@ import type {
   OrderStatus,
 } from "../generated/graphql";
 import {
-  deliveryAddressFixture,
   kitchenEight,
   type MockOrder,
   orderLine,
@@ -41,7 +40,6 @@ function buildOrder(spec: ScenarioSpec, now: Date): MockOrder {
     restaurant: kitchenEight,
     items: defaultItems,
     total: orderTotal(defaultItems),
-    deliveryAddress: deliveryAddressFixture,
     placedAt: at(now, placed),
     milestones: [
       { kind: "PLACED", occurredAt: at(now, placed) },

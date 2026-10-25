@@ -37,13 +37,12 @@ func WithFacts(facts ...order.RecordedFact) Option {
 func New(t testing.TB, id order.ID, options ...Option) *order.Order {
 	t.Helper()
 	snapshot := order.Snapshot{
-		ID:              id,
-		CustomerID:      "customer-1",
-		RestaurantID:    "restaurant-1",
-		Items:           []order.Item{order.NewItem("menu-1", Quantity(t, 2), Money(t, "10"))},
-		DeliveryAddress: Address(t, "Main street 1"),
-		PlacedAt:        PlacedAt,
-		State:           order.StatePlaced,
+		ID:           id,
+		CustomerID:   "customer-1",
+		RestaurantID: "restaurant-1",
+		Items:        []order.Item{order.NewItem("menu-1", Quantity(t, 2), Money(t, "10"))},
+		PlacedAt:     PlacedAt,
+		State:        order.StatePlaced,
 	}
 	for _, option := range options {
 		option(&snapshot)
@@ -71,11 +70,4 @@ func Quantity(t testing.TB, value int) vo.Quantity {
 	quantity, err := vo.NewQuantity(value)
 	require.NoError(t, err)
 	return quantity
-}
-
-func Address(t testing.TB, value string) vo.DeliveryAddress {
-	t.Helper()
-	address, err := vo.NewDeliveryAddress(value)
-	require.NoError(t, err)
-	return address
 }

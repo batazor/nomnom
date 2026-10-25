@@ -69,7 +69,6 @@ fragment CourierWork on Courier {
     deliveryId
     orderId
     pickupAddress
-    dropoffAddress
     expiresAt
   }
   currentDelivery {
@@ -77,7 +76,6 @@ fragment CourierWork on Courier {
     orderId
     stage
     pickupAddress
-    dropoffAddress
   }
 }
 

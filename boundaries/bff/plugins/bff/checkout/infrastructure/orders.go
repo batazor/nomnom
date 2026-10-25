@@ -28,9 +28,8 @@ var _ applications.OrderPlacer = (*Orders)(nil)
 
 func (o *Orders) PlaceOrder(ctx context.Context, input applications.Input) (string, error) {
 	request := &ordersv1.PlaceOrderRequest{
-		IdempotencyKey:  input.IdempotencyKey,
-		RestaurantId:    input.RestaurantID,
-		DeliveryAddress: input.DeliveryAddress,
+		IdempotencyKey: input.IdempotencyKey,
+		RestaurantId:   input.RestaurantID,
 	}
 	for _, line := range input.Lines {
 		request.Items = append(request.Items, &ordersv1.PlaceOrderItem{

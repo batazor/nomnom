@@ -99,7 +99,7 @@ Managed mode включён. `go_package_prefix` задаётся в `buf.gen.ya
 | Категория ошибки | gRPC code | Пример `ErrorInfo.reason` |
 | --- | --- | --- |
 | Сущность не найдена | `NOT_FOUND` | `ORDER_NOT_FOUND` |
-| Запрос или поле некорректны | `INVALID_ARGUMENT` | `INVALID_DELIVERY_ADDRESS` |
+| Запрос или поле некорректны | `INVALID_ARGUMENT` | `INVALID_ORDER` |
 | Текущее состояние запрещает операцию | `FAILED_PRECONDITION` | `ORDER_ALREADY_COMPLETED` |
 | Ресурс с таким идентификатором уже существует | `ALREADY_EXISTS` | `PAYMENT_ALREADY_EXISTS` |
 | Ошибка аутентификации | `UNAUTHENTICATED` | `AUTHENTICATION_REQUIRED` |

@@ -96,7 +96,7 @@ pub(super) fn courier_from_row(row: &PgRow) -> Result<Courier, RepositoryError> 
     )
 }
 
-pub(super) const DELIVERY_COLUMNS: &str = "id, order_id, courier_id, pickup_address, dropoff_address, \
+pub(super) const DELIVERY_COLUMNS: &str = "id, order_id, courier_id, pickup_address, \
      state, failure_reason, failure_detail, authorization_revision, version, created_at";
 
 pub(super) fn delivery_from_row(row: &PgRow) -> Result<Delivery, RepositoryError> {
@@ -112,7 +112,6 @@ pub(super) fn delivery_from_row(row: &PgRow) -> Result<Delivery, RepositoryError
         OrderId::new(column::<String>(row, "order_id")?),
         column::<Option<String>>(row, "courier_id")?.map(CourierId::new),
         address(column(row, "pickup_address")?)?,
-        address(column(row, "dropoff_address")?)?,
         parse_delivery_state(column(row, "state")?)?,
         failure_reason,
     )

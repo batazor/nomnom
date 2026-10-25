@@ -5,7 +5,7 @@
 - **Тип:** Command.
 - **Actor:** Fulfillment process `orders`.
 - **Намерение:** Запросить доставку оформленного заказа.
-- **Результат:** Идемпотентно создана `Delivery` с pickup/dropoff references и данными контекста.
+- **Результат:** Идемпотентно создана `Delivery` с pickup-адресом ресторана и данными контекста.
 
 ## Границы
 
@@ -24,7 +24,7 @@ sequenceDiagram
     participant Store as Unit of Work
     Workflow->>API: запросить доставку
     API->>App: идемпотентная команда
-    App->>Delivery: создать из pickup/dropoff data
+    App->>Delivery: создать из pickup address
     App->>Store: сохранить Delivery
     Store-->>App: commit
     App-->>Workflow: delivery_id

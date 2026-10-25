@@ -49,15 +49,13 @@ func TestOrderComputesTotalAndRejectsDuplicateItems(t *testing.T) {
 	require.NoError(t, err)
 	quantity, err := vo.NewQuantity(2)
 	require.NoError(t, err)
-	address, err := vo.NewDeliveryAddress("Main street 1")
-	require.NoError(t, err)
 	item := NewItem("menu-1", quantity, price)
 
-	order, err := New("order-1", "customer-1", "restaurant-1", []Item{item}, address)
+	order, err := New("order-1", "customer-1", "restaurant-1", []Item{item})
 	require.NoError(t, err)
 	assert.Equal(t, "5 EUR", order.Total().String())
 
-	_, err = New("order-2", "customer-1", "restaurant-1", []Item{item, item}, address)
+	_, err = New("order-2", "customer-1", "restaurant-1", []Item{item, item})
 	require.ErrorIs(t, err, ErrDuplicateMenuItem)
 }
 
@@ -67,14 +65,11 @@ func newTestOrder(t *testing.T) *Order {
 	require.NoError(t, err)
 	quantity, err := vo.NewQuantity(1)
 	require.NoError(t, err)
-	address, err := vo.NewDeliveryAddress("Main street 1")
-	require.NoError(t, err)
 	order, err := New(
 		"order-1",
 		"customer-1",
 		"restaurant-1",
 		[]Item{NewItem("menu-1", quantity, price)},
-		address,
 	)
 	require.NoError(t, err)
 	return order

@@ -59,15 +59,14 @@ type Milestone struct {
 
 // OrderView is the order as the customer UI shows it.
 type OrderView struct {
-	ID              string
-	Status          Status
-	EndReason       EndReason
-	Restaurant      Restaurant
-	Items           []ItemView
-	Total           Money
-	DeliveryAddress string
-	PlacedAt        time.Time
-	Milestones      []Milestone
+	ID         string
+	Status     Status
+	EndReason  EndReason
+	Restaurant Restaurant
+	Items      []ItemView
+	Total      Money
+	PlacedAt   time.Time
+	Milestones []Milestone
 	// AvailableUntil is set only while the customer may request cancellation.
 	AvailableUntil *time.Time
 }

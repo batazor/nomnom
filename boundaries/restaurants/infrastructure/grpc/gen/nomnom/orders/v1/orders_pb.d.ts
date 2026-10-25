@@ -159,11 +159,6 @@ export declare type Order = Message<"nomnom.orders.v1.Order"> & {
   items: OrderItem[];
 
   /**
-   * @generated from field: string delivery_address = 5;
-   */
-  deliveryAddress: string;
-
-  /**
    * @generated from field: nomnom.orders.v1.Money total = 6;
    */
   total?: Money | undefined;

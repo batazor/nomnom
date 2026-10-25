@@ -3,7 +3,6 @@ import { GraphQLError } from "graphql";
 import {
   bffInfoFixture,
   createOrderScenarios,
-  deliveryAddressFixture,
   liveOrderAt,
   liveOrderId,
   liveOrderStepCount,
@@ -32,7 +31,6 @@ type PageArgs = { first: number; after?: string | null };
 type PlaceOrderInput = {
   restaurantId: string;
   items: { menuItemId: string; quantity: number }[];
-  deliveryAddress: string;
   idempotencyKey: string;
 };
 
@@ -264,7 +262,6 @@ export function createMockStore({
       restaurant,
       items,
       total: orderTotal(items),
-      deliveryAddress: input.deliveryAddress || deliveryAddressFixture,
       placedAt: placedAt.toISOString(),
       milestones: [{ kind: "PLACED", occurredAt: placedAt.toISOString() }],
       cancellation: {

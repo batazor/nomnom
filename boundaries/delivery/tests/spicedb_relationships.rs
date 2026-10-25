@@ -170,7 +170,6 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &DatabaseConfig) -> 
             DeliveryId::new(delivery.as_str()),
             OrderId::new(order.as_str()),
             Address::new("Restaurant street 1").expect("pickup"),
-            Address::new("Customer street 2").expect("dropoff"),
         ),
     )
     .expect("seed delivery");

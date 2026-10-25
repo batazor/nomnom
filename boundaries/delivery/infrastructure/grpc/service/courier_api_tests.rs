@@ -235,7 +235,6 @@ impl Api {
             .create_delivery(as_orders_worker(CreateDeliveryRequest {
                 order_id: order.to_owned(),
                 pickup_address: "Restaurant street 1".to_owned(),
-                dropoff_address: "Customer street 2".to_owned(),
             }))
             .await
             .expect("created")
@@ -349,7 +348,6 @@ async fn courier_accepts_picks_up_and_completes_the_delivery() {
                 courier_id: "courier-1".to_owned(),
                 state: DeliveryState::Assigned as i32,
                 pickup_address: "Restaurant street 1".to_owned(),
-                dropoff_address: "Customer street 2".to_owned(),
             }),
             courier_status: CourierStatus::Busy as i32,
         }

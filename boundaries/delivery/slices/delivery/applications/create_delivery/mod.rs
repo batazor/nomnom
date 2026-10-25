@@ -18,7 +18,6 @@ use super::outbox::{DeliveryOutbox, publish};
 pub struct Input {
     pub order_id: String,
     pub pickup_address: String,
-    pub dropoff_address: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -67,7 +66,6 @@ impl<U: UnitOfWork> Handler<'_, U> {
     ) -> Result<Output, DeliveryApplicationError> {
         let order_id = order_id(&input.order_id)?;
         let pickup_address = Address::new(&input.pickup_address)?;
-        let dropoff_address = Address::new(&input.dropoff_address)?;
         self.authorization.check(
             subject,
             DeliveryPermission::CreateDelivery,
@@ -75,13 +73,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
         )?;
 
         if let Some(existing) = self.deliveries.find_by_order(&order_id)? {
-            return replay(&existing, &pickup_address, &dropoff_address);
+            return replay(&existing, &pickup_address);
         }
         let mut delivery = Delivery::create(
             DeliveryId::new(self.ids.next_id()),
             order_id.clone(),
             pickup_address.clone(),
-            dropoff_address.clone(),
             self.clock.now_epoch_seconds(),
         );
         let delivery_id = delivery.id().clone();
@@ -97,7 +94,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
             }),
             Err(InsertError::Conflict) => {
                 let existing = self.concurrent_delivery(&order_id)?;
-                replay(&existing, &pickup_address, &dropoff_address)
+                replay(&existing, &pickup_address)
             }
             Err(InsertError::Failed(error)) => Err(error),
         }
@@ -119,10 +116,8 @@ impl<U: UnitOfWork> Handler<'_, U> {
 fn replay(
     existing: &Delivery,
     pickup_address: &Address,
-    dropoff_address: &Address,
 ) -> Result<Output, DeliveryApplicationError> {
-    if existing.pickup_address() == pickup_address && existing.dropoff_address() == dropoff_address
-    {
+    if existing.pickup_address() == pickup_address {
         Ok(Output {
             delivery_id: existing.id().clone(),
             created: false,
@@ -148,7 +143,6 @@ mod tests {
         Input {
             order_id: "order-1".to_owned(),
             pickup_address: pickup.to_owned(),
-            dropoff_address: "Customer street 2".to_owned(),
         }
     }
 

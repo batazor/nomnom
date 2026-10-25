@@ -36,8 +36,6 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 	price := mustPolicyMoney(t, "10")
 	quantity, err := vo.NewQuantity(2)
 	require.NoError(t, err)
-	address, err := vo.NewDeliveryAddress("Main street 1")
-	require.NoError(t, err)
 	items := []Item{NewItem("menu-1", quantity, price)}
 
 	tests := []struct {
@@ -58,7 +56,7 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			order, err := Place("order-1", "customer-1", "restaurant-1", items, address, tt.placedAt, tt.context)
+			order, err := Place("order-1", "customer-1", "restaurant-1", items, tt.placedAt, tt.context)
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 				return

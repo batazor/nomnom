@@ -42,7 +42,7 @@ Layout начинается с mobile viewport, не создаёт horizontal o
 
 Server state принадлежит GraphQL client cache. Local UI state хранит только modal/selection/preferences, form state принадлежит форме. Глобальный store-копия GraphQL entities не вводится.
 
-Корзина — local-first, одна на ресторан: feature `view-restaurant` хранит в `localStorage` только `menuItemId` и количество (ключ `nomnom.cart.v1.<restaurantId>`), без цен и персональных данных; адрес доставки не сохраняется. Каждый доступ к storage обёрнут в `try/catch`, без storage корзина работает в памяти. Цены берутся из текущего меню, сумма корзины считается точно по десятичным строкам и показывается как предварительная; авторитетны состав и итог заказа из `placeOrder`. Серверная корзина и перенос между устройствами — вне текущего scope.
+Корзина — local-first, одна на ресторан: feature `view-restaurant` хранит в `localStorage` только `menuItemId` и количество (ключ `nomnom.cart.v1.<restaurantId>`), без цен и персональных данных. Каждый доступ к storage обёрнут в `try/catch`, без storage корзина работает в памяти. Цены берутся из текущего меню, сумма корзины считается точно по десятичным строкам и показывается как предварительная; авторитетны состав и итог заказа из `placeOrder`. Серверная корзина и перенос между устройствами — вне текущего scope.
 
 Operations colocated в `features/**/*.graphql`; документы и TypeScript-типы генерируются `graphql-codegen` client preset из публичной schema. Runtime client сейчас provisional urql и скрыт provider/transport boundary; окончательный выбор между urql и Apollo принимается после реальных cache, pagination, offline и auth-refresh требований.
 

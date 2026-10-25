@@ -115,12 +115,11 @@ func requestCancellationError(err error) error {
 
 func snapshot(order *ordersv1.Order) applications.OrderSnapshot {
 	result := applications.OrderSnapshot{
-		ID:              order.GetOrderId(),
-		RestaurantID:    order.GetRestaurantId(),
-		State:           orderStates[order.GetState()],
-		Total:           money(order.GetTotal()),
-		DeliveryAddress: order.GetDeliveryAddress(),
-		PlacedAt:        order.GetPlacedAt().AsTime(),
+		ID:           order.GetOrderId(),
+		RestaurantID: order.GetRestaurantId(),
+		State:        orderStates[order.GetState()],
+		Total:        money(order.GetTotal()),
+		PlacedAt:     order.GetPlacedAt().AsTime(),
 	}
 	for _, item := range order.GetItems() {
 		result.Items = append(result.Items, applications.OrderLine{

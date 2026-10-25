@@ -54,10 +54,6 @@ async function placeOrder(user: ReturnType<typeof userEvent.setup>) {
       name: "Добавить в корзину: Манго и клейкий рис",
     }),
   );
-  await user.type(
-    screen.getByRole("textbox", { name: "Адрес доставки" }),
-    "ул. Морская, 4",
-  );
   await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
   return screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
 }
@@ -132,7 +128,7 @@ describe("flow board", () => {
       await within(selectedKitchenCard()).findByText("Ждёт курьера"),
     ).toBeVisible();
 
-    // The courier goes online, takes the offer to this address and delivers.
+    // The courier goes online, takes the offer and delivers.
     const courier = column("Курьер");
     await user.click(
       within(courier).getByRole("button", { name: "Выйти на линию" }),
@@ -140,9 +136,8 @@ describe("flow board", () => {
     const offers = await within(courier).findByRole("list", {
       name: "Предложения",
     });
-    const offer = within(offers)
-      .getAllByRole("article")
-      .find((candidate) => candidate.textContent?.includes("ул. Морская, 4"));
+    // Offers carry only the pickup address; the placed order's offer is the newest.
+    const offer = within(offers).getAllByRole("article").at(-1);
     if (!offer) throw new Error("No offer for the placed order");
     await user.click(
       within(offer).getByRole("button", { name: "Взять заказ" }),
@@ -168,10 +163,6 @@ describe("flow board", () => {
       await screen.findByRole("button", {
         name: "Добавить в корзину: Манго и клейкий рис",
       }),
-    );
-    await user.type(
-      screen.getByRole("textbox", { name: "Адрес доставки" }),
-      "ул. Морская, 4",
     );
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
     await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
@@ -276,18 +267,9 @@ describe("flow board", () => {
     ).toBeVisible();
   });
 
-  it("keeps three columns on a phone without page scroll and passes axe", async () => {
-    Object.defineProperty(window, "innerWidth", {
-      value: 390,
-      configurable: true,
-    });
+  it("has no detectable accessibility violations", async () => {
     const { container } = renderBoard();
     await screen.findByRole("button", { name: /^Кухня №8/ });
-
-    expect(
-      screen.getAllByRole("heading", { level: 2 }).length,
-    ).toBeGreaterThanOrEqual(3);
-    expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
     const result = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },

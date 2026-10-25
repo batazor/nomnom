@@ -190,9 +190,8 @@ func (d *Delivery) Create(ctx context.Context, request neighbours.DeliveryReques
 			application.InvalidInput("pickup_address", "restaurant has no address"))
 	}
 	_, err = d.client.CreateDelivery(ctx, &deliveryv1.CreateDeliveryRequest{
-		OrderId:        request.OrderID,
-		PickupAddress:  pickup,
-		DropoffAddress: request.DeliveryAddress,
+		OrderId:       request.OrderID,
+		PickupAddress: pickup,
 	})
 	return mapError("delivery.CreateDelivery", err)
 }

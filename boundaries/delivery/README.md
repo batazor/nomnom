@@ -29,7 +29,7 @@ Rust.
 | **Register Courier** | Оператор платформы | Создать курьера в системе доставки | Создан `Courier` с исходным состоянием доступности | Authoritative authorization в `delivery` |
 | **Set Courier Availability** | Курьер или авторизованный диспетчер | Изменить доступность курьера для новых назначений | `Courier` отмечен available или unavailable; позиция курьера не изменена | Не совмещается с location update |
 | **Update Courier Location** | Курьерское приложение | Обновить последнюю известную позицию курьера | Сохранена актуальная доступная `delivery` позиция курьера | Частота, точность и retention определяются отдельно |
-| **Create Delivery** | Fulfillment process `orders` | Запросить доставку оформленного заказа | Создана идемпотентная `Delivery` с необходимыми pickup/dropoff references и данными контекста | Вызывается Temporal Activity через API `delivery`; поиск курьера не запускает — его начинает Dispatch Deliveries |
+| **Create Delivery** | Fulfillment process `orders` | Запросить доставку оформленного заказа | Создана идемпотентная `Delivery` с pickup-адресом ресторана и данными контекста | Вызывается Temporal Activity через API `delivery`; поиск курьера не запускает — его начинает Dispatch Deliveries |
 | **Find Courier** | Процесс назначения `delivery` | Подобрать подходящего доступного курьера | Выбран кандидат или зафиксировано отсутствие кандидата; алгоритм остаётся внутри `delivery` | Может запускаться запросом orchestration, но выбор выполняет `delivery` |
 | **Offer Delivery** | Процесс назначения `delivery` | Предложить конкретному курьеру принять доставку | Создано актуальное ограниченное по времени `Delivery Offer` и `DeliveryOffered` в Outbox; `Courier Assignment` ещё не создан | Учитывает результат Find Courier |
 | **Accept Delivery Offer** | Курьер | Принять актуальное предложение | Ровно один актуальный offer успешно превращён в `Courier Assignment`; курьер и доставка зарезервированы | Конкурентное принятие защищается доменным инвариантом и атомарной записью; публикует бизнес-факт через Outbox |
@@ -82,8 +82,8 @@ RPC сервиса `DeliveryService`:
 
 | RPC | Use case | Ответ |
 | --- | --- | --- |
-| `GetCourierCurrentDelivery` | Get Courier Current Delivery | `courier_status` и `Delivery` (`ASSIGNED`/`PICKED_UP` с `pickup_address` и `dropoff_address`) или пусто; незарегистрированный курьер — `NOT_FOUND` |
-| `CreateDelivery` | Create Delivery (`order_id`, `pickup_address`, `dropoff_address`) | `delivery_id`, `created = false` для идентичного повтора; другие адреса — `ALREADY_EXISTS` |
+| `GetCourierCurrentDelivery` | Get Courier Current Delivery | `courier_status` и `Delivery` (`ASSIGNED`/`PICKED_UP` с `pickup_address`) или пусто; незарегистрированный курьер — `NOT_FOUND` |
+| `CreateDelivery` | Create Delivery (`order_id`, `pickup_address`) | `delivery_id`, `created = false` для идентичного повтора; другой адрес — `ALREADY_EXISTS` |
 | `ReplanDelivery` | Replan Delivery (`order_id`) | `delivery_id`, `offered_courier_id` (пусто без кандидата); после Pickup — `FAILED_PRECONDITION` |
 | `CancelDelivery` | Cancel Delivery (`order_id`, `reason`) | `cancelled = true` (включая повтор) или `cancelled = false` + `rejection_reason` (`already_picked_up`, `already_closed`) — бизнес-результат, не gRPC-ошибка |
 | `RegisterCourier` | Register Courier (`courier_id` = user id курьера) | `courier_id`, `status`; повтор — `ALREADY_EXISTS` |
@@ -283,7 +283,7 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test postgres_store
 | Тип | Минимальные поля | Назначение |
 | --- | --- | --- |
 | `Courier` — aggregate root | `id`, `status` | Хранит доступность курьера для назначения |
-| `Delivery` — aggregate root | `id`, `orderId`, `courierId`, `pickupAddress`, `dropoffAddress`, `status`, `failureReason` | Управляет назначением курьера и выполнением доставки |
+| `Delivery` — aggregate root | `id`, `orderId`, `courierId`, `pickupAddress`, `status`, `failureReason` | Управляет назначением курьера и выполнением доставки |
 | `DeliveryOffer` — aggregate root | `id`, `deliveryId`, `courierId`, `offeredAt`, `expiresAt`, `state` | Ограниченное по времени предложение одному курьеру |
 
 Состояния `Courier`: `available`, `busy`, `unavailable` (вне линии, не получает новых назначений). Состояния `Delivery`: `waiting`, `assigned`, `pickedUp`, `delivered`, `failed`, `cancelled`. В `DeliveryState` контракта `nomnom.delivery.v1` значения для `cancelled` пока нет: отменённая доставка не бывает текущей доставкой курьера. Состояния `DeliveryOffer`: `pending`, `accepted`, `rejected`, `withdrawn`, `expired`. Pending offer после `expiresAt` уже закрыт для принятия и отклонения; переход `Expire` (только из `pending` и только при `now > expiresAt`) сохраняет это как `expired`. Повторный `Expire` — `AlreadyApplied`, `Expire` из других состояний и `Accept`/`Reject`/`Withdraw` из `expired` — `Invalid`.

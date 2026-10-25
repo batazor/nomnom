@@ -133,7 +133,6 @@ pub fn new_delivery(id: &str) -> Delivery {
         DeliveryId::new(id),
         OrderId::new(format!("order-of-{id}")),
         Address::new("Restaurant street 1").expect("pickup"),
-        Address::new("Customer street 2").expect("dropoff"),
     )
 }
 

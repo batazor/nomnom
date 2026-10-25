@@ -30,7 +30,6 @@ type Delivery = {
   offerId: string;
   stage: "SEARCHING" | "ASSIGNED" | "PICKED_UP" | "COMPLETED";
   pickupAddress: string;
-  dropoffAddress: string;
 };
 
 type KitchenActionInput = {
@@ -148,7 +147,6 @@ export function createFulfillment({
   }
 
   function createDelivery(order: KitchenOrder) {
-    const placed = orders.get(order.orderId);
     const id = `delivery-${order.orderId}`;
     deliveries.set(order.orderId, {
       id,
@@ -156,7 +154,6 @@ export function createFulfillment({
       offerId: `offer-${order.orderId}`,
       stage: "SEARCHING",
       pickupAddress: restaurant(order.restaurantId)?.address ?? "",
-      dropoffAddress: placed?.deliveryAddress ?? "",
     });
   }
 
@@ -218,7 +215,6 @@ export function createFulfillment({
                 deliveryId: delivery.id,
                 orderId: delivery.orderId,
                 pickupAddress: delivery.pickupAddress,
-                dropoffAddress: delivery.dropoffAddress,
                 expiresAt,
               }))
           : [],
@@ -228,7 +224,6 @@ export function createFulfillment({
             orderId: current.orderId,
             stage: current.stage,
             pickupAddress: current.pickupAddress,
-            dropoffAddress: current.dropoffAddress,
           }
         : null,
     };

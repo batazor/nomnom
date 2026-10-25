@@ -5,7 +5,6 @@ CREATE TABLE orders (
     id                     TEXT PRIMARY KEY,
     customer_id            TEXT        NOT NULL,
     restaurant_id          TEXT        NOT NULL,
-    delivery_address       TEXT        NOT NULL,
     total_amount           NUMERIC     NOT NULL,
     total_currency         TEXT        NOT NULL,
     state                  TEXT        NOT NULL,

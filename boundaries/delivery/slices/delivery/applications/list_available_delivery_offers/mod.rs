@@ -17,7 +17,6 @@ pub struct AvailableDeliveryOfferView {
     pub delivery_id: DeliveryId,
     pub order_id: OrderId,
     pub pickup_address: Address,
-    pub dropoff_address: Address,
     pub expires_at_epoch_seconds: i64,
 }
 
@@ -113,7 +112,6 @@ mod tests {
                 delivery_id: DeliveryId::new("delivery-1"),
                 order_id: OrderId::new("order-of-delivery-1"),
                 pickup_address: Address::new("Restaurant street 1").expect("pickup"),
-                dropoff_address: Address::new("Customer street 2").expect("dropoff"),
                 expires_at_epoch_seconds: NOW + OFFER_TTL,
             }]
         );

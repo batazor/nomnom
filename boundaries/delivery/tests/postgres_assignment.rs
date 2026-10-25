@@ -73,7 +73,6 @@ fn seed(store: &PostgresStore) -> Seed {
             seed.delivery_id.clone(),
             OrderId::new(unique("order")),
             Address::new("Restaurant street 1").expect("pickup"),
-            Address::new("Customer street 2").expect("dropoff"),
         ),
     )
     .expect("delivery");
@@ -225,7 +224,6 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
         DeliveryId::new(unique("delivery")),
         OrderId::new(unique("order")),
         Address::new("Restaurant street 1").expect("pickup"),
-        Address::new("Customer street 2").expect("dropoff"),
     )
     .with_created_at(Some(created_at));
     DeliveryRepository::add(&*store, &delivery).expect("delivery");

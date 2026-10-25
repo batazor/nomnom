@@ -27,7 +27,6 @@ fragment ViewedOrder on Order {
     amount
     currency
   }
-  deliveryAddress
   placedAt
   milestones {
     kind

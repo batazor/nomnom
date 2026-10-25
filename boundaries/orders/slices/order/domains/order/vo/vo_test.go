@@ -42,12 +42,3 @@ func TestQuantityMustBePositive(t *testing.T) {
 	_, err := NewQuantity(0)
 	require.ErrorIs(t, err, ErrInvalidQuantity)
 }
-
-func TestDeliveryAddressIsNormalized(t *testing.T) {
-	address, err := NewDeliveryAddress("  Main   street\t1 ")
-	require.NoError(t, err)
-	assert.Equal(t, "Main street 1", address.String())
-
-	_, err = NewDeliveryAddress(" \n ")
-	require.ErrorIs(t, err, ErrInvalidDeliveryAddress)
-}

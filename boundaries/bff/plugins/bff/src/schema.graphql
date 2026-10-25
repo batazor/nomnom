@@ -303,10 +303,6 @@ type Order @key(fields: "id") {
   """
   total: Money!
   """
-  Delivery address as entered by the customer
-  """
-  deliveryAddress: String!
-  """
   Moment the order was placed in RFC 3339
   """
   placedAt: String!
@@ -529,10 +525,6 @@ type DeliveryOffer {
   """
   pickupAddress: String!
   """
-  Where to deliver the order
-  """
-  dropoffAddress: String!
-  """
   Moment in RFC 3339 after which the offer cannot be accepted
   """
   expiresAt: String!
@@ -572,10 +564,6 @@ type CourierDelivery {
   Where to pick the order up
   """
   pickupAddress: String!
-  """
-  Where to deliver the order
-  """
-  dropoffAddress: String!
 }
 
 """
@@ -696,10 +684,6 @@ input PlaceOrderInput {
   Ordered items
   """
   items: [OrderLineInput!]!
-  """
-  Delivery address
-  """
-  deliveryAddress: String!
   """
   Client-generated key of this checkout attempt, reused on manual retry
   """

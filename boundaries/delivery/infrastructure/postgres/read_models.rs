@@ -33,7 +33,7 @@ impl CourierCurrentDeliveryReadModel for PostgresStore {
         courier_id: &CourierId,
     ) -> Result<Option<CurrentDeliveryView>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query(
-            "SELECT id, order_id, pickup_address, dropoff_address, state FROM deliveries
+            "SELECT id, order_id, pickup_address, state FROM deliveries
              WHERE courier_id = $1 AND state IN ('assigned', 'picked_up')
              ORDER BY id LIMIT 1"
         )
@@ -44,7 +44,6 @@ impl CourierCurrentDeliveryReadModel for PostgresStore {
                 delivery_id: DeliveryId::new(column::<String>(&row, "id")?),
                 order_id: OrderId::new(column::<String>(&row, "order_id")?),
                 pickup_address: address(column(&row, "pickup_address")?)?,
-                dropoff_address: address(column(&row, "dropoff_address")?)?,
                 state: parse_delivery_state(column(&row, "state")?)?,
             })
         })
@@ -126,7 +125,7 @@ impl PendingDeliveryOffersReadModel for PostgresStore {
         courier_id: &CourierId,
     ) -> Result<Vec<AvailableDeliveryOfferView>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query(
-            "SELECT o.id, o.delivery_id, d.order_id, d.pickup_address, d.dropoff_address, o.expires_at
+            "SELECT o.id, o.delivery_id, d.order_id, d.pickup_address, o.expires_at
              FROM delivery_offers o JOIN deliveries d ON d.id = o.delivery_id
              WHERE o.courier_id = $1 AND o.state = 'pending'
              ORDER BY o.position"
@@ -140,7 +139,6 @@ impl PendingDeliveryOffersReadModel for PostgresStore {
                 delivery_id: DeliveryId::new(column::<String>(row, "delivery_id")?),
                 order_id: OrderId::new(column::<String>(row, "order_id")?),
                 pickup_address: address(column(row, "pickup_address")?)?,
-                dropoff_address: address(column(row, "dropoff_address")?)?,
                 expires_at_epoch_seconds: column(row, "expires_at")?,
             })
         })

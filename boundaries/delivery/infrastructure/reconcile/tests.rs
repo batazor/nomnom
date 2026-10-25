@@ -399,7 +399,6 @@ fn delivery_reconciler_stores_revision_of_restored_assignment() {
         DeliveryId::new("delivery-1"),
         OrderId::new("order-1"),
         Address::new("Restaurant street 1").expect("pickup"),
-        Address::new("Customer street 2").expect("dropoff"),
     );
     delivery
         .assign(CourierId::new("courier-1"))
@@ -463,7 +462,6 @@ fn closed_delivery_relationship_is_stale_and_never_restored() {
             DeliveryId::new(id),
             OrderId::new(format!("order-of-{id}")),
             Address::new("Restaurant street 1").expect("pickup"),
-            Address::new("Customer street 2").expect("dropoff"),
         );
         delivery.assign(CourierId::new(courier)).expect("assign");
         delivery

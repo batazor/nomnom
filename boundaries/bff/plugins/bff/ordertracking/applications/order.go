@@ -21,14 +21,13 @@ type Money struct {
 
 // OrderSnapshot is the Order as orders publishes it to an authorized customer.
 type OrderSnapshot struct {
-	ID              string
-	RestaurantID    string
-	State           string
-	Items           []OrderLine
-	Total           Money
-	DeliveryAddress string
-	PlacedAt        time.Time
-	Facts           []Fact
+	ID           string
+	RestaurantID string
+	State        string
+	Items        []OrderLine
+	Total        Money
+	PlacedAt     time.Time
+	Facts        []Fact
 	// Cancellation is set only for a cancelled Order.
 	Cancellation *Cancellation
 	// Window is set only while the Order State admits cancellation.

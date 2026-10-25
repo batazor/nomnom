@@ -91,7 +91,7 @@ Temporal Activities и телеметрия переводят вид своим
 | Ресторан или его меню не найдены (Place Order) | `NOT_FOUND` | `RESTAURANT_NOT_FOUND` |
 | Ресторан закрыт (`is_open = false`, Place Order) | `FAILED_PRECONDITION` | `RESTAURANT_NOT_ACCEPTING_ORDERS` |
 | Позиции нельзя заказать (политика `OrderItemsOrderable`, Place Order) | `FAILED_PRECONDITION` | `ORDER_NOT_ORDERABLE` + metadata `codes`, `menu_item_ids` |
-| Некорректный состав или Delivery Address | `INVALID_ARGUMENT` | `INVALID_ORDER` |
+| Некорректный состав | `INVALID_ARGUMENT` | `INVALID_ORDER` |
 | Текущее состояние запрещает переход | `FAILED_PRECONDITION` | `ORDER_STATE_CONFLICT` |
 | Окно отмены ещё не открыто или уже закрыто | `FAILED_PRECONDITION` | `CANCELLATION_WINDOW_NOT_OPEN`, `CANCELLATION_WINDOW_EXPIRED` |
 | `Order` с таким идентификатором уже существует | `ALREADY_EXISTS` | `ORDER_ALREADY_EXISTS` |
@@ -153,7 +153,7 @@ gateway не доверяет. Политика контрактов, генер
 
 | Тип | Минимальные поля | Назначение |
 | --- | --- | --- |
-| `Order` — aggregate root | `id`, `customerId`, `restaurantId`, `items`, `deliveryAddress`, `total`, `status` | Владеет составом, стоимостью и общим состоянием заказа |
+| `Order` — aggregate root | `id`, `customerId`, `restaurantId`, `items`, `total`, `status` | Владеет составом, стоимостью и общим состоянием заказа |
 | `OrderItem` — entity внутри `Order` | `menuItemId`, `quantity`, `unitPrice` | Фиксирует заказанную позицию, количество и цену на момент оформления |
 
 Минимальные состояния `Order`: `placed`, `confirmed`, `cancelled`, `completed`. На первом этапе агрегат поддерживает оформление, подтверждение, отмену и завершение заказа.
@@ -175,7 +175,6 @@ gateway не доверяет. Политика контрактов, генер
 | --- | --- |
 | `Money` | Точная десятичная сумма на основе [`shopspring/decimal`](https://github.com/shopspring/decimal) и код валюты; сумма неотрицательна, арифметика разрешена только для одной валюты |
 | `Quantity` | Положительное целое число |
-| `DeliveryAddress` | Непустая нормализованная строка; детальную структуру адреса пока не моделируем |
 
 `Money` создаётся из строки или другого точного представления, но не из `float64`. Требуемые масштаб и режим округления явно задаются доменной операцией.
 

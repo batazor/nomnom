@@ -3,8 +3,6 @@ package order
 import (
 	"fmt"
 	"time"
-
-	"nomnom/orders/slices/order/domains/order/vo"
 )
 
 // Snapshot is the complete persisted form of an Order used by repositories.
@@ -13,7 +11,6 @@ type Snapshot struct {
 	CustomerID         CustomerID
 	RestaurantID       RestaurantID
 	Items              []Item
-	DeliveryAddress    vo.DeliveryAddress
 	PlacedAt           time.Time
 	State              State
 	Version            uint64
@@ -28,7 +25,6 @@ func (o *Order) Snapshot() Snapshot {
 		CustomerID:         o.customerID,
 		RestaurantID:       o.restaurantID,
 		Items:              o.Items(),
-		DeliveryAddress:    o.deliveryAddress,
 		PlacedAt:           o.placedAt,
 		State:              o.state,
 		Version:            o.version,
@@ -43,7 +39,7 @@ func Restore(snapshot Snapshot) (*Order, error) {
 	if !isKnownState(snapshot.State) {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownOrderState, snapshot.State)
 	}
-	order, err := New(snapshot.ID, snapshot.CustomerID, snapshot.RestaurantID, snapshot.Items, snapshot.DeliveryAddress)
+	order, err := New(snapshot.ID, snapshot.CustomerID, snapshot.RestaurantID, snapshot.Items)
 	if err != nil {
 		return nil, err
 	}

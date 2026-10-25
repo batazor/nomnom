@@ -45,7 +45,8 @@ message PlaceOrderRequest {
   string idempotency_key = 1;
   string restaurant_id = 2;
   repeated PlaceOrderItem items = 3;
-  string delivery_address = 4;
+  reserved 4;
+  reserved "delivery_address";
 }
 
 message PlaceOrderResponse {

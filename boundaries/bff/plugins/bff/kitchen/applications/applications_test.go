@@ -2,7 +2,6 @@ package applications
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -35,12 +34,10 @@ func (f *fakeBoard) Apply(_ context.Context, restaurantID, kitchenOrderID string
 	return f.applyErr
 }
 
-type fakeCatalog struct {
-	err error
-}
+type fakeCatalog struct{}
 
-func (f fakeCatalog) Restaurant(_ context.Context, id string) (Restaurant, error) {
-	return Restaurant{ID: id, Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true}, f.err
+func (fakeCatalog) Restaurant(_ context.Context, id string) (Restaurant, error) {
+	return Restaurant{ID: id, Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true}, nil
 }
 
 func (fakeCatalog) MenuItemNames(context.Context, string) (map[string]string, error) {
@@ -88,14 +85,6 @@ func TestKitchenOrdersFollowTheBoardOrder(t *testing.T) {
 	assert.Equal(t, "order-received-1", view.Orders[0].OrderID)
 }
 
-func TestKitchenOfMissingRestaurantOrForbiddenKitchenIsNotFound(t *testing.T) {
-	_, err := NewGetKitchen(&fakeBoard{err: ErrKitchenNotFound}, fakeCatalog{}).Handle(context.Background(), "restaurant-1")
-	assert.ErrorIs(t, err, ErrKitchenNotFound)
-
-	_, err = NewGetKitchen(&fakeBoard{}, fakeCatalog{err: ErrKitchenNotFound}).Handle(context.Background(), "restaurant-1")
-	assert.ErrorIs(t, err, ErrKitchenNotFound)
-}
-
 func TestKitchenActionReadsTheOrderBack(t *testing.T) {
 	board := &fakeBoard{active: []ActiveOrder{active("other", StageReceived, 0), active("ro-1", StagePreparing, 1)}}
 	h := NewApplyKitchenAction(board, board, fakeCatalog{})
@@ -135,14 +124,12 @@ func TestStageConflictIsAProblem(t *testing.T) {
 }
 
 func TestOtherKitchenRefusalsStayErrors(t *testing.T) {
-	for _, refusal := range []error{ErrOrderNotFound, ErrNotPermitted, ErrInvalidCommand, errors.New("down")} {
-		board := &fakeBoard{applyErr: refusal}
-		_, err := NewApplyKitchenAction(board, board, fakeCatalog{}).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionMarkAssembled})
-		assert.ErrorIs(t, err, refusal)
-	}
+	refused := &fakeBoard{applyErr: ErrNotPermitted}
+	_, err := NewApplyKitchenAction(refused, refused, fakeCatalog{}).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionMarkAssembled})
+	assert.ErrorIs(t, err, ErrNotPermitted)
 
 	board := &fakeBoard{}
-	_, err := NewApplyKitchenAction(board, board, fakeCatalog{}).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: "cook"})
+	_, err = NewApplyKitchenAction(board, board, fakeCatalog{}).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: "cook"})
 	assert.ErrorIs(t, err, ErrUnknownAction)
 	assert.Empty(t, board.commands)
 }

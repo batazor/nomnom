@@ -191,10 +191,9 @@ type Delivery struct {
 	CourierId  string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
 	State      DeliveryState          `protobuf:"varint,4,opt,name=state,proto3,enum=nomnom.delivery.v1.DeliveryState" json:"state,omitempty"`
 	// Set by GetCourierCurrentDelivery for the courier's own active Delivery.
-	PickupAddress  string `protobuf:"bytes,5,opt,name=pickup_address,json=pickupAddress,proto3" json:"pickup_address,omitempty"`
-	DropoffAddress string `protobuf:"bytes,6,opt,name=dropoff_address,json=dropoffAddress,proto3" json:"dropoff_address,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	PickupAddress string `protobuf:"bytes,5,opt,name=pickup_address,json=pickupAddress,proto3" json:"pickup_address,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Delivery) Reset() {
@@ -262,20 +261,12 @@ func (x *Delivery) GetPickupAddress() string {
 	return ""
 }
 
-func (x *Delivery) GetDropoffAddress() string {
-	if x != nil {
-		return x.DropoffAddress
-	}
-	return ""
-}
-
 // Pending, not yet expired Delivery Offer addressed to a courier.
 type DeliveryOffer struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	OfferId               string                 `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
 	DeliveryId            string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
 	PickupAddress         string                 `protobuf:"bytes,3,opt,name=pickup_address,json=pickupAddress,proto3" json:"pickup_address,omitempty"`
-	DropoffAddress        string                 `protobuf:"bytes,4,opt,name=dropoff_address,json=dropoffAddress,proto3" json:"dropoff_address,omitempty"`
 	ExpiresAtEpochSeconds int64                  `protobuf:"varint,5,opt,name=expires_at_epoch_seconds,json=expiresAtEpochSeconds,proto3" json:"expires_at_epoch_seconds,omitempty"`
 	OrderId               string                 `protobuf:"bytes,6,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	unknownFields         protoimpl.UnknownFields
@@ -333,13 +324,6 @@ func (x *DeliveryOffer) GetPickupAddress() string {
 	return ""
 }
 
-func (x *DeliveryOffer) GetDropoffAddress() string {
-	if x != nil {
-		return x.DropoffAddress
-	}
-	return ""
-}
-
 func (x *DeliveryOffer) GetExpiresAtEpochSeconds() int64 {
 	if x != nil {
 		return x.ExpiresAtEpochSeconds
@@ -358,7 +342,7 @@ var File_nomnom_delivery_v1_delivery_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
-	"!nomnom/delivery/v1/delivery.proto\x12\x12nomnom.delivery.v1\"\xee\x01\n" +
+	"!nomnom/delivery/v1/delivery.proto\x12\x12nomnom.delivery.v1\"\xdc\x01\n" +
 	"\bDelivery\x12\x1f\n" +
 	"\vdelivery_id\x18\x01 \x01(\tR\n" +
 	"deliveryId\x12\x19\n" +
@@ -366,16 +350,14 @@ const file_nomnom_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
 	"courier_id\x18\x03 \x01(\tR\tcourierId\x127\n" +
 	"\x05state\x18\x04 \x01(\x0e2!.nomnom.delivery.v1.DeliveryStateR\x05state\x12%\n" +
-	"\x0epickup_address\x18\x05 \x01(\tR\rpickupAddress\x12'\n" +
-	"\x0fdropoff_address\x18\x06 \x01(\tR\x0edropoffAddress\"\xef\x01\n" +
+	"\x0epickup_address\x18\x05 \x01(\tR\rpickupAddressJ\x04\b\x06\x10\aR\x0fdropoff_address\"\xdd\x01\n" +
 	"\rDeliveryOffer\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12%\n" +
-	"\x0epickup_address\x18\x03 \x01(\tR\rpickupAddress\x12'\n" +
-	"\x0fdropoff_address\x18\x04 \x01(\tR\x0edropoffAddress\x127\n" +
+	"\x0epickup_address\x18\x03 \x01(\tR\rpickupAddress\x127\n" +
 	"\x18expires_at_epoch_seconds\x18\x05 \x01(\x03R\x15expiresAtEpochSeconds\x12\x19\n" +
-	"\border_id\x18\x06 \x01(\tR\aorderId*\xe7\x01\n" +
+	"\border_id\x18\x06 \x01(\tR\aorderIdJ\x04\b\x04\x10\x05R\x0fdropoff_address*\xe7\x01\n" +
 	"\rDeliveryState\x12\x1e\n" +
 	"\x1aDELIVERY_STATE_UNSPECIFIED\x10\x00\x12$\n" +
 	" DELIVERY_STATE_SEARCHING_COURIER\x10\x01\x12\x1b\n" +

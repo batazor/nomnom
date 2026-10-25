@@ -77,7 +77,6 @@ fn new_delivery(id: &str) -> Delivery {
         DeliveryId::new(id),
         OrderId::new(unique("order")),
         Address::new("Restaurant street 1").expect("pickup"),
-        Address::new("Customer street 2").expect("dropoff"),
     )
 }
 
@@ -87,7 +86,6 @@ fn assigned(delivery: &Delivery, courier: &str) -> Delivery {
         delivery.order_id().clone(),
         Some(CourierId::new(courier)),
         delivery.pickup_address().clone(),
-        delivery.dropoff_address().clone(),
         State::Assigned,
         None,
     )
@@ -398,7 +396,6 @@ fn delivery_round_trip_keeps_revision_and_order_uniqueness() {
         DeliveryId::new(unique("delivery")),
         delivery.order_id().clone(),
         delivery.pickup_address().clone(),
-        delivery.dropoff_address().clone(),
     );
     assert_eq!(
         DeliveryRepository::add(&store, &same_order),

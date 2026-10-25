@@ -25,13 +25,12 @@ func (s *Store) OrderView(ctx context.Context, id order.ID) (getorder.OrderView,
 		return getorder.OrderView{}, err
 	}
 	view := getorder.OrderView{
-		OrderID:         snap.ID,
-		CustomerID:      snap.CustomerID,
-		RestaurantID:    snap.RestaurantID,
-		DeliveryAddress: snap.DeliveryAddress.String(),
-		Total:           restored.Total(),
-		State:           snap.State,
-		PlacedAt:        snap.PlacedAt,
+		OrderID:      snap.ID,
+		CustomerID:   snap.CustomerID,
+		RestaurantID: snap.RestaurantID,
+		Total:        restored.Total(),
+		State:        snap.State,
+		PlacedAt:     snap.PlacedAt,
 	}
 	for _, item := range snap.Items {
 		view.Items = append(view.Items, getorder.ItemView{

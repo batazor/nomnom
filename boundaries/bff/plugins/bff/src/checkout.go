@@ -27,10 +27,9 @@ func (s *BffService) MutationPlaceOrder(ctx context.Context, request *service.Mu
 		lines = append(lines, applications.Line{MenuItemID: item.GetMenuItemId(), Quantity: int(item.GetQuantity())})
 	}
 	result, err := s.checkout.placeOrder.Handle(ctx, applications.Input{
-		RestaurantID:    input.GetRestaurantId(),
-		Lines:           lines,
-		DeliveryAddress: input.GetDeliveryAddress(),
-		IdempotencyKey:  input.GetIdempotencyKey(),
+		RestaurantID:   input.GetRestaurantId(),
+		Lines:          lines,
+		IdempotencyKey: input.GetIdempotencyKey(),
 	})
 	switch {
 	case errors.Is(err, applications.ErrRestaurantNotFound):

@@ -124,7 +124,6 @@ fn create_request(order: &str) -> CreateDeliveryRequest {
     CreateDeliveryRequest {
         order_id: order.to_owned(),
         pickup_address: "Restaurant street 1".to_owned(),
-        dropoff_address: "Customer street 2".to_owned(),
     }
 }
 

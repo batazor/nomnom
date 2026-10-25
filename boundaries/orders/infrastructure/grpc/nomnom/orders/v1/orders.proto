@@ -47,7 +47,8 @@ message Order {
   string customer_id = 2;
   string restaurant_id = 3;
   repeated OrderItem items = 4;
-  string delivery_address = 5;
+  reserved 5;
+  reserved "delivery_address";
   Money total = 6;
   OrderState state = 7;
   google.protobuf.Timestamp placed_at = 8;

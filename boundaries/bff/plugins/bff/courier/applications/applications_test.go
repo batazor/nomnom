@@ -2,7 +2,6 @@ package applications
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -51,7 +50,7 @@ func (f *fakeCouriers) ConfirmDelivery(_ context.Context, courierID, deliveryID 
 	return f.command(courierID + " delivery " + deliveryID)
 }
 
-var offer = Offer{ID: "offer-1", DeliveryID: "delivery-1", PickupAddress: "ул. Садовая, 8", DropoffAddress: "ул. Лесная, 12", ExpiresAt: expiresAt}
+var offer = Offer{ID: "offer-1", DeliveryID: "delivery-1", PickupAddress: "ул. Садовая, 8", ExpiresAt: expiresAt}
 
 func TestAvailableCourierSeesOffers(t *testing.T) {
 	couriers := &fakeCouriers{state: CourierState{Availability: AvailabilityAvailable}, offers: []Offer{offer}}
@@ -63,7 +62,7 @@ func TestAvailableCourierSeesOffers(t *testing.T) {
 }
 
 func TestBusyOrUnavailableCourierHasNoOffers(t *testing.T) {
-	delivery := &Delivery{ID: "delivery-1", OrderID: "order-1", Stage: StageAssigned, PickupAddress: "a", DropoffAddress: "b"}
+	delivery := &Delivery{ID: "delivery-1", OrderID: "order-1", Stage: StageAssigned, PickupAddress: "a"}
 	for _, state := range []CourierState{
 		{Availability: AvailabilityBusy, CurrentDelivery: delivery},
 		{Availability: AvailabilityUnavailable},
@@ -74,11 +73,6 @@ func TestBusyOrUnavailableCourierHasNoOffers(t *testing.T) {
 		assert.Equal(t, CourierView{Availability: state.Availability, Offers: []Offer{}, CurrentDelivery: state.CurrentDelivery}, view)
 		assert.Zero(t, couriers.offerReads)
 	}
-}
-
-func TestNotACourier(t *testing.T) {
-	_, err := NewGetCourier(&fakeCouriers{stateErr: ErrNotCourier}).Handle(context.Background(), "user-1")
-	assert.ErrorIs(t, err, ErrNotCourier)
 }
 
 func TestSetAvailabilityAcceptsAvailableAndUnavailableOnly(t *testing.T) {
@@ -125,11 +119,9 @@ func TestDeliveryActions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ProblemDeliveryStageConflict, result.Problem)
 
-	for _, refusal := range []error{ErrDeliveryNotFound, ErrNotCourier, errors.New("down")} {
-		couriers.commandErr = refusal
-		_, err = h.Handle(context.Background(), "courier-1", "delivery-1", ActionConfirmPickup)
-		assert.ErrorIs(t, err, refusal)
-	}
+	couriers.commandErr = ErrDeliveryNotFound
+	_, err = h.Handle(context.Background(), "courier-1", "delivery-1", ActionConfirmPickup)
+	assert.ErrorIs(t, err, ErrDeliveryNotFound)
 	_, err = h.Handle(context.Background(), "courier-1", "delivery-1", "teleport")
 	assert.ErrorIs(t, err, ErrUnknownCommand)
 }

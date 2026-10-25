@@ -60,10 +60,9 @@ type Restaurants interface {
 }
 
 type DeliveryRequest struct {
-	OrderID         string
-	RestaurantID    string
-	DeliveryAddress string
-	IdempotencyKey  string
+	OrderID        string
+	RestaurantID   string
+	IdempotencyKey string
 }
 
 // Delivery is the client port of delivery. Assignment, Pickup and Completion
@@ -99,12 +98,11 @@ func NewRestaurantOrderRequest(current *order.Order, idempotencyKey string) Rest
 	}
 }
 
-// NewDeliveryRequest carries the pickup restaurant and the Delivery Address.
+// NewDeliveryRequest carries the pickup restaurant.
 func NewDeliveryRequest(current *order.Order, idempotencyKey string) DeliveryRequest {
 	return DeliveryRequest{
-		OrderID:         string(current.ID()),
-		RestaurantID:    string(current.RestaurantID()),
-		DeliveryAddress: current.DeliveryAddress().String(),
-		IdempotencyKey:  idempotencyKey,
+		OrderID:        string(current.ID()),
+		RestaurantID:   string(current.RestaurantID()),
+		IdempotencyKey: idempotencyKey,
 	}
 }

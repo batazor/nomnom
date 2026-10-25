@@ -369,7 +369,6 @@ type Order struct {
 	CustomerId       string                 `protobuf:"bytes,2,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
 	RestaurantId     string                 `protobuf:"bytes,3,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
 	Items            []*OrderItem           `protobuf:"bytes,4,rep,name=items,proto3" json:"items,omitempty"`
-	DeliveryAddress  string                 `protobuf:"bytes,5,opt,name=delivery_address,json=deliveryAddress,proto3" json:"delivery_address,omitempty"`
 	Total            *Money                 `protobuf:"bytes,6,opt,name=total,proto3" json:"total,omitempty"`
 	State            OrderState             `protobuf:"varint,7,opt,name=state,proto3,enum=nomnom.orders.v1.OrderState" json:"state,omitempty"`
 	PlacedAt         *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
@@ -437,13 +436,6 @@ func (x *Order) GetItems() []*OrderItem {
 		return x.Items
 	}
 	return nil
-}
-
-func (x *Order) GetDeliveryAddress() string {
-	if x != nil {
-		return x.DeliveryAddress
-	}
-	return ""
 }
 
 func (x *Order) GetTotal() *Money {
@@ -599,21 +591,20 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\fcancelled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcancelledAt\"\x84\x01\n" +
 	"\x12CancellationWindow\x125\n" +
 	"\bopens_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\aopensAt\x127\n" +
-	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xcd\x04\n" +
+	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xba\x04\n" +
 	"\x05Order\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
 	"customerId\x12#\n" +
 	"\rrestaurant_id\x18\x03 \x01(\tR\frestaurantId\x121\n" +
-	"\x05items\x18\x04 \x03(\v2\x1b.nomnom.orders.v1.OrderItemR\x05items\x12)\n" +
-	"\x10delivery_address\x18\x05 \x01(\tR\x0fdeliveryAddress\x12-\n" +
+	"\x05items\x18\x04 \x03(\v2\x1b.nomnom.orders.v1.OrderItemR\x05items\x12-\n" +
 	"\x05total\x18\x06 \x01(\v2\x17.nomnom.orders.v1.MoneyR\x05total\x122\n" +
 	"\x05state\x18\a \x01(\x0e2\x1c.nomnom.orders.v1.OrderStateR\x05state\x127\n" +
 	"\tplaced_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\x12N\n" +
 	"\x11fulfillment_facts\x18\t \x03(\v2!.nomnom.orders.v1.FulfillmentFactR\x10fulfillmentFacts\x12B\n" +
 	"\fcancellation\x18\n" +
 	" \x01(\v2\x1e.nomnom.orders.v1.CancellationR\fcancellation\x12U\n" +
-	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindow\"\x82\x02\n" +
+	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindowJ\x04\b\x05\x10\x06R\x10delivery_address\"\x82\x02\n" +
 	"\fOrderSummary\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x122\n" +

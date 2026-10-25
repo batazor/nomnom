@@ -55,15 +55,14 @@ func TestGetOrderReturnsView(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, getorder.OrderView{
-		OrderID:         "order-1",
-		CustomerID:      "customer-1",
-		RestaurantID:    "restaurant-1",
-		Items:           []getorder.ItemView{{MenuItemID: "menu-1", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
-		DeliveryAddress: "Main street 1",
-		Total:           ordertest.Money(t, "20"),
-		State:           order.StateCancelled,
-		PlacedAt:        ordertest.PlacedAt,
-		Facts:           []getorder.FactView{{Fact: order.FactPickedUp, OccurredAt: pickedUp.OccurredAt}},
+		OrderID:      "order-1",
+		CustomerID:   "customer-1",
+		RestaurantID: "restaurant-1",
+		Items:        []getorder.ItemView{{MenuItemID: "menu-1", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
+		Total:        ordertest.Money(t, "20"),
+		State:        order.StateCancelled,
+		PlacedAt:     ordertest.PlacedAt,
+		Facts:        []getorder.FactView{{Fact: order.FactPickedUp, OccurredAt: pickedUp.OccurredAt}},
 		Cancellation: &getorder.CancellationView{
 			Outcome:     order.OutcomeCancellation,
 			ReasonCode:  "customer_requested",

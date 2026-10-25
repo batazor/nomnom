@@ -13,8 +13,6 @@ pub struct Delivery {
     /// Set by GetCourierCurrentDelivery for the courier's own active Delivery.
     #[prost(string, tag="5")]
     pub pickup_address: ::prost::alloc::string::String,
-    #[prost(string, tag="6")]
-    pub dropoff_address: ::prost::alloc::string::String,
 }
 /// Pending, not yet expired Delivery Offer addressed to a courier.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -25,8 +23,6 @@ pub struct DeliveryOffer {
     pub delivery_id: ::prost::alloc::string::String,
     #[prost(string, tag="3")]
     pub pickup_address: ::prost::alloc::string::String,
-    #[prost(string, tag="4")]
-    pub dropoff_address: ::prost::alloc::string::String,
     #[prost(int64, tag="5")]
     pub expires_at_epoch_seconds: i64,
     #[prost(string, tag="6")]
@@ -227,8 +223,6 @@ pub struct CreateDeliveryRequest {
     pub order_id: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
     pub pickup_address: ::prost::alloc::string::String,
-    #[prost(string, tag="3")]
-    pub dropoff_address: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CreateDeliveryResponse {

@@ -32,7 +32,6 @@ type PlaceOrderVariables = {
   input: {
     restaurantId: string;
     items: { menuItemId: string; quantity: number }[];
-    deliveryAddress: string;
     idempotencyKey: string;
   };
 };
@@ -84,11 +83,6 @@ describe("place order", () => {
     ]);
     const requests = recordPlaceOrder();
     const user = await openCheckout();
-
-    await user.type(
-      screen.getByRole("textbox", { name: "Адрес доставки" }),
-      "ул. Лесная, 12, кв. 47",
-    );
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
 
     expect(
@@ -107,25 +101,10 @@ describe("place order", () => {
           { menuItemId: "menu-tom-yum", quantity: 2 },
           { menuItemId: "menu-bao", quantity: 1 },
         ],
-        deliveryAddress: "ул. Лесная, 12, кв. 47",
         idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       },
     ]);
     expect(localStorage.getItem(cartKey)).toBeNull();
-  });
-
-  it("asks for an address before sending anything", async () => {
-    storeCart([{ menuItemId: "menu-bao", quantity: 1 }]);
-    const requests = recordPlaceOrder();
-    const user = await openCheckout();
-
-    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
-
-    const address = screen.getByRole("textbox", { name: "Адрес доставки" });
-    expect(address).toHaveFocus();
-    expect(address).toBeInvalid();
-    expect(screen.getByText("Укажите адрес доставки")).toBeVisible();
-    expect(requests).toHaveLength(0);
   });
 
   it("marks an item that ran out and keeps the cart", async () => {
@@ -135,11 +114,6 @@ describe("place order", () => {
       { menuItemId: "menu-gyoza", quantity: 1 },
     ]);
     const user = await openCheckout();
-
-    await user.type(
-      screen.getByRole("textbox", { name: "Адрес доставки" }),
-      "ул. Лесная, 12",
-    );
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
 
     expect(
@@ -187,11 +161,6 @@ describe("place order", () => {
       ),
     );
     const user = await openCheckout();
-
-    await user.type(
-      screen.getByRole("textbox", { name: "Адрес доставки" }),
-      "ул. Лесная, 12",
-    );
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -213,11 +182,6 @@ describe("place order", () => {
       ),
     );
     const user = await openCheckout();
-
-    await user.type(
-      screen.getByRole("textbox", { name: "Адрес доставки" }),
-      "ул. Лесная, 12",
-    );
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -246,11 +210,6 @@ describe("place order", () => {
       ),
     );
     const user = await openCheckout();
-
-    await user.type(
-      screen.getByRole("textbox", { name: "Адрес доставки" }),
-      "ул. Лесная, 12",
-    );
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
     await screen.findByRole("alert");
     await user.click(

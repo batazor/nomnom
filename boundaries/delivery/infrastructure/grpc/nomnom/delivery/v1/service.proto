@@ -44,7 +44,8 @@ message GetCourierCurrentDeliveryResponse {
 message CreateDeliveryRequest {
   string order_id = 1;
   string pickup_address = 2;
-  string dropoff_address = 3;
+  reserved 3;
+  reserved "dropoff_address";
 }
 
 message CreateDeliveryResponse {

@@ -227,13 +227,12 @@ func TestDeliveryCreateUsesRestaurantAddress(t *testing.T) {
 	d := grpcclient.NewDelivery(f.conn)
 
 	require.NoError(t, d.Create(context.Background(), neighbours.DeliveryRequest{
-		OrderID: "order-1", RestaurantID: "restaurant-1", DeliveryAddress: "Main street 1",
+		OrderID: "order-1", RestaurantID: "restaurant-1",
 	}))
 	require.NoError(t, d.Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
 
 	require.Len(t, f.delivery.created, 1)
 	assert.Equal(t, "Kitchen street 1", f.delivery.created[0].GetPickupAddress())
-	assert.Equal(t, "Main street 1", f.delivery.created[0].GetDropoffAddress())
 }
 
 func TestDeliveryCreateWithoutRestaurantAddressIsPermanent(t *testing.T) {

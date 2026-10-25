@@ -48,8 +48,6 @@ spec:
                 staff: (join('-', ['kind-e2e-staff', $run]))
                 courier: ($courier)
                 customer: (join('-', ['kind-e2e-customer', $run]))
-                # Адрес доставки отличает предложения этого прогона у курьера.
-                dropoff: (join(' ', ['Kind e2e dropoff', $run]))
       # В конце теста, в том числе после провала, курьер прогона уходит с линии (если успел
       # выйти; ответ лишь пишется в log): свободный курьер прошлого прогона получал бы предложения следующих прогонов
       # до истечения каждого.
@@ -198,7 +196,7 @@ spec:
               value: >-
                 {query: "mutation($input: PlaceOrderInput!) { placeOrder(input: $input) { order { id status } problems { code menuItemIds } } }",
                  variables: {input: {restaurantId: $s.restaurant_id, items: [{menuItemId: $s.menu_item_id, quantity: 1}],
-                 deliveryAddress: $s.dropoff, idempotencyKey: $s.run}}}
+                 idempotencyKey: $s.run}}}
             - {name: until, value: '.data.placeOrder.order.id != null'}
             - {name: wait, value: 30}
             - {name: save, value: '{order_id: .data.placeOrder.order.id}'}
@@ -254,11 +252,11 @@ spec:
             - {name: subject, value: $s.courier}
             - {name: method, value: nomnom.delivery.v1.DeliveryService/ListAvailableDeliveryOffers}
             - {name: request, value: '{courierId: $s.courier}'}
-            - {name: until, value: '[.. | objects | select(has("offerId") and (tostring | contains($s.dropoff)))] | length > 0'}
+            - {name: until, value: '[.offers[]? | select(.orderId == $s.order_id)] | length > 0'}
             - {name: wait, value: 180}
             - name: save
               value: >-
-                [.. | objects | select(has("offerId") and (tostring | contains($s.dropoff)))][0]
+                [.offers[] | select(.orderId == $s.order_id)][0]
                 | {offer_id: .offerId, delivery_id: .deliveryId}
     - name: courier accepts offer
       use:

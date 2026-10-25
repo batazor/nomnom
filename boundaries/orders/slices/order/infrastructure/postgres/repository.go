@@ -29,10 +29,10 @@ func (s *Store) Add(ctx context.Context, created *order.Order) error {
 	snap := created.Snapshot()
 	outcome, code := cancellation(snap.CancellationReason)
 	_, err := s.q(ctx).Exec(ctx, `
-		INSERT INTO orders (id, customer_id, restaurant_id, delivery_address, total_amount, total_currency,
+		INSERT INTO orders (id, customer_id, restaurant_id, total_amount, total_currency,
 			state, placed_at, cancelled_at, negative_outcome, cancellation_code, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		snap.ID, snap.CustomerID, snap.RestaurantID, snap.DeliveryAddress.String(),
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		snap.ID, snap.CustomerID, snap.RestaurantID,
 		created.Total().Amount().String(), created.Total().Currency(),
 		snap.State, snap.PlacedAt, nullTime(snap.CancelledAt), outcome, code, snap.Version+1)
 	if isUniqueViolation(err) {
@@ -95,16 +95,16 @@ func (s *Store) saveFacts(ctx context.Context, snap order.Snapshot) error {
 
 func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	var (
-		snap                      order.Snapshot
-		address, amount, currency string
-		cancelledAt               *time.Time
-		outcome, code             *string
+		snap             order.Snapshot
+		amount, currency string
+		cancelledAt      *time.Time
+		outcome, code    *string
 	)
 	err := s.q(ctx).QueryRow(ctx, `
-		SELECT customer_id, restaurant_id, delivery_address, total_amount::text, total_currency,
+		SELECT customer_id, restaurant_id, total_amount::text, total_currency,
 			state, placed_at, cancelled_at, negative_outcome, cancellation_code, version
 		FROM orders WHERE id = $1`, id).
-		Scan(&snap.CustomerID, &snap.RestaurantID, &address, &amount, &currency,
+		Scan(&snap.CustomerID, &snap.RestaurantID, &amount, &currency,
 			&snap.State, &snap.PlacedAt, &cancelledAt, &outcome, &code, &snap.Version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return order.Snapshot{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, id)
@@ -114,9 +114,6 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	}
 	snap.ID = id
 	snap.PlacedAt = snap.PlacedAt.UTC()
-	if snap.DeliveryAddress, err = vo.NewDeliveryAddress(address); err != nil {
-		return order.Snapshot{}, fmt.Errorf("order %s address: %w", id, err)
-	}
 	if cancelledAt != nil {
 		snap.CancelledAt = cancelledAt.UTC()
 	}

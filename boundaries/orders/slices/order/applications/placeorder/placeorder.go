@@ -29,10 +29,9 @@ type Input struct {
 	// Subject must be the verified Customer placing the Order.
 	Subject application.Subject
 	// IdempotencyKey is chosen by the client and is unique per Customer.
-	IdempotencyKey  string
-	RestaurantID    order.RestaurantID
-	Items           []ItemInput
-	DeliveryAddress string
+	IdempotencyKey string
+	RestaurantID   order.RestaurantID
+	Items          []ItemInput
 }
 
 type Result struct {
@@ -146,7 +145,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("generate order id: %w", err)
 	}
-	placed, err := order.Place(orderID, customerID, in.RestaurantID, items, request.address, h.deps.Clock.Now(), orderability)
+	placed, err := order.Place(orderID, customerID, in.RestaurantID, items, h.deps.Clock.Now(), orderability)
 	if err != nil {
 		return Result{}, err
 	}
@@ -219,8 +218,7 @@ type itemRequest struct {
 }
 
 type placementRequest struct {
-	items   []itemRequest
-	address vo.DeliveryAddress
+	items []itemRequest
 }
 
 // validate rejects malformed input before any external call. The aggregate
@@ -259,11 +257,6 @@ func validate(in Input) (order.CustomerID, placementRequest, error) {
 		request.items = append(request.items, itemRequest{menuItemID: item.MenuItemID, quantity: quantity})
 	}
 
-	address, err := vo.NewDeliveryAddress(in.DeliveryAddress)
-	if err != nil {
-		return "", placementRequest{}, err
-	}
-	request.address = address
 	return order.CustomerID(in.Subject.ID), request, nil
 }
 

@@ -64,15 +64,14 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 		})
 	}
 	return OrderView{
-		ID:              order.ID,
-		Status:          current,
-		EndReason:       endReason(order),
-		Restaurant:      restaurant,
-		Items:           items,
-		Total:           order.Total,
-		DeliveryAddress: order.DeliveryAddress,
-		PlacedAt:        order.PlacedAt,
-		Milestones:      milestones(order),
-		AvailableUntil:  availableUntil(order, current, h.now()),
+		ID:             order.ID,
+		Status:         current,
+		EndReason:      endReason(order),
+		Restaurant:     restaurant,
+		Items:          items,
+		Total:          order.Total,
+		PlacedAt:       order.PlacedAt,
+		Milestones:     milestones(order),
+		AvailableUntil: availableUntil(order, current, h.now()),
 	}, nil
 }

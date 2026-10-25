@@ -56,7 +56,7 @@ func (s *deliveryServer) ListAvailableDeliveryOffers(ctx context.Context, r *del
 		return nil, err
 	}
 	return &deliveryv1.ListAvailableDeliveryOffersResponse{CourierId: r.GetCourierId(), Offers: []*deliveryv1.DeliveryOffer{{
-		OfferId: "offer-1", DeliveryId: "delivery-1", OrderId: "order-1", PickupAddress: "ул. Садовая, 8", DropoffAddress: "ул. Лесная, 12",
+		OfferId: "offer-1", DeliveryId: "delivery-1", OrderId: "order-1", PickupAddress: "ул. Садовая, 8",
 		ExpiresAtEpochSeconds: time.Date(2026, 10, 25, 12, 5, 0, 0, time.UTC).Unix(),
 	}}}, nil
 }
@@ -109,7 +109,7 @@ func TestStateReadsStatusAndDeliveryOnBehalfOfTheCourier(t *testing.T) {
 		status: deliveryv1.CourierStatus_COURIER_STATUS_BUSY,
 		delivery: &deliveryv1.Delivery{
 			DeliveryId: "delivery-1", OrderId: "order-1", CourierId: "courier-1",
-			State: deliveryv1.DeliveryState_DELIVERY_STATE_PICKED_UP, PickupAddress: "ул. Садовая, 8", DropoffAddress: "ул. Лесная, 12",
+			State: deliveryv1.DeliveryState_DELIVERY_STATE_PICKED_UP, PickupAddress: "ул. Садовая, 8",
 		},
 	}
 	delivery := connect(t, server)
@@ -121,7 +121,7 @@ func TestStateReadsStatusAndDeliveryOnBehalfOfTheCourier(t *testing.T) {
 		Availability: applications.AvailabilityBusy,
 		CurrentDelivery: &applications.Delivery{
 			ID: "delivery-1", OrderID: "order-1", Stage: applications.StagePickedUp,
-			PickupAddress: "ул. Садовая, 8", DropoffAddress: "ул. Лесная, 12",
+			PickupAddress: "ул. Садовая, 8",
 		},
 	}, state)
 	assert.Equal(t, []string{"current courier-1"}, server.calls)
@@ -141,7 +141,7 @@ func TestOffersMapExpiry(t *testing.T) {
 	offers, err := connect(t, &deliveryServer{}).Offers(courierContext(), "courier-1")
 	require.NoError(t, err)
 	assert.Equal(t, []applications.Offer{{
-		ID: "offer-1", DeliveryID: "delivery-1", OrderID: "order-1", PickupAddress: "ул. Садовая, 8", DropoffAddress: "ул. Лесная, 12",
+		ID: "offer-1", DeliveryID: "delivery-1", OrderID: "order-1", PickupAddress: "ул. Садовая, 8",
 		ExpiresAt: time.Date(2026, 10, 25, 12, 5, 0, 0, time.UTC),
 	}}, offers)
 }

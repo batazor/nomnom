@@ -181,8 +181,6 @@ type Order {
   items: [OrderItem!]!
   """Total amount of the order"""
   total: Money!
-  """Delivery address as entered by the customer"""
-  deliveryAddress: String!
   """Moment the order was placed in RFC 3339"""
   placedAt: String!
   """Milestones in chronological order"""
@@ -315,8 +313,6 @@ type DeliveryOffer {
   orderId: ID!
   """Where to pick the order up"""
   pickupAddress: String!
-  """Where to deliver the order"""
-  dropoffAddress: String!
   """Moment in RFC 3339 after which the offer cannot be accepted"""
   expiresAt: String!
 }
@@ -339,8 +335,6 @@ type CourierDelivery {
   stage: CourierDeliveryStage!
   """Where to pick the order up"""
   pickupAddress: String!
-  """Where to deliver the order"""
-  dropoffAddress: String!
 }
 
 """
@@ -421,8 +415,6 @@ input PlaceOrderInput {
   restaurantId: ID!
   """Ordered items"""
   items: [OrderLineInput!]!
-  """Delivery address"""
-  deliveryAddress: String!
   """Client-generated key of this checkout attempt, reused on manual retry"""
   idempotencyKey: String!
 }

@@ -67,9 +67,8 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 			Address:         view.Restaurant.Address,
 			AcceptingOrders: view.Restaurant.IsOpen,
 		},
-		Total:           money(view.Total),
-		DeliveryAddress: view.DeliveryAddress,
-		PlacedAt:        timestamp(view.PlacedAt),
+		Total:    money(view.Total),
+		PlacedAt: timestamp(view.PlacedAt),
 	}
 	if view.EndReason != "" {
 		if order.EndReason, err = enumValue(orderEndReasons, "order end reason", view.EndReason); err != nil {

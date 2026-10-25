@@ -128,10 +128,9 @@ func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
 		IdempotencyKey: step.IdempotencyKey,
 	}}, neighbours.restaurants)
 	assert.Equal(t, []ports.DeliveryRequest{{
-		OrderID:         orderID,
-		RestaurantID:    "restaurant-1",
-		DeliveryAddress: "Main street 1",
-		IdempotencyKey:  step.IdempotencyKey,
+		OrderID:        orderID,
+		RestaurantID:   "restaurant-1",
+		IdempotencyKey: step.IdempotencyKey,
 	}}, neighbours.deliveries)
 }
 

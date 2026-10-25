@@ -145,10 +145,6 @@ function OrderView({
               <dt>{t("order.total")}</dt>
               <dd data-testid="order-total">{money(order.total)}</dd>
             </div>
-            <div>
-              <dt>{t("order.address")}</dt>
-              <dd>{order.deliveryAddress}</dd>
-            </div>
           </dl>
         </section>
 

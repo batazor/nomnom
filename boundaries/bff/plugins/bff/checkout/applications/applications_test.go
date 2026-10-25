@@ -34,10 +34,9 @@ func (f *fakeViews) Handle(_ context.Context, orderID string) (tracking.OrderVie
 }
 
 var input = Input{
-	RestaurantID:    "restaurant-1",
-	Lines:           []Line{{MenuItemID: "menu-pho", Quantity: 2}},
-	DeliveryAddress: "ул. Садовая, 8",
-	IdempotencyKey:  "attempt-1",
+	RestaurantID:   "restaurant-1",
+	Lines:          []Line{{MenuItemID: "menu-pho", Quantity: 2}},
+	IdempotencyKey: "attempt-1",
 }
 
 // AC-570: a placed Order comes back as the order tracking view.

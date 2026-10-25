@@ -19,7 +19,8 @@ message Delivery {
   DeliveryState state = 4;
   // Set by GetCourierCurrentDelivery for the courier's own active Delivery.
   string pickup_address = 5;
-  string dropoff_address = 6;
+  reserved 6;
+  reserved "dropoff_address";
 }
 
 enum CourierStatus {
@@ -41,7 +42,8 @@ message DeliveryOffer {
   string offer_id = 1;
   string delivery_id = 2;
   string pickup_address = 3;
-  string dropoff_address = 4;
+  reserved 4;
+  reserved "dropoff_address";
   int64 expires_at_epoch_seconds = 5;
   string order_id = 6;
 }

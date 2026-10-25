@@ -4,7 +4,7 @@ import { useMutation } from "urql";
 import { PlaceOrderDocument } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { Button, TextField } from "../../shared/ui";
+import { Button } from "../../shared/ui";
 import { type ItemProblems, splitProblems } from "./problems";
 import "./place-order.css";
 
@@ -22,7 +22,7 @@ type CheckoutState =
 
 // One checkout attempt: its idempotency key and the exact request it was made
 // for. A manual retry of the same request reuses the key; any change to the
-// cart or the address starts a new attempt.
+// cart starts a new attempt.
 type Attempt = { key: string; request: string };
 
 export function PlaceOrder({
@@ -38,27 +38,17 @@ export function PlaceOrder({
 }) {
   const { t } = useI18n();
   const [, placeOrder] = useMutation(PlaceOrderDocument);
-  const [address, setAddress] = useState("");
-  const [addressMissing, setAddressMissing] = useState(false);
   const [state, setState] = useState<CheckoutState>({ kind: "idle" });
   const attempt = useRef<Attempt | null>(null);
-  const addressInput = useRef<HTMLInputElement>(null);
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     if (state.kind === "sending") return;
-    const deliveryAddress = address.trim();
-    if (!deliveryAddress) {
-      setAddressMissing(true);
-      addressInput.current?.focus();
-      return;
-    }
-
     const items = lines.map(({ menuItemId, quantity }) => ({
       menuItemId,
       quantity,
     }));
-    const request = JSON.stringify({ restaurantId, items, deliveryAddress });
+    const request = JSON.stringify({ restaurantId, items });
     if (attempt.current?.request !== request) {
       attempt.current = { key: crypto.randomUUID(), request };
     }
@@ -68,7 +58,6 @@ export function PlaceOrder({
       input: {
         restaurantId,
         items,
-        deliveryAddress,
         idempotencyKey: attempt.current.key,
       },
     });
@@ -116,21 +105,6 @@ export function PlaceOrder({
           {itemProblemsInCart ? <p>{t("checkout.itemProblems")}</p> : null}
         </div>
       ) : null}
-
-      <TextField
-        autoComplete="street-address"
-        description={t("checkout.addressHint")}
-        errorMessage={addressMissing ? t("checkout.addressRequired") : null}
-        inputRef={addressInput}
-        required
-        label={t("checkout.address")}
-        name="deliveryAddress"
-        onChange={(value) => {
-          setAddress(value);
-          if (value.trim()) setAddressMissing(false);
-        }}
-        value={address}
-      />
 
       {state.kind === "transportError" ? (
         <p className="checkout-error" role="alert">

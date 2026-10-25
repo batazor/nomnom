@@ -64,7 +64,6 @@ mod tests {
             DeliveryId::new("delivery-1"),
             OrderId::new("order-1"),
             Address::new("Restaurant street 1").expect("pickup"),
-            Address::new("Customer street 2").expect("dropoff"),
         );
         delivery.record_authorization_revision(AuthorizationRevision::new("zed-d"));
         DeliveryRepository::add(&*store, &delivery).expect("delivery");

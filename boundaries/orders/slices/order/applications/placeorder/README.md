@@ -37,7 +37,7 @@ sequenceDiagram
 
 Handler: [`placeorder.go`](placeorder.go), unit-тесты: [`placeorder_test.go`](placeorder_test.go).
 
-- **Вход:** `Input{Subject, IdempotencyKey, RestaurantID, Items[{MenuItemID, Quantity}], DeliveryAddress}`; subject — `user`, он же Customer.
+- **Вход:** `Input{Subject, IdempotencyKey, RestaurantID, Items[{MenuItemID, Quantity}]}`; subject — `user`, он же Customer.
 - **Порядок:** validation → `IdempotencyKeys.FindOrder` → `Catalog.Snapshot` → `IDGenerator` → `order.Place` (`OrderItemsOrderable`) → `Relationships.GrantOrderCustomer` (fail closed) → `UnitOfWork { повторная проверка key, Orders.Add, RememberOrder, Outbox.Append(OrderPlaced) }` → `fulfillment.Starter.Start` после commit.
 - **Конкурентный повтор:** два запроса с одним key могут оба не найти его; `RememberOrder` второго ждёт commit первого на unique index и возвращает `ErrIdempotencyKeyTaken`. Тогда транзакция второго откатывается, key перечитывается после commit, и запрос возвращает Order первого (`Replayed`); если Order не найден — `ErrConcurrencyConflict` (gRPC `ABORTED`, клиент повторяет). Relationship второго остаётся reconciliation (FR-565, AC-671).
 - **Результат:** `Result{OrderID, Replayed, FulfillmentStarted}`; сбой старта не откатывает `Order`, повтор с тем же key повторяет старт.

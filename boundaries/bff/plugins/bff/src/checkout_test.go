@@ -41,10 +41,9 @@ func checkoutService(t *testing.T, placeOrder *fakePlaceOrder) (*BffService, con
 
 func placeOrderRequest() *service.MutationPlaceOrderRequest {
 	return &service.MutationPlaceOrderRequest{Input: &service.PlaceOrderInput{
-		RestaurantId:    "restaurant-1",
-		Items:           []*service.OrderLineInput{{MenuItemId: "menu-pho", Quantity: 2}},
-		DeliveryAddress: "ул. Садовая, 8",
-		IdempotencyKey:  "attempt-1",
+		RestaurantId:   "restaurant-1",
+		Items:          []*service.OrderLineInput{{MenuItemId: "menu-pho", Quantity: 2}},
+		IdempotencyKey: "attempt-1",
 	}}
 }
 
@@ -74,7 +73,7 @@ func TestPlaceOrderReturnsTheOrder(t *testing.T) {
 	assert.Equal(t, "customer-1", placeOrder.user.ID, "orders is called on behalf of the customer")
 	assert.Equal(t, applications.Input{
 		RestaurantID: "restaurant-1", Lines: []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
-		DeliveryAddress: "ул. Садовая, 8", IdempotencyKey: "attempt-1",
+		IdempotencyKey: "attempt-1",
 	}, placeOrder.got)
 	payload := response.GetPlaceOrder()
 	assert.Equal(t, service.OrderStatus_ORDER_STATUS_RECEIVED, payload.GetOrder().GetStatus())

@@ -189,10 +189,9 @@ func requireReason(t *testing.T, err error, code codes.Code, reason string) {
 
 func placeRequest() *ordersv1.PlaceOrderRequest {
 	return &ordersv1.PlaceOrderRequest{
-		IdempotencyKey:  "key-1",
-		RestaurantId:    "restaurant-1",
-		Items:           []*ordersv1.PlaceOrderItem{{MenuItemId: "pizza", Quantity: 2}},
-		DeliveryAddress: "Main street 1",
+		IdempotencyKey: "key-1",
+		RestaurantId:   "restaurant-1",
+		Items:          []*ordersv1.PlaceOrderItem{{MenuItemId: "pizza", Quantity: 2}},
 	}
 }
 
@@ -326,14 +325,13 @@ func TestPlaceOrderDeniesServiceSubject(t *testing.T) {
 	requireReason(t, err, codes.PermissionDenied, "OPERATION_NOT_ALLOWED")
 }
 
-// AC-511: malformed composition and Delivery Address are INVALID_ORDER.
+// AC-511: malformed composition is INVALID_ORDER.
 func TestPlaceOrderMapsInvalidOrder(t *testing.T) {
 	client := newClient(t, fixedSubject{subject: customer})
 	for name, mutate := range map[string]func(*ordersv1.PlaceOrderRequest){
 		"no items":  func(r *ordersv1.PlaceOrderRequest) { r.Items = nil },
 		"duplicate": func(r *ordersv1.PlaceOrderRequest) { r.Items = append(r.Items, r.Items[0]) },
 		"quantity":  func(r *ordersv1.PlaceOrderRequest) { r.Items[0].Quantity = 0 },
-		"address":   func(r *ordersv1.PlaceOrderRequest) { r.DeliveryAddress = " " },
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := placeRequest()

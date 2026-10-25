@@ -57,21 +57,19 @@ const (
 
 // Offer is a pending delivery offer addressed to the courier.
 type Offer struct {
-	ID             string
-	DeliveryID     string
-	OrderID        string
-	PickupAddress  string
-	DropoffAddress string
-	ExpiresAt      time.Time
+	ID            string
+	DeliveryID    string
+	OrderID       string
+	PickupAddress string
+	ExpiresAt     time.Time
 }
 
 // Delivery is the delivery the courier is carrying out.
 type Delivery struct {
-	ID             string
-	OrderID        string
-	Stage          DeliveryStage
-	PickupAddress  string
-	DropoffAddress string
+	ID            string
+	OrderID       string
+	Stage         DeliveryStage
+	PickupAddress string
 }
 
 // CourierState is the status of the courier and its current delivery.

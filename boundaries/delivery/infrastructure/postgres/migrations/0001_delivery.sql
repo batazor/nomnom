@@ -15,7 +15,6 @@ CREATE TABLE deliveries (
     order_id               TEXT   NOT NULL UNIQUE,
     courier_id             TEXT COLLATE "C",
     pickup_address         TEXT   NOT NULL,
-    dropoff_address        TEXT   NOT NULL,
     state                  TEXT   NOT NULL CHECK (state IN
         ('waiting', 'assigned', 'picked_up', 'delivered', 'failed', 'cancelled')),
     failure_reason         TEXT,

@@ -119,12 +119,11 @@ func (x *GetCourierCurrentDeliveryResponse) GetCourierStatus() CourierStatus {
 }
 
 type CreateDeliveryRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	OrderId        string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	PickupAddress  string                 `protobuf:"bytes,2,opt,name=pickup_address,json=pickupAddress,proto3" json:"pickup_address,omitempty"`
-	DropoffAddress string                 `protobuf:"bytes,3,opt,name=dropoff_address,json=dropoffAddress,proto3" json:"dropoff_address,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	PickupAddress string                 `protobuf:"bytes,2,opt,name=pickup_address,json=pickupAddress,proto3" json:"pickup_address,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateDeliveryRequest) Reset() {
@@ -167,13 +166,6 @@ func (x *CreateDeliveryRequest) GetOrderId() string {
 func (x *CreateDeliveryRequest) GetPickupAddress() string {
 	if x != nil {
 		return x.PickupAddress
-	}
-	return ""
-}
-
-func (x *CreateDeliveryRequest) GetDropoffAddress() string {
-	if x != nil {
-		return x.DropoffAddress
 	}
 	return ""
 }
@@ -1489,11 +1481,10 @@ const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"courier_id\x18\x01 \x01(\tR\tcourierId\"\xa7\x01\n" +
 	"!GetCourierCurrentDeliveryResponse\x128\n" +
 	"\bdelivery\x18\x01 \x01(\v2\x1c.nomnom.delivery.v1.DeliveryR\bdelivery\x12H\n" +
-	"\x0ecourier_status\x18\x02 \x01(\x0e2!.nomnom.delivery.v1.CourierStatusR\rcourierStatus\"\x82\x01\n" +
+	"\x0ecourier_status\x18\x02 \x01(\x0e2!.nomnom.delivery.v1.CourierStatusR\rcourierStatus\"p\n" +
 	"\x15CreateDeliveryRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12%\n" +
-	"\x0epickup_address\x18\x02 \x01(\tR\rpickupAddress\x12'\n" +
-	"\x0fdropoff_address\x18\x03 \x01(\tR\x0edropoffAddress\"S\n" +
+	"\x0epickup_address\x18\x02 \x01(\tR\rpickupAddressJ\x04\b\x03\x10\x04R\x0fdropoff_address\"S\n" +
 	"\x16CreateDeliveryResponse\x12\x1f\n" +
 	"\vdelivery_id\x18\x01 \x01(\tR\n" +
 	"deliveryId\x12\x18\n" +
