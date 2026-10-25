@@ -2,10 +2,13 @@ import {
   InvalidRestaurantOrderError,
   InvalidRestaurantOrderReason,
 } from "./errors.ts";
+import type { EventPayload, RestaurantOrderEvent } from "./events.ts";
 import {
   type AcceptanceEligibility,
   type CancellationPolicy,
   RestaurantOrderState,
+  resolveTransition,
+  type TransitionRequest,
 } from "./fsm.ts";
 import {
   compositionKey,
@@ -14,10 +17,6 @@ import {
   type PreparationItemInput,
   toPreparationItems,
 } from "./items.ts";
-import {
-  RestaurantOrderRecord,
-  type RestaurantOrderSnapshot,
-} from "./record.ts";
 import { Quantity } from "./vo/quantity.ts";
 
 export {
@@ -35,19 +34,177 @@ export {
   RestaurantOrderState,
 } from "./fsm.ts";
 export type { PreparationItem, PreparationItemInput } from "./items.ts";
-export type {
-  RestaurantOrderSnapshot,
-  RestaurantOrderTimeline,
-} from "./record.ts";
+
+export type RestaurantOrderTimeline = Readonly<{
+  acceptedAt?: Date;
+  queuedAt?: Date;
+  preparationStartedAt?: Date;
+  expectedReadyAt?: Date;
+  readyAt?: Date;
+}>;
+
+export type RestaurantOrderSnapshot = Readonly<{
+  id: string;
+  orderId: string;
+  restaurantId: string;
+  items: readonly Readonly<{
+    menuItemId: string;
+    quantity: number;
+    options: readonly string[];
+  }>[];
+  state: RestaurantOrderState;
+  timeline: RestaurantOrderTimeline;
+  rejectionReason?: string;
+  failureReason?: string;
+  cancellation?: Readonly<{ stage: RestaurantOrderState; reason?: string }>;
+}>;
 
 /**
  * Aggregate root of the kitchen lifecycle of one `orders.Order` inside
  * `restaurants`. `Kitchen Order` is its role after Acceptance, not a separate
  * aggregate. Every state change goes through `resolveTransition`; domain
- * methods record Domain Events explicitly. Fields and the snapshot live in
- * {@link RestaurantOrderRecord}.
+ * methods record Domain Events explicitly.
  */
-export class RestaurantOrder extends RestaurantOrderRecord {
+export class RestaurantOrder {
+  readonly #id: string;
+  readonly #orderId: string;
+  readonly #restaurantId: string;
+  readonly #items: readonly PreparationItem[];
+  readonly #version: number;
+  #state: RestaurantOrderState;
+  #timeline: RestaurantOrderTimeline;
+  #rejectionReason: string | undefined;
+  #failureReason: string | undefined;
+  #cancellation: RestaurantOrderSnapshot["cancellation"];
+  #events: RestaurantOrderEvent[] = [];
+
+  private constructor(
+    snapshot: Omit<RestaurantOrderSnapshot, "items">,
+    items: readonly PreparationItem[],
+    version: number,
+  ) {
+    this.#id = snapshot.id;
+    this.#orderId = snapshot.orderId;
+    this.#restaurantId = snapshot.restaurantId;
+    this.#items = items;
+    this.#state = snapshot.state;
+    this.#timeline = { ...snapshot.timeline };
+    this.#rejectionReason = snapshot.rejectionReason;
+    this.#failureReason = snapshot.failureReason;
+    this.#cancellation = snapshot.cancellation;
+    this.#version = version;
+  }
+
+  get id(): string {
+    return this.#id;
+  }
+
+  get orderId(): string {
+    return this.#orderId;
+  }
+
+  get restaurantId(): string {
+    return this.#restaurantId;
+  }
+
+  get items(): readonly PreparationItem[] {
+    return this.#items;
+  }
+
+  get state(): RestaurantOrderState {
+    return this.#state;
+  }
+
+  get timeline(): RestaurantOrderTimeline {
+    return this.#timeline;
+  }
+
+  get rejectionReason(): string | undefined {
+    return this.#rejectionReason;
+  }
+
+  get failureReason(): string | undefined {
+    return this.#failureReason;
+  }
+
+  /** State in which the order was cancelled, if it was. */
+  get cancelledAtStage(): RestaurantOrderState | undefined {
+    return this.#cancellation?.stage;
+  }
+
+  get version(): number {
+    return this.#version;
+  }
+
+  toSnapshot(): RestaurantOrderSnapshot {
+    return {
+      id: this.#id,
+      orderId: this.#orderId,
+      restaurantId: this.#restaurantId,
+      items: this.#items.map((item) => ({
+        menuItemId: item.menuItemId,
+        quantity: item.quantity.value,
+        options: [...item.options],
+      })),
+      state: this.#state,
+      timeline: { ...this.#timeline },
+      ...(this.#rejectionReason === undefined
+        ? {}
+        : { rejectionReason: this.#rejectionReason }),
+      ...(this.#failureReason === undefined
+        ? {}
+        : { failureReason: this.#failureReason }),
+      ...(this.#cancellation === undefined
+        ? {}
+        : { cancellation: this.#cancellation }),
+    };
+  }
+
+  pullEvents(): RestaurantOrderEvent[] {
+    const events = this.#events;
+    this.#events = [];
+    return events;
+  }
+
+  private apply(request: TransitionRequest): void {
+    const outcome = resolveTransition(this.#state, request);
+    if (!outcome.ok) {
+      throw outcome.error;
+    }
+    this.#state = outcome.to;
+  }
+
+  private extendTimeline(timeline: RestaurantOrderTimeline): void {
+    this.#timeline = { ...this.#timeline, ...timeline };
+  }
+
+  private setRejectionReason(reason: string | undefined): void {
+    this.#rejectionReason = reason;
+  }
+
+  private setFailureReason(reason: string): void {
+    this.#failureReason = reason;
+  }
+
+  private setCancellation(
+    cancellation: NonNullable<RestaurantOrderSnapshot["cancellation"]>,
+  ): void {
+    this.#cancellation = cancellation;
+  }
+
+  private record(
+    payload: EventPayload<RestaurantOrderEvent>,
+    occurredAt: Date,
+  ): void {
+    this.#events.push({
+      ...payload,
+      restaurantOrderId: this.#id,
+      orderId: this.#orderId,
+      restaurantId: this.#restaurantId,
+      occurredAt,
+    } as RestaurantOrderEvent);
+  }
+
   /** Creates the order in `RECEIVED` from the composition sent by `orders`. */
   static receive(input: {
     id: string;
