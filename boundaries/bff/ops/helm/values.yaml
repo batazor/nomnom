@@ -6,8 +6,8 @@
 replicaCount: 1
 
 image:
-  # Образ всего BFF (Cosmo Router + plugin + config) ещё не определён: по ADR 10 его Dockerfile
-  # отложен до pinning версии и checksum Cosmo Router. Пустое значение — Deployment не запустится.
+  # Образ BFF (Cosmo Router + plugin + config.json) собирается boundaries/bff/Dockerfile;
+  # registry задаёт окружение. Пустое значение — Deployment не запустится.
   repository: ""
   # Tag образа задаётся окружением. Пустое значение означает "latest" — для реальных
   # окружений всегда задавайте tag явно.
@@ -36,8 +36,9 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  # Runtime-образ BFF ещё не определён (см. ADR 10): UID неизвестен.
-  # runAsUser / runAsGroup не задаются: UID runtime-образа ещё неизвестен (см. ops/README.md).
+  # Пользователь nonroot образа distroless (boundaries/bff/Dockerfile).
+  runAsUser: 65532
+  runAsGroup: 65532
   seccompProfile:
     type: RuntimeDefault
 
@@ -52,9 +53,8 @@ securityContext:
 
 service:
   type: ClusterIP
-  # Порт Service и порт Cosmo Router. В boundaries/bff/config.yaml задан listen_addr: localhost:3010;
-  # для контейнера router должен слушать 0.0.0.0:3010 (config.yaml окружения или env LISTEN_ADDR).
-  # targetPort должен совпадать с портом, на котором фактически запускается router.
+  # Порт Service и порт Cosmo Router: образ запускает его с listen_addr 0.0.0.0:3010
+  # (boundaries/bff/config.production.yaml). targetPort совпадает с портом процесса.
   port: 3010
   targetPort: 3010
   # Имя порта: Cosmo Router публикует GraphQL по HTTP.
@@ -90,18 +90,26 @@ envFrom: []
 #         key: password
 extraEnv: []
 
-# Probes отключены: у приложения ещё нет health contract. После его появления
-# задайте тип probe (httpGet / grpc / tcpSocket) и включите:
-# livenessProbe:
-#   enabled: true
-#   httpGet:
-#     path: /healthz
-#     port: http
+# Health endpoints Cosmo Router (config.production.yaml). Router обслуживает их только на
+# порту GraphQL, поэтому probes идут на http, а не на технический порт metrics (исключение из
+# ADR 17, см. ops/README.md). /health/ready — execution config и plugin загружены.
 livenessProbe:
-  enabled: false
+  enabled: true
+  httpGet:
+    path: /health/live
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
 
 readinessProbe:
-  enabled: false
+  enabled: true
+  httpGet:
+    path: /health/ready
+    port: http
+  periodSeconds: 2
+  timeoutSeconds: 1
+  failureThreshold: 1
 
 # ADR 15: адрес internal gateway (BFF__INTERNAL_GATEWAY_ADDR), через который BFF вызывает
 # orders и restaurants. Пустое значение — операции заказа покупателя недоступны.
