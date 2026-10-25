@@ -64,7 +64,7 @@ type Store interface {
 	RememberOrder(ctx context.Context, customerID order.CustomerID, key string, orderID order.ID) error
 	RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error
 	Revision(ctx context.Context, orderID string) (application.AuthorizationRevision, bool, error)
-	recordcourierassignment.Assignments
+	order.CourierAssignments
 	OrderView(ctx context.Context, id order.ID) (getorder.OrderView, error)
 	ListCustomerOrders(ctx context.Context, request listcustomerorders.PageRequest) (listcustomerorders.Page, error)
 	CountByState(ctx context.Context) (map[order.State]int64, error)

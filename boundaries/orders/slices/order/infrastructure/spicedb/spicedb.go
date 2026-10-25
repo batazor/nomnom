@@ -18,7 +18,6 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -117,20 +116,21 @@ func (a *Authorizer) GrantOrderRelationships(ctx context.Context, orderID order.
 }
 
 // AssignCourier writes order#courier and order#delivery of next and deletes
-// those of previous that differ, in one atomic request: a reassignment never
-// leaves the Order visible to both couriers or to none. TOUCH and DELETE are
-// idempotent, so a redelivered event repeats the request safely.
-func (a *Authorizer) AssignCourier(ctx context.Context, orderID order.ID, next recordcourierassignment.Assignment, previous *recordcourierassignment.Assignment) (application.AuthorizationRevision, error) {
+// those of displaced (order.CourierAssignment.Displaced), in one atomic
+// request: a reassignment never leaves the Order visible to both couriers or
+// to none. TOUCH and DELETE are idempotent, so a redelivered event repeats the
+// request safely.
+func (a *Authorizer) AssignCourier(ctx context.Context, orderID order.ID, next, displaced order.CourierAssignment) (application.AuthorizationRevision, error) {
 	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
 	updates := []*v1.RelationshipUpdate{
 		touch(resource, relationCourier, objectSubject(subjectUser, next.CourierID)),
 		touch(resource, relationDelivery, objectSubject(subjectDelivery, next.DeliveryID)),
 	}
-	if previous != nil && previous.CourierID != "" && previous.CourierID != next.CourierID {
-		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationCourier, objectSubject(subjectUser, previous.CourierID)))
+	if displaced.CourierID != "" {
+		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationCourier, objectSubject(subjectUser, displaced.CourierID)))
 	}
-	if previous != nil && previous.DeliveryID != "" && previous.DeliveryID != next.DeliveryID {
-		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, previous.DeliveryID)))
+	if displaced.DeliveryID != "" {
+		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, displaced.DeliveryID)))
 	}
 	return a.write(ctx, fmt.Sprintf("assign courier of order:%s", orderID), updates...)
 }
@@ -138,7 +138,7 @@ func (a *Authorizer) AssignCourier(ctx context.Context, orderID order.ID, next r
 // ReleaseCourier deletes order#courier of the released courier and, when
 // withDelivery, order#delivery in one request. DELETE of an absent
 // relationship is a no-op, so a repeat is idempotent.
-func (a *Authorizer) ReleaseCourier(ctx context.Context, orderID order.ID, released recordcourierassignment.Assignment, withDelivery bool) (application.AuthorizationRevision, error) {
+func (a *Authorizer) ReleaseCourier(ctx context.Context, orderID order.ID, released order.CourierAssignment, withDelivery bool) (application.AuthorizationRevision, error) {
 	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
 	var updates []*v1.RelationshipUpdate
 	if released.CourierID != "" {

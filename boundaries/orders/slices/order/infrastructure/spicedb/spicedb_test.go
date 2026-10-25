@@ -16,7 +16,6 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
@@ -122,16 +121,17 @@ func relationships(updates []*v1.RelationshipUpdate) []string {
 	return out
 }
 
-// AC-519: a reassignment touches the new courier and deletes the previous one
-// in one request; an unchanged delivery is only touched.
+// AC-519: a reassignment touches the new courier and deletes the displaced
+// one in one request; an unchanged delivery is only touched.
 func TestAssignCourierReplacesPreviousInOneRequest(t *testing.T) {
 	fake := &fakePermissions{}
 	a := spicedb.NewAuthorizer(fake, nil, time.Second)
-	next := recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-2"}
+	next := order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-2"}
 
-	_, err := a.AssignCourier(context.Background(), "order-1", next, nil)
+	_, err := a.AssignCourier(context.Background(), "order-1", next, order.CourierAssignment{})
 	require.NoError(t, err)
-	revision, err := a.AssignCourier(context.Background(), "order-1", next, &recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1"})
+	displaced := next.Displaced(order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"})
+	revision, err := a.AssignCourier(context.Background(), "order-1", next, displaced)
 	require.NoError(t, err)
 
 	assert.Equal(t, application.AuthorizationRevision("zed-1"), revision)
@@ -149,7 +149,7 @@ func TestAssignCourierReplacesPreviousInOneRequest(t *testing.T) {
 func TestAssignCourierFailsAsUnavailable(t *testing.T) {
 	a := spicedb.NewAuthorizer(&fakePermissions{err: errors.New("unavailable")}, nil, time.Second)
 
-	_, err := a.AssignCourier(context.Background(), "order-1", recordcourierassignment.Assignment{DeliveryID: "d", CourierID: "c"}, nil)
+	_, err := a.AssignCourier(context.Background(), "order-1", order.CourierAssignment{DeliveryID: "d", CourierID: "c"}, order.CourierAssignment{})
 
 	require.ErrorIs(t, err, spicedb.ErrUnavailable)
 	require.ErrorIs(t, err, application.ErrDependencyUnavailable)
@@ -160,13 +160,13 @@ func TestAssignCourierFailsAsUnavailable(t *testing.T) {
 func TestReleaseCourierDeletesRelationships(t *testing.T) {
 	fake := &fakePermissions{}
 	a := spicedb.NewAuthorizer(fake, nil, time.Second)
-	released := recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1"}
+	released := order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}
 
 	_, err := a.ReleaseCourier(context.Background(), "order-1", released, false)
 	require.NoError(t, err)
 	_, err = a.ReleaseCourier(context.Background(), "order-1", released, true)
 	require.NoError(t, err)
-	revision, err := a.ReleaseCourier(context.Background(), "order-1", recordcourierassignment.Assignment{}, true)
+	revision, err := a.ReleaseCourier(context.Background(), "order-1", order.CourierAssignment{}, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, application.AuthorizationRevision(""), revision)
@@ -182,10 +182,9 @@ func TestReleaseCourierDeletesRelationships(t *testing.T) {
 func TestAssignCourierAfterReleaseDeletesNothing(t *testing.T) {
 	fake := &fakePermissions{}
 	a := spicedb.NewAuthorizer(fake, nil, time.Second)
+	next := order.CourierAssignment{DeliveryID: "delivery-2", CourierID: "courier-2"}
 
-	_, err := a.AssignCourier(context.Background(), "order-1",
-		recordcourierassignment.Assignment{DeliveryID: "delivery-2", CourierID: "courier-2"},
-		&recordcourierassignment.Assignment{})
+	_, err := a.AssignCourier(context.Background(), "order-1", next, next.Displaced(order.CourierAssignment{}))
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{
@@ -241,15 +240,15 @@ func TestAgainstSpiceDB(t *testing.T) {
 	require.NoError(t, check(owner, "view"))
 	require.ErrorIs(t, check(owner, "cancel"), application.ErrPermissionDenied)
 
-	first := recordcourierassignment.Assignment{DeliveryID: "delivery-" + orderID, CourierID: "courier-1-" + orderID}
-	second := recordcourierassignment.Assignment{DeliveryID: first.DeliveryID, CourierID: "courier-2-" + orderID}
-	stored[orderID], err = a.AssignCourier(ctx, order.ID(orderID), first, nil)
+	first := order.CourierAssignment{DeliveryID: "delivery-" + orderID, CourierID: "courier-1-" + orderID}
+	second := order.CourierAssignment{DeliveryID: first.DeliveryID, CourierID: "courier-2-" + orderID}
+	stored[orderID], err = a.AssignCourier(ctx, order.ID(orderID), first, order.CourierAssignment{})
 	require.NoError(t, err)
 	courier1 := application.Subject{Kind: application.SubjectUser, ID: first.CourierID}
 	courier2 := application.Subject{Kind: application.SubjectUser, ID: second.CourierID}
 	require.NoError(t, check(courier1, "view"))
 	require.ErrorIs(t, check(courier1, "cancel"), application.ErrPermissionDenied)
-	stored[orderID], err = a.AssignCourier(ctx, order.ID(orderID), second, &first)
+	stored[orderID], err = a.AssignCourier(ctx, order.ID(orderID), second, second.Displaced(first))
 	require.NoError(t, err)
 	require.ErrorIs(t, check(courier1, "view"), application.ErrPermissionDenied, "the stored revision makes the revocation visible")
 	require.NoError(t, check(courier2, "view"))

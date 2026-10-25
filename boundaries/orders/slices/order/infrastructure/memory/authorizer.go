@@ -7,7 +7,6 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/getorder"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -84,16 +83,16 @@ func (a *Authorizer) GrantOrderRelationships(_ context.Context, orderID order.ID
 }
 
 // AssignCourier grants view on the Order to the next courier and revokes it
-// from the previous one, as order#courier would.
-func (a *Authorizer) AssignCourier(_ context.Context, orderID order.ID, next recordcourierassignment.Assignment, previous *recordcourierassignment.Assignment) (application.AuthorizationRevision, error) {
+// from the displaced one, as order#courier would.
+func (a *Authorizer) AssignCourier(_ context.Context, orderID order.ID, next, displaced order.CourierAssignment) (application.AuthorizationRevision, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.writeError != nil {
 		return "", a.writeError
 	}
 	resource := application.Resource{Type: getorder.ResourceOrder, ID: string(orderID)}
-	if previous != nil && previous.CourierID != "" && previous.CourierID != next.CourierID {
-		delete(a.grants, grant{subject: application.Subject{Kind: application.SubjectUser, ID: previous.CourierID}, permission: getorder.PermissionView, resource: resource})
+	if displaced.CourierID != "" {
+		delete(a.grants, grant{subject: application.Subject{Kind: application.SubjectUser, ID: displaced.CourierID}, permission: getorder.PermissionView, resource: resource})
 	}
 	a.grants[grant{subject: application.Subject{Kind: application.SubjectUser, ID: next.CourierID}, permission: getorder.PermissionView, resource: resource}] = struct{}{}
 	a.writes++
@@ -102,7 +101,7 @@ func (a *Authorizer) AssignCourier(_ context.Context, orderID order.ID, next rec
 
 // ReleaseCourier revokes view on the Order from the released courier, as a
 // DELETE of order#courier would; order#delivery is not modelled.
-func (a *Authorizer) ReleaseCourier(_ context.Context, orderID order.ID, released recordcourierassignment.Assignment, _ bool) (application.AuthorizationRevision, error) {
+func (a *Authorizer) ReleaseCourier(_ context.Context, orderID order.ID, released order.CourierAssignment, _ bool) (application.AuthorizationRevision, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.writeError != nil {

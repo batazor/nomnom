@@ -208,7 +208,7 @@ func TestCourierReleaseEventsRevokeCourierAccess(t *testing.T) {
 	stored, found, err := c.store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, recordcourierassignment.Assignment{AssignedAt: occurredAt}, stored)
+	assert.Equal(t, order.CourierAssignment{AssignedAt: occurredAt}, stored)
 	assert.Equal(t, []fulfillment.Kind{fulfillment.KindCourierAssigned}, kinds(c.workflow.Notifications()))
 	assert.Equal(t, 3, c.store.InboxSize())
 	c.noPoison(t)

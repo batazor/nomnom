@@ -8,15 +8,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 // CourierAssignment reads the Courier Assignment of an Order and locks its row
 // until the end of the active transaction, so reassignments of one Order apply
 // one after another.
-func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (recordcourierassignment.Assignment, bool, error) {
+func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (order.CourierAssignment, bool, error) {
 	var (
 		deliveryID, courierID *string
 		assignedAt            *time.Time
@@ -25,17 +23,17 @@ func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (record
 		SELECT delivery_id, courier_id, courier_assigned_at FROM orders WHERE id = $1 FOR UPDATE`, orderID,
 	).Scan(&deliveryID, &courierID, &assignedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return recordcourierassignment.Assignment{}, false, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
+		return order.CourierAssignment{}, false, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
 	}
 	if err != nil {
-		return recordcourierassignment.Assignment{}, false, fmt.Errorf("read courier assignment of %s: %w", orderID, err)
+		return order.CourierAssignment{}, false, fmt.Errorf("read courier assignment of %s: %w", orderID, err)
 	}
 	// A released assignment keeps its time with an empty courier (and, for a
 	// cancelled Delivery, an empty delivery): it still orders later events.
 	if assignedAt == nil {
-		return recordcourierassignment.Assignment{}, false, nil
+		return order.CourierAssignment{}, false, nil
 	}
-	return recordcourierassignment.Assignment{DeliveryID: deref(deliveryID), CourierID: deref(courierID), AssignedAt: assignedAt.UTC()}, true, nil
+	return order.CourierAssignment{DeliveryID: deref(deliveryID), CourierID: deref(courierID), AssignedAt: assignedAt.UTC()}, true, nil
 }
 
 func deref(s *string) string {
@@ -49,13 +47,13 @@ func deref(s *string) string {
 // the ZedToken of its relationship write in the active transaction. An empty
 // delivery or courier is stored as NULL, so the relation is absent for the
 // reconciliation.
-func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment recordcourierassignment.Assignment, revision application.AuthorizationRevision) error {
+func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment order.CourierAssignment, revision string) error {
 	tag, err := s.q(ctx).Exec(ctx, `
 		UPDATE orders
 		SET delivery_id = NULLIF($2, ''), courier_id = NULLIF($3, ''), courier_assigned_at = $4,
 		    authorization_revision = COALESCE(NULLIF($5, ''), authorization_revision)
 		WHERE id = $1`,
-		orderID, assignment.DeliveryID, assignment.CourierID, assignment.AssignedAt, string(revision))
+		orderID, assignment.DeliveryID, assignment.CourierID, assignment.AssignedAt, revision)
 	if err != nil {
 		return fmt.Errorf("remember courier assignment of %s: %w", orderID, err)
 	}

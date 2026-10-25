@@ -53,6 +53,34 @@ type Inbox interface {
 	Accept(ctx context.Context, consumer, eventID string) (bool, error)
 }
 
+// AcceptOnce runs the insert-first Inbox protocol of an integration event:
+//
+//	UoW { Inbox.Accept → fn } → commit
+//
+// fn runs in the transaction only for an event the consumer has not processed
+// yet; its error rolls the Inbox record back, so redelivery repeats the event.
+// accepted is false for a duplicate, which changes nothing.
+func AcceptOnce(ctx context.Context, uow UnitOfWork, inbox Inbox, consumer, eventID string, fn func(ctx context.Context) error) (accepted bool, err error) {
+	err = uow.Do(ctx, func(ctx context.Context) error {
+		ok, err := inbox.Accept(ctx, consumer, eventID)
+		if err != nil {
+			return fmt.Errorf("accept inbox event: %w", err)
+		}
+		if !ok {
+			return nil
+		}
+		if err := fn(ctx); err != nil {
+			return err
+		}
+		accepted = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return accepted, nil
+}
+
 // Clock supplies the current time to use cases; domain code never reads it.
 type Clock interface {
 	Now() time.Time

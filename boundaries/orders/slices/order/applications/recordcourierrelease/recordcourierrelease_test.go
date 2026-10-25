@@ -13,6 +13,7 @@ import (
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
+	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/memory"
 )
@@ -51,7 +52,7 @@ func (w world) courierCanView(t *testing.T, courierID string) bool {
 	}) == nil
 }
 
-func (w world) stored(t *testing.T) recordcourierassignment.Assignment {
+func (w world) stored(t *testing.T) order.CourierAssignment {
 	t.Helper()
 	stored, found, err := w.store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)
@@ -78,7 +79,7 @@ func TestUnassignmentRevokesCourier(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
 	assert.False(t, w.courierCanView(t, "courier-1"))
-	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", AssignedAt: releasedAt}, w.stored(t))
+	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", AssignedAt: releasedAt}, w.stored(t))
 	revision, _, err := w.store.Revision(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.Equal(t, application.AuthorizationRevision("memory:order-1:courier:2"), revision)
@@ -95,7 +96,7 @@ func TestCancellationReleasesCourierAndDelivery(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
 	assert.False(t, w.courierCanView(t, "courier-1"))
-	assert.Equal(t, recordcourierassignment.Assignment{AssignedAt: cancelledAt}, w.stored(t))
+	assert.Equal(t, order.CourierAssignment{AssignedAt: cancelledAt}, w.stored(t))
 }
 
 // AC-536: an event that does not name the stored assignment changes nothing.
@@ -119,7 +120,7 @@ func TestEventOfAnotherAssignmentIsIgnored(t *testing.T) {
 			assert.Equal(t, recordcourierrelease.OutcomeIgnoredStale, result.Outcome)
 			assert.True(t, w.courierCanView(t, "courier-1"))
 			assert.Equal(t, 1, w.authorizer.CourierWrites())
-			assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt}, w.stored(t))
+			assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt}, w.stored(t))
 			assert.Equal(t, 2, w.store.InboxSize(), "the event is recorded in the Inbox")
 		})
 	}

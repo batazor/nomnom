@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/postgres"
@@ -139,7 +138,7 @@ func TestReconcileCourierAndRestaurantRelationships(t *testing.T) {
 	e := newEnv(t)
 	assigned := id("assigned")
 	require.NoError(t, e.store.Add(e.ctx, ordertest.New(t, order.ID(assigned))))
-	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(assigned), recordcourierassignment.Assignment{
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(assigned), order.CourierAssignment{
 		DeliveryID: "delivery-1", CourierID: "courier-new", AssignedAt: e.now,
 	}, ""))
 	// The previous courier survived a lost DELETE.
@@ -167,10 +166,10 @@ func TestReconcileReleasedCourier(t *testing.T) {
 		e.touchRelation(courierRelation, orderID, "courier-1")
 		e.touchRelation(deliveryRelation, orderID, "delivery-1")
 	}
-	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(unassigned), recordcourierassignment.Assignment{
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(unassigned), order.CourierAssignment{
 		DeliveryID: "delivery-1", AssignedAt: e.now,
 	}, ""))
-	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(cancelled), recordcourierassignment.Assignment{
+	require.NoError(t, e.store.RememberCourierAssignment(e.ctx, order.ID(cancelled), order.CourierAssignment{
 		AssignedAt: e.now,
 	}, ""))
 

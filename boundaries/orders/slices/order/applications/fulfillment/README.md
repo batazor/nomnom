@@ -19,7 +19,7 @@ Package не является use case. Он объявляет единстве
 `Reflector` выполняет insert-first протокол Inbox для 8 входящих use cases:
 
 ```text
-UoW { Inbox.Accept(consumer, event_id) → load Order → domain method → Save } → commit → Notify(event_id)
+application.AcceptOnce: UoW { Inbox.Accept(consumer, event_id) → load Order → domain method → Save } → commit → Notify(event_id)
 ```
 
 | Результат доменного метода | Outcome | Сохраняется |

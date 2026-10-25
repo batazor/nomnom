@@ -136,7 +136,7 @@ func TestHandleWritesAndReplacesCourierRelationships(t *testing.T) {
 	stored, found, err := store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, recordcourierassignment.Assignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: occurredAt}, stored)
+	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: occurredAt}, stored)
 
 	result, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", occurredAt.Add(time.Minute)))
 	require.NoError(t, err)
