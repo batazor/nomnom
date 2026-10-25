@@ -19,7 +19,7 @@ BFF — отдельный сервис и единая прикладная т�
 - generated-код и lock-файл контракта коммитятся;
 - минимальный stateless-запрос `bffInfo` подтверждает сборку полного контура.
 
-Реализованы слайсы `catalog`, `checkout`, `ordertracking`, `restaurantmanagement`, `kitchen` и `courier` поверх `restaurants`, `orders` и `delivery` через internal gateway (см. [Customer API](#customer-api)); операций «только схема» не осталось.
+Реализованы слайсы `catalog`, `checkout`, `ordertracking`, `restaurantmanagement`, `kitchen`, `courier` и `simulator` поверх `restaurants`, `orders` и `delivery` через internal gateway (см. [Customer API](#customer-api)); операций «только схема» не осталось.
 
 ## Customer API
 
@@ -36,6 +36,7 @@ BFF — отдельный сервис и единая прикладная т�
 | `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | реализована (`ordertracking`) |
 | `openRestaurant(restaurantId)`, `closeRestaurant(restaurantId)` | открытие ресторана владельцем, повтор — `changed = false` | реализованы (`restaurantmanagement`) |
 | `myRestaurants(first, after)` | открытые и закрытые рестораны текущего пользователя (`restaurants.ListOwnedRestaurants`), `menu = null`; нужен access token | реализован (`restaurantmanagement`) |
+| `simulator`, `setSimulatorEnabled(enabled)` | demo Simulator трёх контекстов, `enabled` — AND ответов; нужен оператор (`platform#operate_simulator`) | реализованы (`simulator`) |
 | `kitchen(restaurantId)` | активные заказы ресторана для кухни; `null` для отсутствующего ресторана и кухни, которой пользователь не управляет | реализован (`kitchen`) |
 | `applyKitchenAction(input)` | команда кухни над заказом ресторана; конфликт стадии — `problem` | реализована (`kitchen`) |
 | `courier` | работа текущего пользователя как курьера; `null`, если он не курьер | реализован (`courier`) |
@@ -94,6 +95,19 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checko
 - Покупатель не передаётся аргументом: subject определяется по аутентифицированному запросу.
 - Моменты времени — `String` в RFC 3339, `Money.amount` — десятичная строка; unions и custom scalars не используются.
 - `Order.cancellation` берётся из `Order.cancellation_window` ответа `orders` `GetOrder`: `availableUntil = closes_at`, если `opens_at ≤ now ≤ closes_at` по часам BFF, иначе `null`. `orders` возвращает окно, только пока Order State допускает отмену; сам запрос отмены `orders` проверяет заново.
+
+### Слайс `simulator`
+
+Change [`add-demo-simulator`](../../openspec/changes/add-demo-simulator/) (FR-607). `plugins/bff/simulator/applications` — сценарии Get Simulator и Set Simulator Enabled с портом `Simulator`; `simulator/infrastructure` вызывает `GetSimulator`/`SetSimulatorEnabled` у `orders`, `restaurants` и `delivery` по очереди от имени пользователя (service token BFF и user assertion, ADR 32). `enabled` — `true`, только если Simulator включён во всех трёх. Право `platform#operate_simulator` проверяет каждый контекст.
+
+| Ответ контекстов | GraphQL `simulator` / `setSimulatorEnabled` |
+| --- | --- |
+| нет или невалидный access token | error `UNAUTHENTICATED`, контексты не вызываются |
+| успех всех трёх | `Simulator { enabled }` — AND ответов |
+| `PERMISSION_DENIED` хотя бы одного | error `PERMISSION_DENIED` |
+| остальные сбои любого, в том числе `UNAVAILABLE` | error `UNAVAILABLE` без внутренних деталей |
+
+Mutation останавливается на первом сбое: контексты, переключённые до него, остаются в новом состоянии, повтор доводит переключение.
 
 ### Слайс `restaurantmanagement`
 
@@ -260,6 +274,7 @@ boundaries/bff/
     checkout/                 # слайс оформления заказа
     ordertracking/            # слайс отслеживания заказа
     restaurantmanagement/     # слайс открытия ресторана владельцем
+    simulator/                # слайс переключателя demo Simulator
     identity/                 # access token, user assertion, service token
     infrastructure/gateway/   # соединение с internal gateway
     infrastructure/grpcerr/   # ErrorInfo и metadata ошибок контекстов

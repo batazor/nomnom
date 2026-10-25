@@ -17,6 +17,7 @@ use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
 use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
+use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
 
 #[cfg(test)]
 use super::infrastructure::local_authorization;
@@ -47,6 +48,7 @@ module! {
 pub struct ServiceModule {
     couriers: ObservedCourierUseCases,
     deliveries: ObservedDeliveryUseCases,
+    simulator: Arc<dyn SimulatorUseCases>,
 }
 
 impl ServiceModule {
@@ -59,6 +61,11 @@ impl ServiceModule {
     pub fn deliveries(&self) -> &dyn DeliveryUseCases {
         &self.deliveries
     }
+
+    #[must_use]
+    pub fn simulator(&self) -> &dyn SimulatorUseCases {
+        &*self.simulator
+    }
 }
 
 /// Модули слайсов над портами `infrastructure` и итоговый модуль use cases.
@@ -66,6 +73,7 @@ impl ServiceModule {
 #[must_use]
 pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModule {
     let courier = Arc::new(CourierModule::builder(infrastructure.clone()).build());
+    let simulator = SimulatorModule::builder(infrastructure.clone()).build();
     let delivery = Arc::new(DeliveryModule::builder(infrastructure).build());
     let module = UseCaseModule::builder(courier, delivery).build();
     let telemetry = Arc::new(UseCaseTelemetry::global());
@@ -74,6 +82,7 @@ pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModul
     ServiceModule {
         couriers: ObservedCourierUseCases::new(couriers, Arc::clone(&telemetry)),
         deliveries: ObservedDeliveryUseCases::new(deliveries, telemetry),
+        simulator: simulator.resolve(),
     }
 }
 

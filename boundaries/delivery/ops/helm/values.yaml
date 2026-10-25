@@ -92,6 +92,8 @@ resources:
 # env:
 #   OFFERS__EXPIRY_INTERVAL: 30s
 #   OFFERS__DISPATCH_INTERVAL: 2s
+# SIMULATOR__INTERVAL, SIMULATOR__MIN_DELAY и SIMULATOR__MAX_DELAY обязательны (FR-606):
+# без них процесс не стартует, значения задаёт окружение (kind: 5s, 30s, 2m).
 env: {}
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:

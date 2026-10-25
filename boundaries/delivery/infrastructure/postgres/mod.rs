@@ -226,6 +226,7 @@ mod outbox;
 mod read_models;
 mod repositories;
 mod rows;
+mod simulator;
 mod transaction;
 
 fn storage_error(error: sqlx::Error) -> RepositoryError {

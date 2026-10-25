@@ -25,6 +25,8 @@ import type { RejectOrderHandler } from "../../slices/restaurantorder/applicatio
 import type { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import type { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import type { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
+import type { GetSimulatorHandler } from "../../slices/simulator/applications/get-simulator/get-simulator.ts";
+import type { SetSimulatorEnabledHandler } from "../../slices/simulator/applications/set-simulator-enabled/set-simulator-enabled.ts";
 import { requireField, transportError } from "./errors.ts";
 import {
   AssignStaffResponseSchema,
@@ -48,6 +50,7 @@ import {
 } from "./messages.ts";
 import { createOpeningRpcs } from "./restaurant-commands.ts";
 import { withRequestRevision } from "./revision.ts";
+import { createSimulatorRpcs } from "./simulator.ts";
 import type { SubjectResolver } from "./subject.ts";
 
 export {
@@ -84,6 +87,8 @@ export type RestaurantsServiceDependencies = Readonly<{
   addMenuItem: Pick<AddMenuItemHandler, "execute">;
   updateMenuItem: Pick<UpdateMenuItemHandler, "execute">;
   setMenuItemAvailability: Pick<SetMenuItemAvailabilityHandler, "execute">;
+  getSimulator: Pick<GetSimulatorHandler, "execute">;
+  setSimulatorEnabled: Pick<SetSimulatorEnabledHandler, "execute">;
   subjects: SubjectResolver;
 }>;
 
@@ -276,5 +281,6 @@ export const createRestaurantsService = (
 
     ...createOpeningRpcs(dependencies, subjects),
     ...createMenuRpcs(dependencies, subjects),
+    ...createSimulatorRpcs(dependencies, subjects),
   };
 };

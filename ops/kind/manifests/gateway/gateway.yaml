@@ -632,3 +632,78 @@ spec:
     - group: ""
       kind: Service
       name: payments
+---
+# Simulator (platform#operate_simulator): его вызывает BFF от имени оператора (FR-604).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: orders-v1-simulator
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.orders.v1.OrdersService
+            method: GetSimulator
+        - method:
+            type: Exact
+            service: nomnom.orders.v1.OrdersService
+            method: SetSimulatorEnabled
+      backendRefs:
+        - name: orders
+          namespace: nomnom-orders
+          port: 8081
+---
+# Simulator (platform#operate_simulator): его вызывает BFF от имени оператора (FR-604).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: restaurants-v1-simulator
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: GetSimulator
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: SetSimulatorEnabled
+      backendRefs:
+        - name: restaurants
+          namespace: nomnom-restaurants
+          port: 8082
+---
+# Simulator (platform#operate_simulator): его вызывает BFF от имени оператора (FR-604).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: delivery-v1-simulator
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: GetSimulator
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: SetSimulatorEnabled
+      backendRefs:
+        - name: delivery
+          namespace: nomnom-delivery
+          port: 8083

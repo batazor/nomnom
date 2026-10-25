@@ -37,6 +37,8 @@ export const RESTAURANTS_USE_CASES = {
   markRestaurantOrderReady: command("mark_ready_for_pickup"),
   reportPreparationDelay: command("report_preparation_delay"),
   reportPreparationFailure: command("report_preparation_failure"),
+  getSimulator: query("get_simulator"),
+  setSimulatorEnabled: command("set_simulator_enabled"),
 } as const;
 
 /** Use cases of `cmd/restaurants-consumer` by cradle key. */

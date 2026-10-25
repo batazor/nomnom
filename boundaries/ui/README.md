@@ -83,6 +83,15 @@ Feature `manage-restaurant` (`src/features/manage-restaurant/`, route `/manage/r
 - `bff-error.ts` читает gRPC-код из ошибки BFF: `PermissionDenied` — «нет прав», `NotFound` — «ресторан не найден», `Unauthenticated` — «войдите в аккаунт владельца», остальное и transport error — generic сообщение; повтор только ручным нажатием (команды идемпотентны).
 - Экран изолирован под `/manage/` и не связан с customer-навигацией: это исключение из границы customer UI до отдельного restaurant UI ([`docs/ui.md`](../../docs/ui.md#feature-organization)). Списка «мои рестораны» нет — экран открывается по ссылке с id ресторана. С реальным BFF нужен access token владельца; способ входа в браузере пока не выбран.
 
+## Переключатель эмулятора
+
+Feature `demo-simulator` (`src/features/demo-simulator/`) — переключатель «Эмулятор» справа в шапке (`app/layout.tsx`), change [`add-demo-simulator`](../../openspec/changes/add-demo-simulator/) (FR-607).
+
+- Operations `DemoSimulator` и `SetSimulatorEnabled` лежат в `demo-simulator.graphql`; query выполняется один раз при загрузке, polling нет (ADR 36).
+- Переключатель виден, только если `simulator` ответил без ошибки (оператор). При `PermissionDenied`, `Unauthenticated` и любой другой ошибке query шапка его не показывает.
+- Пока mutation выполняется, переключатель disabled; optimistic update нет, состояние меняется только по ответу. Ошибка mutation — короткое сообщение под переключателем, состояние прежнее.
+- В моках пользователь — оператор, Simulator выключен; `simulatorDeniedHandlers` из `mocks/handlers.ts` даёт вариант `PermissionDenied`.
+
 Основные проверки:
 
 ```bash

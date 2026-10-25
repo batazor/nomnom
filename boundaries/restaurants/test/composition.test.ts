@@ -10,7 +10,11 @@ import {
   type RestaurantsResources,
 } from "../di/restaurants.ts";
 import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
-import { type AppConfig, loadConfig } from "../pkg/config/config.ts";
+import {
+  type AppConfig,
+  loadConfig,
+  loadSimulatorConfig,
+} from "../pkg/config/config.ts";
 import {
   connectMongoDb,
   type MongoDbConnection,
@@ -19,6 +23,12 @@ import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { rejectingSubjects } from "./support/grpc.ts";
 import { mongoUri } from "./support/mongodb.ts";
+
+const simulatorEnvironment = {
+  SIMULATOR__INTERVAL: "5s",
+  SIMULATOR__MIN_DELAY: "30s",
+  SIMULATOR__MAX_DELAY: "2m",
+};
 
 const environment = {
   SPICEDB__ENDPOINT: "127.0.0.1:1",
@@ -42,6 +52,7 @@ const resourcesOf = (
     spicedb: config.spicedb,
     reconciler: config.reconciler,
     kitchen: config.kitchen,
+    simulator: loadSimulatorConfig(simulatorEnvironment),
     mongo,
     subjects: rejectingSubjects,
     logger: silentLogger,

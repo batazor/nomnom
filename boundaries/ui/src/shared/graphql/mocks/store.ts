@@ -90,6 +90,8 @@ function initialState(now: Date) {
     cancellations: new Map<string, CancellationPayload>(),
     // Opening state changed by openRestaurant/closeRestaurant, by restaurant id.
     opening: new Map<string, boolean>(),
+    // The mock user is the operator; the Simulator starts off like a new service.
+    simulatorEnabled: false,
   };
 }
 
@@ -346,6 +348,12 @@ export function createMockStore({
       setOpening(restaurantId, true),
     closeRestaurant: ({ restaurantId }: { restaurantId: string }) =>
       setOpening(restaurantId, false),
+    // Like BFF: the Simulator of the three contexts, switched together.
+    simulator: () => ({ enabled: state.simulatorEnabled }),
+    setSimulatorEnabled: ({ enabled }: { enabled: boolean }) => {
+      state.simulatorEnabled = enabled;
+      return { enabled: state.simulatorEnabled };
+    },
     // The mock user operates the kitchen of every restaurant and is a courier.
     kitchen: ({ restaurantId }: { restaurantId: string }) =>
       fulfillment.kitchen(restaurantId),

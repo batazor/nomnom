@@ -39,6 +39,8 @@ use crate::slices::delivery::domains::delivery::{
 };
 use crate::slices::delivery::infrastructure::failure_log::FailureLog;
 use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
+use crate::slices::simulator::applications::authorization::SimulatorAuthorization;
+use crate::slices::simulator::di::{SimulatorDependencies, SimulatorPorts, SimulatorStore};
 
 /// Локальные значения политики назначения до появления продуктовых настроек.
 const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
@@ -64,6 +66,8 @@ pub struct ProcessStores {
     pub read_models: Arc<dyn DeliveryReadModels>,
     /// Выборка Dispatch Deliveries: только PostgreSQL.
     pub waiting: Arc<dyn WaitingDeliveriesQuery>,
+    /// Переключатель и работа Simulator.
+    pub simulator: Arc<dyn SimulatorStore>,
 }
 
 impl ProcessStores {
@@ -75,6 +79,7 @@ impl ProcessStores {
             + TransactionalStore
             + DeliveryReadModels
             + WaitingDeliveriesQuery
+            + SimulatorStore
             + 'static,
     {
         Self {
@@ -82,14 +87,21 @@ impl ProcessStores {
             transactional: Arc::clone(store) as _,
             read_models: Arc::clone(store) as _,
             waiting: Arc::clone(store) as _,
+            simulator: Arc::clone(store) as _,
         }
     }
 }
 
-/// Адаптер авторизации процесса: закрывает порты обоих слайсов.
-pub trait ProcessAuthorization: CourierAuthorization + DeliveryAuthorization + Send + Sync {}
+/// Адаптер авторизации процесса: закрывает порты всех слайсов.
+pub trait ProcessAuthorization:
+    CourierAuthorization + DeliveryAuthorization + SimulatorAuthorization + Send + Sync
+{
+}
 
-impl<T: CourierAuthorization + DeliveryAuthorization + Send + Sync> ProcessAuthorization for T {}
+impl<T> ProcessAuthorization for T where
+    T: CourierAuthorization + DeliveryAuthorization + SimulatorAuthorization + Send + Sync
+{
+}
 
 /// Разрешающая авторизация тестовых графов [`super::service`]; процесс без
 /// SpiceDB не стартует (см. [`super::server::spicedb`]).
@@ -98,10 +110,11 @@ pub(super) fn local_authorization() -> StaticAuthorization {
     StaticAuthorization::allow_all()
 }
 
-/// Одна проверка прав на оба слайса.
+/// Одна проверка прав на все слайсы.
 pub trait SharedAuthorization: Interface {
     fn courier(&self) -> &dyn CourierAuthorization;
     fn delivery(&self) -> &dyn DeliveryAuthorization;
+    fn simulator(&self) -> &dyn SimulatorAuthorization;
 }
 
 #[derive(Component)]
@@ -116,6 +129,10 @@ impl SharedAuthorization for LocalAuthorization {
     }
 
     fn delivery(&self) -> &dyn DeliveryAuthorization {
+        &*self.authorization
+    }
+
+    fn simulator(&self) -> &dyn SimulatorAuthorization {
         &*self.authorization
     }
 }
@@ -381,6 +398,24 @@ impl DeliveryPorts for LocalDeliveryPorts {
 }
 
 #[derive(Component)]
+#[shaku(interface = SimulatorPorts)]
+pub struct LocalSimulatorPorts {
+    store: Arc<dyn SimulatorStore>,
+    #[shaku(inject)]
+    authorization: Arc<dyn SharedAuthorization>,
+}
+
+impl SimulatorPorts for LocalSimulatorPorts {
+    fn authorization(&self) -> &dyn SimulatorAuthorization {
+        self.authorization.simulator()
+    }
+
+    fn store(&self) -> &dyn SimulatorStore {
+        &*self.store
+    }
+}
+
+#[derive(Component)]
 #[shaku(interface = DeliverySettings)]
 pub struct LocalDeliverySettings;
 
@@ -398,6 +433,7 @@ module! {
             SystemClock,
             LocalCourierPorts,
             LocalDeliveryPorts,
+            LocalSimulatorPorts,
             LocalDeliverySettings
         ],
         providers = []
@@ -405,6 +441,8 @@ module! {
 }
 
 impl DeliveryDependencies for InfrastructureModule {}
+
+impl SimulatorDependencies for InfrastructureModule {}
 
 /// Собирает порты процесса над выбранными реализациями. Роли хранилища
 /// принадлежат модулю на всё время процесса; транзакции открывает Unit of
@@ -427,6 +465,9 @@ pub(super) fn infrastructure(
             })
             .with_component_parameters::<LocalCourierPorts>(LocalCourierPortsParameters {
                 store: stores.couriers,
+            })
+            .with_component_parameters::<LocalSimulatorPorts>(LocalSimulatorPortsParameters {
+                store: stores.simulator,
             })
             .with_component_parameters::<LocalDeliveryPorts>(LocalDeliveryPortsParameters {
                 store: ObservedStore::new(stores.transactional, observed_outbox()),

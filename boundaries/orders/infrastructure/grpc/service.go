@@ -15,16 +15,48 @@ import (
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
+	"nomnom/orders/slices/simulator/applications/switchsimulator"
 )
+
+// SimulatorSwitch is the inbound port of GetSimulator and SetSimulatorEnabled.
+type SimulatorSwitch interface {
+	Get(ctx context.Context, query switchsimulator.GetQuery) (bool, error)
+	Set(ctx context.Context, command switchsimulator.SetCommand) (bool, error)
+}
 
 type Service struct {
 	ordersv1.UnimplementedOrdersServiceServer
-	module   *orderdi.Module
-	subjects SubjectResolver
+	module    *orderdi.Module
+	simulator SimulatorSwitch
+	subjects  SubjectResolver
 }
 
-func NewService(module *orderdi.Module, subjects SubjectResolver) *Service {
-	return &Service{module: module, subjects: subjects}
+func NewService(module *orderdi.Module, simulator SimulatorSwitch, subjects SubjectResolver) *Service {
+	return &Service{module: module, simulator: simulator, subjects: subjects}
+}
+
+func (s *Service) GetSimulator(ctx context.Context, _ *ordersv1.GetSimulatorRequest) (*ordersv1.GetSimulatorResponse, error) {
+	subject, err := s.subjects.Resolve(ctx)
+	if err != nil {
+		return nil, transportError(err)
+	}
+	enabled, err := s.simulator.Get(ctx, switchsimulator.GetQuery{Subject: subject})
+	if err != nil {
+		return nil, transportError(err)
+	}
+	return &ordersv1.GetSimulatorResponse{Enabled: enabled}, nil
+}
+
+func (s *Service) SetSimulatorEnabled(ctx context.Context, request *ordersv1.SetSimulatorEnabledRequest) (*ordersv1.SetSimulatorEnabledResponse, error) {
+	subject, err := s.subjects.Resolve(ctx)
+	if err != nil {
+		return nil, transportError(err)
+	}
+	enabled, err := s.simulator.Set(ctx, switchsimulator.SetCommand{Subject: subject, Enabled: request.GetEnabled()})
+	if err != nil {
+		return nil, transportError(err)
+	}
+	return &ordersv1.SetSimulatorEnabledResponse{Enabled: enabled}, nil
 }
 
 func (s *Service) GetOrder(ctx context.Context, request *ordersv1.GetOrderRequest) (*ordersv1.GetOrderResponse, error) {

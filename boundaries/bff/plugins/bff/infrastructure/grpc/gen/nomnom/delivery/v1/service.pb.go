@@ -1471,6 +1471,174 @@ func (x *ReportDeliveryFailureResponse) GetReleasedCourierId() string {
 	return ""
 }
 
+type GetSimulatorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSimulatorRequest) Reset() {
+	*x = GetSimulatorRequest{}
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSimulatorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSimulatorRequest) ProtoMessage() {}
+
+func (x *GetSimulatorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSimulatorRequest.ProtoReflect.Descriptor instead.
+func (*GetSimulatorRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{26}
+}
+
+type GetSimulatorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSimulatorResponse) Reset() {
+	*x = GetSimulatorResponse{}
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSimulatorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSimulatorResponse) ProtoMessage() {}
+
+func (x *GetSimulatorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSimulatorResponse.ProtoReflect.Descriptor instead.
+func (*GetSimulatorResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GetSimulatorResponse) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type SetSimulatorEnabledRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSimulatorEnabledRequest) Reset() {
+	*x = SetSimulatorEnabledRequest{}
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSimulatorEnabledRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSimulatorEnabledRequest) ProtoMessage() {}
+
+func (x *SetSimulatorEnabledRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSimulatorEnabledRequest.ProtoReflect.Descriptor instead.
+func (*SetSimulatorEnabledRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *SetSimulatorEnabledRequest) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type SetSimulatorEnabledResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSimulatorEnabledResponse) Reset() {
+	*x = SetSimulatorEnabledResponse{}
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSimulatorEnabledResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSimulatorEnabledResponse) ProtoMessage() {}
+
+func (x *SetSimulatorEnabledResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSimulatorEnabledResponse.ProtoReflect.Descriptor instead.
+func (*SetSimulatorEnabledResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SetSimulatorEnabledResponse) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
 var File_nomnom_delivery_v1_service_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
@@ -1589,7 +1757,14 @@ const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"deliveryId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12.\n" +
-	"\x13released_courier_id\x18\x04 \x01(\tR\x11releasedCourierId2\x93\f\n" +
+	"\x13released_courier_id\x18\x04 \x01(\tR\x11releasedCourierId\"\x15\n" +
+	"\x13GetSimulatorRequest\"0\n" +
+	"\x14GetSimulatorResponse\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\"6\n" +
+	"\x1aSetSimulatorEnabledRequest\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\"7\n" +
+	"\x1bSetSimulatorEnabledResponse\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled2\xee\r\n" +
 	"\x0fDeliveryService\x12\x88\x01\n" +
 	"\x19GetCourierCurrentDelivery\x124.nomnom.delivery.v1.GetCourierCurrentDeliveryRequest\x1a5.nomnom.delivery.v1.GetCourierCurrentDeliveryResponse\x12g\n" +
 	"\x0eCreateDelivery\x12).nomnom.delivery.v1.CreateDeliveryRequest\x1a*.nomnom.delivery.v1.CreateDeliveryResponse\x12g\n" +
@@ -1603,7 +1778,9 @@ const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"\x13RejectDeliveryOffer\x12..nomnom.delivery.v1.RejectDeliveryOfferRequest\x1a/.nomnom.delivery.v1.RejectDeliveryOfferResponse\x12d\n" +
 	"\rConfirmPickup\x12(.nomnom.delivery.v1.ConfirmPickupRequest\x1a).nomnom.delivery.v1.ConfirmPickupResponse\x12j\n" +
 	"\x0fConfirmDelivery\x12*.nomnom.delivery.v1.ConfirmDeliveryRequest\x1a+.nomnom.delivery.v1.ConfirmDeliveryResponse\x12|\n" +
-	"\x15ReportDeliveryFailure\x120.nomnom.delivery.v1.ReportDeliveryFailureRequest\x1a1.nomnom.delivery.v1.ReportDeliveryFailureResponseB\xfc\x01\n" +
+	"\x15ReportDeliveryFailure\x120.nomnom.delivery.v1.ReportDeliveryFailureRequest\x1a1.nomnom.delivery.v1.ReportDeliveryFailureResponse\x12a\n" +
+	"\fGetSimulator\x12'.nomnom.delivery.v1.GetSimulatorRequest\x1a(.nomnom.delivery.v1.GetSimulatorResponse\x12v\n" +
+	"\x13SetSimulatorEnabled\x12..nomnom.delivery.v1.SetSimulatorEnabledRequest\x1a/.nomnom.delivery.v1.SetSimulatorEnabledResponseB\xfc\x01\n" +
 	"\x16com.nomnom.delivery.v1B\fServiceProtoP\x01Zjgithub.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1;deliveryv1\xa2\x02\x03NDX\xaa\x02\x12Nomnom.Delivery.V1\xca\x02\x12Nomnom\\Delivery\\V1\xe2\x02\x1eNomnom\\Delivery\\V1\\GPBMetadata\xea\x02\x14Nomnom::Delivery::V1b\x06proto3"
 
 var (
@@ -1618,7 +1795,7 @@ func file_nomnom_delivery_v1_service_proto_rawDescGZIP() []byte {
 	return file_nomnom_delivery_v1_service_proto_rawDescData
 }
 
-var file_nomnom_delivery_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_nomnom_delivery_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_nomnom_delivery_v1_service_proto_goTypes = []any{
 	(*GetCourierCurrentDeliveryRequest)(nil),    // 0: nomnom.delivery.v1.GetCourierCurrentDeliveryRequest
 	(*GetCourierCurrentDeliveryResponse)(nil),   // 1: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse
@@ -1646,21 +1823,25 @@ var file_nomnom_delivery_v1_service_proto_goTypes = []any{
 	(*ConfirmDeliveryResponse)(nil),             // 23: nomnom.delivery.v1.ConfirmDeliveryResponse
 	(*ReportDeliveryFailureRequest)(nil),        // 24: nomnom.delivery.v1.ReportDeliveryFailureRequest
 	(*ReportDeliveryFailureResponse)(nil),       // 25: nomnom.delivery.v1.ReportDeliveryFailureResponse
-	(*Delivery)(nil),                            // 26: nomnom.delivery.v1.Delivery
-	(CourierStatus)(0),                          // 27: nomnom.delivery.v1.CourierStatus
-	(CourierAvailability)(0),                    // 28: nomnom.delivery.v1.CourierAvailability
-	(*DeliveryOffer)(nil),                       // 29: nomnom.delivery.v1.DeliveryOffer
-	(DeliveryState)(0),                          // 30: nomnom.delivery.v1.DeliveryState
+	(*GetSimulatorRequest)(nil),                 // 26: nomnom.delivery.v1.GetSimulatorRequest
+	(*GetSimulatorResponse)(nil),                // 27: nomnom.delivery.v1.GetSimulatorResponse
+	(*SetSimulatorEnabledRequest)(nil),          // 28: nomnom.delivery.v1.SetSimulatorEnabledRequest
+	(*SetSimulatorEnabledResponse)(nil),         // 29: nomnom.delivery.v1.SetSimulatorEnabledResponse
+	(*Delivery)(nil),                            // 30: nomnom.delivery.v1.Delivery
+	(CourierStatus)(0),                          // 31: nomnom.delivery.v1.CourierStatus
+	(CourierAvailability)(0),                    // 32: nomnom.delivery.v1.CourierAvailability
+	(*DeliveryOffer)(nil),                       // 33: nomnom.delivery.v1.DeliveryOffer
+	(DeliveryState)(0),                          // 34: nomnom.delivery.v1.DeliveryState
 }
 var file_nomnom_delivery_v1_service_proto_depIdxs = []int32{
-	26, // 0: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.delivery:type_name -> nomnom.delivery.v1.Delivery
-	27, // 1: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.courier_status:type_name -> nomnom.delivery.v1.CourierStatus
-	27, // 2: nomnom.delivery.v1.RegisterCourierResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
-	28, // 3: nomnom.delivery.v1.SetCourierAvailabilityRequest.availability:type_name -> nomnom.delivery.v1.CourierAvailability
-	27, // 4: nomnom.delivery.v1.SetCourierAvailabilityResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
-	29, // 5: nomnom.delivery.v1.ListAvailableDeliveryOffersResponse.offers:type_name -> nomnom.delivery.v1.DeliveryOffer
-	30, // 6: nomnom.delivery.v1.ConfirmPickupResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
-	30, // 7: nomnom.delivery.v1.ConfirmDeliveryResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
+	30, // 0: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.delivery:type_name -> nomnom.delivery.v1.Delivery
+	31, // 1: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.courier_status:type_name -> nomnom.delivery.v1.CourierStatus
+	31, // 2: nomnom.delivery.v1.RegisterCourierResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
+	32, // 3: nomnom.delivery.v1.SetCourierAvailabilityRequest.availability:type_name -> nomnom.delivery.v1.CourierAvailability
+	31, // 4: nomnom.delivery.v1.SetCourierAvailabilityResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
+	33, // 5: nomnom.delivery.v1.ListAvailableDeliveryOffersResponse.offers:type_name -> nomnom.delivery.v1.DeliveryOffer
+	34, // 6: nomnom.delivery.v1.ConfirmPickupResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
+	34, // 7: nomnom.delivery.v1.ConfirmDeliveryResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
 	0,  // 8: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:input_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryRequest
 	2,  // 9: nomnom.delivery.v1.DeliveryService.CreateDelivery:input_type -> nomnom.delivery.v1.CreateDeliveryRequest
 	4,  // 10: nomnom.delivery.v1.DeliveryService.ReplanDelivery:input_type -> nomnom.delivery.v1.ReplanDeliveryRequest
@@ -1674,21 +1855,25 @@ var file_nomnom_delivery_v1_service_proto_depIdxs = []int32{
 	20, // 18: nomnom.delivery.v1.DeliveryService.ConfirmPickup:input_type -> nomnom.delivery.v1.ConfirmPickupRequest
 	22, // 19: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:input_type -> nomnom.delivery.v1.ConfirmDeliveryRequest
 	24, // 20: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:input_type -> nomnom.delivery.v1.ReportDeliveryFailureRequest
-	1,  // 21: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:output_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryResponse
-	3,  // 22: nomnom.delivery.v1.DeliveryService.CreateDelivery:output_type -> nomnom.delivery.v1.CreateDeliveryResponse
-	5,  // 23: nomnom.delivery.v1.DeliveryService.ReplanDelivery:output_type -> nomnom.delivery.v1.ReplanDeliveryResponse
-	7,  // 24: nomnom.delivery.v1.DeliveryService.CancelDelivery:output_type -> nomnom.delivery.v1.CancelDeliveryResponse
-	9,  // 25: nomnom.delivery.v1.DeliveryService.RegisterCourier:output_type -> nomnom.delivery.v1.RegisterCourierResponse
-	11, // 26: nomnom.delivery.v1.DeliveryService.UpdateCourierLocation:output_type -> nomnom.delivery.v1.UpdateCourierLocationResponse
-	13, // 27: nomnom.delivery.v1.DeliveryService.SetCourierAvailability:output_type -> nomnom.delivery.v1.SetCourierAvailabilityResponse
-	15, // 28: nomnom.delivery.v1.DeliveryService.ListAvailableDeliveryOffers:output_type -> nomnom.delivery.v1.ListAvailableDeliveryOffersResponse
-	17, // 29: nomnom.delivery.v1.DeliveryService.AcceptDeliveryOffer:output_type -> nomnom.delivery.v1.AcceptDeliveryOfferResponse
-	19, // 30: nomnom.delivery.v1.DeliveryService.RejectDeliveryOffer:output_type -> nomnom.delivery.v1.RejectDeliveryOfferResponse
-	21, // 31: nomnom.delivery.v1.DeliveryService.ConfirmPickup:output_type -> nomnom.delivery.v1.ConfirmPickupResponse
-	23, // 32: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:output_type -> nomnom.delivery.v1.ConfirmDeliveryResponse
-	25, // 33: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:output_type -> nomnom.delivery.v1.ReportDeliveryFailureResponse
-	21, // [21:34] is the sub-list for method output_type
-	8,  // [8:21] is the sub-list for method input_type
+	26, // 21: nomnom.delivery.v1.DeliveryService.GetSimulator:input_type -> nomnom.delivery.v1.GetSimulatorRequest
+	28, // 22: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:input_type -> nomnom.delivery.v1.SetSimulatorEnabledRequest
+	1,  // 23: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:output_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryResponse
+	3,  // 24: nomnom.delivery.v1.DeliveryService.CreateDelivery:output_type -> nomnom.delivery.v1.CreateDeliveryResponse
+	5,  // 25: nomnom.delivery.v1.DeliveryService.ReplanDelivery:output_type -> nomnom.delivery.v1.ReplanDeliveryResponse
+	7,  // 26: nomnom.delivery.v1.DeliveryService.CancelDelivery:output_type -> nomnom.delivery.v1.CancelDeliveryResponse
+	9,  // 27: nomnom.delivery.v1.DeliveryService.RegisterCourier:output_type -> nomnom.delivery.v1.RegisterCourierResponse
+	11, // 28: nomnom.delivery.v1.DeliveryService.UpdateCourierLocation:output_type -> nomnom.delivery.v1.UpdateCourierLocationResponse
+	13, // 29: nomnom.delivery.v1.DeliveryService.SetCourierAvailability:output_type -> nomnom.delivery.v1.SetCourierAvailabilityResponse
+	15, // 30: nomnom.delivery.v1.DeliveryService.ListAvailableDeliveryOffers:output_type -> nomnom.delivery.v1.ListAvailableDeliveryOffersResponse
+	17, // 31: nomnom.delivery.v1.DeliveryService.AcceptDeliveryOffer:output_type -> nomnom.delivery.v1.AcceptDeliveryOfferResponse
+	19, // 32: nomnom.delivery.v1.DeliveryService.RejectDeliveryOffer:output_type -> nomnom.delivery.v1.RejectDeliveryOfferResponse
+	21, // 33: nomnom.delivery.v1.DeliveryService.ConfirmPickup:output_type -> nomnom.delivery.v1.ConfirmPickupResponse
+	23, // 34: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:output_type -> nomnom.delivery.v1.ConfirmDeliveryResponse
+	25, // 35: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:output_type -> nomnom.delivery.v1.ReportDeliveryFailureResponse
+	27, // 36: nomnom.delivery.v1.DeliveryService.GetSimulator:output_type -> nomnom.delivery.v1.GetSimulatorResponse
+	29, // 37: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:output_type -> nomnom.delivery.v1.SetSimulatorEnabledResponse
+	23, // [23:38] is the sub-list for method output_type
+	8,  // [8:23] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1706,7 +1891,7 @@ func file_nomnom_delivery_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_delivery_v1_service_proto_rawDesc), len(file_nomnom_delivery_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   26,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

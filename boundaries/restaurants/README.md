@@ -47,6 +47,8 @@ TypeScript.
 | **Report Preparation Delay** | Авторизованный сотрудник кухни | Сообщить, что заказ будет готов позже | `expected_ready_at` изменён, State не меняется | Публикует `PreparationDelayed` через Outbox |
 | **Report Preparation Failure** | Авторизованный сотрудник кухни | Сообщить, что начатое приготовление невозможно завершить | `Restaurant Order` в `FAILED` с причиной | Публикует `PreparationFailed` через Outbox |
 | **Cancel Restaurant Order** | Fulfillment process `orders` | Запросить прекращение работы над `Restaurant Order` | Синхронный ответ по стадии: отменено либо отказ с причиной | Temporal Activity → internal gateway → `restaurants`; `RestaurantOrderCancelled` через Outbox при изменении State; не завершает общий `Order` |
+| **Set Simulator Enabled** | Оператор платформы | Включить или выключить Demo Simulator кухни | Состояние сохранено и переживает рестарт | `platform#operate_simulator`; slice `simulator` ([FR-604](../../openspec/changes/add-demo-simulator/)) |
+| **Simulate Kitchen** | Demo Simulator от имени владельца ресторана | Продвигать заказы без участника, пока Simulator включён | Через случайную задержку вызван настоящий kitchen use case по весам FR-605 | Фоновый `PeriodicLoop`; slice `simulator`, [README](slices/simulator/applications/simulate-kitchen/README.md) |
 | **Reject After Acceptance** | Авторизованный сотрудник ресторана | Отказаться от принятого заказа до начала Preparation | `Restaurant Order` отклонён | Отдельное продуктовое решение; в MVP не разрешено |
 
 ### Queries
@@ -62,13 +64,14 @@ TypeScript.
 | **Get Kitchen Queue** | Авторизованный сотрудник ресторана | Увидеть заказы, ожидающие Preparation | Заказы в очереди в рекомендованном порядке | Projection Kitchen Queue, не aggregate |
 | **Get Restaurant Order** | Авторизованный сотрудник ресторана или внутренний actor | Получить состав, State и timeline заказа | Представление одного `Restaurant Order` | Read model `restaurants` |
 | **List Active Preparations** | Авторизованный сотрудник ресторана | Увидеть заказы в работе кухни | Готовящиеся и собранные заказы с задержками | Read model kitchen board |
+| **Get Simulator** | Оператор платформы | Узнать, включён ли Demo Simulator | `enabled`; без сохранённого состояния — `false` | `platform#operate_simulator`; slice `simulator` |
 | **List Ready Orders** | Авторизованный сотрудник ресторана | Увидеть заказы, ожидающие передачи курьеру | Готовые заказы и информационные данные курьера | Read model kitchen board; данные курьера — projection событий `delivery` |
 
 Команды кухни требуют permission над `restaurant`, выводимую из relation `staff`; роли cook/manager не моделируются. Сценарии, политики повтора и отмены по стадиям — в [Kitchen](../../docs/kitchen.md#use-cases).
 
 ## Структура слайсов
 
-Слайсы `restaurants` следуют [общей DDD-структуре и правилам зависимостей](../README.md#организация-кода-внутри-контекста): `slices/restaurant` владеет рестораном и правилами приёма заказов, `slices/menu` — меню и доступностью позиций, а `slices/restaurantorder` владеет жизненным циклом `Restaurant Order`, включая его роль `Kitchen Order` на кухне. Use cases размещаются в `slices/<slice>/applications/<usecase>/`, shared packages — в `pkg/`. Доменные модели не зависят от транспорта, хранилища или Awilix.
+Слайсы `restaurants` следуют [общей DDD-структуре и правилам зависимостей](../README.md#организация-кода-внутри-контекста): `slices/restaurant` владеет рестораном и правилами приёма заказов, `slices/menu` — меню и доступностью позиций, `slices/restaurantorder` владеет жизненным циклом `Restaurant Order`, включая его роль `Kitchen Order` на кухне, а `slices/simulator` — Demo Simulator кухни (состояние вкл/выкл и фоновые действия от имени владельца ресторана). Use cases размещаются в `slices/<slice>/applications/<usecase>/`, shared packages — в `pkg/`. Доменные модели не зависят от транспорта, хранилища или Awilix.
 
 ## gRPC-адаптер
 
@@ -120,6 +123,8 @@ RPC, подключённые в `cmd/restaurants` (native gRPC/HTTP2 на би�
 | `AddMenuItem` | `add-menu-item` | `menu_id`, `MenuItem`, `version`; требует `restaurant#manage_menu`; `available` по умолчанию `true`; не идемпотентен; без факта |
 | `UpdateMenuItem` | `update-menu-item` | `menu_id`, `MenuItem`, `version`, `changed`; незаданные поля не меняются, пустой `description` удаляет описание; смена доступности публикует `MenuItemAvailabilityChanged` |
 | `SetMenuItemAvailability` | `set-menu-item-availability` | `menu_id`, `MenuItem`, `version`, `changed = false` при повторе; публикует `MenuItemAvailabilityChanged` |
+| `GetSimulator` | `get-simulator` | `enabled`; требует `platform#operate_simulator`, иначе `PERMISSION_DENIED` (FR-604) |
+| `SetSimulatorEnabled` | `set-simulator-enabled` | новое `enabled`; требует `platform#operate_simulator`; состояние — документ коллекции `simulator`, без документа Simulator выключен |
 
 Командные RPC ([FR-428](../../openspec/changes/add-fulfillment-command-rpcs/), [FR-446](../../openspec/changes/add-restaurant-admin-rpcs/)) получают `Subject` через `SubjectResolver` (`infrastructure/grpc/subject.ts`). Без конфигурации identity используется `RejectingSubjectResolver`, который отвечает `UNAUTHENTICATED`; с конфигурацией — `ServiceTokenSubjectResolver`: тонкий resolver, который по порядку вызывает `ServiceTokenVerifier` (`infrastructure/grpc/service-token.ts`) и при наличии assertion — `UserAssertionVerifier` (`infrastructure/grpc/user-assertion.ts`), пишет log и audit (см. [Service identity](#service-identity) и [User identity](#user-identity)). Отказ отмены по стадии — бизнес-ответ, а не gRPC-ошибка.
 
@@ -136,6 +141,14 @@ RPC, подключённые в `cmd/restaurants` (native gRPC/HTTP2 на би�
 | `KITCHEN__PREPARATION_TIME` | Начальный `expected_ready_at` после Acceptance (`FixedPreparationTimeEstimator`); позже сдвигается Report Preparation Delay | `20m` |
 | `KITCHEN__REPEAT_POLICY` | Повтор `StartPreparation`/`MarkRestaurantOrderReady`: `succeed-without-event` — текущий заказ без факта, `reject` — `FAILED_PRECONDITION` | `succeed-without-event` |
 | `KITCHEN__CANCELLATION_DURING_PREPARATION` | `CancelRestaurantOrder` во время Preparation: `reject` — отказ по стадии, Preparation продолжается; `allow` — отмена | `reject` |
+
+Demo Simulator кухни ([FR-605, FR-606](../../openspec/changes/add-demo-simulator/)) — `PeriodicLoop` основного процесса рядом с reconciler. Проход: выключен — забыть расписание; включён — найти заказы всех ресторанов в `RECEIVED`/`QUEUED`/`PREPARING`/`ASSEMBLED` (`MongoKitchenBoard.listPendingKitchenOrders`, индекс `restaurant_orders_state_received`), назначить каждой паре заказ+состояние срок `первое появление + random[MIN_DELAY, MAX_DELAY]` и по сроку вызвать настоящий handler команды кухни с subject `user:<ownerId>` ресторана (проверка `restaurant#operate_kitchen` как у человека). Ошибка use case пишется в log, запись отбрасывается. Переменные обязательны для `cmd/restaurants`, default нет: пустое или невалидное значение и `MIN_DELAY > MAX_DELAY` останавливают старт.
+
+| Переменная | Назначение | В kind |
+| --- | --- | --- |
+| `SIMULATOR__INTERVAL` | Пауза между проходами Simulator | `5s` |
+| `SIMULATOR__MIN_DELAY` | Нижняя граница случайной задержки действия | `30s` |
+| `SIMULATOR__MAX_DELAY` | Верхняя граница случайной задержки действия | `2m` |
 
 ### Service identity
 

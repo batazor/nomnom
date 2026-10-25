@@ -96,6 +96,8 @@ resources:
 # OpenTelemetry — секция telemetry ниже, не env.
 # env:
 #   CANCELLATION__WINDOW: 5m  # окно отмены; без значения действует placeholder 5m
+# Release API (cmd/orders) требует SIMULATOR__INTERVAL, SIMULATOR__MIN_DELAY,
+# SIMULATOR__MAX_DELAY и SIMULATOR__CUSTOMER_ID (FR-606): без них pod не стартует.
 env: {}
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:

@@ -181,6 +181,8 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
         outbox,
         clock,
       }),
+      getSimulator: unused,
+      setSimulatorEnabled: unused,
     });
     worker = new GrpcWorker(createGrpcServer(service), 0);
     await worker.start();

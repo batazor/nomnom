@@ -32,6 +32,8 @@ const (
 	DeliveryService_ConfirmPickup_FullMethodName               = "/nomnom.delivery.v1.DeliveryService/ConfirmPickup"
 	DeliveryService_ConfirmDelivery_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/ConfirmDelivery"
 	DeliveryService_ReportDeliveryFailure_FullMethodName       = "/nomnom.delivery.v1.DeliveryService/ReportDeliveryFailure"
+	DeliveryService_GetSimulator_FullMethodName                = "/nomnom.delivery.v1.DeliveryService/GetSimulator"
+	DeliveryService_SetSimulatorEnabled_FullMethodName         = "/nomnom.delivery.v1.DeliveryService/SetSimulatorEnabled"
 )
 
 // DeliveryServiceClient is the client API for DeliveryService service.
@@ -59,6 +61,9 @@ type DeliveryServiceClient interface {
 	ConfirmDelivery(ctx context.Context, in *ConfirmDeliveryRequest, opts ...grpc.CallOption) (*ConfirmDeliveryResponse, error)
 	// The assigned courier (courier#act) or a dispatcher (platform dispatch_delivery).
 	ReportDeliveryFailure(ctx context.Context, in *ReportDeliveryFailureRequest, opts ...grpc.CallOption) (*ReportDeliveryFailureResponse, error)
+	// Demo Simulator of couriers (FR-604): requires platform#operate_simulator.
+	GetSimulator(ctx context.Context, in *GetSimulatorRequest, opts ...grpc.CallOption) (*GetSimulatorResponse, error)
+	SetSimulatorEnabled(ctx context.Context, in *SetSimulatorEnabledRequest, opts ...grpc.CallOption) (*SetSimulatorEnabledResponse, error)
 }
 
 type deliveryServiceClient struct {
@@ -199,6 +204,26 @@ func (c *deliveryServiceClient) ReportDeliveryFailure(ctx context.Context, in *R
 	return out, nil
 }
 
+func (c *deliveryServiceClient) GetSimulator(ctx context.Context, in *GetSimulatorRequest, opts ...grpc.CallOption) (*GetSimulatorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSimulatorResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_GetSimulator_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) SetSimulatorEnabled(ctx context.Context, in *SetSimulatorEnabledRequest, opts ...grpc.CallOption) (*SetSimulatorEnabledResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetSimulatorEnabledResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_SetSimulatorEnabled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DeliveryServiceServer is the server API for DeliveryService service.
 // All implementations must embed UnimplementedDeliveryServiceServer
 // for forward compatibility.
@@ -224,6 +249,9 @@ type DeliveryServiceServer interface {
 	ConfirmDelivery(context.Context, *ConfirmDeliveryRequest) (*ConfirmDeliveryResponse, error)
 	// The assigned courier (courier#act) or a dispatcher (platform dispatch_delivery).
 	ReportDeliveryFailure(context.Context, *ReportDeliveryFailureRequest) (*ReportDeliveryFailureResponse, error)
+	// Demo Simulator of couriers (FR-604): requires platform#operate_simulator.
+	GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error)
+	SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error)
 	mustEmbedUnimplementedDeliveryServiceServer()
 }
 
@@ -272,6 +300,12 @@ func (UnimplementedDeliveryServiceServer) ConfirmDelivery(context.Context, *Conf
 }
 func (UnimplementedDeliveryServiceServer) ReportDeliveryFailure(context.Context, *ReportDeliveryFailureRequest) (*ReportDeliveryFailureResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportDeliveryFailure not implemented")
+}
+func (UnimplementedDeliveryServiceServer) GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSimulator not implemented")
+}
+func (UnimplementedDeliveryServiceServer) SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSimulatorEnabled not implemented")
 }
 func (UnimplementedDeliveryServiceServer) mustEmbedUnimplementedDeliveryServiceServer() {}
 func (UnimplementedDeliveryServiceServer) testEmbeddedByValue()                         {}
@@ -528,6 +562,42 @@ func _DeliveryService_ReportDeliveryFailure_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DeliveryService_GetSimulator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSimulatorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).GetSimulator(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_GetSimulator_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).GetSimulator(ctx, req.(*GetSimulatorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_SetSimulatorEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetSimulatorEnabledRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).SetSimulatorEnabled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_SetSimulatorEnabled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).SetSimulatorEnabled(ctx, req.(*SetSimulatorEnabledRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DeliveryService_ServiceDesc is the grpc.ServiceDesc for DeliveryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -586,6 +656,14 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReportDeliveryFailure",
 			Handler:    _DeliveryService_ReportDeliveryFailure_Handler,
+		},
+		{
+			MethodName: "GetSimulator",
+			Handler:    _DeliveryService_GetSimulator_Handler,
+		},
+		{
+			MethodName: "SetSimulatorEnabled",
+			Handler:    _DeliveryService_SetSimulatorEnabled_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

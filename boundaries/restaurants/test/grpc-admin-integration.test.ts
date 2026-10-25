@@ -194,6 +194,10 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
       addMenuItem: unused,
       updateMenuItem: unused,
       setMenuItemAvailability: unused,
+      getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+      setSimulatorEnabled: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
       subjects: { resolve: async () => caller },
     });
     const as = (subject: Subject) => {

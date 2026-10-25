@@ -24,6 +24,7 @@ type Config struct {
 	SpiceDB         SpiceDBConfig         `mapstructure:"spicedb"`
 	Postgres        PostgresConfig        `mapstructure:"postgres"`
 	Reconciler      ReconcilerConfig      `mapstructure:"reconciler"`
+	Simulator       SimulatorConfig       `mapstructure:"simulator"`
 }
 
 func Load() (Config, error) {
@@ -68,6 +69,10 @@ func Load() (Config, error) {
 	}
 	if err := configureReconciler(loader); err != nil {
 		return Config{}, fmt.Errorf("configure reconciler: %w", err)
+	}
+
+	if err := configureSimulator(loader); err != nil {
+		return Config{}, fmt.Errorf("configure simulator: %w", err)
 	}
 
 	if path := os.Getenv("CONFIG_FILE"); path != "" {

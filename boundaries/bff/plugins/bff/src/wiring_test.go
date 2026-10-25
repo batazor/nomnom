@@ -62,6 +62,7 @@ func TestWiringOpensOneConnectionPerAudience(t *testing.T) {
 	assert.NotNil(t, bff.catalog)
 	assert.NotNil(t, bff.checkout)
 	assert.NotNil(t, bff.management)
+	assert.NotNil(t, bff.simulator)
 	assert.NotNil(t, bff.kitchen)
 	assert.NotNil(t, bff.courier)
 }

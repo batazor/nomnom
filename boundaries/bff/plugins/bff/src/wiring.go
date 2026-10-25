@@ -19,6 +19,8 @@ import (
 	trackinginfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/infrastructure"
 	managementapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 	managementinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/infrastructure"
+	simulatorapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/applications"
+	simulatorinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/infrastructure"
 )
 
 // envInternalGateway is the address of the internal gateway (ADR 15) through
@@ -138,6 +140,12 @@ type courier struct {
 	applyAction     deliveryActionHandler
 }
 
+// simulator holds the scenarios of the demo Simulator switch in the header.
+type simulator struct {
+	getSimulator        getSimulatorHandler
+	setSimulatorEnabled setSimulatorEnabledHandler
+}
+
 // newBffService assembles BFF from cfg. BFF identity and the gateway address
 // are required: customer operations must not run without a verified customer
 // (ADR 32), and every slice calls contexts through the internal gateway.
@@ -169,6 +177,7 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	service.management = newRestaurantManagement(restaurants)
 	service.kitchen = newKitchen(restaurants)
 	service.courier = newCourier(delivery)
+	service.simulator = newSimulator(orders, restaurants, delivery)
 	return service, nil
 }
 
@@ -219,5 +228,17 @@ func newRestaurantManagement(restaurants grpc.ClientConnInterface) *restaurantMa
 		openRestaurant:       managementapp.NewOpenRestaurant(restaurantsAPI),
 		closeRestaurant:      managementapp.NewCloseRestaurant(restaurantsAPI),
 		listOwnedRestaurants: managementapp.NewListOwnedRestaurants(restaurantsAPI),
+	}
+}
+
+func newSimulator(orders, restaurants, delivery grpc.ClientConnInterface) *simulator {
+	simulators := []simulatorapp.Simulator{
+		simulatorinfra.NewOrders(orders),
+		simulatorinfra.NewRestaurants(restaurants),
+		simulatorinfra.NewDelivery(delivery),
+	}
+	return &simulator{
+		getSimulator:        simulatorapp.NewGetSimulator(simulators...),
+		setSimulatorEnabled: simulatorapp.NewSetSimulatorEnabled(simulators...),
 	}
 }

@@ -59,6 +59,8 @@ const createWorld = async () => {
     addMenuItem: unused,
     updateMenuItem: unused,
     setMenuItemAvailability: unused,
+    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     subjects: { resolve: async () => caller },
   });
   const as = (subject: Subject) => {
@@ -265,6 +267,8 @@ test("staff RPCs map missing input to INVALID_ARGUMENT and unknown restaurants t
     addMenuItem: unused,
     updateMenuItem: unused,
     setMenuItemAvailability: unused,
+    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     subjects: { resolve: async () => owner },
   });
   await assert.rejects(
@@ -309,6 +313,8 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
     addMenuItem: failing,
     updateMenuItem: failing,
     setMenuItemAvailability: failing,
+    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     subjects: { resolve: async () => owner },
   });
 
@@ -363,6 +369,8 @@ test("admin RPCs are UNAUTHENTICATED for an unverified caller", async () => {
     addMenuItem: unused,
     updateMenuItem: unused,
     setMenuItemAvailability: unused,
+    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
   });
 
   await assert.rejects(

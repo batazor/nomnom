@@ -46,6 +46,7 @@ type BffService struct {
 	management   *restaurantManagement
 	kitchen      *kitchen
 	courier      *courier
+	simulator    *simulator
 }
 
 func (s *BffService) QueryBffInfo(context.Context, *service.QueryBffInfoRequest) (*service.QueryBffInfoResponse, error) {

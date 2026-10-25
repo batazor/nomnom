@@ -24,7 +24,9 @@ pub mod v1 {
 }
 
 pub use client::{ClientTelemetry, PermissionChecker, SpiceDbClient, SpiceDbConfigError};
-pub use mapping::{CheckConsistency, PermissionCheck, courier_check, delivery_check};
+pub use mapping::{
+    CheckConsistency, PermissionCheck, courier_check, delivery_check, simulator_check,
+};
 pub use relationships::{
     COURIER, COURIER_SELF, DELIVERY, DELIVERY_COURIER, Relationship, RelationshipGraph,
     RelationshipOperation, RelationshipPage, SpiceDbRelationships, USER, courier_self,
@@ -45,6 +47,7 @@ use crate::slices::courier::applications::authorization::{
 use crate::slices::delivery::applications::authorization::{
     DeliveryAuthorization, DeliveryPermission, DeliveryResource,
 };
+use crate::slices::simulator::applications::authorization::SimulatorAuthorization;
 
 /// Авторизация обоих слайсов через `CheckPermission`.
 pub struct SpiceDbAuthorization {
@@ -129,6 +132,12 @@ impl CourierAuthorization for SpiceDbAuthorization {
         resource: &CourierResource,
     ) -> Result<(), AuthorizationError> {
         self.decide(courier_check(subject, permission, resource))
+    }
+}
+
+impl SimulatorAuthorization for SpiceDbAuthorization {
+    fn check_operate_simulator(&self, subject: &Subject) -> Result<(), AuthorizationError> {
+        self.decide(Some(simulator_check(subject)))
     }
 }
 

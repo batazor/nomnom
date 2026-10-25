@@ -60,6 +60,8 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
     },
   },
   BoardCourier: {},
+  DemoSimulator: {},
+  SetSimulatorEnabled: { enabled: true },
   SetCourierAvailability: { availability: "AVAILABLE" },
   AcceptDeliveryOffer: { offerId: "offer-order-preparing" },
   ApplyCourierDeliveryAction: {

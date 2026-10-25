@@ -1342,6 +1342,66 @@ export declare type SetMenuItemAvailabilityResponse = Message<"nomnom.restaurant
 export declare const SetMenuItemAvailabilityResponseSchema: GenMessage<SetMenuItemAvailabilityResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.GetSimulatorRequest
+ */
+export declare type GetSimulatorRequest = Message<"nomnom.restaurants.v1.GetSimulatorRequest"> & {
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.GetSimulatorRequest.
+ * Use `create(GetSimulatorRequestSchema)` to create a new message.
+ */
+export declare const GetSimulatorRequestSchema: GenMessage<GetSimulatorRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.GetSimulatorResponse
+ */
+export declare type GetSimulatorResponse = Message<"nomnom.restaurants.v1.GetSimulatorResponse"> & {
+  /**
+   * @generated from field: bool enabled = 1;
+   */
+  enabled: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.GetSimulatorResponse.
+ * Use `create(GetSimulatorResponseSchema)` to create a new message.
+ */
+export declare const GetSimulatorResponseSchema: GenMessage<GetSimulatorResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.SetSimulatorEnabledRequest
+ */
+export declare type SetSimulatorEnabledRequest = Message<"nomnom.restaurants.v1.SetSimulatorEnabledRequest"> & {
+  /**
+   * @generated from field: bool enabled = 1;
+   */
+  enabled: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SetSimulatorEnabledRequest.
+ * Use `create(SetSimulatorEnabledRequestSchema)` to create a new message.
+ */
+export declare const SetSimulatorEnabledRequestSchema: GenMessage<SetSimulatorEnabledRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.SetSimulatorEnabledResponse
+ */
+export declare type SetSimulatorEnabledResponse = Message<"nomnom.restaurants.v1.SetSimulatorEnabledResponse"> & {
+  /**
+   * @generated from field: bool enabled = 1;
+   */
+  enabled: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SetSimulatorEnabledResponse.
+ * Use `create(SetSimulatorEnabledResponseSchema)` to create a new message.
+ */
+export declare const SetSimulatorEnabledResponseSchema: GenMessage<SetSimulatorEnabledResponse>;
+
+/**
  * @generated from enum nomnom.restaurants.v1.RestaurantOrderState
  */
 export enum RestaurantOrderState {
@@ -1655,6 +1715,25 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof SetMenuItemAvailabilityRequestSchema;
     output: typeof SetMenuItemAvailabilityResponseSchema;
+  },
+  /**
+   * Demo Simulator (FR-604): state of the kitchen simulator of this service; both
+   * require platform#operate_simulator, otherwise PERMISSION_DENIED.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.GetSimulator
+   */
+  getSimulator: {
+    methodKind: "unary";
+    input: typeof GetSimulatorRequestSchema;
+    output: typeof GetSimulatorResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.SetSimulatorEnabled
+   */
+  setSimulatorEnabled: {
+    methodKind: "unary";
+    input: typeof SetSimulatorEnabledRequestSchema;
+    output: typeof SetSimulatorEnabledResponseSchema;
   },
 }>;
 

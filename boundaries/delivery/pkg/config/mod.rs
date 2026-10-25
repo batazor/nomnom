@@ -1,5 +1,6 @@
 mod infrastructure;
 mod load;
+mod simulator;
 
 use std::time::Duration;
 
@@ -13,7 +14,11 @@ pub use infrastructure::{
 pub use load::load;
 #[cfg(test)]
 use load::{
-    configure_identity, configure_reconciler, configure_settings, configure_spicedb, load_from,
+    configure_identity, configure_reconciler, configure_settings, configure_simulator,
+    configure_spicedb, load_from,
+};
+pub use simulator::{
+    SIMULATOR_INTERVAL_ENV, SIMULATOR_MAX_DELAY_ENV, SIMULATOR_MIN_DELAY_ENV, SimulatorConfig,
 };
 
 const CONFIG_KEY_PORT: &str = "server.port";
@@ -187,6 +192,7 @@ pub struct AppConfig {
     pub reconciler: ReconcilerConfig,
     pub offers: OffersConfig,
     pub database: DatabaseConfig,
+    pub simulator: SimulatorConfig,
 }
 
 impl ShutdownConfig {

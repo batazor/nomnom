@@ -80,3 +80,12 @@ reconciler:
   interval: 5m
   grace: 10m
   page_size: 500
+# Demo customer Simulator (FR-604..FR-606), только cmd/orders; значений по умолчанию нет,
+# пустое или невалидное значение и min_delay > max_delay останавливают процесс на старте.
+# Включается RPC SetSimulatorEnabled (platform#operate_simulator); новый сервис — выключен.
+simulator:
+  interval: 5s
+  min_delay: 30s
+  max_delay: 2m
+  # user, от имени которого Simulator оформляет и отменяет заказы.
+  customer_id: ""

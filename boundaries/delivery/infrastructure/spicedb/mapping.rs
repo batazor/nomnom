@@ -92,6 +92,12 @@ pub fn courier_check(
     }
 }
 
+/// Check слайса `simulator`: `platform:nomnom#operate_simulator` (FR-604).
+#[must_use]
+pub fn simulator_check(subject: &Subject) -> PermissionCheck {
+    PermissionCheck::platform("operate_simulator", subject)
+}
+
 /// Команды Order Fulfillment Workflow: capability `platform:nomnom`
 /// независимо от resource.
 const fn coordinates_delivery(permission: DeliveryPermission) -> bool {
@@ -177,6 +183,15 @@ mod tests {
             DeliveryResource::Order(OrderId::new("order-1")),
             DeliveryResource::Courier(CourierId::new("courier-1")),
         ]
+    }
+
+    /// FR-604
+    #[test]
+    fn simulator_checks_platform_operate_simulator() {
+        assert_eq!(
+            simulator_check(&user()).to_string(),
+            "platform:nomnom#operate_simulator@user:user-1"
+        );
     }
 
     #[test]

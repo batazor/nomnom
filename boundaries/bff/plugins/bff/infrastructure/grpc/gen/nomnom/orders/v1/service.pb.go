@@ -552,6 +552,174 @@ func (x *RequestOrderCancellationResponse) GetOutcome() CancellationRequestOutco
 	return CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED
 }
 
+type GetSimulatorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSimulatorRequest) Reset() {
+	*x = GetSimulatorRequest{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSimulatorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSimulatorRequest) ProtoMessage() {}
+
+func (x *GetSimulatorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSimulatorRequest.ProtoReflect.Descriptor instead.
+func (*GetSimulatorRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{9}
+}
+
+type GetSimulatorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSimulatorResponse) Reset() {
+	*x = GetSimulatorResponse{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSimulatorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSimulatorResponse) ProtoMessage() {}
+
+func (x *GetSimulatorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSimulatorResponse.ProtoReflect.Descriptor instead.
+func (*GetSimulatorResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetSimulatorResponse) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type SetSimulatorEnabledRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSimulatorEnabledRequest) Reset() {
+	*x = SetSimulatorEnabledRequest{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSimulatorEnabledRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSimulatorEnabledRequest) ProtoMessage() {}
+
+func (x *SetSimulatorEnabledRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSimulatorEnabledRequest.ProtoReflect.Descriptor instead.
+func (*SetSimulatorEnabledRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *SetSimulatorEnabledRequest) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type SetSimulatorEnabledResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSimulatorEnabledResponse) Reset() {
+	*x = SetSimulatorEnabledResponse{}
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSimulatorEnabledResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSimulatorEnabledResponse) ProtoMessage() {}
+
+func (x *SetSimulatorEnabledResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSimulatorEnabledResponse.ProtoReflect.Descriptor instead.
+func (*SetSimulatorEnabledResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SetSimulatorEnabledResponse) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
 var File_nomnom_orders_v1_service_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_service_proto_rawDesc = "" +
@@ -588,17 +756,26 @@ const file_nomnom_orders_v1_service_proto_rawDesc = "" +
 	"request_id\x18\x02 \x01(\tR\trequestId\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\"j\n" +
 	" RequestOrderCancellationResponse\x12F\n" +
-	"\aoutcome\x18\x01 \x01(\x0e2,.nomnom.orders.v1.CancellationRequestOutcomeR\aoutcome*\xaa\x01\n" +
+	"\aoutcome\x18\x01 \x01(\x0e2,.nomnom.orders.v1.CancellationRequestOutcomeR\aoutcome\"\x15\n" +
+	"\x13GetSimulatorRequest\"0\n" +
+	"\x14GetSimulatorResponse\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\"6\n" +
+	"\x1aSetSimulatorEnabledRequest\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\"7\n" +
+	"\x1bSetSimulatorEnabledResponse\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled*\xaa\x01\n" +
 	"\x1aCancellationRequestOutcome\x12,\n" +
 	"(CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED\x10\x00\x12*\n" +
 	"&CANCELLATION_REQUEST_OUTCOME_REQUESTED\x10\x01\x122\n" +
-	".CANCELLATION_REQUEST_OUTCOME_ALREADY_CANCELLED\x10\x022\xb0\x03\n" +
+	".CANCELLATION_REQUEST_OUTCOME_ALREADY_CANCELLED\x10\x022\x83\x05\n" +
 	"\rOrdersService\x12Q\n" +
 	"\bGetOrder\x12!.nomnom.orders.v1.GetOrderRequest\x1a\".nomnom.orders.v1.GetOrderResponse\x12o\n" +
 	"\x12ListCustomerOrders\x12+.nomnom.orders.v1.ListCustomerOrdersRequest\x1a,.nomnom.orders.v1.ListCustomerOrdersResponse\x12W\n" +
 	"\n" +
 	"PlaceOrder\x12#.nomnom.orders.v1.PlaceOrderRequest\x1a$.nomnom.orders.v1.PlaceOrderResponse\x12\x81\x01\n" +
-	"\x18RequestOrderCancellation\x121.nomnom.orders.v1.RequestOrderCancellationRequest\x1a2.nomnom.orders.v1.RequestOrderCancellationResponseB\xee\x01\n" +
+	"\x18RequestOrderCancellation\x121.nomnom.orders.v1.RequestOrderCancellationRequest\x1a2.nomnom.orders.v1.RequestOrderCancellationResponse\x12]\n" +
+	"\fGetSimulator\x12%.nomnom.orders.v1.GetSimulatorRequest\x1a&.nomnom.orders.v1.GetSimulatorResponse\x12r\n" +
+	"\x13SetSimulatorEnabled\x12,.nomnom.orders.v1.SetSimulatorEnabledRequest\x1a-.nomnom.orders.v1.SetSimulatorEnabledResponseB\xee\x01\n" +
 	"\x14com.nomnom.orders.v1B\fServiceProtoP\x01Zfgithub.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1;ordersv1\xa2\x02\x03NOX\xaa\x02\x10Nomnom.Orders.V1\xca\x02\x10Nomnom\\Orders\\V1\xe2\x02\x1cNomnom\\Orders\\V1\\GPBMetadata\xea\x02\x12Nomnom::Orders::V1b\x06proto3"
 
 var (
@@ -614,7 +791,7 @@ func file_nomnom_orders_v1_service_proto_rawDescGZIP() []byte {
 }
 
 var file_nomnom_orders_v1_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_nomnom_orders_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_nomnom_orders_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_nomnom_orders_v1_service_proto_goTypes = []any{
 	(CancellationRequestOutcome)(0),          // 0: nomnom.orders.v1.CancellationRequestOutcome
 	(*GetOrderRequest)(nil),                  // 1: nomnom.orders.v1.GetOrderRequest
@@ -626,24 +803,32 @@ var file_nomnom_orders_v1_service_proto_goTypes = []any{
 	(*PlaceOrderResponse)(nil),               // 7: nomnom.orders.v1.PlaceOrderResponse
 	(*RequestOrderCancellationRequest)(nil),  // 8: nomnom.orders.v1.RequestOrderCancellationRequest
 	(*RequestOrderCancellationResponse)(nil), // 9: nomnom.orders.v1.RequestOrderCancellationResponse
-	(*Order)(nil),                            // 10: nomnom.orders.v1.Order
-	(*OrderSummary)(nil),                     // 11: nomnom.orders.v1.OrderSummary
+	(*GetSimulatorRequest)(nil),              // 10: nomnom.orders.v1.GetSimulatorRequest
+	(*GetSimulatorResponse)(nil),             // 11: nomnom.orders.v1.GetSimulatorResponse
+	(*SetSimulatorEnabledRequest)(nil),       // 12: nomnom.orders.v1.SetSimulatorEnabledRequest
+	(*SetSimulatorEnabledResponse)(nil),      // 13: nomnom.orders.v1.SetSimulatorEnabledResponse
+	(*Order)(nil),                            // 14: nomnom.orders.v1.Order
+	(*OrderSummary)(nil),                     // 15: nomnom.orders.v1.OrderSummary
 }
 var file_nomnom_orders_v1_service_proto_depIdxs = []int32{
-	10, // 0: nomnom.orders.v1.GetOrderResponse.order:type_name -> nomnom.orders.v1.Order
-	11, // 1: nomnom.orders.v1.ListCustomerOrdersResponse.orders:type_name -> nomnom.orders.v1.OrderSummary
+	14, // 0: nomnom.orders.v1.GetOrderResponse.order:type_name -> nomnom.orders.v1.Order
+	15, // 1: nomnom.orders.v1.ListCustomerOrdersResponse.orders:type_name -> nomnom.orders.v1.OrderSummary
 	5,  // 2: nomnom.orders.v1.PlaceOrderRequest.items:type_name -> nomnom.orders.v1.PlaceOrderItem
 	0,  // 3: nomnom.orders.v1.RequestOrderCancellationResponse.outcome:type_name -> nomnom.orders.v1.CancellationRequestOutcome
 	1,  // 4: nomnom.orders.v1.OrdersService.GetOrder:input_type -> nomnom.orders.v1.GetOrderRequest
 	3,  // 5: nomnom.orders.v1.OrdersService.ListCustomerOrders:input_type -> nomnom.orders.v1.ListCustomerOrdersRequest
 	6,  // 6: nomnom.orders.v1.OrdersService.PlaceOrder:input_type -> nomnom.orders.v1.PlaceOrderRequest
 	8,  // 7: nomnom.orders.v1.OrdersService.RequestOrderCancellation:input_type -> nomnom.orders.v1.RequestOrderCancellationRequest
-	2,  // 8: nomnom.orders.v1.OrdersService.GetOrder:output_type -> nomnom.orders.v1.GetOrderResponse
-	4,  // 9: nomnom.orders.v1.OrdersService.ListCustomerOrders:output_type -> nomnom.orders.v1.ListCustomerOrdersResponse
-	7,  // 10: nomnom.orders.v1.OrdersService.PlaceOrder:output_type -> nomnom.orders.v1.PlaceOrderResponse
-	9,  // 11: nomnom.orders.v1.OrdersService.RequestOrderCancellation:output_type -> nomnom.orders.v1.RequestOrderCancellationResponse
-	8,  // [8:12] is the sub-list for method output_type
-	4,  // [4:8] is the sub-list for method input_type
+	10, // 8: nomnom.orders.v1.OrdersService.GetSimulator:input_type -> nomnom.orders.v1.GetSimulatorRequest
+	12, // 9: nomnom.orders.v1.OrdersService.SetSimulatorEnabled:input_type -> nomnom.orders.v1.SetSimulatorEnabledRequest
+	2,  // 10: nomnom.orders.v1.OrdersService.GetOrder:output_type -> nomnom.orders.v1.GetOrderResponse
+	4,  // 11: nomnom.orders.v1.OrdersService.ListCustomerOrders:output_type -> nomnom.orders.v1.ListCustomerOrdersResponse
+	7,  // 12: nomnom.orders.v1.OrdersService.PlaceOrder:output_type -> nomnom.orders.v1.PlaceOrderResponse
+	9,  // 13: nomnom.orders.v1.OrdersService.RequestOrderCancellation:output_type -> nomnom.orders.v1.RequestOrderCancellationResponse
+	11, // 14: nomnom.orders.v1.OrdersService.GetSimulator:output_type -> nomnom.orders.v1.GetSimulatorResponse
+	13, // 15: nomnom.orders.v1.OrdersService.SetSimulatorEnabled:output_type -> nomnom.orders.v1.SetSimulatorEnabledResponse
+	10, // [10:16] is the sub-list for method output_type
+	4,  // [4:10] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -661,7 +846,7 @@ func file_nomnom_orders_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_orders_v1_service_proto_rawDesc), len(file_nomnom_orders_v1_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

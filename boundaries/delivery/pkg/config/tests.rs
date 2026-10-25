@@ -14,7 +14,7 @@ fn loads_port_from_toml() {
             .as_nanos()
     );
     let path = std::env::temp_dir().join(name);
-    fs::write(&path, "[server]\nport = 9003\n").expect("write config");
+    fs::write(&path, format!("[server]\nport = 9003\n{SIMULATOR_TOML}")).expect("write config");
 
     let config = load_from(Some(&path)).expect("load config");
     fs::remove_file(path).expect("remove config");
@@ -25,12 +25,22 @@ fn loads_port_from_toml() {
     assert_eq!(config.shutdown.readiness_delay, Duration::from_secs(5));
 }
 
-/// Пишет TOML во временный файл с уникальным именем и загружает его.
+/// Обязательная секция Simulator (FR-606) тестовых конфигов.
+const SIMULATOR_TOML: &str =
+    "\n[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\n";
+
+/// Пишет TOML во временный файл с уникальным именем и загружает его; без
+/// своей секции `[simulator]` к нему добавляется [`SIMULATOR_TOML`].
 fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
     let path = std::env::temp_dir().join(format!(
         "nomnom-delivery-{name}-{}.toml",
         std::process::id()
     ));
+    let contents = if contents.contains("[simulator]") {
+        contents.to_owned()
+    } else {
+        format!("{contents}{SIMULATOR_TOML}")
+    };
     fs::write(&path, contents).expect("write config");
     let result = load_from(Some(&path));
     fs::remove_file(path).expect("remove config");
@@ -483,4 +493,80 @@ fn malformed_database_duration_fails_startup() {
     )
     .expect_err("malformed duration");
     assert!(error.to_string().contains("acquire_timeout"), "{error}");
+}
+
+#[test]
+fn loads_simulator_from_toml() {
+    let config = load_toml("simulator", "").expect("load config");
+
+    assert_eq!(
+        config.simulator,
+        SimulatorConfig {
+            interval: Duration::from_secs(5),
+            min_delay: Duration::from_secs(30),
+            max_delay: Duration::from_secs(120),
+        }
+    );
+}
+
+/// FR-606: no defaults, a missing value fails startup.
+#[test]
+fn missing_simulator_settings_fail_startup() {
+    assert!(load_toml("simulator-missing", "[simulator]\n").is_err());
+    assert!(
+        load_toml(
+            "simulator-no-max",
+            "[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\n"
+        )
+        .is_err()
+    );
+}
+
+/// AC-765
+#[test]
+fn min_delay_above_max_delay_fails_startup() {
+    let error = load_toml(
+        "simulator-inverted",
+        "[simulator]\ninterval = \"5s\"\nmin_delay = \"3m\"\nmax_delay = \"1m\"\n",
+    )
+    .expect_err("MIN_DELAY > MAX_DELAY must fail");
+
+    assert!(error.to_string().contains(SIMULATOR_MIN_DELAY_ENV));
+}
+
+#[test]
+fn zero_or_malformed_simulator_values_fail_startup() {
+    for (name, contents) in [
+        (
+            "simulator-zero-interval",
+            "[simulator]\ninterval = \"0s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\n",
+        ),
+        (
+            "simulator-zero-min",
+            "[simulator]\ninterval = \"5s\"\nmin_delay = \"0s\"\nmax_delay = \"2m\"\n",
+        ),
+        (
+            "simulator-bad-max",
+            "[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"soon\"\n",
+        ),
+    ] {
+        assert!(load_toml(name, contents).is_err(), "{name}");
+    }
+}
+
+#[test]
+fn simulator_env_sets_values() {
+    let builder = configure_simulator(ConfigLoader::builder(), |name| match name {
+        SIMULATOR_INTERVAL_ENV => Some("1s".to_owned()),
+        SIMULATOR_MIN_DELAY_ENV => Some("2s".to_owned()),
+        SIMULATOR_MAX_DELAY_ENV => Some("3s".to_owned()),
+        _ => None,
+    })
+    .expect("configure simulator");
+    let config = builder.build().expect("build config");
+
+    assert_eq!(
+        config.get_string("simulator.min_delay").expect("min delay"),
+        "2s"
+    );
 }

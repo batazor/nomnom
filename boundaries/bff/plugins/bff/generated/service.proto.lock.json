@@ -10,7 +10,8 @@
         "customerOrders": 6,
         "myRestaurants": 7,
         "kitchen": 8,
-        "courier": 9
+        "courier": 9,
+        "simulator": 10
       },
       "reservedNumbers": [
         1
@@ -124,7 +125,8 @@
         "applyKitchenAction": 5,
         "setCourierAvailability": 6,
         "acceptDeliveryOffer": 7,
-        "applyCourierDeliveryAction": 8
+        "applyCourierDeliveryAction": 8,
+        "setSimulatorEnabled": 9
       }
     },
     "MutationPlaceOrderRequest": {
@@ -556,6 +558,34 @@
     "LookupCourierByIdResponse": {
       "fields": {
         "result": 1
+      }
+    },
+    "QuerySimulatorRequest": {
+      "fields": {}
+    },
+    "QuerySimulatorResponse": {
+      "fields": {
+        "simulator": 1
+      }
+    },
+    "MutationSetSimulatorEnabledRequest": {
+      "fields": {
+        "enabled": 1
+      }
+    },
+    "MutationSetSimulatorEnabled": {
+      "fields": {
+        "enabled": 1
+      }
+    },
+    "MutationSetSimulatorEnabledResponse": {
+      "fields": {
+        "set_simulator_enabled": 1
+      }
+    },
+    "Simulator": {
+      "fields": {
+        "enabled": 1
       }
     }
   },

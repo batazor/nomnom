@@ -34,6 +34,7 @@ export * from "./connections.ts";
 export * from "./env.ts";
 export * from "./identity.ts";
 export * from "./kitchen.ts";
+export * from "./simulator.ts";
 export * from "./workers.ts";
 
 export interface ServerConfig {

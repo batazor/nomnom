@@ -15,6 +15,12 @@ env:
   # lazy, поэтому старт API от Temporal не зависит.
   TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
   TEMPORAL__NAMESPACE: default
+  # Demo customer Simulator (FR-605): покупатель — демо-пользователь demo@nomnom.test
+  # (sub Dex, ops/kind/bootstrap/values.yaml); включается переключателем «Эмулятор».
+  SIMULATOR__INTERVAL: 5s
+  SIMULATOR__MIN_DELAY: 30s
+  SIMULATOR__MAX_DELAY: 2m
+  SIMULATOR__CUSTOMER_ID: ChFub21ub20tZGVtby1vd25lchIFbG9jYWw
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.

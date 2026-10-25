@@ -42,6 +42,7 @@ Rust.
 | **Report Delivery Failure** | Назначенный курьер или авторизованный диспетчер | Зафиксировать невозможность завершить доставку | Неудача сохранена с кодом причины из каталога Delivery Failure Reason и необязательным пояснением, результат доступен `orders` | Публикует бизнес-факт через Outbox; неизвестный код — ошибка валидации; retryability кодов остаётся открытым вопросом |
 | **Expire Delivery Offers** | Фоновая задача процесса `delivery` | Закрыть pending offers, на которые не ответили до `expiresAt` | Offers с `expiresAt < now` переведены в `expired` пачками, каждый в своей Unit of Work с `DeliveryOfferExpired` в Outbox; конкурентно закрытые offers пропускаются | Без subject и проверки прав; повторное предложение делает Dispatch Deliveries (см. «Истечение Delivery Offers») |
 | **Dispatch Deliveries** | Фоновая задача процесса `delivery` | Начать поиск курьера для ожидающих доставок | Ожидающей `Delivery` без pending offer предложена доставка курьеру, которому её ещё не предлагали; без кандидата доставка ждёт следующего прохода; конкурентно изменённые доставки пропускаются | Без subject и проверки прав; Find Courier и Offer Delivery в одной Unit of Work на доставку (см. «Dispatch Deliveries») |
+| **Set Simulator Enabled** | Оператор платформы | Включить или выключить демо Simulator курьеров | Переключатель сохранён в PostgreSQL и переживает рестарт | `platform#operate_simulator`, иначе `PERMISSION_DENIED` (FR-604); см. «Demo Simulator» |
 
 ### Queries
 
@@ -49,6 +50,7 @@ Rust.
 | --- | --- | --- | --- | --- |
 | **Get Courier Current Delivery** | Курьер | Получить свою активную доставку | Возвращено текущее назначение и разрешённое представление `Delivery` либо отсутствие активной доставки | Query model `delivery`; проверка принадлежности курьеру |
 | **List Available Delivery Offers** | Курьер | Получить актуальные предложения, доступные этому курьеру | Возвращён список непротухших `Delivery Offer` без изменения состояния | Query model `delivery`; проверка адресата offer |
+| **Get Simulator** | Оператор платформы | Узнать, включён ли демо Simulator | `enabled`; без записи в хранилище — `false` | `platform#operate_simulator`, иначе `PERMISSION_DENIED` (FR-604) |
 
 ## Структура слайсов
 
@@ -59,6 +61,12 @@ Rust.
 Занятость курьера use cases слайса `delivery` проверяют и меняют только через прикладной порт `CourierAssignment` слайса `courier` (`slices/courier/applications/assignment.rs`: `ensure_registered`, `ensure_available`, `occupy`, `release`), а не через агрегат `Courier` и `CourierRepository` (FR-485). Реализация порта загружает `Courier` через `CourierRepository`, вызывает доменный метод и сохраняет агрегат в текущей Unit of Work.
 
 Accept Delivery Offer, Reassign Courier, Confirm Delivery, Report Delivery Failure и Cancel Delivery изменяют offer, `Delivery` и `Courier` одной локальной транзакцией. Это записанное исключение из правила «один aggregate на транзакцию» ([Unit of Work](../../docs/unit-of-work.md#исключение-offer-delivery-и-courier-в-одной-транзакции)): инвариант «у курьера не больше одной активной доставки» и FR-310 требуют атомарности, а конкуренция за `Courier` ограничена optimistic concurrency по `version`.
+
+## Demo Simulator
+
+Слайс `slices/simulator` (change [`add-demo-simulator`](../../openspec/changes/add-demo-simulator/), FR-604…FR-606) владеет переключателем Simulator (таблица `simulator`, одна строка; нет строки — выключен) и глобальной выборкой работы (pending offers всех курьеров, доставки в `assigned`/`picked_up`). RPC `GetSimulator` и `SetSimulatorEnabled` требуют `platform#operate_simulator`.
+
+Фоновый `di::SimulatorWorker` каждые `SIMULATOR__INTERVAL` читает переключатель: выключенный Simulator сбрасывает расписание и ничего не меняет. Включённый назначает новой сущности момент `firstSeen + random[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` и, когда он наступил, вызывает настоящий use case от имени курьера (`Subject::User(courier_id)`): pending offer — accept 85% / reject 15%; `Assigned` — Confirm Pickup 95% / Report Delivery Failure 5%; `PickedUp` — Confirm Delivery 95% / Report Delivery Failure 5% (причина — случайный код каталога, не требующий пояснения). Offer живёт 60s, поэтому верхняя граница его задержки обрезается до `expiresAt − SIMULATOR__INTERVAL`; если не успевает и `MIN_DELAY`, offer получает действие на последнем проходе до истечения. Отказ use case пишется в лог, запись расписания удаляется, Simulator продолжает. Все три `SIMULATOR__*` обязательны, значений по умолчанию нет; `MIN_DELAY > MAX_DELAY` или нулевое значение завершают startup (kind: 5s / 30s / 2m).
 
 ## gRPC-адаптер
 

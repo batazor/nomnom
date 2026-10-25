@@ -401,6 +401,17 @@ type Query {
   Work of the current user as a courier, null if the user is not a registered courier
   """
   courier: Courier
+  """
+  Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
+  three; requires the operator (platform#operate_simulator)
+  """
+  simulator: Simulator!
+}
+
+"""Demo Simulator that acts for the customer, the kitchen and couriers"""
+type Simulator {
+  """Whether the Simulator is on in orders, restaurants and delivery"""
+  enabled: Boolean!
 }
 
 input OrderLineInput {
@@ -524,6 +535,10 @@ type Mutation {
   acceptDeliveryOffer(offerId: ID!): CourierPayload!
   """Apply a command to the current delivery of the courier"""
   applyCourierDeliveryAction(deliveryId: ID!, action: CourierDeliveryAction!): CourierPayload!
+  """
+  Switch the demo Simulator in orders, restaurants and delivery; requires the operator
+  """
+  setSimulatorEnabled(enabled: Boolean!): Simulator!
 }
 
 type Subscription {

@@ -77,6 +77,11 @@ service RestaurantsService {
   rpc AddMenuItem(AddMenuItemRequest) returns (AddMenuItemResponse);
   rpc UpdateMenuItem(UpdateMenuItemRequest) returns (UpdateMenuItemResponse);
   rpc SetMenuItemAvailability(SetMenuItemAvailabilityRequest) returns (SetMenuItemAvailabilityResponse);
+
+  // Demo Simulator (FR-604): state of the kitchen simulator of this service; both
+  // require platform#operate_simulator, otherwise PERMISSION_DENIED.
+  rpc GetSimulator(GetSimulatorRequest) returns (GetSimulatorResponse);
+  rpc SetSimulatorEnabled(SetSimulatorEnabledRequest) returns (SetSimulatorEnabledResponse);
 }
 
 message GetRestaurantRequest {
@@ -424,4 +429,18 @@ message SetMenuItemAvailabilityResponse {
   int64 version = 3;
   // false when the item already had this availability.
   bool changed = 4;
+}
+
+message GetSimulatorRequest {}
+
+message GetSimulatorResponse {
+  bool enabled = 1;
+}
+
+message SetSimulatorEnabledRequest {
+  bool enabled = 1;
+}
+
+message SetSimulatorEnabledResponse {
+  bool enabled = 1;
 }

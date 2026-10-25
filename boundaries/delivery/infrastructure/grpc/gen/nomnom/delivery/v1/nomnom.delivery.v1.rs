@@ -424,5 +424,23 @@ pub struct ReportDeliveryFailureResponse {
     #[prost(string, tag="4")]
     pub released_courier_id: ::prost::alloc::string::String,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetSimulatorRequest {
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetSimulatorResponse {
+    #[prost(bool, tag="1")]
+    pub enabled: bool,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SetSimulatorEnabledRequest {
+    #[prost(bool, tag="1")]
+    pub enabled: bool,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SetSimulatorEnabledResponse {
+    #[prost(bool, tag="1")]
+    pub enabled: bool,
+}
 include!("nomnom.delivery.v1.tonic.rs");
 // @@protoc_insertion_point(module)

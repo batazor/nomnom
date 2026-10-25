@@ -5,6 +5,7 @@ use tonic::Status;
 
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
+use crate::slices::simulator::applications::error::SimulatorApplicationError;
 
 pub(super) fn delivery_transport_error(error: DeliveryApplicationError) -> Status {
     match error {
@@ -50,5 +51,17 @@ pub(super) fn courier_transport_error(error: CourierApplicationError) -> Status 
         CourierApplicationError::ConcurrentModification => Status::aborted(error.to_string()),
         CourierApplicationError::DependencyUnavailable(_) => Status::unavailable(error.to_string()),
         CourierApplicationError::Internal(_) => Status::internal("internal error"),
+    }
+}
+
+/// The same categories as [`delivery_transport_error`] for the `simulator`
+/// slice.
+pub(super) fn simulator_transport_error(error: SimulatorApplicationError) -> Status {
+    match error {
+        SimulatorApplicationError::PermissionDenied => Status::permission_denied(error.to_string()),
+        SimulatorApplicationError::DependencyUnavailable(_) => {
+            Status::unavailable(error.to_string())
+        }
+        SimulatorApplicationError::Internal(_) => Status::internal("internal error"),
     }
 }

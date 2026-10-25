@@ -6,6 +6,11 @@ import {
   type VersionedDocument,
 } from "../../../../pkg/infrastructure/mongodb/versioned-collection.ts";
 import type {
+  PendingKitchenOrder,
+  PendingKitchenOrdersReader,
+} from "../../../simulator/applications/simulate-kitchen/simulate-kitchen.ts";
+import { SIMULATED_STATES } from "../../../simulator/domains/simulator/simulator.ts";
+import type {
   KitchenQueueEntry,
   KitchenQueueReader,
 } from "../../applications/get-kitchen-queue/get-kitchen-queue.ts";
@@ -184,7 +189,8 @@ export class MongoKitchenBoard
     KitchenQueueReader,
     ActivePreparationsReader,
     ReadyOrdersReader,
-    ActiveRestaurantOrdersReader
+    ActiveRestaurantOrdersReader,
+    PendingKitchenOrdersReader
 {
   readonly #collection: VersionedCollection<RestaurantOrderDocument>;
 
@@ -285,6 +291,23 @@ export class MongoKitchenBoard
       state: document.state,
       items: boardItems(document),
       preparationStartedAt: document.timeline.preparationStartedAt,
+      expectedReadyAt: document.timeline.expectedReadyAt,
+    }));
+  }
+
+  /**
+   * Demo Simulator (FR-605): orders of every restaurant waiting for the
+   * kitchen, via the `(state, receivedAt)` index.
+   */
+  async listPendingKitchenOrders(): Promise<readonly PendingKitchenOrder[]> {
+    const documents = await this.#collection.find(
+      { state: { $in: [...SIMULATED_STATES] } },
+      { sort: { state: 1, "timeline.receivedAt": 1, _id: 1 } },
+    );
+    return documents.map((document) => ({
+      restaurantOrderId: document._id,
+      restaurantId: document.restaurantId,
+      state: document.state as PendingKitchenOrder["state"],
       expectedReadyAt: document.timeline.expectedReadyAt,
     }));
   }

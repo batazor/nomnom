@@ -59,6 +59,13 @@
       "response": "QueryCourierResponse"
     },
     {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "simulator",
+      "mapped": "QuerySimulator",
+      "request": "QuerySimulatorRequest",
+      "response": "QuerySimulatorResponse"
+    },
+    {
       "type": "OPERATION_TYPE_MUTATION",
       "original": "placeOrder",
       "mapped": "MutationPlaceOrder",
@@ -113,6 +120,13 @@
       "mapped": "MutationApplyCourierDeliveryAction",
       "request": "MutationApplyCourierDeliveryActionRequest",
       "response": "MutationApplyCourierDeliveryActionResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "setSimulatorEnabled",
+      "mapped": "MutationSetSimulatorEnabled",
+      "request": "MutationSetSimulatorEnabledRequest",
+      "response": "MutationSetSimulatorEnabledResponse"
     }
   ],
   "entityMappings": [
@@ -224,6 +238,10 @@
         {
           "original": "courier",
           "mapped": "courier"
+        },
+        {
+          "original": "simulator",
+          "mapped": "simulator"
         }
       ]
     },
@@ -311,6 +329,16 @@
             {
               "original": "action",
               "mapped": "action"
+            }
+          ]
+        },
+        {
+          "original": "setSimulatorEnabled",
+          "mapped": "set_simulator_enabled",
+          "argumentMappings": [
+            {
+              "original": "enabled",
+              "mapped": "enabled"
             }
           ]
         }
@@ -725,6 +753,15 @@
         {
           "original": "problem",
           "mapped": "problem"
+        }
+      ]
+    },
+    {
+      "type": "Simulator",
+      "fieldMappings": [
+        {
+          "original": "enabled",
+          "mapped": "enabled"
         }
       ]
     },

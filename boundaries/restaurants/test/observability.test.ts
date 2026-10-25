@@ -160,6 +160,10 @@ test("one trace spans the gRPC call, the use case and, through the Outbox, the K
       addMenuItem: unused,
       updateMenuItem: unused,
       setMenuItemAvailability: unused,
+      getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+      setSimulatorEnabled: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
       subjects: { resolve: async () => owner },
     });
     const worker = new GrpcWorker(createGrpcServer(service), 0);

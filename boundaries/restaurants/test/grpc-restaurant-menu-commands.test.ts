@@ -52,6 +52,8 @@ const createWorld = async () => {
     addMenuItem: world.addMenuItem,
     updateMenuItem: world.updateMenuItem,
     setMenuItemAvailability: world.setAvailability,
+    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     subjects: { resolve: async () => caller },
   });
   const as = (subject: Subject) => {

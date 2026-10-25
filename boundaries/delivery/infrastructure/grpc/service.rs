@@ -23,6 +23,8 @@ use crate::slices::delivery::applications::{
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 use crate::slices::delivery::domains::delivery::State;
+use crate::slices::simulator::applications::set_simulator_enabled;
+use crate::slices::simulator::di::SimulatorUseCases;
 
 use super::v1::delivery_service_server::{DeliveryService, DeliveryServiceServer};
 use super::v1::{
@@ -30,17 +32,18 @@ use super::v1::{
     CancelDeliveryResponse, ConfirmDeliveryRequest, ConfirmDeliveryResponse, ConfirmPickupRequest,
     ConfirmPickupResponse, CourierAvailability, CourierStatus, CreateDeliveryRequest,
     CreateDeliveryResponse, Delivery, DeliveryOffer, DeliveryState,
-    GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse,
-    ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse,
+    GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse, GetSimulatorRequest,
+    GetSimulatorResponse, ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse,
     RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
     RejectDeliveryOfferResponse, ReplanDeliveryRequest, ReplanDeliveryResponse,
     ReportDeliveryFailureRequest, ReportDeliveryFailureResponse, SetCourierAvailabilityRequest,
-    SetCourierAvailabilityResponse, UpdateCourierLocationRequest, UpdateCourierLocationResponse,
+    SetCourierAvailabilityResponse, SetSimulatorEnabledRequest, SetSimulatorEnabledResponse,
+    UpdateCourierLocationRequest, UpdateCourierLocationResponse,
 };
 
 mod status;
 
-use status::{courier_transport_error, delivery_transport_error};
+use status::{courier_transport_error, delivery_transport_error, simulator_transport_error};
 
 /// Resolves only verified caller identities;
 /// [`super::ServiceTokenSubjectResolver`] verifies projected ServiceAccount
@@ -56,6 +59,35 @@ struct DeliveryGrpcService {
 
 #[tonic::async_trait]
 impl DeliveryService for DeliveryGrpcService {
+    async fn get_simulator(
+        &self,
+        request: Request<GetSimulatorRequest>,
+    ) -> Result<Response<GetSimulatorResponse>, Status> {
+        let subject = self.subjects.resolve(request.metadata())?;
+        let output = self
+            .simulator()
+            .get_simulator(&subject)
+            .map_err(simulator_transport_error)?;
+        Ok(Response::new(GetSimulatorResponse {
+            enabled: output.enabled,
+        }))
+    }
+
+    async fn set_simulator_enabled(
+        &self,
+        request: Request<SetSimulatorEnabledRequest>,
+    ) -> Result<Response<SetSimulatorEnabledResponse>, Status> {
+        let subject = self.subjects.resolve(request.metadata())?;
+        let enabled = request.into_inner().enabled;
+        let output = self
+            .simulator()
+            .set_simulator_enabled(&subject, set_simulator_enabled::Input { enabled })
+            .map_err(simulator_transport_error)?;
+        Ok(Response::new(SetSimulatorEnabledResponse {
+            enabled: output.enabled,
+        }))
+    }
+
     async fn get_courier_current_delivery(
         &self,
         request: Request<GetCourierCurrentDeliveryRequest>,
@@ -390,6 +422,10 @@ impl DeliveryGrpcService {
 
     fn couriers(&self) -> &dyn CourierUseCases {
         self.module.couriers()
+    }
+
+    fn simulator(&self) -> &dyn SimulatorUseCases {
+        self.module.simulator()
     }
 }
 

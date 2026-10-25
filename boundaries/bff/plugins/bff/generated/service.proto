@@ -41,6 +41,8 @@ service BffService {
   rpc MutationRequestOrderCancellation(MutationRequestOrderCancellationRequest) returns (MutationRequestOrderCancellationResponse) {}
   // Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
   rpc MutationSetCourierAvailability(MutationSetCourierAvailabilityRequest) returns (MutationSetCourierAvailabilityResponse) {}
+  // Switch the demo Simulator in orders, restaurants and delivery; requires the operator
+  rpc MutationSetSimulatorEnabled(MutationSetSimulatorEnabledRequest) returns (MutationSetSimulatorEnabledResponse) {}
   // Metadata for the client BFF
   rpc QueryBffInfo(QueryBffInfoRequest) returns (QueryBffInfoResponse) {}
   // Work of the current user as a courier, null if the user is not a registered courier
@@ -60,6 +62,11 @@ service BffService {
   rpc QueryRestaurant(QueryRestaurantRequest) returns (QueryRestaurantResponse) {}
   // Restaurants available to the customer
   rpc QueryRestaurants(QueryRestaurantsRequest) returns (QueryRestaurantsResponse) {}
+  /*
+   * Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
+   * three; requires the operator (platform#operate_simulator)
+   */
+  rpc QuerySimulator(QuerySimulatorRequest) returns (QuerySimulatorResponse) {}
 }
 
 // Key message for Order entity lookup
@@ -246,6 +253,23 @@ message QueryCourierResponse {
   // Work of the current user as a courier, null if the user is not a registered courier
   Courier courier = 1;
 }
+/*
+ * Request message for simulator operation: Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
+ * three; requires the operator (platform#operate_simulator).
+ */
+message QuerySimulatorRequest {
+}
+/*
+ * Response message for simulator operation: Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
+ * three; requires the operator (platform#operate_simulator).
+ */
+message QuerySimulatorResponse {
+  /*
+   * Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
+   * three; requires the operator (platform#operate_simulator)
+   */
+  Simulator simulator = 1;
+}
 // Request message for placeOrder operation: Place an order for the current customer.
 message MutationPlaceOrderRequest {
   PlaceOrderInput input = 1;
@@ -327,6 +351,15 @@ message MutationApplyCourierDeliveryActionRequest {
 message MutationApplyCourierDeliveryActionResponse {
   // Apply a command to the current delivery of the courier
   CourierPayload apply_courier_delivery_action = 1;
+}
+// Request message for setSimulatorEnabled operation: Switch the demo Simulator in orders, restaurants and delivery; requires the operator.
+message MutationSetSimulatorEnabledRequest {
+  bool enabled = 1;
+}
+// Response message for setSimulatorEnabled operation: Switch the demo Simulator in orders, restaurants and delivery; requires the operator.
+message MutationSetSimulatorEnabledResponse {
+  // Switch the demo Simulator in orders, restaurants and delivery; requires the operator
+  Simulator set_simulator_enabled = 1;
 }
 
 /*
@@ -419,6 +452,12 @@ message OrderConnection {
   repeated OrderEdge edges = 1;
   // Pagination state
   PageInfo page_info = 2;
+}
+
+// Demo Simulator that acts for the customer, the kitchen and couriers
+message Simulator {
+  // Whether the Simulator is on in orders, restaurants and delivery
+  bool enabled = 1;
 }
 
 message PlaceOrderInput {

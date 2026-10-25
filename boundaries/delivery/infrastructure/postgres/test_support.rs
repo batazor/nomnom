@@ -41,6 +41,10 @@ use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository, OrderId,
 };
+use crate::slices::simulator::applications::work::{
+    ActiveDeliveryWork, PendingOfferWork, SimulatorWork,
+};
+use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
 use super::{PostgresStore, blocking, migrate};
 
@@ -395,5 +399,25 @@ impl ReconciliationStore for TestStore {
     ) -> Result<bool, RepositoryError> {
         self.available()?
             .record_assignment_revision(delivery_id, courier_id, revision)
+    }
+}
+
+impl SimulatorStateRepository for TestStore {
+    fn enabled(&self) -> Result<bool, RepositoryError> {
+        self.available()?.enabled()
+    }
+
+    fn set_enabled(&self, enabled: bool) -> Result<(), RepositoryError> {
+        self.available()?.set_enabled(enabled)
+    }
+}
+
+impl SimulatorWork for TestStore {
+    fn pending_offers(&self) -> Result<Vec<PendingOfferWork>, RepositoryError> {
+        self.available()?.pending_offers()
+    }
+
+    fn active_deliveries(&self) -> Result<Vec<ActiveDeliveryWork>, RepositoryError> {
+        self.available()?.active_deliveries()
     }
 }

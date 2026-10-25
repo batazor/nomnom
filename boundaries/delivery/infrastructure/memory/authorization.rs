@@ -7,6 +7,7 @@ use crate::slices::courier::applications::authorization::{
 use crate::slices::delivery::applications::authorization::{
     DeliveryAuthorization, DeliveryPermission, DeliveryResource,
 };
+use crate::slices::simulator::applications::authorization::SimulatorAuthorization;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Mode {
@@ -28,6 +29,7 @@ pub struct StaticAuthorization {
     delivery_grants: Mutex<Vec<DeliveryCheck>>,
     courier_checks: Mutex<Vec<CourierCheck>>,
     delivery_checks: Mutex<Vec<DeliveryCheck>>,
+    simulator_grants: Mutex<Vec<Subject>>,
 }
 
 impl StaticAuthorization {
@@ -38,6 +40,7 @@ impl StaticAuthorization {
             delivery_grants: Mutex::new(Vec::new()),
             courier_checks: Mutex::new(Vec::new()),
             delivery_checks: Mutex::new(Vec::new()),
+            simulator_grants: Mutex::new(Vec::new()),
         }
     }
 
@@ -78,6 +81,11 @@ impl StaticAuthorization {
         resource: DeliveryResource,
     ) {
         lock(&self.delivery_grants).push((subject, permission, resource));
+    }
+
+    /// Grants `platform#operate_simulator` to the subject.
+    pub fn grant_simulator(&self, subject: Subject) {
+        lock(&self.simulator_grants).push(subject);
     }
 
     #[must_use]
@@ -131,6 +139,13 @@ impl DeliveryAuthorization for StaticAuthorization {
         let check = (subject.clone(), permission, resource.clone());
         let granted = lock(&self.delivery_grants).contains(&check);
         lock(&self.delivery_checks).push(check);
+        self.decide(granted)
+    }
+}
+
+impl SimulatorAuthorization for StaticAuthorization {
+    fn check_operate_simulator(&self, subject: &Subject) -> Result<(), AuthorizationError> {
+        let granted = lock(&self.simulator_grants).contains(subject);
         self.decide(granted)
     }
 }

@@ -9,6 +9,7 @@ import (
 	"nomnom/orders/pkg/config"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	orderdi "nomnom/orders/slices/order/di"
+	simulatordi "nomnom/orders/slices/simulator/di"
 )
 
 // Provider sets процессов orders объявлены здесь, под тегом wireinject: их
@@ -23,7 +24,7 @@ var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна
 	// только своя секция.
 	configSet = wire.NewSet(wire.FieldsOf(new(config.Config),
-		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Catalog", "Temporal", "Fulfillment", "InternalGateway"))
+		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Catalog", "Temporal", "Fulfillment", "InternalGateway", "Simulator"))
 	// temporalAPISet — lazy Temporal client API и порт Order Fulfillment Workflow.
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
@@ -40,7 +41,7 @@ var (
 // `make generate`.
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
-	wire.Build(configSet, orderdi.PostgresSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, temporalAPISet, grpcSet, NewApp)
+	wire.Build(configSet, orderdi.PostgresSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, simulatordi.APISet, NewSimulatorRunner, temporalAPISet, grpcSet, NewApp)
 	return nil, nil, nil
 }
 
@@ -58,4 +59,3 @@ func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), e
 	wire.Build(configSet, orderdi.PostgresSet, spiceDBSet, NewRelationshipReconciler)
 	return nil, nil, nil
 }
-

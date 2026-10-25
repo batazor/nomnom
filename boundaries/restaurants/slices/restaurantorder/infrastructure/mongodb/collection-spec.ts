@@ -84,5 +84,10 @@ export const restaurantOrderCollectionSpec: CollectionSpec = {
       key: { restaurantId: 1, state: 1, "timeline.readyAt": 1 },
       name: "restaurant_orders_board_ready",
     },
+    // Demo Simulator: orders of every restaurant waiting for the kitchen.
+    {
+      key: { state: 1, "timeline.receivedAt": 1 },
+      name: "restaurant_orders_state_received",
+    },
   ],
 };

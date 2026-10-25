@@ -30,6 +30,7 @@ import type {
   KitchenConfig,
   ReconcilerConfig,
   ServerConfig,
+  SimulatorConfig,
   SpiceDbEnabledConfig,
 } from "../pkg/config/config.ts";
 import {
@@ -79,6 +80,11 @@ import {
   ObservedOutbox,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
+import type { SimulatorAccess } from "../slices/simulator/applications/access-control.ts";
+import {
+  registerSimulator,
+  type SimulatorCradle,
+} from "../slices/simulator/di/registrations.ts";
 import { instrumentUseCases, RESTAURANTS_USE_CASES } from "./usecases.ts";
 
 /** First reconciliation pass shortly after start. */
@@ -90,6 +96,7 @@ export type RestaurantsResources = Readonly<{
   spicedb: SpiceDbEnabledConfig;
   reconciler: ReconcilerConfig;
   kitchen: KitchenConfig;
+  simulator: SimulatorConfig;
   mongo: MongoDbConnection;
   subjects: SubjectResolver;
   logger: Logger;
@@ -101,10 +108,13 @@ export interface InfrastructureCradle {
   readonly spicedbConfig: SpiceDbEnabledConfig;
   readonly reconcilerConfig: ReconcilerConfig;
   readonly kitchenConfig: KitchenConfig;
+  readonly simulatorConfig: SimulatorConfig;
   readonly mongoClient: MongoClient;
   readonly db: Db;
   readonly clock: Clock;
   readonly ids: IdGenerator;
+  /** Random number in `[0, 1)` of the Demo Simulator. */
+  readonly random: () => number;
   /** Structured stdout logs (pkg/telemetry/logger.ts). */
   readonly logger: Logger;
   /** Span and duration of every use case listed in di/usecases.ts. */
@@ -123,6 +133,7 @@ export interface InfrastructureCradle {
   readonly kitchenAccessControl: KitchenAccess;
   readonly restaurantAccessControl: RestaurantAccessControl;
   readonly menuAccessControl: MenuAccessControl;
+  readonly simulatorAccessControl: SimulatorAccess;
   readonly relationshipWriter: SpiceDbRelationshipWriter;
   readonly ownerRelationships: OwnerRelationshipWriter;
   readonly staffRelationships: StaffRelationshipWriter;
@@ -133,7 +144,9 @@ export interface ProcessCradle {
   readonly subjects: SubjectResolver;
   readonly grpcServer: Http2Server;
   readonly reconcileLoop: PeriodicLoop;
-  /** gRPC worker with the reconciliation loop, run by the Lifecycle. */
+  /** Demo Simulator of the kitchen (FR-605). */
+  readonly simulatorLoop: PeriodicLoop;
+  /** gRPC worker with the reconciliation and Simulator loops, run by the Lifecycle. */
   readonly worker: Worker;
 }
 
@@ -141,6 +154,7 @@ export type RestaurantsCradle = InfrastructureCradle &
   RestaurantCradle &
   MenuCradle &
   RestaurantOrderCradle &
+  SimulatorCradle &
   ProcessCradle;
 
 export const createRestaurantsContainer = (
@@ -151,6 +165,7 @@ export const createRestaurantsContainer = (
   registerRestaurant(container);
   registerMenu(container);
   registerRestaurantOrder(container);
+  registerSimulator(container);
   instrumentUseCases(container, RESTAURANTS_USE_CASES);
   container.register(processRegistrations(resources));
   return container;
@@ -163,10 +178,12 @@ const infrastructureRegistrations = (
   spicedbConfig: asValue(resources.spicedb),
   reconcilerConfig: asValue(resources.reconciler),
   kitchenConfig: asValue(resources.kitchen),
+  simulatorConfig: asValue(resources.simulator),
   mongoClient: asValue(resources.mongo.client),
   db: asValue(resources.mongo.db),
   clock: asValue<Clock>({ now: () => new Date() }),
   ids: asValue<IdGenerator>({ next: () => randomUUID() }),
+  random: asValue(Math.random),
   logger: asValue(resources.logger),
   useCaseTelemetry: asFunction(() => new UseCaseTelemetry()).singleton(),
   // Business metrics change only after the outermost transaction commits, by
@@ -229,6 +246,7 @@ const infrastructureRegistrations = (
   kitchenAccessControl: aliasTo("spicedbAccessControl"),
   restaurantAccessControl: aliasTo("spicedbAccessControl"),
   menuAccessControl: aliasTo("spicedbAccessControl"),
+  simulatorAccessControl: aliasTo("spicedbAccessControl"),
   // Owner/staff relationships are written before the restaurant is saved
   // (dual-write, repaired by the reconciler).
   relationshipWriter: asFunction(
@@ -274,6 +292,8 @@ const processRegistrations = (
       addMenuItem: cradle.addMenuItem,
       updateMenuItem: cradle.updateMenuItem,
       setMenuItemAvailability: cradle.setMenuItemAvailability,
+      getSimulator: cradle.getSimulator,
+      setSimulatorEnabled: cradle.setSimulatorEnabled,
     });
     // Server spans continue the caller's traceparent (tracingInterceptor).
     return createGrpcServer(service, cradle.logger);
@@ -296,10 +316,25 @@ const processRegistrations = (
         },
       ),
   ).singleton(),
+  // Demo Simulator (FR-605): a disabled Simulator only reads its state.
+  simulatorLoop: asFunction(
+    ({ kitchenSimulator, simulatorConfig, logger }: RestaurantsCradle) =>
+      new PeriodicLoop((signal) => kitchenSimulator.tick(signal), {
+        initialDelayMs: simulatorConfig.intervalMs,
+        intervalMs: simulatorConfig.intervalMs,
+        log: logger.child({ operation: "simulator" }).error,
+      }),
+  ).singleton(),
   worker: asFunction(
-    ({ grpcServer, serverConfig, reconcileLoop }: RestaurantsCradle) =>
+    ({
+      grpcServer,
+      serverConfig,
+      reconcileLoop,
+      simulatorLoop,
+    }: RestaurantsCradle) =>
       new WorkerWithLoops(new GrpcWorker(grpcServer, serverConfig.port), [
         reconcileLoop,
+        simulatorLoop,
       ]),
   ).singleton(),
 });

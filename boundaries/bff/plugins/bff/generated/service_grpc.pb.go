@@ -30,6 +30,7 @@ const (
 	BffService_MutationPlaceOrder_FullMethodName                 = "/service.BffService/MutationPlaceOrder"
 	BffService_MutationRequestOrderCancellation_FullMethodName   = "/service.BffService/MutationRequestOrderCancellation"
 	BffService_MutationSetCourierAvailability_FullMethodName     = "/service.BffService/MutationSetCourierAvailability"
+	BffService_MutationSetSimulatorEnabled_FullMethodName        = "/service.BffService/MutationSetSimulatorEnabled"
 	BffService_QueryBffInfo_FullMethodName                       = "/service.BffService/QueryBffInfo"
 	BffService_QueryCourier_FullMethodName                       = "/service.BffService/QueryCourier"
 	BffService_QueryCustomerOrders_FullMethodName                = "/service.BffService/QueryCustomerOrders"
@@ -38,6 +39,7 @@ const (
 	BffService_QueryOrder_FullMethodName                         = "/service.BffService/QueryOrder"
 	BffService_QueryRestaurant_FullMethodName                    = "/service.BffService/QueryRestaurant"
 	BffService_QueryRestaurants_FullMethodName                   = "/service.BffService/QueryRestaurants"
+	BffService_QuerySimulator_FullMethodName                     = "/service.BffService/QuerySimulator"
 )
 
 // BffServiceClient is the client API for BffService service.
@@ -72,6 +74,8 @@ type BffServiceClient interface {
 	MutationRequestOrderCancellation(ctx context.Context, in *MutationRequestOrderCancellationRequest, opts ...grpc.CallOption) (*MutationRequestOrderCancellationResponse, error)
 	// Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
 	MutationSetCourierAvailability(ctx context.Context, in *MutationSetCourierAvailabilityRequest, opts ...grpc.CallOption) (*MutationSetCourierAvailabilityResponse, error)
+	// Switch the demo Simulator in orders, restaurants and delivery; requires the operator
+	MutationSetSimulatorEnabled(ctx context.Context, in *MutationSetSimulatorEnabledRequest, opts ...grpc.CallOption) (*MutationSetSimulatorEnabledResponse, error)
 	// Metadata for the client BFF
 	QueryBffInfo(ctx context.Context, in *QueryBffInfoRequest, opts ...grpc.CallOption) (*QueryBffInfoResponse, error)
 	// Work of the current user as a courier, null if the user is not a registered courier
@@ -89,6 +93,9 @@ type BffServiceClient interface {
 	QueryRestaurant(ctx context.Context, in *QueryRestaurantRequest, opts ...grpc.CallOption) (*QueryRestaurantResponse, error)
 	// Restaurants available to the customer
 	QueryRestaurants(ctx context.Context, in *QueryRestaurantsRequest, opts ...grpc.CallOption) (*QueryRestaurantsResponse, error)
+	// Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
+	// three; requires the operator (platform#operate_simulator)
+	QuerySimulator(ctx context.Context, in *QuerySimulatorRequest, opts ...grpc.CallOption) (*QuerySimulatorResponse, error)
 }
 
 type bffServiceClient struct {
@@ -209,6 +216,16 @@ func (c *bffServiceClient) MutationSetCourierAvailability(ctx context.Context, i
 	return out, nil
 }
 
+func (c *bffServiceClient) MutationSetSimulatorEnabled(ctx context.Context, in *MutationSetSimulatorEnabledRequest, opts ...grpc.CallOption) (*MutationSetSimulatorEnabledResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationSetSimulatorEnabledResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationSetSimulatorEnabled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bffServiceClient) QueryBffInfo(ctx context.Context, in *QueryBffInfoRequest, opts ...grpc.CallOption) (*QueryBffInfoResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryBffInfoResponse)
@@ -289,6 +306,16 @@ func (c *bffServiceClient) QueryRestaurants(ctx context.Context, in *QueryRestau
 	return out, nil
 }
 
+func (c *bffServiceClient) QuerySimulator(ctx context.Context, in *QuerySimulatorRequest, opts ...grpc.CallOption) (*QuerySimulatorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QuerySimulatorResponse)
+	err := c.cc.Invoke(ctx, BffService_QuerySimulator_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BffServiceServer is the server API for BffService service.
 // All implementations must embed UnimplementedBffServiceServer
 // for forward compatibility.
@@ -321,6 +348,8 @@ type BffServiceServer interface {
 	MutationRequestOrderCancellation(context.Context, *MutationRequestOrderCancellationRequest) (*MutationRequestOrderCancellationResponse, error)
 	// Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
 	MutationSetCourierAvailability(context.Context, *MutationSetCourierAvailabilityRequest) (*MutationSetCourierAvailabilityResponse, error)
+	// Switch the demo Simulator in orders, restaurants and delivery; requires the operator
+	MutationSetSimulatorEnabled(context.Context, *MutationSetSimulatorEnabledRequest) (*MutationSetSimulatorEnabledResponse, error)
 	// Metadata for the client BFF
 	QueryBffInfo(context.Context, *QueryBffInfoRequest) (*QueryBffInfoResponse, error)
 	// Work of the current user as a courier, null if the user is not a registered courier
@@ -338,6 +367,9 @@ type BffServiceServer interface {
 	QueryRestaurant(context.Context, *QueryRestaurantRequest) (*QueryRestaurantResponse, error)
 	// Restaurants available to the customer
 	QueryRestaurants(context.Context, *QueryRestaurantsRequest) (*QueryRestaurantsResponse, error)
+	// Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
+	// three; requires the operator (platform#operate_simulator)
+	QuerySimulator(context.Context, *QuerySimulatorRequest) (*QuerySimulatorResponse, error)
 	mustEmbedUnimplementedBffServiceServer()
 }
 
@@ -381,6 +413,9 @@ func (UnimplementedBffServiceServer) MutationRequestOrderCancellation(context.Co
 func (UnimplementedBffServiceServer) MutationSetCourierAvailability(context.Context, *MutationSetCourierAvailabilityRequest) (*MutationSetCourierAvailabilityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationSetCourierAvailability not implemented")
 }
+func (UnimplementedBffServiceServer) MutationSetSimulatorEnabled(context.Context, *MutationSetSimulatorEnabledRequest) (*MutationSetSimulatorEnabledResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationSetSimulatorEnabled not implemented")
+}
 func (UnimplementedBffServiceServer) QueryBffInfo(context.Context, *QueryBffInfoRequest) (*QueryBffInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryBffInfo not implemented")
 }
@@ -404,6 +439,9 @@ func (UnimplementedBffServiceServer) QueryRestaurant(context.Context, *QueryRest
 }
 func (UnimplementedBffServiceServer) QueryRestaurants(context.Context, *QueryRestaurantsRequest) (*QueryRestaurantsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryRestaurants not implemented")
+}
+func (UnimplementedBffServiceServer) QuerySimulator(context.Context, *QuerySimulatorRequest) (*QuerySimulatorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QuerySimulator not implemented")
 }
 func (UnimplementedBffServiceServer) mustEmbedUnimplementedBffServiceServer() {}
 func (UnimplementedBffServiceServer) testEmbeddedByValue()                    {}
@@ -624,6 +662,24 @@ func _BffService_MutationSetCourierAvailability_Handler(srv interface{}, ctx con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_MutationSetSimulatorEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationSetSimulatorEnabledRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationSetSimulatorEnabled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationSetSimulatorEnabled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationSetSimulatorEnabled(ctx, req.(*MutationSetSimulatorEnabledRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BffService_QueryBffInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryBffInfoRequest)
 	if err := dec(in); err != nil {
@@ -768,6 +824,24 @@ func _BffService_QueryRestaurants_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_QuerySimulator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QuerySimulatorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).QuerySimulator(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_QuerySimulator_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).QuerySimulator(ctx, req.(*QuerySimulatorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BffService_ServiceDesc is the grpc.ServiceDesc for BffService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -820,6 +894,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BffService_MutationSetCourierAvailability_Handler,
 		},
 		{
+			MethodName: "MutationSetSimulatorEnabled",
+			Handler:    _BffService_MutationSetSimulatorEnabled_Handler,
+		},
+		{
 			MethodName: "QueryBffInfo",
 			Handler:    _BffService_QueryBffInfo_Handler,
 		},
@@ -850,6 +928,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryRestaurants",
 			Handler:    _BffService_QueryRestaurants_Handler,
+		},
+		{
+			MethodName: "QuerySimulator",
+			Handler:    _BffService_QuerySimulator_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

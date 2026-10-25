@@ -30,17 +30,21 @@ use crate::infrastructure::spicedb::{
     RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization, SpiceDbClient,
     SpiceDbConfigError, SpiceDbRelationships,
 };
-use crate::pkg::config::{AppConfig, DatabaseConfig, OffersConfig, SpiceDbConfig};
+use crate::pkg::config::{AppConfig, DatabaseConfig, OffersConfig, SimulatorConfig, SpiceDbConfig};
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::delivery::domains::delivery::DeliveryRepository;
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
+use crate::slices::simulator::di::SimulatorStore;
 
-use super::infrastructure::{ProcessIds, ProcessLocator, ProcessStores, infrastructure};
+use super::infrastructure::{
+    ProcessIds, ProcessLocator, ProcessStores, SystemClock, infrastructure,
+};
 use super::service::{ServiceModule, service};
 use super::{
     DispatchDeliveries, DispatchSchedule, DispatchWorker, ExpireOffers, ExpirySchedule,
-    OfferExpiryWorker, ReconcilingWorker,
+    OfferExpiryWorker, ReconcilingWorker, Simulator, SimulatorSchedule, SimulatorWorker,
+    SystemRandomness, UseCaseCourierActions,
 };
 
 /// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
@@ -237,9 +241,46 @@ impl DeliveryDispatch for UseCaseDeliveryDispatch {
     }
 }
 
-/// Worker процесса: gRPC, фоновый reconciliation, истечение offers и
-/// Dispatch Deliveries под одним сигналом.
-pub type DeliveryWorker = ReconcilingWorker<DispatchWorker<OfferExpiryWorker<GrpcWorker>>>;
+/// Демо Simulator курьеров (FR-605) над use cases процесса.
+pub trait DemoSimulator: Interface {
+    fn simulator(&self) -> Simulator;
+    fn interval(&self) -> Duration;
+}
+
+#[derive(Component)]
+#[shaku(interface = DemoSimulator)]
+pub struct UseCaseDemoSimulator {
+    /// Тот же граф use cases, что у gRPC-транспорта.
+    use_cases: Arc<ServiceModule>,
+    /// Переключатель и работа Simulator в хранилище процесса.
+    store: Arc<dyn SimulatorStore>,
+    config: SimulatorConfig,
+}
+
+impl DemoSimulator for UseCaseDemoSimulator {
+    fn simulator(&self) -> Simulator {
+        Simulator::new(
+            Arc::clone(&self.store),
+            Arc::new(UseCaseCourierActions::new(Arc::clone(&self.use_cases))),
+            Arc::new(SystemClock),
+            Box::new(SystemRandomness::seeded()),
+            SimulatorSchedule {
+                interval: self.config.interval,
+                min_delay: self.config.min_delay,
+                max_delay: self.config.max_delay,
+            },
+        )
+    }
+
+    fn interval(&self) -> Duration {
+        self.config.interval
+    }
+}
+
+/// Worker процесса: gRPC, фоновый reconciliation, истечение offers,
+/// Dispatch Deliveries и Simulator под одним сигналом.
+pub type DeliveryWorker =
+    ReconcilingWorker<SimulatorWorker<DispatchWorker<OfferExpiryWorker<GrpcWorker>>>>;
 
 /// Создаёт [`DeliveryWorker`]: открывает бизнес-порт, reconcilers, цикл
 /// истечения offers и цикл Dispatch Deliveries.
@@ -251,7 +292,8 @@ where
         + HasComponent<dyn GrpcTransport>
         + HasComponent<dyn RelationshipReconciliation>
         + HasComponent<dyn OfferExpiry>
-        + HasComponent<dyn DeliveryDispatch>,
+        + HasComponent<dyn DeliveryDispatch>
+        + HasComponent<dyn DemoSimulator>,
 {
     type Interface = DeliveryWorker;
 
@@ -260,11 +302,13 @@ where
         let reconciliation: &dyn RelationshipReconciliation = module.resolve_ref();
         let expiry: &dyn OfferExpiry = module.resolve_ref();
         let dispatch: &dyn DeliveryDispatch = module.resolve_ref();
+        let simulator: &dyn DemoSimulator = module.resolve_ref();
         let worker = transport
             .bind()
             .map_err(|error| format!("listen :{}: {error}", transport.port()))?;
         let worker = OfferExpiryWorker::new(worker, expiry.expire(), expiry.schedule());
         let worker = DispatchWorker::new(worker, dispatch.dispatch(), dispatch.schedule());
+        let worker = SimulatorWorker::new(worker, simulator.simulator(), simulator.interval());
         Ok(Box::new(ReconcilingWorker::new(
             worker,
             reconciliation.reconcilers(),
@@ -306,6 +350,7 @@ module! {
             SpiceDbReconciliation,
             UseCaseOfferExpiry,
             UseCaseDeliveryDispatch,
+            UseCaseDemoSimulator,
             OtlpServerTelemetry
         ],
         providers = [DeliveryWorkerProvider]
@@ -360,6 +405,11 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
         .with_component_parameters::<UseCaseDeliveryDispatch>(UseCaseDeliveryDispatchParameters {
             use_cases: Arc::clone(&use_cases),
             config: config.offers,
+        })
+        .with_component_parameters::<UseCaseDemoSimulator>(UseCaseDemoSimulatorParameters {
+            use_cases: Arc::clone(&use_cases),
+            store: Arc::clone(&store) as _,
+            config: config.simulator,
         })
         .with_component_parameters::<TonicTransport>(TonicTransportParameters {
             use_cases,

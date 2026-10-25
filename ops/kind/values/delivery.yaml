@@ -11,6 +11,10 @@ podLabels:
 env:
   # Единственный адрес для синхронных вызовов бизнес-API других приложений.
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+  # Демо Simulator курьеров (FR-606): опрос и границы задержки действия.
+  SIMULATOR__INTERVAL: 5s
+  SIMULATOR__MIN_DELAY: 30s
+  SIMULATOR__MAX_DELAY: 2m
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.

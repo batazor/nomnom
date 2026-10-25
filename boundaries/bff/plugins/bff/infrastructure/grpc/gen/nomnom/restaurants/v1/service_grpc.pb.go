@@ -44,6 +44,8 @@ const (
 	RestaurantsService_AddMenuItem_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/AddMenuItem"
 	RestaurantsService_UpdateMenuItem_FullMethodName               = "/nomnom.restaurants.v1.RestaurantsService/UpdateMenuItem"
 	RestaurantsService_SetMenuItemAvailability_FullMethodName      = "/nomnom.restaurants.v1.RestaurantsService/SetMenuItemAvailability"
+	RestaurantsService_GetSimulator_FullMethodName                 = "/nomnom.restaurants.v1.RestaurantsService/GetSimulator"
+	RestaurantsService_SetSimulatorEnabled_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/SetSimulatorEnabled"
 )
 
 // RestaurantsServiceClient is the client API for RestaurantsService service.
@@ -115,6 +117,10 @@ type RestaurantsServiceClient interface {
 	AddMenuItem(ctx context.Context, in *AddMenuItemRequest, opts ...grpc.CallOption) (*AddMenuItemResponse, error)
 	UpdateMenuItem(ctx context.Context, in *UpdateMenuItemRequest, opts ...grpc.CallOption) (*UpdateMenuItemResponse, error)
 	SetMenuItemAvailability(ctx context.Context, in *SetMenuItemAvailabilityRequest, opts ...grpc.CallOption) (*SetMenuItemAvailabilityResponse, error)
+	// Demo Simulator (FR-604): state of the kitchen simulator of this service; both
+	// require platform#operate_simulator, otherwise PERMISSION_DENIED.
+	GetSimulator(ctx context.Context, in *GetSimulatorRequest, opts ...grpc.CallOption) (*GetSimulatorResponse, error)
+	SetSimulatorEnabled(ctx context.Context, in *SetSimulatorEnabledRequest, opts ...grpc.CallOption) (*SetSimulatorEnabledResponse, error)
 }
 
 type restaurantsServiceClient struct {
@@ -375,6 +381,26 @@ func (c *restaurantsServiceClient) SetMenuItemAvailability(ctx context.Context, 
 	return out, nil
 }
 
+func (c *restaurantsServiceClient) GetSimulator(ctx context.Context, in *GetSimulatorRequest, opts ...grpc.CallOption) (*GetSimulatorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSimulatorResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_GetSimulator_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) SetSimulatorEnabled(ctx context.Context, in *SetSimulatorEnabledRequest, opts ...grpc.CallOption) (*SetSimulatorEnabledResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetSimulatorEnabledResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_SetSimulatorEnabled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RestaurantsServiceServer is the server API for RestaurantsService service.
 // All implementations must embed UnimplementedRestaurantsServiceServer
 // for forward compatibility.
@@ -444,6 +470,10 @@ type RestaurantsServiceServer interface {
 	AddMenuItem(context.Context, *AddMenuItemRequest) (*AddMenuItemResponse, error)
 	UpdateMenuItem(context.Context, *UpdateMenuItemRequest) (*UpdateMenuItemResponse, error)
 	SetMenuItemAvailability(context.Context, *SetMenuItemAvailabilityRequest) (*SetMenuItemAvailabilityResponse, error)
+	// Demo Simulator (FR-604): state of the kitchen simulator of this service; both
+	// require platform#operate_simulator, otherwise PERMISSION_DENIED.
+	GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error)
+	SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error)
 	mustEmbedUnimplementedRestaurantsServiceServer()
 }
 
@@ -528,6 +558,12 @@ func (UnimplementedRestaurantsServiceServer) UpdateMenuItem(context.Context, *Up
 }
 func (UnimplementedRestaurantsServiceServer) SetMenuItemAvailability(context.Context, *SetMenuItemAvailabilityRequest) (*SetMenuItemAvailabilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetMenuItemAvailability not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSimulator not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSimulatorEnabled not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) mustEmbedUnimplementedRestaurantsServiceServer() {}
 func (UnimplementedRestaurantsServiceServer) testEmbeddedByValue()                            {}
@@ -1000,6 +1036,42 @@ func _RestaurantsService_SetMenuItemAvailability_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RestaurantsService_GetSimulator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSimulatorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).GetSimulator(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_GetSimulator_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).GetSimulator(ctx, req.(*GetSimulatorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_SetSimulatorEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetSimulatorEnabledRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).SetSimulatorEnabled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_SetSimulatorEnabled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).SetSimulatorEnabled(ctx, req.(*SetSimulatorEnabledRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RestaurantsService_ServiceDesc is the grpc.ServiceDesc for RestaurantsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1106,6 +1178,14 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetMenuItemAvailability",
 			Handler:    _RestaurantsService_SetMenuItemAvailability_Handler,
+		},
+		{
+			MethodName: "GetSimulator",
+			Handler:    _RestaurantsService_GetSimulator_Handler,
+		},
+		{
+			MethodName: "SetSimulatorEnabled",
+			Handler:    _RestaurantsService_SetSimulatorEnabled_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

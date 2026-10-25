@@ -10,9 +10,10 @@ import (
 	"github.com/google/wire"
 	"nomnom/orders/infrastructure/grpc"
 	"nomnom/orders/pkg/config"
-	di2 "nomnom/orders/slices/fulfillment/di"
+	di3 "nomnom/orders/slices/fulfillment/di"
 	"nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/infrastructure/observability"
+	di2 "nomnom/orders/slices/simulator/di"
 )
 
 // Injectors from wire.go:
@@ -75,7 +76,8 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		Metrics:    domainMetrics,
 	}
 	module := di.NewModule(dependencies)
-	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
+	simulatorConfig := cfg.Simulator
+	diModule, cleanup5, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, store, authorizer, module)
 	if err != nil {
 		cleanup4()
 		cleanup3()
@@ -83,9 +85,20 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	server := NewGRPCServer(module, subjectResolver)
-	app := NewApp(serverConfig, server, module)
+	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
+	if err != nil {
+		cleanup5()
+		cleanup4()
+		cleanup3()
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	server := NewGRPCServer(module, diModule, subjectResolver)
+	simulatorRunner := NewSimulatorRunner(diModule)
+	app := NewApp(serverConfig, server, module, simulatorRunner)
 	return app, func() {
+		cleanup5()
 		cleanup4()
 		cleanup3()
 		cleanup2()
@@ -104,13 +117,13 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	processStore := di.NewProcessStore(store, domainMetrics)
 	internalGatewayConfig := cfg.InternalGateway
 	identityConfig := cfg.Identity
-	neighbours, cleanup2, err := di2.NewNeighbours(internalGatewayConfig, identityConfig)
+	neighbours, cleanup2, err := di3.NewNeighbours(internalGatewayConfig, identityConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
 	useCases := observability.UseCases()
-	activities := di2.NewActivities(processStore, neighbours, useCases)
+	activities := di3.NewActivities(processStore, neighbours, useCases)
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
 		cleanup2()
@@ -179,7 +192,7 @@ var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна
 	// только своя секция.
 	configSet = wire.NewSet(wire.FieldsOf(new(config.Config),
-		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Catalog", "Temporal", "Fulfillment", "InternalGateway"))
+		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Catalog", "Temporal", "Fulfillment", "InternalGateway", "Simulator"))
 	// temporalAPISet — lazy Temporal client API и порт Order Fulfillment Workflow.
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
@@ -188,5 +201,5 @@ var (
 	spiceDBSet = wire.NewSet(NewSpiceDBClient)
 	// workerStoreSet — store процесса слайса order, в том числе в роли хранилища
 	// Activities fulfillment.
-	workerStoreSet = wire.NewSet(di.PostgresSet, wire.Bind(new(di2.Store), new(*di.ProcessStore)))
+	workerStoreSet = wire.NewSet(di.PostgresSet, wire.Bind(new(di3.Store), new(*di.ProcessStore)))
 )

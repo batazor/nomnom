@@ -20,23 +20,25 @@ import (
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
 	orderdi "nomnom/orders/slices/order/di"
+	simulatordi "nomnom/orders/slices/simulator/di"
 )
 
 // AppServiceName — service.name API по умолчанию; OTEL_SERVICE_NAME переопределяет.
 const AppServiceName = "orders"
 
-// App — lifecycle.Worker бизнес-порта.
+// App — lifecycle.Worker бизнес-порта и владелец SimulatorRunner.
 type App struct {
 	server     *grpc.Server
 	order      *orderdi.Module
+	simulator  *SimulatorRunner
 	addr       string
 	listener   net.Listener
 	newMetrics func(ctx context.Context, serviceName string) (*telemetry.Metrics, error)
 	metrics    *telemetry.Metrics
 }
 
-func NewApp(cfg config.ServerConfig, server *grpc.Server, order *orderdi.Module) *App {
-	return &App{server: server, order: order, addr: fmt.Sprintf(":%d", cfg.Port), newMetrics: telemetry.Start}
+func NewApp(cfg config.ServerConfig, server *grpc.Server, order *orderdi.Module, simulator *SimulatorRunner) *App {
+	return &App{server: server, order: order, simulator: simulator, addr: fmt.Sprintf(":%d", cfg.Port), newMetrics: telemetry.Start}
 }
 
 // Start поднимает metrics pipeline и открывает бизнес-порт; после него процесс может стать ready.
@@ -57,8 +59,9 @@ func (a *App) Start(ctx context.Context) error {
 	return nil
 }
 
-// Run обслуживает входящие запросы до вызова Shutdown.
+// Run обслуживает входящие запросы и тики Simulator до вызова Shutdown.
 func (a *App) Run() error {
+	go a.simulator.Run()
 	if err := a.server.Serve(a.listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 		return fmt.Errorf("serve grpc: %w", err)
 	}
@@ -69,7 +72,7 @@ func (a *App) Run() error {
 // соединения и дожидается начатых до дедлайна ctx; оставшиеся соединения
 // закрываются принудительно. Финальный export метрик — после drain.
 func (a *App) Shutdown(ctx context.Context) error {
-	return errors.Join(a.stop(ctx), a.flushMetrics(ctx))
+	return errors.Join(a.simulator.Shutdown(ctx), a.stop(ctx), a.flushMetrics(ctx))
 }
 
 func (a *App) flushMetrics(ctx context.Context) error {
@@ -95,11 +98,11 @@ func (a *App) stop(ctx context.Context) error {
 	}
 }
 
-func NewGRPCServer(module *orderdi.Module, subjects grpcadapter.SubjectResolver) *grpc.Server {
+func NewGRPCServer(module *orderdi.Module, simulator *simulatordi.Module, subjects grpcadapter.SubjectResolver) *grpc.Server {
 	// Bound incomplete HTTP/2 handshakes so a half-open TCP connection cannot
 	// keep GracefulStop waiting beyond the process drain budget.
 	// otelgrpc пишет в глобальный MeterProvider, который App.Start регистрирует.
 	server := grpc.NewServer(grpc.ConnectionTimeout(2*time.Second), grpc.StatsHandler(otelgrpc.NewServerHandler()))
-	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module, subjects))
+	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module, simulator.Switch, subjects))
 	return server
 }

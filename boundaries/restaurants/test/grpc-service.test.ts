@@ -327,6 +327,8 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
     addMenuItem: world.addMenuItem,
     updateMenuItem: world.updateMenuItem,
     setMenuItemAvailability: world.setAvailability,
+    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     subjects: resolverOf(ordersService),
   });
   await assert.rejects(

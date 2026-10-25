@@ -467,6 +467,61 @@ pub mod delivery_service_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        pub async fn get_simulator(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetSimulatorRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetSimulatorResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/nomnom.delivery.v1.DeliveryService/GetSimulator",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("nomnom.delivery.v1.DeliveryService", "GetSimulator"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn set_simulator_enabled(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SetSimulatorEnabledRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::SetSimulatorEnabledResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/nomnom.delivery.v1.DeliveryService/SetSimulatorEnabled",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "nomnom.delivery.v1.DeliveryService",
+                        "SetSimulatorEnabled",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -571,6 +626,20 @@ pub mod delivery_service_server {
             request: tonic::Request<super::ReportDeliveryFailureRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ReportDeliveryFailureResponse>,
+            tonic::Status,
+        >;
+        async fn get_simulator(
+            &self,
+            request: tonic::Request<super::GetSimulatorRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetSimulatorResponse>,
+            tonic::Status,
+        >;
+        async fn set_simulator_enabled(
+            &self,
+            request: tonic::Request<super::SetSimulatorEnabledRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::SetSimulatorEnabledResponse>,
             tonic::Status,
         >;
     }
@@ -1262,6 +1331,100 @@ pub mod delivery_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ReportDeliveryFailureSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/nomnom.delivery.v1.DeliveryService/GetSimulator" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetSimulatorSvc<T: DeliveryService>(pub Arc<T>);
+                    impl<
+                        T: DeliveryService,
+                    > tonic::server::UnaryService<super::GetSimulatorRequest>
+                    for GetSimulatorSvc<T> {
+                        type Response = super::GetSimulatorResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetSimulatorRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as DeliveryService>::get_simulator(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetSimulatorSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/nomnom.delivery.v1.DeliveryService/SetSimulatorEnabled" => {
+                    #[allow(non_camel_case_types)]
+                    struct SetSimulatorEnabledSvc<T: DeliveryService>(pub Arc<T>);
+                    impl<
+                        T: DeliveryService,
+                    > tonic::server::UnaryService<super::SetSimulatorEnabledRequest>
+                    for SetSimulatorEnabledSvc<T> {
+                        type Response = super::SetSimulatorEnabledResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SetSimulatorEnabledRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as DeliveryService>::set_simulator_enabled(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = SetSimulatorEnabledSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

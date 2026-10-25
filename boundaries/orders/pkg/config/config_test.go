@@ -102,6 +102,7 @@ func clearConfigEnvironment(t *testing.T) {
 		EnvFulfillment("acceptance_timeout"), EnvFulfillment("max_replans"),
 		EnvFulfillment("publish_stage"), EnvInternalGatewayAddr, EnvCancellationWindow,
 		EnvCatalogMinimumTotal, EnvCatalogMaximumTotal, EnvCatalogTimeout,
+		EnvSimulatorInterval, EnvSimulatorMinDelay, EnvSimulatorMaxDelay, EnvSimulatorCustomerID,
 	} {
 		value, exists := os.LookupEnv(name)
 		require.NoError(t, os.Unsetenv(name))

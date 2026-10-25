@@ -105,6 +105,11 @@ const mapping: ReadonlyArray<{
     call: (access) => access.canViewRestaurantOrders(user, "r-1"),
     expected: "restaurant:r-1#view_orders@user:u-1",
   },
+  {
+    name: "canOperateSimulator",
+    call: (access) => access.canOperateSimulator(user),
+    expected: "platform:nomnom#operate_simulator@user:u-1",
+  },
 ];
 
 for (const { name, call, expected } of mapping) {
@@ -148,6 +153,7 @@ for (const permissionship of [
 const PLATFORM_CHECKS = new Set([
   "canRegisterRestaurant",
   "canCoordinateFulfillment",
+  "canOperateSimulator",
 ]);
 
 for (const { name, call, expected } of mapping) {

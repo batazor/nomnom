@@ -5,7 +5,11 @@
 import { createRestaurantsContainer } from "../../di/restaurants.ts";
 import { createSubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/collections.ts";
-import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
+import {
+  loadConfig,
+  loadLocalEnv,
+  loadSimulatorConfig,
+} from "../../pkg/config/config.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
@@ -20,6 +24,9 @@ loadLocalEnv();
 const logger = createLogger({ resource: telemetryResource(SERVICE_NAME) });
 logUncaughtErrors(logger);
 const config = loadConfig();
+// Demo Simulator (FR-606): required in this process; an empty or invalid
+// value or MIN_DELAY > MAX_DELAY stops startup.
+const simulator = loadSimulatorConfig(process.env);
 // MongoDB (ADR 8, local ADR 1) is required; the process migrates its
 // collections, validators and indexes itself before serving (local ADR 2).
 if (!config.mongodb.enabled) {
@@ -52,6 +59,7 @@ const container = createRestaurantsContainer({
   spicedb: config.spicedb,
   reconciler: config.reconciler,
   kitchen: config.kitchen,
+  simulator,
   mongo,
   subjects,
   logger,

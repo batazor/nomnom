@@ -3,7 +3,7 @@ import { HttpResponse } from "msw";
 import { graphql } from "msw/graphql";
 
 import { publicSchema } from "./schema";
-import { createMockStore, type MockStore } from "./store";
+import { bffError, createMockStore, type MockStore } from "./store";
 
 const publicGraphql = graphql.link(/\/graphql$/);
 
@@ -38,3 +38,19 @@ export function createGraphqlHandlers(store: MockStore) {
 export const mockStore = createMockStore();
 
 export const graphqlHandlers = createGraphqlHandlers(mockStore);
+
+// A user who is not the operator: BFF answers simulator with PermissionDenied
+// (AC-767), so the header shows no switch.
+export const simulatorDeniedHandlers = [
+  publicGraphql.query("DemoSimulator", () =>
+    HttpResponse.json({
+      data: null,
+      errors: [
+        bffError(
+          "PermissionDenied",
+          "simulator operation is not permitted",
+        ).toJSON(),
+      ],
+    }),
+  ),
+];

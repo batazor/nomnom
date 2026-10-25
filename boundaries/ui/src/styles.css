@@ -105,6 +105,13 @@ a,
   color: var(--color-primary);
 }
 
+.app-topbar-end {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+}
+
 .location-label {
   display: none;
   color: var(--color-muted);

@@ -33,6 +33,8 @@ definition platform {
 	permission register_courier = operator
 	/** delivery: dispatcher actions on any delivery (Report Delivery Failure). */
 	permission dispatch_delivery = operator
+	/** orders, restaurants, delivery: read and switch the demo Simulator (FR-604). */
+	permission operate_simulator = operator
 }
 
 /** Owner: orders. */

@@ -9,6 +9,7 @@ import type {
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
 } from "../../slices/restaurantorder/applications/access-control.ts";
+import type { SimulatorAccess } from "../../slices/simulator/applications/access-control.ts";
 import {
   checkConsistency,
   type PermissionsClient,
@@ -54,7 +55,8 @@ export class SpiceDbAccessControl
     MenuAccessControl,
     KitchenStaffAccess,
     FulfillmentCoordinatorAccess,
-    RestaurantOrderViewAccess
+    RestaurantOrderViewAccess,
+    SimulatorAccess
 {
   readonly #client: PermissionsClient;
   readonly #revisions: RevisionReader;
@@ -107,6 +109,11 @@ export class SpiceDbAccessControl
     restaurantId: string,
   ): Promise<boolean> {
     return this.#check("restaurant", restaurantId, "view_orders", subject);
+  }
+
+  /** Demo Simulator of the platform (FR-604): operators only. */
+  canOperateSimulator(subject: Subject): Promise<boolean> {
+    return this.#check("platform", PLATFORM_ID, "operate_simulator", subject);
   }
 
   async #check(

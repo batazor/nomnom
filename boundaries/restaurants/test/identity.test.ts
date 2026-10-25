@@ -330,6 +330,8 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
     addMenuItem: world.addMenuItem,
     updateMenuItem: world.updateMenuItem,
     setMenuItemAvailability: world.setAvailability,
+    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     subjects: {
       resolve: async (context) => {
         const subject = await resolver.resolve(context);

@@ -81,6 +81,8 @@ const startServer = async () => {
     addMenuItem: unused,
     updateMenuItem: unused,
     setMenuItemAvailability: unused,
+    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     subjects: { resolve: async () => owner },
   });
   const worker = new GrpcWorker(createGrpcServer(service), 0);

@@ -29,6 +29,10 @@ service DeliveryService {
   rpc ConfirmDelivery(ConfirmDeliveryRequest) returns (ConfirmDeliveryResponse);
   // The assigned courier (courier#act) or a dispatcher (platform dispatch_delivery).
   rpc ReportDeliveryFailure(ReportDeliveryFailureRequest) returns (ReportDeliveryFailureResponse);
+
+  // Demo Simulator of couriers (FR-604): requires platform#operate_simulator.
+  rpc GetSimulator(GetSimulatorRequest) returns (GetSimulatorResponse);
+  rpc SetSimulatorEnabled(SetSimulatorEnabledRequest) returns (SetSimulatorEnabledResponse);
 }
 
 message GetCourierCurrentDeliveryRequest {
@@ -189,4 +193,18 @@ message ReportDeliveryFailureResponse {
   string detail = 3;
   // Courier whose assignment the failure ended.
   string released_courier_id = 4;
+}
+
+message GetSimulatorRequest {}
+
+message GetSimulatorResponse {
+  bool enabled = 1;
+}
+
+message SetSimulatorEnabledRequest {
+  bool enabled = 1;
+}
+
+message SetSimulatorEnabledResponse {
+  bool enabled = 1;
 }

@@ -162,6 +162,10 @@ describe("kitchen command RPCs over MongoDB", () => {
       addMenuItem: unused,
       updateMenuItem: unused,
       setMenuItemAvailability: unused,
+      getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+      setSimulatorEnabled: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
       acceptRestaurantOrder: new AcceptOrderHandler({
         ...commands,
         facts: new RepositoryAcceptanceFactsReader({ restaurants, menus }),

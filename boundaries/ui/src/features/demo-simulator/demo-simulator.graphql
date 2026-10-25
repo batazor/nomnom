@@ -1,0 +1,11 @@
+query DemoSimulator {
+  simulator {
+    enabled
+  }
+}
+
+mutation SetSimulatorEnabled($enabled: Boolean!) {
+  setSimulatorEnabled(enabled: $enabled) {
+    enabled
+  }
+}

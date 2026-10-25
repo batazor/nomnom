@@ -13,6 +13,10 @@ service OrdersService {
   // RequestOrderCancellation hands a Cancellation Request to the fulfillment
   // workflow; the Order is cancelled by the workflow, not by this call.
   rpc RequestOrderCancellation(RequestOrderCancellationRequest) returns (RequestOrderCancellationResponse);
+  // GetSimulator and SetSimulatorEnabled read and switch the demo customer
+  // Simulator (FR-604); both require platform#operate_simulator.
+  rpc GetSimulator(GetSimulatorRequest) returns (GetSimulatorResponse);
+  rpc SetSimulatorEnabled(SetSimulatorEnabledRequest) returns (SetSimulatorEnabledResponse);
 }
 
 message GetOrderRequest {
@@ -73,4 +77,18 @@ enum CancellationRequestOutcome {
 
 message RequestOrderCancellationResponse {
   CancellationRequestOutcome outcome = 1;
+}
+
+message GetSimulatorRequest {}
+
+message GetSimulatorResponse {
+  bool enabled = 1;
+}
+
+message SetSimulatorEnabledRequest {
+  bool enabled = 1;
+}
+
+message SetSimulatorEnabledResponse {
+  bool enabled = 1;
 }

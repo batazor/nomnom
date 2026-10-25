@@ -30,6 +30,8 @@ import (
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
+	"nomnom/orders/slices/simulator/applications/switchsimulator"
+	simulatorpostgres "nomnom/orders/slices/simulator/infrastructure/postgres"
 )
 
 type fixedSubject struct {
@@ -79,7 +81,8 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 		IDs:        &fake.IDs{},
 		Telemetry:  observability.UseCases(),
 	})
-	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module, subjects))
+	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module,
+		switchsimulator.NewHandlers(authorizer, simulatorpostgres.NewState(store.Pool())), subjects))
 	go func() {
 		_ = server.Serve(listener)
 	}()

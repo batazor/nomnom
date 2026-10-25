@@ -23,6 +23,8 @@ const (
 	OrdersService_ListCustomerOrders_FullMethodName       = "/nomnom.orders.v1.OrdersService/ListCustomerOrders"
 	OrdersService_PlaceOrder_FullMethodName               = "/nomnom.orders.v1.OrdersService/PlaceOrder"
 	OrdersService_RequestOrderCancellation_FullMethodName = "/nomnom.orders.v1.OrdersService/RequestOrderCancellation"
+	OrdersService_GetSimulator_FullMethodName             = "/nomnom.orders.v1.OrdersService/GetSimulator"
+	OrdersService_SetSimulatorEnabled_FullMethodName      = "/nomnom.orders.v1.OrdersService/SetSimulatorEnabled"
 )
 
 // OrdersServiceClient is the client API for OrdersService service.
@@ -37,6 +39,10 @@ type OrdersServiceClient interface {
 	// RequestOrderCancellation hands a Cancellation Request to the fulfillment
 	// workflow; the Order is cancelled by the workflow, not by this call.
 	RequestOrderCancellation(ctx context.Context, in *RequestOrderCancellationRequest, opts ...grpc.CallOption) (*RequestOrderCancellationResponse, error)
+	// GetSimulator and SetSimulatorEnabled read and switch the demo customer
+	// Simulator (FR-604); both require platform#operate_simulator.
+	GetSimulator(ctx context.Context, in *GetSimulatorRequest, opts ...grpc.CallOption) (*GetSimulatorResponse, error)
+	SetSimulatorEnabled(ctx context.Context, in *SetSimulatorEnabledRequest, opts ...grpc.CallOption) (*SetSimulatorEnabledResponse, error)
 }
 
 type ordersServiceClient struct {
@@ -87,6 +93,26 @@ func (c *ordersServiceClient) RequestOrderCancellation(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *ordersServiceClient) GetSimulator(ctx context.Context, in *GetSimulatorRequest, opts ...grpc.CallOption) (*GetSimulatorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSimulatorResponse)
+	err := c.cc.Invoke(ctx, OrdersService_GetSimulator_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ordersServiceClient) SetSimulatorEnabled(ctx context.Context, in *SetSimulatorEnabledRequest, opts ...grpc.CallOption) (*SetSimulatorEnabledResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetSimulatorEnabledResponse)
+	err := c.cc.Invoke(ctx, OrdersService_SetSimulatorEnabled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrdersServiceServer is the server API for OrdersService service.
 // All implementations must embed UnimplementedOrdersServiceServer
 // for forward compatibility.
@@ -99,6 +125,10 @@ type OrdersServiceServer interface {
 	// RequestOrderCancellation hands a Cancellation Request to the fulfillment
 	// workflow; the Order is cancelled by the workflow, not by this call.
 	RequestOrderCancellation(context.Context, *RequestOrderCancellationRequest) (*RequestOrderCancellationResponse, error)
+	// GetSimulator and SetSimulatorEnabled read and switch the demo customer
+	// Simulator (FR-604); both require platform#operate_simulator.
+	GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error)
+	SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error)
 	mustEmbedUnimplementedOrdersServiceServer()
 }
 
@@ -120,6 +150,12 @@ func (UnimplementedOrdersServiceServer) PlaceOrder(context.Context, *PlaceOrderR
 }
 func (UnimplementedOrdersServiceServer) RequestOrderCancellation(context.Context, *RequestOrderCancellationRequest) (*RequestOrderCancellationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestOrderCancellation not implemented")
+}
+func (UnimplementedOrdersServiceServer) GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSimulator not implemented")
+}
+func (UnimplementedOrdersServiceServer) SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSimulatorEnabled not implemented")
 }
 func (UnimplementedOrdersServiceServer) mustEmbedUnimplementedOrdersServiceServer() {}
 func (UnimplementedOrdersServiceServer) testEmbeddedByValue()                       {}
@@ -214,6 +250,42 @@ func _OrdersService_RequestOrderCancellation_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OrdersService_GetSimulator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSimulatorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrdersServiceServer).GetSimulator(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrdersService_GetSimulator_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrdersServiceServer).GetSimulator(ctx, req.(*GetSimulatorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OrdersService_SetSimulatorEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetSimulatorEnabledRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrdersServiceServer).SetSimulatorEnabled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrdersService_SetSimulatorEnabled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrdersServiceServer).SetSimulatorEnabled(ctx, req.(*SetSimulatorEnabledRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // OrdersService_ServiceDesc is the grpc.ServiceDesc for OrdersService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -236,6 +308,14 @@ var OrdersService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RequestOrderCancellation",
 			Handler:    _OrdersService_RequestOrderCancellation_Handler,
+		},
+		{
+			MethodName: "GetSimulator",
+			Handler:    _OrdersService_GetSimulator_Handler,
+		},
+		{
+			MethodName: "SetSimulatorEnabled",
+			Handler:    _OrdersService_SetSimulatorEnabled_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

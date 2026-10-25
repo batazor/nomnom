@@ -71,3 +71,13 @@ dispatch_batch = 100
 url = ""
 # Максимум соединений пула процесса.
 max_conns = 10
+
+[simulator]
+# Демо Simulator курьеров (FR-604..FR-606): пока его включает оператор (SetSimulatorEnabled),
+# pending offers, назначенные и забранные доставки получают действие курьера через случайную
+# задержку [min_delay, max_delay] от момента, когда Simulator их увидел. Обязательно, значений
+# по умолчанию нет; min_delay > max_delay завершает startup. Переменные: SIMULATOR__INTERVAL,
+# SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY.
+interval = "5s"
+min_delay = "30s"
+max_delay = "2m"

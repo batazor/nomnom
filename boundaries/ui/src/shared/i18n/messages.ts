@@ -169,6 +169,8 @@ export const messages = {
       "Войдите в аккаунт владельца, чтобы управлять рестораном.",
     "manage.error.failed":
       "Не удалось изменить статус. Проверьте соединение и попробуйте ещё раз.",
+    "simulator.label": "Эмулятор",
+    "simulator.error.failed": "Не удалось переключить эмулятор.",
     "auth.signIn": "Войти: {role}",
     "auth.signOut": "Выйти",
     "auth.signInDemo": "Войти в демо",
@@ -435,6 +437,8 @@ export const messages = {
       "Sign in as the owner to manage the restaurant.",
     "manage.error.failed":
       "Could not change the status. Check your connection and try again.",
+    "simulator.label": "Simulator",
+    "simulator.error.failed": "Could not switch the simulator.",
     "auth.signIn": "Sign in: {role}",
     "auth.signOut": "Sign out",
     "auth.signInDemo": "Sign in to the demo",
