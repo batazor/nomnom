@@ -104,6 +104,25 @@ Fail closed: если `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` или `IDENTITY_
 
 Совместимость с реализациями других контекстов закреплена общими векторами `tests/identity/fixtures`: `tests/test_service_identity.py` принимает только `valid` и `valid_string_aud` (AC-461) и проверяет вызов по gRPC до handler (AC-459). Время проверки `exp`/`nbf` инжектируется (`clock`) для тестов допуска. Helm values `identity.*` описаны в [ops/README.md](ops/README.md#service-identity).
 
+### User identity
+
+Пользователя передаёт только BFF: вместе с собственным service token он присылает metadata `x-nomnom-user-assertion` — ES256 JWT, подписанный ключом BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md), FR-471–FR-473). `ServiceTokenSubjectResolver` проверяет вызов по порядку [design](../../openspec/changes/add-user-identity-assertions/design.md):
+
+1. service token, как выше; отказ — `UNAUTHENTICATED`, assertion не рассматривается;
+2. нет `x-nomnom-user-assertion` — `Subject(service, <service-name>)`, как раньше;
+3. assertion повторяется или пуст, user assertions не настроены или service не входит в `IDENTITY__USER_DELEGATES` — `UNAUTHENTICATED` (AC-526);
+4. `UserAssertionVerifier`: `alg` только `ES256`, `kid` есть в JWKS BFF (EC P-256), `iss` == `IDENTITY__USER_ISSUER`, `aud` содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, `iat` обязателен и `exp − iat ≤ 60 s`, `sub` непуст и без пробелов по краям, `jti` непуст.
+
+Результат — `Subject(user, <sub>)` с `delegate` = имя service BFF (для log и audit, в сравнении и authorization не участвует). Принятие (`INFO`) и отказ (`WARNING`) пишутся в log с `delegate` и `jti`; токены не логируются.
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `IDENTITY__USER_ISSUER` | пусто | Ожидаемый `iss` assertion; в кластере `nomnom-bff`. |
+| `IDENTITY__USER_JWKS_FILE` | пусто | Путь к JWKS BFF; в Helm chart — `/etc/nomnom/user-identity/jwks.json`. |
+| `IDENTITY__USER_DELEGATES` | пусто | Имена services через запятую, которым разрешено передавать user; в кластере `bff`. |
+
+User assertions принимаются, только если заданы все три переменные; иначе любой вызов с assertion — `UNAUTHENTICATED`, а вызовы без него обрабатываются как раньше (AC-529). Ошибки startup: заданный, но нечитаемый JWKS BFF либо JWKS без ключей `ES256` P-256 с `kid`, неверный формат или дубликаты `IDENTITY__USER_DELEGATES`. Тесты — `tests/test_user_identity.py` на `user-vectors.json` с часами, зафиксированными на `now`.
+
 ## Authorization
 
 Порт `PaymentPermissionChecker` (`slices/payment/applications/ports.py`) реализует `SpiceDBPermissionChecker` (`infrastructure/authorization/spicedb.py`) на официальном клиенте `authzed` по [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md) и нормативной таблице [design](../../openspec/changes/add-spicedb-authorization/design.md) (FR-435). Schema и grants развёртывания — `authorization/schema.zed` и `authorization/bootstrap.yaml`.
@@ -254,7 +273,7 @@ DATABASE_URL=postgresql://payments:payments@localhost:55432/payments make test
 docker stop payments-pg
 ```
 
-Не реализованы: provider client, проверка подписи webhooks, user identity через BFF, Kafka consumers (Inbox для integration events), Helm-развёртывание `payments-relay`, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения провайдера composition root (`create_default_worker`) собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+Не реализованы: provider client, проверка подписи webhooks, Kafka consumers (Inbox для integration events), Helm-развёртывание `payments-relay`, telemetry flush и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; до подключения провайдера composition root (`create_default_worker`) собран fail closed: `RejectingSubjectResolver` без конфигурации identity, обязательный `SPICEDB__ENDPOINT` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
 
 ## Запуск
 

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
 import {
   createLocalJWKSet,
+  decodeJwt,
   decodeProtectedHeader,
   importJWK,
   type JSONWebKeySet,
@@ -10,7 +11,10 @@ import {
 } from "jose";
 
 import type { Subject } from "../../pkg/application/subject.ts";
-import type { IdentityConfig } from "../../pkg/config/config.ts";
+import type {
+  IdentityConfig,
+  UserIdentityConfig,
+} from "../../pkg/config/config.ts";
 
 /**
  * Authenticates the transport caller and returns the verified application
@@ -39,6 +43,23 @@ const SERVICE_TOKEN_ALGORITHMS = ["RS256", "ES256"];
 const CLOCK_TOLERANCE_SECONDS = 30;
 const BEARER = /^Bearer +(\S+)$/i;
 
+/** gRPC metadata с user assertion BFF (ADR 32). */
+export const USER_ASSERTION_HEADER = "x-nomnom-user-assertion";
+/** Единственный алгоритм user assertion (ADR 32). */
+const USER_ASSERTION_ALGORITHMS = ["ES256"];
+/** Предел `exp - iat`: защита от долгоживущих assertions при ошибке минтера. */
+const USER_ASSERTION_MAX_LIFETIME_SECONDS = 60;
+const MAX_LOGGED_JTI_LENGTH = 128;
+
+export interface UserAssertionOptions {
+  /** Ожидаемый `iss` assertion, `IDENTITY__USER_ISSUER`. */
+  readonly issuer: string;
+  /** JWKS BFF (EC P-256). */
+  readonly jwks: JSONWebKeySet;
+  /** Services, которым разрешено передавать user subject. */
+  readonly delegates: ReadonlySet<string>;
+}
+
 export interface ServiceTokenSubjectResolverOptions {
   readonly issuer: string;
   readonly audience: string;
@@ -49,12 +70,25 @@ export interface ServiceTokenSubjectResolverOptions {
   readonly log?: (message: string) => void;
   /** Текущее время для проверки `exp`/`nbf`; по умолчанию системное. */
   readonly now?: () => Date;
+  /** Без настроек любой вызов с user assertion — UNAUTHENTICATED. */
+  readonly userAssertions?: UserAssertionOptions;
+  /** Получает принятые user assertions (delegate и `jti`, без токенов). */
+  readonly audit?: (message: string) => void;
 }
+
+type UserAssertionVerifier = Readonly<{
+  issuer: string;
+  keys: ReturnType<typeof createLocalJWKSet>;
+  delegates: ReadonlySet<string>;
+}>;
 
 /**
  * Verifies a projected ServiceAccount token from `authorization: Bearer <jwt>`
  * against the cluster JWKS and maps an allowlisted ServiceAccount to a
- * `service` subject. Every failure is UNAUTHENTICATED without details.
+ * `service` subject. When the call also carries `x-nomnom-user-assertion`,
+ * the authenticated service must be an allowed delegate and the BFF-signed
+ * assertion yields a `user` subject (ADR 32). Every failure is
+ * UNAUTHENTICATED without details.
  */
 export class ServiceTokenSubjectResolver implements SubjectResolver {
   readonly #issuer: string;
@@ -63,6 +97,8 @@ export class ServiceTokenSubjectResolver implements SubjectResolver {
   readonly #serviceAccounts: ReadonlyMap<string, string>;
   readonly #log: (message: string) => void;
   readonly #now: () => Date;
+  readonly #user: UserAssertionVerifier | undefined;
+  readonly #audit: (message: string) => void;
 
   constructor(options: ServiceTokenSubjectResolverOptions) {
     this.#issuer = options.issuer;
@@ -71,19 +107,86 @@ export class ServiceTokenSubjectResolver implements SubjectResolver {
     this.#serviceAccounts = options.serviceAccounts;
     this.#log = options.log ?? ((message) => console.warn(message));
     this.#now = options.now ?? (() => new Date());
+    this.#audit = options.audit ?? ((message) => console.info(message));
+    const user = options.userAssertions;
+    this.#user =
+      user === undefined
+        ? undefined
+        : Object.freeze({
+            issuer: user.issuer,
+            keys: createLocalJWKSet(user.jwks),
+            delegates: user.delegates,
+          });
   }
 
   async resolve(context: HandlerContext): Promise<Subject> {
+    let service: Subject;
     try {
-      return await this.#verify(context.requestHeader.get("authorization"));
+      service = await this.#verify(context.requestHeader.get("authorization"));
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.#log(`service identity rejected: ${reason}`);
-      throw new ConnectError(
-        "verified caller identity is required",
-        Code.Unauthenticated,
+      this.#log(`service identity rejected: ${reasonOf(error)}`);
+      throw unauthenticated();
+    }
+    const assertion = context.requestHeader.get(USER_ASSERTION_HEADER);
+    if (assertion === null) {
+      return service;
+    }
+    try {
+      const user = await this.#verifyUser(service.id, assertion);
+      this.#audit(
+        `user assertion accepted: delegate=${service.id} jti=${loggedJti(assertion)}`,
+      );
+      return user;
+    } catch (error) {
+      this.#log(
+        `user assertion rejected: delegate=${service.id} jti=${loggedJti(assertion)}: ${reasonOf(error)}`,
+      );
+      throw unauthenticated();
+    }
+  }
+
+  async #verifyUser(delegate: string, assertion: string): Promise<Subject> {
+    if (this.#user === undefined) {
+      throw new Error("user assertions are not configured");
+    }
+    // Headers склеивает повторённые metadata через ", "; compact JWT запятых
+    // не содержит.
+    if (assertion === "" || assertion.includes(",")) {
+      throw new Error(
+        `${USER_ASSERTION_HEADER} must appear exactly once and be non-empty`,
       );
     }
+    if (!this.#user.delegates.has(delegate)) {
+      throw new Error(`service ${delegate} is not a user delegate`);
+    }
+    if (decodeProtectedHeader(assertion).kid === undefined) {
+      throw new Error("assertion header has no kid");
+    }
+    const { payload } = await jwtVerify(assertion, this.#user.keys, {
+      algorithms: USER_ASSERTION_ALGORITHMS,
+      issuer: this.#user.issuer,
+      audience: this.#audience,
+      clockTolerance: CLOCK_TOLERANCE_SECONDS,
+      currentDate: this.#now(),
+      requiredClaims: ["exp", "iat", "sub", "jti"],
+    });
+    const { exp, iat, sub, jti } = payload;
+    if (
+      exp === undefined ||
+      iat === undefined ||
+      exp - iat > USER_ASSERTION_MAX_LIFETIME_SECONDS
+    ) {
+      throw new Error(
+        `assertion lifetime exceeds ${USER_ASSERTION_MAX_LIFETIME_SECONDS}s`,
+      );
+    }
+    if (typeof sub !== "string" || sub === "" || sub.trim() !== sub) {
+      throw new Error("assertion sub is empty or padded");
+    }
+    if (typeof jti !== "string" || jti === "") {
+      throw new Error("assertion jti is empty");
+    }
+    return Object.freeze({ type: "user", id: sub, delegate });
   }
 
   async #verify(authorization: string | null): Promise<Subject> {
@@ -116,14 +219,43 @@ export class ServiceTokenSubjectResolver implements SubjectResolver {
   }
 }
 
+const unauthenticated = () =>
+  new ConnectError(
+    "verified caller identity is required",
+    Code.Unauthenticated,
+  );
+
+const reasonOf = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+/** `jti` непроверенного assertion только для log; сам токен не пишется. */
+function loggedJti(assertion: string): string {
+  try {
+    const { jti } = decodeJwt(assertion);
+    return typeof jti === "string"
+      ? JSON.stringify(jti.slice(0, MAX_LOGGED_JTI_LENGTH))
+      : "-";
+  } catch {
+    return "-";
+  }
+}
+
+export interface CreateSubjectResolverOptions {
+  /** Принятые user assertions; по умолчанию `console.info`. */
+  readonly audit?: (message: string) => void;
+  /** Текущее время для проверки токенов; по умолчанию системное. */
+  readonly now?: () => Date;
+}
+
 /**
  * Builds the resolver from configuration. Without issuer, audience and JWKS
- * the server stays fail closed; an unreadable or invalid JWKS is a startup
- * error.
+ * the server stays fail closed; an unreadable or invalid JWKS (cluster or
+ * BFF) is a startup error. Without user settings assertions are rejected.
  */
 export async function createSubjectResolver(
   identity: IdentityConfig,
   log: (message: string) => void = (message) => console.warn(message),
+  options: CreateSubjectResolverOptions = {},
 ): Promise<SubjectResolver> {
   if (!identity.enabled) {
     log(
@@ -137,11 +269,45 @@ export async function createSubjectResolver(
     jwks: await readJwks(identity.jwksFile),
     serviceAccounts: identity.serviceAccounts,
     log,
+    audit: options.audit,
+    now: options.now,
+    userAssertions: await userAssertionOptions(identity.user, log),
   });
 }
 
+async function userAssertionOptions(
+  user: UserIdentityConfig,
+  log: (message: string) => void,
+): Promise<UserAssertionOptions | undefined> {
+  if (!user.enabled) {
+    log(
+      "user assertions are not configured (IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE, IDENTITY__USER_DELEGATES); calls carrying x-nomnom-user-assertion are rejected",
+    );
+    return undefined;
+  }
+  return {
+    issuer: user.issuer,
+    jwks: await readUserJwks(user.jwksFile),
+    delegates: user.delegates,
+  };
+}
+
+/** Читает JWKS BFF: только EC P-256 ключи для ES256 (ADR 32). */
+export async function readUserJwks(path: string): Promise<JSONWebKeySet> {
+  const jwks = await readJwks(path, USER_ASSERTION_ALGORITHMS);
+  for (const key of jwks.keys) {
+    if (key.kty !== "EC" || key.crv !== "P-256") {
+      throw new Error(`JWKS ${path} key ${key.kid} is not an EC P-256 key`);
+    }
+  }
+  return jwks;
+}
+
 /** Читает JWKS кластера и проверяет, что каждый ключ импортируется. */
-export async function readJwks(path: string): Promise<JSONWebKeySet> {
+export async function readJwks(
+  path: string,
+  algorithms: readonly string[] = SERVICE_TOKEN_ALGORITHMS,
+): Promise<JSONWebKeySet> {
   let jwks: JSONWebKeySet;
   try {
     jwks = JSON.parse(await readFile(path, "utf8")) as JSONWebKeySet;
@@ -156,7 +322,7 @@ export async function readJwks(path: string): Promise<JSONWebKeySet> {
       throw new Error(`JWKS ${path} has a key without kid`);
     }
     const algorithm = key.alg ?? (key.kty === "EC" ? "ES256" : "RS256");
-    if (!SERVICE_TOKEN_ALGORITHMS.includes(algorithm)) {
+    if (!algorithms.includes(algorithm)) {
       throw new Error(`JWKS ${path} key ${key.kid} uses ${algorithm}`);
     }
     try {

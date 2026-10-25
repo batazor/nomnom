@@ -96,6 +96,8 @@ test("accepted vectors resolve to the orders-worker service subject (AC-459, AC-
 test("rejected vectors are UNAUTHENTICATED with a generic message (AC-460, AC-461)", async () => {
   const reasons: string[] = [];
   const resolver = await createResolver((message) => reasons.push(message));
+  // Startup warning: user assertions (ADR 32) are not configured here.
+  reasons.length = 0;
   assert.ok(vectors.rejected.length > 0);
 
   for (const name of vectors.rejected) {

@@ -58,9 +58,27 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
-          {{- with .Values.extraEnv }}
+          {{- if or .Values.extraEnv .Values.identity.idpJwksConfigMap }}
           env:
+            {{- with .Values.identity }}
+            {{- if .idpJwksConfigMap }}
+            - name: BFF__IDP_ISSUER
+              value: {{ .idpIssuer | quote }}
+            - name: BFF__IDP_AUDIENCE
+              value: {{ .idpAudience | quote }}
+            - name: BFF__IDP_JWKS_FILE
+              value: /etc/nomnom/idp/jwks.json
+            - name: BFF__ASSERTION_KEY_FILE
+              value: /etc/nomnom/assertion/{{ .assertionKeySecret.key }}
+            - name: BFF__ASSERTION_KEY_ID
+              value: {{ .assertionKeyId | quote }}
+            - name: IDENTITY__TOKEN_DIR
+              value: /var/run/secrets/nomnom/identity
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
@@ -74,13 +92,54 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
+          {{- if or .Values.volumeMounts .Values.identity.idpJwksConfigMap }}
           volumeMounts:
+            {{- if .Values.identity.idpJwksConfigMap }}
+            - name: idp-jwks
+              mountPath: /etc/nomnom/idp
+              readOnly: true
+            - name: assertion-key
+              mountPath: /etc/nomnom/assertion
+              readOnly: true
+            - name: identity-tokens
+              mountPath: /var/run/secrets/nomnom/identity
+              readOnly: true
+            {{- end }}
+            {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- with .Values.volumes }}
+      {{- if or .Values.volumes .Values.identity.idpJwksConfigMap }}
       volumes:
+        {{- with .Values.identity }}
+        {{- if .idpJwksConfigMap }}
+        - name: idp-jwks
+          configMap:
+            name: {{ .idpJwksConfigMap }}
+            items:
+              - key: jwks.json
+                path: jwks.json
+        - name: assertion-key
+          secret:
+            secretName: {{ required "identity.assertionKeySecret.name is required with identity.idpJwksConfigMap" .assertionKeySecret.name }}
+            items:
+              - key: {{ .assertionKeySecret.key }}
+                path: {{ .assertionKeySecret.key }}
+        # ADR 27: one projected ServiceAccount token per target context; kubelet rotates them.
+        - name: identity-tokens
+          projected:
+            sources:
+              {{- range required "identity.tokenAudiences is required with identity.idpJwksConfigMap" .tokenAudiences }}
+              - serviceAccountToken:
+                  audience: {{ . }}
+                  path: {{ . }}
+                  expirationSeconds: {{ $.Values.identity.tokenExpirationSeconds }}
+              {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

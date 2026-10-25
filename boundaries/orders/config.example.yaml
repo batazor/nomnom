@@ -46,6 +46,11 @@ identity:
   service_accounts: ""
   # Каталог projected tokens по audience целевых контекстов (worker).
   token_dir: ""
+  # User assertions BFF (ADR 32): без user_issuer, user_jwks_file и user_delegates отклоняются.
+  user_issuer: ""
+  user_jwks_file: ""
+  # Services, которым разрешено передавать user, через запятую (в развёртываниях bff).
+  user_delegates: ""
 # SpiceDB (ADR 18). Пустой endpoint — все authorization checks отклоняются.
 spicedb:
   endpoint: ""

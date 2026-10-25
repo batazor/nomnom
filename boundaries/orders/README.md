@@ -370,7 +370,7 @@ customer. Назначение хранится в `orders.delivery_id`, `courie
 курьера, событие старше сохранённого назначения пропускается, ZedToken записи сохраняется в
 `authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
 
-Не реализованы: user identity через BFF и API меню `restaurants` (Place Order пока недоступен
+Не реализованы: выпуск user assertions в BFF (verifier в `orders` готов) и API меню `restaurants` (Place Order пока недоступен
 клиентам). `delivery` не публикует `CourierUnassignedFromDelivery`/`DeliveryCancelled`, поэтому
 снятие курьера без нового назначения не наблюдаемо: `order#courier` прежнего курьера остаётся до
 следующего назначения.
@@ -418,10 +418,18 @@ make temporal-dev-stop
 | `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` | —, `nomnom.orders`, — | Проверка входящего projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)); без них все вызовы `UNAUTHENTICATED` |
 | `IDENTITY__SERVICE_ACCOUNTS` | — | Allowlist `namespace/serviceaccount=service-name,…` |
 | `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker); пусто — без credentials |
+| `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE`, `IDENTITY__USER_DELEGATES` | —, —, — | User assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)): ожидаемый `iss`, JWKS BFF (только EC P-256) и services-делегаты через запятую (в развёртываниях `bff`). Без всех трёх любой вызов с assertion — `UNAUTHENTICATED`, service-вызовы не затронуты; неразбираемый JWKS — ошибка startup |
 | `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#courier`/`delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
 | `RECONCILER__INTERVAL`, `RECONCILER__GRACE`, `RECONCILER__PAGE_SIZE` | `5m`, `10m`, `500` | `cmd/orders-reconciler`: сверка relations `order` SpiceDB ↔ PostgreSQL |
 | `POSTGRES__DSN`, `POSTGRES__MAX_CONNS` | —, `10` | PostgreSQL orders (обязателен для всех процессов); локально — `make postgres-dev`, `make migrate` |
 | `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` | `false`, `2s` | Plaintext (только kind/локально) и deadline проверки; ошибка или timeout — отказ |
+
+Порядок проверки caller в [`infrastructure/grpc/identity.go`](infrastructure/grpc/identity.go): service token
+(`authorization`, ADR 27) → без metadata `x-nomnom-user-assertion` результат `Subject{service}` → service
+входит в `IDENTITY__USER_DELEGATES` → assertion: только ES256 с `kid` из JWKS BFF, `iss`, `aud` содержит
+`IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, обязательный `iat` и `exp - iat ≤ 60 s`, непустые `sub` и
+`jti` → `Subject{user, sub}`. Повторный или пустой assertion и любое нарушение — `UNAUTHENTICATED`; принятие и
+отказ пишутся в log с делегатом и `jti`, без самих tokens.
 
 `FULFILLMENT__NEIGHBOURS=unavailable` (по умолчанию) — вызовы соседей завершаются retryable ошибкой, workflow ждёт на текущем шаге; `simulated` одобряет вызовы без эффекта и предназначен только для локальной проверки; `grpc` вызывает командные API `payments`, `restaurants`, `delivery` через `INTERNAL_GATEWAY_ADDR` клиентами [`neighbours/grpcclient`](slices/order/infrastructure/neighbours/grpcclient) (Go-код генерируется `make generate` из workspace-модулей до публикации в BSR). Клиент прикладывает projected token целевого контекста из `IDENTITY__TOKEN_DIR` (ADR 27); `UNAUTHENTICATED` и `PERMISSION_DENIED` клиент считает retryable.
 

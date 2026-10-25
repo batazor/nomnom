@@ -9,6 +9,8 @@ require (
 	google.golang.org/protobuf v1.36.12
 )
 
+require github.com/golang-jwt/jwt/v5 v5.3.1
+
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

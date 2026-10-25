@@ -13,3 +13,12 @@ execution_config:
 plugins:
   enabled: true
   path: plugins
+
+# ADR 32: the plugin verifies the customer's access token itself, so the
+# Router forwards Authorization to it as gRPC metadata authorization. No other
+# client header reaches the plugin.
+headers:
+  all:
+    request:
+      - op: propagate
+        named: Authorization

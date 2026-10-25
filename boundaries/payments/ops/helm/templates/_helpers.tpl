@@ -81,6 +81,13 @@ Service identity (ADR 27): при заданном identity.jwksConfigMap при
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- if .userJwksConfigMap -}}
+{{- range $key := list "jwksConfigMap" "userIssuer" "userDelegates" -}}
+{{- if not (get $.Values.identity $key) -}}
+{{- fail (printf "identity.%s is required when identity.userJwksConfigMap is set" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 

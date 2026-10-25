@@ -180,6 +180,11 @@ identity:
   # (/var/run/secrets/nomnom/identity/<audience>); нужно только worker'у.
   tokenAudiences: []
   tokenExpirationSeconds: 3600
+  # User assertions BFF (ADR 32): ConfigMap с JWKS BFF (ключ jwks.json), ожидаемый iss и
+  # services-делегаты через запятую. Пустой userJwksConfigMap — вызовы с assertion отклоняются.
+  userJwksConfigMap: ""
+  userIssuer: ""
+  userDelegates: ""
 
 # SpiceDB (ADR 18). Пустой endpoint — authorization отклоняет все проверки (fail closed).
 # Preshared key берётся из внешнего Secret и не хранится в values.

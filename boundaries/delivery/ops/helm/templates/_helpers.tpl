@@ -73,6 +73,14 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 /etc/nomnom/identity/jwks.json
 {{- end -}}
 
+{{/*
+Путь к JWKS BFF внутри контейнера (ADR 32): ConfigMap identity.userJwksConfigMap
+монтируется read-only каталогом /etc/nomnom/user-identity.
+*/}}
+{{- define "delivery.identityUserJwksFile" -}}
+/etc/nomnom/user-identity/jwks.json
+{{- end -}}
+
 
 {{/*
 SpiceDB (ADR 18): при заданном endpoint preshared key обязателен и берётся только из Secret,

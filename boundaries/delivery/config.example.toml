@@ -19,6 +19,13 @@ audience = "nomnom.delivery"
 jwks_file = ""
 # Allowlist "namespace/serviceaccount=service-name" через запятую.
 service_accounts = ""
+# User assertions BFF (ADR 32): принимаются, только если заданы все три значения, иначе
+# вызов с x-nomnom-user-assertion отклоняется UNAUTHENTICATED. Переменные:
+# IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE, IDENTITY__USER_DELEGATES.
+user_issuer = ""
+user_jwks_file = ""
+# Services через запятую, которым разрешено передавать user subject, например "bff".
+user_delegates = ""
 
 [spicedb]
 # Авторизация в SpiceDB (ADR 18). Пустой endpoint — локальная авторизация процесса с

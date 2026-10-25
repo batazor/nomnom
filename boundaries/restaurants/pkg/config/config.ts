@@ -13,6 +13,9 @@ export const IDENTITY_ISSUER_ENV = "IDENTITY__ISSUER";
 export const IDENTITY_AUDIENCE_ENV = "IDENTITY__AUDIENCE";
 export const IDENTITY_JWKS_FILE_ENV = "IDENTITY__JWKS_FILE";
 export const IDENTITY_SERVICE_ACCOUNTS_ENV = "IDENTITY__SERVICE_ACCOUNTS";
+export const IDENTITY_USER_ISSUER_ENV = "IDENTITY__USER_ISSUER";
+export const IDENTITY_USER_JWKS_FILE_ENV = "IDENTITY__USER_JWKS_FILE";
+export const IDENTITY_USER_DELEGATES_ENV = "IDENTITY__USER_DELEGATES";
 export const SPICEDB_ENDPOINT_ENV = "SPICEDB__ENDPOINT";
 export const SPICEDB_PRESHARED_KEY_ENV = "SPICEDB__PRESHARED_KEY";
 export const SPICEDB_INSECURE_ENV = "SPICEDB__INSECURE";
@@ -94,6 +97,22 @@ export type IdentityConfig =
       jwksFile: string;
       /** `system:serviceaccount:<namespace>:<name>` → имя сервиса. */
       serviceAccounts: ReadonlyMap<string, string>;
+      user: UserIdentityConfig;
+    }>;
+
+/**
+ * Проверка user assertion BFF (ADR 32). `enabled: false`, пока не заданы
+ * issuer, JWKS и непустой список делегатов: любой вызов с assertion
+ * отклоняется, вызовы без него проверяются как раньше.
+ */
+export type UserIdentityConfig =
+  | Readonly<{ enabled: false }>
+  | Readonly<{
+      enabled: true;
+      issuer: string;
+      jwksFile: string;
+      /** Services, которым разрешено передавать user subject. */
+      delegates: ReadonlySet<string>;
     }>;
 
 /** Подключение к SpiceDB (ADR 18), когда задан `SPICEDB__ENDPOINT`. */
@@ -383,7 +402,40 @@ export function loadIdentityConfig(
     audience,
     jwksFile,
     serviceAccounts,
+    user: loadUserIdentityConfig(environment),
   });
+}
+
+function loadUserIdentityConfig(
+  environment: Record<string, string | undefined>,
+): UserIdentityConfig {
+  const issuer = environment[IDENTITY_USER_ISSUER_ENV]?.trim() ?? "";
+  const jwksFile = environment[IDENTITY_USER_JWKS_FILE_ENV]?.trim() ?? "";
+  const delegates = parseDelegates(
+    environment[IDENTITY_USER_DELEGATES_ENV] ?? "",
+  );
+  if (issuer === "" || jwksFile === "" || delegates.size === 0) {
+    return Object.freeze({ enabled: false });
+  }
+  return Object.freeze({ enabled: true, issuer, jwksFile, delegates });
+}
+
+/** Разбирает имена services через запятую. */
+function parseDelegates(value: string): ReadonlySet<string> {
+  const delegates = new Set<string>();
+  if (value.trim() === "") {
+    return delegates;
+  }
+  for (const rawEntry of value.split(",")) {
+    const entry = rawEntry.trim();
+    if (!SERVICE_NAME.test(entry)) {
+      throw new Error(
+        `${IDENTITY_USER_DELEGATES_ENV}: malformed service name "${entry}"`,
+      );
+    }
+    delegates.add(entry);
+  }
+  return delegates;
 }
 
 /** Разбирает `namespace/serviceaccount=service-name` через запятую. */

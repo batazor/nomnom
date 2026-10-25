@@ -11,4 +11,9 @@ export type Subject = Readonly<{
    * It only makes checks at least as fresh; it never grants a permission.
    */
   authorizationRevision?: string;
+  /**
+   * Authenticated service that delegated a `user` subject (ADR 32), kept for
+   * logs and audit only; authorization never uses it.
+   */
+  delegate?: string;
 }>;

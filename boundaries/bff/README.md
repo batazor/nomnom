@@ -45,6 +45,22 @@ BFF — отдельный сервис и единая прикладная т�
 - Моменты времени — `String` в RFC 3339, `Money.amount` — десятичная строка; unions и custom scalars не используются.
 - `Order.cancellation` берётся из `Order.cancellation_window` ответа `orders` `GetOrder`: `availableUntil = closes_at`, если `opens_at ≤ now ≤ closes_at` по часам BFF, иначе `null`. `orders` возвращает окно, только пока Order State допускает отмену; сам запрос отмены `orders` проверяет заново.
 
+## Identity покупателя
+
+Решение — [ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md); код — пакет [`plugins/bff/identity`](plugins/bff/identity).
+
+- **Access token.** Router передаёт заголовок `Authorization` в плагин правилом `headers.all.request: propagate` в [`config.yaml`](config.yaml); другие клиентские заголовки (например `x-user-id`) до плагина не доходят. Проверено на Router 0.363.0: без правила metadata `authorization` в плагине пустая. `AccessTokenVerifier` проверяет подпись по JWKS identity provider (RS256/ES256, `kid`), `iss`, `aud` BFF и срок с допуском 30 s; ID token (есть `nonce`, нет `scope`) отклоняется.
+- **User assertion.** `AssertionSigner` подписывает ES256 JWT на каждый вызов контекста: `iss: nomnom-bff`, `aud` контекста, `sub` из проверенного token, срок 30 s, случайный `jti`.
+- **Вызовы контекстов.** `UnaryClientInterceptor(audience, …)` ставит `authorization: Bearer <projected token BFF для audience>` (ADR 27) и, если в контексте запроса есть покупатель (`identity.WithUser`), `x-nomnom-user-assertion`.
+
+| Переменная | Назначение |
+| --- | --- |
+| `BFF__IDP_ISSUER`, `BFF__IDP_AUDIENCE`, `BFF__IDP_JWKS_FILE` | identity provider и его JWKS |
+| `BFF__ASSERTION_KEY_FILE`, `BFF__ASSERTION_KEY_ID` | ключ подписи assertions (P-256, PEM) и его `kid` |
+| `IDENTITY__TOKEN_DIR` | каталог projected ServiceAccount tokens, файл на audience |
+
+Без этих переменных identity выключена; частичная конфигурация останавливает плагин на старте. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — JWKS provider из ConfigMap, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`). Resolvers, которые используют identity, пока не реализованы.
+
 ## Место в архитектуре
 
 ```text
@@ -189,7 +205,7 @@ stages должны собрать плагин и `config.json`, а в непр
 ## Следующие шаги
 
 - определить production-схему публикации и получения execution config через Cosmo control plane;
-- выбрать propagated access token или signed internal identity, настроить OIDC/JWT и ограничения операций;
+- выбрать identity provider и способ получения access token браузером; identity между BFF и контекстами решена ADR 32;
 - сгенерировать внутренние gRPC-клиенты из BSR;
 - реализовать resolvers customer API и политику частичных результатов;
 - настроить deadlines, cancellation, идемпотентность и наблюдаемость.

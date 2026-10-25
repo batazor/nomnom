@@ -5,6 +5,13 @@
 # Test-only key material; never use it outside tests.
 set -euo pipefail
 cd "$(dirname "$0")"
+# LibreSSL writes EC keys with explicit curve parameters, which Go rejects;
+# prefer OpenSSL 3 when it is installed next to the system LibreSSL.
+if openssl version | grep -q LibreSSL; then
+  for candidate in /opt/homebrew/opt/openssl@3/bin /usr/local/opt/openssl@3/bin; do
+    if [ -x "$candidate/openssl" ]; then PATH="$candidate:$PATH"; break; fi
+  done
+fi
 out=fixtures
 mkdir -p "$out"
 key="$out/signing-key.pem"
@@ -56,8 +63,8 @@ PY
 # User assertions signed by BFF (ADR 32) and access tokens of a test identity
 # provider that BFF verifies. Separate files: the service vectors above stay as they are.
 bff_key="$out/bff-signing-key.pem"
-[ -f "$bff_key" ] || openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$bff_key" 2>/dev/null
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$out/.foreign-ec-key.pem" 2>/dev/null
+[ -f "$bff_key" ] || openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -pkeyopt ec_param_enc:named_curve -out "$bff_key" 2>/dev/null
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -pkeyopt ec_param_enc:named_curve -out "$out/.foreign-ec-key.pem" 2>/dev/null
 idp_key="$out/idp-signing-key.pem"
 [ -f "$idp_key" ] || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$idp_key" 2>/dev/null
 python3 - "$key" "$bff_key" "$idp_key" "$out" <<'PY'

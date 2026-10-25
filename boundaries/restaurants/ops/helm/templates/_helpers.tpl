@@ -67,7 +67,8 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 
 {{/*
 Service identity (ADR 27): с JWKS приложению нужны issuer, audience и allowlist,
-иначе оно не стартует или остаётся fail closed.
+иначе оно не стартует или остаётся fail closed. User assertions (ADR 32) требуют
+service identity, issuer BFF и делегатов.
 */}}
 {{- define "restaurants.validateIdentity" -}}
 {{- with .Values.identity -}}
@@ -75,6 +76,13 @@ Service identity (ADR 27): с JWKS приложению нужны issuer, audie
 {{- range $key := list "issuer" "audience" "serviceAccounts" -}}
 {{- if not (get $.Values.identity $key) -}}
 {{- fail (printf "identity.%s is required when identity.jwksConfigMap is set" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if .userJwksConfigMap -}}
+{{- range $key := list "jwksConfigMap" "userIssuer" "userDelegates" -}}
+{{- if not (get $.Values.identity $key) -}}
+{{- fail (printf "identity.%s is required when identity.userJwksConfigMap is set" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

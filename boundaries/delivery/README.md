@@ -108,6 +108,25 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 
 Fail closed: если пусты issuer, audience или путь к JWKS, процесс использует `RejectingSubjectResolver` и пишет предупреждение при старте — все вызовы получают `UNAUTHENTICATED`. Нечитаемый или невалидный JWKS (нет usable RS256/ES256 ключей, ключ без `kid`, дубликат `kid`), пустой allowlist при заданной проверке и неверный формат allowlist завершают startup ошибкой. JWKS читается один раз при старте: после ротации signing key кластера нужен restart. Тесты проходят по общим векторам `tests/identity/fixtures` (AC-461).
 
+### User identity от BFF
+
+По [ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md) BFF передаёт пользователя в metadata `x-nomnom-user-assertion: <jwt>` вместе со своим service token. Порядок проверки в `ServiceTokenSubjectResolver`:
+
+1. service token (выше); без него assertion не рассматривается;
+2. assertion нет → `Subject::Service(<service-name>)`, как раньше;
+3. assertion повторён или пуст, user assertions не настроены или service не входит в `IDENTITY__USER_DELEGATES` → `UNAUTHENTICATED`;
+4. `UserAssertionVerifier`: `alg` ровно `ES256`, `kid` есть в JWKS BFF (ключи EC P-256), `iss` равен `IDENTITY__USER_ISSUER`, `aud` содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, `iat` обязателен, `exp - iat ≤ 60 s`, `sub` непустой и без пробелов по краям, `jti` непустой → `Subject::User(<sub>)`.
+
+Service identity делегата остаётся в `Caller::delegate` (`ServiceTokenSubjectResolver::authenticate`); принятие и отказ пишутся в stderr с `jti` и делегатом, без token.
+
+| Переменная | Ключ TOML | Значение |
+| --- | --- | --- |
+| `IDENTITY__USER_ISSUER` | `identity.user_issuer` | Ожидаемый `iss` assertion, `nomnom-bff` |
+| `IDENTITY__USER_JWKS_FILE` | `identity.user_jwks_file` | JWKS BFF; Helm монтирует `/etc/nomnom/user-identity/jwks.json` из `identity.userJwksConfigMap` |
+| `IDENTITY__USER_DELEGATES` | `identity.user_delegates` | Services через запятую, которым разрешено передавать user subject, в развёртываниях `bff` |
+
+User assertions принимаются, только если заданы все три переменные; иначе любой вызов с assertion получает `UNAUTHENTICATED`, вызовы без assertion работают как раньше. Нечитаемый JWKS BFF, JWKS без ES256-ключей и неверный формат списка делегатов завершают startup ошибкой. Ротация ключа BFF: новый `kid` добавляется в ConfigMap, затем rollout restart, затем BFF переключается на новый ключ. Тесты проходят по `tests/identity/fixtures/user-vectors.json` с часами, зафиксированными на `now` (FR-471–FR-473).
+
 ## Авторизация (SpiceDB)
 
 Use cases проверяют права через порты `CourierAuthorization` и `DeliveryAuthorization` (`slices/*/applications/authorization.rs`). При заданном `SPICEDB__ENDPOINT` оба порта закрывает `SpiceDbAuthorization` (`infrastructure/spicedb`, [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md), FR-435): каждый check — `PermissionsService.CheckPermission` (consistency `minimize_latency`, для ресурса с сохранённой revision — `at_least_as_fresh`, см. «Authorization revisions») по [схеме](../../authorization/schema.zed) и нормативной таблице [design.md](../../openspec/changes/add-spicedb-authorization/design.md):
@@ -277,7 +296,10 @@ Topic `delivery.v1.delivery-events`, контракт `infrastructure/grpc/nomno
 | `DeliveryPickedUp` | `nomnom.delivery.v1.DeliveryPickedUp` |
 | `DeliveryCompleted` | `nomnom.delivery.v1.DeliveryCompleted` |
 | `DeliveryFailed` | `nomnom.delivery.v1.DeliveryFailed` (с `reason`) |
-| `CourierUnassignedFromDelivery`, `DeliveryCancelled` | не публикуются: контракта нет, mapper — явный allowlist |
+| `CourierUnassignedFromDelivery` | `nomnom.delivery.v1.CourierUnassignedFromDelivery` (курьер снят без замены) |
+| `DeliveryCancelled` | `nomnom.delivery.v1.DeliveryCancelled` (с `reason`, пустой — причина не указана) |
+
+Mapper — явный allowlist: новый Domain Event не публикуется, пока для него нет контракта (match без wildcard не скомпилируется). Все события одной транзакции получают один `aggregate_version`; `event_id` различается через `event_type` (ADR 31).
 
 `delivery-relay` (`cmd/delivery-relay`, тот же образ, runtime contract `pkg/lifecycle`) — polling relay ADR 31:
 
@@ -330,13 +352,13 @@ docker stop delivery-pg delivery-kafka
 - доменная модель: `Courier` (включая `unavailable`), `Location`, табличные FSM `Delivery` (6 states × 6 triggers, включая `Cancelled`/`Cancel`) и `DeliveryOffer` (4 × 3) с тестами полноты, domain events `CourierAssignedToDelivery`, `CourierUnassignedFromDelivery`, `DeliveryPickedUp`, `DeliveryCompleted`, `DeliveryFailed`, `DeliveryCancelled`; policies `CourierEligibleForDelivery` и `DeliveryOfferAcceptable`; контракты репозиториев рядом с моделями;
 - application handlers всех 16 use cases в `slices/<slice>/applications/<usecase>/mod.rs` с unit-тестами;
 - порты: `UnitOfWork`, `Clock`, `IdGenerator`, `Subject`/`AuthorizationError` (`pkg/application`), `RepositoryError` (`pkg/persistence`), `CourierAuthorization` и `DeliveryAuthorization`, `DeliveryOutbox`, `CourierLocator`, `CourierLocationStore`, read models `CourierCurrentDeliveryReadModel` и `PendingDeliveryOffersReadModel`, параметры `AssignmentPolicy`;
-- `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27);
+- `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27) и user identity по assertion BFF (ADR 32);
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
 - `PostgresStore` (`infrastructure/postgres`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox ADR 31, миграции `delivery-migrate`;
 - публикация Integration Events: mapper `DeliveryIntegrationEvents` (4 события `events.proto`) и процесс `delivery-relay` (`infrastructure/outbox`: advisory lock, head-of-line, retention, `rdkafka`, OTLP-метрики ADR 13);
 - in-memory адаптеры всех портов в `infrastructure/memory` (транзакционный store с rollback и инъекцией сбоя commit, статическая authorization, управляемые clock и id generator, статический locator) — только для тестов и локальной сборки.
 
-Не реализованы: Kafka consumers и Inbox, распространение trace context в Outbox (`traceparent` не пишется: OpenTelemetry tracing в процессе не подключён), метрики основного процесса, user identity через BFF (ADR 27 оставляет её открытой), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
+Не реализованы: Kafka consumers и Inbox, распространение trace context в Outbox (`traceparent` не пишется: OpenTelemetry tracing в процессе не подключён), метрики основного процесса, расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
 
 Допущения по открытым продуктовым вопросам (момент начала поиска курьера, retryability причин неудачи, параметры позиции и политики назначения) зафиксированы в [design.md](../../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам) change.
 

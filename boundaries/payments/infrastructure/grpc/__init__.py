@@ -5,6 +5,7 @@ from .identity import (
     RejectingSubjectResolver,
     ServiceTokenSubjectResolver,
     SubjectResolver,
+    UserAssertionVerifier,
     create_subject_resolver,
 )
 from .service import GrpcWorker
@@ -15,5 +16,6 @@ __all__ = [
     "RejectingSubjectResolver",
     "ServiceTokenSubjectResolver",
     "SubjectResolver",
+    "UserAssertionVerifier",
     "create_subject_resolver",
 ]

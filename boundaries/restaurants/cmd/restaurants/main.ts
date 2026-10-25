@@ -20,14 +20,30 @@ import { MongoUnitOfWork } from "../../pkg/infrastructure/mongodb/unit-of-work.t
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../../pkg/lifecycle/periodic.ts";
 import { currentTraceMetadata } from "../../pkg/telemetry/trace-context.ts";
+import { AcceptOrderHandler } from "../../slices/kitchenorder/applications/accept-order/accept-order.ts";
 import type { KitchenAccessControl } from "../../slices/kitchenorder/applications/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../../slices/kitchenorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import { MarkAssembledHandler } from "../../slices/kitchenorder/applications/mark-assembled/mark-assembled.ts";
+import { MarkReadyForPickupHandler } from "../../slices/kitchenorder/applications/mark-order-ready/mark-order-ready.ts";
 import { ReceiveOrderRequestHandler } from "../../slices/kitchenorder/applications/receive-order-request/receive-order-request.ts";
+import { RejectOrderHandler } from "../../slices/kitchenorder/applications/reject-order/reject-order.ts";
+import { ReportPreparationDelayHandler } from "../../slices/kitchenorder/applications/report-preparation-delay/report-preparation-delay.ts";
+import { ReportPreparationFailureHandler } from "../../slices/kitchenorder/applications/report-preparation-failure/report-preparation-failure.ts";
+import type { RepeatPolicy } from "../../slices/kitchenorder/applications/restaurant-order-support.ts";
+import { StartPreparationHandler } from "../../slices/kitchenorder/applications/start-preparing-order/start-preparing-order.ts";
+import {
+  FixedPreparationTimeEstimator,
+  UnconstrainedAcceptanceConditions,
+} from "../../slices/kitchenorder/infrastructure/acceptance/mvp.ts";
 import { restaurantOrderEventMapper } from "../../slices/kitchenorder/infrastructure/integration/restaurant-order-events.ts";
 import {
   createRestaurantOrderCollection,
   MongoRestaurantOrderRepository,
 } from "../../slices/kitchenorder/infrastructure/mongodb/restaurant-orders.ts";
+import {
+  createMenuCollection,
+  MongoMenuRepository,
+} from "../../slices/menu/infrastructure/mongodb/menus.ts";
 import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
@@ -47,14 +63,27 @@ import { RelationshipReconciler } from "../../slices/restaurant/infrastructure/r
 
 /** First reconciliation pass shortly after start. */
 const RECONCILER_FIRST_PASS_MS = 10_000;
+/**
+ * Initial `expected_ready_at` after Acceptance until the estimate is a
+ * product decision; staff move it later with ReportPreparationDelay.
+ */
+const PREPARATION_TIME_MS = 20 * 60_000;
+/**
+ * Open product decision: a repeated Start Preparation or Mark Ready answers
+ * with the current order and publishes nothing, so staff UI retries are safe.
+ */
+const KITCHEN_REPEAT_POLICY: RepeatPolicy = "succeed-without-event";
 
 loadLocalEnv();
 const config = loadConfig();
-// Projected ServiceAccount token verification (ADR 27). Without issuer,
-// audience and JWKS the RejectingSubjectResolver keeps commands fail closed;
-// an invalid JWKS or allowlist stops startup.
-const subjects = await createSubjectResolver(config.identity, (message) =>
-  console.warn(`restaurants ${message}`),
+// Projected ServiceAccount token verification (ADR 27) and BFF user
+// assertions (ADR 32). Without issuer, audience and JWKS the
+// RejectingSubjectResolver keeps commands fail closed; an invalid JWKS or
+// allowlist stops startup.
+const subjects = await createSubjectResolver(
+  config.identity,
+  (message) => console.warn(`restaurants ${message}`),
+  { audit: (message) => console.info(`restaurants ${message}`) },
 );
 
 // MongoDB (ADR 8, local ADR 1) is required; collections, validators and
@@ -78,6 +107,9 @@ const restaurantCollection = createRestaurantCollection(mongo.db, unitOfWork);
 const orderCollection = createRestaurantOrderCollection(mongo.db, unitOfWork);
 const restaurants = new MongoRestaurantRepository(restaurantCollection);
 const restaurantOrders = new MongoRestaurantOrderRepository(orderCollection);
+const menus = new MongoMenuRepository(
+  createMenuCollection(mongo.db, unitOfWork),
+);
 // SpiceDB (ADR 18) is required; errors and timeouts fail closed as
 // UNAVAILABLE. Without SPICEDB__ENDPOINT the process does not start.
 let spicedb: SpiceDbClient | undefined;
@@ -117,6 +149,16 @@ if (config.spicedb.enabled) {
   );
 }
 
+// Kitchen commands of restaurant staff: one MongoDB transaction saves the
+// Restaurant Order and its published facts to the Outbox.
+const kitchenCommands = {
+  accessControl: kitchenAccessControl,
+  unitOfWork,
+  restaurantOrders,
+  outbox,
+  clock,
+};
+
 const service = createRestaurantsService({
   subjects,
   getRestaurant: new GetRestaurantHandler({
@@ -138,6 +180,32 @@ const service = createRestaurantsService({
     // Open product decision; the conservative choice keeps Preparation going.
     cancellationDuringPreparation: "reject",
   }),
+  acceptRestaurantOrder: new AcceptOrderHandler({
+    ...kitchenCommands,
+    restaurants,
+    menus,
+    conditions: new UnconstrainedAcceptanceConditions(),
+    readyTimeEstimator: new FixedPreparationTimeEstimator(PREPARATION_TIME_MS),
+  }),
+  rejectRestaurantOrder: new RejectOrderHandler(kitchenCommands),
+  startPreparation: new StartPreparationHandler({
+    ...kitchenCommands,
+    onRepeat: KITCHEN_REPEAT_POLICY,
+  }),
+  // Assembly is a local fact: a single document write without the Outbox.
+  markRestaurantOrderAssembled: new MarkAssembledHandler({
+    accessControl: kitchenAccessControl,
+    restaurantOrders,
+    clock,
+  }),
+  markRestaurantOrderReady: new MarkReadyForPickupHandler({
+    ...kitchenCommands,
+    onRepeat: KITCHEN_REPEAT_POLICY,
+  }),
+  reportPreparationDelay: new ReportPreparationDelayHandler(kitchenCommands),
+  reportPreparationFailure: new ReportPreparationFailureHandler(
+    kitchenCommands,
+  ),
   registerRestaurant: new RegisterRestaurantHandler({
     accessControl: restaurantAccessControl,
     ownerRelationships: relationshipWriter,

@@ -172,6 +172,15 @@ identity:
   serviceAccounts: ""
   # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart.
   jwksConfigMap: ""
+  # User assertions BFF (ADR 32). Пока userJwksConfigMap пуст (или пуст jwksConfigMap),
+  # IDENTITY__USER_* не задаются и любой вызов с x-nomnom-user-assertion отклоняется.
+  # Если задан, его ключ jwks.json (публичные ключи BFF, EC P-256; в kind — bff-jwks)
+  # монтируется read-only в /etc/nomnom/user-identity/jwks.json.
+  userJwksConfigMap: ""
+  # Ожидаемый iss assertion, например "nomnom-bff".
+  userIssuer: ""
+  # Services через запятую, которым разрешено передавать user subject, например "bff".
+  userDelegates: ""
 
 # Авторизация в SpiceDB (ADR 18). Пока endpoint пуст, SPICEDB__* не задаются и приложение
 # использует локальную авторизацию с предупреждением. Если endpoint задан, передаются

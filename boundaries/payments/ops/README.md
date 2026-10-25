@@ -148,8 +148,11 @@ Chart реализует [runtime contract](../../../docs/cloud-native-runtime.m
 | `identity.audience` | `nomnom.payments` | Audience контекста. |
 | `identity.serviceAccounts` | `""` | Allowlist `namespace/serviceaccount=service-name` через запятую; обязателен при `jwksConfigMap`. |
 | `identity.jwksConfigMap` | `""` | ConfigMap с ключом `jwks.json` (JWKS кластера); создаётся развёртыванием, не chart. |
+| `identity.userIssuer` | `""` | Ожидаемый `iss` user assertions BFF (`nomnom-bff`); обязателен при `userJwksConfigMap`. |
+| `identity.userDelegates` | `""` | Services через запятую, которым разрешено передавать user (`bff`); обязателен при `userJwksConfigMap`. |
+| `identity.userJwksConfigMap` | `""` | ConfigMap с ключом `jwks.json` (JWKS BFF); монтируется в `/etc/nomnom/user-identity`, контейнер получает `IDENTITY__USER_*` ([ADR 32](../../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)). Без него вызовы с user assertion отклоняются. |
 
-При `jwksConfigMap` без `issuer`, `audience` или `serviceAccounts` `helm template` завершается ошибкой.
+При `jwksConfigMap` без `issuer`, `audience` или `serviceAccounts` `helm template` завершается ошибкой; так же при `userJwksConfigMap` без `jwksConfigMap`, `userIssuer` или `userDelegates`.
 
 ```bash
 helm template payments ops/helm \

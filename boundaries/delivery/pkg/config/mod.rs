@@ -21,17 +21,24 @@ const CONFIG_KEY_READINESS_DELAY: &str = "shutdown.readiness_delay";
 pub const DEFAULT_READINESS_DELAY: &str = "5s";
 pub const READINESS_DELAY_ENV: &str = "SHUTDOWN__READINESS_DELAY";
 
-/// Service identity (ADR 27): ключ конфигурации и переменная окружения.
-const IDENTITY_SETTINGS: [(&str, &str); 4] = [
+/// Service identity (ADR 27) и user assertions BFF (ADR 32): ключ
+/// конфигурации и переменная окружения.
+const IDENTITY_SETTINGS: [(&str, &str); 7] = [
     ("identity.issuer", ISSUER_ENV),
     ("identity.audience", AUDIENCE_ENV),
     ("identity.jwks_file", JWKS_FILE_ENV),
     ("identity.service_accounts", SERVICE_ACCOUNTS_ENV),
+    ("identity.user_issuer", USER_ISSUER_ENV),
+    ("identity.user_jwks_file", USER_JWKS_FILE_ENV),
+    ("identity.user_delegates", USER_DELEGATES_ENV),
 ];
 pub const ISSUER_ENV: &str = "IDENTITY__ISSUER";
 pub const AUDIENCE_ENV: &str = "IDENTITY__AUDIENCE";
 pub const JWKS_FILE_ENV: &str = "IDENTITY__JWKS_FILE";
 pub const SERVICE_ACCOUNTS_ENV: &str = "IDENTITY__SERVICE_ACCOUNTS";
+pub const USER_ISSUER_ENV: &str = "IDENTITY__USER_ISSUER";
+pub const USER_JWKS_FILE_ENV: &str = "IDENTITY__USER_JWKS_FILE";
+pub const USER_DELEGATES_ENV: &str = "IDENTITY__USER_DELEGATES";
 
 /// SpiceDB (ADR 18): ключ конфигурации, переменная окружения и значение по умолчанию.
 const SPICEDB_SETTINGS: [(&str, &str, &str); 4] = [
@@ -297,8 +304,11 @@ pub struct ShutdownConfig {
     pub drain_timeout: Duration,
 }
 
-/// Проверка projected ServiceAccount token (ADR 27). Пустые issuer, audience
-/// или jwks_file означают, что проверка выключена и вызовы отклоняются.
+/// Проверка projected ServiceAccount token (ADR 27) и user assertions BFF
+/// (ADR 32). Пустые issuer, audience или jwks_file означают, что проверка
+/// выключена и вызовы отклоняются. Пустые user_issuer, user_jwks_file или
+/// user_delegates выключают только user assertions: вызов с assertion
+/// отклоняется, service-вызовы работают как раньше.
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct IdentityConfig {
@@ -310,6 +320,12 @@ pub struct IdentityConfig {
     pub jwks_file: String,
     /// Allowlist `namespace/serviceaccount=service-name` через запятую.
     pub service_accounts: String,
+    /// Ожидаемый `iss` user assertion (`nomnom-bff`).
+    pub user_issuer: String,
+    /// Путь к JWKS BFF (ключи EC P-256 для ES256).
+    pub user_jwks_file: String,
+    /// Services, которым разрешено передавать user assertion, через запятую.
+    pub user_delegates: String,
 }
 
 /// Проверка прав в SpiceDB (ADR 18). Пустой `endpoint` оставляет локальную
@@ -738,6 +754,52 @@ mod tests {
                 audience: "nomnom.delivery".to_owned(),
                 jwks_file: "/etc/nomnom/identity/jwks.json".to_owned(),
                 service_accounts: "nomnom/orders-worker=orders-worker".to_owned(),
+                ..IdentityConfig::default()
+            }
+        );
+    }
+
+    #[test]
+    fn loads_user_assertions_from_toml() {
+        let config = load_toml(
+            "identity-user",
+            "[identity]\nuser_issuer = \"nomnom-bff\"\n\
+             user_jwks_file = \"/etc/bff-jwks.json\"\nuser_delegates = \"bff\"\n",
+        )
+        .expect("load config");
+
+        assert_eq!(config.identity.user_issuer, "nomnom-bff");
+        assert_eq!(config.identity.user_jwks_file, "/etc/bff-jwks.json");
+        assert_eq!(config.identity.user_delegates, "bff");
+        assert_eq!(config.identity.issuer, "");
+    }
+
+    #[test]
+    fn user_assertion_env_overrides_file_values() {
+        let env = std::collections::HashMap::from([
+            (USER_ISSUER_ENV, "nomnom-bff"),
+            (USER_JWKS_FILE_ENV, "/etc/nomnom/identity/bff-jwks.json"),
+            (USER_DELEGATES_ENV, "bff,admin-bff"),
+        ]);
+        let builder = ConfigLoader::builder()
+            .set_default("identity.user_issuer", "file-issuer")
+            .expect("default");
+        let identity: IdentityConfig = configure_identity(builder, |name| {
+            env.get(name).map(|value| (*value).to_owned())
+        })
+        .expect("configure")
+        .build()
+        .expect("build")
+        .get("identity")
+        .expect("identity section");
+
+        assert_eq!(
+            identity,
+            IdentityConfig {
+                user_issuer: "nomnom-bff".to_owned(),
+                user_jwks_file: "/etc/nomnom/identity/bff-jwks.json".to_owned(),
+                user_delegates: "bff,admin-bff".to_owned(),
+                ..IdentityConfig::default()
             }
         );
     }

@@ -180,6 +180,18 @@ identity:
   serviceAccounts: ""
   # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart.
   jwksConfigMap: ""
+  # User assertions BFF (ADR 32). Включаются, только когда задан userJwksConfigMap (вместе с
+  # jwksConfigMap): ConfigMap с ключом jwks.json (публичные ES256 ключи BFF) монтируется в
+  # /etc/nomnom/user-identity/jwks.json, значения передаются как IDENTITY__USER_ISSUER,
+  # IDENTITY__USER_JWKS_FILE и IDENTITY__USER_DELEGATES. Без него вызовы с
+  # x-nomnom-user-assertion отклоняются UNAUTHENTICATED, service-вызовы не затронуты.
+  # Ожидаемый iss assertion, например nomnom-bff. Обязателен вместе с userJwksConfigMap.
+  userIssuer: ""
+  # Services, которым разрешено передавать user, через запятую, например bff.
+  # Обязателен вместе с userJwksConfigMap.
+  userDelegates: ""
+  # Имя ConfigMap с ключом jwks.json (JWKS BFF); создаётся развёртыванием, не этим chart.
+  userJwksConfigMap: ""
 
 # Authorization через SpiceDB (ADR 18). Проверка включается, только когда задан endpoint:
 # контейнер получает SPICEDB__ENDPOINT, SPICEDB__INSECURE, SPICEDB__TIMEOUT и

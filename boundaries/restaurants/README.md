@@ -99,7 +99,7 @@ RPC, подключённые в `cmd/restaurants` (native gRPC/HTTP2 на би�
 | `AssignStaff` | `assign-staff` | `restaurant_id`, отсортированный `staff`, `changed = false` при повторе; требует `restaurant#manage`, пишет `restaurant#staff` |
 | `RevokeStaff` | `revoke-staff` | `restaurant_id`, отсортированный `staff`, `changed = false` при повторе; требует `restaurant#manage`, удаляет `restaurant#staff` |
 
-Командные RPC ([FR-428](../../openspec/changes/add-fulfillment-command-rpcs/), [FR-446](../../openspec/changes/add-restaurant-admin-rpcs/)) получают `Subject` через `SubjectResolver` (`infrastructure/grpc/subject.ts`). Без конфигурации identity используется `RejectingSubjectResolver`, который отвечает `UNAUTHENTICATED`; с конфигурацией — `ServiceTokenSubjectResolver` (см. [Service identity](#service-identity)). Отказ отмены по стадии — бизнес-ответ, а не gRPC-ошибка.
+Командные RPC ([FR-428](../../openspec/changes/add-fulfillment-command-rpcs/), [FR-446](../../openspec/changes/add-restaurant-admin-rpcs/)) получают `Subject` через `SubjectResolver` (`infrastructure/grpc/subject.ts`). Без конфигурации identity используется `RejectingSubjectResolver`, который отвечает `UNAUTHENTICATED`; с конфигурацией — `ServiceTokenSubjectResolver` (см. [Service identity](#service-identity) и [User identity](#user-identity)). Отказ отмены по стадии — бизнес-ответ, а не gRPC-ошибка.
 
 ### Service identity
 
@@ -122,6 +122,25 @@ RPC, подключённые в `cmd/restaurants` (native gRPC/HTTP2 на би�
 | `IDENTITY__SERVICE_ACCOUNTS` | Allowlist через запятую: `namespace/serviceaccount=service-name`, например `nomnom/orders-worker=orders-worker` | пусто |
 
 Если `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` или `IDENTITY__JWKS_FILE` пусты, сервер стартует с `RejectingSubjectResolver` и пишет предупреждение (fail closed). Нечитаемый или невалидный JWKS, пустой allowlist при заданном issuer и неверный формат allowlist — ошибка startup. Тесты (`test/identity.test.ts`) проходят по общим векторам `tests/identity/fixtures` с audience векторов `nomnom.payments`.
+
+### User identity
+
+Пользователя передаёт только BFF: user assertion в metadata `x-nomnom-user-assertion` ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md), [FR-471–FR-473](../../openspec/changes/add-user-identity-assertions/specs/user-identity/spec.md)). `ServiceTokenSubjectResolver` проверяет по порядку:
+
+1. service token, как выше; без него assertion не рассматривается;
+2. assertion нет → `Subject{type: "service"}`, как раньше;
+3. assertion повторён или пуст, user-настройки не заданы или service не входит в `IDENTITY__USER_DELEGATES` → `UNAUTHENTICATED`;
+4. assertion: `alg` только `ES256`, `kid` обязателен и есть в JWKS BFF, `iss` равен `IDENTITY__USER_ISSUER`, `aud` содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, `iat` обязателен и `exp - iat ≤ 60 s`, `sub` непуст и без пробелов по краям, `jti` непуст → `Subject{type: "user", id: <sub>, delegate: <service>}`.
+
+`delegate` нужен только для log и audit. Принятие и отказ пишутся в log с delegate и `jti`, сами токены не пишутся; `jti` не дедуплицируется.
+
+| Переменная | Значение | По умолчанию |
+| --- | --- | --- |
+| `IDENTITY__USER_ISSUER` | Ожидаемый `iss` assertion, `nomnom-bff` | пусто |
+| `IDENTITY__USER_JWKS_FILE` | JWKS BFF (EC P-256); в chart — `/etc/nomnom/user-identity/jwks.json` из `identity.userJwksConfigMap` | пусто |
+| `IDENTITY__USER_DELEGATES` | Services через запятую, которым разрешено передавать пользователя, например `bff` | пусто |
+
+Assertions принимаются, только если заданы issuer и JWKS и список делегатов не пуст; иначе любой вызов с assertion — `UNAUTHENTICATED`, вызовы без него работают как раньше. Нечитаемый JWKS BFF или ключ не EC P-256 — ошибка startup. Тесты (`test/user-identity.test.ts`) проходят по `tests/identity/fixtures/user-vectors.json` с часами, зафиксированными на `now` векторов.
 
 ### Authorization: SpiceDB
 

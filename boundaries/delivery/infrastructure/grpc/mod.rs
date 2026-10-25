@@ -7,6 +7,7 @@ mod identity;
 mod service;
 
 pub use identity::{
-    CLOCK_LEEWAY_SECONDS, IdentityConfigError, ServiceTokenSubjectResolver, subject_resolver,
+    CLOCK_LEEWAY_SECONDS, Caller, Clock, IdentityConfigError, MAX_USER_ASSERTION_TTL_SECONDS,
+    ServiceTokenSubjectResolver, UserAssertionVerifier, subject_resolver,
 };
 pub use service::{GrpcWorker, RejectingSubjectResolver, SubjectResolver};
