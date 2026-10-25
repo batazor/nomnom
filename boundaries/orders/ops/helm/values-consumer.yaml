@@ -5,14 +5,17 @@
 # relationships курьера.
 component: consumer
 
+telemetry:
+  serviceName: orders-consumer
+
 command:
   - /orders-consumer
 
-# service.name процесса — и Kafka ClientID (квоты и диагностика брокера), и OTel resource.
+# service.name процесса (telemetry.serviceName) совпадает с Kafka ClientID (квоты и
+# диагностика брокера).
 # Группа orders читает стримы с начала: события по существующим Order должны быть отражены,
 # повтор истории идемпотентен через Inbox (ADR 28).
 env:
-  OTEL_SERVICE_NAME: orders-consumer
   KAFKA__CLIENT_ID: orders-consumer
   KAFKA__CONSUMER_GROUP: orders
   KAFKA__INITIAL_OFFSET: oldest
@@ -26,3 +29,8 @@ service:
 shutdown:
   readinessDelaySeconds: 2
   drainTimeoutSeconds: 20
+
+# Пул PostgreSQL роли (README, «Пулер PostgreSQL»): Watermill handlers: транзакция Inbox + агрегат на сообщение.
+postgres:
+  maxConns: 5
+  minConns: 1

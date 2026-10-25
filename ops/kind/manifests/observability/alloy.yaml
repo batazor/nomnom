@@ -2,8 +2,8 @@
 # Grafana Cloud (free tier). Подключается Skaffold profile grafana-cloud; Secret
 # grafana-cloud-otlp создаёт scripts/grafana-cloud.sh из ops/grafana-cloud/.env.grafana-cloud.
 # Free tier ограничен активными series, поэтому уходят только метрики service.namespace=nomnom
-# и allowlist инфраструктуры (SpiceDB, PostgreSQL, pods nomnom-*): без traces, logs, profiles
-# и собственных метрик Alloy.
+# и allowlist инфраструктуры (SpiceDB, PostgreSQL, pods nomnom-*), traces процессов nomnom и
+# stdout-логи прикладных неймспейсов; без profiles и собственных метрик Alloy.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -27,6 +27,7 @@ data:
       }
       output {
         metrics = [otelcol.processor.memory_limiter.default.input]
+        traces  = [otelcol.processor.memory_limiter.default.input]
       }
     }
 
@@ -35,6 +36,7 @@ data:
       limit          = "200MiB"
       output {
         metrics = [otelcol.processor.filter.nomnom.input]
+        traces  = [otelcol.processor.filter.nomnom.input]
       }
     }
 
@@ -44,8 +46,115 @@ data:
       metrics {
         metric = ["resource.attributes[\"service.namespace\"] != \"nomnom\""]
       }
+      traces {
+        span = ["resource.attributes[\"service.namespace\"] != \"nomnom\""]
+      }
       output {
         metrics = [otelcol.processor.batch.default.input]
+        traces  = [otelcol.processor.batch.signals.input]
+      }
+    }
+
+    // Traces и logs: короткий batch, чтобы trace и его логи появлялись в Grafana быстро.
+    otelcol.processor.batch "signals" {
+      timeout = "5s"
+      output {
+        traces = [otelcol.exporter.otlphttp.grafana_cloud.input]
+        logs   = [otelcol.exporter.otlphttp.grafana_cloud.input]
+      }
+    }
+
+    // Logs (docs/observability.md#логи): JSON-строки stdout pods прикладных неймспейсов.
+    // Поля записи поднимаются в OTLP: resource service.*, severity, trace_id/span_id —
+    // переход log → trace в Grafana. Строка не-JSON уходит как есть, с namespace и pod.
+    discovery.kubernetes "app_pods" {
+      role = "pod"
+      namespaces {
+        names = ["nomnom-orders", "nomnom-payments", "nomnom-delivery", "nomnom-restaurants", "nomnom-bff"]
+      }
+    }
+
+    discovery.relabel "app_pods" {
+      targets = discovery.kubernetes.app_pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+    }
+
+    loki.source.kubernetes "app_pods" {
+      targets    = discovery.relabel.app_pods.output
+      forward_to = [loki.process.app_logs.receiver]
+    }
+
+    loki.process "app_logs" {
+      stage.json {
+        expressions = {
+          severity          = "severity",
+          service_name      = "\"service.name\"",
+          service_namespace = "\"service.namespace\"",
+          service_version   = "\"service.version\"",
+          environment       = "\"deployment.environment.name\"",
+          trace_id          = "trace_id",
+          span_id           = "span_id",
+        }
+      }
+      // Индекс Loki — только ограниченный набор; trace_id и версия — structured metadata.
+      stage.labels {
+        values = {
+          severity          = "",
+          service_name      = "",
+          service_namespace = "",
+          environment       = "",
+        }
+      }
+      stage.structured_metadata {
+        values = {
+          trace_id        = "",
+          span_id         = "",
+          service_version = "",
+        }
+      }
+      forward_to = [otelcol.receiver.loki.app_logs.receiver]
+    }
+
+    otelcol.receiver.loki "app_logs" {
+      output {
+        logs = [otelcol.processor.transform.app_logs.input]
+      }
+    }
+
+    // Loki labels → OTLP: resource attributes сервиса и поля trace context записи.
+    otelcol.processor.transform "app_logs" {
+      error_mode = "ignore"
+      log_statements {
+        context    = "log"
+        statements = [
+          `set(resource.attributes["service.name"], attributes["service_name"]) where attributes["service_name"] != nil`,
+          // Не-JSON строка (процесс ещё без structured logs): сервис — имя контейнера.
+          `set(resource.attributes["service.name"], attributes["container"]) where attributes["service_name"] == nil`,
+          `set(resource.attributes["service.namespace"], attributes["service_namespace"]) where attributes["service_namespace"] != nil`,
+          `set(resource.attributes["service.namespace"], "nomnom") where attributes["service_namespace"] == nil`,
+          `set(resource.attributes["service.version"], attributes["service_version"]) where attributes["service_version"] != nil`,
+          `set(resource.attributes["deployment.environment.name"], attributes["environment"]) where attributes["environment"] != nil`,
+          `set(resource.attributes["k8s.namespace.name"], attributes["namespace"])`,
+          `set(resource.attributes["k8s.pod.name"], attributes["pod"])`,
+          `set(severity_text, attributes["severity"]) where attributes["severity"] != nil`,
+          `set(trace_id.string, attributes["trace_id"]) where attributes["trace_id"] != nil`,
+          `set(span_id.string, attributes["span_id"]) where attributes["span_id"] != nil`,
+          `delete_matching_keys(attributes, "^(service_name|service_namespace|service_version|environment|severity|trace_id|span_id|container)$")`,
+        ]
+      }
+      output {
+        logs = [otelcol.processor.batch.signals.input]
       }
     }
 
@@ -285,6 +394,10 @@ rules:
   - apiGroups: [""]
     resources: [pods, nodes]
     verbs: [get, list, watch]
+  # loki.source.kubernetes: stdout pods через API server.
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
   - apiGroups: [""]
     resources: [nodes/proxy]
     verbs: [get]

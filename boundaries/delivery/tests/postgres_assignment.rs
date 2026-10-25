@@ -40,6 +40,7 @@ fn config() -> Option<DatabaseConfig> {
     Some(DatabaseConfig {
         url: dsn,
         max_conns: 4,
+        ..DatabaseConfig::default()
     })
 }
 

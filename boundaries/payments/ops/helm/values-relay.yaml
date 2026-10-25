@@ -12,5 +12,9 @@ service:
   enabled: false
 
 database:
+  # Пул relay (README, «Пулер PostgreSQL»): цикл публикации идёт последовательно, второе
+  # соединение — retention и метрики backlog. Advisory lock держит отдельное соединение вне пула.
+  maxConns: 2
+  minConns: 1
   # Схему применяет init container release payments.
   migrate: false

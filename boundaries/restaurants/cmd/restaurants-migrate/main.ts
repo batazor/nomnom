@@ -7,9 +7,16 @@
 import { createMigrateContainer } from "../../di/migrate.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
+import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
+import { telemetryResource } from "../../pkg/telemetry/resource.ts";
 
 loadLocalEnv();
-const config = loadConfig();
+// A one-shot init container: JSON logs only, no OTLP export.
+const logger = createLogger({
+  resource: telemetryResource("restaurants-migrate"),
+}).child({ operation: "migrate" });
+logUncaughtErrors(logger);
+const config = loadConfig(process.env, { process: "migrate" });
 if (!config.mongodb.enabled) {
   throw new Error(
     "MONGODB__URI is required: restaurants stores its data in MongoDB",
@@ -18,11 +25,11 @@ if (!config.mongodb.enabled) {
 const mongo = await connectMongoDb(config.mongodb);
 const container = createMigrateContainer({
   db: mongo.db,
-  log: (message) => console.log(`restaurants-migrate ${message}`),
+  logger,
 });
 try {
   await container.cradle.migration.run();
-  console.log("restaurants-migrate collections and indexes are up to date");
+  logger.info("collections and indexes are up to date");
 } finally {
   await container.dispose();
   await mongo.close();

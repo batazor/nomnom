@@ -149,11 +149,13 @@ async fn serve(listener: TcpListener, health: Arc<Health>, mut stop: watch::Rece
                     let health = Arc::clone(&health);
                     connections.spawn(async move {
                         if let Err(error) = handle(stream, &health).await {
-                            eprintln!("management connection failed: {error}");
+                            tracing::warn!(operation = "management.connection", error.message = %error, "management connection failed");
                         }
                     });
                 }
-                Err(error) => eprintln!("management accept failed: {error}"),
+                Err(error) => {
+                    tracing::warn!(operation = "management.accept", error.message = %error, "management accept failed");
+                }
             },
             Some(_) = connections.join_next() => {}
             () = wait_for_stop(&mut stop) => break,

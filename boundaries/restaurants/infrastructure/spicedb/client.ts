@@ -4,6 +4,10 @@
 import { deadlineInterceptor, v1 } from "@authzed/authzed-node";
 
 import type { SpiceDbEnabledConfig } from "../../pkg/config/config.ts";
+import {
+  clientTelemetryInterceptor,
+  grpcPeer,
+} from "../grpc/client-telemetry.ts";
 
 /**
  * The single SpiceDB call the adapter needs. The production implementation
@@ -36,7 +40,9 @@ export interface SpiceDbClient extends PermissionsClient, RelationshipsClient {
 /**
  * Creates the SpiceDB client: preshared key as bearer token, TLS unless
  * `insecure` (plaintext for kind and local runs only), and a per-call gRPC
- * deadline of `timeoutMs`.
+ * deadline of `timeoutMs`. Every call gets a CLIENT span with the W3C
+ * context in its metadata and `rpc.client.call.duration`; the span covers the
+ * deadline interceptor.
  */
 export function createSpiceDbClient(
   config: SpiceDbEnabledConfig,
@@ -48,7 +54,12 @@ export function createSpiceDbClient(
       ? v1.ClientSecurity.INSECURE_PLAINTEXT_CREDENTIALS
       : v1.ClientSecurity.SECURE,
     undefined,
-    { interceptors: [deadlineInterceptor(config.timeoutMs)] },
+    {
+      interceptors: [
+        clientTelemetryInterceptor(grpcPeer(config.endpoint)),
+        deadlineInterceptor(config.timeoutMs),
+      ],
+    },
   );
   return {
     checkPermission: (request) => client.promises.checkPermission(request),

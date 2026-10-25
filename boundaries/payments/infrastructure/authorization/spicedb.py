@@ -7,6 +7,7 @@ other contexts: ``openspec/changes/add-spicedb-authorization/design.md``.
 import logging
 from typing import Protocol, cast
 
+import grpc
 from authzed.api.v1 import (
     CheckPermissionRequest,
     CheckPermissionResponse,
@@ -20,6 +21,7 @@ from grpcutil import bearer_token_credentials
 
 from pkg.application import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
+from pkg.telemetry.rpc import ClientTelemetryInterceptor, split_target
 from slices.payment.applications.ports import (
     PaymentPermission,
     PaymentResource,
@@ -134,11 +136,36 @@ class DenyAllPermissions:
         return False
 
 
-def create_spicedb_client(settings: SpiceDBSettings) -> PermissionsClient:
-    """Create the official authzed client; channels connect lazily on the first check."""
+def create_spicedb_client(
+    settings: SpiceDBSettings, telemetry: ClientTelemetryInterceptor | None = None
+) -> PermissionsClient:
+    """Create the official authzed client; channels connect lazily on the first check.
+
+    The channel passes the telemetry interceptor: client span, ``traceparent`` in the
+    metadata and ``rpc.client.call.duration`` of every ``CheckPermission``.
+    """
+    interceptor = telemetry or ClientTelemetryInterceptor(*split_target(settings.endpoint))
     if settings.insecure:
-        return cast(PermissionsClient, InsecureClient(settings.endpoint, settings.preshared_key))
+        return cast(
+            PermissionsClient,
+            _traced(InsecureClient, interceptor)(settings.endpoint, settings.preshared_key),
+        )
     return cast(
         PermissionsClient,
-        SyncClient(settings.endpoint, bearer_token_credentials(settings.preshared_key)),
+        _traced(SyncClient, interceptor)(
+            settings.endpoint, bearer_token_credentials(settings.preshared_key)
+        ),
     )
+
+
+def _traced[C: type](client: C, interceptor: grpc.UnaryUnaryClientInterceptor) -> C:
+    """Subclass of an authzed client whose stubs use the intercepted channel.
+
+    The authzed clients build their channel inside ``__init__``; ``init_stubs`` is the
+    only hook that sees it.
+    """
+
+    def init_stubs(self: object, channel: grpc.Channel) -> None:
+        client.init_stubs(self, grpc.intercept_channel(channel, interceptor))  # type: ignore[attr-defined]
+
+    return cast(C, type(f"Traced{client.__name__}", (client,), {"init_stubs": init_stubs}))

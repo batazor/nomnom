@@ -46,8 +46,11 @@ type Options struct {
 	GRPC     bool
 	GraphQL  bool
 	// Dependencies — только client-side метрики самого сервиса.
-	GRPCClients     bool
-	Database        Database
+	GRPCClients bool
+	Database    Database
+	// DatabasePool — пул клиента БД экспортирует полный набор db.client.connection.*
+	// (pool.go): saturation, pending, timeouts, wait/use/create time и alert rules пула.
+	DatabasePool    bool
 	PaymentProvider bool
 	Kafka           *Kafka
 	// UseCases — декоратор application handlers (раздел usecase инвентаря).

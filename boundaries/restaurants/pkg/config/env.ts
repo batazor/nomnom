@@ -6,6 +6,8 @@ export const DEFAULT_READINESS_DELAY = "5s";
 export const READINESS_DELAY_ENV = "SHUTDOWN__READINESS_DELAY";
 export const DEFAULT_DRAIN_TIMEOUT = "20s";
 export const DRAIN_TIMEOUT_ENV = "SHUTDOWN__DRAIN_TIMEOUT";
+export const DEFAULT_TELEMETRY_FLUSH_TIMEOUT = "5s";
+export const TELEMETRY_FLUSH_TIMEOUT_ENV = "SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT";
 export const IDENTITY_ISSUER_ENV = "IDENTITY__ISSUER";
 export const IDENTITY_AUDIENCE_ENV = "IDENTITY__AUDIENCE";
 export const IDENTITY_JWKS_FILE_ENV = "IDENTITY__JWKS_FILE";
@@ -23,6 +25,31 @@ export const MONGODB_DATABASE_ENV = "MONGODB__DATABASE";
 export const DEFAULT_MONGODB_DATABASE = "restaurants";
 export const MONGODB_TIMEOUT_ENV = "MONGODB__TIMEOUT";
 export const DEFAULT_MONGODB_TIMEOUT = "5s";
+export const MONGODB_MAX_POOL_SIZE_ENV = "MONGODB__MAX_POOL_SIZE";
+export const MONGODB_MIN_POOL_SIZE_ENV = "MONGODB__MIN_POOL_SIZE";
+export const DEFAULT_MONGODB_MIN_POOL_SIZE = 0;
+export const MONGODB_MAX_IDLE_TIME_ENV = "MONGODB__MAX_IDLE_TIME";
+export const DEFAULT_MONGODB_MAX_IDLE_TIME = "5m";
+export const MONGODB_WAIT_QUEUE_TIMEOUT_ENV = "MONGODB__WAIT_QUEUE_TIMEOUT";
+export const DEFAULT_MONGODB_WAIT_QUEUE_TIMEOUT = "5s";
+export const MONGODB_MAX_CONNECTING_ENV = "MONGODB__MAX_CONNECTING";
+export const DEFAULT_MONGODB_MAX_CONNECTING = 2;
+/** Upper bound of `MONGODB__MAX_POOL_SIZE` per process (and per server). */
+export const MONGODB_POOL_SIZE_LIMIT = 100;
+/**
+ * Processes of restaurants that open a MongoClient; each sizes its own pool
+ * to its concurrency.
+ */
+export type MongoDbProcess = "api" | "relay" | "consumer" | "migrate";
+/**
+ * Default `maxPoolSize` per process: the API serves concurrent RPCs, the
+ * relay polls one batch at a time (plus lease renewal and cleanup), the
+ * consumer processes one message at a time with its Inbox transaction, and
+ * migrate runs sequential DDL.
+ */
+export const DEFAULT_MONGODB_MAX_POOL_SIZE: Readonly<
+  Record<MongoDbProcess, number>
+> = Object.freeze({ api: 20, relay: 3, consumer: 5, migrate: 2 });
 export const RECONCILER_INTERVAL_ENV = "RECONCILER__INTERVAL";
 export const DEFAULT_RECONCILER_INTERVAL = "5m";
 export const RECONCILER_GRACE_ENV = "RECONCILER__GRACE";

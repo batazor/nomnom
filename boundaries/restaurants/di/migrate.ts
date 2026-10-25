@@ -9,10 +9,11 @@ import {
   createProcessContainer,
   type Registrations,
 } from "../pkg/di/container.ts";
+import type { Logger } from "../pkg/telemetry/logger.ts";
 
 export type MigrateResources = Readonly<{
   db: Db;
-  log: (message: string) => void;
+  logger: Logger;
 }>;
 
 /** Collections, validators, indexes and pending document migrations. */
@@ -22,7 +23,7 @@ export interface Migration {
 
 export interface MigrateCradle {
   readonly db: Db;
-  readonly log: (message: string) => void;
+  readonly logger: Logger;
   readonly migration: Migration;
 }
 
@@ -32,10 +33,14 @@ export const createMigrateContainer = (
   const container = createProcessContainer<MigrateCradle>();
   const registrations: Registrations<MigrateCradle> = {
     db: asValue(resources.db),
-    log: asValue(resources.log),
+    logger: asValue(resources.logger),
     migration: asFunction(
-      ({ db, log }: MigrateCradle): Migration => ({
-        run: () => migrateRestaurantsDatabase(db, log),
+      ({ db, logger }: MigrateCradle): Migration => ({
+        run: () =>
+          migrateRestaurantsDatabase(
+            db,
+            logger.child({ operation: "migrate" }).info,
+          ),
       }),
     ).singleton(),
   };

@@ -20,11 +20,12 @@ path = "cmd/delivery-migrate/main.rs"
 
 [dependencies]
 config = { version = "0.15.27", default-features = false, features = ["toml"] }
+http = "1.5.0"
 humantime-serde = "1.1.1"
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
 opentelemetry = { version = "0.33.1", default-features = false, features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["metrics", "grpc-tonic"] }
-opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics"] }
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["metrics", "trace", "grpc-tonic"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics", "trace"] }
 prost = "0.14.4"
 prost-types = "0.14.4"
 rdkafka = { version = "0.39.0", features = ["tokio"] }
@@ -35,6 +36,9 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "io-util", "sync"] }
 tonic = { version = "0.14.6", features = ["tls-ring", "tls-webpki-roots"] }
 tonic-prost = "0.14.4"
+tower = { version = "0.5.3", default-features = false }
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["registry", "std"] }
 uuid = { version = "1.29.0", default-features = false, features = ["std", "v5", "v7"] }
 
 [dev-dependencies]

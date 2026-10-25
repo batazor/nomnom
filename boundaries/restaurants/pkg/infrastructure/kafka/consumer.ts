@@ -85,12 +85,17 @@ export class KafkaConsumerWorker implements Worker {
   readonly #stopped: Promise<void>;
   #resolveStopped: () => void = () => {};
 
+  readonly #groupId: string | undefined;
+
   constructor(options: {
     client: ConsumerClient;
     topics: readonly string[];
     handler: MessageHandler;
+    /** `messaging.consumer.group.name` of the process spans. */
+    groupId?: string;
   }) {
     this.#client = options.client;
+    this.#groupId = options.groupId;
     this.#topics = options.topics;
     this.#handler = options.handler;
     this.#stopped = new Promise((resolve) => {
@@ -104,19 +109,29 @@ export class KafkaConsumerWorker implements Worker {
     await this.#client.run({
       eachMessage: async ({ topic, partition, message }) => {
         const headers = stringHeaders(message.headers);
-        // CONSUMER span continuing the producer's `traceparent` header, so
-        // the Outbox records of the handler stay in the same trace.
+        // Process span of one message: the child of the producer's
+        // `traceparent` header (one message, one immediate processing —
+        // docs/observability.md, "Kafka и Watermill"), so the Inbox write and
+        // the Outbox records of the handler stay in the same trace. A
+        // redelivery is a separate process span with the same parent.
         await withSpan(
-          `${topic} process`,
+          `process ${topic}`,
           {
             parent: extractContext(headers),
             kind: SpanKind.CONSUMER,
             attributes: {
               "messaging.system": "kafka",
               "messaging.operation.type": "process",
+              "messaging.operation.name": "process",
               "messaging.destination.name": topic,
               "messaging.destination.partition.id": String(partition),
               "messaging.kafka.offset": Number(message.offset),
+              ...(this.#groupId === undefined
+                ? {}
+                : { "messaging.consumer.group.name": this.#groupId }),
+              ...(headers.event_id === undefined
+                ? {}
+                : { "messaging.message.id": headers.event_id }),
             },
           },
           () =>

@@ -7,47 +7,48 @@ import grpc
 from infrastructure.grpc.errors import application_errors
 from infrastructure.grpc.generated import payments_pb2, service_pb2, service_pb2_grpc
 from infrastructure.grpc.identity import SubjectResolver
+from pkg.application import Handler
 from slices.payment.applications.authorize_payment import (
-    AuthorizePaymentHandler,
     AuthorizePaymentInput,
+    AuthorizePaymentResult,
 )
 from slices.payment.applications.cancel_authorization import (
-    CancelAuthorizationHandler,
     CancelAuthorizationInput,
+    CancelAuthorizationResult,
 )
 from slices.payment.applications.capture_payment import (
-    CapturePaymentHandler,
     CapturePaymentInput,
+    CapturePaymentResult,
 )
 from slices.payment.applications.create_payment import (
-    CreatePaymentHandler,
     CreatePaymentInput,
+    CreatePaymentResult,
 )
 from slices.payment.applications.get_payment_status import (
-    GetPaymentStatusHandler,
     GetPaymentStatusInput,
+    GetPaymentStatusResult,
 )
 from slices.payment.applications.operation_flow import (
     OperationStatus,
     PaymentOperationResult,
 )
 from slices.payment.applications.refund_payment import (
-    RefundPaymentHandler,
     RefundPaymentInput,
+    RefundPaymentResult,
 )
 from slices.payment.domains.payment import PaymentState
 
 
 @dataclass(frozen=True)
 class PaymentsHandlers:
-    """Application handlers served by ``PaymentsService``."""
+    """Application handlers served by ``PaymentsService``; DI wraps them in telemetry."""
 
-    get_payment_status: GetPaymentStatusHandler
-    create_payment: CreatePaymentHandler
-    authorize_payment: AuthorizePaymentHandler
-    capture_payment: CapturePaymentHandler
-    cancel_authorization: CancelAuthorizationHandler
-    refund_payment: RefundPaymentHandler
+    get_payment_status: Handler[GetPaymentStatusInput, GetPaymentStatusResult]
+    create_payment: Handler[CreatePaymentInput, CreatePaymentResult]
+    authorize_payment: Handler[AuthorizePaymentInput, AuthorizePaymentResult]
+    capture_payment: Handler[CapturePaymentInput, CapturePaymentResult]
+    cancel_authorization: Handler[CancelAuthorizationInput, CancelAuthorizationResult]
+    refund_payment: Handler[RefundPaymentInput, RefundPaymentResult]
 
 
 class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore[misc]

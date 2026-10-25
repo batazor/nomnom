@@ -19,7 +19,7 @@ impl HttpWorker {
     /// Открывает бизнес-порт; ошибка прерывает startup до ready.
     pub async fn bind(addr: SocketAddr) -> io::Result<Self> {
         let listener = TcpListener::bind(addr).await?;
-        println!("delivery listening on {}", listener.local_addr()?);
+        tracing::info!(operation = "http.listen", address = %listener.local_addr()?, "delivery listening");
         Ok(Self { listener })
     }
 
@@ -42,11 +42,13 @@ impl Worker for HttpWorker {
                     Ok((stream, _)) => {
                         connections.spawn(async move {
                             if let Err(error) = handle(stream).await {
-                                eprintln!("connection failed: {error}");
+                                tracing::warn!(operation = "http.connection", error.message = %error, "connection failed");
                             }
                         });
                     }
-                    Err(error) => eprintln!("accept failed: {error}"),
+                    Err(error) => {
+                        tracing::warn!(operation = "http.accept", error.message = %error, "accept failed");
+                    }
                 },
                 Some(_) = connections.join_next() => {}
                 () = wait_for_stop(&mut stop) => break,

@@ -180,8 +180,9 @@ pub async fn compose(
 ) -> Result<RelayModule, Box<dyn Error>> {
     kafka.require()?;
     let publisher = Arc::new(KafkaPublisher::new(kafka, outbox.publish_timeout)?);
-    let pg_outbox = Arc::new(PgOutbox::connect(database).await?);
+    // Метрики пула берутся у глобального MeterProvider при подключении.
     let telemetry = telemetry::start(SERVICE_NAME)?;
+    let pg_outbox = Arc::new(PgOutbox::connect(database).await?);
     Ok(RelayModule::builder()
         .with_component_parameters::<PostgresRelayOutbox>(PostgresRelayOutboxParameters {
             outbox: pg_outbox,

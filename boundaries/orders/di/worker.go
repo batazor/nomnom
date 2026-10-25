@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -79,11 +79,16 @@ func (w *TemporalWorker) Start(ctx context.Context) error {
 	}
 	w.metrics = metrics
 
-	c, err := w.dial(ctx, client.Options{
+	// Worker наследует tracing interceptor client'а: spans workflow task и Activity.
+	options, err := telemetry.TemporalClientOptions(client.Options{
 		HostPort:       w.cfg.HostPort,
 		Namespace:      w.cfg.Namespace,
 		MetricsHandler: metrics.TemporalMetricsHandler(),
 	})
+	if err != nil {
+		return errors.Join(err, metrics.Shutdown(ctx))
+	}
+	c, err := w.dial(ctx, options)
 	if err != nil {
 		return errors.Join(fmt.Errorf("connect temporal %s: %w", w.cfg.HostPort, err), metrics.Shutdown(ctx))
 	}
@@ -109,7 +114,8 @@ func (w *TemporalWorker) Start(ctx context.Context) error {
 		return fmt.Errorf("start temporal worker: %w", err)
 	}
 	w.client = c
-	log.Printf("orders-worker polling task queue %s in namespace %s", fulfillmenttemporal.TaskQueue, w.cfg.Namespace)
+	slog.InfoContext(ctx, "orders-worker polling task queue",
+		slog.String("temporal.task_queue", fulfillmenttemporal.TaskQueue), slog.String("temporal.namespace", w.cfg.Namespace))
 	return nil
 }
 
@@ -136,7 +142,7 @@ func (w *TemporalWorker) Shutdown(ctx context.Context) error {
 		if w.metrics != nil {
 			// Финальный export после остановки poll; ошибку flush не смешиваем с drain.
 			if err := w.metrics.Shutdown(ctx); err != nil {
-				log.Printf("flush metrics: %v", err)
+				slog.WarnContext(ctx, "flush telemetry failed", telemetry.LogErrorKey, err)
 			}
 		}
 	}()

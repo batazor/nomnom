@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -23,7 +22,6 @@ const instrumentationName = "nomnom/orders/pkg/messaging"
 // event_id or aggregate_id. Consumer lag is measured broker-side.
 type telemetry struct {
 	tracer     trace.Tracer
-	propagator propagation.TextMapPropagator
 	duration   metric.Float64Histogram
 	age        metric.Float64Histogram
 	retries    metric.Int64Counter
@@ -69,7 +67,6 @@ func newTelemetry() (*telemetry, error) {
 	}
 	return &telemetry{
 		tracer:     otel.Tracer(instrumentationName),
-		propagator: propagation.TraceContext{},
 		duration:   duration,
 		age:        age,
 		retries:    retries,
@@ -113,7 +110,7 @@ func (t *telemetry) middleware(next message.HandlerFunc) message.HandlerFunc {
 	return func(msg *message.Message) ([]*message.Message, error) {
 		attrs := baseAttributes(msg)
 		o := &observation{}
-		ctx := t.propagator.Extract(msg.Context(), propagation.MapCarrier(msg.Metadata))
+		ctx := ExtractTraceContext(msg.Context(), msg)
 		ctx = context.WithValue(ctx, observationKey{}, o)
 		ctx, span := t.tracer.Start(ctx, message.SubscribeTopicFromCtx(msg.Context())+" process",
 			trace.WithSpanKind(trace.SpanKindConsumer),

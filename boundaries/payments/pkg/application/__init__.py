@@ -7,6 +7,7 @@ from .errors import (
     ConcurrencyConflictError,
     PermissionDeniedError,
 )
+from .handler import Handler
 from .outbox import AggregateRef
 from .subject import Subject, SubjectKind
 from .unit_of_work import UnitOfWork
@@ -17,6 +18,7 @@ __all__ = [
     "AuthorizationUnavailableError",
     "Clock",
     "ConcurrencyConflictError",
+    "Handler",
     "PermissionDeniedError",
     "Subject",
     "SubjectKind",

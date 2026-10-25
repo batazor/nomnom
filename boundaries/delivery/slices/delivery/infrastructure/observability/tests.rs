@@ -1,6 +1,4 @@
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::time::SystemTime;
 
 use opentelemetry::metrics::MeterProvider;
 use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData, ResourceMetrics};
@@ -525,18 +523,12 @@ fn committed_failure_is_logged_once_and_rolled_back_failure_is_not() {
     let provider = SdkMeterProvider::builder()
         .with_reader(PeriodicReader::builder(exporter).build())
         .build();
-    let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-    let sink = Arc::clone(&lines);
     let observed = ObservedOutbox::new(DomainMetrics::new(
         &provider.meter("test"),
         &DeliveryFailureCode::CODES,
         Arc::new(|| NOW),
     ))
-    .with_failure_log(FailureLog::new(
-        "delivery",
-        Arc::new(move |line| sink.lock().expect("lines").push(line.to_owned())),
-        Arc::new(SystemTime::now),
-    ));
+    .with_failure_log(FailureLog);
     let store = MemoryStore::new();
     let run = |commit: bool| {
         observed
@@ -549,13 +541,12 @@ fn committed_failure_is_logged_once_and_rolled_back_failure_is_not() {
             .expect("unit of work");
     };
 
-    run(false);
-    assert!(lines.lock().expect("lines").is_empty());
-    run(true);
+    let resource = opentelemetry_sdk::Resource::builder_empty().build();
+    assert!(crate::pkg::telemetry::log::capture_json(&resource, || run(false)).is_empty());
+    let records = crate::pkg::telemetry::log::capture_json(&resource, || run(true));
 
-    let lines = lines.lock().expect("lines");
-    assert_eq!(lines.len(), 1);
-    let record: serde_json::Value = serde_json::from_str(&lines[0]).expect("json");
+    assert_eq!(records.len(), 1);
+    let record = &records[0];
     assert_eq!(record["reason"], "other");
     assert_eq!(record["detail"], "free text detail");
     assert_eq!(record["delivery_id"], "delivery-1");

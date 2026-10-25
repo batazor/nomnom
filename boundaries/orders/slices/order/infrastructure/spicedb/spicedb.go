@@ -14,6 +14,8 @@ import (
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 	authzed "github.com/authzed/authzed-go/v1"
 	"github.com/authzed/grpcutil"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/metric/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -61,6 +63,11 @@ func Dial(cfg config.SpiceDBConfig) (*authzed.Client, error) {
 		}
 		options = []grpc.DialOption{grpcutil.WithBearerToken(cfg.PresharedKey), tls}
 	}
+	// Client spans of every SpiceDB call (trace context goes in metadata; the
+	// preshared key header is not recorded). RPC metrics stay off: SpiceDB
+	// latency and outcome are the authz metrics of the Authorization port, and
+	// rpc.client.* covers calls through the internal gateway only.
+	options = append(options, grpc.WithStatsHandler(otelgrpc.NewClientHandler(otelgrpc.WithMeterProvider(noop.NewMeterProvider()))))
 	client, err := authzed.NewClient(cfg.Endpoint, options...)
 	if err != nil {
 		return nil, fmt.Errorf("dial spicedb %s: %w", cfg.Endpoint, err)

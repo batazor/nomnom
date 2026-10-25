@@ -45,7 +45,9 @@ import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work
 import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
+import type { Logger } from "../pkg/telemetry/logger.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
+import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
 import type { MenuAccessControl } from "../slices/menu/applications/access-control.ts";
 import {
   type MenuCradle,
@@ -73,6 +75,7 @@ import {
   ObservedOutbox,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
+import { instrumentUseCases, RESTAURANTS_USE_CASES } from "./usecases.ts";
 
 /** First reconciliation pass shortly after start. */
 const RECONCILER_FIRST_PASS_MS = 10_000;
@@ -85,6 +88,7 @@ export type RestaurantsResources = Readonly<{
   kitchen: KitchenConfig;
   mongo: MongoDbConnection;
   subjects: SubjectResolver;
+  logger: Logger;
 }>;
 
 /** Shared clients and ports of the process. */
@@ -97,6 +101,10 @@ export interface InfrastructureCradle {
   readonly db: Db;
   readonly clock: Clock;
   readonly ids: IdGenerator;
+  /** Structured stdout logs (pkg/telemetry/logger.ts). */
+  readonly logger: Logger;
+  /** Span and duration of every use case listed in di/usecases.ts. */
+  readonly useCaseTelemetry: UseCaseTelemetry;
   readonly domainMetrics: RestaurantOrderDomainMetrics;
   readonly unitOfWork: MongoUnitOfWork;
   /**
@@ -138,6 +146,7 @@ export const createRestaurantsContainer = (
   registerRestaurant(container);
   registerMenu(container);
   registerRestaurantOrder(container);
+  instrumentUseCases(container, RESTAURANTS_USE_CASES);
   container.register(processRegistrations(resources));
   return container;
 };
@@ -153,6 +162,8 @@ const infrastructureRegistrations = (
   db: asValue(resources.mongo.db),
   clock: asValue<Clock>({ now: () => new Date() }),
   ids: asValue<IdGenerator>({ next: () => randomUUID() }),
+  logger: asValue(resources.logger),
+  useCaseTelemetry: asFunction(() => new UseCaseTelemetry()).singleton(),
   // Business metrics change only after the outermost transaction commits, by
   // the Domain Events written to the Outbox (docs/observability.md#метрики).
   domainMetrics: asFunction(
@@ -252,7 +263,7 @@ const processRegistrations = (
   // Reconciliation (FR-445) runs in this process and stops before the gRPC
   // drain.
   reconcileLoop: asFunction(
-    ({ relationshipReconciler, reconcilerConfig }: RestaurantsCradle) =>
+    ({ relationshipReconciler, reconcilerConfig, logger }: RestaurantsCradle) =>
       new PeriodicLoop(
         async (signal) => {
           await relationshipReconciler.reconcile(signal);
@@ -263,7 +274,7 @@ const processRegistrations = (
             reconcilerConfig.intervalMs,
           ),
           intervalMs: reconcilerConfig.intervalMs,
-          log: (message) => console.error(`restaurants reconcile ${message}`),
+          log: logger.child({ operation: "reconcile" }).error,
         },
       ),
   ).singleton(),

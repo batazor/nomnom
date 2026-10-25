@@ -15,14 +15,14 @@ use crate::slices::delivery::applications::list_available_delivery_offers::{
 use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId, State};
 
 use super::rows::{address, column, courier_status, delivery_state, parse_delivery_state};
-use super::{PostgresStore, corrupt, limit, storage_error};
+use super::{PostgresStore, corrupt, domain_version, limit, storage_error};
 
 impl CourierCurrentDeliveryReadModel for PostgresStore {
     fn active_delivery_for(
         &self,
         courier_id: &CourierId,
     ) -> Result<Option<CurrentDeliveryView>, RepositoryError> {
-        sql!(self, |connection| sqlx::query(
+        sql!(self, "SELECT", |connection| sqlx::query(
             "SELECT id, order_id, pickup_address, dropoff_address, state FROM deliveries
              WHERE courier_id = $1 AND state IN ('assigned', 'picked_up')
              ORDER BY id LIMIT 1"
@@ -47,7 +47,7 @@ impl PendingDeliveryOffersReadModel for PostgresStore {
         &self,
         courier_id: &CourierId,
     ) -> Result<Vec<AvailableDeliveryOfferView>, RepositoryError> {
-        sql!(self, |connection| sqlx::query(
+        sql!(self, "SELECT", |connection| sqlx::query(
             "SELECT o.id, o.delivery_id, d.pickup_address, d.dropoff_address, o.expires_at
              FROM delivery_offers o JOIN deliveries d ON d.id = o.delivery_id
              WHERE o.courier_id = $1 AND o.state = 'pending'
@@ -71,7 +71,7 @@ impl PendingDeliveryOffersReadModel for PostgresStore {
 
 impl CourierPositions for PostgresStore {
     fn available_positions(&self) -> Result<Vec<CourierPosition>, RepositoryError> {
-        sql!(self, |connection| sqlx::query(
+        sql!(self, "SELECT", |connection| sqlx::query(
             "SELECT p.courier_id, p.latitude, p.longitude, p.recorded_at
              FROM courier_positions p JOIN couriers c ON c.id = p.courier_id
              WHERE c.status = $1
@@ -93,17 +93,24 @@ impl CourierPositions for PostgresStore {
 }
 
 impl ReconciliationStore for PostgresStore {
-    fn courier_page(&self, after: &str, size: usize) -> Result<Vec<String>, RepositoryError> {
-        sql!(self, |connection| sqlx::query_scalar(
-            "SELECT id FROM couriers WHERE id > $1 ORDER BY id LIMIT $2"
+    fn courier_page(
+        &self,
+        after: &str,
+        size: usize,
+    ) -> Result<Vec<(String, u64)>, RepositoryError> {
+        let rows: Vec<(String, i64)> = sql!(self, "SELECT", |connection| sqlx::query_as(
+            "SELECT id, version FROM couriers WHERE id > $1 ORDER BY id LIMIT $2"
         )
         .bind(after)
         .bind(limit(size))
-        .fetch_all(connection))
+        .fetch_all(connection))?;
+        rows.into_iter()
+            .map(|(id, version)| Ok((id, domain_version(version)?)))
+            .collect()
     }
 
     fn registered_couriers(&self, ids: &[String]) -> Result<Vec<String>, RepositoryError> {
-        sql!(self, |connection| sqlx::query_scalar(
+        sql!(self, "SELECT", |connection| sqlx::query_scalar(
             "SELECT id FROM couriers WHERE id = ANY($1)"
         )
         .bind(ids)
@@ -114,20 +121,23 @@ impl ReconciliationStore for PostgresStore {
         &self,
         after: &str,
         size: usize,
-    ) -> Result<Vec<(String, String)>, RepositoryError> {
-        sql!(self, |connection| sqlx::query_as(
-            "SELECT id, courier_id FROM deliveries
+    ) -> Result<Vec<(String, String, u64)>, RepositoryError> {
+        let rows: Vec<(String, String, i64)> = sql!(self, "SELECT", |connection| sqlx::query_as(
+            "SELECT id, courier_id, version FROM deliveries
              WHERE id > $1 AND courier_id IS NOT NULL AND state = ANY($3)
              ORDER BY id LIMIT $2"
         )
         .bind(after)
         .bind(limit(size))
         .bind(active_assignment_states())
-        .fetch_all(connection))
+        .fetch_all(connection))?;
+        rows.into_iter()
+            .map(|(id, courier, version)| Ok((id, courier, domain_version(version)?)))
+            .collect()
     }
 
     fn assigned_couriers(&self, ids: &[String]) -> Result<Vec<(String, String)>, RepositoryError> {
-        sql!(self, |connection| sqlx::query_as(
+        sql!(self, "SELECT", |connection| sqlx::query_as(
             "SELECT id, courier_id FROM deliveries
              WHERE id = ANY($1) AND courier_id IS NOT NULL AND state = ANY($2)"
         )
@@ -141,7 +151,7 @@ impl ReconciliationStore for PostgresStore {
         courier_id: &str,
         revision: AuthorizationRevision,
     ) -> Result<bool, RepositoryError> {
-        let updated = sql!(self, |connection| sqlx::query(
+        let updated = sql!(self, "UPDATE", |connection| sqlx::query(
             "UPDATE couriers SET authorization_revision = $2, version = version + 1
              WHERE id = $1"
         )
@@ -157,7 +167,7 @@ impl ReconciliationStore for PostgresStore {
         courier_id: &str,
         revision: AuthorizationRevision,
     ) -> Result<bool, RepositoryError> {
-        let updated = sql!(self, |connection| sqlx::query(
+        let updated = sql!(self, "UPDATE", |connection| sqlx::query(
             "UPDATE deliveries SET authorization_revision = $3, version = version + 1
              WHERE id = $1 AND courier_id = $2 AND state = ANY($4)"
         )

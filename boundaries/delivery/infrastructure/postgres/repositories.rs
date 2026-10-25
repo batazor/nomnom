@@ -29,7 +29,7 @@ impl PostgresStore {
         if updated > 0 {
             return Ok(());
         }
-        let exists = sql!(self, |connection| sqlx::query(exists_sql)
+        let exists = sql!(self, "SELECT", |connection| sqlx::query(exists_sql)
             .bind(id)
             .fetch_optional(connection))?
         .is_some();
@@ -44,9 +44,9 @@ impl PostgresStore {
 impl CourierRepository for PostgresStore {
     fn get(&self, id: &CourierId) -> Result<Option<Courier>, RepositoryError> {
         let statement = format!("SELECT {COURIER_COLUMNS} FROM couriers WHERE id = $1");
-        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
-            statement
-        ))
+        sql!(self, "INSERT", |connection| sqlx::query(
+            sqlx::AssertSqlSafe(statement)
+        )
         .bind(id.as_str())
         .fetch_optional(connection))?
         .as_ref()
@@ -56,7 +56,7 @@ impl CourierRepository for PostgresStore {
 
     fn add(&self, courier: &Courier) -> Result<(), RepositoryError> {
         let version = db_version(courier.version())?;
-        let inserted = sql!(self, |connection| sqlx::query(
+        let inserted = sql!(self, "INSERT", |connection| sqlx::query(
             "INSERT INTO couriers (id, status, authorization_revision, version)
              VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING"
         )
@@ -77,7 +77,7 @@ impl CourierRepository for PostgresStore {
 
     fn save(&self, courier: &Courier) -> Result<(), RepositoryError> {
         let version = db_version(courier.version())?;
-        let updated = sql!(self, |connection| sqlx::query(
+        let updated = sql!(self, "UPDATE", |connection| sqlx::query(
             "UPDATE couriers SET status = $3, authorization_revision = $4,
                  version = version + 1
              WHERE id = $1 AND version = $2"
@@ -102,9 +102,9 @@ impl CourierRepository for PostgresStore {
 impl DeliveryRepository for PostgresStore {
     fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
         let statement = format!("SELECT {DELIVERY_COLUMNS} FROM deliveries WHERE id = $1");
-        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
-            statement
-        ))
+        sql!(self, "SELECT", |connection| sqlx::query(
+            sqlx::AssertSqlSafe(statement)
+        )
         .bind(id.as_str())
         .fetch_optional(connection))?
         .as_ref()
@@ -114,9 +114,9 @@ impl DeliveryRepository for PostgresStore {
 
     fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
         let statement = format!("SELECT {DELIVERY_COLUMNS} FROM deliveries WHERE order_id = $1");
-        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
-            statement
-        ))
+        sql!(self, "INSERT", |connection| sqlx::query(
+            sqlx::AssertSqlSafe(statement)
+        )
         .bind(order_id.as_str())
         .fetch_optional(connection))?
         .as_ref()
@@ -128,7 +128,7 @@ impl DeliveryRepository for PostgresStore {
         let version = db_version(delivery.version())?;
         // ON CONFLICT DO NOTHING keeps the transaction usable after a
         // duplicate id or order id.
-        let inserted = sql!(self, |connection| sqlx::query(
+        let inserted = sql!(self, "INSERT", |connection| sqlx::query(
             "INSERT INTO deliveries (id, order_id, courier_id, pickup_address,
                  dropoff_address, state, failure_reason, authorization_revision, version,
                  created_at, failure_detail)
@@ -162,7 +162,7 @@ impl DeliveryRepository for PostgresStore {
 
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
         let version = db_version(delivery.version())?;
-        let updated = sql!(self, |connection| sqlx::query(
+        let updated = sql!(self, "UPDATE", |connection| sqlx::query(
             "UPDATE deliveries SET courier_id = $3, state = $4, failure_reason = $5,
                  authorization_revision = $6, failure_detail = $7, version = version + 1
              WHERE id = $1 AND version = $2"
@@ -194,9 +194,9 @@ impl DeliveryRepository for PostgresStore {
 impl DeliveryOfferRepository for PostgresStore {
     fn get(&self, id: &DeliveryOfferId) -> Result<Option<DeliveryOffer>, RepositoryError> {
         let statement = format!("SELECT {OFFER_COLUMNS} FROM delivery_offers WHERE id = $1");
-        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
-            statement
-        ))
+        sql!(self, "SELECT", |connection| sqlx::query(
+            sqlx::AssertSqlSafe(statement)
+        )
         .bind(id.as_str())
         .fetch_optional(connection))?
         .as_ref()
@@ -211,9 +211,9 @@ impl DeliveryOfferRepository for PostgresStore {
         let statement = format!(
             "SELECT {OFFER_COLUMNS} FROM delivery_offers WHERE delivery_id = $1 ORDER BY position"
         );
-        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
-            statement
-        ))
+        sql!(self, "SELECT", |connection| sqlx::query(
+            sqlx::AssertSqlSafe(statement)
+        )
         .bind(delivery_id.as_str())
         .fetch_all(connection))?
         .iter()
@@ -231,9 +231,9 @@ impl DeliveryOfferRepository for PostgresStore {
              WHERE state = 'pending' AND expires_at < $1
              ORDER BY expires_at, position LIMIT $2"
         );
-        sql!(self, |connection| sqlx::query(sqlx::AssertSqlSafe(
-            statement
-        ))
+        sql!(self, "INSERT", |connection| sqlx::query(
+            sqlx::AssertSqlSafe(statement)
+        )
         .bind(now_epoch_seconds)
         .bind(super::limit(limit))
         .fetch_all(connection))?
@@ -244,7 +244,7 @@ impl DeliveryOfferRepository for PostgresStore {
 
     fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
         let version = db_version(offer.version())?;
-        let inserted = sql!(self, |connection| sqlx::query(
+        let inserted = sql!(self, "INSERT", |connection| sqlx::query(
             "INSERT INTO delivery_offers (id, delivery_id, courier_id, offered_at,
                  expires_at, state, version)
              VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING"
@@ -265,7 +265,7 @@ impl DeliveryOfferRepository for PostgresStore {
 
     fn save(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
         let version = db_version(offer.version())?;
-        let updated = sql!(self, |connection| sqlx::query(
+        let updated = sql!(self, "UPDATE", |connection| sqlx::query(
             "UPDATE delivery_offers SET state = $3, version = version + 1
              WHERE id = $1 AND version = $2"
         )
@@ -283,7 +283,7 @@ impl DeliveryOfferRepository for PostgresStore {
 
 impl CourierLocationStore for PostgresStore {
     fn record(&self, position: &CourierPosition) -> Result<(), RepositoryError> {
-        sql!(self, |connection| sqlx::query(
+        sql!(self, "INSERT", |connection| sqlx::query(
             "INSERT INTO courier_positions (courier_id, latitude, longitude, recorded_at)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (courier_id) DO UPDATE SET latitude = EXCLUDED.latitude,
@@ -298,7 +298,7 @@ impl CourierLocationStore for PostgresStore {
     }
 
     fn latest(&self, courier_id: &CourierId) -> Result<Option<CourierPosition>, RepositoryError> {
-        sql!(self, |connection| sqlx::query(
+        sql!(self, "SELECT", |connection| sqlx::query(
             "SELECT latitude, longitude, recorded_at FROM courier_positions
              WHERE courier_id = $1"
         )

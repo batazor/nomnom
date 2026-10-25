@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/telemetry"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	orderdi "nomnom/orders/slices/order/di"
 )
@@ -14,8 +15,14 @@ import (
 // первом вызове, поэтому старт и readiness API не зависят от Temporal. Пока
 // Temporal недоступен, Place Order сохраняет заказ с fulfillment_started=false,
 // а Request Order Cancellation отвечает UNAVAILABLE.
+// Tracing interceptor продолжает trace Place Order в start и signal workflow;
+// logger — JSON logger процесса.
 func NewTemporalClient(cfg config.TemporalConfig) (client.Client, func(), error) {
-	c, err := client.NewLazyClient(client.Options{HostPort: cfg.HostPort, Namespace: cfg.Namespace})
+	options, err := telemetry.TemporalClientOptions(client.Options{HostPort: cfg.HostPort, Namespace: cfg.Namespace})
+	if err != nil {
+		return nil, nil, err
+	}
+	c, err := client.NewLazyClient(options)
 	if err != nil {
 		return nil, nil, fmt.Errorf("temporal client %s: %w", cfg.HostPort, err)
 	}

@@ -1,0 +1,257 @@
+import axe from "axe-core";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { HttpResponse } from "msw";
+import { graphql } from "msw/graphql";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+
+import { AppProviders } from "../../app/providers";
+import { AppRouter } from "../../app/router";
+import { mockStore } from "../../shared/graphql/mocks/handlers";
+import { mockServer } from "../../shared/graphql/mocks/server";
+import { bffError } from "../../shared/graphql/mocks/store";
+
+const config = {
+  publicGraphqlUrl: "https://public.example.test/graphql",
+  locale: "ru" as const,
+  enableMocks: true,
+};
+
+const kitchen = "restaurant-kitchen-8";
+const bakery = "restaurant-night-bakery";
+const publicGraphql = graphql.link(/\/graphql$/);
+
+beforeAll(() => mockServer.listen({ onUnhandledFrame: "error" }));
+afterEach(() => {
+  mockServer.resetHandlers();
+  mockStore.reset();
+});
+afterAll(() => mockServer.close());
+
+function renderManage(restaurantId = kitchen) {
+  return render(
+    <AppProviders config={config}>
+      <AppRouter initialEntries={[`/manage/restaurants/${restaurantId}`]} />
+    </AppProviders>,
+  );
+}
+
+function feedback() {
+  return document.querySelector(".manage-feedback");
+}
+
+describe("manage restaurant", () => {
+  // AC-755: the screen shows the opening state and changes it.
+  it("shows an open restaurant and closes it", async () => {
+    const user = userEvent.setup();
+    renderManage();
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Кухня №8" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Открыт")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Закрыть ресторан" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Открыть ресторан" }),
+    ).toBeEnabled();
+    expect(screen.getByText("Закрыт")).toBeVisible();
+    expect(feedback()).toHaveTextContent("Ресторан закрыт для новых заказов.");
+  });
+
+  it("opens a closed restaurant, which then appears in the catalog", async () => {
+    const user = userEvent.setup();
+    renderManage(bakery);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Открыть ресторан" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Закрыть ресторан" }),
+    ).toBeInTheDocument();
+    expect(feedback()).toHaveTextContent("Ресторан открыт и принимает заказы.");
+
+    const restaurants = mockStore.rootValue.restaurants({ first: 100 });
+    expect(restaurants.edges.map((edge) => edge.node.id)).toContain(bakery);
+  });
+
+  // AC-755: one command per press while it is pending.
+  it("keeps the action pending and sends one command per press", async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let sent = 0;
+    mockServer.use(
+      publicGraphql.mutation("CloseRestaurant", async () => {
+        sent += 1;
+        await gate;
+        // Falls through to the schema-backed handler.
+      }),
+    );
+    renderManage();
+
+    const close = await screen.findByRole("button", {
+      name: "Закрыть ресторан",
+    });
+    await user.click(close);
+    expect(await screen.findByText("Закрываем ресторан…")).toBeVisible();
+    expect(close).toHaveAttribute("data-pending");
+    await user.click(close);
+    expect(sent).toBe(1);
+
+    release();
+    expect(
+      await screen.findByRole("button", { name: "Открыть ресторан" }),
+    ).toBeInTheDocument();
+  });
+
+  it("tells a repeat that changed nothing", async () => {
+    const user = userEvent.setup();
+    mockServer.use(
+      publicGraphql.mutation(
+        "CloseRestaurant",
+        () =>
+          HttpResponse.json({
+            data: {
+              closeRestaurant: {
+                __typename: "RestaurantOpeningPayload",
+                changed: false,
+                restaurant: {
+                  __typename: "Restaurant",
+                  id: kitchen,
+                  name: "Кухня №8",
+                  address: "ул. Садовая, 8",
+                  acceptingOrders: false,
+                },
+              },
+            },
+          }),
+        { once: true },
+      ),
+    );
+    renderManage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Закрыть ресторан" }),
+    );
+
+    expect(
+      await screen.findByText("Ресторан уже был закрыт."),
+    ).toBeInTheDocument();
+  });
+
+  // AC-756: a refusal of restaurants keeps the state and explains it.
+  it("explains a missing right without changing the state", async () => {
+    const user = userEvent.setup();
+    renderManage("restaurant-green-bowl");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Закрыть ресторан" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "У вас нет прав управлять этим рестораном.",
+    );
+    expect(screen.getByText("Открыт")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Закрыть ресторан" }),
+    ).toBeEnabled();
+  });
+
+  it.each([
+    ["Unauthenticated", "Войдите в аккаунт владельца"],
+    ["NotFound", "Ресторан не найден. Возможно, ссылка устарела."],
+    ["Unavailable", "Не удалось изменить статус."],
+  ])("maps the BFF error %s to a message", async (code, message) => {
+    const user = userEvent.setup();
+    mockServer.use(
+      publicGraphql.mutation(
+        "CloseRestaurant",
+        () =>
+          HttpResponse.json({
+            data: null,
+            errors: [bffError(code, "refused").toJSON()],
+          }),
+        { once: true },
+      ),
+    );
+    renderManage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Закрыть ресторан" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+  });
+
+  // AC-757: a transport error is retried by hand only.
+  it("offers a manual retry after a transport error", async () => {
+    const user = userEvent.setup();
+    mockServer.use(
+      publicGraphql.mutation("CloseRestaurant", () => HttpResponse.error(), {
+        once: true,
+      }),
+    );
+    renderManage();
+
+    const close = await screen.findByRole("button", {
+      name: "Закрыть ресторан",
+    });
+    await user.click(close);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Не удалось изменить статус.",
+    );
+
+    await user.click(close);
+    expect(
+      await screen.findByRole("button", { name: "Открыть ресторан" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a missing restaurant", async () => {
+    renderManage("restaurant-missing");
+    expect(
+      await screen.findByRole("heading", { name: "Ресторан не найден" }),
+    ).toBeVisible();
+  });
+
+  it("recovers from a failed load", async () => {
+    const user = userEvent.setup();
+    mockServer.use(
+      publicGraphql.query("ManageRestaurant", () => HttpResponse.error(), {
+        once: true,
+      }),
+    );
+    renderManage();
+
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Кухня №8" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("manage restaurant quality", () => {
+  it("fits a 390px viewport, has one primary action and passes axe", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      value: 390,
+      configurable: true,
+    });
+    const { container } = renderManage(bakery);
+    await screen.findByRole("button", { name: "Открыть ресторан" });
+
+    expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    expect(document.querySelectorAll('[data-ui-primary="true"]')).toHaveLength(
+      1,
+    );
+    const result = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(result.violations).toEqual([]);
+  });
+});

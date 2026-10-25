@@ -14,3 +14,7 @@ service:
 database:
   # Схему применяет init container release delivery.
   migrate: false
+  pool:
+    # Пачка relay выполняет запросы по одному; lock держит отдельное соединение вне
+    # пула, поэтому на сервер relay открывает maxConns + 1.
+    maxConns: 2

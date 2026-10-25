@@ -5,16 +5,21 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 
 	"nomnom/orders/di"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/lifecycle"
+	"nomnom/orders/pkg/telemetry"
 )
 
 func main() {
+	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов.
+	telemetry.SetupLogging(di.ForwarderServiceName)
 	if err := run(); err != nil {
-		log.Fatal(err)
+		slog.Error("orders-forwarder stopped", telemetry.LogErrorKey, err)
+		os.Exit(1)
 	}
 }
 

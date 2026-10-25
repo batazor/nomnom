@@ -20,7 +20,11 @@ mod relay;
 pub use envelope::{EnvelopeHeaders, WATERMILL_UUID_HEADER, format_occurred_at, headers};
 pub use kafka::KafkaPublisher;
 pub use metrics::RelayMetrics;
-pub use postgres::{PgOutbox, RELAY_LOCK_KEY};
+pub use postgres::{
+    LOCK_CHECK_TIMEOUT, PgOutbox, RELAY_LOCK_KEY, advisory_lock_parts, holds_advisory_lock,
+    lock_connect_options,
+};
 pub use relay::{
     BatchOutcome, OutboxEntry, OutboxStore, PublishError, Publisher, RelayWorker, relay_batch,
+    report_backlog,
 };

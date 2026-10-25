@@ -2,6 +2,12 @@
 // instance by lease, batch in `seq` order, publication confirmed by the broker
 // before `publishedAt` is set, head-of-line stop at the first failure and
 // retention of published records. Storage, Kafka and metrics are ports.
+// Each publish runs in the trace context captured when the event was written
+// (Outbox `metadata.traceparent`), so the PRODUCER span of the publisher and
+// the consumer of the message continue the trace of the originating call.
+import { context } from "@opentelemetry/api";
+
+import { extractContext } from "../../telemetry/tracing.ts";
 
 /** Unpublished Outbox record as the relay sees it. */
 export type RelayRecord = Readonly<{
@@ -101,6 +107,14 @@ export function envelopeHeaders(record: RelayRecord): Record<string, string> {
   return headers;
 }
 
+/** Trace context of the call that wrote `record`; root without one. */
+export const recordContext = (record: RelayRecord) =>
+  extractContext(
+    record.metadata.traceparent === undefined
+      ? {}
+      : { traceparent: record.metadata.traceparent },
+  );
+
 export const toIntegrationMessage = (
   record: RelayRecord,
 ): IntegrationMessage => ({
@@ -130,6 +144,8 @@ export interface OutboxRelayOptions {
   metrics?: RelayMetrics;
   clock?: { now(): Date };
   log?: (message: string) => void;
+  /** Failed publications; `log` by default. */
+  warn?: (message: string) => void;
 }
 
 const DEFAULT_CLEANUP_INTERVAL_MS = 60_000;
@@ -196,13 +212,15 @@ export class OutboxRelay {
       }
       const started = performance.now();
       try {
-        await this.#options.publisher.publish(toIntegrationMessage(record));
+        await context.with(recordContext(record), () =>
+          this.#options.publisher.publish(toIntegrationMessage(record)),
+        );
       } catch (error) {
         // Head-of-line: the next cycle starts again from this record.
         failedId = record.id;
         this.#metrics.failed(record, errorClass(error));
         await store.markFailed(record.id, describe(error));
-        this.#options.log?.(
+        (this.#options.warn ?? this.#options.log)?.(
           `publish ${record.eventType} ${record.eventId} failed (attempt ${record.attempts + 1}): ${describe(error)}`,
         );
         break;

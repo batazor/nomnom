@@ -232,7 +232,7 @@ const DELIVERY_FAILURE_REASONS: &[&str] = &DeliveryFailureCode::CODES;
 /// Business metrics and the Delivery Failure log of the process.
 fn observed_outbox() -> ObservedOutbox {
     ObservedOutbox::new(DomainMetrics::global(DELIVERY_FAILURE_REASONS))
-        .with_failure_log(FailureLog::stdout(super::server::SERVICE_NAME))
+        .with_failure_log(FailureLog)
 }
 
 /// [`TransactionalStore`] of the slice whose Unit of Work and Outbox go

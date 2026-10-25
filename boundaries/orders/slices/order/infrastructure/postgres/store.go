@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,6 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 
 	"nomnom/orders/pkg/config"
 )
@@ -24,10 +27,16 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// migrateMaxConns bounds the database/sql pool of Migrate: goose holds the
+// session advisory lock on one connection and applies migrations on another.
+// One connection would deadlock.
+const migrateMaxConns = 2
+
 // Store shares one pool between the API, worker, consumer and forwarder of
 // orders. The transaction of a Unit of Work travels in context.
 type Store struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	metrics metric.Registration
 }
 
 // Open creates the pool; it does not connect until the first query.
@@ -39,15 +48,50 @@ func Open(ctx context.Context, cfg config.PostgresConfig) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", config.EnvPostgresDSN, err)
 	}
-	poolConfig.MaxConns = cfg.MaxConns
+	applyPoolLimits(poolConfig, cfg)
+	meter := otel.Meter(poolInstrumentation)
+	metrics, err := newPoolMetrics(meter, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("postgres pool metrics: %w", err)
+	}
+	poolConfig.ConnConfig.Tracer = connTracer(metrics)
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres pool: %w", err)
 	}
-	return &Store{pool: pool}, nil
+	registration, err := metrics.observe(meter, pool)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("postgres pool metrics: %w", err)
+	}
+	return &Store{pool: pool, metrics: registration}, nil
 }
 
-func (s *Store) Close() { s.pool.Close() }
+// applyPoolLimits sizes the per-process pool behind the session-mode pooler:
+// each pooled connection pins one server connection, so MaxConns of every
+// replica counts against the pooler pool_size. The DSN keeps the default
+// prepared-statement cache, which needs session mode. Zero durations (configs
+// built in tests) keep the pgx defaults; Load always sets them.
+func applyPoolLimits(poolConfig *pgxpool.Config, cfg config.PostgresConfig) {
+	poolConfig.MaxConns = cfg.MaxConns
+	poolConfig.MinConns = cfg.MinConns
+	poolConfig.MaxConnLifetimeJitter = cfg.MaxConnLifetimeJitter
+	for target, value := range map[*time.Duration]time.Duration{
+		&poolConfig.MaxConnLifetime:           cfg.MaxConnLifetime,
+		&poolConfig.MaxConnIdleTime:           cfg.MaxConnIdleTime,
+		&poolConfig.HealthCheckPeriod:         cfg.HealthCheckPeriod,
+		&poolConfig.ConnConfig.ConnectTimeout: cfg.ConnectTimeout,
+	} {
+		if value > 0 {
+			*target = value
+		}
+	}
+}
+
+func (s *Store) Close() {
+	_ = s.metrics.Unregister()
+	s.pool.Close()
+}
 
 // Pool exposes the pool for the Outbox forwarder subscriber.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
@@ -62,7 +106,14 @@ func Migrate(ctx context.Context, cfg config.PostgresConfig) error {
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", config.EnvPostgresDSN, err)
 	}
+	if cfg.ConnectTimeout > 0 {
+		poolConfig.ConnConfig.ConnectTimeout = cfg.ConnectTimeout
+	}
 	db := stdlib.OpenDB(*poolConfig.ConnConfig)
+	db.SetMaxOpenConns(migrateMaxConns)
+	db.SetMaxIdleConns(migrateMaxConns)
+	db.SetConnMaxLifetime(cfg.MaxConnLifetime)
+	db.SetConnMaxIdleTime(cfg.MaxConnIdleTime)
 	defer func() { _ = db.Close() }()
 
 	locker, err := lock.NewPostgresSessionLocker()

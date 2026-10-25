@@ -27,6 +27,9 @@ def kafka_producer(settings: KafkaSettings, database: PostgresDatabase) -> Itera
     yield KafkaPublisher(settings.brokers, settings.client_id)
 
 
+SERVICE_NAME = "payments-relay"
+
+
 class RelayContainer(containers.DeclarativeContainer):
     """One instance per ``payments-relay`` process; ``config`` holds ``RelaySettings``.
 
@@ -36,7 +39,7 @@ class RelayContainer(containers.DeclarativeContainer):
     config = providers.Configuration(strict=True)
 
     telemetry = TelemetryResource(
-        telemetry_providers, config.shutdown.provided.telemetry_flush_timeout
+        telemetry_providers, config.shutdown.provided.telemetry_flush_timeout, SERVICE_NAME
     )
     database = ProcessResource(postgres_database, config.database)
     publisher = ProcessResource(kafka_producer, config.kafka, database)

@@ -300,8 +300,9 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_bff}}"
           image.tag: "{{.IMAGE_TAG_nomnom_bff}}"
 profiles:
-  # make kind-deploy GRAFANA_CLOUD=1: метрики orders и orders-consumer → Alloy → Grafana Cloud.
-  # Индексы releases: 0 — orders, 4 — orders-consumer; при изменении порядка поправить patches.
+  # make kind-deploy GRAFANA_CLOUD=1: метрики, traces и логи сервисов → Alloy → Grafana Cloud.
+  # Индексы releases 0–8 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
+  # своя telemetry); при изменении порядка releases поправить patches.
   - name: grafana-cloud
     patches:
       - op: add
@@ -313,7 +314,28 @@ profiles:
         path: /deploy/helm/releases/0/valuesFiles/-
         value: ../values/grafana-cloud.yaml
       - op: add
+        path: /deploy/helm/releases/1/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/2/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/3/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
         path: /deploy/helm/releases/4/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/5/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/6/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/7/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      - op: add
+        path: /deploy/helm/releases/8/valuesFiles/-
         value: ../values/grafana-cloud.yaml
   # make kind-dev: restaurants и payments собираются из stage dev и получают file sync —
   # правка исходников копируется в контейнер, процесс перезапускает node --watch / watchfiles.

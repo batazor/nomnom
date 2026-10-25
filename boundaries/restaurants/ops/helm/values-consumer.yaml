@@ -14,10 +14,12 @@ command: ["/usr/bin/tini", "--", "node", "dist/cmd/restaurants-consumer/main.js"
 # стрим с начала: Restaurant Order создаётся и для заказов, оформленных до первого запуска;
 # повтор истории идемпотентен через Inbox.
 env:
-  OTEL_SERVICE_NAME: restaurants-consumer
   KAFKA__CLIENT_ID: restaurants-consumer
   KAFKA__CONSUMER_GROUP: restaurants
   KAFKA__INITIAL_OFFSET: oldest
+
+telemetry:
+  serviceName: restaurants-consumer
 
 # Consumer не обслуживает бизнес-API: без Service и бизнес-порта, только metrics и probes.
 service:
@@ -30,6 +32,9 @@ shutdown:
   drainTimeoutSeconds: 20
 
 mongodb:
+  pool:
+    # Одно сообщение за раз: транзакция Inbox и Restaurant Order плюс запас на dead letters и health.
+    maxPoolSize: 5
   # Коллекции, Inbox и индексы создаёт init container release restaurants.
   migrate:
     enabled: false

@@ -19,7 +19,7 @@ BFF — отдельный сервис и единая прикладная т�
 - generated-код и lock-файл контракта коммитятся;
 - минимальный stateless-запрос `bffInfo` подтверждает сборку полного контура.
 
-Реализованы слайсы `catalog`, `checkout` и `ordertracking` поверх `restaurants` и `orders` через internal gateway (см. [Customer API](#customer-api)); `customerOrders` пока только в схеме.
+Реализованы слайсы `catalog`, `checkout`, `ordertracking` и `restaurantmanagement` поверх `restaurants` и `orders` через internal gateway (см. [Customer API](#customer-api)); `customerOrders` пока только в схеме.
 
 ## Customer API
 
@@ -34,6 +34,7 @@ BFF — отдельный сервис и единая прикладная т�
 | `customerOrders(first, after)` | история заказов покупателя | только схема |
 | `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey` | реализована (`checkout`) |
 | `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | реализована (`ordertracking`) |
+| `openRestaurant(restaurantId)`, `closeRestaurant(restaurantId)` | открытие ресторана владельцем, повтор — `changed = false` | реализованы (`restaurantmanagement`) |
 
 Операции «только схема» возвращают GraphQL error с gRPC `Unimplemented`: `BffService` встраивает `UnimplementedBffServiceServer`.
 
@@ -86,6 +87,25 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checko
 - Покупатель не передаётся аргументом: subject определяется по аутентифицированному запросу.
 - Моменты времени — `String` в RFC 3339, `Money.amount` — десятичная строка; unions и custom scalars не используются.
 - `Order.cancellation` берётся из `Order.cancellation_window` ответа `orders` `GetOrder`: `availableUntil = closes_at`, если `opens_at ≤ now ≤ closes_at` по часам BFF, иначе `null`. `orders` возвращает окно, только пока Order State допускает отмену; сам запрос отмены `orders` проверяет заново.
+
+### Слайс `restaurantmanagement`
+
+Change [`add-restaurant-opening-management`](../../openspec/changes/add-restaurant-opening-management/). `plugins/bff/restaurantmanagement/applications` — сценарии Open Restaurant и Close Restaurant с портом `RestaurantOpener`; `restaurantmanagement/infrastructure` вызывает `OpenRestaurant`/`CloseRestaurant` `restaurants` (GRPCRoute `restaurants-v1-management`) от имени пользователя: service token BFF и user assertion (ADR 32), как `PlaceOrder`. Право `restaurant#manage` (владелец) проверяет `restaurants`; BFF владение не проверяет.
+
+Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acceptingOrders` — `is_open`, `menu = null`) и `changed` (`false` у повтора).
+
+| Ответ `restaurants` | GraphQL `openRestaurant` / `closeRestaurant` |
+| --- | --- |
+| нет или невалидный access token | error `UNAUTHENTICATED`, `restaurants` не вызывается |
+| пустой `restaurantId` | error `INVALID_ARGUMENT`, `restaurants` не вызывается |
+| нет gateway или identity | error `UNAVAILABLE` (`restaurant management operations are not available`) |
+| успех, в том числе повтор | payload, `changed` как в ответе |
+| `NOT_FOUND` | error `NOT_FOUND` |
+| `PERMISSION_DENIED` | error `PERMISSION_DENIED`: ресторан — публичные данные, скрывать его существование незачем |
+| `INVALID_ARGUMENT` | error `INVALID_ARGUMENT` без деталей `restaurants` |
+| остальные сбои, в том числе `UNAVAILABLE` | error `UNAVAILABLE` без внутренних деталей |
+
+Бизнес-отказа, который пользователь исправит в форме, у открытия нет, поэтому отказы — GraphQL errors, а не `problems`. Router отдаёт gRPC-код в `errors[].extensions.errors[].extensions.code` (`PermissionDenied`, `NotFound`, …).
 
 ## Identity покупателя
 
@@ -156,6 +176,7 @@ BFF проверяет клиентский GraphQL-запрос и access token
 | **View Order** | Клиент | Получить текущее клиентское представление заказа | Собрано разрешённое представление заказа и заранее определённые enrichment-поля | Query `Get Order` в `orders`, при необходимости queries других владельцев |
 | **List My Orders** | Клиент | Получить свою историю заказов | Возвращён разрешённый список заказов клиента | Query `List Customer Orders` в `orders` |
 | **Cancel Order** | Клиент | Запросить отмену заказа | Mutation передана владельцу заказа, возвращён результат принятия запроса | Command `Request Order Cancellation` в `orders`; BFF не выполняет компенсации |
+| **Open/Close Restaurant** | Владелец ресторана | Начать или прекратить приём новых заказов | Команда передана `restaurants`, возвращено состояние открытия | Commands `Open Restaurant` и `Close Restaurant` в `restaurants`; authorization `restaurant#manage` у `restaurants` |
 | **Courier View** | Курьер | Работать с предложениями и текущей доставкой | Собраны доступные offers и текущая доставка; команды accept/reject, Pickup и Delivery Completion делегированы владельцу | Queries и commands `delivery`; BFF не владеет assignment или доставкой |
 
 ## Структура проекта
@@ -180,6 +201,7 @@ boundaries/bff/
     catalog/                  # слайс каталога: applications, infrastructure
     checkout/                 # слайс оформления заказа
     ordertracking/            # слайс отслеживания заказа
+    restaurantmanagement/     # слайс открытия ресторана владельцем
     identity/                 # access token, user assertion, service token
     infrastructure/gateway/   # соединение с internal gateway
     infrastructure/grpcerr/   # ErrorInfo и metadata ошибок контекстов
@@ -187,7 +209,7 @@ boundaries/bff/
     generated/                # generated gRPC-контракт и mapping
 ```
 
-Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
+Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`, `restaurantmanagement`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`, `RestaurantOpener`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
 
 Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и открывает по одному соединению к `nomnom.orders` и `nomnom.restaurants` на все слайсы; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
 

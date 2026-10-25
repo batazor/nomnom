@@ -454,3 +454,122 @@ fn outbox_env_overrides_file_values() {
         .expect("outbox");
     assert_eq!(config.retention, Duration::from_secs(2 * 24 * 60 * 60));
 }
+
+#[test]
+fn database_pool_defaults_and_env_overrides() {
+    let defaults: DatabaseConfig =
+        configure_settings(ConfigLoader::builder(), &DATABASE_SETTINGS, |_| None)
+            .expect("defaults")
+            .build()
+            .expect("build")
+            .get("database")
+            .expect("database");
+    assert_eq!(defaults, DatabaseConfig::default());
+    defaults.validate().expect("defaults are valid");
+
+    let builder = configure_settings(ConfigLoader::builder(), &DATABASE_SETTINGS, |name| {
+        match name {
+            DATABASE_URL_ENV => Some("postgres://u:p@db/delivery"),
+            DATABASE_MAX_CONNS_ENV => Some("2"),
+            DATABASE_MIN_CONNS_ENV => Some("1"),
+            DATABASE_MAX_LIFETIME_ENV => Some("10m"),
+            DATABASE_IDLE_TIMEOUT_ENV => Some("1m"),
+            DATABASE_ACQUIRE_TIMEOUT_ENV => Some("750ms"),
+            _ => None,
+        }
+        .map(str::to_owned)
+    })
+    .expect("env");
+    let database: DatabaseConfig = builder
+        .build()
+        .expect("build")
+        .get("database")
+        .expect("database");
+    assert_eq!(
+        database,
+        DatabaseConfig {
+            url: "postgres://u:p@db/delivery".to_owned(),
+            max_conns: 2,
+            min_conns: 1,
+            max_lifetime: Duration::from_secs(600),
+            idle_timeout: Duration::from_secs(60),
+            acquire_timeout: Duration::from_millis(750),
+        }
+    );
+    database.validate().expect("valid");
+}
+
+#[test]
+fn invalid_database_pool_limits_fail_startup() {
+    let valid = DatabaseConfig::default();
+    for (invalid, needle) in [
+        (
+            DatabaseConfig {
+                max_conns: 0,
+                ..valid.clone()
+            },
+            "max_conns",
+        ),
+        (
+            DatabaseConfig {
+                max_conns: MAX_DATABASE_MAX_CONNS + 1,
+                ..valid.clone()
+            },
+            "max_conns",
+        ),
+        (
+            DatabaseConfig {
+                min_conns: MAX_DATABASE_MIN_CONNS + 1,
+                ..valid.clone()
+            },
+            "min_conns",
+        ),
+        (
+            DatabaseConfig {
+                max_conns: 1,
+                min_conns: 1,
+                ..valid.clone()
+            },
+            "",
+        ),
+        (
+            DatabaseConfig {
+                acquire_timeout: Duration::ZERO,
+                ..valid.clone()
+            },
+            "acquire_timeout",
+        ),
+        (
+            DatabaseConfig {
+                max_lifetime: Duration::ZERO,
+                ..valid.clone()
+            },
+            "max_lifetime",
+        ),
+        (
+            DatabaseConfig {
+                idle_timeout: Duration::from_secs(3600),
+                ..valid.clone()
+            },
+            "idle_timeout",
+        ),
+    ] {
+        match invalid.validate() {
+            Ok(()) => assert!(needle.is_empty(), "{invalid:?} must be rejected"),
+            Err(error) => {
+                assert!(!needle.is_empty(), "{invalid:?} is valid: {error}");
+                assert!(error.to_string().contains(needle), "{error}");
+            }
+        }
+    }
+}
+
+#[test]
+fn malformed_database_duration_fails_startup() {
+    let error = load_toml(
+        "database-duration",
+        "[database]\nacquire_timeout = \"soon\"\n",
+    )
+    .expect_err("malformed duration");
+    assert!(error.to_string().contains("acquire_timeout"), "{error}");
+}

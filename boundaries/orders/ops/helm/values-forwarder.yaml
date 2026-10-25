@@ -3,6 +3,9 @@
 # Kafka и PostgreSQL задаются values окружения (env KAFKA__*, postgres.dsnSecret).
 component: forwarder
 
+telemetry:
+  serviceName: orders-forwarder
+
 replicaCount: 1
 
 command:
@@ -10,3 +13,8 @@ command:
 
 service:
   enabled: false
+
+# Пул PostgreSQL роли (README, «Пулер PostgreSQL»): Один активный экземпляр: транзакция опроса Outbox (FOR UPDATE offsets) и запас.
+postgres:
+  maxConns: 2
+  minConns: 1

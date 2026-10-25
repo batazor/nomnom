@@ -6,8 +6,10 @@
 //!   differs (orphan or stale) is deleted only when it was orphan on two passes
 //!   at least `grace` apart, because writers run before commit;
 //! - business → graph: a missing relationship is restored by `TOUCH` only
-//!   when it was missing, with the same subject in business state, on two
-//!   passes at least `grace` apart, and its revision is stored with the
+//!   when it was missing, with the same subject and the same Courier or
+//!   Delivery row version in business state, on two passes at least `grace`
+//!   apart (a writer that re-assigned and revoked again between the passes
+//!   bumped the version, so the grace starts over), and its revision is stored with the
 //!   courier or delivery (FR-447); ids SpiceDB cannot store are skipped and
 //!   counted. Writers also `DELETE` before commit (Reassign Courier, Cancel
 //!   Delivery) without holding a row lock, so a pass may read the graph after
@@ -33,7 +35,9 @@ use crate::infrastructure::spicedb::{
     RelationshipOperation, USER,
 };
 
-pub use sources::{AssignedDeliveries, ReconciliationStore, RegisteredCouriers, RelationSource};
+pub use sources::{
+    AssignedDeliveries, ReconciliationStore, RegisteredCouriers, RelationSource, SourceRow,
+};
 
 /// Drift counters of one pass.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -72,7 +76,8 @@ pub struct Reconciler {
     page_size: u32,
     now: Now,
     candidates: HashMap<Relationship, Instant>,
-    missing: HashMap<Relationship, Instant>,
+    /// First sighting and the business row version it was seen at.
+    missing: HashMap<Relationship, (Instant, u64)>,
 }
 
 impl Reconciler {
@@ -214,14 +219,17 @@ impl Reconciler {
                 return Err("reconciliation stopped".to_owned());
             }
             let page = self.source.page(&after, limit)?;
-            for (resource_id, subject_id) in &page {
+            for (resource_id, subject_id, version) in &page {
                 if present.contains(&(resource_id.clone(), subject_id.clone())) {
                     continue;
                 }
                 if !valid_object_id(resource_id) || !valid_object_id(subject_id) {
-                    eprintln!(
-                        "reconcile {}: {resource_id:?} of {subject_id:?} has an id SpiceDB cannot store",
-                        self.name()
+                    tracing::warn!(
+                        operation = "reconcile",
+                        reconciler = self.name(),
+                        resource_id = ?resource_id,
+                        subject_id = ?subject_id,
+                        "relationship has an id SpiceDB cannot store"
                     );
                     stats.unrepairable += 1;
                     continue;
@@ -235,10 +243,16 @@ impl Reconciler {
                 );
                 missing.insert(relationship.clone());
                 let now = (self.now)();
-                let Some(first) = self.missing.get(&relationship).copied() else {
-                    self.missing.insert(relationship, now);
-                    stats.missing_pending += 1;
-                    continue;
+                // A changed version means a writer committed between the
+                // passes (e.g. re-assigned and revoked again), so the DELETE
+                // seen now may be its own: the grace starts over.
+                let first = match self.missing.get(&relationship).copied() {
+                    Some((first, seen)) if seen == *version => first,
+                    _ => {
+                        self.missing.insert(relationship, (now, *version));
+                        stats.missing_pending += 1;
+                        continue;
+                    }
                 };
                 if now.saturating_duration_since(first) < self.grace {
                     stats.missing_pending += 1;
@@ -255,7 +269,7 @@ impl Reconciler {
                 stats.missing_repaired += 1;
             }
             match page.last() {
-                Some((last, _)) if page.len() >= limit => after.clone_from(last),
+                Some((last, _, _)) if page.len() >= limit => after.clone_from(last),
                 _ => break Ok(stats),
             }
         };
@@ -295,18 +309,26 @@ pub async fn run(
             let stopping = || *watcher.borrow();
             for reconciler in &mut reconcilers {
                 match reconciler.reconcile(&stopping) {
-                    Ok(stats) => println!(
-                        "reconcile {}: checked={} orphans_pending={} orphans_deleted={} missing_pending={} missing_repaired={} unrepairable={}",
-                        reconciler.name(),
-                        stats.checked,
-                        stats.orphans_pending,
-                        stats.orphans_deleted,
-                        stats.missing_pending,
-                        stats.missing_repaired,
-                        stats.unrepairable
+                    Ok(stats) => tracing::info!(
+                        operation = "reconcile",
+                        outcome = "success",
+                        reconciler = reconciler.name(),
+                        checked = stats.checked,
+                        orphans_pending = stats.orphans_pending,
+                        orphans_deleted = stats.orphans_deleted,
+                        missing_pending = stats.missing_pending,
+                        missing_repaired = stats.missing_repaired,
+                        unrepairable = stats.unrepairable,
+                        "reconcile pass finished"
                     ),
                     Err(reason) => {
-                        eprintln!("reconcile {}: pass failed: {reason}", reconciler.name())
+                        tracing::warn!(
+                            operation = "reconcile",
+                            outcome = "error",
+                            reconciler = reconciler.name(),
+                            error.message = %reason,
+                            "reconcile pass failed"
+                        );
                     }
                 }
             }
@@ -315,7 +337,7 @@ pub async fn run(
         match pass.await {
             Ok(returned) => reconcilers = returned,
             Err(error) => {
-                eprintln!("reconcile: pass aborted: {error}");
+                tracing::error!(operation = "reconcile", outcome = "error", error.message = %error, "reconcile pass aborted");
                 return;
             }
         }

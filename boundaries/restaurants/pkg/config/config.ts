@@ -12,10 +12,13 @@ import {
   DEFAULT_MANAGEMENT_PORT,
   DEFAULT_PORT,
   DEFAULT_READINESS_DELAY,
+  DEFAULT_TELEMETRY_FLUSH_TIMEOUT,
   DRAIN_TIMEOUT_ENV,
   MANAGEMENT_PORT_ENV,
+  type MongoDbProcess,
   PORT_ENV,
   READINESS_DELAY_ENV,
+  TELEMETRY_FLUSH_TIMEOUT_ENV,
 } from "./env.ts";
 import { type IdentityConfig, loadIdentityConfig } from "./identity.ts";
 import { type KitchenConfig, loadKitchenConfig } from "./kitchen.ts";
@@ -47,6 +50,8 @@ export interface ManagementConfig {
 export interface ShutdownConfig {
   readonly readinessDelayMs: number;
   readonly drainTimeoutMs: number;
+  /** Deadline of the final telemetry export after the drain. */
+  readonly telemetryFlushTimeoutMs: number;
 }
 
 export interface AppConfig {
@@ -75,8 +80,14 @@ export function loadLocalEnv(path = ".env"): void {
   }
 }
 
+export type LoadConfigOptions = Readonly<{
+  /** Процесс, по которому выбирается default `MONGODB__MAX_POOL_SIZE`. */
+  process?: MongoDbProcess;
+}>;
+
 export function loadConfig(
   environment: Record<string, string | undefined> = process.env,
+  options: LoadConfigOptions = {},
 ): AppConfig {
   const server = loadServerConfig(environment);
   const management = Object.freeze({
@@ -95,7 +106,7 @@ export function loadConfig(
     shutdown: loadShutdownConfig(environment),
     identity: loadIdentityConfig(environment),
     spicedb: loadSpiceDbConfig(environment),
-    mongodb: loadMongoDbConfig(environment),
+    mongodb: loadMongoDbConfig(environment, options.process),
     reconciler: loadReconcilerConfig(environment),
     kitchen: loadKitchenConfig(environment),
     kafka: loadKafkaConfig(environment),
@@ -113,8 +124,18 @@ function loadShutdownConfig(
   const drainTimeoutMs = durationSchema
     .refine((value) => value > 0, "drain timeout must be positive")
     .parse(environment[DRAIN_TIMEOUT_ENV] ?? DEFAULT_DRAIN_TIMEOUT);
+  const telemetryFlushTimeoutMs = durationSchema
+    .refine((value) => value > 0, "telemetry flush timeout must be positive")
+    .parse(
+      environment[TELEMETRY_FLUSH_TIMEOUT_ENV] ??
+        DEFAULT_TELEMETRY_FLUSH_TIMEOUT,
+    );
 
-  return Object.freeze({ readinessDelayMs, drainTimeoutMs });
+  return Object.freeze({
+    readinessDelayMs,
+    drainTimeoutMs,
+    telemetryFlushTimeoutMs,
+  });
 }
 
 function loadServerConfig(

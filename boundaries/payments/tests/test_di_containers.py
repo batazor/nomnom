@@ -1,13 +1,14 @@
 import http.client
 import io
 import json
+import logging
 import os
 import threading
 import time
 import unittest
 from collections.abc import Iterator
-from contextlib import redirect_stderr
-from typing import Any
+from contextlib import redirect_stdout
+from typing import Any, override
 from unittest.mock import patch
 
 from dependency_injector import errors, providers
@@ -75,7 +76,7 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertIsInstance(container.webhook_worker(), HttpWorker)
         self.assertIsInstance(container.handlers(), PaymentsHandlers)
         self.assertIsInstance(container.permissions(), SpiceDBPermissionChecker)
-        self.assertIsInstance(container.provider(), FakePaymentProvider)
+        self.assertIsInstance(container.provider().inner, FakePaymentProvider)
         # Business counters wrap the Outbox and the Unit of Work (ops/semconv domain.yaml).
         self.assertIsInstance(container.outbox(), ObservedOutbox)
         self.assertIsInstance(container.outbox()._inner, PostgresPaymentOutbox)
@@ -231,6 +232,21 @@ def _resource(events: list[str], name: str, error: Exception | None = None) -> I
 class EntrypointResourceOrderTest(unittest.TestCase):
     """Telemetry is initialized first and flushed last; failures keep the exit contract."""
 
+    @override
+    def setUp(self) -> None:
+        # main() настраивает JSON-логи процесса на root logger; тест возвращает прежние.
+        root = logging.getLogger()
+        handlers, level = list(root.handlers), root.level
+
+        def restore() -> None:
+            for handler in list(root.handlers):
+                root.removeHandler(handler)
+            for handler in handlers:
+                root.addHandler(handler)
+            root.setLevel(level)
+
+        self.addCleanup(restore)
+
     def payments(self, events: list[str], **errors_: Exception) -> PaymentsContainer:
         container = PaymentsContainer()
         container.telemetry.override(TelemetryResource(_resource, events, "telemetry"))
@@ -243,15 +259,15 @@ class EntrypointResourceOrderTest(unittest.TestCase):
         return container
 
     def run_payments(self, container: PaymentsContainer) -> tuple[int, str]:
-        stderr = io.StringIO()
+        stdout = io.StringIO()
         env = {"DATABASE__URL": "postgresql://payments@127.0.0.1:1/x"}
         with (
             patch.dict(os.environ, env, clear=True),
             patch.object(payments_main, "PaymentsContainer", lambda: container),
-            redirect_stderr(stderr),
+            redirect_stdout(stdout),
         ):
             code = payments_main.main()
-        return code, stderr.getvalue()
+        return code, stdout.getvalue()
 
     def test_payments_resources_wrap_the_lifecycle(self) -> None:
         events: list[str] = []

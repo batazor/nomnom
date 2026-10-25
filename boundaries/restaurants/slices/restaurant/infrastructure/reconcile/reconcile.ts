@@ -105,7 +105,7 @@ export class RelationshipReconciler {
     this.#timeoutMs = options.timeoutMs;
     this.#clock = options.clock;
     this.#prefix = options.resourceIdPrefix ?? "";
-    this.#log = options.log ?? console.log;
+    this.#log = options.log ?? (() => {});
   }
 
   /** Orphan candidates waiting for their grace period; for tests and logs. */

@@ -57,8 +57,9 @@ impl UserAssertionVerifier {
         let audience = config.audience.trim();
         if issuer.is_empty() || jwks_file.is_empty() || delegates.is_empty() {
             if !(issuer.is_empty() && jwks_file.is_empty() && delegates.is_empty()) {
-                eprintln!(
-                    "delivery: warning: IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE and \
+                tracing::warn!(
+                    operation = "identity.config",
+                    "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE and \
                      IDENTITY__USER_DELEGATES must all be set; every call with a user assertion \
                      is rejected as unauthenticated"
                 );

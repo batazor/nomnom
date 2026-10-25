@@ -28,6 +28,7 @@ spec:
       {{- include "restaurants.validateIdentity" . }}
       {{- include "restaurants.validateSpiceDb" . }}
       {{- include "restaurants.validateMongoDb" . }}
+      {{- include "restaurants.validateTelemetry" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -52,7 +53,10 @@ spec:
             {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
           {{- end }}
           env:
-            {{- include "restaurants.mongodbEnv" . | trim | nindent 12 }}
+            {{- $migratePool := merge (dict "maxPoolSize" .Values.mongodb.migrate.maxPoolSize) (deepCopy .Values.mongodb.pool) }}
+            {{- include "restaurants.mongodbEnv" (dict "context" . "pool" $migratePool) | trim | nindent 12 }}
+            # JSON-логи миграции с тем же resource; OTLP-экспорта у init container нет.
+            {{- include "restaurants.otelResourceEnv" . | nindent 12 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -92,6 +96,9 @@ spec:
               value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
             - name: SHUTDOWN__DRAIN_TIMEOUT
               value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
+            - name: SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT
+              value: {{ printf "%ds" (int .Values.shutdown.telemetryFlushTimeoutSeconds) | quote }}
+            {{- include "restaurants.otelEnv" . | nindent 12 }}
             {{- if .Values.identity.jwksConfigMap }}
             - name: IDENTITY__ISSUER
               value: {{ .Values.identity.issuer | quote }}
@@ -125,7 +132,7 @@ spec:
                   key: {{ .presharedKeySecret.key | quote }}
             {{- end }}
             {{- end }}
-            {{- include "restaurants.mongodbEnv" . | trim | nindent 12 }}
+            {{- include "restaurants.mongodbEnv" (dict "context" . "pool" .Values.mongodb.pool) | trim | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}

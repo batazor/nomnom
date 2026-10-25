@@ -11,7 +11,7 @@ Grafana Cloud (free tier) заменяет в тестах ещё не разв�
 
 ```bash
 make kind-up
-make kind-deploy GRAFANA_CLOUD=1   # Alloy в nomnom-observability, OTLP orders и orders-consumer → Alloy
+make kind-deploy GRAFANA_CLOUD=1   # Alloy в nomnom-observability; метрики и traces всех сервисов по OTLP, логи из stdout pods
 make kind-grafana-cloud-stop       # остановить отправку, кластер остаётся
 make kind-down
 make grafana-cloud-push            # overview dashboards → folder nomnom в stack (gcx)
@@ -27,15 +27,22 @@ Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) зап
 
 | Мера | Где |
 | --- | --- |
-| Только метрики: traces, logs и profiles в pipeline Alloy нет | `alloy.yaml` |
+| Метрики, traces и логи; profiles в pipeline Alloy нет | `alloy.yaml` |
+| Traces — только `service.namespace=nomnom`; логи — только stdout pods прикладных неймспейсов, в индексе Loki лишь `service_name`, `service_namespace`, `environment`, `severity`, а `trace_id`, `span_id`, версия — structured metadata | `alloy.yaml` |
 | Только `service.namespace=nomnom`, остальной OTLP отбрасывается | `otelcol.processor.filter "nomnom"` |
 | Собственные метрики Alloy не отправляются | `alloy.yaml` |
 | Инфраструктура — только allowlist метрик (`prometheus.relabel`): SpiceDB без health-check и buckets datastore, PostgreSQL только база владельца, pods только прикладных неймспейсов и `condition="true"` readiness; kube-state-metrics генерирует три метрики pods | `alloy.yaml` |
 | Экспорт раз в 60 s | `OTEL_METRIC_EXPORT_INTERVAL` |
-| Метрики только orders и orders-consumer (остальные сервисы OTel не подключили) | `values/grafana-cloud.yaml` |
+| Values профиля получают все releases orders, restaurants, delivery и payments (BFF — Cosmo, своя telemetry) | `skaffold.yaml`, `values/grafana-cloud.yaml` |
 | Отправка выключается без удаления кластера | `make kind-grafana-cloud-stop` |
 
 Расход виден в stack (**Cost management → Usage**) или запросом `count by (job) ({job=~"(nomnom|infra)/.+"})`: OTLP ingestion собирает `job` из `service.namespace/service.name`, у Prometheus scrape инфраструктуры `job` — `infra/spicedb`, `infra/postgresql`, `infra/kubernetes`.
+
+## Traces и логи
+
+Traces процессов приходят в тот же `otelcol.receiver.otlp` и уходят в Tempo stack (`grafanacloud-traces`) через OTLP gateway тем же токеном. Логи Alloy читает из stdout pods через API server (`loki.source.kubernetes`, ClusterRole `nomnom-alloy`: `pods/log`), разбирает JSON-запись ([docs/observability.md](../../docs/observability.md#логи)) и переводит её в OTLP: `service.*` и `deployment.environment.name` — resource attributes, `severity`, `trace_id`, `span_id` — поля записи (переход log → trace в Grafana). Строка не-JSON уходит как есть; сервис для неё — имя контейнера.
+
+Проверено 2026-10-25: тестовый span и запись лога приняты gateway (HTTP 200/204), span найден в Tempo с resource `service.namespace=nomnom`; логи pods всех пяти прикладных неймспейсов видны в `grafanacloud-logs`.
 
 ## Инфраструктура
 

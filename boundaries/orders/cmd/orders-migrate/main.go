@@ -6,17 +6,22 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"os/signal"
 	"syscall"
 
 	"nomnom/orders/di"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/telemetry"
 )
 
 func main() {
+	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов.
+	telemetry.SetupLogging(di.MigratorServiceName)
 	if err := run(); err != nil {
-		log.Fatal(err)
+		slog.Error("orders-migrate stopped", telemetry.LogErrorKey, err)
+		os.Exit(1)
 	}
 }
 
@@ -30,6 +35,6 @@ func run() error {
 	if err := di.InitializeMigrator(cfg).Run(ctx); err != nil {
 		return err
 	}
-	log.Print("orders migrations applied")
+	slog.InfoContext(ctx, "orders migrations applied")
 	return nil
 }

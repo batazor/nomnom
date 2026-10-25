@@ -8,9 +8,12 @@ at startup. The dependency graph is ``di.relay.RelayContainer``.
 import logging
 import sys
 
-from di.relay import RelayContainer
+from di.relay import SERVICE_NAME, RelayContainer
 from di.resources import ProcessResource, TelemetryResource, sections
+from pkg import telemetry
 from pkg.config import load_relay_settings
+
+logger = logging.getLogger("entrypoints.payments_relay")
 
 
 def run() -> None:
@@ -32,12 +35,16 @@ def run() -> None:
 
 
 def main() -> int:
-    """Console entrypoint; any failure is printed to stderr and turns into exit code 1."""
-    logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(message)s")
+    """Console entrypoint; any failure is logged as JSON and turns into exit code 1.
+
+    Logging is configured first: every record, startup errors included, is one JSON
+    line on stdout (docs/observability.md#логи).
+    """
+    telemetry.configure_process_logging(SERVICE_NAME)
     try:
         run()
     except Exception as error:
-        print(f"payments-relay: {error}", file=sys.stderr)
+        logger.exception("payments-relay: %s", error)
         return 1
     return 0
 

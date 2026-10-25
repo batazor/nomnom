@@ -54,9 +54,7 @@ export class PeriodicLoop {
       await this.#task(this.#stop.signal);
     } catch (error) {
       if (!this.#stop.signal.aborted) {
-        (this.#options.log ?? console.error)(
-          `periodic task failed: ${describe(error)}`,
-        );
+        this.#options.log?.(`periodic task failed: ${describe(error)}`);
       }
     } finally {
       this.#running = undefined;

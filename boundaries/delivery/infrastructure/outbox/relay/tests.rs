@@ -247,3 +247,135 @@ async fn relay_without_the_lock_publishes_nothing() {
     assert!(publisher.attempts().is_empty());
     assert!(store.published().is_empty());
 }
+
+mod backlog {
+    use opentelemetry::metrics::MeterProvider as _;
+    use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+    use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
+
+    use super::*;
+
+    struct Gauges {
+        provider: SdkMeterProvider,
+        exporter: InMemoryMetricExporter,
+        metrics: RelayMetrics,
+    }
+
+    impl Gauges {
+        fn new() -> Self {
+            let exporter = InMemoryMetricExporter::default();
+            let provider = SdkMeterProvider::builder()
+                .with_reader(PeriodicReader::builder(exporter.clone()).build())
+                .build();
+            let metrics = RelayMetrics::new(&provider.meter("test"));
+            Self {
+                provider,
+                exporter,
+                metrics,
+            }
+        }
+
+        /// `stream → (pending, oldest age)` of the latest export.
+        fn exported(&self) -> std::collections::BTreeMap<String, (u64, f64)> {
+            self.provider.force_flush().expect("flush");
+            let metrics = self
+                .exporter
+                .get_finished_metrics()
+                .expect("metrics")
+                .pop()
+                .expect("an export");
+            let mut gauges = std::collections::BTreeMap::<String, (u64, f64)>::new();
+            for metric in metrics.scope_metrics().flat_map(|scope| scope.metrics()) {
+                match (metric.name(), metric.data()) {
+                    (
+                        "nomnom.outbox.pending.messages",
+                        AggregatedMetrics::U64(MetricData::Gauge(gauge)),
+                    ) => {
+                        for point in gauge.data_points() {
+                            let stream = stream_of(point.attributes());
+                            gauges.entry(stream).or_default().0 = point.value();
+                        }
+                    }
+                    (
+                        "nomnom.outbox.oldest_pending.age",
+                        AggregatedMetrics::F64(MetricData::Gauge(gauge)),
+                    ) => {
+                        for point in gauge.data_points() {
+                            let stream = stream_of(point.attributes());
+                            gauges.entry(stream).or_default().1 = point.value();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            gauges
+        }
+    }
+
+    fn stream_of<'a>(mut attributes: impl Iterator<Item = &'a opentelemetry::KeyValue>) -> String {
+        attributes
+            .find(|kv| kv.key.as_str() == "messaging.destination.name")
+            .map(|kv| kv.value.as_str().into_owned())
+            .expect("stream attribute")
+    }
+
+    fn row(stream: &str, pending: u64, age: f64) -> (String, u64, f64) {
+        (stream.to_owned(), pending, age)
+    }
+
+    /// The Outbox topic reports 0 before it ever had a backlog.
+    #[test]
+    fn empty_outbox_reports_zero_for_the_outbox_topic() {
+        let gauges = Gauges::new();
+        let mut streams = BTreeSet::new();
+        report_backlog(&gauges.metrics, &mut streams, &[]);
+        assert_eq!(
+            gauges.exported(),
+            [(OUTBOX_TOPIC.to_owned(), (0, 0.0))].into()
+        );
+    }
+
+    /// A stream whose backlog emptied reports 0 instead of keeping (or
+    /// dropping) its last value.
+    #[test]
+    fn emptied_stream_reports_zero() {
+        let gauges = Gauges::new();
+        let mut streams = BTreeSet::new();
+        report_backlog(
+            &gauges.metrics,
+            &mut streams,
+            &[
+                row(OUTBOX_TOPIC, 3, 12.5),
+                row("delivery.v0.legacy", 2, 40.0),
+            ],
+        );
+        assert_eq!(
+            gauges.exported(),
+            [
+                ("delivery.v0.legacy".to_owned(), (2, 40.0)),
+                (OUTBOX_TOPIC.to_owned(), (3, 12.5)),
+            ]
+            .into()
+        );
+
+        report_backlog(&gauges.metrics, &mut streams, &[row(OUTBOX_TOPIC, 1, 2.0)]);
+        assert_eq!(
+            gauges.exported(),
+            [
+                ("delivery.v0.legacy".to_owned(), (0, 0.0)),
+                (OUTBOX_TOPIC.to_owned(), (1, 2.0)),
+            ]
+            .into()
+        );
+
+        report_backlog(&gauges.metrics, &mut streams, &[]);
+        assert_eq!(
+            gauges.exported(),
+            [
+                ("delivery.v0.legacy".to_owned(), (0, 0.0)),
+                (OUTBOX_TOPIC.to_owned(), (0, 0.0)),
+            ]
+            .into()
+        );
+    }
+}

@@ -10,13 +10,15 @@ use std::process::ExitCode;
 use delivery::di::relay::{self, SERVICE_NAME};
 use delivery::pkg::config;
 use delivery::pkg::lifecycle::{Lifecycle, Settings};
+use delivery::pkg::telemetry::log;
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    log::init_logs(SERVICE_NAME);
     match run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("{SERVICE_NAME}: {error}");
+            tracing::error!(operation = "startup", error.message = %error, "delivery-relay stopped with an error");
             ExitCode::FAILURE
         }
     }
@@ -36,13 +38,14 @@ async fn run() -> Result<(), Box<dyn Error>> {
     .await
     .map_err(|error| format!("listen management :{}: {error}", config.management.port))?;
 
-    println!(
-        "{SERVICE_NAME}: brokers {}, poll {:?}, batch {}, retention {:?}, metrics export {}",
-        config.kafka.brokers,
-        config.outbox.poll_interval,
-        config.outbox.batch_size,
-        config.outbox.retention,
-        process.telemetry().exporting()
+    tracing::info!(
+        operation = "startup",
+        brokers = %config.kafka.brokers,
+        poll_interval = ?config.outbox.poll_interval,
+        batch_size = config.outbox.batch_size,
+        retention = ?config.outbox.retention,
+        metrics_export = process.telemetry().exporting(),
+        "delivery-relay started"
     );
     let result = lifecycle.run(process.worker()?).await;
     process.shutdown();

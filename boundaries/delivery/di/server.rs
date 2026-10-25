@@ -284,6 +284,10 @@ impl ServerModule {
 /// до открытия портов.
 /// Вызывается внутри tokio runtime: OTLP exporter держит соединение на нём.
 pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
+    // Tracer и instruments (клиент SpiceDB, пул PostgreSQL, use cases)
+    // берутся у глобальных providers при создании, поэтому pipeline
+    // запускается первым.
+    let telemetry = telemetry::start(SERVICE_NAME)?;
     // Невалидный JWKS или allowlist service identity прерывает startup.
     let subjects = subject_resolver(&config.identity)?;
     // SpiceDB обязателен: проверки прав, запись relationships и reconciliation.
@@ -294,9 +298,6 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // Delivery; checks читают их из того же хранилища (FR-447).
     // Каждая роль хранилища разрешается отдельно над одним `PostgresStore`.
     let store = Arc::new(postgres(&config.database)?);
-    // Instruments берутся у глобального MeterProvider при сборке портов,
-    // поэтому pipeline запускается до них.
-    let telemetry = telemetry::start(SERVICE_NAME)?;
     let (ids, locator) = assignment_adapters(Arc::clone(&store) as _);
     let infrastructure = infrastructure(
         ProcessStores::over(&store),

@@ -2,7 +2,7 @@
 
 Customer web-приложение BiteRoute находится в отдельной application boundary `boundaries/ui/`. Оно отвечает за пользовательские сценарии каталога ресторанов, меню, корзины и заказов, но не владеет backend-доменной моделью и не обращается к внутренним сервисам напрямую.
 
-Customer journey работает на публичном GraphQL-контракте BFF: каталог открытых ресторанов на `/`, меню с корзиной и оформлением заказа на `/restaurants/:restaurantId` и экран заказа на `/orders/:orderId`. Каждый сценарий — отдельная feature со своими operations рядом с кодом (см. «Каталог, корзина и оформление» и «Экран заказа»).
+Customer journey работает на публичном GraphQL-контракте BFF: каталог открытых ресторанов на `/`, меню с корзиной и оформлением заказа на `/restaurants/:restaurantId` и экран заказа на `/orders/:orderId`. Отдельно, под `/manage/`, — минимальный экран владельца для открытия и закрытия ресторана (см. «Экран управления рестораном»). Каждый сценарий — отдельная feature со своими operations рядом с кодом (см. «Каталог, корзина и оформление» и «Экран заказа»).
 
 ## Запуск
 
@@ -36,6 +36,8 @@ Customer-схема BFF зафиксирована раньше resolvers (OpenS
 
 Каталог: `restaurants` отдаёт только рестораны, принимающие заказы (как `ListRestaurants` по умолчанию), — семь открытых, то есть две страницы при размере страницы 6; `restaurant(id)` отдаёт и закрытую «Ночную пекарню» (`restaurant-night-bakery`). В меню «Кухни №8» (`restaurant-kitchen-8`) позиция «Гёдза с уткой» недоступна, у «Кофейни на углу» (`restaurant-corner-coffee`) меню не опубликовано.
 
+Управление рестораном: mock-пользователь владеет «Кухней №8» (`restaurant-kitchen-8`) и «Ночной пекарней» (`restaurant-night-bakery`); `openRestaurant`/`closeRestaurant` меняют состояние открытия в store (повтор — `changed = false`), и каталог и `placeOrder` видят новое состояние. Для другого существующего ресторана моки отвечают error `PermissionDenied`, для неизвестного — `NotFound` в форме Cosmo Router (`bffError`: код в `errors[].extensions.errors[].extensions.code`).
+
 Mutations: `placeOrder` идемпотентен по `idempotencyKey` и возвращает problems `RESTAURANT_NOT_ACCEPTING_ORDERS` и `ORDER_ITEM_UNAVAILABLE`; `requestOrderCancellation` идемпотентен по `requestId` и возвращает `ALREADY_CANCELLED`, `ORDER_ALREADY_FINAL` или `CANCELLATION_WINDOW_EXPIRED`.
 
 ## Каталог, корзина и оформление
@@ -59,6 +61,16 @@ Feature `view-order` (`src/features/view-order/`) — экран заказа н
 - `cancel-order.tsx`: действие отмены видно, пока есть `cancellation.availableUntil`; подтверждение в `fieldset` переводит фокус на «Не отменять»; `requestId` создаётся на попытку и переиспользуется при ручном повторе, автоматического retry нет.
 - С реальным BFF экран работает через resolvers слайса `ordertracking` ([README BFF](../bff/README.md#слайс-ordertracking)); позиция, которой уже нет в меню ресторана, приходит с пустым названием и показывается как «Позиция меню».
 - Ответ `null` даёт «Заказ не найден», transport error и `Unimplemented` от BFF — generic recovery UI без технических деталей.
+
+## Экран управления рестораном
+
+Feature `manage-restaurant` (`src/features/manage-restaurant/`, route `/manage/restaurants/:restaurantId`) — минимальный экран владельца ресторана, change [`add-restaurant-opening-management`](../../openspec/changes/add-restaurant-opening-management/). На моках: `http://localhost:4173/manage/restaurants/restaurant-night-bakery`.
+
+- Operations `ManageRestaurant`, `OpenRestaurant` и `CloseRestaurant` лежат в `manage-restaurant.graphql`.
+- Экран показывает «Открыт»/«Закрыт» и одно действие «Открыть ресторан»/«Закрыть ресторан». Пока команда выполняется, кнопка в pending и повторное нажатие не отправляет вторую команду; результат объявляется через `aria-live` и различает «уже был открыт/закрыт» (`changed = false`).
+- Optimistic update нет: состояние меняется по payload команды, urql затем перезапрашивает query ресторана.
+- `bff-error.ts` читает gRPC-код из ошибки BFF: `PermissionDenied` — «нет прав», `NotFound` — «ресторан не найден», `Unauthenticated` — «войдите в аккаунт владельца», остальное и transport error — generic сообщение; повтор только ручным нажатием (команды идемпотентны).
+- Экран изолирован под `/manage/` и не связан с customer-навигацией: это исключение из границы customer UI до отдельного restaurant UI ([`docs/ui.md`](../../docs/ui.md#feature-organization)). Списка «мои рестораны» нет — экран открывается по ссылке с id ресторана. С реальным BFF нужен access token владельца; способ входа в браузере пока не выбран.
 
 Основные проверки:
 

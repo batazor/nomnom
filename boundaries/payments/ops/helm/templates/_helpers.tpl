@@ -112,19 +112,79 @@ SpiceDB (ADR 18): при заданном spicedb.endpoint приложение 
 {{- end -}}
 
 {{/*
-PostgreSQL env (ADR 8): DSN из внешнего Secret. Без database.urlSecret.name переменная не
-задаётся, и процесс payments не стартует (DATABASE__URL обязателен).
+PostgreSQL env (ADR 8): DSN из внешнего Secret и лимиты пула процесса. Без
+database.urlSecret.name переменные не задаются, и процесс payments не стартует
+(DATABASE__URL обязателен). За пулером в session mode каждое соединение пула держит
+server-соединение, поэтому maxConns задаётся values каждого release. Init container migrate
+передаёт "migrate": миграции идут на одном соединении под advisory lock (пул 1).
+Usage: {{ include "payments.databaseEnv" (dict "context" $ "migrate" false) }}
 */}}
 {{- define "payments.databaseEnv" -}}
-{{- with .Values.database }}
+{{- with .context.Values.database }}
 {{- if .urlSecret.name -}}
+{{- $maxConns := ternary 1 .maxConns $.migrate -}}
+{{- $minConns := ternary 0 .minConns $.migrate -}}
+{{- if lt (int .maxConns) 1 -}}
+{{- fail (printf "database.maxConns must be positive, got %v" .maxConns) -}}
+{{- end -}}
+{{- if or (lt (int .minConns) 0) (gt (int .minConns) 1) -}}
+{{- fail (printf "database.minConns must be 0 or 1, got %v" .minConns) -}}
+{{- end -}}
+{{- range $key := list "maxConnLifetime" "maxConnIdleTime" "connectTimeout" "acquireTimeout" -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString (get $.context.Values.database $key))) -}}
+{{- fail (printf "database.%s %q must be a positive duration <int>(ms|s|m), e.g. 5s" $key (toString (get $.context.Values.database $key))) -}}
+{{- end -}}
+{{- end }}
 - name: DATABASE__URL
   valueFrom:
     secretKeyRef:
       name: {{ .urlSecret.name | quote }}
       key: {{ .urlSecret.key | quote }}
 - name: DATABASE__MAX_CONNS
-  value: {{ .maxConns | quote }}
+  value: {{ $maxConns | quote }}
+- name: DATABASE__MIN_CONNS
+  value: {{ $minConns | quote }}
+- name: DATABASE__MAX_CONN_LIFETIME
+  value: {{ .maxConnLifetime | quote }}
+- name: DATABASE__MAX_CONN_IDLE_TIME
+  value: {{ .maxConnIdleTime | quote }}
+- name: DATABASE__CONNECT_TIMEOUT
+  value: {{ .connectTimeout | quote }}
+- name: DATABASE__ACQUIRE_TIMEOUT
+  value: {{ .acquireTimeout | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+OpenTelemetry env (ADR 9): service.instance.id — имя pod (downward API), service.version —
+неизменяемый image.tag, остальные атрибуты — telemetry.resourceAttributes. Явная env
+имеет приоритет над envFrom, поэтому OTEL_RESOURCE_ATTRIBUTES в env была бы перекрыта.
+Init container migrate ("migrate" true) получает только идентичность для JSON-логов: он
+не экспортирует telemetry и называется payments-migrate.
+Usage: {{ include "payments.otelEnv" (dict "context" $ "migrate" false) }}
+*/}}
+{{- define "payments.otelEnv" -}}
+{{- with .context.Values.telemetry }}
+{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "unknown" $.context.Values.image.tag)) -}}
+{{- range $key, $value := .resourceAttributes }}
+{{- $attrs = append $attrs (printf "%s=%s" $key (toString $value)) -}}
+{{- end }}
+- name: POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: {{ join "," $attrs | quote }}
+{{- if not $.migrate }}
+{{- if .serviceName }}
+- name: OTEL_SERVICE_NAME
+  value: {{ .serviceName | quote }}
+{{- end }}
+{{- if .endpoint }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ .endpoint | quote }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

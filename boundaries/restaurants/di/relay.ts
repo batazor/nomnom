@@ -23,6 +23,7 @@ import {
 } from "../pkg/infrastructure/outbox/relay.ts";
 import { IdleWorker, type Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
+import type { Logger } from "../pkg/telemetry/logger.ts";
 import { MENU_EVENTS_TOPIC } from "../slices/menu/infrastructure/integration/menu-events.ts";
 import { RESTAURANT_EVENTS_TOPIC } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
 import { RESTAURANT_ORDER_EVENTS_TOPIC } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
@@ -39,14 +40,15 @@ export type RelayResources = Readonly<{
   outbox: OutboxRelayConfig;
   db: Db;
   publisher: MessagePublisher;
-  log: (message: string) => void;
+  logger: Logger;
 }>;
 
 export interface RelayCradle {
   readonly outboxConfig: OutboxRelayConfig;
   readonly db: Db;
   readonly publisher: MessagePublisher;
-  readonly log: (message: string) => void;
+  /** Structured stdout logs (pkg/telemetry/logger.ts). */
+  readonly logger: Logger;
   readonly relayStore: RelayStore;
   readonly relayMetrics: RelayMetrics;
   readonly outboxRelay: OutboxRelay;
@@ -62,7 +64,7 @@ export const createRelayContainer = (
     outboxConfig: asValue(resources.outbox),
     db: asValue(resources.db),
     publisher: asValue(resources.publisher),
-    log: asValue(resources.log),
+    logger: asValue(resources.logger),
     relayStore: asFunction(
       ({ db }: RelayCradle) => new MongoOutboxRelayStore(db),
     ).singleton(),
@@ -75,7 +77,7 @@ export const createRelayContainer = (
         publisher,
         outboxConfig,
         relayMetrics,
-        log,
+        logger,
       }: RelayCradle) =>
         new OutboxRelay({
           store: relayStore,
@@ -85,11 +87,12 @@ export const createRelayContainer = (
           leaseTtlMs: outboxConfig.leaseTtlMs,
           retentionMs: outboxConfig.retentionMs,
           metrics: relayMetrics,
-          log,
+          log: logger.child({ operation: "outbox.relay" }).info,
+          warn: logger.child({ operation: "outbox.relay" }).warn,
         }),
     ).singleton(),
     worker: asFunction(
-      ({ outboxRelay, outboxConfig }: RelayCradle) =>
+      ({ outboxRelay, outboxConfig, logger }: RelayCradle) =>
         new WorkerWithLoops(
           new IdleWorker(async () => {
             await outboxRelay.release();
@@ -102,7 +105,7 @@ export const createRelayContainer = (
               {
                 initialDelayMs: 0,
                 intervalMs: outboxConfig.pollIntervalMs,
-                log: (message) => console.error(`restaurants-relay ${message}`),
+                log: logger.child({ operation: "outbox.relay" }).error,
               },
             ),
           ],

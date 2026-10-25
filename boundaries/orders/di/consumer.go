@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"log/slog"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -54,7 +53,7 @@ func NewKafkaConsumer(cfg config.Config, handlers orderdi.Consumer) *KafkaConsum
 			return messaging.NewDeadLetterPublisher(cfg, logger)
 		},
 		newMetrics: telemetry.Start,
-		// slog.Default writes through the standard log package, as the process does.
+		// Watermill пишет через JSON logger процесса (telemetry.SetupLogging).
 		logger: watermill.NewSlogLogger(slog.Default()),
 		done:   make(chan error, 1),
 	}
@@ -72,11 +71,16 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 
 	dialCtx, cancel := context.WithTimeout(ctx, c.cfg.Temporal.ConnectTimeout)
 	defer cancel()
-	temporal, err := c.dial(dialCtx, client.Options{
+	// Tracing interceptor: signal/start workflow продолжает trace обработки сообщения.
+	options, err := telemetry.TemporalClientOptions(client.Options{
 		HostPort:       c.cfg.Temporal.HostPort,
 		Namespace:      c.cfg.Temporal.Namespace,
 		MetricsHandler: metrics.TemporalMetricsHandler(),
 	})
+	if err != nil {
+		return errors.Join(err, c.flushMetrics(ctx))
+	}
+	temporal, err := c.dial(dialCtx, options)
 	if err != nil {
 		return fmt.Errorf("connect temporal %s: %w", c.cfg.Temporal.HostPort, err)
 	}
@@ -104,7 +108,8 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 	go func() { c.done <- c.router.Run(context.Background()) }()
 	select {
 	case <-c.router.Running():
-		log.Printf("orders-consumer consuming %d streams in group %s", len(streams), c.cfg.Kafka.ConsumerGroup)
+		slog.InfoContext(ctx, "orders-consumer consuming streams",
+			slog.Int("streams", len(streams)), slog.String("messaging.consumer.group.name", c.cfg.Kafka.ConsumerGroup))
 		return nil
 	case err := <-c.done:
 		return errors.Join(fmt.Errorf("run router: %w", err), c.closeResources())

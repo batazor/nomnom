@@ -9,18 +9,27 @@ from infrastructure.grpc.generated import service_pb2_grpc
 from infrastructure.grpc.identity import SubjectResolver
 from infrastructure.grpc.servicer import PaymentsHandlers, PaymentsService
 from pkg.lifecycle import DrainTimeoutError, LifecycleError
+from pkg.telemetry.rpc import ServerTelemetryInterceptor
 
 
 class GrpcWorker:
-    """grpc.Server implementation of the shared lifecycle Worker protocol."""
+    """grpc.Server implementation of the shared lifecycle Worker protocol.
+
+    Every call passes the telemetry interceptor: server span with the caller's W3C
+    trace context and ``rpc.server.call.duration``.
+    """
 
     def __init__(
         self,
         address: tuple[str, int],
         handlers: PaymentsHandlers,
         subjects: SubjectResolver,
+        telemetry: ServerTelemetryInterceptor | None = None,
     ) -> None:
-        self._server = grpc.server(futures.ThreadPoolExecutor(thread_name_prefix="payments-grpc"))
+        self._server = grpc.server(
+            futures.ThreadPoolExecutor(thread_name_prefix="payments-grpc"),
+            interceptors=[telemetry or ServerTelemetryInterceptor()],
+        )
         service_pb2_grpc.add_PaymentsServiceServicer_to_server(
             PaymentsService(handlers, subjects), self._server
         )

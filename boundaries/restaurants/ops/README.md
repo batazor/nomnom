@@ -51,7 +51,13 @@ multi-document транзакции. Пока `mongodb.uriSecret.name` пуст,
 `mongodb.migrate.command` (по умолчанию `node dist/cmd/restaurants-migrate/main.js`; для dev-образа
 — `["node", "cmd/restaurants-migrate/main.ts"]`). Он идемпотентно создаёт коллекции, JSON Schema
 validators, индексы и применяет миграции документов до старта процесса, как `orders-migrate`.
-С неверным `mongodb.database` или `mongodb.timeout` chart не рендерится.
+Лимиты connection pool задаёт `mongodb.pool` (`maxPoolSize` 20, `minPoolSize` 0, `maxIdleTime`
+`5m`, `waitQueueTimeout` `5s`, `maxConnecting` 2) → `MONGODB__MAX_POOL_SIZE`, `MONGODB__MIN_POOL_SIZE`,
+`MONGODB__MAX_IDLE_TIME`, `MONGODB__WAIT_QUEUE_TIMEOUT`, `MONGODB__MAX_CONNECTING`; `values-relay.yaml`
+задаёт `maxPoolSize` 3, `values-consumer.yaml` — 5, init container `migrate` берёт
+`mongodb.migrate.maxPoolSize` (2) и остальные лимиты из `mongodb.pool`.
+С неверным `mongodb.database`, `mongodb.timeout` или лимитом пула вне диапазона приложения chart не
+рендерится.
 
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
 к `Service` напрямую и проходят через internal gateway. Ingress, `HTTPRoute`/`GRPCRoute`,
@@ -131,17 +137,28 @@ helm upgrade --install restaurants ops/helm --set image.tag=local
 
 Приложение слушает порт `8082` (переменная `SERVER__PORT`); `service.targetPort` должен
 совпадать с портом процесса. Несекретная конфигурация передаётся через `env` и попадает в
-`ConfigMap`:
+`ConfigMap`.
+
+OpenTelemetry задаётся секцией `telemetry`, а не `env`: chart сам выставляет
+`OTEL_SERVICE_NAME` (`telemetry.serviceName`: `restaurants`, в `values-consumer.yaml` —
+`restaurants-consumer`, в `values-relay.yaml` — `restaurants-relay`),
+`OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя pod через downward API `POD_NAME`,
+`service.version` — `image.tag`, иначе digest, иначе `unknown`, плюс
+`telemetry.resourceAttributes`) и, если `telemetry.endpoint` задан,
+`OTEL_EXPORTER_OTLP_ENDPOINT` (traces и metrics по OTLP/gRPC). Явные переменные chart
+перекрывают одноимённые из `env`; `service.*` в `resourceAttributes` chart отклоняет.
+Init container `migrate` получает тот же resource для JSON-логов.
 
 ```yaml
-env:
-  OTEL_SERVICE_NAME: restaurants
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-  OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+telemetry:
+  endpoint: http://alloy.nomnom-observability.svc.cluster.local:4317
+  resourceAttributes:
+    deployment.environment.name: local
 ```
 
-Адрес Alloy и другие значения OpenTelemetry задаются окружением и не хардкодятся в chart;
-Alloy sidecar не добавляется — collector разворачивается отдельно.
+Адрес Alloy задаётся окружением и не хардкодится в chart; без endpoint экспорт выключен, а
+W3C trace context всё равно передаётся. Alloy sidecar не добавляется — collector
+разворачивается отдельно.
 
 Секреты (пароли, API tokens, credentials БД и Kafka, BSR tokens) не помещаются в
 `values.yaml` и `ConfigMap`. Они подключаются из внешних Kubernetes `Secret`:
@@ -177,7 +194,8 @@ Chart реализует [runtime contract](../../../docs/cloud-native-runtime.m
 | `management.port` | `9082` | Номер технического порта; передаётся приложению как `MANAGEMENT__PORT`. |
 | `shutdown.readinessDelaySeconds` | `5` | `SHUTDOWN__READINESS_DELAY`: сколько pod после `SIGTERM` продолжает обслуживать запросы с readiness `503`. |
 | `shutdown.drainTimeoutSeconds` | `20` | `SHUTDOWN__DRAIN_TIMEOUT`: deadline на завершение начатых запросов. |
-| `terminationGracePeriodSeconds` | `30` | Должен быть больше суммы delay и drain; иначе `helm template` завершается ошибкой. |
+| `shutdown.telemetryFlushTimeoutSeconds` | `5` | `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`: deadline финального экспорта traces и metrics после drain. |
+| `terminationGracePeriodSeconds` | `35` | Должен быть больше суммы delay, drain и telemetry flush; иначе `helm template` завершается ошибкой. |
 | `startupProbe` | `/health/startup`, каждые 2s, до 30 попыток | Пока не пройдена, liveness и readiness не проверяются. |
 | `livenessProbe` | `/health/live`, каждые 10s, 3 провала | Остаётся успешной во время shutdown. |
 | `readinessProbe` | `/health/ready`, каждые 2s, 1 провал | Исключает pod из endpoints сразу после `SIGTERM`, в пределах readiness delay. |

@@ -44,7 +44,11 @@ fn env() -> Option<Env> {
         .ok()
         .filter(|v| !v.is_empty())?;
     Some(Env {
-        database: DatabaseConfig { url, max_conns: 4 },
+        database: DatabaseConfig {
+            url,
+            max_conns: 4,
+            ..DatabaseConfig::default()
+        },
         kafka: KafkaConfig {
             brokers,
             client_id: "delivery-relay-test".to_owned(),

@@ -68,8 +68,11 @@ JSON — артефакт генератора: правки вносятся в
 | --- | --- | --- |
 | mongodb: operations | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | mongodb: p95 by operation | TODO | [`db_client_operation_duration_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| mongodb: pool | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
-| mongodb: pool wait p95 | TODO | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| mongodb: pool connections | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_idle_min`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| mongodb: pool saturation | TODO | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| mongodb: pending checkouts and timeouts | TODO | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| mongodb: pool wait / use / create p95 | TODO | [`db_client_connection_create_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_use_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
+| mongodb: pool cleared | TODO | [`nomnom_db_client_connection_pool_clears_total`](../../../../docs/observability/metric-inventory.md#db), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
 ### Kafka
 
@@ -129,7 +132,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
-Живых панелей: 6 из 47. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 6 из 50. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
@@ -140,6 +143,11 @@ Rule group `restaurants` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.
 | Restaurants: gRPC technical errors | critical | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
 | Restaurants: gRPC p95 latency | warning | ждёт метрик | [`rpc_server_call_duration_seconds`](../../../../docs/observability/metric-inventory.md#rpc) |
 | Restaurants: messages sent to DLQ | warning | ждёт метрик | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Restaurants: mongodb pool saturated | warning | ждёт метрик | [`db_client_connection_count`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
+| Restaurants: mongodb pool checkouts queued | warning | ждёт метрик | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db) |
+| Restaurants: mongodb pool wait p95 | warning | ждёт метрик | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
+| Restaurants: mongodb pool checkout timeouts | warning | ждёт метрик | [`db_client_connection_timeouts_total`](../../../../docs/observability/metric-inventory.md#db) |
+| Restaurants: mongodb pool cleared | warning | ждёт метрик | [`nomnom_db_client_connection_pool_clears_total`](../../../../docs/observability/metric-inventory.md#db) |
 
 ## Переходы
 

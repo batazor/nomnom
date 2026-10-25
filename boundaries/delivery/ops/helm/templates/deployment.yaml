@@ -48,7 +48,8 @@ spec:
             {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
           {{- end }}
           env:
-            {{- include "delivery.databaseEnv" . | nindent 12 }}
+            {{- include "delivery.databaseEnv" (dict "root" . "maxConns" .Values.database.pool.migrateMaxConns) | nindent 12 }}
+            {{- include "delivery.otelEnv" . | nindent 12 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -120,7 +121,8 @@ spec:
                   name: {{ .Values.spicedb.presharedKeySecret.name | quote }}
                   key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
             {{- end }}
-            {{- include "delivery.databaseEnv" . | nindent 12 }}
+            {{- include "delivery.databaseEnv" (dict "root" . "maxConns" .Values.database.pool.maxConns) | nindent 12 }}
+            {{- include "delivery.otelEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}

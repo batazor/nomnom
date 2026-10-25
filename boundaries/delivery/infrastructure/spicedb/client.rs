@@ -6,13 +6,23 @@
 //! потоке с current-thread runtime: каждый вызов отправляет запрос в этот поток
 //! и ждёт ответ, не вызывая `block_on` в чужом runtime. На multi-thread runtime
 //! ожидание выполняется через `block_in_place`, чтобы не занимать async worker.
+//!
+//! Telemetry (docs/observability.md, «HTTP и gRPC»): вызов несёт OpenTelemetry
+//! context вызывающего потока (span use case) в поток клиента; там каждый
+//! RPC получает client span `authzed.api.v1.PermissionsService/<Method>`,
+//! `traceparent` в metadata и измерение `rpc.client.call.duration`
+//! (`pkg/telemetry/rpc`). Preshared key и тело запроса в telemetry не попадают.
 
 mod config;
 mod proto;
 
 use std::fmt;
+use std::sync::Arc;
 use std::sync::mpsc as std_mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+use opentelemetry::Context;
+use opentelemetry::global::BoxedTracer;
 
 use tokio::runtime::{Handle, RuntimeFlavor};
 use tokio::sync::mpsc;
@@ -31,6 +41,7 @@ use super::v1::{
 };
 use crate::pkg::config::SpiceDbConfig;
 use crate::pkg::persistence::AuthorizationRevision;
+use crate::pkg::telemetry::rpc::{self, ClientCall, RpcMetrics};
 
 pub use config::SpiceDbConfigError;
 use config::{config_error, endpoint};
@@ -55,6 +66,97 @@ enum Job {
     Read(ReadRelationshipsRequest, Reply<RelationshipPage>),
 }
 
+const CHECK_PERMISSION: &str = "authzed.api.v1.PermissionsService/CheckPermission";
+const WRITE_RELATIONSHIPS: &str = "authzed.api.v1.PermissionsService/WriteRelationships";
+const READ_RELATIONSHIPS: &str = "authzed.api.v1.PermissionsService/ReadRelationships";
+
+/// `DEADLINE_EXCEEDED`: the client deadline expired before a response.
+const DEADLINE_EXCEEDED: i32 = 4;
+
+/// Запрос вместе с context вызывающего потока.
+struct Traced {
+    job: Job,
+    parent: Context,
+}
+
+/// Spans и метрики вызовов SpiceDB.
+#[derive(Clone)]
+pub struct ClientTelemetry {
+    tracer: Arc<BoxedTracer>,
+    metrics: RpcMetrics,
+}
+
+impl ClientTelemetry {
+    /// Global providers (no-op until the pipeline starts).
+    #[must_use]
+    pub fn global() -> Self {
+        Self::new(
+            opentelemetry::global::tracer(rpc::INSTRUMENTATION),
+            RpcMetrics::global(),
+        )
+    }
+
+    #[must_use]
+    pub fn new(tracer: BoxedTracer, metrics: RpcMetrics) -> Self {
+        Self {
+            tracer: Arc::new(tracer),
+            metrics,
+        }
+    }
+}
+
+/// Telemetry одного RPC в потоке клиента.
+struct CallTelemetry {
+    telemetry: ClientTelemetry,
+    call: ClientCall,
+    context: Context,
+    started: Instant,
+}
+
+impl CallTelemetry {
+    fn start(
+        telemetry: &ClientTelemetry,
+        target: &(String, u16),
+        method: &'static str,
+        parent: &Context,
+    ) -> Self {
+        let call = ClientCall {
+            method,
+            server_address: target.0.clone(),
+            server_port: target.1,
+        };
+        let context = call.start(&telemetry.tracer, parent);
+        Self {
+            telemetry: telemetry.clone(),
+            call,
+            context,
+            started: Instant::now(),
+        }
+    }
+
+    /// Request с `traceparent` client span в metadata.
+    fn request<T>(&self, message: T) -> Request<T> {
+        let mut request = Request::new(message);
+        rpc::inject(&self.context, request.metadata_mut());
+        request
+    }
+
+    fn finish(self, code: i32) {
+        rpc::end_client_span(&self.context, code);
+        self.telemetry
+            .metrics
+            .client_call(&self.call, code, self.started.elapsed());
+    }
+}
+
+fn code_of<T>(outcome: &Result<Result<T, tonic::Status>, tokio::time::error::Elapsed>) -> i32 {
+    match outcome {
+        Ok(Ok(_)) => 0,
+        Ok(Err(status)) => status.code() as i32,
+        Err(_) => DEADLINE_EXCEEDED,
+    }
+}
+
 /// Bearer preshared key в каждом запросе.
 #[derive(Clone)]
 struct PresharedKey(MetadataValue<Ascii>);
@@ -72,7 +174,7 @@ impl Interceptor for PresharedKey {
 /// вместе с последним экземпляром.
 #[derive(Clone)]
 pub struct SpiceDbClient {
-    jobs: mpsc::UnboundedSender<Job>,
+    jobs: mpsc::UnboundedSender<Traced>,
     timeout: Duration,
 }
 
@@ -90,6 +192,14 @@ impl SpiceDbClient {
     /// устанавливается лениво: недоступный SpiceDB не мешает startup, а
     /// отклоняет checks как unavailable.
     pub fn connect(config: &SpiceDbConfig) -> Result<Self, SpiceDbConfigError> {
+        Self::connect_with_telemetry(config, ClientTelemetry::global())
+    }
+
+    /// [`Self::connect`] с заданными tracer и метриками (тесты).
+    pub fn connect_with_telemetry(
+        config: &SpiceDbConfig,
+        telemetry: ClientTelemetry,
+    ) -> Result<Self, SpiceDbConfigError> {
         if config.preshared_key.is_empty() {
             return Err(config_error("preshared key is required"));
         }
@@ -97,6 +207,7 @@ impl SpiceDbClient {
             return Err(config_error("timeout must be positive"));
         }
         let endpoint = endpoint(config)?;
+        let target = server_target(endpoint.uri());
         let key = PresharedKey(
             format!("Bearer {}", config.preshared_key)
                 .parse()
@@ -106,7 +217,7 @@ impl SpiceDbClient {
             .enable_all()
             .build()
             .map_err(|error| config_error(format!("start client runtime: {error}")))?;
-        let (jobs, mut queue) = mpsc::unbounded_channel::<Job>();
+        let (jobs, mut queue) = mpsc::unbounded_channel::<Traced>();
         let timeout = config.timeout;
 
         std::thread::Builder::new()
@@ -115,9 +226,14 @@ impl SpiceDbClient {
                 runtime.block_on(async move {
                     let channel = endpoint.connect_lazy();
                     let client = PermissionsServiceClient::with_interceptor(channel, key);
-                    while let Some(job) = queue.recv().await {
+                    while let Some(Traced { job, parent }) = queue.recv().await {
                         let client = client.clone();
-                        tokio::spawn(serve(client, job, timeout));
+                        let call = Call {
+                            telemetry: telemetry.clone(),
+                            target: target.clone(),
+                            parent,
+                        };
+                        tokio::spawn(serve(client, job, timeout, call));
                     }
                 });
             })
@@ -131,13 +247,43 @@ type Client = PermissionsServiceClient<
     tonic::service::interceptor::InterceptedService<tonic::transport::Channel, PresharedKey>,
 >;
 
+/// `server.address` / `server.port` endpoint'а.
+fn server_target(uri: &tonic::codegen::http::Uri) -> (String, u16) {
+    let default_port = if uri.scheme_str() == Some("https") {
+        443
+    } else {
+        80
+    };
+    (
+        uri.host().unwrap_or_default().to_owned(),
+        uri.port_u16().unwrap_or(default_port),
+    )
+}
+
+/// Telemetry context одного запроса.
+struct Call {
+    telemetry: ClientTelemetry,
+    target: (String, u16),
+    parent: Context,
+}
+
+impl Call {
+    fn start(&self, method: &'static str) -> CallTelemetry {
+        CallTelemetry::start(&self.telemetry, &self.target, method, &self.parent)
+    }
+}
+
 /// Выполняет один запрос в потоке клиента в пределах `timeout`.
-async fn serve(mut client: Client, job: Job, timeout: Duration) {
+async fn serve(mut client: Client, job: Job, timeout: Duration, call: Call) {
     // Получатель мог уйти по своему deadline, поэтому ошибки отправки
     // ответа игнорируются.
     match job {
         Job::Check(request, reply) => {
-            let outcome = tokio::time::timeout(timeout, client.check_permission(request)).await;
+            let telemetry = call.start(CHECK_PERMISSION);
+            let outcome =
+                tokio::time::timeout(timeout, client.check_permission(telemetry.request(request)))
+                    .await;
+            telemetry.finish(code_of(&outcome));
             let _ = reply.send(match outcome {
                 Ok(Ok(response)) => Ok(allowed(response.get_ref())),
                 Ok(Err(status)) => Err(failed("check", &status)),
@@ -145,7 +291,13 @@ async fn serve(mut client: Client, job: Job, timeout: Duration) {
             });
         }
         Job::Write(request, reply) => {
-            let outcome = tokio::time::timeout(timeout, client.write_relationships(request)).await;
+            let telemetry = call.start(WRITE_RELATIONSHIPS);
+            let outcome = tokio::time::timeout(
+                timeout,
+                client.write_relationships(telemetry.request(request)),
+            )
+            .await;
+            telemetry.finish(code_of(&outcome));
             let _ = reply.send(match outcome {
                 Ok(Ok(response)) => written_at(response.get_ref()),
                 Ok(Err(status)) => Err(failed("write relationships", &status)),
@@ -155,9 +307,13 @@ async fn serve(mut client: Client, job: Job, timeout: Duration) {
             });
         }
         Job::Read(request, reply) => {
-            let outcome = tokio::time::timeout(timeout, read_page(&mut client, request)).await;
+            let telemetry = call.start(READ_RELATIONSHIPS);
+            let outcome =
+                tokio::time::timeout(timeout, read_page(&mut client, telemetry.request(request)))
+                    .await;
+            telemetry.finish(code_of(&outcome));
             let _ = reply.send(match outcome {
-                Ok(result) => result,
+                Ok(result) => result.map_err(|status| failed("read relationships", &status)),
                 Err(_) => Err(format!(
                     "spicedb read relationships timed out after {timeout:?}"
                 )),
@@ -189,19 +345,11 @@ fn failed(operation: &str, status: &tonic::Status) -> String {
 /// Читает одну страницу stream `ReadRelationships` целиком.
 async fn read_page(
     client: &mut Client,
-    request: ReadRelationshipsRequest,
-) -> Result<RelationshipPage, String> {
-    let mut stream = client
-        .read_relationships(request)
-        .await
-        .map_err(|status| failed("read relationships", &status))?
-        .into_inner();
+    request: Request<ReadRelationshipsRequest>,
+) -> Result<RelationshipPage, tonic::Status> {
+    let mut stream = client.read_relationships(request).await?.into_inner();
     let mut page = RelationshipPage::default();
-    while let Some(response) = stream
-        .message()
-        .await
-        .map_err(|status| failed("read relationships", &status))?
-    {
+    while let Some(response) = stream.message().await? {
         if let Some(relationship) = response.relationship.as_ref().and_then(from_proto) {
             page.relationships.push(relationship);
         }
@@ -215,7 +363,10 @@ impl SpiceDbClient {
     fn call<T>(&self, job: impl FnOnce(Reply<T>) -> Job, operation: &str) -> Result<T, String> {
         let (reply, receiver) = std_mpsc::sync_channel(1);
         self.jobs
-            .send(job(reply))
+            .send(Traced {
+                job: job(reply),
+                parent: Context::current(),
+            })
             .map_err(|_| "spicedb client stopped".to_owned())?;
 
         let wait = || receiver.recv_timeout(self.timeout + REPLY_GRACE);
