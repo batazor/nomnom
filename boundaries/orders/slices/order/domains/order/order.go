@@ -111,6 +111,7 @@ func Place(
 		RestaurantID: restaurantID,
 		Total:        order.total,
 		PlacedAt:     placedAt,
+		Items:        order.Items(),
 	})
 	return order, nil
 }

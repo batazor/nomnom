@@ -24,12 +24,14 @@ const (
 
 // Заказ оформлен.
 type OrderPlaced struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	CustomerId    string                 `protobuf:"bytes,2,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
-	RestaurantId  string                 `protobuf:"bytes,3,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
-	Total         *Money                 `protobuf:"bytes,4,opt,name=total,proto3" json:"total,omitempty"`
-	PlacedAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	OrderId      string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	CustomerId   string                 `protobuf:"bytes,2,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
+	RestaurantId string                 `protobuf:"bytes,3,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	Total        *Money                 `protobuf:"bytes,4,opt,name=total,proto3" json:"total,omitempty"`
+	PlacedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
+	// Состав заказа по ценам catalog snapshot; restaurants создаёт по нему Restaurant Order.
+	Items         []*OrderItem `protobuf:"bytes,6,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -95,6 +97,13 @@ func (x *OrderPlaced) GetTotal() *Money {
 func (x *OrderPlaced) GetPlacedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.PlacedAt
+	}
+	return nil
+}
+
+func (x *OrderPlaced) GetItems() []*OrderItem {
+	if x != nil {
+		return x.Items
 	}
 	return nil
 }
@@ -201,14 +210,15 @@ var File_nomnom_orders_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1dnomnom/orders/v1/events.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/orders.proto\"\xd6\x01\n" +
+	"\x1dnomnom/orders/v1/events.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/orders.proto\"\x89\x02\n" +
 	"\vOrderPlaced\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
 	"customerId\x12#\n" +
 	"\rrestaurant_id\x18\x03 \x01(\tR\frestaurantId\x12-\n" +
 	"\x05total\x18\x04 \x01(\v2\x17.nomnom.orders.v1.MoneyR\x05total\x127\n" +
-	"\tplaced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\"+\n" +
+	"\tplaced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\x121\n" +
+	"\x05items\x18\x06 \x03(\v2\x1b.nomnom.orders.v1.OrderItemR\x05items\"+\n" +
 	"\x0eOrderCompleted\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\"o\n" +
 	"\x0eOrderCancelled\x12\x19\n" +
@@ -235,17 +245,19 @@ var file_nomnom_orders_v1_events_proto_goTypes = []any{
 	(*OrderCancelled)(nil),        // 2: nomnom.orders.v1.OrderCancelled
 	(*Money)(nil),                 // 3: nomnom.orders.v1.Money
 	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
-	(*Cancellation)(nil),          // 5: nomnom.orders.v1.Cancellation
+	(*OrderItem)(nil),             // 5: nomnom.orders.v1.OrderItem
+	(*Cancellation)(nil),          // 6: nomnom.orders.v1.Cancellation
 }
 var file_nomnom_orders_v1_events_proto_depIdxs = []int32{
 	3, // 0: nomnom.orders.v1.OrderPlaced.total:type_name -> nomnom.orders.v1.Money
 	4, // 1: nomnom.orders.v1.OrderPlaced.placed_at:type_name -> google.protobuf.Timestamp
-	5, // 2: nomnom.orders.v1.OrderCancelled.cancellation:type_name -> nomnom.orders.v1.Cancellation
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 2: nomnom.orders.v1.OrderPlaced.items:type_name -> nomnom.orders.v1.OrderItem
+	6, // 3: nomnom.orders.v1.OrderCancelled.cancellation:type_name -> nomnom.orders.v1.Cancellation
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_events_proto_init() }

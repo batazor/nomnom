@@ -101,6 +101,7 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 			RestaurantID: "restaurant-1",
 			Total:        ordertest.Money(t, "29.00"),
 			PlacedAt:     now,
+			Items:        placed.Items,
 		},
 	}, records[0])
 	assert.Equal(t, []fulfillment.StartRequest{{OrderID: "order-1"}}, e.workflow.Starts())

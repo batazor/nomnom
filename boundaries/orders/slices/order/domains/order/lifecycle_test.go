@@ -83,6 +83,7 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 				RestaurantID: "restaurant-1",
 				Total:        mustPolicyMoney(t, "20"),
 				PlacedAt:     testNow,
+				Items:        items,
 			}}, order.PullEvents())
 		})
 	}

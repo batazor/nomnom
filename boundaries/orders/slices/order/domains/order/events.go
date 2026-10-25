@@ -16,6 +16,9 @@ type OrderPlaced struct {
 	RestaurantID RestaurantID
 	Total        vo.Money
 	PlacedAt     time.Time
+	// Items is the composition at placement; restaurants creates its Restaurant
+	// Order from it.
+	Items []Item
 }
 
 func (OrderPlaced) isOrderDomainEvent() {}

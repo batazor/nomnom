@@ -95,12 +95,21 @@ func integrationMessage(id order.ID, version uint64, index int, event order.Doma
 func contract(event order.DomainEvent) (proto.Message, time.Time, error) {
 	switch e := event.(type) {
 	case order.OrderPlaced:
+		items := make([]*ordersv1.OrderItem, 0, len(e.Items))
+		for _, item := range e.Items {
+			items = append(items, &ordersv1.OrderItem{
+				MenuItemId: string(item.MenuItemID()),
+				Quantity:   int32(item.Quantity().Value()), //nolint:gosec // quantities are small positive values validated by the Order.
+				UnitPrice:  &ordersv1.Money{Amount: item.UnitPrice().Amount().String(), Currency: item.UnitPrice().Currency()},
+			})
+		}
 		return &ordersv1.OrderPlaced{
 			OrderId:      string(e.OrderID),
 			CustomerId:   string(e.CustomerID),
 			RestaurantId: string(e.RestaurantID),
 			Total:        &ordersv1.Money{Amount: e.Total.Amount().String(), Currency: e.Total.Currency()},
 			PlacedAt:     timestamppb.New(e.PlacedAt),
+			Items:        items,
 		}, e.PlacedAt, nil
 	case order.OrderCompleted:
 		return &ordersv1.OrderCompleted{OrderId: string(e.OrderID)}, time.Now().UTC(), nil
