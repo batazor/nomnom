@@ -10,8 +10,9 @@
 //!   (FR-447); ids SpiceDB cannot store are skipped and counted. Deleting an
 //!   orphan changes no revision: the resource is gone or the link is stale.
 //!
-//! The business state of `delivery` lives in process memory, so the
-//! reconciler is a background loop of the main process ([`run`]).
+//! The reconciler is a background loop of the main process ([`run`]); it
+//! reads business state through [`ReconciliationStore`] (PostgreSQL in the
+//! process, memory in tests).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -24,7 +25,83 @@ use crate::infrastructure::spicedb::{
     COURIER, COURIER_SELF, DELIVERY, DELIVERY_COURIER, Relationship, RelationshipGraph,
     RelationshipOperation, USER,
 };
-use crate::pkg::persistence::AuthorizationRevision;
+use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
+
+/// Business state read and revision writes of reconciliation. Reads see only
+/// committed state; revision writes are single-statement transactions that
+/// bump the aggregate version.
+pub trait ReconciliationStore: Send + Sync {
+    /// Registered courier ids after `after`, ordered by id.
+    fn courier_page(&self, after: &str, limit: usize) -> Result<Vec<String>, RepositoryError>;
+
+    /// Which of `ids` are registered couriers.
+    fn registered_couriers(&self, ids: &[String]) -> Result<Vec<String>, RepositoryError>;
+
+    /// `(delivery_id, courier_id)` of assigned deliveries after `after`,
+    /// ordered by delivery id.
+    fn assignment_page(
+        &self,
+        after: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>, RepositoryError>;
+
+    /// `(delivery_id, courier_id)` for those of `ids` with an assigned courier.
+    fn assigned_couriers(&self, ids: &[String]) -> Result<Vec<(String, String)>, RepositoryError>;
+
+    /// Stores the revision on a registered courier; `false` — not registered.
+    fn record_courier_revision(
+        &self,
+        courier_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<bool, RepositoryError>;
+
+    /// Stores the revision on a delivery still assigned to `courier_id`.
+    fn record_assignment_revision(
+        &self,
+        delivery_id: &str,
+        courier_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<bool, RepositoryError>;
+}
+
+impl ReconciliationStore for MemoryStore {
+    fn courier_page(&self, after: &str, limit: usize) -> Result<Vec<String>, RepositoryError> {
+        MemoryStore::courier_page(self, after, limit)
+    }
+
+    fn registered_couriers(&self, ids: &[String]) -> Result<Vec<String>, RepositoryError> {
+        MemoryStore::registered_couriers(self, ids)
+    }
+
+    fn assignment_page(
+        &self,
+        after: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>, RepositoryError> {
+        MemoryStore::assignment_page(self, after, limit)
+    }
+
+    fn assigned_couriers(&self, ids: &[String]) -> Result<Vec<(String, String)>, RepositoryError> {
+        MemoryStore::assigned_couriers(self, ids)
+    }
+
+    fn record_courier_revision(
+        &self,
+        courier_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<bool, RepositoryError> {
+        MemoryStore::record_courier_revision(self, courier_id, revision)
+    }
+
+    fn record_assignment_revision(
+        &self,
+        delivery_id: &str,
+        courier_id: &str,
+        revision: AuthorizationRevision,
+    ) -> Result<bool, RepositoryError> {
+        MemoryStore::record_assignment_revision(self, delivery_id, courier_id, revision)
+    }
+}
 
 /// Business side of one relation: `resource_id → subject_id`.
 pub trait RelationSource: Send + Sync {
@@ -45,7 +122,7 @@ pub trait RelationSource: Send + Sync {
 }
 
 /// `courier#self`: every registered courier acts for itself.
-pub struct RegisteredCouriers(pub Arc<MemoryStore>);
+pub struct RegisteredCouriers(pub Arc<dyn ReconciliationStore>);
 
 impl RelationSource for RegisteredCouriers {
     fn subjects_of(&self, resource_ids: &[String]) -> Result<HashMap<String, String>, String> {
@@ -78,7 +155,7 @@ impl RelationSource for RegisteredCouriers {
 }
 
 /// `delivery#courier`: deliveries with `courier_id` set.
-pub struct AssignedDeliveries(pub Arc<MemoryStore>);
+pub struct AssignedDeliveries(pub Arc<dyn ReconciliationStore>);
 
 impl RelationSource for AssignedDeliveries {
     fn subjects_of(&self, resource_ids: &[String]) -> Result<HashMap<String, String>, String> {
@@ -172,7 +249,7 @@ impl Reconciler {
     #[must_use]
     pub fn couriers(
         graph: Arc<dyn RelationshipGraph>,
-        store: Arc<MemoryStore>,
+        store: Arc<dyn ReconciliationStore>,
         grace: Duration,
         page_size: u32,
         now: Now,
@@ -191,7 +268,7 @@ impl Reconciler {
     #[must_use]
     pub fn deliveries(
         graph: Arc<dyn RelationshipGraph>,
-        store: Arc<MemoryStore>,
+        store: Arc<dyn ReconciliationStore>,
         grace: Duration,
         page_size: u32,
         now: Now,
@@ -642,7 +719,7 @@ mod tests {
         let graph = Arc::new(FakeGraph::with([courier_self("courier-ghost")]));
         let mut reconciler = Reconciler::couriers(
             Arc::clone(&graph) as Arc<dyn RelationshipGraph>,
-            Arc::clone(&store),
+            Arc::clone(&store) as _,
             Duration::ZERO,
             500,
             Arc::new(Instant::now),
@@ -688,7 +765,7 @@ mod tests {
         )]));
         let mut reconciler = Reconciler::deliveries(
             Arc::clone(&graph) as Arc<dyn RelationshipGraph>,
-            Arc::clone(&store),
+            Arc::clone(&store) as _,
             Duration::ZERO,
             500,
             Arc::new(Instant::now),

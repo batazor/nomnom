@@ -19,7 +19,7 @@ chart сейчас не используется. Решение зафикси�
 
 | Ресурс | Назначение |
 | --- | --- |
-| `Deployment` | Один контейнер с образом приложения; все изменяемые параметры в `values.yaml`. |
+| `Deployment` | Контейнер приложения и init container миграций `delivery-migrate` того же образа; все изменяемые параметры в `values.yaml`. |
 | `Service` (`ClusterIP`, порт `8083`) | Backend target для internal gateway и технических механизмов Kubernetes. |
 | `ServiceAccount` | Отдельный аккаунт с `automountServiceAccountToken: false`. |
 | `ConfigMap` | Несекретная конфигурация из `env`; создаётся только если `env` не пуст. |
@@ -114,6 +114,16 @@ extraEnv:
 ```
 
 Secret-ресурсы chart не создаёт.
+
+## PostgreSQL
+
+Хранилище — PostgreSQL ([ADR 31](../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md),
+[ADR 0001 контекста](../docs/adr/0001-postgresql-хранилище-delivery.md)). Контейнер и init
+container `migrate` (`/usr/local/bin/delivery-migrate`, `database.migrate: true`) получают
+`DATABASE__URL` из Secret `database.urlSecret` (по умолчанию `delivery-postgres`, ключ `dsn`)
+и `DATABASE__MAX_CONNS` (`database.maxConns`). Secret создаёт развёртывание: в kind —
+`ops/kind/scripts/postgres.sh` вместе с базой `postgres-delivery`. Без Secret init container не
+рендерится, а процесс завершается ошибкой startup (`DATABASE__URL is required`).
 
 ## Service identity
 

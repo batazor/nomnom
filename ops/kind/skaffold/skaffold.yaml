@@ -244,6 +244,10 @@ profiles:
               dest: .
             - src: "slices/**/*.ts"
               dest: .
+      # Индекс releases: 1 — restaurants.
+      - op: add
+        path: /deploy/helm/releases/1/valuesFiles/-
+        value: ../values/restaurants-dev.yaml
       - op: replace
         path: /build/artifacts/3/docker/target
         value: dev

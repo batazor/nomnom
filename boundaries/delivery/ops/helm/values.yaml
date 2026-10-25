@@ -184,6 +184,19 @@ spicedb:
     name: ""
     key: "preshared-key"
 
+# PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста). DATABASE__URL берётся из Secret
+# database.urlSecret (secretKeyRef); без него процесс не стартует (fail fast). Secret
+# создаётся развёртыванием (root ops/kind: delivery-postgres, ключ dsn), не этим chart.
+# migrate: init container `delivery-migrate` перед процессом в каждом pod; advisory lock
+# sqlx сериализует миграции реплик.
+database:
+  urlSecret:
+    name: delivery-postgres
+    key: dsn
+  # Максимум соединений пула одного pod (DATABASE__MAX_CONNS).
+  maxConns: 10
+  migrate: true
+
 volumes: []
 volumeMounts: []
 

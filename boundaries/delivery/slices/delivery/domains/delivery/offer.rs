@@ -277,6 +277,8 @@ pub struct DeliveryOffer {
     offered_at_epoch_seconds: i64,
     expires_at_epoch_seconds: i64,
     state: OfferState,
+    /// Technical field: optimistic concurrency version of the stored snapshot.
+    version: u64,
 }
 
 impl DeliveryOffer {
@@ -315,7 +317,21 @@ impl DeliveryOffer {
             offered_at_epoch_seconds,
             expires_at_epoch_seconds,
             state,
+            version: 0,
         })
+    }
+
+    /// Snapshot field `version` (optimistic concurrency): the stored version
+    /// this offer was loaded at; `0` for a new offer.
+    #[must_use]
+    pub fn with_version(mut self, version: u64) -> Self {
+        self.version = version;
+        self
+    }
+
+    #[must_use]
+    pub const fn version(&self) -> u64 {
+        self.version
     }
 
     /// Pending and not past its deadline; the deadline itself is inclusive.

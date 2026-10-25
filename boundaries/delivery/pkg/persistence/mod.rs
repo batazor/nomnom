@@ -8,6 +8,9 @@ pub enum RepositoryError {
     /// A uniqueness or write precondition was violated by a concurrent or
     /// duplicate write.
     Conflict,
+    /// Optimistic concurrency check failed: the aggregate was changed by a
+    /// concurrent writer after it was loaded (stored version differs).
+    ConcurrentModification,
     /// The storage could not be reached or failed transiently.
     Unavailable(String),
 }
@@ -16,6 +19,9 @@ impl Display for RepositoryError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Conflict => formatter.write_str("storage write conflict"),
+            Self::ConcurrentModification => {
+                formatter.write_str("aggregate was modified concurrently")
+            }
             Self::Unavailable(reason) => write!(formatter, "storage unavailable: {reason}"),
         }
     }

@@ -42,3 +42,11 @@ interval = "5m"
 grace = "10m"
 # Размер страницы ReadRelationships (1..1000).
 page_size = 500
+
+[database]
+# PostgreSQL delivery (ADR 8, ADR 31, ADR 0001 контекста). Обязательно: пустой url
+# завершает startup процесса и `delivery-migrate`. Не храните URL с паролем в файле:
+# задавайте DATABASE__URL из Secret. Переменные: DATABASE__URL, DATABASE__MAX_CONNS.
+url = ""
+# Максимум соединений пула процесса.
+max_conns = 10

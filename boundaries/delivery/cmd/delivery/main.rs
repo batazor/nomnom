@@ -6,7 +6,6 @@ use std::time::{Duration, Instant};
 
 use delivery::di;
 use delivery::infrastructure::grpc::{GrpcWorker, subject_resolver};
-use delivery::infrastructure::memory::MemoryStore;
 use delivery::infrastructure::reconcile::{Reconciler, Schedule};
 use delivery::infrastructure::spicedb::{RelationshipGraph, SpiceDbRelationships};
 use delivery::pkg::config;
@@ -35,9 +34,10 @@ async fn run() -> Result<(), Box<dyn Error>> {
     // SpiceDB обязателен: проверки прав, запись relationships и reconciliation.
     let spicedb = di::spicedb(&config.spicedb)?;
     let graph: Arc<dyn RelationshipGraph> = Arc::new(spicedb.clone());
-    // Revisions записей relationships хранятся с Courier и Delivery; checks
-    // читают их из того же хранилища (FR-447).
-    let store = Arc::new(MemoryStore::new());
+    // PostgreSQL обязателен: пустой DATABASE__URL или недоступная база
+    // прерывают startup. Revisions записей relationships хранятся с Courier и
+    // Delivery; checks читают их из того же хранилища (FR-447).
+    let store: Arc<dyn di::ProcessStore> = Arc::new(di::postgres(&config.database)?);
     let process = di::build_process(
         Arc::clone(&store),
         Box::new(di::spicedb_authorization(spicedb, store)),
@@ -46,14 +46,14 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let reconcilers = vec![
         Reconciler::couriers(
             Arc::clone(&graph),
-            Arc::clone(&process.store),
+            Arc::clone(&process.store) as _,
             config.reconciler.grace,
             config.reconciler.page_size,
             Arc::new(Instant::now),
         ),
         Reconciler::deliveries(
             graph,
-            Arc::clone(&process.store),
+            Arc::clone(&process.store) as _,
             config.reconciler.grace,
             config.reconciler.page_size,
             Arc::new(Instant::now),

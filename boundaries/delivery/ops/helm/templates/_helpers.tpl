@@ -89,3 +89,21 @@ SpiceDB (ADR 18): при заданном endpoint preshared key обязате�
 {{- fail "spicedb.timeout is required when spicedb.endpoint is set" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+PostgreSQL (ADR 8, ADR 31): URL только из Secret database.urlSecret. Общий env процесса
+и init container миграций.
+*/}}
+{{- define "delivery.databaseEnv" -}}
+{{- with .Values.database }}
+{{- if .urlSecret.name }}
+- name: DATABASE__URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .urlSecret.name | quote }}
+      key: {{ .urlSecret.key | quote }}
+- name: DATABASE__MAX_CONNS
+  value: {{ .maxConns | quote }}
+{{- end }}
+{{- end }}
+{{- end }}

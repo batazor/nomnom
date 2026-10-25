@@ -20,7 +20,7 @@ Rust.
 
 ## Use Cases
 
-Статус реализации: все перечисленные Commands и Queries реализованы как application handlers (`Input` / `Output` / `Handler::execute`) по SDD change [`implement-delivery-application-layer`](../../openspec/changes/implement-delivery-application-layer/) с in-memory адаптерами портов; транспорт, хранилище и интеграционные адаптеры ещё не подключены. Требования — `FR-300`…`FR-318`, acceptance criteria — `AC-300`…`AC-343`. Командные use cases процесса исполнения заказа (Cancel Delivery, Replan Delivery) и их gRPC-методы добавлены по change [`add-fulfillment-command-rpcs`](../../openspec/changes/add-fulfillment-command-rpcs/) (`FR-429`, `AC-455`, `AC-456`).
+Статус реализации: все перечисленные Commands и Queries реализованы как application handlers (`Input` / `Output` / `Handler::execute`) по SDD change [`implement-delivery-application-layer`](../../openspec/changes/implement-delivery-application-layer/) ; хранилище — PostgreSQL (см. «Хранилище (PostgreSQL)»), Kafka-адаптеры ещё не подключены. Требования — `FR-300`…`FR-318`, acceptance criteria — `AC-300`…`AC-343`. Командные use cases процесса исполнения заказа (Cancel Delivery, Replan Delivery) и их gRPC-методы добавлены по change [`add-fulfillment-command-rpcs`](../../openspec/changes/add-fulfillment-command-rpcs/) (`FR-429`, `AC-455`, `AC-456`).
 
 ### Commands
 
@@ -153,7 +153,7 @@ SPICEDB_ENDPOINT=localhost:50051 cargo test --test spicedb_authorization
 
 Допущение: курьер — пользователь с тем же id (`courier_id` = `user_id`, см. `GLOSSARY.md`). Ошибка записи отменяет use case (fail closed, `UNAVAILABLE`). Повторы, не меняющие состояние (повторная регистрация, повторное принятие offer, повторная отмена, отмена доставки без курьера), ничего не пишут. Если запись прошла, а commit нет, лишнюю связь удалит reconciliation; `DELETE` до commit при неуспешном commit временно отнимает доступ, его восстановит reconciliation.
 
-Reconciliation (`infrastructure/reconcile.rs`, порт алгоритма `orders`): для `courier#self` (зарегистрированные курьеры) и `delivery#courier` (доставки с `courier_id`) граф читается страницами `ReadRelationships` с `fully_consistent`, хранилище — постранично по id и только committed state. Orphan/stale связь удаляется, только если была orphan на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` сразу; id вне грамматики SpiceDB `^[a-zA-Z0-9/_|\-=+]+$` пропускаются и считаются `unrepairable`. Каждый проход пишет в stdout `checked`, `orphans_pending`, `orphans_deleted`, `missing_repaired`, `unrepairable`. Хранилище пока в памяти процесса, поэтому reconciler — фоновая задача основного процесса (`ReconcilingWorker`): первый проход через `min(10s, interval)` после старта, остановка по сигналу shutdown (проход прерывается на границе страницы).
+Reconciliation (`infrastructure/reconcile.rs`, порт алгоритма `orders`): для `courier#self` (зарегистрированные курьеры) и `delivery#courier` (доставки с `courier_id`) граф читается страницами `ReadRelationships` с `fully_consistent`, хранилище — постранично по id и только committed state. Orphan/stale связь удаляется, только если была orphan на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` сразу; id вне грамматики SpiceDB `^[a-zA-Z0-9/_|\-=+]+$` пропускаются и считаются `unrepairable`. Каждый проход пишет в stdout `checked`, `orphans_pending`, `orphans_deleted`, `missing_repaired`, `unrepairable`. Reconciler читает PostgreSQL через порт `ReconciliationStore` и работает фоновой задачей основного процесса (`ReconcilingWorker`): первый проход через `min(10s, interval)` после старта, остановка по сигналу shutdown (проход прерывается на границе страницы).
 
 | Переменная | Ключ TOML | Значение |
 | --- | --- | --- |
@@ -169,6 +169,28 @@ Stubs `authzed.api.v1` теперь включают `CheckPermission`, `WriteRe
 
 ```bash
 make test-spicedb   # SPICEDB_ENDPOINT=localhost:50051, оба integration-набора
+```
+
+## Хранилище (PostgreSQL)
+
+[ADR 0001 контекста](docs/adr/0001-postgresql-хранилище-delivery.md), [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md). `PostgresStore` (`infrastructure/postgres`, `sqlx`) закрывает репозитории `Courier`, `Delivery`, `DeliveryOffer`, Outbox, `CourierLocationStore`, оба read model, `UnitOfWork` и `ReconciliationStore`. Схема — `infrastructure/postgres/migrations` (`sqlx::migrate!`), применяется процессом `delivery-migrate` (init container; advisory lock сериализует реплики).
+
+- **Optimistic concurrency.** `Courier`, `Delivery` и `DeliveryOffer` несут технический `version` (`with_version`/`version()`, как `authorization_revision`). `save` выполняет `UPDATE … SET version = version + 1 WHERE id = $1 AND version = $2`; 0 строк при существующем id — `RepositoryError::ConcurrentModification` → `ConcurrentModification` application error → gRPC `ABORTED` (клиент повторяет вызов целиком); отсутствующий id — `Conflict`. Запись revision reconciler'ом тоже увеличивает `version`. In-memory store проверяет версии так же.
+- **Unit of Work.** Порты не принимают handle транзакции: соединение текущей транзакции хранится в thread-local слоте store, поэтому записи агрегатов и Outbox внутри `run` фиксируются или откатываются вместе. Вложенные Unit of Work не поддерживаются.
+- **Outbox.** Таблица `delivery_outbox` по ADR 31; `event_id` — UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`, `aggregate_version` — версия, записанная той же транзакцией. Domain Event → Integration Event переводит `OutboxMapper` (`PostgresStore::with_outbox_mapper`); по умолчанию `NoIntegrationEvents` — ничего не пишется.
+- **Sync порты над async sqlx.** Store владеет tokio runtime пула; вызовы идут через `block_in_place` на multi-thread runtime процесса и через scoped thread на current-thread runtime.
+
+| Переменная | Ключ | Назначение |
+| --- | --- | --- |
+| `DATABASE__URL` | `database.url` | URL `postgres://user:password@host:5432/db`; только из Secret. Пусто или база недоступна — ошибка startup процесса и `delivery-migrate` |
+| `DATABASE__MAX_CONNS` | `database.max_conns` | Размер пула, по умолчанию `10` |
+
+Integration-тесты (`tests/postgres_store.rs`: CRUD, конфликт двух конкурентных `save`, атомарность агрегата и Outbox, read models, reconciliation, оба вида runtime) выполняются только при заданном `DATABASE_URL`:
+
+```bash
+docker run -d --rm --name delivery-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18
+DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres cargo test --test postgres_store
+docker stop delivery-pg
 ```
 
 ## Минимальная доменная модель
@@ -223,7 +245,7 @@ Application handler загружает `Courier`, `Delivery` и `DeliveryOffer` 
 В `delivery` граф зависимостей описывается модулями [`shaku`](https://github.com/AzureMarker/shaku), которые проверяются при компиляции. Handlers по-прежнему получают зависимости явно (`&dyn Trait`) и создаются в тестах без контейнера.
 
 - `slices/<slice>/di` — shaku-модуль слайса: интерфейс внешних портов (`CourierPorts`, `DeliveryPorts`), интерфейс use cases (`CourierUseCases`, `DeliveryUseCases`) и их реализация, которая собирает handler на каждый вызов. Порты слайс получает через submodule (`CourierDependencies`, `DeliveryDependencies`).
-- `di` — корневой composition root: выбирает реализации портов (авторизация — `SpiceDbAuthorization` при заданном `SPICEDB__ENDPOINT`, иначе локальная; остальное — in-memory адаптеры из `infrastructure::memory` и одно общее хранилище на оба слайса), задаёт `AssignmentPolicy` и собирает итоговый `ServiceModule`.
+- `di` — корневой composition root: выбирает реализации портов (авторизация — `SpiceDbAuthorization` при заданном `SPICEDB__ENDPOINT`, иначе локальная; хранилище — один `PostgresStore` на оба слайса за интерфейсом `ProcessStore`; тестовый граф `di::build()` и locator — in-memory адаптеры из `infrastructure::memory`), задаёт `AssignmentPolicy` и собирает итоговый `ServiceModule`.
 - `cmd/delivery` — загружает конфигурацию (невалидная завершает процесс до открытия портов), собирает модуль, открывает бизнес-порт через `di::HttpWorker` и передаёт его `pkg::lifecycle::Lifecycle`.
 
 Shaku импортируют только модули `di`; `domains/` и `applications/` от него не зависят. Shaku требует `Send + Sync` от интерфейсов и создаёт отдельный экземпляр на каждый компонент, поэтому порты, которые обслуживает одно хранилище, собраны в интерфейс-агрегатор слайса. Generic `UnitOfWork` передаётся через object-safe `TransactionScope` и адаптер `ScopedUnitOfWork` из `pkg/application`.
@@ -243,7 +265,7 @@ Shaku импортируют только модули `di`; `domains/` и `appl
 
 Consumers интеграционных событий `delivery` используют Transactional Inbox по общесистемному [ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md). Проверка `event_id`, изменение состояния доставки, запись Inbox и, если обработчик публикует новое событие, запись Outbox выполняются в одной локальной транзакции. Kafka offset подтверждается только после commit.
 
-Хранилище `delivery` ещё не выбрано. Его выбор должен подтвердить атомарную уникальность `(consumer, event_id)` вместе с изменением business state, а также transaction capabilities для Unit of Work и защиту конкурентных courier assignments — см. [документацию Unit of Work](../../docs/unit-of-work.md#delivery) и [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md). Kafka-клиент, схема Inbox и адаптеры относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+Хранилище `delivery` — PostgreSQL ([ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md), [ADR 0001 контекста](docs/adr/0001-postgresql-хранилище-delivery.md)): Unit of Work, optimistic concurrency и таблица Outbox реализованы, Inbox — следующий шаг; см. [документацию Unit of Work](../../docs/unit-of-work.md#delivery) и [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md). Kafka-клиент, схема Inbox и адаптеры относятся к следующим шагам. Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 ## Observability
 
@@ -258,9 +280,10 @@ Consumers интеграционных событий `delivery` использ�
 - порты: `UnitOfWork`, `Clock`, `IdGenerator`, `Subject`/`AuthorizationError` (`pkg/application`), `RepositoryError` (`pkg/persistence`), `CourierAuthorization` и `DeliveryAuthorization`, `DeliveryOutbox`, `CourierLocator`, `CourierLocationStore`, read models `CourierCurrentDeliveryReadModel` и `PendingDeliveryOffersReadModel`, параметры `AssignmentPolicy`;
 - `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27);
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
+- `PostgresStore` (`infrastructure/postgres`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox ADR 31, миграции `delivery-migrate`;
 - in-memory адаптеры всех портов в `infrastructure/memory` (транзакционный store с rollback и инъекцией сбоя commit, статическая authorization, управляемые clock и id generator, статический locator) — только для тестов и локальной сборки.
 
-Не реализованы: постоянное хранилище и optimistic concurrency, Outbox relay и Kafka, user identity через BFF (ADR 27 оставляет её открытой), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
+Не реализованы: Protobuf-мапперы Outbox (по умолчанию `NoIntegrationEvents`), Outbox relay и Kafka, Inbox, user identity через BFF (ADR 27 оставляет её открытой), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
 
 Допущения по открытым продуктовым вопросам (момент начала поиска курьера, retryability причин неудачи, параметры позиции и политики назначения) зафиксированы в [design.md](../../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам) change.
 

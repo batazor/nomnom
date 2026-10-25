@@ -20,11 +20,11 @@ pub trait RevisionReader: Send + Sync {
 }
 
 /// [`RevisionReader`] поверх репозиториев `Courier` и `Delivery`.
-pub struct RepositoryRevisions<S>(pub Arc<S>);
+pub struct RepositoryRevisions<S: ?Sized>(pub Arc<S>);
 
 impl<S> RevisionReader for RepositoryRevisions<S>
 where
-    S: CourierRepository + DeliveryRepository + Send + Sync,
+    S: ?Sized + CourierRepository + DeliveryRepository + Send + Sync,
 {
     fn revision(
         &self,

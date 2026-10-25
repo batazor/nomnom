@@ -29,6 +29,8 @@ pub enum CourierApplicationError {
     CourierAlreadyRegistered(CourierId),
     /// The current courier state forbids the operation.
     PreconditionFailed(CourierError),
+    /// The aggregate was changed concurrently; the caller may retry.
+    ConcurrentModification,
     DependencyUnavailable(String),
     Internal(String),
 }
@@ -43,6 +45,7 @@ impl Display for CourierApplicationError {
                 write!(formatter, "courier {} is already registered", id.as_str())
             }
             Self::PreconditionFailed(error) => write!(formatter, "precondition failed: {error}"),
+            Self::ConcurrentModification => formatter.write_str("concurrent modification, retry"),
             Self::DependencyUnavailable(reason) => {
                 write!(formatter, "dependency unavailable: {reason}")
             }
@@ -66,6 +69,7 @@ impl From<RepositoryError> for CourierApplicationError {
     fn from(error: RepositoryError) -> Self {
         match error {
             RepositoryError::Conflict => Self::Internal(error.to_string()),
+            RepositoryError::ConcurrentModification => Self::ConcurrentModification,
             RepositoryError::Unavailable(reason) => Self::DependencyUnavailable(reason),
         }
     }

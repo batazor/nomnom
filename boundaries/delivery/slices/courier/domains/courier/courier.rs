@@ -62,6 +62,8 @@ pub struct Courier {
     status: CourierStatus,
     /// Technical field: revision of the last `courier:<id>#self` write.
     authorization_revision: Option<AuthorizationRevision>,
+    /// Technical field: optimistic concurrency version of the stored snapshot.
+    version: u64,
 }
 
 impl Courier {
@@ -71,6 +73,7 @@ impl Courier {
             id,
             status: CourierStatus::Available,
             authorization_revision: None,
+            version: 0,
         }
     }
 
@@ -82,7 +85,21 @@ impl Courier {
             id,
             status,
             authorization_revision: None,
+            version: 0,
         }
+    }
+
+    /// Snapshot field `version` (optimistic concurrency): the stored version
+    /// this aggregate was loaded at; `0` for a new aggregate.
+    #[must_use]
+    pub fn with_version(mut self, version: u64) -> Self {
+        self.version = version;
+        self
+    }
+
+    #[must_use]
+    pub const fn version(&self) -> u64 {
+        self.version
     }
 
     /// Snapshot field `authorization_revision`, absent in old snapshots.

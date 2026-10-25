@@ -1,9 +1,10 @@
 //! Composition root процесса `delivery`: выбирает реализации портов и
 //! собирает shaku-модули слайсов в итоговый [`ServiceModule`].
 //!
-//! Авторизация — SpiceDB (`infrastructure::spicedb`), если задан
-//! `SPICEDB__ENDPOINT`. Пока хранилище и locator не выбраны, остальные порты
-//! закрываются in-memory адаптерами из `infrastructure::memory`.
+//! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
+//! PostgreSQL (`infrastructure::postgres`, ADR 0001 контекста). Тестовый граф
+//! [`build`] и locator пока закрываются in-memory адаптерами из
+//! `infrastructure::memory`.
 
 mod http_worker;
 mod reconciling_worker;
@@ -20,11 +21,13 @@ use crate::infrastructure::memory::{
     MemoryStore, RecordingRelationships, SequentialIdGenerator, StaticAuthorization,
     StaticCourierLocator,
 };
+use crate::infrastructure::postgres::PostgresStore;
+use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::infrastructure::spicedb::{
     RepositoryRevisions, RevisionReader, SpiceDbAuthorization, SpiceDbClient, SpiceDbConfigError,
 };
 use crate::pkg::application::{Clock, IdGenerator, TransactionScope};
-use crate::pkg::config::{SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
+use crate::pkg::config::{DatabaseConfig, SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
@@ -52,23 +55,57 @@ const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
     offer_ttl_seconds: 60,
 };
 
+/// Все порты хранилища процесса: репозитории, Outbox, read models, Unit of
+/// Work и чтение reconciliation. Закрывается одним адаптером
+/// ([`PostgresStore`] в процессе, [`MemoryStore`] в тестах), поэтому Unit of
+/// Work охватывает записи обоих слайсов и Outbox.
+pub trait ProcessStore:
+    CourierRepository
+    + CourierLocationStore
+    + CourierCurrentDeliveryReadModel
+    + DeliveryRepository
+    + DeliveryOfferRepository
+    + PendingDeliveryOffersReadModel
+    + DeliveryOutbox
+    + TransactionScope
+    + ReconciliationStore
+    + Send
+    + Sync
+{
+}
+
+impl<T> ProcessStore for T where
+    T: CourierRepository
+        + CourierLocationStore
+        + CourierCurrentDeliveryReadModel
+        + DeliveryRepository
+        + DeliveryOfferRepository
+        + PendingDeliveryOffersReadModel
+        + DeliveryOutbox
+        + TransactionScope
+        + ReconciliationStore
+        + Send
+        + Sync
+{
+}
+
 /// Общее хранилище: одно на процесс, чтобы Unit of Work, репозитории и
 /// Outbox обоих слайсов работали с одними данными.
 pub trait SharedStore: Interface {
-    fn store(&self) -> &MemoryStore;
+    fn store(&self) -> &dyn ProcessStore;
 }
 
 #[derive(Component)]
 #[shaku(interface = SharedStore)]
 pub struct LocalStore {
     /// Shared with the reconciler, which reads business state of the process.
-    #[shaku(default)]
-    store: Arc<MemoryStore>,
+    #[shaku(default = Arc::new(MemoryStore::new()))]
+    store: Arc<dyn ProcessStore>,
 }
 
 impl SharedStore for LocalStore {
-    fn store(&self) -> &MemoryStore {
-        &self.store
+    fn store(&self) -> &dyn ProcessStore {
+        &*self.store
     }
 }
 
@@ -95,6 +132,12 @@ pub fn spicedb(config: &SpiceDbConfig) -> Result<SpiceDbClient, SpiceDbConfigErr
         return Err(SpiceDbConfigError::missing_endpoint(SPICEDB_ENDPOINT_ENV));
     }
     SpiceDbClient::connect(config)
+}
+
+/// Хранилище процесса — PostgreSQL. Пустой `DATABASE__URL` или недоступная
+/// база — ошибка startup (fail fast).
+pub fn postgres(config: &DatabaseConfig) -> Result<PostgresStore, String> {
+    PostgresStore::connect(config)
 }
 
 /// Разрешающая авторизация тестового графа `build()`; процесс без SpiceDB не
@@ -346,7 +389,7 @@ pub fn build_with_authorization(authorization: Box<dyn ProcessAuthorization>) ->
 /// Граф процесса и его хранилище: хранилище читает reconciler.
 pub struct Process {
     pub module: ServiceModule,
-    pub store: Arc<MemoryStore>,
+    pub store: Arc<dyn ProcessStore>,
 }
 
 /// Собирает граф процесса над `store` с выбранными адаптерами авторизации и
@@ -354,7 +397,7 @@ pub struct Process {
 /// reconciler и [`RevisionReader`] авторизации.
 #[must_use]
 pub fn build_process(
-    store: Arc<MemoryStore>,
+    store: Arc<dyn ProcessStore>,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn ProcessRelationships>,
 ) -> Process {
@@ -371,7 +414,7 @@ pub fn build_process(
 #[must_use]
 pub fn spicedb_authorization(
     client: SpiceDbClient,
-    store: Arc<MemoryStore>,
+    store: Arc<dyn ProcessStore>,
 ) -> SpiceDbAuthorization {
     SpiceDbAuthorization::new(Box::new(client))
         .with_revisions(Arc::new(RepositoryRevisions(store)) as Arc<dyn RevisionReader>)
@@ -390,7 +433,7 @@ pub(crate) fn build_with_locator(locator: StaticCourierLocator) -> ServiceModule
 }
 
 fn assemble(
-    store: Arc<MemoryStore>,
+    store: Arc<dyn ProcessStore>,
     locator: StaticCourierLocator,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn ProcessRelationships>,

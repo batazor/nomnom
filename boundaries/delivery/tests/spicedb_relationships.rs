@@ -411,13 +411,13 @@ fn reconciler_restores_lost_and_deletes_orphan_after_grace() {
     let grace = Duration::from_secs(600);
     let mut deliveries = Reconciler::deliveries(
         Arc::clone(&graph),
-        Arc::clone(&store),
+        Arc::clone(&store) as _,
         grace,
         500,
         now.clone(),
     );
     let mut couriers =
-        Reconciler::couriers(Arc::clone(&graph), Arc::clone(&store), grace, 500, now);
+        Reconciler::couriers(Arc::clone(&graph), Arc::clone(&store) as _, grace, 500, now);
     // Orphans carry no revision: they are checked with `minimize_latency`.
     let unrevisioned = adapter(&client, &store);
 

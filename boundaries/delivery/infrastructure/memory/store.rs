@@ -31,6 +31,7 @@ struct DeliveryRecord {
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
     authorization_revision: Option<AuthorizationRevision>,
+    version: u64,
 }
 
 impl DeliveryRecord {
@@ -44,6 +45,7 @@ impl DeliveryRecord {
             state: delivery.state(),
             failure_reason: delivery.failure_reason().cloned(),
             authorization_revision: delivery.authorization_revision().cloned(),
+            version: delivery.version(),
         }
     }
 
@@ -57,7 +59,11 @@ impl DeliveryRecord {
             self.state,
             self.failure_reason.clone(),
         )
-        .map(|delivery| delivery.with_authorization_revision(self.authorization_revision.clone()))
+        .map(|delivery| {
+            delivery
+                .with_authorization_revision(self.authorization_revision.clone())
+                .with_version(self.version)
+        })
         .map_err(|error| RepositoryError::Unavailable(format!("corrupt delivery record: {error}")))
     }
 }
@@ -211,6 +217,7 @@ impl MemoryStore {
             return Ok(false);
         };
         courier.record_authorization_revision(revision);
+        *courier = courier.clone().with_version(courier.version() + 1);
         Ok(true)
     }
 
@@ -234,6 +241,7 @@ impl MemoryStore {
             return Ok(false);
         }
         record.authorization_revision = Some(revision);
+        record.version += 1;
         Ok(true)
     }
 
@@ -304,7 +312,10 @@ impl CourierRepository for MemoryStore {
             .couriers
             .get_mut(courier.id().as_str())
             .ok_or(RepositoryError::Conflict)?;
-        *stored = courier.clone();
+        if stored.version() != courier.version() {
+            return Err(RepositoryError::ConcurrentModification);
+        }
+        *stored = courier.clone().with_version(courier.version() + 1);
         Ok(())
     }
 }
@@ -367,7 +378,11 @@ impl DeliveryRepository for MemoryStore {
             .deliveries
             .get_mut(delivery.id().as_str())
             .ok_or(RepositoryError::Conflict)?;
+        if stored.version != delivery.version() {
+            return Err(RepositoryError::ConcurrentModification);
+        }
         *stored = DeliveryRecord::from_domain(delivery);
+        stored.version += 1;
         Ok(())
     }
 }
@@ -411,7 +426,10 @@ impl DeliveryOfferRepository for MemoryStore {
             .iter_mut()
             .find(|stored| stored.id() == offer.id())
             .ok_or(RepositoryError::Conflict)?;
-        *stored = offer.clone();
+        if stored.version() != offer.version() {
+            return Err(RepositoryError::ConcurrentModification);
+        }
+        *stored = offer.clone().with_version(offer.version() + 1);
         Ok(())
     }
 }
@@ -572,6 +590,26 @@ mod tests {
         DeliveryRepository::add(&store, &delivery("delivery-1")).expect("first");
         assert_eq!(
             DeliveryRepository::add(&store, &delivery("delivery-2")),
+            Err(RepositoryError::Conflict)
+        );
+    }
+
+    #[test]
+    fn stale_save_is_a_concurrent_modification() {
+        let store = MemoryStore::new();
+        CourierRepository::add(&store, &courier("courier-1")).expect("seed");
+        let first = CourierRepository::get(&store, &CourierId::new("courier-1"))
+            .expect("read")
+            .expect("courier");
+        let second = first.clone();
+
+        CourierRepository::save(&store, &first).expect("first writer wins");
+        assert_eq!(
+            CourierRepository::save(&store, &second),
+            Err(RepositoryError::ConcurrentModification)
+        );
+        assert_eq!(
+            CourierRepository::save(&store, &courier("courier-2")),
             Err(RepositoryError::Conflict)
         );
     }

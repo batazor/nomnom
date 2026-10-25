@@ -48,6 +48,8 @@ pub enum DeliveryApplicationError {
     OfferPrecondition(DeliveryOfferError),
     /// No position snapshot exists for the courier.
     CourierPositionUnknown(CourierId),
+    /// The aggregate was changed concurrently; the caller may retry.
+    ConcurrentModification,
     DependencyUnavailable(String),
     /// The local transaction failed to commit or its outcome is unknown.
     Transaction(UnitOfWorkError),
@@ -82,6 +84,7 @@ impl Display for DeliveryApplicationError {
             Self::CourierPositionUnknown(id) => {
                 write!(formatter, "position of courier {} is unknown", id.as_str())
             }
+            Self::ConcurrentModification => formatter.write_str("concurrent modification, retry"),
             Self::DependencyUnavailable(reason) => {
                 write!(formatter, "dependency unavailable: {reason}")
             }
@@ -106,6 +109,7 @@ impl From<RepositoryError> for DeliveryApplicationError {
     fn from(error: RepositoryError) -> Self {
         match error {
             RepositoryError::Conflict => Self::Internal(error.to_string()),
+            RepositoryError::ConcurrentModification => Self::ConcurrentModification,
             RepositoryError::Unavailable(reason) => Self::DependencyUnavailable(reason),
         }
     }

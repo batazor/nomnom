@@ -27,6 +27,8 @@ pub struct Delivery {
     failure_reason: Option<DeliveryFailureReason>,
     /// Technical field: revision of the last `delivery:<id>#courier` write.
     authorization_revision: Option<AuthorizationRevision>,
+    /// Technical field: optimistic concurrency version of the stored snapshot.
+    version: u64,
     events: Vec<DomainEvent>,
 }
 
@@ -47,6 +49,7 @@ impl Delivery {
             state: State::Waiting,
             failure_reason: None,
             authorization_revision: None,
+            version: 0,
             events: Vec::new(),
         }
     }
@@ -84,8 +87,22 @@ impl Delivery {
             state,
             failure_reason,
             authorization_revision: None,
+            version: 0,
             events: Vec::new(),
         })
+    }
+
+    /// Snapshot field `version` (optimistic concurrency): the stored version
+    /// this aggregate was loaded at; `0` for a new aggregate.
+    #[must_use]
+    pub fn with_version(mut self, version: u64) -> Self {
+        self.version = version;
+        self
+    }
+
+    #[must_use]
+    pub const fn version(&self) -> u64 {
+        self.version
     }
 
     /// Snapshot field `authorization_revision`, absent in old snapshots.

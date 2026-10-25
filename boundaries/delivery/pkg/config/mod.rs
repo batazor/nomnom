@@ -62,6 +62,74 @@ pub const RECONCILER_PAGE_SIZE_ENV: &str = "RECONCILER__PAGE_SIZE";
 /// Максимум `ReadRelationships` limit SpiceDB по умолчанию.
 pub const MAX_RECONCILER_PAGE_SIZE: u32 = 1000;
 
+/// PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста): ключ, переменная, значение по умолчанию.
+const DATABASE_SETTINGS: [(&str, &str, &str); 2] = [
+    ("database.url", DATABASE_URL_ENV, ""),
+    (
+        "database.max_conns",
+        DATABASE_MAX_CONNS_ENV,
+        DEFAULT_DATABASE_MAX_CONNS,
+    ),
+];
+pub const DATABASE_URL_ENV: &str = "DATABASE__URL";
+pub const DATABASE_MAX_CONNS_ENV: &str = "DATABASE__MAX_CONNS";
+pub const DEFAULT_DATABASE_MAX_CONNS: &str = "10";
+
+/// Хранилище `delivery`. URL обязателен для процесса и миграций: пустое
+/// значение завершает startup (см. `di::postgres`). URL приходит из Secret.
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct DatabaseConfig {
+    /// libpq connection string или URL `postgres://user:password@host/db`.
+    pub url: String,
+    /// Максимум соединений пула процесса.
+    pub max_conns: u32,
+}
+
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            max_conns: 10,
+        }
+    }
+}
+
+/// URL содержит пароль и не попадает в логи.
+impl std::fmt::Debug for DatabaseConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("DatabaseConfig")
+            .field(
+                "url",
+                &if self.url.is_empty() {
+                    ""
+                } else {
+                    "<redacted>"
+                },
+            )
+            .field("max_conns", &self.max_conns)
+            .finish()
+    }
+}
+
+impl DatabaseConfig {
+    /// PostgreSQL задан, если задан URL.
+    #[must_use]
+    pub fn enabled(&self) -> bool {
+        !self.url.trim().is_empty()
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        if self.max_conns == 0 {
+            return Err(ConfigError::Message(
+                "database max_conns must be positive".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Фоновая сверка relationships `courier#self` и `delivery#courier` с
 /// business state процесса.
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -216,6 +284,7 @@ pub struct AppConfig {
     pub identity: IdentityConfig,
     pub spicedb: SpiceDbConfig,
     pub reconciler: ReconcilerConfig,
+    pub database: DatabaseConfig,
 }
 
 pub fn load() -> Result<AppConfig, ConfigError> {
@@ -236,6 +305,7 @@ fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigError> {
     builder = configure_identity(builder, |name| std::env::var(name).ok())?;
     builder = configure_spicedb(builder, |name| std::env::var(name).ok())?;
     builder = configure_reconciler(builder, |name| std::env::var(name).ok())?;
+    builder = configure_database(builder, |name| std::env::var(name).ok())?;
 
     let config: AppConfig = builder.build()?.try_deserialize()?;
     config.server.validate()?;
@@ -243,6 +313,7 @@ fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigError> {
     config.shutdown.validate()?;
     config.spicedb.validate()?;
     config.reconciler.validate()?;
+    config.database.validate()?;
 
     Ok(config)
 }
@@ -307,6 +378,19 @@ fn configure_spicedb(
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
     for (key, name, default) in SPICEDB_SETTINGS {
+        builder = builder.set_default(key, default)?;
+        if let Some(value) = env(name) {
+            builder = builder.set_override(key, value)?;
+        }
+    }
+    Ok(builder)
+}
+
+fn configure_database(
+    mut builder: ConfigBuilder<DefaultState>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    for (key, name, default) in DATABASE_SETTINGS {
         builder = builder.set_default(key, default)?;
         if let Some(value) = env(name) {
             builder = builder.set_override(key, value)?;

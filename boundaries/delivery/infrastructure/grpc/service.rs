@@ -177,6 +177,7 @@ fn transport_error(error: CourierApplicationError) -> Status {
         CourierApplicationError::PreconditionFailed(_) => {
             Status::failed_precondition(error.to_string())
         }
+        CourierApplicationError::ConcurrentModification => Status::aborted(error.to_string()),
         CourierApplicationError::DependencyUnavailable(_) => Status::unavailable(error.to_string()),
         CourierApplicationError::Internal(_) => Status::internal("internal error"),
     }
@@ -201,6 +202,8 @@ fn delivery_transport_error(error: DeliveryApplicationError) -> Status {
         | DeliveryApplicationError::CourierPositionUnknown(_) => {
             Status::failed_precondition(error.to_string())
         }
+        // A lost optimistic concurrency race: the client retries the whole call.
+        DeliveryApplicationError::ConcurrentModification => Status::aborted(error.to_string()),
         // An unknown commit outcome is resolved by an idempotent retry.
         DeliveryApplicationError::DependencyUnavailable(_)
         | DeliveryApplicationError::Transaction(_) => Status::unavailable(error.to_string()),
@@ -253,6 +256,18 @@ impl Worker for GrpcWorker {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn concurrent_modification_maps_to_aborted() {
+        assert_eq!(
+            delivery_transport_error(DeliveryApplicationError::ConcurrentModification).code(),
+            tonic::Code::Aborted
+        );
+        assert_eq!(
+            transport_error(CourierApplicationError::ConcurrentModification).code(),
+            tonic::Code::Aborted
+        );
+    }
+
     use super::super::v1::delivery_service_client::DeliveryServiceClient;
     use super::*;
     use crate::infrastructure::memory::StaticCourierLocator;

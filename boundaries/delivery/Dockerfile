@@ -15,7 +15,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/src/target \
     CARGO_PROFILE_RELEASE_DEBUG=1 cargo build --release --locked && \
-    cp target/release/delivery /out-delivery
+    cp target/release/delivery /out-delivery && \
+    cp target/release/delivery-migrate /out-delivery-migrate
 
 FROM debian:12.12-slim AS runtime
 
@@ -26,6 +27,7 @@ RUN apt-get update && \
     useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent app
 
 COPY --from=build --chown=app:app /out-delivery /usr/local/bin/delivery
+COPY --from=build --chown=app:app /out-delivery-migrate /usr/local/bin/delivery-migrate
 
 EXPOSE 8083 9083
 USER app:app
