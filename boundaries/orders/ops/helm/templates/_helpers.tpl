@@ -82,3 +82,22 @@ PostgreSQL env (ADR 8): DSN из внешнего Secret. Без dsnSecret.name 
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+OpenTelemetry resource (ADR 9): service.instance.id — имя pod (downward API),
+service.version — неизменяемый image.tag. Остальные атрибуты окружения задаются
+telemetry.resourceAttributes: явная env имеет приоритет над envFrom, поэтому
+OTEL_RESOURCE_ATTRIBUTES в env была бы перекрыта.
+*/}}
+{{- define "orders.otelEnv" -}}
+{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "unknown" .Values.image.tag)) -}}
+{{- range $key, $value := .Values.telemetry.resourceAttributes }}
+{{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
+{{- end }}
+- name: POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: {{ join "," $attrs | quote }}
+{{- end }}

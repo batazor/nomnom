@@ -198,3 +198,10 @@ postgres:
     key: dsn
   maxConns: 10
   migrate: true
+
+# ADR 9: OTel resource attributes процесса. service.instance.id (имя pod) и service.version
+# (image.tag) chart задаёт сам; здесь — атрибуты окружения, например
+# deployment.environment.name. Не задавать OTEL_RESOURCE_ATTRIBUTES через env: явная
+# переменная chart её перекроет.
+telemetry:
+  resourceAttributes: {}

@@ -105,6 +105,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- include "orders.postgresEnv" . | nindent 12 }}
+            {{- include "orders.otelEnv" . | nindent 12 }}
             {{- with .Values.spicedb }}
             {{- if .endpoint }}
             - name: SPICEDB__ENDPOINT
