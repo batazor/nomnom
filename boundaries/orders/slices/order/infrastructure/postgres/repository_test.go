@@ -27,9 +27,11 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	assert.Equal(t, order.StatePlaced, loaded.State())
 	assert.Equal(t, "20", loaded.Total().Amount().String())
 
-	_, err = loaded.Confirm(ordertest.PlacedAt.Add(time.Minute))
+	acceptedAt := ordertest.PlacedAt.Add(time.Minute)
+	preparingAt := ordertest.PlacedAt.Add(2 * time.Minute)
+	_, err = loaded.Confirm(acceptedAt)
 	require.NoError(t, err)
-	_, err = loaded.RecordPreparationStarted(ordertest.PlacedAt.Add(time.Minute))
+	_, err = loaded.RecordPreparationStarted(preparingAt)
 	require.NoError(t, err)
 	require.NoError(t, store.Save(ctx, loaded))
 
@@ -37,12 +39,12 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), saved.Version())
 	assert.Equal(t, order.StateConfirmed, saved.State())
-	// Confirm records restaurant_accepted with the transition.
-	facts := make([]order.FulfillmentFact, 0, len(saved.Facts()))
-	for _, recorded := range saved.Facts() {
-		facts = append(facts, recorded.Fact)
-	}
-	assert.ElementsMatch(t, []order.FulfillmentFact{order.FactRestaurantAccepted, order.FactPreparationStarted}, facts)
+	// Confirm records restaurant_accepted with the transition (AC-563); facts
+	// load in the order they occurred.
+	assert.Equal(t, []order.RecordedFact{
+		{Fact: order.FactRestaurantAccepted, OccurredAt: acceptedAt},
+		{Fact: order.FactPreparationStarted, OccurredAt: preparingAt},
+	}, saved.Facts())
 	assert.Equal(t, ordertest.New(t, id).Items(), saved.Items())
 }
 
