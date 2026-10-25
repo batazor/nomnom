@@ -58,6 +58,35 @@ function placeInput(overrides: Record<string, unknown> = {}) {
 }
 
 describe("mock store", () => {
+  it("lists open restaurants only, page by page", async () => {
+    const store = createMockStore();
+    const list = `query ($first: Int!, $after: String) {
+      restaurants(first: $first, after: $after) {
+        edges { node { id acceptingOrders } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`;
+    type ListData = {
+      restaurants: {
+        edges: { node: { id: string; acceptingOrders: boolean } }[];
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      };
+    };
+    const first = await run<ListData>(store, list, { first: 4 });
+    const rest = await run<ListData>(store, list, {
+      first: 4,
+      after: first.restaurants.pageInfo.endCursor,
+    });
+    const nodes = [...first.restaurants.edges, ...rest.restaurants.edges].map(
+      (edge) => edge.node,
+    );
+
+    expect(first.restaurants.pageInfo.hasNextPage).toBe(true);
+    expect(rest.restaurants.pageInfo.hasNextPage).toBe(false);
+    expect(nodes.every((node) => node.acceptingOrders)).toBe(true);
+    expect(nodes.map((node) => node.id)).not.toContain(nightBakery.id);
+  });
+
   it("returns null for a missing order", async () => {
     const data = await run<OrderData>(createMockStore(), orderStatus, {
       id: "order-unknown",

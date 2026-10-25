@@ -182,7 +182,12 @@ export function createMockStore({
 
   const rootValue = {
     bffInfo: () => bffInfoFixture,
-    restaurants: (args: PageArgs) => paginate(restaurantFixtures, args),
+    // Like ListRestaurants by default, the catalog lists open restaurants only.
+    restaurants: (args: PageArgs) =>
+      paginate(
+        restaurantFixtures.filter((restaurant) => restaurant.acceptingOrders),
+        args,
+      ),
     restaurant: ({ id }: { id: string }) =>
       restaurantFixtures.find((restaurant) => restaurant.id === id) ?? null,
     order: ({ id }: { id: string }) => {

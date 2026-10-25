@@ -129,9 +129,87 @@ export const nightBakery: MockRestaurant = {
   },
 };
 
+function item(
+  id: string,
+  name: string,
+  amount: string,
+  description: string | null = null,
+): MockMenuItem {
+  return { id, name, description, price: rub(amount), available: true };
+}
+
+// Open restaurants beyond the first page of the catalog, so that "show more"
+// has something to load.
+const moreRestaurants: MockRestaurant[] = [
+  {
+    id: "restaurant-north-dumplings",
+    name: "Пельменная «Север»",
+    address: "ул. Полярная, 3",
+    acceptingOrders: true,
+    menu: {
+      items: [
+        item(
+          "menu-pelmeni",
+          "Пельмени с говядиной",
+          "390.00",
+          "Сметана и укроп",
+        ),
+        item("menu-vareniki", "Вареники с вишней", "350.00"),
+      ],
+    },
+  },
+  {
+    id: "restaurant-georgian-yard",
+    name: "Грузинский дворик",
+    address: "пер. Тбилисский, 5",
+    acceptingOrders: true,
+    menu: {
+      items: [
+        item("menu-khachapuri", "Хачапури по-аджарски", "520.00"),
+        item("menu-khinkali", "Хинкали, 5 шт.", "450.00"),
+      ],
+    },
+  },
+  {
+    id: "restaurant-sora-ramen",
+    name: "Рамен-бар Сора",
+    address: "ул. Восточная, 17",
+    acceptingOrders: true,
+    menu: {
+      items: [item("menu-shoyu", "Сёю рамен", "640.00", "Курица, яйцо, нори")],
+    },
+  },
+  {
+    id: "restaurant-green-bowl",
+    name: "Овощи и злаки",
+    address: "Зелёный бульвар, 9",
+    acceptingOrders: true,
+    menu: {
+      items: [item("menu-buddha-bowl", "Боул с киноа", "480.50")],
+    },
+  },
+  {
+    id: "restaurant-bridge-pizza",
+    name: "Пицца у моста",
+    address: "наб. Речная, 21",
+    acceptingOrders: true,
+    menu: {
+      items: [item("menu-margherita", "Маргарита", "560.00")],
+    },
+  },
+  {
+    id: "restaurant-corner-coffee",
+    name: "Кофейня на углу",
+    address: "ул. Садовая, 1",
+    acceptingOrders: true,
+    menu: null,
+  },
+];
+
 export const restaurantFixtures: readonly MockRestaurant[] = [
   kitchenEight,
   nightBakery,
+  ...moreRestaurants,
 ];
 
 export const deliveryAddressFixture = "ул. Лесная, 12, кв. 47";
