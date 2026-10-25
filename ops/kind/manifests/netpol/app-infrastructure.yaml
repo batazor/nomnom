@@ -1,5 +1,6 @@
 # Инфраструктурные подключения через штатные endpoints, по владельцам.
-# Доступ к БД есть только у её владельца; BFF и фикстура инфраструктуру не используют.
+# Доступ к БД есть только у её владельца; фикстура инфраструктуру не использует, BFF читает
+# только JWKS identity providers.
 ---
 # orders: своя PostgreSQL, Kafka (Watermill), Temporal Server (SDK и workers).
 apiVersion: networking.k8s.io/v1
@@ -182,3 +183,36 @@ spec:
       ports:
         - protocol: TCP
           port: 50051
+---
+# BFF: JWKS identity providers (ADR 35) — Dex и тестовый test-idp.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-infrastructure-egress
+  namespace: nomnom-bff
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bff
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dex
+      ports:
+        - protocol: TCP
+          port: 5556
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: test-idp
+      ports:
+        - protocol: TCP
+          port: 8080

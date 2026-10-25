@@ -11,10 +11,13 @@ spec:
       {{- include "bff.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- if or .Values.env .Values.podAnnotations }}
+      {{- if or .Values.env .Values.podAnnotations .Values.identity.providers }}
       annotations:
         {{- if .Values.env }}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.identity.providers }}
+        checksum/router: {{ include (print $.Template.BasePath "/router-authentication.yaml") . | sha256sum }}
         {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
@@ -58,20 +61,21 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
-          {{- if or .Values.extraEnv .Values.identity.idpJwksConfigMap .Values.internalGateway.address }}
+          {{- if or .Values.extraEnv .Values.identity.providers .Values.internalGateway.address }}
           env:
             {{- with .Values.internalGateway.address }}
             - name: BFF__INTERNAL_GATEWAY_ADDR
               value: {{ . | quote }}
             {{- end }}
             {{- with .Values.identity }}
-            {{- if .idpJwksConfigMap }}
-            - name: BFF__IDP_ISSUER
-              value: {{ .idpIssuer | quote }}
+            {{- if .providers }}
+            # Router: execution config образа и проверка access tokens по JWKS providers.
+            - name: CONFIG_PATH
+              value: /app/config.yaml,/etc/nomnom/router/authentication.yaml
+            - name: BFF__IDP_PROVIDERS
+              value: {{ .providers | toJson | quote }}
             - name: BFF__IDP_AUDIENCE
               value: {{ .idpAudience | quote }}
-            - name: BFF__IDP_JWKS_FILE
-              value: /etc/nomnom/idp/jwks.json
             - name: BFF__ASSERTION_KEY_FILE
               value: /etc/nomnom/assertion/{{ .assertionKeySecret.key }}
             - name: BFF__ASSERTION_KEY_ID
@@ -96,11 +100,11 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.volumeMounts .Values.identity.idpJwksConfigMap }}
+          {{- if or .Values.volumeMounts .Values.identity.providers }}
           volumeMounts:
-            {{- if .Values.identity.idpJwksConfigMap }}
-            - name: idp-jwks
-              mountPath: /etc/nomnom/idp
+            {{- if .Values.identity.providers }}
+            - name: router-authentication
+              mountPath: /etc/nomnom/router
               readOnly: true
             - name: assertion-key
               mountPath: /etc/nomnom/assertion
@@ -113,19 +117,16 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
-      {{- if or .Values.volumes .Values.identity.idpJwksConfigMap }}
+      {{- if or .Values.volumes .Values.identity.providers }}
       volumes:
         {{- with .Values.identity }}
-        {{- if .idpJwksConfigMap }}
-        - name: idp-jwks
+        {{- if .providers }}
+        - name: router-authentication
           configMap:
-            name: {{ .idpJwksConfigMap }}
-            items:
-              - key: jwks.json
-                path: jwks.json
+            name: {{ include "bff.fullname" $ }}-router
         - name: assertion-key
           secret:
-            secretName: {{ required "identity.assertionKeySecret.name is required with identity.idpJwksConfigMap" .assertionKeySecret.name }}
+            secretName: {{ required "identity.assertionKeySecret.name is required with identity.providers" .assertionKeySecret.name }}
             items:
               - key: {{ .assertionKeySecret.key }}
                 path: {{ .assertionKeySecret.key }}
@@ -133,7 +134,7 @@ spec:
         - name: identity-tokens
           projected:
             sources:
-              {{- range required "identity.tokenAudiences is required with identity.idpJwksConfigMap" .tokenAudiences }}
+              {{- range required "identity.tokenAudiences is required with identity.providers" .tokenAudiences }}
               - serviceAccountToken:
                   audience: {{ . }}
                   path: {{ . }}

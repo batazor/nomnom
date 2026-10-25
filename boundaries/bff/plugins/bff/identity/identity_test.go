@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,9 +40,13 @@ func loadIdPVectors(t *testing.T) idpVectors {
 
 func newVerifier(t *testing.T, v idpVectors) *AccessTokenVerifier {
 	t.Helper()
-	verifier, err := NewAccessTokenVerifier(v.Issuer, v.Audience, filepath.Join(fixtures, "idp-jwks.json"))
+	verifier, err := NewAccessTokenVerifier(context.Background(), v.Audience, testProviders(v.Issuer))
 	require.NoError(t, err)
 	return verifier
+}
+
+func testProviders(issuer string) []Provider {
+	return []Provider{{Issuer: issuer, JWKSFile: filepath.Join(fixtures, "idp-jwks.json")}}
 }
 
 func newSigner(t *testing.T) *AssertionSigner {
@@ -64,6 +70,35 @@ func TestAccessTokenVerifierOnSharedVectors(t *testing.T) {
 		_, err := verifier.Verify(v.Tokens[name])
 		assert.ErrorIs(t, err, ErrUnauthenticated, name)
 	}
+}
+
+// ADR 35: a provider with a JWKS URL (Dex rotates its keys) verifies tokens of
+// its issuer only; the key set of one issuer never proves another issuer.
+func TestAccessTokenVerifierFetchesJWKSByIssuer(t *testing.T) {
+	v := loadIdPVectors(t)
+	jwks, err := os.ReadFile(filepath.Join(fixtures, "idp-jwks.json"))
+	require.NoError(t, err)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(jwks)
+	}))
+	defer server.Close()
+
+	verifier, err := NewAccessTokenVerifier(t.Context(), v.Audience, []Provider{
+		{Issuer: v.Issuer, JWKSURL: server.URL},
+		{Issuer: "https://other.nomnom.test", JWKSFile: filepath.Join(fixtures, "bff-jwks.json")},
+	})
+	require.NoError(t, err)
+	user, err := verifier.Verify(v.Tokens["valid"])
+	require.NoError(t, err)
+	assert.Equal(t, User{ID: v.ExpectedSubject}, user)
+
+	other, err := NewAccessTokenVerifier(t.Context(), v.Audience, []Provider{
+		{Issuer: v.Issuer, JWKSFile: filepath.Join(fixtures, "bff-jwks.json")},
+		{Issuer: "https://other.nomnom.test", JWKSURL: server.URL},
+	})
+	require.NoError(t, err)
+	_, err = other.Verify(v.Tokens["valid"])
+	assert.ErrorIs(t, err, ErrUnauthenticated)
 }
 
 func TestAccessTokenFromIncomingContextRequiresBearer(t *testing.T) {
@@ -194,12 +229,15 @@ func TestLoadRequiresCompleteConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, none)
 
-	_, err = Load(Config{IdPIssuer: "https://idp.nomnom.test"})
+	_, err = Load(Config{IdPAudience: "nomnom-bff"})
 	assert.Error(t, err)
 
 	v := loadIdPVectors(t)
+	providers, err := json.Marshal(testProviders(v.Issuer))
+	require.NoError(t, err)
+
 	full, err := Load(Config{
-		IdPIssuer: v.Issuer, IdPAudience: v.Audience, IdPJWKSFile: filepath.Join(fixtures, "idp-jwks.json"),
+		IdPProviders: string(providers), IdPAudience: v.Audience,
 		AssertionKeyFile: filepath.Join(fixtures, "bff-signing-key.pem"), AssertionKeyID: "nomnom-bff-test-key",
 		ServiceTokenDir: t.TempDir(),
 	})

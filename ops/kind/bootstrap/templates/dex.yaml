@@ -1,0 +1,192 @@
+# Вход в браузере (ADR 35). ТОЛЬКО для kind.
+#   - Dex: OIDC provider со staticPasswords и storage memory. Issuer — адрес, по которому его
+#     видит браузер (port-forward svc/dex на localhost); Router и BFF берут JWKS по адресу
+#     Service. Ключи подписи Dex создаёт при старте и ротирует сам, поэтому JWKS читается по
+#     URL, а не из ConfigMap.
+#   - test-idp: JWKS тестового identity provider из tests/identity/fixtures по HTTP. Им
+#     подписывает access tokens scripts/mint-jwt.py для e2e-проверок без браузера.
+{{- $dex := .Values.dex }}
+{{- $config := dict
+  "issuer" $dex.issuer
+  "storage" (dict "type" "memory")
+  "web" (dict "http" "0.0.0.0:5556" "allowedOrigins" $dex.allowedOrigins)
+  "telemetry" (dict "http" "0.0.0.0:5558")
+  "oauth2" (dict "skipApprovalScreen" true "responseTypes" (list "code"))
+  "expiry" (dict "idTokens" $dex.tokenLifetime)
+  "enablePasswordDB" true
+  "staticClients" (list
+    (dict "id" $dex.uiClientId "name" "nomnom UI" "public" true "redirectURIs" $dex.uiRedirectURIs)
+    (dict "id" $dex.bffClientId "name" "nomnom BFF" "public" true "trustedPeers" (list $dex.uiClientId)))
+  "staticPasswords" $dex.users
+}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+data:
+  config.yaml: {{ toYaml $config | toJson }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex
+  namespace: nomnom-data
+  labels:
+    app.kubernetes.io/name: dex
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dex
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dex
+      annotations:
+        nomnom.dev/config-checksum: {{ toYaml $config | sha256sum | trunc 16 | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dex
+          image: {{ .Values.images.dex }}
+          args: [dex, serve, /etc/dex/config.yaml]
+          ports:
+            - name: http
+              containerPort: 5556
+            - name: telemetry
+              containerPort: 5558
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: telemetry
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+              readOnly: true
+            # Entrypoint образа рендерит конфигурацию (gomplate) во временный файл.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: dex
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: dex
+  ports:
+    - name: http
+      port: 5556
+      targetPort: http
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-idp
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+data:
+  jwks.json: {{ required "identity.idpJwks: --set-file identity.idpJwks=tests/identity/fixtures/idp-jwks.json" .Values.identity.idpJwks | toJson }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-idp
+  namespace: nomnom-data
+  labels:
+    app.kubernetes.io/name: test-idp
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: test-idp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: test-idp
+      annotations:
+        nomnom.dev/jwks-checksum: {{ .Values.identity.idpJwks | sha256sum | trunc 16 | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: httpd
+          image: {{ .Values.images.busybox }}
+          args: [httpd, -f, -v, -p, "8080", -h, /www]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /jwks.json
+              port: http
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: jwks
+              mountPath: /www
+              readOnly: true
+      volumes:
+        - name: jwks
+          configMap:
+            name: test-idp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-idp
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: test-idp
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

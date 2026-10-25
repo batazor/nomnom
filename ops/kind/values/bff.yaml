@@ -15,14 +15,19 @@ serviceAccount:
 internalGateway:
   address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
 
-# ADR 32. ТОЛЬКО для kind: identity provider — тестовый (tests/identity/fixtures, ConfigMap
-# idp-jwks), его ключ подписи лежит в репозитории. Ключ подписи user assertions (Secret
-# bff-assertion-key) выпускает cert-manager один раз на кластер: ECDSA P-256 в PKCS#8, ключ
-# tls.key, rotationPolicy Never. Оба создаёт chart ops/kind/bootstrap (ADR 34).
+# ADR 32, ADR 35. ТОЛЬКО для kind: два identity provider из chart ops/kind/bootstrap —
+# Dex (вход в браузере, issuer — адрес port-forward на localhost) и тестовый test-idp
+# (tests/identity/fixtures, ключ подписи лежит в репозитории; tokens выпускает
+# scripts/mint-jwt.py для e2e). JWKS обоих читаются по адресам Service в nomnom-data. Ключ
+# подписи user assertions (Secret bff-assertion-key) выпускает cert-manager один раз на
+# кластер: ECDSA P-256 в PKCS#8, ключ tls.key, rotationPolicy Never (ADR 34).
 identity:
-  idpIssuer: https://idp.nomnom.test
+  providers:
+    - issuer: http://localhost:5556/dex
+      jwksUrl: http://dex.nomnom-data.svc.cluster.local:5556/dex/keys
+    - issuer: https://idp.nomnom.test
+      jwksUrl: http://test-idp.nomnom-data.svc.cluster.local:8080/jwks.json
   idpAudience: nomnom-bff
-  idpJwksConfigMap: idp-jwks
   assertionKeySecret:
     name: bff-assertion-key
     key: tls.key

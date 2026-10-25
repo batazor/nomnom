@@ -30,9 +30,8 @@ func (d *recordingDial) dial(address, audience string, credentials identity.Outg
 func identityConfig(t *testing.T) identity.Config {
 	t.Helper()
 	return identity.Config{
-		IdPIssuer:        "https://idp.nomnom.test",
+		IdPProviders:     `[{"issuer":"https://idp.nomnom.test","jwksFile":"` + filepath.Join(fixtures, "idp-jwks.json") + `"}]`,
 		IdPAudience:      "nomnom-bff",
-		IdPJWKSFile:      filepath.Join(fixtures, "idp-jwks.json"),
 		AssertionKeyFile: filepath.Join(fixtures, "bff-signing-key.pem"),
 		AssertionKeyID:   "nomnom-bff-test-key",
 		ServiceTokenDir:  t.TempDir(),
@@ -46,7 +45,7 @@ func TestConfigIsReadOnce(t *testing.T) {
 		return "value-of-" + name
 	})
 	assert.Equal(t, "value-of-"+envInternalGateway, cfg.internalGateway)
-	assert.Equal(t, "value-of-"+identity.EnvIdPIssuer, cfg.identity.IdPIssuer)
+	assert.Equal(t, "value-of-"+identity.EnvIdPProviders, cfg.identity.IdPProviders)
 	for name, count := range reads {
 		assert.Equal(t, 1, count, name)
 	}
@@ -82,7 +81,7 @@ func TestWiringWithoutGatewayOrIdentityLeavesSlicesUnconnected(t *testing.T) {
 }
 
 func TestWiringReturnsErrorsInsteadOfStopping(t *testing.T) {
-	_, err := newBffService(config{identity: identity.Config{IdPIssuer: "https://idp.nomnom.test"}}, (&recordingDial{}).dial)
+	_, err := newBffService(config{identity: identity.Config{IdPAudience: "nomnom-bff"}}, (&recordingDial{}).dial)
 	assert.Error(t, err, "partial identity")
 
 	down := errors.New("dial failed")

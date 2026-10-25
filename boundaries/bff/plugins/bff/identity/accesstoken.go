@@ -4,12 +4,12 @@ package identity
 
 import (
 	"context"
-	"crypto"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc/metadata"
 )
@@ -25,25 +25,61 @@ type User struct {
 	ID string
 }
 
-// AccessTokenVerifier checks an access token of the identity provider:
-// signature by its JWKS, issuer, the BFF audience and validity. An ID token
-// (nonce, no scope) is not an access token and is rejected.
+// Provider is an identity provider whose access tokens BFF accepts: its
+// issuer and where its JWKS is. A JWKS URL is fetched and refreshed (Dex
+// rotates its keys, ADR 35); a JWKS file is read once.
+type Provider struct {
+	Issuer   string `json:"issuer"`
+	JWKSURL  string `json:"jwksUrl,omitempty"`
+	JWKSFile string `json:"jwksFile,omitempty"`
+}
+
+// AccessTokenVerifier checks an access token of a trusted identity provider:
+// signature by the JWKS of the provider named by iss, the BFF audience and
+// validity. An ID token (nonce) is not an access token and is rejected.
 type AccessTokenVerifier struct {
-	keys     map[string]crypto.PublicKey
-	issuer   string
+	keys     map[string]jwt.Keyfunc
 	audience string
 	now      func() time.Time
 }
 
-func NewAccessTokenVerifier(issuer, audience, jwksFile string) (*AccessTokenVerifier, error) {
-	if issuer == "" || audience == "" {
-		return nil, errors.New("identity provider issuer and audience are required")
+// NewAccessTokenVerifier binds every issuer to its own JWKS: a key of one
+// provider never proves a token that names another issuer. ctx bounds the
+// background refresh of JWKS URLs.
+func NewAccessTokenVerifier(ctx context.Context, audience string, providers []Provider) (*AccessTokenVerifier, error) {
+	if audience == "" || len(providers) == 0 {
+		return nil, errors.New("identity provider audience and at least one provider are required")
 	}
-	keys, err := LoadJWKS(jwksFile)
-	if err != nil {
-		return nil, err
+	keys := make(map[string]jwt.Keyfunc, len(providers))
+	for _, p := range providers {
+		if p.Issuer == "" || (p.JWKSURL == "") == (p.JWKSFile == "") {
+			return nil, fmt.Errorf("identity provider %q needs an issuer and exactly one of jwksUrl, jwksFile", p.Issuer)
+		}
+		if _, ok := keys[p.Issuer]; ok {
+			return nil, fmt.Errorf("identity provider %q is listed twice", p.Issuer)
+		}
+		if p.JWKSFile != "" {
+			fileKeys, err := LoadJWKS(p.JWKSFile)
+			if err != nil {
+				return nil, err
+			}
+			keys[p.Issuer] = func(token *jwt.Token) (any, error) {
+				kid, _ := token.Header["kid"].(string)
+				key, ok := fileKeys[kid]
+				if !ok {
+					return nil, fmt.Errorf("unknown kid %q", kid)
+				}
+				return key, nil
+			}
+			continue
+		}
+		remote, err := keyfunc.NewDefaultCtx(ctx, []string{p.JWKSURL})
+		if err != nil {
+			return nil, fmt.Errorf("jwks %s: %w", p.JWKSURL, err)
+		}
+		keys[p.Issuer] = remote.Keyfunc
 	}
-	return &AccessTokenVerifier{keys: keys, issuer: issuer, audience: audience, now: time.Now}, nil
+	return &AccessTokenVerifier{keys: keys, audience: audience, now: time.Now}, nil
 }
 
 // FromIncomingContext verifies the access token the Router forwards as
@@ -63,22 +99,21 @@ func (v *AccessTokenVerifier) FromIncomingContext(ctx context.Context) (User, er
 
 type accessClaims struct {
 	jwt.RegisteredClaims
-	Scope *string `json:"scope"`
 	Nonce *string `json:"nonce"`
 }
 
 func (v *AccessTokenVerifier) Verify(raw string) (User, error) {
 	var claims accessClaims
+	// Claims are decoded before the key is chosen: iss selects the provider,
+	// an unknown issuer has no key.
 	_, err := jwt.ParseWithClaims(raw, &claims, func(token *jwt.Token) (any, error) {
-		kid, _ := token.Header["kid"].(string)
-		key, ok := v.keys[kid]
+		keys, ok := v.keys[claims.Issuer]
 		if !ok {
-			return nil, fmt.Errorf("unknown kid %q", kid)
+			return nil, fmt.Errorf("unknown issuer %q", claims.Issuer)
 		}
-		return key, nil
+		return keys(token)
 	},
 		jwt.WithValidMethods([]string{"RS256", "ES256"}),
-		jwt.WithIssuer(v.issuer),
 		jwt.WithAudience(v.audience),
 		jwt.WithExpirationRequired(),
 		jwt.WithLeeway(clockLeeway),
@@ -87,7 +122,9 @@ func (v *AccessTokenVerifier) Verify(raw string) (User, error) {
 	if err != nil {
 		return User{}, fmt.Errorf("%w: %w", ErrUnauthenticated, err)
 	}
-	if claims.Nonce != nil || claims.Scope == nil {
+	// Dex issues access tokens in the shape of ID tokens, without scope; only
+	// nonce tells an ID token apart, so the UI never sends one (ADR 35).
+	if claims.Nonce != nil {
 		return User{}, fmt.Errorf("%w: id token is not an access token", ErrUnauthenticated)
 	}
 	if strings.TrimSpace(claims.Subject) == "" {

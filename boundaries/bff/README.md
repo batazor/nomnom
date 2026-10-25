@@ -112,18 +112,19 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 
 Решение — [ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md); код — пакет [`plugins/bff/identity`](plugins/bff/identity).
 
-- **Access token.** Router передаёт заголовок `Authorization` в плагин правилом `headers.all.request: propagate` в [`config.yaml`](config.yaml); другие клиентские заголовки (например `x-user-id`) до плагина не доходят. Проверено на Router 0.363.0: без правила metadata `authorization` в плагине пустая. `AccessTokenVerifier` проверяет подпись по JWKS identity provider (RS256/ES256, `kid`), `iss`, `aud` BFF и срок с допуском 30 s; ID token (есть `nonce`, нет `scope`) отклоняется.
+- **Access token.** Router передаёт заголовок `Authorization` в плагин правилом `headers.all.request: propagate` в [`config.yaml`](config.yaml); другие клиентские заголовки (например `x-user-id`) до плагина не доходят. Проверено на Router 0.363.0: без правила metadata `authorization` в плагине пустая. Router (`identity.providers` в chart → `authentication.jwt.jwks`) отклоняет token с неверной подписью кодом 401 до плагина. `AccessTokenVerifier` выбирает JWKS по `iss`, проверяет подпись (RS256/ES256, `kid`), `aud` BFF и срок с допуском 30 s; ID token (есть `nonce`) отклоняется — у Dex access token тоже без `scope` (ADR 35).
 - **User assertion.** `AssertionSigner` подписывает ES256 JWT на каждый вызов контекста: `iss: nomnom-bff`, `aud` контекста, `sub` из проверенного token, срок 30 s, случайный `jti`.
 - **Входящая и исходящая части.** `identity.Load` собирает `Identity`: `AccessTokens` (`AccessTokenVerifier`) проверяет входящие запросы, `Outgoing` (`OutgoingCredentials`: `ServiceTokens` и `Signer`) аутентифицирует вызовы контекстов; `gateway.Dial` получает только исходящую часть.
 - **Вызовы контекстов.** `UnaryClientInterceptor(audience, tokens, signer)` (интерфейсы `TokenSource` и `Signer`) ставит `authorization: Bearer <projected token BFF для audience>` (ADR 27) и, если в контексте запроса есть покупатель (`identity.WithUser`), `x-nomnom-user-assertion`.
 
 | Переменная | Назначение |
 | --- | --- |
-| `BFF__IDP_ISSUER`, `BFF__IDP_AUDIENCE`, `BFF__IDP_JWKS_FILE` | identity provider и его JWKS |
+| `BFF__IDP_PROVIDERS` | JSON-массив identity providers: `issuer` и `jwksUrl` (обновляется, ADR 35) или `jwksFile`; ключи одного issuer не подтверждают token другого |
+| `BFF__IDP_AUDIENCE` | audience access token (`nomnom-bff`) |
 | `BFF__ASSERTION_KEY_FILE`, `BFF__ASSERTION_KEY_ID` | ключ подписи assertions (P-256, PEM) и его `kid` |
 | `IDENTITY__TOKEN_DIR` | каталог projected ServiceAccount tokens, файл на audience |
 
-Без этих переменных identity выключена; частичная конфигурация останавливает плагин на старте. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — JWKS provider из ConfigMap, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`).
+Без этих переменных identity выключена; частичная конфигурация останавливает плагин на старте. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — providers с JWKS URL, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`).
 
 ## Место в архитектуре
 

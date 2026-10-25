@@ -116,15 +116,18 @@ readinessProbe:
 internalGateway:
   address: ""
 
-# ADR 32: identity покупателя. Plugin проверяет access token identity provider по JWKS из
-# idpJwksConfigMap (ключ jwks.json) и подписывает user assertions ключом из Secret
-# assertionKeySecret (P-256 в PEM). tokenAudiences — контексты, для которых Pod получает
-# projected ServiceAccount token (ADR 27). Пустой idpJwksConfigMap — identity выключена,
-# customer-операции недоступны. Ключ подписи не хранится в values.
+# ADR 32: identity покупателя. Router и plugin проверяют access token по JWKS identity
+# provider, которого называет iss (providers: issuer и jwksUrl); plugin подписывает user
+# assertions ключом из Secret assertionKeySecret (P-256 в PEM). tokenAudiences — контексты,
+# для которых Pod получает projected ServiceAccount token (ADR 27). Пустой providers —
+# identity выключена, customer-операции недоступны. Ключ подписи не хранится в values.
 identity:
-  idpIssuer: ""
+  # Пример:
+  # providers:
+  #   - issuer: https://idp.example.com
+  #     jwksUrl: https://idp.example.com/keys
+  providers: []
   idpAudience: nomnom-bff
-  idpJwksConfigMap: ""
   assertionKeySecret:
     name: ""
     key: key.pem

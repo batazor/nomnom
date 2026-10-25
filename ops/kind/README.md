@@ -102,7 +102,7 @@ make kind-down
   ServiceAccount `bff`, контексты только через internal gateway, projected tokens `nomnom.orders` и
   `nomnom.restaurants`. Наружу BFF не опубликован; проверка `e2e/bff` на время прогона открывает
   ingress к нему из `nomnom-outsider` (`manifests/fixtures/allow-bff-from-outsider.yaml`).
-  Ключ подписи user assertions, `bff-jwks` и `idp-jwks` создаёт chart [`bootstrap`](#bootstrap).
+  Ключ подписи user assertions, `bff-jwks`, Dex и `test-idp` создаёт chart [`bootstrap`](#bootstrap).
   Values контекстов: `identity.userJwksConfigMap: bff-jwks`, `userIssuer: nomnom-bff`,
   `userDelegates: bff`; `nomnom-bff/bff` — в allowlist `orders` и `restaurants`. **Только для
   kind**: реального identity provider нет, проверка подписывает access tokens ключом
@@ -154,7 +154,8 @@ releases с pod template label `skaffold.dev/run-id`, а хранилища де
 | ClusterIssuer `nomnom-selfsigned-bootstrap`, `nomnom-local-ca`, Certificate `cert-manager/nomnom-local-ca` | cert-manager | сертификат public gateway |
 | Secret `nomnom-bff/bff-assertion-key` (`tls.key`, `tls.crt`) | Certificate cert-manager: ECDSA P-256, PKCS#8, `rotationPolicy: Never`, kid `nomnom-bff-kind` | BFF (`identity.assertionKeySecret.key: tls.key`), проверка 7 |
 | ConfigMap `cluster-jwks`, `bff-jwks` (`jwks.json`) в неймспейсах контекстов | Job `identity-jwks` (hook): `/openid/v1/jwks` с проверкой issuer и публичный ключ BFF из `tls.crt`, server-side apply | `identity.jwksConfigMap`, `identity.userJwksConfigMap` контекстов |
-| ConfigMap `nomnom-bff/idp-jwks` | `--set-file` из `tests/identity/fixtures/idp-jwks.json`; **только для kind** — проверка подписывает access tokens ключом `tests/identity/fixtures/idp-signing-key.pem` (`scripts/mint-jwt.py`) | BFF |
+| Deployment и Service `nomnom-data/test-idp` | ConfigMap `test-idp` из `--set-file tests/identity/fixtures/idp-jwks.json`, раздаётся busybox httpd на `:8080/jwks.json`; **только для kind** — проверки подписывают access tokens ключом `tests/identity/fixtures/idp-signing-key.pem` (`scripts/mint-jwt.py`) | BFF, Router |
+| Deployment и Service `nomnom-data/dex` ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)) | `templates/dex.yaml`, `dex.*` в values: storage memory, staticPasswords (`customer`, `owner`, `kitchen`, `courier`, `operator` `@nomnom.test`, пароль `nomnom`), public client `nomnom-ui`, audience `nomnom-bff`; **только для kind** | браузер (port-forward), BFF и Router (JWKS) |
 | ConfigMap `spicedb-bootstrap`, Deployment и Service `spicedb` (`nomnom-authz`) | `--set-file` из `authorization/` и kind-only grants `authz/bootstrap-kind.yaml`; checksum в pod template перезапускает SpiceDB только при изменении schema/bootstrap | — |
 | Secret `spicedb-preshared-key` (`preshared-key`) в `nomnom-authz` и неймспейсах контекстов | `lookup` или `randAlphaNum 64` | SpiceDB, контексты |
 | Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-observability/alloy-postgres` | `lookup` или `randAlphaNum 48`; DSN из того же значения | PostgreSQL, приложения, Alloy |
@@ -181,7 +182,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | Неймспейс | Содержимое |
 | --- | --- |
 | `nomnom-orders`, `nomnom-restaurants`, `nomnom-delivery`, `nomnom-payments` | приложения из Helm charts; pod проверок `net-probe` (образ `e2e/probe`) |
-| `nomnom-bff` | BFF (release `bff`, ServiceAccount `bff`), Secret `bff-assertion-key`, ConfigMap `idp-jwks`; pod проверок `grpc-caller` (образ `e2e/probe`, ServiceAccount `grpc-caller`) и `e2e-driver` (образ `e2e/probe`, ServiceAccount `e2e-driver`) |
+| `nomnom-bff` | BFF (release `bff`, ServiceAccount `bff`), Secret `bff-assertion-key`; pod проверок `grpc-caller` (образ `e2e/probe`, ServiceAccount `grpc-caller`) и `e2e-driver` (образ `e2e/probe`, ServiceAccount `e2e-driver`) |
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура: ingress-проверки и внешний клиент BFF |
@@ -229,6 +230,21 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 2. `ReferenceGrant` в неймспейсе backend'а для `GRPCRoute` из `nomnom-gateway`.
 3. Порт pod с именем `grpc` и label `nomnom.dev/business-api: "true"` в values окружения.
 
+
+## Вход в браузере (Dex)
+
+[ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md): customer UI получает access token
+Dex через authorization code + PKCE. Браузер видит Dex и BFF через port-forward:
+
+```bash
+kubectl -n nomnom-data port-forward svc/dex 5556
+kubectl -n nomnom-bff port-forward svc/bff 3010
+```
+
+Issuer — `http://localhost:5556/dex`; Router и BFF читают JWKS по адресу Service
+(`values/bff.yaml`, `identity.providers`). `sub` пользователя Dex — закодированная пара
+(userID, connector), например `CgpraW5kLW93bmVyEgVsb2NhbA` для `owner@nomnom.test`; её же
+указывают как `ownerId` ресторана и subject в SpiceDB.
 
 ## Public gateway и TLS
 

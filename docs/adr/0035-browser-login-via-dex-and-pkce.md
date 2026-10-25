@@ -24,21 +24,33 @@ Cosmo Router и BFF. Регистрация, восстановление пар
 ## Decision
 
 - **Identity provider — [Dex](https://dexidp.io)** со `staticPasswords` и storage `memory`.
-  Один stateless Deployment без базы; пользователи и их `userID` (становится `sub`) задаются в
-  конфигурации. Issuer, JWKS (`/keys`) и discovery — стандартные OIDC.
+  Один stateless Deployment без базы; пользователи задаются в конфигурации. Issuer, JWKS
+  (`/keys`) и discovery — стандартные OIDC. `sub` Dex — не `userID`, а его кодировка вместе с
+  connector (`base64url(protobuf{userID, "local"})`, для `kind-owner` —
+  `CgpraW5kLW93bmVyEgVsb2NhbA`); значение стабильно и служит subject пользователя.
+- Audience access token — `nomnom-bff`: UI (public client `nomnom-ui`) запрашивает scope
+  `audience:server:client_id:nomnom-bff`, client `nomnom-bff` доверяет `nomnom-ui`
+  (`trustedPeers`).
+- Access token Dex имеет форму ID token (без `scope`, с `at_hash`). ID token отличается только
+  `nonce`, поэтому UI не передаёт `nonce` (PKCE защищает обмен code), а BFF отклоняет token с
+  `nonce`; `scope` не требуется.
+- Ключи подписи Dex создаёт при старте и ротирует сам, поэтому Router и BFF читают JWKS по URL
+  с обновлением. BFF принимает несколько providers (`BFF__IDP_PROVIDERS`: issuer и JWKS), ключи
+  одного issuer не подтверждают token другого.
 - **Браузер получает access token через OIDC authorization code + PKCE** (public client, без
   client secret) и передаёт его в `Authorization: Bearer`. Cosmo Router и BFF проверяют token по
   JWKS Dex, как описано в ADR 32; контексты от Dex не зависят.
 - Token хранится в памяти страницы, refresh — повторным входом (короткоживущие сессии
   достаточны для теста). httpOnly cookie и session в BFF не вводятся.
-- `mint-jwt.py` и фикстура ключа остаются для e2e-проверок, которым браузер не нужен.
+- `mint-jwt.py` и фикстура ключа остаются для e2e-проверок, которым браузер не нужен: в kind
+  BFF и Router доверяют и Dex, и тестовому provider (`test-idp` раздаёт его JWKS по HTTP).
 
 ## Consequences
 
 - Вход в kind поднимается одним небольшим Deployment; смена провайдера затрагивает только
   конфигурацию Router, BFF и UI.
-- `userID` статических пользователей Dex должны совпадать с subjects в
-  `ops/kind/authz/bootstrap-kind.yaml`.
+- Subjects пользователей Dex в SpiceDB (`ops/kind/authz/bootstrap-kind.yaml`, `ownerId` при
+  регистрации ресторана) — закодированный `sub` Dex, а не `userID`.
 - Хранение пользователей в конфигурации и storage `memory` не подходят для production: при
   выходе за пределы тестового окружения провайдер выбирается заново, без изменений контекстов.
 - Token в памяти теряется при перезагрузке страницы — пользователь входит снова.

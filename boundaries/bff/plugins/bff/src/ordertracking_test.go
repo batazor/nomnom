@@ -56,7 +56,8 @@ func accessToken(t *testing.T) (verifier *identity.AccessTokenVerifier, token st
 		Tokens   map[string]string `json:"tokens"`
 	}
 	require.NoError(t, json.Unmarshal(data, &vectors))
-	verifier, err = identity.NewAccessTokenVerifier(vectors.Issuer, vectors.Audience, filepath.Join(fixtures, "idp-jwks.json"))
+	verifier, err = identity.NewAccessTokenVerifier(context.Background(), vectors.Audience,
+		[]identity.Provider{{Issuer: vectors.Issuer, JWKSFile: filepath.Join(fixtures, "idp-jwks.json")}})
 	require.NoError(t, err)
 	return verifier, vectors.Tokens["valid"]
 }

@@ -2,8 +2,6 @@
 #   - Certificate bff-assertion-key (nomnom-bff): cert-manager создаёт ключ подписи user
 #     assertions BFF (ECDSA P-256, PKCS#8) в Secret bff-assertion-key (tls.key, tls.crt);
 #     rotationPolicy Never — ключ живёт столько же, сколько кластер. BFF читает tls.key.
-#   - ConfigMap idp-jwks (nomnom-bff): JWKS тестового identity provider из
-#     tests/identity/fixtures; реального provider в kind нет.
 #   - Job identity-jwks: ConfigMap cluster-jwks и bff-jwks в неймспейсах контекстов
 #     (files/publish-jwks.py) при каждом install/upgrade.
 {{- $namespaces := list }}
@@ -34,16 +32,6 @@ spec:
     group: cert-manager.io
     kind: ClusterIssuer
     name: nomnom-selfsigned-bootstrap
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: idp-jwks
-  namespace: nomnom-bff
-  labels:
-    {{- include "bootstrap.labels" . | nindent 4 }}
-data:
-  jwks.json: {{ required "identity.idpJwks: --set-file identity.idpJwks=tests/identity/fixtures/idp-jwks.json" .Values.identity.idpJwks | toJson }}
 ---
 apiVersion: v1
 kind: ServiceAccount
