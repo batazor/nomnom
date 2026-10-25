@@ -87,11 +87,10 @@ resources:
   limits: {}
 
 # Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
+# OpenTelemetry задаётся блоком telemetry, а не здесь.
 # Пример:
 # env:
-#   OTEL_SERVICE_NAME: delivery
-#   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-#   OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+#   OFFERS__EXPIRY_INTERVAL: 30s
 env: {}
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
@@ -217,3 +216,17 @@ volumeMounts: []
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# ADR 9, docs/observability.md: OpenTelemetry процесса. Все три сигнала (traces, metrics
+# OTLP gRPC, логи JSON в stdout) идентифицируются одним resource.
+telemetry:
+  # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT), например
+  # "http://alloy.observability.svc:4317". Пусто — traces и metrics не экспортируются.
+  otlpEndpoint: ""
+  # service.name (OTEL_SERVICE_NAME); пусто — имя процесса по умолчанию
+  # (delivery, delivery-relay).
+  serviceName: ""
+  # service.instance.id (имя pod) и service.version (image.tag) chart задаёт сам; здесь —
+  # атрибуты окружения, например deployment.environment.name: local. Не задавать
+  # OTEL_RESOURCE_ATTRIBUTES через env: явная переменная chart её перекроет.
+  resourceAttributes: {}

@@ -115,3 +115,30 @@ PostgreSQL (ADR 8, ADR 31): URL только из Secret database.urlSecret. О�
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+OpenTelemetry (ADR 9): OTLP endpoint из telemetry.otlpEndpoint (пусто — экспорта нет);
+resource: service.instance.id — имя pod (downward API), service.version — неизменяемый
+image.tag, остальные атрибуты окружения — telemetry.resourceAttributes. Явная env имеет
+приоритет над envFrom, поэтому OTEL_RESOURCE_ATTRIBUTES в env была бы перекрыта.
+*/}}
+{{- define "delivery.otelEnv" -}}
+{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "unknown" .Values.image.tag)) -}}
+{{- range $key, $value := .Values.telemetry.resourceAttributes }}
+{{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
+{{- end }}
+- name: POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: {{ join "," $attrs | quote }}
+{{- with .Values.telemetry.otlpEndpoint }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ . | quote }}
+{{- end }}
+{{- with .Values.telemetry.serviceName }}
+- name: OTEL_SERVICE_NAME
+  value: {{ . | quote }}
+{{- end }}
+{{- end }}

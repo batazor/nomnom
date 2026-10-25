@@ -49,6 +49,7 @@ spec:
           {{- end }}
           env:
             {{- include "delivery.databaseEnv" . | nindent 12 }}
+            {{- include "delivery.otelEnv" . | nindent 12 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -121,6 +122,7 @@ spec:
                   key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
             {{- end }}
             {{- include "delivery.databaseEnv" . | nindent 12 }}
+            {{- include "delivery.otelEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
