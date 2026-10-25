@@ -54,6 +54,38 @@ spec:
       # выйти; ответ лишь пишется в log): свободный курьер прошлого прогона получал бы предложения следующих прогонов
       # до истечения каждого.
       cleanup:
+        # Удалить ресторан нельзя: у restaurants нет delete/archive RPC. Ресторан прогона
+        # закрывается (ListRestaurants его больше не показывает), персонал отзывается. Ids
+        # выводятся из $run, а ресторан ищется через ListOwnedRestaurants владельца прогона:
+        # ConfigMap состояния к этому моменту может быть уже удалён.
+        - script:
+            env:
+              - name: OWNER
+                value: (join('-', ['kind-e2e-owner', $run]))
+              - name: STAFF
+                value: (join('-', ['kind-e2e-staff', $run]))
+            content: |
+              set -eu
+              root="$(git rev-parse --show-toplevel)"
+              key="$(mktemp)"
+              trap 'rm -f "$key"' EXIT
+              kubectl -n nomnom-bff get secret bff-assertion-key -o json | jq -r '.data["tls.key"] // .data["key.pem"]' | base64 -d >"$key"
+              call() {
+                assertion="$(python3 -I "$root/ops/kind/scripts/mint-jwt.py" user-assertion "$key" nomnom-bff-kind nomnom.restaurants "$OWNER")"
+                kubectl -n nomnom-bff exec deploy/e2e-driver -- sh -c '
+                  grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb \
+                    -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/nomnom.restaurants)" \
+                    -H "x-nomnom-user-assertion: $0" -d "$1" \
+                    internal-gateway.envoy-gateway-system.svc.cluster.local:8080 \
+                    "nomnom.restaurants.v1.RestaurantsService/$2" 2>&1
+                ' "$assertion" "$2" "$1"
+              }
+              ids="$(call ListOwnedRestaurants '{}' | jq -r '.restaurants[]?.restaurantId')" ||
+                { echo "owner $OWNER has no restaurants"; exit 0; }
+              for id in $ids; do
+                call RevokeStaff "{\"restaurantId\":\"$id\",\"userId\":\"$STAFF\"}" || echo "staff $STAFF of $id stays"
+                call CloseRestaurant "{\"restaurantId\":\"$id\"}" || echo "restaurant $id stays open"
+              done
         - script:
             env:
               - name: COURIER
