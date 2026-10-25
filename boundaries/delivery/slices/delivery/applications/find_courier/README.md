@@ -11,7 +11,7 @@
 
 - **Владелец:** `delivery/slices/delivery`.
 - **Домен:** `domains/delivery`.
-- **Взаимодействие:** Оркестрация может запустить поиск, но алгоритм и eligibility принадлежат `delivery`.
+- **Взаимодействие:** Поиск запускают Dispatch Deliveries (фоновая задача `delivery`) и Replan Delivery из оркестрации; алгоритм и eligibility принадлежат `delivery`.
 
 ## Реализация
 

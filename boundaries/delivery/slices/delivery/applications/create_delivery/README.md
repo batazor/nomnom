@@ -35,7 +35,7 @@ sequenceDiagram
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-306.
 - **Порты:** `DeliveryAuthorization` (`CreateDelivery` над `Platform`), `DeliveryRepository`, `IdGenerator`.
 - **Транзакция:** Без UoW: ключ идемпотентности — `OrderId` (уникальность в репозитории); совпадающий повтор возвращает существующую `Delivery`, конфликтующий — `DeliveryAlreadyExists`.
-- **Допущение:** Find Courier автоматически не запускается: момент начала поиска курьера — открытый вопрос `docs/use-cases.md`.
+- **Допущение:** Find Courier здесь не запускается: поиск курьера начинает следующий проход Dispatch Deliveries (FR-582).
 
 ## Acceptance
 

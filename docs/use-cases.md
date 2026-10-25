@@ -55,6 +55,7 @@
 | `delivery` | Create Delivery | Command | Fulfillment process `orders` | invoked by Activity | no |
 | `delivery` | Find Courier | Command | Процесс назначения `delivery` | may be requested by workflow | no |
 | `delivery` | Offer Delivery | Command | Процесс назначения `delivery` | no | no |
+| `delivery` | Dispatch Deliveries | Command | Фоновая задача процесса `delivery` | no; Replan Delivery остаётся эскалацией workflow по таймауту назначения | Outbox: internal `DeliveryOffered` |
 | `delivery` | Accept Delivery Offer | Command | Курьер | workflow observes assignment asynchronously | Outbox: publishes assignment result |
 | `delivery` | Reject Delivery Offer | Command | Курьер | no | no |
 | `delivery` | Reassign Courier | Command | Процесс назначения или авторизованный диспетчер | may be invoked by Activity | Outbox: publishes result if assignment changes |
@@ -105,7 +106,6 @@ BFF на WunderGraph Cosmo не является bounded context. Он пред�
 - когда выполняется Capture;
 - какие сроки authorization window и refund window проверяют `PaymentCapturable` и `PaymentRefundable` (текущее допущение реализации: policies в handlers не подключены, Capture и Refund выполняются на полную сумму, см. [design.md change `implement-payments-application-layer`](../openspec/changes/implement-payments-application-layer/design.md));
 - можно ли принять `Restaurant Order`, если курьер ещё не назначен;
-- на какой стадии начинается поиск курьера (текущее допущение реализации: Create Delivery, Reject и Reassign не вызывают Find Courier, последовательность Find → Offer → Accept запускает внешний процесс назначения, см. [design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам));
 - на какой стадии Request Order Cancellation больше не может быть удовлетворён;
 - какая компенсация применяется после начала Preparation;
 - что происходит при запросе отмены после Pickup;
@@ -120,3 +120,5 @@ BFF на WunderGraph Cosmo не является bounded context. Он пред�
 - как рассчитывается `expected_ready_at` и как `orders` реагирует на Preparation Delay.
 
 Полный список открытых вопросов кухни — в [Kitchen](kitchen.md#открытые-вопросы).
+
+Момент начала поиска курьера решён Dispatch Deliveries ([change `close-order-lifecycle-in-kind`](../openspec/changes/close-order-lifecycle-in-kind/design.md), FR-582): фоновая задача процесса `delivery` предлагает ожидающую доставку без pending offer курьеру, которому её ещё не предлагали, — в течение `OFFERS__DISPATCH_INTERVAL` после Create Delivery и снова после отказа или истечения предложения. Create Delivery, Reject Delivery Offer и Reassign Courier сами Find Courier не вызывают; Replan Delivery из `orders` остаётся эскалацией по таймауту назначения.

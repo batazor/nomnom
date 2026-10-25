@@ -1,5 +1,6 @@
 //! Composition root процесса `delivery` (`cmd/delivery`): gRPC API, фоновый
-//! reconciliation relationships и фоновое истечение Delivery Offers.
+//! reconciliation relationships, фоновое истечение Delivery Offers и
+//! Dispatch Deliveries.
 //!
 //! [`compose`] выбирает реализации портов и открывает общие клиенты процесса
 //! (fail fast: SpiceDB, PostgreSQL, service identity), собирает граф use cases
@@ -39,7 +40,10 @@ use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 
 use super::infrastructure::{ProcessIds, ProcessLocator, ProcessStores, infrastructure};
 use super::service::{ServiceModule, service};
-use super::{ExpireOffers, ExpirySchedule, OfferExpiryWorker, ReconcilingWorker};
+use super::{
+    DispatchDeliveries, DispatchSchedule, DispatchWorker, ExpireOffers, ExpirySchedule,
+    OfferExpiryWorker, ReconcilingWorker,
+};
 
 /// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
 pub const SERVICE_NAME: &str = "delivery";
@@ -196,12 +200,41 @@ impl OfferExpiry for UseCaseOfferExpiry {
     }
 }
 
-/// Worker процесса: gRPC, фоновый reconciliation и истечение offers под
-/// одним сигналом.
-pub type DeliveryWorker = ReconcilingWorker<OfferExpiryWorker<GrpcWorker>>;
+/// Фоновый Dispatch Deliveries над use cases процесса: поиск курьера для
+/// ожидающих доставок начинается здесь, а не в Create Delivery.
+pub trait DeliveryDispatch: Interface {
+    fn dispatch(&self) -> DispatchDeliveries;
+    fn schedule(&self) -> DispatchSchedule;
+}
 
-/// Создаёт [`DeliveryWorker`]: открывает бизнес-порт, reconcilers и цикл
-/// истечения offers.
+#[derive(Component)]
+#[shaku(interface = DeliveryDispatch)]
+pub struct UseCaseDeliveryDispatch {
+    /// Тот же граф use cases, что у gRPC-транспорта.
+    use_cases: Arc<ServiceModule>,
+    config: OffersConfig,
+}
+
+impl DeliveryDispatch for UseCaseDeliveryDispatch {
+    fn dispatch(&self) -> DispatchDeliveries {
+        let use_cases = Arc::clone(&self.use_cases);
+        Arc::new(move |input| use_cases.deliveries().dispatch_deliveries(input))
+    }
+
+    fn schedule(&self) -> DispatchSchedule {
+        DispatchSchedule {
+            interval: self.config.dispatch_interval,
+            batch_size: usize::try_from(self.config.dispatch_batch).unwrap_or(usize::MAX),
+        }
+    }
+}
+
+/// Worker процесса: gRPC, фоновый reconciliation, истечение offers и
+/// Dispatch Deliveries под одним сигналом.
+pub type DeliveryWorker = ReconcilingWorker<DispatchWorker<OfferExpiryWorker<GrpcWorker>>>;
+
+/// Создаёт [`DeliveryWorker`]: открывает бизнес-порт, reconcilers, цикл
+/// истечения offers и цикл Dispatch Deliveries.
 pub struct DeliveryWorkerProvider;
 
 impl<M> Provider<M> for DeliveryWorkerProvider
@@ -209,7 +242,8 @@ where
     M: Module
         + HasComponent<dyn GrpcTransport>
         + HasComponent<dyn RelationshipReconciliation>
-        + HasComponent<dyn OfferExpiry>,
+        + HasComponent<dyn OfferExpiry>
+        + HasComponent<dyn DeliveryDispatch>,
 {
     type Interface = DeliveryWorker;
 
@@ -217,10 +251,12 @@ where
         let transport: &dyn GrpcTransport = module.resolve_ref();
         let reconciliation: &dyn RelationshipReconciliation = module.resolve_ref();
         let expiry: &dyn OfferExpiry = module.resolve_ref();
+        let dispatch: &dyn DeliveryDispatch = module.resolve_ref();
         let worker = transport
             .bind()
             .map_err(|error| format!("listen :{}: {error}", transport.port()))?;
         let worker = OfferExpiryWorker::new(worker, expiry.expire(), expiry.schedule());
+        let worker = DispatchWorker::new(worker, dispatch.dispatch(), dispatch.schedule());
         Ok(Box::new(ReconcilingWorker::new(
             worker,
             reconciliation.reconcilers(),
@@ -261,6 +297,7 @@ module! {
             TonicTransport,
             SpiceDbReconciliation,
             UseCaseOfferExpiry,
+            UseCaseDeliveryDispatch,
             OtlpServerTelemetry
         ],
         providers = [DeliveryWorkerProvider]
@@ -311,6 +348,10 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
             use_cases: Arc::clone(&use_cases),
             config: config.offers,
         })
+        .with_component_parameters::<UseCaseDeliveryDispatch>(UseCaseDeliveryDispatchParameters {
+            use_cases: Arc::clone(&use_cases),
+            config: config.offers,
+        })
         .with_component_parameters::<TonicTransport>(TonicTransportParameters {
             use_cases,
             subjects,
@@ -337,7 +378,9 @@ mod tests {
     use crate::slices::courier::applications::{
         register_courier, set_courier_availability, update_courier_location,
     };
-    use crate::slices::delivery::applications::{create_delivery, find_courier};
+    use crate::slices::delivery::applications::{
+        create_delivery, dispatch_deliveries, find_courier,
+    };
 
     use super::super::infrastructure::local_authorization;
     use super::super::service::ServiceModule;
@@ -435,6 +478,46 @@ mod tests {
             find_courier::Outcome::CandidateFound { courier_id, .. }
                 if courier_id.as_str() == "courier-1"
         ));
+    }
+
+    /// AC-734: the courier search of a created Delivery starts on the next
+    /// dispatch pass of the process, over the stored courier positions.
+    #[test]
+    fn dispatch_offers_a_created_delivery_to_a_courier_on_line() {
+        let store = Arc::new(MemoryStore::new());
+        let process = process(&store);
+        let couriers = process.couriers();
+        couriers
+            .register_courier(
+                &operator(),
+                register_courier::Input {
+                    courier_id: "courier-1".to_owned(),
+                },
+            )
+            .expect("courier registered");
+        couriers
+            .update_courier_location(
+                &operator(),
+                update_courier_location::Input {
+                    courier_id: "courier-1".to_owned(),
+                    latitude: 52.37,
+                    longitude: 4.89,
+                },
+            )
+            .expect("position recorded");
+        let created = create(&process, "order-1");
+
+        let output = process
+            .deliveries()
+            .dispatch_deliveries(dispatch_deliveries::Input {
+                batch_size: 10,
+                after: None,
+            })
+            .expect("dispatched");
+
+        assert_eq!(output.offered.len(), 1);
+        assert_eq!(output.offered[0].delivery_id, created.delivery_id);
+        assert_eq!(output.offered[0].courier_id.as_str(), "courier-1");
     }
 
     #[test]

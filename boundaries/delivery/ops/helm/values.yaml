@@ -91,6 +91,7 @@ resources:
 # Пример:
 # env:
 #   OFFERS__EXPIRY_INTERVAL: 30s
+#   OFFERS__DISPATCH_INTERVAL: 2s
 env: {}
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:

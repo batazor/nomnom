@@ -20,7 +20,7 @@ Rust.
 
 ## Use Cases
 
-Статус реализации: все перечисленные Commands и Queries реализованы как application handlers (`Input` / `Output` / `Handler::execute`) по SDD change [`implement-delivery-application-layer`](../../openspec/changes/implement-delivery-application-layer/) ; хранилище — PostgreSQL (см. «Хранилище (PostgreSQL)»), Integration Events публикует `delivery-relay` (см. «Событийная интеграция»); Kafka consumers ещё не подключены. Требования — `FR-300`…`FR-318`, acceptance criteria — `AC-300`…`AC-343`. Командные use cases процесса исполнения заказа (Cancel Delivery, Replan Delivery) и их gRPC-методы добавлены по change [`add-fulfillment-command-rpcs`](../../openspec/changes/add-fulfillment-command-rpcs/) (`FR-429`, `AC-455`, `AC-456`).
+Статус реализации: все перечисленные Commands и Queries реализованы как application handlers (`Input` / `Output` / `Handler::execute`) по SDD change [`implement-delivery-application-layer`](../../openspec/changes/implement-delivery-application-layer/) ; хранилище — PostgreSQL (см. «Хранилище (PostgreSQL)»), Integration Events публикует `delivery-relay` (см. «Событийная интеграция»); Kafka consumers ещё не подключены. Требования — `FR-300`…`FR-318`, acceptance criteria — `AC-300`…`AC-343`. Командные use cases процесса исполнения заказа (Cancel Delivery, Replan Delivery) и их gRPC-методы добавлены по change [`add-fulfillment-command-rpcs`](../../openspec/changes/add-fulfillment-command-rpcs/) (`FR-429`, `AC-455`, `AC-456`). gRPC API курьера и Register Courier, а также Dispatch Deliveries добавлены по change [`close-order-lifecycle-in-kind`](../../openspec/changes/close-order-lifecycle-in-kind/) (`FR-580`…`FR-582`, `AC-730`…`AC-736`).
 
 ### Commands
 
@@ -29,18 +29,19 @@ Rust.
 | **Register Courier** | Оператор платформы | Создать курьера в системе доставки | Создан `Courier` с исходным состоянием доступности | Authoritative authorization в `delivery` |
 | **Set Courier Availability** | Курьер или авторизованный диспетчер | Изменить доступность курьера для новых назначений | `Courier` отмечен available или unavailable; позиция курьера не изменена | Не совмещается с location update |
 | **Update Courier Location** | Курьерское приложение | Обновить последнюю известную позицию курьера | Сохранена актуальная доступная `delivery` позиция курьера | Частота, точность и retention определяются отдельно |
-| **Create Delivery** | Fulfillment process `orders` | Запросить доставку оформленного заказа | Создана идемпотентная `Delivery` с необходимыми pickup/dropoff references и данными контекста | Вызывается Temporal Activity через API `delivery` |
+| **Create Delivery** | Fulfillment process `orders` | Запросить доставку оформленного заказа | Создана идемпотентная `Delivery` с необходимыми pickup/dropoff references и данными контекста | Вызывается Temporal Activity через API `delivery`; поиск курьера не запускает — его начинает Dispatch Deliveries |
 | **Find Courier** | Процесс назначения `delivery` | Подобрать подходящего доступного курьера | Выбран кандидат или зафиксировано отсутствие кандидата; алгоритм остаётся внутри `delivery` | Может запускаться запросом orchestration, но выбор выполняет `delivery` |
-| **Offer Delivery** | Процесс назначения `delivery` | Предложить конкретному курьеру принять доставку | Создано актуальное ограниченное по времени `Delivery Offer`; `Courier Assignment` ещё не создан | Учитывает результат Find Courier |
+| **Offer Delivery** | Процесс назначения `delivery` | Предложить конкретному курьеру принять доставку | Создано актуальное ограниченное по времени `Delivery Offer` и `DeliveryOffered` в Outbox; `Courier Assignment` ещё не создан | Учитывает результат Find Courier |
 | **Accept Delivery Offer** | Курьер | Принять актуальное предложение | Ровно один актуальный offer успешно превращён в `Courier Assignment`; курьер и доставка зарезервированы | Конкурентное принятие защищается доменным инвариантом и атомарной записью; публикует бизнес-факт через Outbox |
-| **Reject Delivery Offer** | Курьер | Отклонить актуальное предложение | Offer закрыт как отклонённый и не создаёт `Courier Assignment` | Может инициировать дальнейший поиск внутри `delivery` |
+| **Reject Delivery Offer** | Курьер | Отклонить актуальное предложение | Offer закрыт как отклонённый и не создаёт `Courier Assignment` | Следующий проход Dispatch Deliveries предлагает доставку другому курьеру |
 | **Reassign Courier** | Процесс назначения `delivery` или авторизованный диспетчер | Прекратить неактуальное назначение и подобрать замену | Текущее назначение отменено или истекло, доставка снова участвует в поиске | Может вызываться Temporal Activity; алгоритм повторного выбора принадлежит `delivery` |
 | **Replan Delivery** | Fulfillment process `orders` | Перепланировать доставку заказа по `order_id` | Если курьер назначен — Reassign Courier; затем Find Courier и Offer Delivery кандидату; без кандидата — успех без offer | Вызывается Temporal Activity через `ReplanDelivery`; композиция существующих handlers, алгоритм остаётся в `delivery` |
 | **Cancel Delivery** | Fulfillment process `orders` | Отменить доставку заказа до Pickup по `order_id` | `waiting`/`assigned` → `cancelled`, курьер освобождён, `DeliveryCancelled` в Outbox; повтор — успех; после Pickup — бизнес-отказ `already_picked_up`, после `delivered`/`failed` — `already_closed` | Вызывается Temporal Activity через `CancelDelivery` как компенсация; бизнес-отказ не является ошибкой |
 | **Confirm Pickup** | Назначенный курьер | Подтвердить получение заказа у ресторана | Для `Delivery` зафиксирован Pickup | Публикует бизнес-факт через Outbox |
 | **Confirm Delivery** | Назначенный курьер | Подтвердить передачу заказа клиенту | Для `Delivery` зафиксирована Delivery Completion | Публикует бизнес-факт через Outbox |
 | **Report Delivery Failure** | Назначенный курьер или авторизованный диспетчер | Зафиксировать невозможность завершить доставку | Неудача сохранена с кодом причины из каталога Delivery Failure Reason и необязательным пояснением, результат доступен `orders` | Публикует бизнес-факт через Outbox; неизвестный код — ошибка валидации; retryability кодов остаётся открытым вопросом |
-| **Expire Delivery Offers** | Фоновая задача процесса `delivery` | Закрыть pending offers, на которые не ответили до `expiresAt` | Offers с `expiresAt < now` переведены в `expired` пачками, каждый в своей Unit of Work с `DeliveryOfferExpired` в Outbox; конкурентно закрытые offers пропускаются | Без subject и проверки прав; повторное предложение другому курьеру не запускает (см. «Истечение Delivery Offers») |
+| **Expire Delivery Offers** | Фоновая задача процесса `delivery` | Закрыть pending offers, на которые не ответили до `expiresAt` | Offers с `expiresAt < now` переведены в `expired` пачками, каждый в своей Unit of Work с `DeliveryOfferExpired` в Outbox; конкурентно закрытые offers пропускаются | Без subject и проверки прав; повторное предложение делает Dispatch Deliveries (см. «Истечение Delivery Offers») |
+| **Dispatch Deliveries** | Фоновая задача процесса `delivery` | Начать поиск курьера для ожидающих доставок | Ожидающей `Delivery` без pending offer предложена доставка курьеру, которому её ещё не предлагали; без кандидата доставка ждёт следующего прохода; конкурентно изменённые доставки пропускаются | Без subject и проверки прав; Find Courier и Offer Delivery в одной Unit of Work на доставку (см. «Dispatch Deliveries») |
 
 ### Queries
 
@@ -85,8 +86,19 @@ RPC сервиса `DeliveryService`:
 | `CreateDelivery` | Create Delivery (`order_id`, `pickup_address`, `dropoff_address`) | `delivery_id`, `created = false` для идентичного повтора; другие адреса — `ALREADY_EXISTS` |
 | `ReplanDelivery` | Replan Delivery (`order_id`) | `delivery_id`, `offered_courier_id` (пусто без кандидата); после Pickup — `FAILED_PRECONDITION` |
 | `CancelDelivery` | Cancel Delivery (`order_id`, `reason`) | `cancelled = true` (включая повтор) или `cancelled = false` + `rejection_reason` (`already_picked_up`, `already_closed`) — бизнес-результат, не gRPC-ошибка |
+| `RegisterCourier` | Register Courier (`courier_id` = user id курьера) | `courier_id`, `status`; повтор — `ALREADY_EXISTS` |
+| `UpdateCourierLocation` | Update Courier Location (`courier_id`, `latitude`, `longitude`) | позиция и `recorded_at_epoch_seconds`; координаты вне диапазона — `INVALID_ARGUMENT` |
+| `SetCourierAvailability` | Set Courier Availability (`courier_id`, `availability`) | `status`, `changed = false`, если доступность уже такая; `COURIER_AVAILABILITY_UNSPECIFIED` — `INVALID_ARGUMENT` |
+| `ListAvailableDeliveryOffers` | List Available Delivery Offers (`courier_id`) | pending и непротухшие `DeliveryOffer` курьера |
+| `AcceptDeliveryOffer` | Accept Delivery Offer (`offer_id`, `courier_id`) | `offer_id`, `delivery_id`, `courier_id`, `already_accepted` |
+| `RejectDeliveryOffer` | Reject Delivery Offer (`offer_id`, `courier_id`) | `offer_id`, `delivery_id`, `changed` |
+| `ConfirmPickup` | Confirm Pickup (`delivery_id`, `courier_id`) | `delivery_id`, `state`, `changed` |
+| `ConfirmDelivery` | Confirm Delivery (`delivery_id`, `courier_id`) | `delivery_id`, `state = COMPLETED`, `changed` |
+| `ReportDeliveryFailure` | Report Delivery Failure (`delivery_id`, `courier_id` или пусто для диспетчера, `reason` — код каталога, `detail`) | `delivery_id`, `reason`, `detail`, `released_courier_id`; неизвестный код — `INVALID_ARGUMENT` |
 
 Неизвестный `order_id` во всех командах — `NOT_FOUND`. Командные RPC авторизуются над ресурсом `Order(order_id)` (`CancelDelivery`, `ReplanDelivery`); Replan дополнительно проходит проверки вложенных use cases над `Delivery(id)`.
+
+RPC курьера вызываются от имени пользователя: subject — user из assertion делегата (см. «User identity от BFF»). `RegisterCourier` требует `platform:nomnom#register_courier` (оператор) и до сохранения записывает `courier:<id>#self@user:<id>`, поэтому пользователь получает `courier#act` на нового курьера. Остальные RPC курьера требуют `courier#act` на `courier_id` запроса; `ReportDeliveryFailure` без `courier_id` — действие диспетчера с `platform:nomnom#dispatch_delivery`. Принадлежность доставки или offer курьеру проверяет домен. Ошибки `courier` и `delivery` переводятся одной таблицей (`infrastructure/grpc/service/status.rs`).
 
 Генерация Rust/tonic кода (`neoeinstein-prost`/`neoeinstein-tonic`, см. `infrastructure/grpc/buf.gen.yaml`) — в `infrastructure/grpc/gen`:
 
@@ -94,7 +106,7 @@ RPC сервиса `DeliveryService`:
 make generate   # из корня: make buf-generate; только delivery: cd infrastructure/grpc && buf generate --template buf.gen.yaml
 ```
 
-Transport adapter уже маппит application errors в gRPC status codes; добавление структурированных `google.rpc.ErrorInfo` с domain `nomnom.delivery.v1` остаётся частью расширения error contract. Политика контрактов, генерации и совместимости описана в [ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery` и `CancelDelivery` подключены к application use cases через tonic adapter; `cmd/delivery` запускает gRPC-сервер и завершает его через общий lifecycle. Subject вызывающего определяет `SubjectResolver` — см. «Service identity».
+Transport adapter уже маппит application errors в gRPC status codes; добавление структурированных `google.rpc.ErrorInfo` с domain `nomnom.delivery.v1` остаётся частью расширения error contract. Политика контрактов, генерации и совместимости описана в [ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). Все RPC `DeliveryService` подключены к application use cases через tonic adapter; `cmd/delivery` запускает gRPC-сервер и завершает его через общий lifecycle. Subject вызывающего определяет `SubjectResolver` — см. «Service identity».
 
 ## Service identity
 
@@ -204,12 +216,25 @@ make test-spicedb   # SPICEDB_ENDPOINT=localhost:50051, оба integration-на�
 
 Фоновая задача основного процесса (`OfferExpiryWorker` в `di/offer_expiry_worker.rs`, рядом с `ReconcilingWorker`) раз в `OFFERS__EXPIRY_INTERVAL` вызывает Expire Delivery Offers (`slices/delivery/applications/expire_delivery_offers`): pending offers с `expires_at < now` читаются пачками по `OFFERS__EXPIRY_BATCH` (`ORDER BY expires_at`, partial index `delivery_offers_pending_expiry`), полные пачки — подряд. Каждый offer истекает в своей Unit of Work вместе с `DeliveryOfferExpired` в Outbox; optimistic-concurrency конфликт (offer конкурентно принят, отклонён или отозван) — пропуск, не ошибка. Цикл останавливается по сигналу shutdown основного worker; начатая пачка доводится до конца. Ошибка пачки пишется в stderr и прерывает только текущий проход. `DeliveryOfferExpired` — внутренний факт: не публикуется, считается в `nomnom.delivery.offers{nomnom.outcome="expired"}`. Queries (`ListAvailableDeliveryOffers`, `is_open_at`) считают `expired` закрытым, как и pending offer после `expiresAt`.
 
-Повторное предложение после истечения в этот use case не входит. Сейчас его делает `orders`: fulfillment workflow без `CourierAssignedToDelivery` за `FULFILLMENT__ASSIGNMENT_TIMEOUT` (15m) вызывает `ReplanDelivery` (до `FULFILLMENT__MAX_REPLANS`, затем эскалация оператору), а Find Courier пропускает курьеров, которым эта доставка уже предлагалась в любом состоянии, поэтому следующий offer получает другой ближайший курьер.
+Повторное предложение после истечения в этот use case не входит: истёкший offer больше не pending, поэтому доставку берёт следующий проход Dispatch Deliveries (см. ниже), а Find Courier пропускает курьеров, которым эта доставка уже предлагалась в любом состоянии, и следующий offer получает другой курьер. Эскалацией остаётся `orders`: fulfillment workflow без `CourierAssignedToDelivery` за `FULFILLMENT__ASSIGNMENT_TIMEOUT` (15m) вызывает `ReplanDelivery` (до `FULFILLMENT__MAX_REPLANS`, затем эскалация оператору).
 
 | Переменная | Ключ TOML | Значение |
 | --- | --- | --- |
 | `OFFERS__EXPIRY_INTERVAL` | `offers.expiry_interval` | Интервал между проходами, по умолчанию `15s`; положительный |
 | `OFFERS__EXPIRY_BATCH` | `offers.expiry_batch` | Максимум offers пачки, по умолчанию `100`; `1..1000` |
+
+Невалидные значения завершают startup.
+
+## Dispatch Deliveries
+
+Поиск курьера начинает сам `delivery`, а не Create Delivery и не оркестратор заказа (FR-582). Фоновая задача основного процесса (`DispatchWorker` в `di/dispatch_worker.rs`, рядом с `OfferExpiryWorker`) раз в `OFFERS__DISPATCH_INTERVAL` вызывает Dispatch Deliveries (`slices/delivery/applications/dispatch_deliveries`): ожидающие доставки без pending offer читаются по возрастанию `(created_at, id)` пачками по `OFFERS__DISPATCH_BATCH` (фильтр и keyset-пагинация в SQL, partial index `deliveries_waiting`); каждая следующая пачка прохода начинается после последней доставки предыдущей, поэтому доставки без кандидата не загораживают следующие. Для каждой доставки в своей Unit of Work Find Courier выбирает доступного курьера, которому её ещё не предлагали, `Delivery` сохраняется с версией из пачки, и Offer Delivery создаёт offer с `DeliveryOffered` в Outbox. Без кандидата доставка остаётся ожидающей до следующего прохода; конкурентное изменение доставки (другая реплика, принятый offer, Replan, Cancel) или курьер, переставший быть доступным, — пропуск, не ошибка. Subject и проверки прав нет: это работа процесса. Остановка и ошибки пачки — как у истечения offers.
+
+Поэтому offer появляется в течение `OFFERS__DISPATCH_INTERVAL` после Create Delivery, а после отказа или истечения — следующему курьеру. Когда доставку уже предлагали всем доступным курьерам, она ждёт Replan Delivery из `orders`. `DeliveryOffered` — внутренний факт: не публикуется и метрикой не считается.
+
+| Переменная | Ключ TOML | Значение |
+| --- | --- | --- |
+| `OFFERS__DISPATCH_INTERVAL` | `offers.dispatch_interval` | Интервал между проходами, по умолчанию `2s`; положительный |
+| `OFFERS__DISPATCH_BATCH` | `offers.dispatch_batch` | Максимум доставок пачки, по умолчанию `100`; `1..1000` |
 
 Невалидные значения завершают startup.
 
@@ -290,7 +315,7 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 - `di` — корневой composition root, по модулю на процесс:
   - `di::infrastructure` — `InfrastructureModule`: реализации портов обоих слайсов (роли одного хранилища `ProcessStores`: `CourierStore`, `TransactionalStore`, `DeliveryReadModels`; генератор id, locator курьеров, одна авторизация, один writer relationships, `SystemClock`, `AssignmentPolicy`); реализации приходят параметрами компонентов, memory-адаптеры — только в тестовом графе;
   - `di::service` — модули слайсов над `InfrastructureModule` и итоговый `ServiceModule` (use cases); `di::build()` — тестовый граф над in-memory адаптерами `infrastructure::memory`. Транспорт получает use cases через `ServiceModule::couriers()` / `deliveries()` и shaku не импортирует;
-  - `di::server` — `ServerModule` процесса `delivery`: `compose` выбирает `SpiceDbAuthorization` с revisions из хранилища (роль `RevisionReader`), `SpiceDbRelationships`, `PostgresStore` с mapper Integration Events, `UuidIdGenerator` (UUIDv7, FR-541), `StoredCourierLocator` (последние позиции доступных курьеров, FR-542) и resolver service identity; каждая роль хранилища разрешается отдельно над одним `Arc<PostgresStore>`; компоненты `TonicTransport` (use cases, identity, бизнес-порт) и `SpiceDbReconciliation` (граф SpiceDB и то же хранилище в роли `ReconciliationStore`), provider `DeliveryWorkerProvider` — gRPC worker с reconciliation;
+  - `di::server` — `ServerModule` процесса `delivery`: `compose` выбирает `SpiceDbAuthorization` с revisions из хранилища (роль `RevisionReader`), `SpiceDbRelationships`, `PostgresStore` с mapper Integration Events, `UuidIdGenerator` (UUIDv7, FR-541), `StoredCourierLocator` (последние позиции доступных курьеров, FR-542) и resolver service identity; каждая роль хранилища разрешается отдельно над одним `Arc<PostgresStore>`; компоненты `TonicTransport` (use cases, identity, бизнес-порт), `SpiceDbReconciliation` (граф SpiceDB и то же хранилище в роли `ReconciliationStore`), `UseCaseOfferExpiry` и `UseCaseDeliveryDispatch` (фоновые задачи над тем же графом use cases), provider `DeliveryWorkerProvider` — gRPC worker с reconciliation, истечением offers и Dispatch Deliveries;
   - `di::relay` — `RelayModule` процесса `delivery-relay`: компоненты `PostgresRelayOutbox` (`PgOutbox`), `KafkaRelayPublisher`, `OtlpTelemetry`, `OutboxSettings`, provider `RelayWorkerProvider`; `RelayModule::shutdown` после drain дожидается Kafka и выгружает метрики;
   - `di::migrate` — `MigrateModule` процесса `delivery-migrate` с компонентом `PostgresMigration`.
 - `cmd/*` — загружают конфигурацию (невалидная завершает процесс до открытия портов), вызывают `compose` своего модуля, открывают технический порт `pkg::lifecycle::Lifecycle`, затем получают worker из модуля и передают его lifecycle.
@@ -383,8 +408,8 @@ docker stop delivery-pg delivery-kafka
 
 Реализованы:
 
-- доменная модель: `Courier` (включая `unavailable`), `Location`, табличные FSM `Delivery` (6 states × 6 triggers, включая `Cancelled`/`Cancel`) и `DeliveryOffer` (4 × 3) с тестами полноты, domain events `CourierAssignedToDelivery`, `CourierUnassignedFromDelivery`, `DeliveryPickedUp`, `DeliveryCompleted`, `DeliveryFailed`, `DeliveryCancelled`; policies `CourierEligibleForDelivery` и `DeliveryOfferAcceptable`; контракты репозиториев рядом с моделями;
-- application handlers всех 16 use cases в `slices/<slice>/applications/<usecase>/mod.rs` с unit-тестами;
+- доменная модель: `Courier` (включая `unavailable`), `Location`, табличные FSM `Delivery` (6 states × 6 triggers, включая `Cancelled`/`Cancel`) и `DeliveryOffer` (4 × 3) с тестами полноты, domain events `DeliveryOffered`, `CourierAssignedToDelivery`, `CourierUnassignedFromDelivery`, `DeliveryPickedUp`, `DeliveryCompleted`, `DeliveryFailed`, `DeliveryCancelled`; policies `CourierEligibleForDelivery` и `DeliveryOfferAcceptable`; контракты репозиториев рядом с моделями;
+- application handlers всех 17 use cases в `slices/<slice>/applications/<usecase>/mod.rs` с unit-тестами;
 - порты: `UnitOfWork`, `Clock`, `IdGenerator`, `Subject`/`AuthorizationError` (`pkg/application`), `RepositoryError` (`pkg/persistence`), `CourierAuthorization` и `DeliveryAuthorization`, порт занятости курьера `CourierAssignment`, `DeliveryOutbox`, `CourierLocator`, `CourierLocationStore`, read models `CourierCurrentDeliveryReadModel` и `PendingDeliveryOffersReadModel`, параметры `AssignmentPolicy`;
 - `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27) и user identity по assertion BFF (ADR 32);
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
@@ -394,9 +419,9 @@ docker stop delivery-pg delivery-kafka
 - `StoredCourierLocator` (`infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Pickup не геокодируется, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;
 - in-memory адаптеры всех портов в `infrastructure/memory` (транзакционный store с rollback и инъекцией сбоя commit, статическая authorization, управляемые clock и id generator, статический locator) — только для тестов.
 
-Не реализованы: Kafka consumers и Inbox, распространение trace context в Outbox (`traceparent` не пишется: OpenTelemetry tracing в процессе не подключён), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
+Не реализованы: Kafka consumers и Inbox, распространение trace context в Outbox (`traceparent` не пишется: OpenTelemetry tracing в процессе не подключён), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы все use cases, кроме Find Courier, Offer Delivery и Reassign Courier (шаги процесса назначения) и фоновых Expire Delivery Offers и Dispatch Deliveries.
 
-Допущения по открытым продуктовым вопросам (момент начала поиска курьера, retryability причин неудачи, параметры позиции и политики назначения) зафиксированы в [design.md](../../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам) change.
+Момент начала поиска курьера решён Dispatch Deliveries (см. выше). Допущения по остальным открытым продуктовым вопросам (retryability причин неудачи, параметры позиции и политики назначения) зафиксированы в [design.md](../../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам) change.
 
 ## Запуск
 

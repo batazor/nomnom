@@ -3,7 +3,7 @@
 //! No offer or assignment is created and no state changes.
 //!
 //! [`select_candidate`] is the application service without authorization;
-//! Replan Delivery reuses it under its own check and Unit of Work.
+//! Replan Delivery and Dispatch Deliveries reuse it in their Unit of Work.
 
 use std::collections::HashSet;
 

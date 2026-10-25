@@ -11,14 +11,14 @@
 
 - **Владелец:** `delivery/slices/delivery`.
 - **Домен:** `domains/delivery`.
-- **Взаимодействие:** Может инициировать новый поиск внутри `delivery`.
+- **Взаимодействие:** Отклонённый offer больше не pending, поэтому следующий проход Dispatch Deliveries предлагает доставку другому курьеру.
 
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-311.
 - **Порты:** `DeliveryAuthorization` (`RejectDeliveryOffer` над `Courier(id)`), `DeliveryOfferRepository`, `Clock`.
 - **Транзакция:** Без UoW: одиночная запись; повтор отклонения — no-op.
-- **Допущение:** Новый поиск автоматически не запускается.
+- **Допущение:** Сам use case новый поиск не запускает: его начинает Dispatch Deliveries.
 
 ## Acceptance
 

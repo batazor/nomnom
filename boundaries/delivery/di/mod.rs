@@ -3,8 +3,8 @@
 //!
 //! - [`infrastructure`] — порты слайсов и их реализации ([`InfrastructureModule`]);
 //! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы [`build`];
-//! - [`server`] — `cmd/delivery`: gRPC, reconciliation и истечение Delivery
-//!   Offers ([`server::ServerModule`]);
+//! - [`server`] — `cmd/delivery`: gRPC, reconciliation, истечение Delivery
+//!   Offers и Dispatch Deliveries ([`server::ServerModule`]);
 //! - [`relay`] — `cmd/delivery-relay`: Outbox → Kafka ([`relay::RelayModule`]);
 //! - [`migrate`] — `cmd/delivery-migrate` ([`migrate::MigrateModule`]).
 //!
@@ -14,6 +14,7 @@
 //! (`infrastructure::locator`). Только тестовый граф [`build`] закрывается
 //! in-memory адаптерами из `infrastructure::memory`.
 
+mod dispatch_worker;
 mod http_worker;
 pub mod infrastructure;
 pub mod migrate;
@@ -23,6 +24,7 @@ pub mod relay;
 pub mod server;
 pub mod service;
 
+pub use dispatch_worker::{DispatchDeliveries, DispatchSchedule, DispatchWorker};
 pub use http_worker::HttpWorker;
 pub use infrastructure::{
     CourierStore, InfrastructureModule, ProcessAuthorization, ProcessRelationships, ProcessStores,

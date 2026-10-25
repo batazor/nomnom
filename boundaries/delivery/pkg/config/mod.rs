@@ -79,16 +79,26 @@ pub const RECONCILER_PAGE_SIZE_ENV: &str = "RECONCILER__PAGE_SIZE";
 /// Максимум `ReadRelationships` limit SpiceDB по умолчанию.
 pub const MAX_RECONCILER_PAGE_SIZE: u32 = 1000;
 
-/// Истечение Delivery Offers (Expire Delivery Offers): ключ, переменная,
-/// значение по умолчанию.
-const OFFERS_SETTINGS: [(&str, &str, &str); 2] = [
+/// Истечение Delivery Offers (Expire Delivery Offers) и Dispatch Deliveries:
+/// ключ, переменная, значение по умолчанию.
+const OFFERS_SETTINGS: [(&str, &str, &str); 4] = [
     ("offers.expiry_interval", OFFERS_EXPIRY_INTERVAL_ENV, "15s"),
     ("offers.expiry_batch", OFFERS_EXPIRY_BATCH_ENV, "100"),
+    (
+        "offers.dispatch_interval",
+        OFFERS_DISPATCH_INTERVAL_ENV,
+        "2s",
+    ),
+    ("offers.dispatch_batch", OFFERS_DISPATCH_BATCH_ENV, "100"),
 ];
 pub const OFFERS_EXPIRY_INTERVAL_ENV: &str = "OFFERS__EXPIRY_INTERVAL";
 pub const OFFERS_EXPIRY_BATCH_ENV: &str = "OFFERS__EXPIRY_BATCH";
 /// Верхняя граница пачки истечения offers.
 pub const MAX_OFFERS_EXPIRY_BATCH: u32 = 1000;
+pub const OFFERS_DISPATCH_INTERVAL_ENV: &str = "OFFERS__DISPATCH_INTERVAL";
+pub const OFFERS_DISPATCH_BATCH_ENV: &str = "OFFERS__DISPATCH_BATCH";
+/// Верхняя граница пачки Dispatch Deliveries.
+pub const MAX_OFFERS_DISPATCH_BATCH: u32 = 1000;
 
 /// PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста): ключ, переменная, значение по умолчанию.
 const DATABASE_SETTINGS: [(&str, &str, &str); 2] = [

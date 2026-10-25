@@ -5,7 +5,7 @@
 //! together with its `DeliveryOfferExpired` fact in the Outbox. An offer that
 //! was accepted, rejected or withdrawn concurrently (optimistic concurrency
 //! conflict) is skipped, not an error. Re-offering the Delivery to another
-//! courier is not part of this use case.
+//! courier is not part of this use case: Dispatch Deliveries does it.
 //!
 //! The job runs inside the process, not on behalf of a caller, so there is no
 //! subject and no permission check.
