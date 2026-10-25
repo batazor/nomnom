@@ -11,14 +11,17 @@ const (
 	configKeyKafkaBrokers       = "kafka.brokers"
 	configKeyKafkaClientID      = "kafka.client_id"
 	configKeyKafkaConsumerGroup = "kafka.consumer_group"
+	configKeyKafkaPoisonTopic   = "kafka.poison_topic"
 
 	EnvKafkaBrokers       = "KAFKA__BROKERS"
 	EnvKafkaClientID      = "KAFKA__CLIENT_ID"
 	EnvKafkaConsumerGroup = "KAFKA__CONSUMER_GROUP"
+	EnvKafkaPoisonTopic   = "KAFKA__POISON_TOPIC"
 
 	DefaultKafkaBroker        = "localhost:9092"
 	DefaultKafkaClientID      = "orders"
 	DefaultKafkaConsumerGroup = "orders"
+	DefaultKafkaPoisonTopic   = "orders.v1.consumer-poison"
 )
 
 // KafkaConfig is shared by Kafka-backed process composition roots. The HTTP
@@ -27,17 +30,21 @@ type KafkaConfig struct {
 	Brokers       []string `mapstructure:"brokers"`
 	ClientID      string   `mapstructure:"client_id"`
 	ConsumerGroup string   `mapstructure:"consumer_group"`
+	// PoisonTopic receives inbound messages that cannot be processed (ADR 28).
+	PoisonTopic string `mapstructure:"poison_topic"`
 }
 
 func configureKafka(loader *viper.Viper) error {
 	loader.SetDefault(configKeyKafkaBrokers, []string{DefaultKafkaBroker})
 	loader.SetDefault(configKeyKafkaClientID, DefaultKafkaClientID)
 	loader.SetDefault(configKeyKafkaConsumerGroup, DefaultKafkaConsumerGroup)
+	loader.SetDefault(configKeyKafkaPoisonTopic, DefaultKafkaPoisonTopic)
 
 	for key, env := range map[string]string{
 		configKeyKafkaBrokers:       EnvKafkaBrokers,
 		configKeyKafkaClientID:      EnvKafkaClientID,
 		configKeyKafkaConsumerGroup: EnvKafkaConsumerGroup,
+		configKeyKafkaPoisonTopic:   EnvKafkaPoisonTopic,
 	} {
 		if err := loader.BindEnv(key, env); err != nil {
 			return fmt.Errorf("bind %s: %w", env, err)
@@ -60,6 +67,9 @@ func (cfg KafkaConfig) Validate() error {
 	}
 	if strings.TrimSpace(cfg.ConsumerGroup) == "" {
 		return fmt.Errorf("kafka consumer group must not be empty")
+	}
+	if strings.TrimSpace(cfg.PoisonTopic) == "" {
+		return fmt.Errorf("kafka poison topic must not be empty")
 	}
 	return nil
 }

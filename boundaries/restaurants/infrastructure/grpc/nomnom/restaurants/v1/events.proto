@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package nomnom.restaurants.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Integration Events стрима restaurants.v1.restaurant-order-events (ADR 25, ADR 28).
+// Envelope (event_id, event_type, occurred_at, aggregate_*) передаётся в Kafka
+// headers; event_type — полное имя сообщения ниже, partition key — aggregate_id
+// Kitchen Order.
+
+// Ресторан принял Kitchen Order (Order Acceptance).
+message RestaurantOrderAccepted {
+  string order_id = 1;
+}
+
+// Ресторан отказался принять Kitchen Order.
+message RestaurantOrderRejected {
+  string order_id = 1;
+  string reason = 2;
+}
+
+// Начато Preparation.
+message PreparationStarted {
+  string order_id = 1;
+}
+
+// Preparation задерживается; expected_ready_at — новая ожидаемая готовность.
+message PreparationDelayed {
+  string order_id = 1;
+  google.protobuf.Timestamp expected_ready_at = 2;
+}
+
+// Preparation не может быть завершено.
+message PreparationFailed {
+  string order_id = 1;
+  string reason = 2;
+}
+
+// Kitchen Order готов к Pickup.
+message RestaurantOrderReady {
+  string order_id = 1;
+}

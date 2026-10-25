@@ -36,6 +36,27 @@ func NewEventMessage(eventID, orderID string, payload []byte) (*message.Message,
 }
 
 func NewPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (*watermillkafka.Publisher, error) {
+	return newPublisher(cfg, logger, func(_ string, msg *message.Message) (string, error) {
+		key := msg.Metadata.Get(PartitionKeyMetadata)
+		if key == "" {
+			return "", fmt.Errorf("message %q has no %s metadata", msg.UUID, PartitionKeyMetadata)
+		}
+		return key, nil
+	})
+}
+
+// NewPoisonPublisher publishes messages rejected by the consumer to the poison
+// topic, keyed by the aggregate_id of the source stream when it is known.
+func NewPoisonPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (*watermillkafka.Publisher, error) {
+	return newPublisher(cfg, logger, func(_ string, msg *message.Message) (string, error) {
+		if key := msg.Metadata.Get(AggregateIDMetadata); key != "" {
+			return key, nil
+		}
+		return msg.UUID, nil
+	})
+}
+
+func newPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter, key watermillkafka.GeneratePartitionKey) (*watermillkafka.Publisher, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -46,13 +67,7 @@ func NewPublisher(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (*wate
 	saramaConfig.Producer.Idempotent = true
 	saramaConfig.Net.MaxOpenRequests = 1
 
-	marshaler := watermillkafka.NewWithPartitioningMarshaler(func(_ string, msg *message.Message) (string, error) {
-		key := msg.Metadata.Get(PartitionKeyMetadata)
-		if key == "" {
-			return "", fmt.Errorf("message %q has no %s metadata", msg.UUID, PartitionKeyMetadata)
-		}
-		return key, nil
-	})
+	marshaler := watermillkafka.NewWithPartitioningMarshaler(key)
 
 	publisher, err := watermillkafka.NewPublisher(watermillkafka.PublisherConfig{
 		Brokers:               cfg.Brokers,

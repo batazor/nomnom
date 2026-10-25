@@ -44,9 +44,15 @@ Custom `CommandEventMarshaler`: имя — `event_type` envelope (полное �
 | --- | --- | --- |
 | `orders/slices/order` | `restaurants.v1.restaurant-order-events` | `RestaurantOrderAccepted` → Confirm Order; `RestaurantOrderRejected` → Reject Order; `PreparationStarted` → Record Preparation Started; `RestaurantOrderReady` → Record Order Ready; `PreparationDelayed`, `PreparationFailed` → только workflow Signal |
 | `orders/slices/order` | `delivery.v1.delivery-events` | `CourierAssignedToDelivery` → Record Courier Assignment; `DeliveryPickedUp` → Record Pickup; `DeliveryCompleted` → Record Delivery Completion; `DeliveryFailed` → Record Delivery Failure |
-| `orders/slices/order` | `payments.v1.payment-events` | `PaymentAuthorized`, `PaymentFailed` → только workflow Signal |
 
-Источник списка — [orders README](../boundaries/orders/README.md). Неизвестный `event_type` в стриме — poison.
+Источник списка — [orders README](../boundaries/orders/README.md). `PaymentAuthorized` и `PaymentFailed` `orders` из Kafka не читает: в порте `fulfillment` нет соответствующих Kind, workflow получает результат оплаты через Activity. Неизвестный `event_type` в стриме — poison.
+
+### Реализация в `orders`
+
+- Envelope — Kafka headers (`event_id`, `event_type`, `occurred_at`, `aggregate_*`, `traceparent`), payload — Protobuf. Контракты событий — `events.proto` в модулях publisher'ов (`nomnom.restaurants.v1`, `nomnom.delivery.v1`).
+- Общий transport: [`pkg/messaging`](../boundaries/orders/pkg/messaging) — `EnvelopeMarshaler`, классы ошибок, `NewConsumerRouter` (poison → retry → reject unknown → `EventGroupProcessor`).
+- Slice adapter: [`slices/order/infrastructure/messaging`](../boundaries/orders/slices/order/infrastructure/messaging/README.md).
+- Composition root: `cmd/orders-consumer`, `di/consumer.go`.
 
 ### Ошибки
 

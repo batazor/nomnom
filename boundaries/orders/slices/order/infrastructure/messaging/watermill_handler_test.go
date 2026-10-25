@@ -1,0 +1,220 @@
+package messaging_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/slices/order/applications/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillment"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
+	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
+	"nomnom/orders/slices/order/applications/recordorderready"
+	"nomnom/orders/slices/order/applications/recordpickup"
+	"nomnom/orders/slices/order/applications/recordpreparationstarted"
+	"nomnom/orders/slices/order/applications/rejectorder"
+	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/domains/order"
+	"nomnom/orders/slices/order/domains/order/ordertest"
+	"nomnom/orders/slices/order/infrastructure/memory"
+	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
+	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
+	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
+)
+
+const poisonTopic = "orders.v1.consumer-poison"
+
+var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
+
+type consumer struct {
+	pubSub   *gochannel.GoChannel
+	store    *memory.Store
+	workflow *memory.Workflow
+	poison   chan *message.Message
+}
+
+// startConsumer wires the order slice streams to gochannel: the same router
+// policy as orders-consumer, without Kafka.
+func startConsumer(t *testing.T, orders ...*order.Order) consumer {
+	t.Helper()
+	store := memory.NewStore()
+	for _, o := range orders {
+		require.NoError(t, store.Add(context.Background(), o))
+	}
+	workflow := memory.NewWorkflow()
+	handlers := ordermessaging.Handlers{
+		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
+		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
+		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
+		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
+		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow),
+		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
+		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
+		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
+	}
+
+	pubSub := gochannel.NewGoChannel(gochannel.Config{BlockPublishUntilSubscriberAck: true}, watermill.NopLogger{})
+	subscription, err := pubSub.Subscribe(context.Background(), poisonTopic)
+	require.NoError(t, err)
+	poison := make(chan *message.Message, 10)
+	go func() {
+		for msg := range subscription {
+			msg.Ack()
+			poison <- msg
+		}
+	}()
+
+	router, err := messaging.NewConsumerRouter(messaging.ConsumerConfig{
+		PoisonTopic: poisonTopic,
+		Retry:       messaging.RetryPolicy{MaxRetries: 1, InitialInterval: time.Millisecond, MaxInterval: time.Millisecond},
+	}, pubSub, pubSub, ordermessaging.Streams(handlers), nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { _ = router.Run(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		_ = router.Close()
+	})
+	<-router.Running()
+	return consumer{pubSub: pubSub, store: store, workflow: workflow, poison: poison}
+}
+
+func (c consumer) publish(t *testing.T, topic, eventID string, event proto.Message) {
+	t.Helper()
+	msg, err := messaging.NewIntegrationEventMessage(messaging.Envelope{
+		EventID:          eventID,
+		OccurredAt:       occurredAt,
+		AggregateType:    "source",
+		AggregateID:      "aggregate-1",
+		AggregateVersion: 1,
+	}, event)
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	go func() { done <- c.pubSub.Publish(topic, msg) }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%s was not acked", eventID)
+	}
+}
+
+func (c consumer) poisoned(t *testing.T) *message.Message {
+	t.Helper()
+	select {
+	case msg := <-c.poison:
+		return msg
+	case <-time.After(5 * time.Second):
+		t.Fatal("no message in poison topic")
+		return nil
+	}
+}
+
+func (c consumer) noPoison(t *testing.T) {
+	t.Helper()
+	select {
+	case msg := <-c.poison:
+		t.Fatalf("unexpected poison message %s: %s", msg.UUID, msg.Metadata.Get("reason_poisoned"))
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func kinds(notifications []fulfillment.Notification) []fulfillment.Kind {
+	result := make([]fulfillment.Kind, 0, len(notifications))
+	for _, n := range notifications {
+		result = append(result, n.Kind)
+	}
+	return result
+}
+
+func TestRestaurantOrderAcceptedConfirmsOrder(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1"))
+
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.RestaurantOrderAccepted{OrderId: "order-1"})
+
+	snapshot, _ := c.store.Snapshot("order-1")
+	assert.Equal(t, order.StateConfirmed, snapshot.State)
+	assert.Equal(t, 1, c.store.InboxSize())
+	assert.Equal(t, []fulfillment.Notification{{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+	}}, c.workflow.Notifications())
+	c.noPoison(t)
+}
+
+func TestRedeliveryIsAckedAsDuplicate(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1"))
+	accepted := &restaurantsv1.RestaurantOrderAccepted{OrderId: "order-1"}
+
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", accepted)
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", accepted)
+
+	assert.Equal(t, 1, c.store.InboxSize())
+	assert.Len(t, c.workflow.Notifications(), 2, "duplicate re-notifies the workflow with the same event_id")
+	c.noPoison(t)
+}
+
+func TestDeliveryStreamKeepsOrderOfOneAggregate(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed)))
+
+	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-1", &deliveryv1.CourierAssignedToDelivery{OrderId: "order-1"})
+	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-2", &deliveryv1.DeliveryPickedUp{OrderId: "order-1"})
+	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-3", &deliveryv1.DeliveryCompleted{OrderId: "order-1"})
+
+	assert.Equal(t, []fulfillment.Kind{
+		fulfillment.KindCourierAssigned, fulfillment.KindPickedUp, fulfillment.KindDeliveryCompleted,
+	}, kinds(c.workflow.Notifications()))
+	assert.Equal(t, 3, c.store.InboxSize())
+	c.noPoison(t)
+}
+
+func TestPreparationDelayedIsRelayedToWorkflow(t *testing.T) {
+	c := startConsumer(t)
+	expected := occurredAt.Add(15 * time.Minute)
+
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.PreparationDelayed{
+		OrderId: "order-1", ExpectedReadyAt: timestamppb.New(expected),
+	})
+
+	assert.Equal(t, []fulfillment.Notification{{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPreparationDelayed, OccurredAt: occurredAt, ExpectedReadyAt: expected,
+	}}, c.workflow.Notifications())
+	assert.Zero(t, c.store.InboxSize())
+	c.noPoison(t)
+}
+
+func TestUnknownOrderGoesToPoison(t *testing.T) {
+	c := startConsumer(t)
+
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.RestaurantOrderReady{OrderId: "missing"})
+
+	assert.Equal(t, "event-1", c.poisoned(t).UUID)
+	assert.Zero(t, c.store.InboxSize(), "rolled back transaction keeps no Inbox record")
+}
+
+func TestEventOfAnotherStreamGoesToPoison(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1"))
+
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &deliveryv1.DeliveryPickedUp{OrderId: "order-1"})
+
+	assert.Equal(t, ordermessaging.RestaurantOrderEventsTopic, c.poisoned(t).Metadata.Get("topic_poisoned"))
+	assert.Empty(t, c.workflow.Notifications())
+}
+
+func TestInvalidCommandGoesToPoison(t *testing.T) {
+	c := startConsumer(t)
+
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.PreparationDelayed{OrderId: "order-1"})
+
+	assert.Equal(t, "event-1", c.poisoned(t).UUID)
+}

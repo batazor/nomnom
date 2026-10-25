@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package nomnom.delivery.v1;
+
+// Integration Events стрима delivery.v1.delivery-events (ADR 25, ADR 28).
+// Envelope (event_id, event_type, occurred_at, aggregate_*) передаётся в Kafka
+// headers; event_type — полное имя сообщения ниже, partition key — aggregate_id
+// Delivery.
+
+// Курьер назначен на Delivery (Courier Assignment).
+message CourierAssignedToDelivery {
+  string order_id = 1;
+  string delivery_id = 2;
+  string courier_id = 3;
+}
+
+// Курьер забрал заказ (Pickup).
+message DeliveryPickedUp {
+  string order_id = 1;
+  string delivery_id = 2;
+}
+
+// Delivery завершена (Delivery Completion).
+message DeliveryCompleted {
+  string order_id = 1;
+  string delivery_id = 2;
+}
+
+// Delivery не удалась по бизнес-причине.
+message DeliveryFailed {
+  string order_id = 1;
+  string delivery_id = 2;
+  string reason = 3;
+}

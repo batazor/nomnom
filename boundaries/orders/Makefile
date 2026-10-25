@@ -5,7 +5,7 @@ TEMPORAL_IMAGE ?= temporalio/temporal:1.9.1
 TEMPORAL_PORT ?= 7233
 TEMPORAL_CONTAINER ?= orders-temporal-dev
 
-.PHONY: check run run-worker generate proto-check proto-generate test test-integration temporal-dev temporal-dev-stop lint format format-check
+.PHONY: check run run-worker run-consumer generate proto-check proto-generate test test-integration temporal-dev temporal-dev-stop lint format format-check
 
 check: proto-check test lint format-check
 
@@ -17,6 +17,10 @@ run:
 run-worker:
 	MANAGEMENT__PORT=9082 TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true FULFILLMENT__NEIGHBOURS=simulated \
 		$(GO) run ./cmd/orders-worker
+
+# Consumer против локальных Kafka и Temporal (make temporal-dev).
+run-consumer:
+	MANAGEMENT__PORT=9083 $(GO) run ./cmd/orders-consumer
 
 temporal-dev:
 	$(DOCKER) run -d --rm --name $(TEMPORAL_CONTAINER) -p $(TEMPORAL_PORT):7233 -p 8233:8233 \
@@ -41,6 +45,7 @@ proto-check:
 proto-generate:
 	cd infrastructure/grpc && buf generate --template buf.gen.yaml
 	cd slices/order/infrastructure/neighbours/grpcclient && buf generate --template buf.gen.yaml
+	cd slices/order/infrastructure/messaging && buf generate --template buf.gen.yaml
 
 test:
 	$(GO) test ./...

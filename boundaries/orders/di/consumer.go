@@ -1,0 +1,154 @@
+package di
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"go.temporal.io/sdk/client"
+
+	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/slices/order/applications/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillment"
+	"nomnom/orders/slices/order/applications/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
+	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
+	"nomnom/orders/slices/order/applications/recordorderready"
+	"nomnom/orders/slices/order/applications/recordpickup"
+	"nomnom/orders/slices/order/applications/recordpreparationstarted"
+	"nomnom/orders/slices/order/applications/rejectorder"
+	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/infrastructure/memory"
+	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
+	"nomnom/orders/slices/order/infrastructure/temporal/fulfillorder"
+)
+
+// KafkaConsumer — lifecycle.Worker процесса orders-consumer (ADR 28): в Start
+// подключается к Temporal и Kafka и собирает Watermill Router с handler groups
+// слайса order; Shutdown закрывает Router, дожидаясь начатых сообщений.
+type KafkaConsumer struct {
+	cfg   config.Config
+	store *memory.Store
+
+	dial          func(ctx context.Context, options client.Options) (client.Client, error)
+	newSubscriber func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error)
+	newPoison     func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Publisher, error)
+	logger        watermill.LoggerAdapter
+
+	temporal   client.Client
+	subscriber message.Subscriber
+	poison     message.Publisher
+	router     *message.Router
+	done       chan error
+}
+
+// NewKafkaConsumer собирает consumer поверх store процесса. До PostgreSQL store
+// in-memory и не разделяется с API и worker'ом.
+func NewKafkaConsumer(cfg config.Config, store *memory.Store) *KafkaConsumer {
+	return &KafkaConsumer{
+		cfg:   cfg,
+		store: store,
+		dial:  client.DialContext,
+		newSubscriber: func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
+			return messaging.NewSubscriber(cfg, logger)
+		},
+		newPoison: func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
+			return messaging.NewPoisonPublisher(cfg, logger)
+		},
+		logger: watermill.NewStdLogger(false, false),
+		done:   make(chan error, 1),
+	}
+}
+
+// ConsumerHandlers собирает application handlers, которые читают Kafka.
+func ConsumerHandlers(store *memory.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
+	return ordermessaging.Handlers{
+		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
+		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
+		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
+		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
+		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow),
+		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
+		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
+		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
+	}
+}
+
+func (c *KafkaConsumer) Start(ctx context.Context) error {
+	dialCtx, cancel := context.WithTimeout(ctx, c.cfg.Temporal.ConnectTimeout)
+	defer cancel()
+	temporal, err := c.dial(dialCtx, client.Options{HostPort: c.cfg.Temporal.HostPort, Namespace: c.cfg.Temporal.Namespace})
+	if err != nil {
+		return fmt.Errorf("connect temporal %s: %w", c.cfg.Temporal.HostPort, err)
+	}
+	c.temporal = temporal
+
+	if c.subscriber, err = c.newSubscriber(c.cfg.Kafka, c.logger); err != nil {
+		return errors.Join(err, c.closeResources())
+	}
+	if c.poison, err = c.newPoison(c.cfg.Kafka, c.logger); err != nil {
+		return errors.Join(err, c.closeResources())
+	}
+
+	workflow := fulfillorder.NewClient(temporal, NewFulfillmentPolicy(c.cfg.Fulfillment))
+	streams := ordermessaging.Streams(ConsumerHandlers(c.store, workflow))
+	c.router, err = messaging.NewConsumerRouter(messaging.ConsumerConfig{
+		PoisonTopic:  c.cfg.Kafka.PoisonTopic,
+		Retry:        messaging.DefaultRetryPolicy,
+		CloseTimeout: c.cfg.Shutdown.DrainTimeout,
+	}, c.subscriber, c.poison, streams, c.logger)
+	if err != nil {
+		return errors.Join(err, c.closeResources())
+	}
+
+	go func() { c.done <- c.router.Run(context.Background()) }()
+	select {
+	case <-c.router.Running():
+		log.Printf("orders-consumer consuming %d streams in group %s", len(streams), c.cfg.Kafka.ConsumerGroup)
+		return nil
+	case err := <-c.done:
+		return errors.Join(fmt.Errorf("run router: %w", err), c.closeResources())
+	case <-ctx.Done():
+		return errors.Join(ctx.Err(), c.router.Close(), c.closeResources())
+	}
+}
+
+// Run ждёт остановки Router: штатной после Shutdown или аварийной.
+func (c *KafkaConsumer) Run() error {
+	if err := <-c.done; err != nil {
+		return fmt.Errorf("kafka consumer failed: %w", err)
+	}
+	return nil
+}
+
+// Shutdown прекращает чтение и ждёт начатые сообщения до CloseTimeout Router;
+// offsets подтверждаются только для сообщений, обработанных до commit.
+func (c *KafkaConsumer) Shutdown(ctx context.Context) error {
+	stopped := make(chan error, 1)
+	go func() { stopped <- errors.Join(c.router.Close(), c.closeResources()) }()
+	select {
+	case err := <-stopped:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("stop kafka consumer: %w", ctx.Err())
+	}
+}
+
+func (c *KafkaConsumer) closeResources() error {
+	var errs []error
+	if c.subscriber != nil {
+		errs = append(errs, c.subscriber.Close())
+	}
+	if c.poison != nil {
+		errs = append(errs, c.poison.Close())
+	}
+	if c.temporal != nil {
+		c.temporal.Close()
+	}
+	return errors.Join(errs...)
+}

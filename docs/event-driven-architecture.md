@@ -542,7 +542,7 @@ Inbox не обязан храниться бесконечно. Retention уч�
 
 Общие:
 
-- формат protobuf envelope интеграционного события и место `event_type`, `aggregate_*` и trace context: Kafka headers или payload (`event_id` передаётся в header `event_id`);
+- ~~формат protobuf envelope интеграционного события и место `event_type`, `aggregate_*` и trace context: Kafka headers или payload (`event_id` передаётся в header `event_id`);~~ — решено для consumer `orders` ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md)): envelope целиком в Kafka headers (`event_id`, `event_type`, `occurred_at` RFC 3339, `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent`), payload — Protobuf-сообщение контракта; publishers на других языках используют тот же формат;
 - размещение event-схем в Buf и правила их совместимости;
 - polling или CDC для Outbox не-Go сервисов, распределение записей между экземплярами publisher с сохранением порядка, срок retention опубликованных записей и процедура ручной повторной публикации;
 - процедура карантина и ручного восстановления poison outbox record;
