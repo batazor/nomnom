@@ -20,5 +20,5 @@
 
 ## 4. Документация и проверка
 
-- [ ] 4.1 `docs/security.md`: путь доступа курьера и право диспетчера.
-- [ ] 4.2 `openspec validate scope-courier-access-to-assignment --strict`; проверки delivery и orders.
+- [x] 4.1 `docs/security.md`: путь доступа курьера и право диспетчера.
+- [x] 4.2 `openspec validate scope-courier-access-to-assignment --strict`; проверки delivery и orders.

@@ -8,7 +8,7 @@ import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collection
 import {
   createSpiceDbClient,
   type SpiceDbClient,
-} from "../infrastructure/spicedb/access-control.ts";
+} from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import { FixedClock } from "../pkg/infrastructure/memory/clock.ts";
 import {

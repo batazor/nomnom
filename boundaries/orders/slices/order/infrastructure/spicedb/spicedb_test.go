@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -164,33 +163,8 @@ func TestUnlinkDeliveryDeletesTheRelationship(t *testing.T) {
 	assert.Equal(t, []string{"OPERATION_DELETE order-1#delivery@delivery:delivery-1"}, relationships(fake.writes[0].GetUpdates()))
 }
 
-// schemaPath is the shared authorization schema of the repository.
-const schemaPath = "../../../../../../authorization/schema.zed"
-
-// withoutOrderCourier is the schema with relation order#courier removed
-// (change scope-courier-access-to-assignment): view = customer +
-// restaurant->view_orders + delivery->act_as_courier. The schema change itself
-// belongs to the delivery branch; until both branches are merged the test
-// applies it to the SpiceDB under test, afterwards it is a no-op.
-func withoutOrderCourier(t *testing.T) string {
-	t.Helper()
-	data, err := os.ReadFile(schemaPath)
-	require.NoError(t, err)
-	// Only the order definition loses courier: delivery#courier stays.
-	schema := strings.Replace(string(data), "\trelation courier: user\n\trelation delivery: delivery\n", "\trelation delivery: delivery\n", 1)
-	schema = strings.Replace(schema, " + courier + delivery->act_as_courier", " + delivery->act_as_courier", 1)
-	require.NotContains(t, orderDefinition(schema), "courier:", "order#courier is gone")
-	return schema
-}
-
-func orderDefinition(schema string) string {
-	start := strings.Index(schema, "definition order {")
-	end := strings.Index(schema[start:], "\n}")
-	return schema[start : start+end]
-}
-
 // AC-465, AC-467, AC-518, AC-519, AC-522, AC-534, AC-535 against the SpiceDB
-// of `make spicedb-dev`, with the schema without order#courier.
+// of `make spicedb-dev`.
 func TestAgainstSpiceDB(t *testing.T) {
 	endpoint := os.Getenv("SPICEDB_ENDPOINT")
 	if endpoint == "" {
@@ -199,8 +173,6 @@ func TestAgainstSpiceDB(t *testing.T) {
 	client, err := spicedb.Dial(config.SpiceDBConfig{Endpoint: endpoint, PresharedKey: "devkey", Insecure: true, Timeout: 2 * time.Second})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
-	_, err = client.WriteSchema(context.Background(), &v1.WriteSchemaRequest{Schema: withoutOrderCourier(t)})
-	require.NoError(t, err, "SpiceDB must not hold order#courier relationships (design, section 5)")
 	stored := revisions{}
 	a := spicedb.NewAuthorizer(client, stored, 2*time.Second)
 	ctx := context.Background()
