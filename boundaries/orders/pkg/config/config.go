@@ -17,6 +17,7 @@ type Config struct {
 	Fulfillment FulfillmentConfig `mapstructure:"fulfillment"`
 
 	Cancellation CancellationConfig `mapstructure:"cancellation"`
+	Catalog      CatalogConfig      `mapstructure:"catalog"`
 
 	InternalGateway InternalGatewayConfig `mapstructure:"internal_gateway"`
 	Identity        IdentityConfig        `mapstructure:"identity"`
@@ -49,6 +50,9 @@ func Load() (Config, error) {
 	}
 	if err := configureCancellation(loader); err != nil {
 		return Config{}, fmt.Errorf("configure cancellation: %w", err)
+	}
+	if err := configureCatalog(loader); err != nil {
+		return Config{}, fmt.Errorf("configure catalog: %w", err)
 	}
 	if err := configureInternalGateway(loader); err != nil {
 		return Config{}, fmt.Errorf("configure internal gateway: %w", err)
@@ -99,6 +103,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := cfg.Cancellation.Validate(); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.Catalog.Validate(); err != nil {
 		return Config{}, err
 	}
 	if err := cfg.Identity.Validate(); err != nil {

@@ -75,7 +75,7 @@ func Classify(err error) telemetry.Failure {
 	case errors.As(err, &guard):
 		return rejected(ErrorTypeGuardFailed)
 	case errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem),
-		errors.Is(err, order.ErrInvalidCancellationReason):
+		errors.Is(err, order.ErrInvalidCancellationReason), errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders):
 		return rejected(ErrorTypeDomainRule)
 	case errors.Is(err, fulfillment.ErrCancellationRefused):
 		return rejected(ErrorTypeCancellationRefused)

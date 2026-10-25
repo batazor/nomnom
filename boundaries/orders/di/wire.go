@@ -23,7 +23,7 @@ var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна
 	// только своя секция.
 	configSet = wire.NewSet(wire.FieldsOf(new(config.Config),
-		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Temporal", "Fulfillment", "InternalGateway"))
+		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Catalog", "Temporal", "Fulfillment", "InternalGateway"))
 	// temporalAPISet — lazy Temporal client API и порт Order Fulfillment Workflow.
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.

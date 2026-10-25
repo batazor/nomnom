@@ -20,6 +20,12 @@ temporal:
 # продуктового решения; значение должно быть положительным.
 cancellation:
   window: 5m
+# Catalog Place Order (env CATALOG__*): лимиты суммы заказа в валюте меню — placeholders,
+# пока restaurants их не публикует; timeout — общий deadline GetRestaurant и GetMenu.
+catalog:
+  minimum_total: "0"
+  maximum_total: "100000"
+  timeout: 2s
 # Policy Order Fulfillment Workflow. Значения — placeholders, не продуктовые сроки.
 fulfillment:
   acceptance_timeout: 10m

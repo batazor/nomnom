@@ -214,7 +214,7 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 	assert.True(t, replayed.GetReplayed())
 }
 
-// AC-509: the production catalog fails closed while restaurants has no menu API.
+// AC-509: a fail-closed catalog (neighbours unavailable or simulated) is UNAVAILABLE.
 func TestPlaceOrderUnavailableCatalogIsUnavailable(t *testing.T) {
 	ports := newCommandPorts()
 	ports.catalog = neighbours.UnavailableCatalog{}
@@ -222,6 +222,31 @@ func TestPlaceOrderUnavailableCatalogIsUnavailable(t *testing.T) {
 
 	_, err := client.PlaceOrder(context.Background(), placeRequest())
 	requireReason(t, err, codes.Unavailable, "DEPENDENCY_UNAVAILABLE")
+}
+
+// AC-566: refusals of the catalog name the restaurant rule; no Order is placed.
+func TestPlaceOrderMapsRestaurantRefusals(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err    error
+		code   codes.Code
+		reason string
+	}{
+		"unknown restaurant": {placeorder.ErrUnknownRestaurant, codes.NotFound, "RESTAURANT_NOT_FOUND"},
+		"closed restaurant":  {placeorder.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, ports := memory.NewStore(), newCommandPorts()
+			catalog := memory.NewCatalog()
+			catalog.Fail(tc.err)
+			ports.catalog = catalog
+			client := newClientWithPorts(t, fixedSubject{subject: customer}, store, memory.NewAuthorizer(), ports)
+
+			_, err := client.PlaceOrder(context.Background(), placeRequest())
+			requireReason(t, err, tc.code, tc.reason)
+			_, placed := store.Snapshot("order-1")
+			assert.False(t, placed)
+		})
+	}
 }
 
 // AC-510: a service subject is not a Customer.

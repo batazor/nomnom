@@ -16,6 +16,10 @@ import (
 // ErrUnknownRestaurant is returned by Catalog adapters for a restaurant without a menu.
 var ErrUnknownRestaurant = errors.New("unknown restaurant")
 
+// ErrRestaurantNotAcceptingOrders is returned by Catalog adapters for a closed
+// restaurant: the Order is refused before the transaction.
+var ErrRestaurantNotAcceptingOrders = errors.New("restaurant is not accepting orders")
+
 type ItemInput struct {
 	MenuItemID order.MenuItemID
 	Quantity   int

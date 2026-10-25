@@ -216,6 +216,10 @@ func transportError(err error) error {
 		code, reason, message = codes.Unauthenticated, "AUTHENTICATION_REQUIRED", err.Error()
 	case errors.Is(err, application.ErrDependencyUnavailable), errors.Is(err, fulfillment.ErrWorkflowNotFound):
 		code, reason, message = codes.Unavailable, "DEPENDENCY_UNAVAILABLE", "dependency unavailable"
+	case errors.Is(err, placeorder.ErrUnknownRestaurant):
+		code, reason, message = codes.NotFound, "RESTAURANT_NOT_FOUND", err.Error()
+	case errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders):
+		code, reason, message = codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS", err.Error()
 	case errors.Is(err, application.ErrInvalidInput):
 		code, reason, message = codes.InvalidArgument, "INVALID_ARGUMENT", err.Error()
 	case errors.Is(err, vo.ErrInvalidValue), errors.As(err, &notOrderable),

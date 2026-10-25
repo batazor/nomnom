@@ -6,7 +6,7 @@
 
 ## 2. orders
 
-- [ ] 2.1 Адаптер каталога на `GetRestaurant`/`GetMenu` через internal gateway, `ErrRestaurantNotAcceptingOrders`, конфигурация `catalog.*`, DI вместо `UnavailableCatalog`; тесты на bufconn (`FR-497`, `AC-566`); перегенерировать клиент restaurants.
+- [x] 2.1 Адаптер каталога на `GetRestaurant`/`GetMenu` через internal gateway, `ErrRestaurantNotAcceptingOrders`, конфигурация `catalog.*`, DI вместо `UnavailableCatalog`; тесты на bufconn (`FR-497`, `AC-566`); перегенерировать клиент restaurants.
 - [ ] 2.2 `PlaceOrder`: `ORDER_NOT_ORDERABLE` с metadata `codes`/`menu_item_ids`, `RESTAURANT_NOT_ACCEPTING_ORDERS`; тесты сервиса (`FR-498`, `AC-567`); README, Helm values.
 
 ## 3. BFF

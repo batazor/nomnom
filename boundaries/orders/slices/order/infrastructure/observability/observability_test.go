@@ -24,6 +24,7 @@ func TestClassifySeparatesRejectionsFromFailures(t *testing.T) {
 		"permission denied":    {application.FailClosed(errors.New("spicedb unavailable")), rejected("permission_denied")},
 		"order not found":      {fmt.Errorf("load: %w", order.ErrOrderNotFound), rejected("not_found")},
 		"unknown restaurant":   {placeorder.ErrUnknownRestaurant, rejected("not_found")},
+		"closed restaurant":    {placeorder.ErrRestaurantNotAcceptingOrders, rejected("domain_rule")},
 		"already exists":       {order.ErrOrderAlreadyExists, rejected("already_exists")},
 		"invalid transition":   {fmt.Errorf("apply: %w", order.InvalidTransition{}), rejected("invalid_transition")},
 		"guard failed":         {order.GuardFailed{Reason: "paid"}, rejected("guard_failed")},

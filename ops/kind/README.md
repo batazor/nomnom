@@ -110,8 +110,9 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 Адрес gateway для приложений: `INTERNAL_GATEWAY_ADDR=internal-gateway.envoy-gateway-system.svc.cluster.local:8080`.
 
 Реестр маршрутов — `GRPCRoute` в `nomnom-gateway`. Сейчас в нём два route сервиса
-`nomnom.orders.v1.OrdersService`: `orders-v1-reads` (`GetOrder`, `ListCustomerOrders`, с retries)
-и `orders-v1` (остальные методы, без retries); вызов незарегистрированного сервиса получает 404
+`nomnom.orders.v1.OrdersService` — `orders-v1-reads` (`GetOrder`, `ListCustomerOrders`, с retries)
+и `orders-v1` (остальные методы, без retries) — и `restaurants-v1-reads`
+(`nomnom.restaurants.v1.RestaurantsService`: `GetRestaurant`, `GetMenu`, с retries; catalog Place Order); вызов незарегистрированного сервиса получает 404
 (gRPC `UNIMPLEMENTED`). Новый бизнес-RPC публикуется так:
 
 1. `GRPCRoute` в `nomnom-gateway` с `method.type: Exact`, полным именем сервиса и методом;
@@ -121,7 +122,7 @@ Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость по�
 2. `ReferenceGrant` в неймспейсе backend'а для `GRPCRoute` из `nomnom-gateway`.
 3. Порт pod с именем `grpc` и label `nomnom.dev/business-api: "true"` в values окружения.
 
-Retries включены только для `orders-v1-reads`: не более 2 повторов на `unavailable`,
+Retries включены только для `orders-v1-reads` и `restaurants-v1-reads`: не более 2 повторов на `unavailable`,
 `connect-failure`, `refused-stream` и `reset-before-request`, без per-try timeout.
 
 ## Public gateway и TLS

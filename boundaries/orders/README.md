@@ -83,6 +83,8 @@ Temporal workflow относится к прикладному процессу 
 | Ошибка `orders` | gRPC code | `ErrorInfo.reason` |
 | --- | --- | --- |
 | `Order` не найден | `NOT_FOUND` | `ORDER_NOT_FOUND` |
+| Ресторан или его меню не найдены (Place Order) | `NOT_FOUND` | `RESTAURANT_NOT_FOUND` |
+| Ресторан закрыт (`is_open = false`, Place Order) | `FAILED_PRECONDITION` | `RESTAURANT_NOT_ACCEPTING_ORDERS` |
 | Некорректный состав или Delivery Address | `INVALID_ARGUMENT` | `INVALID_ORDER` |
 | Текущее состояние запрещает переход | `FAILED_PRECONDITION` | `ORDER_STATE_CONFLICT` |
 | Окно отмены ещё не открыто или уже закрыто | `FAILED_PRECONDITION` | `CANCELLATION_WINDOW_NOT_OPEN`, `CANCELLATION_WINDOW_EXPIRED` |
@@ -105,8 +107,16 @@ Preparation Issue вызывает Kafka consumer, Complete Order и Fail or Can
 fulfillment workflow.
 
 `PlaceOrder` оформляет заказ для verified subject: поля customer в запросе нет. Пока resolver
-выдаёт только service subjects (ADR 27), вызов отвечает `PERMISSION_DENIED`. У `restaurants` нет
-API чтения меню, поэтому production catalog fail-closed и `PlaceOrder` отвечает
+выдаёт только service subjects (ADR 27), вызов отвечает `PERMISSION_DENIED`. Catalog snapshot
+до транзакции читает адаптер [`slices/order/infrastructure/catalog`](slices/order/infrastructure/catalog)
+(FR-497): `restaurants.GetRestaurant` (`is_open`) и `GetMenu` через internal gateway с общим
+deadline `CATALOG__TIMEOUT`. В snapshot попадают только запрошенные позиции; отсутствующие в меню
+недоступны. Закрытый ресторан — `RESTAURANT_NOT_ACCEPTING_ORDERS`, `NOT_FOUND` ресторана или меню и
+пустое меню — `RESTAURANT_NOT_FOUND`, цены в разных валютах — `INVALID_ORDER`, любая другая ошибка
+`restaurants` (transport, deadline, identity, отсутствующий route) — `UNAVAILABLE`. Валюта snapshot —
+валюта меню; минимум и максимум суммы — `CATALOG__MINIMUM_TOTAL`/`CATALOG__MAXIMUM_TOTAL` в этой
+валюте (placeholders, пока `restaurants` их не публикует). При `FULFILLMENT__NEIGHBOURS=unavailable`
+или `simulated` catalog fail-closed: цены не симулируются, `PlaceOrder` отвечает
 `UNAVAILABLE`/`DEPENDENCY_UNAVAILABLE`. `order_id` — UUIDv7. Temporal client API lazy: процесс
 стартует без Temporal; если start workflow не удался после commit, ответ содержит
 `fulfillment_started=false`, а повтор с тем же `idempotency_key` повторяет start.
@@ -383,8 +393,8 @@ customer. Назначение хранится в `orders.delivery_id`, `courie
 курьера, событие старше сохранённого назначения пропускается, ZedToken записи сохраняется в
 `authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
 
-Не реализованы: выпуск user assertions в BFF (verifier в `orders` готов) и API меню `restaurants` (Place Order пока недоступен
-клиентам).
+Не реализованы: выпуск user assertions в BFF (verifier в `orders` готов), поэтому Place Order пока
+недоступен клиентам.
 
 Снятие курьера без замены (`CourierUnassignedFromDelivery`) удаляет `order#courier` и очищает
 `courier_id`, отмена Delivery (`DeliveryCancelled`) — ещё и `order#delivery`/`delivery_id`; событие
@@ -431,10 +441,11 @@ make temporal-dev-stop
 | `TEMPORAL__NAMESPACE` | `default` | Namespace окружения |
 | `TEMPORAL__CONNECT_TIMEOUT` | `10s` | Предел подключения и проверки Search Attribute в startup |
 | `TEMPORAL__REGISTER_SEARCH_ATTRIBUTES` | `false` | Создать `OrderFulfillmentStage`, если его нет (нужны права оператора) |
-| `FULFILLMENT__<KEY>` | см. `config.example.yaml` | `Policy` workflow (placeholders), `PUBLISH_STAGE`, `NEIGHBOURS` |
+| `FULFILLMENT__<KEY>` | см. `config.example.yaml` | `Policy` workflow (placeholders), `PUBLISH_STAGE`, `NEIGHBOURS` (также выбирает catalog Place Order) |
+| `CATALOG__MINIMUM_TOTAL`, `CATALOG__MAXIMUM_TOTAL`, `CATALOG__TIMEOUT` | `0`, `100000`, `2s` | Лимиты суммы Place Order в валюте меню (placeholders) и deadline чтения `GetRestaurant` + `GetMenu` |
 | `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` | —, `nomnom.orders`, — | Проверка входящего projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)); без них все вызовы `UNAUTHENTICATED` |
 | `IDENTITY__SERVICE_ACCOUNTS` | — | Allowlist `namespace/serviceaccount=service-name,…` |
-| `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker); пусто — без credentials |
+| `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker; API — catalog `restaurants`, его чтения identity не требуют); пусто — без credentials |
 | `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE`, `IDENTITY__USER_DELEGATES` | —, —, — | User assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)): ожидаемый `iss`, JWKS BFF (только EC P-256) и services-делегаты через запятую (в развёртываниях `bff`). Без всех трёх любой вызов с assertion — `UNAUTHENTICATED`, service-вызовы не затронуты; неразбираемый JWKS — ошибка startup |
 | `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#courier`/`delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
 | `RECONCILER__INTERVAL`, `RECONCILER__GRACE`, `RECONCILER__PAGE_SIZE` | `5m`, `10m`, `500` | `cmd/orders-reconciler`: сверка relations `order` SpiceDB ↔ PostgreSQL |

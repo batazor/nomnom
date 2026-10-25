@@ -146,6 +146,55 @@ spec:
         - refused-stream
         - reset-before-request
 ---
+# Публичные чтения restaurants (ADR 15) для catalog Place Order: идемпотентны, поэтому с
+# retries, как orders-v1-reads. Остальные методы RestaurantsService пока не опубликованы.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: restaurants-v1-reads
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: GetRestaurant
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: GetMenu
+      backendRefs:
+        - name: restaurants
+          namespace: nomnom-restaurants
+          port: 8082
+---
+# Та же политика, что у orders-v1-reads.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: restaurants-v1-reads
+  namespace: nomnom-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: restaurants-v1-reads
+  timeout:
+    http:
+      requestTimeout: 300s
+  retry:
+    numRetries: 2
+    retryOn:
+      triggers:
+        - unavailable
+        - connect-failure
+        - refused-stream
+        - reset-before-request
+---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata:
@@ -160,3 +209,18 @@ spec:
     - group: ""
       kind: Service
       name: orders
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-internal-gateway
+  namespace: nomnom-restaurants
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      namespace: nomnom-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: restaurants

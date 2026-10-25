@@ -115,6 +115,7 @@ func clearConfigEnvironment(t *testing.T) {
 		EnvTemporalHostPort, EnvTemporalNamespace, EnvTemporalConnectTimeout, EnvTemporalRegisterSearchAttributes,
 		EnvFulfillment("acceptance_timeout"), EnvFulfillment("max_replans"), EnvFulfillment("neighbours"),
 		EnvFulfillment("publish_stage"), EnvInternalGatewayAddr, EnvCancellationWindow,
+		EnvCatalogMinimumTotal, EnvCatalogMaximumTotal, EnvCatalogTimeout,
 	} {
 		value, exists := os.LookupEnv(name)
 		require.NoError(t, os.Unsetenv(name))
@@ -235,6 +236,49 @@ func TestLoadRejectsUnusableCancellationWindow(t *testing.T) {
 
 			_, err := Load()
 			require.Error(t, err)
+		})
+	}
+}
+
+func TestLoadUsesPlaceholderCatalogLimits(t *testing.T) {
+	clearConfigEnvironment(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, CatalogConfig{
+		MinimumTotal: DefaultCatalogMinimumTotal,
+		MaximumTotal: DefaultCatalogMaximumTotal,
+		Timeout:      DefaultCatalogTimeout,
+	}, cfg.Catalog)
+}
+
+func TestLoadReadsCatalogFromEnvironment(t *testing.T) {
+	clearConfigEnvironment(t)
+	t.Setenv(EnvCatalogMinimumTotal, "10.50")
+	t.Setenv(EnvCatalogMaximumTotal, "500")
+	t.Setenv(EnvCatalogTimeout, "3s")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, CatalogConfig{MinimumTotal: "10.50", MaximumTotal: "500", Timeout: 3 * time.Second}, cfg.Catalog)
+}
+
+func TestLoadRejectsUnusableCatalog(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"minimum not decimal": {EnvCatalogMinimumTotal: "ten"},
+		"maximum not decimal": {EnvCatalogMaximumTotal: "lots"},
+		"negative minimum":    {EnvCatalogMinimumTotal: "-1"},
+		"maximum below min":   {EnvCatalogMinimumTotal: "20", EnvCatalogMaximumTotal: "10"},
+		"zero timeout":        {EnvCatalogTimeout: "0s"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			clearConfigEnvironment(t)
+			for key, value := range env {
+				t.Setenv(key, value)
+			}
+
+			_, err := Load()
+			require.ErrorContains(t, err, "catalog")
 		})
 	}
 }

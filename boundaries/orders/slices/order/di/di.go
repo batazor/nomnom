@@ -9,9 +9,11 @@ import (
 	"strings"
 
 	"github.com/google/wire"
+	"github.com/shopspring/decimal"
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
@@ -20,6 +22,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
+	"nomnom/orders/slices/order/infrastructure/catalog"
 	"nomnom/orders/slices/order/infrastructure/neighbours"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/postgres"
@@ -120,9 +123,34 @@ type Workflow interface {
 	fulfillment.CancellationRequester
 }
 
-// NewCatalog — catalog snapshot Place Order. У restaurants нет API чтения меню,
-// поэтому adapter fail-closed: Place Order отвечает UNAVAILABLE.
-func NewCatalog() placeorder.Catalog { return neighbours.UnavailableCatalog{} }
+// NewCatalog — catalog snapshot Place Order, выбранный тем же
+// fulfillment.neighbours, что и адаптеры Activities. grpc (по умолчанию) читает
+// GetRestaurant и GetMenu restaurants через internal gateway (lazy connection,
+// projected token из IDENTITY__TOKEN_DIR, если задан); unavailable и simulated
+// оставляют fail-closed catalog: цены, которые orders не может проверить, не
+// симулируются, и Place Order отвечает UNAVAILABLE.
+func NewCatalog(cfg config.FulfillmentConfig, gateway config.InternalGatewayConfig, identity config.IdentityConfig, limits config.CatalogConfig) (placeorder.Catalog, func(), error) {
+	if cfg.Neighbours != config.NeighboursGRPC {
+		if cfg.Neighbours == config.NeighboursSimulated {
+			slog.Warn("restaurants catalog is not simulated: Place Order answers UNAVAILABLE", "neighbours", cfg.Neighbours)
+		}
+		return neighbours.UnavailableCatalog{}, func() {}, nil
+	}
+	minimum, err := decimal.NewFromString(limits.MinimumTotal)
+	if err != nil {
+		return nil, nil, fmt.Errorf("catalog minimum_total: %w", err)
+	}
+	maximum, err := decimal.NewFromString(limits.MaximumTotal)
+	if err != nil {
+		return nil, nil, fmt.Errorf("catalog maximum_total: %w", err)
+	}
+	conn, err := grpcclient.Dial(gateway.Address, identity.TokenDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	adapter := catalog.New(conn, catalog.Limits{MinimumTotal: minimum, MaximumTotal: maximum}, limits.Timeout)
+	return adapter, func() { _ = conn.Close() }, nil
+}
 
 // NewClock — системные часы use cases.
 func NewClock() application.Clock { return system.Clock{} }

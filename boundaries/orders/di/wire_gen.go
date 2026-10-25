@@ -40,15 +40,24 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	catalog := di.NewCatalog()
-	temporalConfig := cfg.Temporal
-	client, cleanup3, err := NewTemporalClient(temporalConfig)
+	fulfillmentConfig := cfg.Fulfillment
+	internalGatewayConfig := cfg.InternalGateway
+	identityConfig := cfg.Identity
+	catalogConfig := cfg.Catalog
+	catalog, cleanup3, err := di.NewCatalog(fulfillmentConfig, internalGatewayConfig, identityConfig, catalogConfig)
 	if err != nil {
 		cleanup2()
 		cleanup()
 		return nil, nil, err
 	}
-	fulfillmentConfig := cfg.Fulfillment
+	temporalConfig := cfg.Temporal
+	client, cleanup4, err := NewTemporalClient(temporalConfig)
+	if err != nil {
+		cleanup3()
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
 	workflow := NewFulfillmentWorkflow(client, fulfillmentConfig)
 	clock := di.NewClock()
 	idGenerator := di.NewOrderIDs()
@@ -65,9 +74,9 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		Metrics:    domainMetrics,
 	}
 	module := di.NewModule(dependencies)
-	identityConfig := cfg.Identity
 	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
 	if err != nil {
+		cleanup4()
 		cleanup3()
 		cleanup2()
 		cleanup()
@@ -76,6 +85,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	server := NewGRPCServer(module, subjectResolver)
 	app := NewApp(serverConfig, server, module)
 	return app, func() {
+		cleanup4()
 		cleanup3()
 		cleanup2()
 		cleanup()
@@ -187,7 +197,7 @@ var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна
 	// только своя секция.
 	configSet = wire.NewSet(wire.FieldsOf(new(config.Config),
-		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Temporal", "Fulfillment", "InternalGateway"))
+		"Server", "Identity", "SpiceDB", "Postgres", "Cancellation", "Catalog", "Temporal", "Fulfillment", "InternalGateway"))
 	// temporalAPISet — lazy Temporal client API и порт Order Fulfillment Workflow.
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
