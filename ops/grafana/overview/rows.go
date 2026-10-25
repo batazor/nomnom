@@ -159,12 +159,18 @@ func (g *generator) dependencies(sc Scope) []Panel {
 				{Sum("error_type", sc.Rate("db_client_operation_duration_seconds_count", db, `error_type!=""`)), "error {{error_type}}"},
 			}},
 			Panel{Title: string(o.Database) + ": p95 by operation", Unit: "s", Traces: true, Queries: []Query{{sc.Quantile("0.95", "db_operation_name", "db_client_operation_duration_seconds", db), "{{db_operation_name}}"}}},
-			Panel{Title: string(o.Database) + ": pool", Unit: "short", Queries: []Query{
-				{Sum("db_client_connection_state", sc.Gauge("db_client_connection_count")), "{{db_client_connection_state}}"},
-				{Sum("", sc.Gauge("db_client_connection_max")), "max"},
-			}},
-			Panel{Title: string(o.Database) + ": pool wait p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "", "db_client_connection_wait_time_seconds"), "wait p95"}}},
 		)
+		if o.DatabasePool {
+			panels = append(panels, poolPanels(sc, o.Database)...)
+		} else {
+			panels = append(panels,
+				Panel{Title: string(o.Database) + ": pool", Unit: "short", Queries: []Query{
+					{Sum("db_client_connection_state", sc.Gauge("db_client_connection_count")), "{{db_client_connection_state}}"},
+					{Sum("", sc.Gauge("db_client_connection_max")), "max"},
+				}},
+				Panel{Title: string(o.Database) + ": pool wait p95", Unit: "s", Queries: []Query{{sc.Quantile("0.95", "", "db_client_connection_wait_time_seconds"), "wait p95"}}},
+			)
+		}
 	}
 	if o.PaymentProvider {
 		provider := "nomnom_payments_provider_request_duration_seconds"

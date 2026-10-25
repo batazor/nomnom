@@ -9,7 +9,7 @@ import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
 
 loadLocalEnv();
-const config = loadConfig();
+const config = loadConfig(process.env, { process: "migrate" });
 if (!config.mongodb.enabled) {
   throw new Error(
     "MONGODB__URI is required: restaurants stores its data in MongoDB",

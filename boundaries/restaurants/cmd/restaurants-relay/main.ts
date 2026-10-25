@@ -18,7 +18,7 @@ import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 const log = (message: string) => console.log(`restaurants-relay ${message}`);
 
 loadLocalEnv();
-const config = loadConfig();
+const config = loadConfig(process.env, { process: "relay" });
 if (!config.mongodb.enabled) {
   throw new Error(
     "MONGODB__URI is required: restaurants-relay reads the Outbox from MongoDB",

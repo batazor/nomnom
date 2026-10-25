@@ -12,6 +12,9 @@ service:
   enabled: false
 
 mongodb:
+  pool:
+    # Один батч Outbox за цикл плюс продление lease и очистка.
+    maxPoolSize: 3
   # Коллекции и индексы создаёт init container release restaurants.
   migrate:
     enabled: false

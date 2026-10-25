@@ -30,6 +30,9 @@ shutdown:
   drainTimeoutSeconds: 20
 
 mongodb:
+  pool:
+    # Одно сообщение за раз: транзакция Inbox и Restaurant Order плюс запас на dead letters и health.
+    maxPoolSize: 5
   # Коллекции, Inbox и индексы создаёт init container release restaurants.
   migrate:
     enabled: false
