@@ -274,9 +274,10 @@ type OrderCancellationAvailability {
 }
 
 """
-Order of the current customer
+Order of the current customer; the entity key lets the Router resolve
+subscription events of the events subgraph (ADR 36)
 """
-type Order {
+type Order @key(fields: "id") {
   """
   Order identifier
   """
@@ -514,6 +515,10 @@ type DeliveryOffer {
   Delivery the offer is for
   """
   deliveryId: ID!
+  """
+  Customer order the delivery is for
+  """
+  orderId: ID!
   """
   Where to pick the order up
   """
