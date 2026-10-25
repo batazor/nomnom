@@ -6,6 +6,8 @@ import { createLocalJWKSet, importJWK, type JSONWebKeySet } from "jose";
 export const SERVICE_TOKEN_ALGORITHMS = ["RS256", "ES256"];
 /** Единственный алгоритм user assertion (ADR 32). */
 export const USER_ASSERTION_ALGORITHMS = ["ES256"];
+/** Допуск расхождения часов при проверке `exp`/`nbf`/`iat`. */
+export const CLOCK_TOLERANCE_SECONDS = 30;
 
 /** Читает JWKS BFF: только EC P-256 ключи для ES256 (ADR 32). */
 export async function readUserJwks(path: string): Promise<JSONWebKeySet> {

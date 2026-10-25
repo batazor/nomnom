@@ -1,25 +1,24 @@
 import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
-import {
-  createLocalJWKSet,
-  decodeJwt,
-  decodeProtectedHeader,
-  type JSONWebKeySet,
-  jwtVerify,
-} from "jose";
+import { decodeJwt, type JSONWebKeySet } from "jose";
 
 import type { Subject } from "../../pkg/application/subject.ts";
 import type {
   IdentityConfig,
   UserIdentityConfig,
 } from "../../pkg/config/config.ts";
+import { readJwks, readUserJwks } from "./jwks.ts";
+import { ServiceTokenVerifier } from "./service-token.ts";
 import {
-  readJwks,
-  readUserJwks,
-  SERVICE_TOKEN_ALGORITHMS,
-  USER_ASSERTION_ALGORITHMS,
-} from "./jwks.ts";
+  USER_ASSERTION_HEADER,
+  type UserAssertionOptions,
+  UserAssertionVerifier,
+} from "./user-assertion.ts";
 
 export { readJwks, readUserJwks } from "./jwks.ts";
+export {
+  USER_ASSERTION_HEADER,
+  type UserAssertionOptions,
+} from "./user-assertion.ts";
 
 /**
  * Authenticates the transport caller and returns the verified application
@@ -43,23 +42,7 @@ export class RejectingSubjectResolver implements SubjectResolver {
   }
 }
 
-const CLOCK_TOLERANCE_SECONDS = 30;
-const BEARER = /^Bearer +(\S+)$/i;
-
-/** gRPC metadata с user assertion BFF (ADR 32). */
-export const USER_ASSERTION_HEADER = "x-nomnom-user-assertion";
-/** Предел `exp - iat`: защита от долгоживущих assertions при ошибке минтера. */
-const USER_ASSERTION_MAX_LIFETIME_SECONDS = 60;
 const MAX_LOGGED_JTI_LENGTH = 128;
-
-export interface UserAssertionOptions {
-  /** Ожидаемый `iss` assertion, `IDENTITY__USER_ISSUER`. */
-  readonly issuer: string;
-  /** JWKS BFF (EC P-256). */
-  readonly jwks: JSONWebKeySet;
-  /** Services, которым разрешено передавать user subject. */
-  readonly delegates: ReadonlySet<string>;
-}
 
 export interface ServiceTokenSubjectResolverOptions {
   readonly issuer: string;
@@ -77,53 +60,48 @@ export interface ServiceTokenSubjectResolverOptions {
   readonly audit?: (message: string) => void;
 }
 
-type UserAssertionVerifier = Readonly<{
-  issuer: string;
-  keys: ReturnType<typeof createLocalJWKSet>;
-  delegates: ReadonlySet<string>;
-}>;
-
 /**
- * Verifies a projected ServiceAccount token from `authorization: Bearer <jwt>`
- * against the cluster JWKS and maps an allowlisted ServiceAccount to a
- * `service` subject. When the call also carries `x-nomnom-user-assertion`,
- * the authenticated service must be an allowed delegate and the BFF-signed
- * assertion yields a `user` subject (ADR 32). Every failure is
+ * Resolves the caller from `authorization: Bearer <jwt>` with
+ * {@link ServiceTokenVerifier}. When the call also carries
+ * `x-nomnom-user-assertion`, {@link UserAssertionVerifier} turns the
+ * authenticated delegate's assertion into a `user` subject (ADR 32). The
+ * resolver only orders the two checks, logs and audits; every failure is
  * UNAUTHENTICATED without details.
  */
 export class ServiceTokenSubjectResolver implements SubjectResolver {
-  readonly #issuer: string;
-  readonly #audience: string;
-  readonly #keys: ReturnType<typeof createLocalJWKSet>;
-  readonly #serviceAccounts: ReadonlyMap<string, string>;
+  readonly #services: ServiceTokenVerifier;
+  readonly #users: UserAssertionVerifier | undefined;
   readonly #log: (message: string) => void;
-  readonly #now: () => Date;
-  readonly #user: UserAssertionVerifier | undefined;
   readonly #audit: (message: string) => void;
 
   constructor(options: ServiceTokenSubjectResolverOptions) {
-    this.#issuer = options.issuer;
-    this.#audience = options.audience;
-    this.#keys = createLocalJWKSet(options.jwks);
-    this.#serviceAccounts = options.serviceAccounts;
-    this.#log = options.log ?? ((message) => console.warn(message));
-    this.#now = options.now ?? (() => new Date());
-    this.#audit = options.audit ?? ((message) => console.info(message));
+    const now = options.now ?? (() => new Date());
+    this.#services = new ServiceTokenVerifier({
+      issuer: options.issuer,
+      audience: options.audience,
+      jwks: options.jwks,
+      serviceAccounts: options.serviceAccounts,
+      now,
+    });
     const user = options.userAssertions;
-    this.#user =
+    this.#users =
       user === undefined
         ? undefined
-        : Object.freeze({
-            issuer: user.issuer,
-            keys: createLocalJWKSet(user.jwks),
-            delegates: user.delegates,
+        : new UserAssertionVerifier({
+            ...user,
+            audience: options.audience,
+            now,
           });
+    this.#log = options.log ?? ((message) => console.warn(message));
+    this.#audit = options.audit ?? ((message) => console.info(message));
   }
 
   async resolve(context: HandlerContext): Promise<Subject> {
     let service: Subject;
     try {
-      service = await this.#verify(context.requestHeader.get("authorization"));
+      service = await this.#services.verify(
+        context.requestHeader.get("authorization"),
+      );
     } catch (error) {
       this.#log(`service identity rejected: ${reasonOf(error)}`);
       throw unauthenticated();
@@ -133,7 +111,10 @@ export class ServiceTokenSubjectResolver implements SubjectResolver {
       return service;
     }
     try {
-      const user = await this.#verifyUser(service.id, assertion);
+      if (this.#users === undefined) {
+        throw new Error("user assertions are not configured");
+      }
+      const user = await this.#users.verify(service.id, assertion);
       this.#audit(
         `user assertion accepted: delegate=${service.id} jti=${loggedJti(assertion)}`,
       );
@@ -144,79 +125,6 @@ export class ServiceTokenSubjectResolver implements SubjectResolver {
       );
       throw unauthenticated();
     }
-  }
-
-  async #verifyUser(delegate: string, assertion: string): Promise<Subject> {
-    if (this.#user === undefined) {
-      throw new Error("user assertions are not configured");
-    }
-    // Headers склеивает повторённые metadata через ", "; compact JWT запятых
-    // не содержит.
-    if (assertion === "" || assertion.includes(",")) {
-      throw new Error(
-        `${USER_ASSERTION_HEADER} must appear exactly once and be non-empty`,
-      );
-    }
-    if (!this.#user.delegates.has(delegate)) {
-      throw new Error(`service ${delegate} is not a user delegate`);
-    }
-    if (decodeProtectedHeader(assertion).kid === undefined) {
-      throw new Error("assertion header has no kid");
-    }
-    const { payload } = await jwtVerify(assertion, this.#user.keys, {
-      algorithms: USER_ASSERTION_ALGORITHMS,
-      issuer: this.#user.issuer,
-      audience: this.#audience,
-      clockTolerance: CLOCK_TOLERANCE_SECONDS,
-      currentDate: this.#now(),
-      requiredClaims: ["exp", "iat", "sub", "jti"],
-    });
-    const { exp, iat, sub, jti } = payload;
-    if (
-      exp === undefined ||
-      iat === undefined ||
-      exp - iat > USER_ASSERTION_MAX_LIFETIME_SECONDS
-    ) {
-      throw new Error(
-        `assertion lifetime exceeds ${USER_ASSERTION_MAX_LIFETIME_SECONDS}s`,
-      );
-    }
-    if (typeof sub !== "string" || sub === "" || sub.trim() !== sub) {
-      throw new Error("assertion sub is empty or padded");
-    }
-    if (typeof jti !== "string" || jti === "") {
-      throw new Error("assertion jti is empty");
-    }
-    return Object.freeze({ type: "user", id: sub, delegate });
-  }
-
-  async #verify(authorization: string | null): Promise<Subject> {
-    if (authorization === null) {
-      throw new Error("authorization metadata is missing");
-    }
-    const token = BEARER.exec(authorization.trim())?.[1];
-    if (token === undefined) {
-      throw new Error("authorization metadata is not a Bearer token");
-    }
-    if (decodeProtectedHeader(token).kid === undefined) {
-      throw new Error("token header has no kid");
-    }
-    const { payload } = await jwtVerify(token, this.#keys, {
-      algorithms: SERVICE_TOKEN_ALGORITHMS,
-      issuer: this.#issuer,
-      audience: this.#audience,
-      clockTolerance: CLOCK_TOLERANCE_SECONDS,
-      currentDate: this.#now(),
-      requiredClaims: ["exp", "sub"],
-    });
-    const service =
-      payload.sub === undefined
-        ? undefined
-        : this.#serviceAccounts.get(payload.sub);
-    if (service === undefined) {
-      throw new Error(`service account ${payload.sub} is not allowlisted`);
-    }
-    return Object.freeze({ type: "service", id: service });
   }
 }
 
