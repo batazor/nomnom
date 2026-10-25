@@ -111,7 +111,7 @@ Endpoint, credentials и TLS поступают через runtime configuration
 
 State-changing операции fail closed при `DENIED`, `ERROR` или `TIMEOUT`. Каждый check получает bounded timeout и ограниченный retry budget. Circuit breaker переводит зависимость в быстрый отказ, чтобы защищённые вызовы не исчерпали ресурсы процесса, а независимые возможности сервиса продолжали работать. Альтернативное поведение read-only UI требует отдельного решения для конкретного use case.
 
-Application-level cache authorization-решений по умолчанию не вводится. Любой будущий cache требует измеримой причины, TTL, invalidation, consistency requirements и явно допустимого окна stale access.
+Application-level cache authorization-решений по умолчанию не вводится. Любой будущий cache требует измеримой причины, TTL, invalidation, consistency requirements и явно допустимого окна stale access. Общие критерии ввода кеша и способ инвалидации — [ADR 40](0040-application-caching-policy.md).
 
 OpenTelemetry различает latency, allowed, denied, errors, timeouts, relationship write failures и reconciliation drift. Metric labels ограничены `permission`, `resource_type`, результатом и низкокардинальным классом ошибки; `user_id`, `order_id` и другие resource identifiers не являются labels. Идентификаторы в traces подчиняются privacy/cardinality policy. Logs различают denied, unavailable, invalid request и schema/integration error.
 
