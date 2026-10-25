@@ -2,7 +2,9 @@
 //! offer of a Delivery becomes the Courier Assignment: the delivery is
 //! assigned, the courier becomes busy, the remaining pending offers are
 //! withdrawn and the assignment fact is written to the Outbox in one Unit of
-//! Work.
+//! Work. Before commit `delivery:<id>#courier@user:<courier_id>` is written to
+//! the authorization graph; a failed write rolls the acceptance back. A repeated
+//! acceptance writes nothing.
 
 use crate::pkg::application::{Clock, Subject, UnitOfWork};
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
@@ -16,6 +18,7 @@ use super::courier_locator::CourierLocator;
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
 use super::policy::AssignmentPolicy;
+use super::relationships::DeliveryRelationshipWriter;
 use super::{courier_id, load_courier, load_delivery, load_offer, offer_id};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,6 +46,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub locator: &'a dyn CourierLocator,
     pub clock: &'a dyn Clock,
     pub policy: AssignmentPolicy,
+    pub relationships: &'a dyn DeliveryRelationshipWriter,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -97,6 +101,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
         offer.accept(courier_id, conditions)?;
         delivery.assign(courier_id.clone())?;
         courier.mark_busy()?;
+        // The Courier Assignment is valid; grant access before commit.
+        self.relationships
+            .assign_courier(delivery.id(), courier_id)?;
 
         for mut other in self.offers.list_for_delivery(delivery.id())? {
             if other.id() != offer.id() && other.state() == OfferState::Pending {
@@ -129,12 +136,13 @@ fn output(offer: &DeliveryOffer, already_accepted: bool) -> Output {
 mod tests {
     use super::*;
     use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::memory::{RecordingRelationships, RelationshipWrite};
     use crate::pkg::application::UnitOfWorkError;
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::authorization::DeliveryResource;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{
-        NOW, OFFER_TTL, World, candidate, subject,
+        NOW, OFFER_TTL, ObservingRelationships, World, candidate, subject,
     };
     use crate::slices::delivery::domains::delivery::{
         DeliveryError, DeliveryOfferError, DeliveryOfferReason, DomainEvent, OfferTrigger, OrderId,
@@ -152,6 +160,7 @@ mod tests {
             locator: &world.locator,
             clock: &world.clock,
             policy: world.policy,
+            relationships: &world.relationships,
         }
     }
 
@@ -211,6 +220,57 @@ mod tests {
         assert_eq!(world.offer_state("offer-2"), OfferState::Withdrawn);
         assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
         assert_eq!(world.store.commits(), 1);
+        assert_eq!(world.relationships.writes(), vec![assigned("courier-1")]);
+    }
+
+    fn assigned(courier: &str) -> RelationshipWrite {
+        RelationshipWrite::AssignCourier(DeliveryId::new("delivery-1"), CourierId::new(courier))
+    }
+
+    /// FR-444: `delivery#courier` is written inside the Unit of Work before the
+    /// delivery is saved.
+    #[test]
+    fn assignment_relationship_is_written_before_delivery_is_saved() {
+        let world = world_with_two_offers();
+        let writer = ObservingRelationships::new(&world.store);
+        let handler = Handler {
+            relationships: &writer,
+            ..handler(&world)
+        };
+
+        handler
+            .execute(&subject("courier-1"), input("offer-1", "courier-1"))
+            .expect("offer accepted");
+
+        assert_eq!(
+            *writer.observed.borrow(),
+            vec![(assigned("courier-1"), None)]
+        );
+        assert_eq!(
+            world.delivery("delivery-1").courier_id(),
+            Some(&CourierId::new("courier-1"))
+        );
+    }
+
+    /// FR-444: a failed write rolls the acceptance back (fail closed).
+    #[test]
+    fn failed_relationship_write_rolls_acceptance_back() {
+        let world = World {
+            relationships: RecordingRelationships::failing("spicedb offline"),
+            ..world_with_two_offers()
+        };
+
+        assert!(matches!(
+            handler(&world).execute(&subject("courier-1"), input("offer-1", "courier-1")),
+            Err(DeliveryApplicationError::DependencyUnavailable(reason)) if reason.contains("spicedb offline")
+        ));
+        assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
+        assert_eq!(world.delivery("delivery-1").courier_id(), None);
+        assert_eq!(world.offer_state("offer-1"), OfferState::Pending);
+        assert_eq!(world.offer_state("offer-2"), OfferState::Pending);
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
+        assert!(world.store.outbox_messages().is_empty());
+        assert_eq!(world.store.rollbacks(), 1);
     }
 
     /// AC-324
@@ -236,6 +296,7 @@ mod tests {
         );
         assert_eq!(world.courier_status("courier-2"), CourierStatus::Available);
         assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
+        assert_eq!(world.relationships.writes(), vec![assigned("courier-1")]);
     }
 
     #[test]
@@ -260,6 +321,7 @@ mod tests {
         assert_eq!(world.courier_status("courier-2"), CourierStatus::Available);
         assert!(world.store.outbox_messages().is_empty());
         assert_eq!(world.store.rollbacks(), 1);
+        assert!(world.relationships.writes().is_empty());
     }
 
     /// AC-325
@@ -310,6 +372,7 @@ mod tests {
         assert!(repeat.already_accepted);
         assert_eq!(world.store.outbox_messages(), vec![assignment_fact()]);
         assert_eq!(world.store.commits(), 1);
+        assert_eq!(world.relationships.writes(), vec![assigned("courier-1")]);
     }
 
     /// AC-328

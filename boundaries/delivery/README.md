@@ -87,7 +87,85 @@ RPC сервиса `DeliveryService`:
 make generate   # из корня: make buf-generate; только delivery: cd infrastructure/grpc && buf generate --template buf.gen.yaml
 ```
 
-Transport adapter уже маппит application errors в gRPC status codes; добавление структурированных `google.rpc.ErrorInfo` с domain `nomnom.delivery.v1` остаётся частью расширения error contract. Политика контрактов, генерации и совместимости описана в [ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery` и `CancelDelivery` подключены к application use cases через tonic adapter; `cmd/delivery` запускает gRPC-сервер и завершает его через общий lifecycle. До появления проверяющего JWT/mTLS adapter'а production `SubjectResolver` отклоняет вызовы без доверенной identity.
+Transport adapter уже маппит application errors в gRPC status codes; добавление структурированных `google.rpc.ErrorInfo` с domain `nomnom.delivery.v1` остаётся частью расширения error contract. Политика контрактов, генерации и совместимости описана в [ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery` и `CancelDelivery` подключены к application use cases через tonic adapter; `cmd/delivery` запускает gRPC-сервер и завершает его через общий lifecycle. Subject вызывающего определяет `SubjectResolver` — см. «Service identity».
+
+## Service identity
+
+По [ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md) workloads других контекстов (Activities `orders-worker` и т. п.) предъявляют projected ServiceAccount token в gRPC metadata `authorization: Bearer <jwt>`. `ServiceTokenSubjectResolver` (`infrastructure/grpc/identity.rs`, `jsonwebtoken`) проверяет:
+
+- `alg` ровно `RS256` или `ES256` (`none`, HS* и прочие отклоняются), `kid` обязателен и есть в JWKS, алгоритм совпадает с типом ключа (RSA → RS256, EC P-256 → ES256);
+- подпись, `iss` равен `IDENTITY__ISSUER`, `aud` (строка или массив) содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s;
+- `sub` = `system:serviceaccount:<namespace>:<serviceaccount>` есть в allowlist → `Subject::Service(<service-name>)`.
+
+Любой отказ — `UNAUTHENTICATED` с общим сообщением; причина пишется только в stderr. Что разрешено service subject, решает authorization use case, не resolver.
+
+| Переменная | Ключ TOML | Значение |
+| --- | --- | --- |
+| `IDENTITY__ISSUER` | `identity.issuer` | Issuer кластера (`/.well-known/openid-configuration`) |
+| `IDENTITY__AUDIENCE` | `identity.audience` | Audience контекста, в кластере `nomnom.delivery` |
+| `IDENTITY__JWKS_FILE` | `identity.jwks_file` | Файл JWKS кластера (`/openid/v1/jwks`); Helm монтирует `/etc/nomnom/identity/jwks.json` |
+| `IDENTITY__SERVICE_ACCOUNTS` | `identity.service_accounts` | Allowlist `namespace/serviceaccount=service-name` через запятую, например `nomnom/orders-worker=orders-worker` |
+
+Fail closed: если пусты issuer, audience или путь к JWKS, процесс использует `RejectingSubjectResolver` и пишет предупреждение при старте — все вызовы получают `UNAUTHENTICATED`. Нечитаемый или невалидный JWKS (нет usable RS256/ES256 ключей, ключ без `kid`, дубликат `kid`), пустой allowlist при заданной проверке и неверный формат allowlist завершают startup ошибкой. JWKS читается один раз при старте: после ротации signing key кластера нужен restart. Тесты проходят по общим векторам `tests/identity/fixtures` (AC-461).
+
+## Авторизация (SpiceDB)
+
+Use cases проверяют права через порты `CourierAuthorization` и `DeliveryAuthorization` (`slices/*/applications/authorization.rs`). При заданном `SPICEDB__ENDPOINT` оба порта закрывает `SpiceDbAuthorization` (`infrastructure/spicedb`, [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md), FR-435): каждый check — `PermissionsService.CheckPermission` с consistency `minimize_latency` по [схеме](../../authorization/schema.zed) и нормативной таблице [design.md](../../openspec/changes/add-spicedb-authorization/design.md):
+
+| Порт / permission | SpiceDB check |
+| --- | --- |
+| `RegisterCourier` на `Platform` | `platform:nomnom#register_courier` |
+| `CreateDelivery`, `FindCourier`, `OfferDelivery`, `ReassignCourier`, `CancelDelivery`, `ReplanDelivery` (любой resource) | `platform:nomnom#coordinate_delivery` |
+| прочие permissions на `Courier(id)` | `courier:<id>#act` |
+| прочие permissions на `Delivery(id)` | `delivery:<id>#act_as_courier` |
+| остальные сочетания (`Order`/`Platform` для прочих permissions, `RegisterCourier` на `Courier`) | отказ без обращения к SpiceDB |
+
+Subject: `Subject::User(id)` → `user:<id>`, `Subject::Service(id)` → `service:<id>`. Fulfillment-команды разрешены `service:orders-worker` grant'ом `platform:nomnom#fulfillment` из [`authorization/bootstrap.yaml`](../../authorization/bootstrap.yaml).
+
+Fail closed: разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION`, conditional и неизвестные значения — `AuthorizationError::Denied`. Ошибка gRPC, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationError::Unavailable` («authorization unavailable», gRPC `UNAVAILABLE`), а не разрешение. Соединение ленивое: недоступный SpiceDB не мешает startup.
+
+Официального Rust SDK у SpiceDB нет: stubs `authzed.api.v1` (`CheckPermission`, `WriteRelationships`, `ReadRelationships` и их типы) генерируются buf remote plugins `neoeinstein-prost`/`neoeinstein-tonic` из `buf.build/authzed/api:v1.57.0` (`infrastructure/spicedb/buf.gen.yaml`, `make generate-spicedb`) и коммитятся в `infrastructure/spicedb/gen`. Preshared key передаётся interceptor'ом как `authorization: Bearer <key>`. Порты синхронные, а handlers tonic — async, поэтому клиент работает в собственном потоке с current-thread runtime, а ожидание ответа на multi-thread runtime выполняется через `block_in_place`.
+
+| Переменная | Ключ TOML | Значение |
+| --- | --- | --- |
+| `SPICEDB__ENDPOINT` | `spicedb.endpoint` | gRPC endpoint `host:port` (или URL со схемой, совпадающей с `insecure`). Пусто — локальная авторизация процесса с предупреждением при старте |
+| `SPICEDB__PRESHARED_KEY` | `spicedb.preshared_key` | Preshared key SpiceDB; в Kubernetes только из Secret. Обязателен при заданном endpoint, иначе ошибка startup |
+| `SPICEDB__INSECURE` | `spicedb.insecure` | `true` — plaintext без TLS (только kind/локально); по умолчанию `false`, TLS с корнями webpki |
+| `SPICEDB__TIMEOUT` | `spicedb.timeout` | Deadline одного check, по умолчанию `2s`; должен быть положительным |
+
+`SPICEDB__ENDPOINT` обязателен: при пустом значении процесс завершается ошибкой startup. `StaticAuthorization` из `infrastructure/memory` используется только тестовым графом `di::build()`.
+
+Integration-тесты (`tests/spicedb_authorization.rs`) выполняются против SpiceDB с `authorization/bootstrap.yaml`, только если задан `SPICEDB_ENDPOINT` (ключ `devkey` или `SPICEDB_PRESHARED_KEY`, plaintext); без переменной они пропускаются, кроме проверки недоступного endpoint:
+
+```bash
+make test-spicedb                          # SPICEDB_ENDPOINT=localhost:50051
+SPICEDB_ENDPOINT=localhost:50051 cargo test --test spicedb_authorization
+```
+
+## Relationships и reconciliation (SpiceDB)
+
+По change [`add-restaurant-delivery-relationships`](../../openspec/changes/add-restaurant-delivery-relationships/) (FR-444, FR-445, AC-477) `delivery` сам пишет relationships своих definitions. Порты записи — `CourierRelationshipWriter` и `DeliveryRelationshipWriter` (`slices/*/applications/relationships.rs`), SpiceDB-адаптер — `SpiceDbRelationships` (`infrastructure/spicedb/relationships.rs`, `WriteRelationships`), локальный/тестовый — `RecordingRelationships` (`infrastructure/memory`).
+
+| Relationship | Source of truth | Запись |
+| --- | --- | --- |
+| `courier:<id>#self@user:<id>` | зарегистрированный `Courier` | `TOUCH` в Register Courier до сохранения |
+| `delivery:<id>#courier@user:<courier_id>` | `Delivery.courier_id` | `TOUCH` в Accept Delivery Offer (Assignment); `DELETE` в Reassign Courier (и Replan Delivery через него) и в Cancel Delivery, если курьер освобождён — внутри Unit of Work до commit |
+
+Допущение: курьер — пользователь с тем же id (`courier_id` = `user_id`, см. `GLOSSARY.md`). Ошибка записи отменяет use case (fail closed, `UNAVAILABLE`). Повторы, не меняющие состояние (повторная регистрация, повторное принятие offer, повторная отмена, отмена доставки без курьера), ничего не пишут. Если запись прошла, а commit нет, лишнюю связь удалит reconciliation; `DELETE` до commit при неуспешном commit временно отнимает доступ, его восстановит reconciliation.
+
+Reconciliation (`infrastructure/reconcile.rs`, порт алгоритма `orders`): для `courier#self` (зарегистрированные курьеры) и `delivery#courier` (доставки с `courier_id`) граф читается страницами `ReadRelationships` с `fully_consistent`, хранилище — постранично по id и только committed state. Orphan/stale связь удаляется, только если была orphan на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` сразу; id вне грамматики SpiceDB `^[a-zA-Z0-9/_|\-=+]+$` пропускаются и считаются `unrepairable`. Каждый проход пишет в stdout `checked`, `orphans_pending`, `orphans_deleted`, `missing_repaired`, `unrepairable`. Хранилище пока в памяти процесса, поэтому reconciler — фоновая задача основного процесса (`ReconcilingWorker`): первый проход через `min(10s, interval)` после старта, остановка по сигналу shutdown (проход прерывается на границе страницы).
+
+| Переменная | Ключ TOML | Значение |
+| --- | --- | --- |
+| `RECONCILER__INTERVAL` | `reconciler.interval` | Интервал между проходами, по умолчанию `5m`; положительный |
+| `RECONCILER__GRACE` | `reconciler.grace` | Минимальный интервал между двумя orphan-проходами до удаления, по умолчанию `10m` |
+| `RECONCILER__PAGE_SIZE` | `reconciler.page_size` | Размер страницы, по умолчанию `500`; `1..1000` |
+
+Stubs `authzed.api.v1` теперь включают `CheckPermission`, `WriteRelationships` и `ReadRelationships` (`make generate-spicedb`). Integration-тесты `tests/spicedb_relationships.rs` (только при `SPICEDB_ENDPOINT`): регистрация → `courier#act`, принятие offer → `delivery#act_as_courier`, Reassign и Cancel → доступ пропадает, reconciler восстанавливает потерянную связь и удаляет сироту только после grace. Проверки идут через `minimize_latency`, поэтому тесты ждут результат в пределах окна квантования SpiceDB:
+
+```bash
+make test-spicedb   # SPICEDB_ENDPOINT=localhost:50051, оба integration-набора
+```
 
 ## Минимальная доменная модель
 
@@ -141,7 +219,7 @@ Application handler загружает `Courier`, `Delivery` и `DeliveryOffer` 
 В `delivery` граф зависимостей описывается модулями [`shaku`](https://github.com/AzureMarker/shaku), которые проверяются при компиляции. Handlers по-прежнему получают зависимости явно (`&dyn Trait`) и создаются в тестах без контейнера.
 
 - `slices/<slice>/di` — shaku-модуль слайса: интерфейс внешних портов (`CourierPorts`, `DeliveryPorts`), интерфейс use cases (`CourierUseCases`, `DeliveryUseCases`) и их реализация, которая собирает handler на каждый вызов. Порты слайс получает через submodule (`CourierDependencies`, `DeliveryDependencies`).
-- `di` — корневой composition root: выбирает реализации портов (сейчас in-memory адаптеры из `infrastructure::memory` и одно общее хранилище на оба слайса), задаёт `AssignmentPolicy` и собирает итоговый `ServiceModule`.
+- `di` — корневой composition root: выбирает реализации портов (авторизация — `SpiceDbAuthorization` при заданном `SPICEDB__ENDPOINT`, иначе локальная; остальное — in-memory адаптеры из `infrastructure::memory` и одно общее хранилище на оба слайса), задаёт `AssignmentPolicy` и собирает итоговый `ServiceModule`.
 - `cmd/delivery` — загружает конфигурацию (невалидная завершает процесс до открытия портов), собирает модуль, открывает бизнес-порт через `di::HttpWorker` и передаёт его `pkg::lifecycle::Lifecycle`.
 
 Shaku импортируют только модули `di`; `domains/` и `applications/` от него не зависят. Shaku требует `Send + Sync` от интерфейсов и создаёт отдельный экземпляр на каждый компонент, поэтому порты, которые обслуживает одно хранилище, собраны в интерфейс-агрегатор слайса. Generic `UnitOfWork` передаётся через object-safe `TransactionScope` и адаптер `ScopedUnitOfWork` из `pkg/application`.
@@ -174,9 +252,11 @@ Consumers интеграционных событий `delivery` использ�
 - доменная модель: `Courier` (включая `unavailable`), `Location`, табличные FSM `Delivery` (6 states × 6 triggers, включая `Cancelled`/`Cancel`) и `DeliveryOffer` (4 × 3) с тестами полноты, domain events `CourierAssignedToDelivery`, `CourierUnassignedFromDelivery`, `DeliveryPickedUp`, `DeliveryCompleted`, `DeliveryFailed`, `DeliveryCancelled`; policies `CourierEligibleForDelivery` и `DeliveryOfferAcceptable`; контракты репозиториев рядом с моделями;
 - application handlers всех 16 use cases в `slices/<slice>/applications/<usecase>/mod.rs` с unit-тестами;
 - порты: `UnitOfWork`, `Clock`, `IdGenerator`, `Subject`/`AuthorizationError` (`pkg/application`), `RepositoryError` (`pkg/persistence`), `CourierAuthorization` и `DeliveryAuthorization`, `DeliveryOutbox`, `CourierLocator`, `CourierLocationStore`, read models `CourierCurrentDeliveryReadModel` и `PendingDeliveryOffersReadModel`, параметры `AssignmentPolicy`;
+- `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27);
+- `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
 - in-memory адаптеры всех портов в `infrastructure/memory` (транзакционный store с rollback и инъекцией сбоя commit, статическая authorization, управляемые clock и id generator, статический locator) — только для тестов и локальной сборки.
 
-Не реализованы: постоянное хранилище и optimistic concurrency, Outbox relay и Kafka, SpiceDB adapter, production JWT/mTLS `SubjectResolver`, расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
+Не реализованы: постоянное хранилище и optimistic concurrency, Outbox relay и Kafka, writers relationships `courier`/`delivery` (пользовательские checks отклоняются до них), user identity через BFF (ADR 27 оставляет её открытой), расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы `GetCourierCurrentDelivery`, `CreateDelivery`, `ReplanDelivery`, `CancelDelivery`; остальные application handlers к transport пока не подключены.
 
 Допущения по открытым продуктовым вопросам (момент начала поиска курьера, retryability причин неудачи, параметры позиции и политики назначения) зафиксированы в [design.md](../../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам) change.
 

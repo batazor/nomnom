@@ -153,6 +153,37 @@ readinessProbe:
   timeoutSeconds: 1
   failureThreshold: 1
 
+# Service identity (ADR 27): проверка projected ServiceAccount token входящих gRPC-вызовов.
+# Пока jwksConfigMap пуст, IDENTITY__* не задаются и приложение отклоняет все вызовы
+# UNAUTHENTICATED (fail closed). Если jwksConfigMap задан, его ключ jwks.json (публичные
+# ключи кластера из /openid/v1/jwks) монтируется read-only в /etc/nomnom/identity/jwks.json.
+identity:
+  # Ожидаемый iss token: issuer кластера из /.well-known/openid-configuration.
+  issuer: ""
+  # Audience контекста, которую должен содержать aud token.
+  audience: "nomnom.delivery"
+  # Allowlist "namespace/serviceaccount=service-name" через запятую,
+  # например "nomnom/orders-worker=orders-worker". Пустой при заданном issuer — ошибка startup.
+  serviceAccounts: ""
+  # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart.
+  jwksConfigMap: ""
+
+# Авторизация в SpiceDB (ADR 18). Пока endpoint пуст, SPICEDB__* не задаются и приложение
+# использует локальную авторизацию с предупреждением. Если endpoint задан, передаются
+# SPICEDB__ENDPOINT, SPICEDB__INSECURE, SPICEDB__TIMEOUT, а SPICEDB__PRESHARED_KEY берётся
+# из Secret presharedKeySecret (secretKeyRef); ключ в values не хранится.
+spicedb:
+  # gRPC endpoint "host:port", например "spicedb.nomnom-authz.svc:50051".
+  endpoint: ""
+  # true — plaintext без TLS; только для kind и локального запуска.
+  insecure: false
+  # Deadline одного CheckPermission; ошибка или timeout — отказ (fail closed).
+  timeout: "2s"
+  # Secret с preshared key; создаётся развёртыванием, не этим chart. Обязателен при endpoint.
+  presharedKeySecret:
+    name: ""
+    key: "preshared-key"
+
 volumes: []
 volumeMounts: []
 

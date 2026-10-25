@@ -13,13 +13,14 @@ path = "cmd/delivery/main.rs"
 [dependencies]
 config = { version = "0.15.27", default-features = false, features = ["toml"] }
 humantime-serde = "1.1.1"
-jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto", "use_pem"] }
+jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
 prost = "0.14.4"
+prost-types = "0.14.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 shaku = "0.6.3"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "io-util", "sync"] }
-tonic = "0.14.6"
+tonic = { version = "0.14.6", features = ["tls-ring", "tls-webpki-roots"] }
 tonic-prost = "0.14.4"
 
 [lints.clippy]

@@ -16,6 +16,7 @@ use super::courier_locator::CourierLocator;
 use super::error::DeliveryApplicationError;
 use super::outbox::DeliveryOutbox;
 use super::policy::AssignmentPolicy;
+use super::relationships::DeliveryRelationshipWriter;
 use super::{find_courier, load_delivery_by_order, offer_delivery, order_id, reassign_courier};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,6 +44,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
     pub policy: AssignmentPolicy,
+    pub relationships: &'a dyn DeliveryRelationshipWriter,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -68,6 +70,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 deliveries: self.deliveries,
                 couriers: self.couriers,
                 outbox: self.outbox,
+                relationships: self.relationships,
             }
             .execute(
                 subject,
@@ -128,7 +131,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::{MemoryStore, RelationshipWrite, StaticAuthorization};
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::test_support::{World, candidate, service};
     use crate::slices::delivery::domains::delivery::{
@@ -147,6 +150,7 @@ mod tests {
             ids: &world.ids,
             clock: &world.clock,
             policy: world.policy,
+            relationships: &world.relationships,
         }
     }
 
@@ -204,6 +208,14 @@ mod tests {
         assert_eq!(delivery.state(), State::Waiting);
         assert_eq!(delivery.courier_id(), None);
         assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
+        // An offer is not an assignment: only the released courier loses access.
+        assert_eq!(
+            world.relationships.writes(),
+            vec![RelationshipWrite::UnassignCourier(
+                DeliveryId::new("delivery-1"),
+                CourierId::new("courier-1")
+            )]
+        );
     }
 
     #[test]

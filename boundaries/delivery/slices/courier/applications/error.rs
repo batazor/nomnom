@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use crate::pkg::application::AuthorizationError;
+use crate::pkg::application::{AuthorizationError, RelationshipWriteError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{CourierError, CourierId, LocationError};
 
@@ -74,5 +74,11 @@ impl From<RepositoryError> for CourierApplicationError {
 impl From<CourierError> for CourierApplicationError {
     fn from(error: CourierError) -> Self {
         Self::PreconditionFailed(error)
+    }
+}
+
+impl From<RelationshipWriteError> for CourierApplicationError {
+    fn from(error: RelationshipWriteError) -> Self {
+        Self::DependencyUnavailable(error.to_string())
     }
 }

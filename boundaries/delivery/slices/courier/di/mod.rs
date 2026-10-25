@@ -12,6 +12,7 @@ use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::get_courier_current_delivery::{
     self, CourierCurrentDeliveryReadModel,
 };
+use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::{self, CourierLocationStore};
 use crate::slices::courier::applications::{register_courier, set_courier_availability};
 use crate::slices::courier::domains::courier::CourierRepository;
@@ -24,6 +25,7 @@ pub trait CourierPorts: Interface {
     fn locations(&self) -> &dyn CourierLocationStore;
     fn current_deliveries(&self) -> &dyn CourierCurrentDeliveryReadModel;
     fn clock(&self) -> &dyn Clock;
+    fn relationships(&self) -> &dyn CourierRelationshipWriter;
 }
 
 /// Модуль, через который корневой `di` передаёт слайсу его порты.
@@ -71,6 +73,7 @@ impl CourierUseCases for CourierUseCasesImpl {
         register_courier::Handler {
             authorization: self.ports.authorization(),
             couriers: self.ports.couriers(),
+            relationships: self.ports.relationships(),
         }
         .execute(subject, input)
     }

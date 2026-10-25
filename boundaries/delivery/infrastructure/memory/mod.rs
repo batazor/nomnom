@@ -5,9 +5,11 @@
 mod authorization;
 mod clock;
 mod locator;
+mod relationships;
 mod store;
 
 pub use authorization::StaticAuthorization;
 pub use clock::{ManualClock, SequentialIdGenerator};
 pub use locator::StaticCourierLocator;
+pub use relationships::{RecordingRelationships, RelationshipWrite};
 pub use store::MemoryStore;

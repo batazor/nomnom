@@ -1,5 +1,7 @@
 //! Register Courier: a platform operator creates a `Courier` that is
-//! available for new assignments.
+//! available for new assignments. Before the courier is persisted,
+//! `courier:<id>#self@user:<id>` is written to the authorization graph; a
+//! failed write aborts the registration (fail closed).
 
 use crate::pkg::application::Subject;
 use crate::pkg::persistence::RepositoryError;
@@ -10,6 +12,7 @@ use crate::slices::courier::domains::courier::{
 use super::authorization::{CourierAuthorization, CourierPermission, CourierResource};
 use super::courier_id;
 use super::error::CourierApplicationError;
+use super::relationships::CourierRelationshipWriter;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
@@ -25,6 +28,7 @@ pub struct Output {
 pub struct Handler<'a> {
     pub authorization: &'a dyn CourierAuthorization,
     pub couriers: &'a dyn CourierRepository,
+    pub relationships: &'a dyn CourierRelationshipWriter,
 }
 
 impl Handler<'_> {
@@ -45,6 +49,8 @@ impl Handler<'_> {
                 courier_id,
             ));
         }
+        // A repeated registration was rejected above and writes nothing.
+        self.relationships.register_courier(&courier_id)?;
         let courier = Courier::new(courier_id);
         match self.couriers.add(&courier) {
             Ok(()) => Ok(Output {
@@ -62,7 +68,10 @@ impl Handler<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::{
+        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+    };
+    use crate::pkg::application::RelationshipWriteError;
     use crate::slices::courier::applications::error::InvalidCourierRequest;
 
     fn operator() -> Subject {
@@ -80,9 +89,11 @@ mod tests {
     fn registers_available_courier() {
         let store = MemoryStore::new();
         let authorization = StaticAuthorization::allow_all();
+        let relationships = RecordingRelationships::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            relationships: &relationships,
         };
 
         let output = handler
@@ -103,6 +114,73 @@ mod tests {
                 CourierResource::Platform
             )]
         );
+        assert_eq!(
+            relationships.writes(),
+            vec![RelationshipWrite::RegisterCourier(CourierId::new(
+                "courier-1"
+            ))]
+        );
+    }
+
+    /// Writer that observes whether the courier was already persisted.
+    struct ObservingWriter<'a> {
+        store: &'a MemoryStore,
+        persisted_at_write: std::cell::Cell<Option<bool>>,
+    }
+
+    impl CourierRelationshipWriter for ObservingWriter<'_> {
+        fn register_courier(&self, courier_id: &CourierId) -> Result<(), RelationshipWriteError> {
+            let persisted = self.store.get(courier_id).expect("read courier").is_some();
+            self.persisted_at_write.set(Some(persisted));
+            Ok(())
+        }
+    }
+
+    /// FR-444: the relationship is written before the courier is persisted.
+    #[test]
+    fn relationship_is_written_before_courier_is_persisted() {
+        let store = MemoryStore::new();
+        let authorization = StaticAuthorization::allow_all();
+        let writer = ObservingWriter {
+            store: &store,
+            persisted_at_write: std::cell::Cell::new(None),
+        };
+        let handler = Handler {
+            authorization: &authorization,
+            couriers: &store,
+            relationships: &writer,
+        };
+
+        handler
+            .execute(&operator(), input("courier-1"))
+            .expect("courier registered");
+
+        assert_eq!(writer.persisted_at_write.get(), Some(false));
+        assert!(
+            store
+                .get(&CourierId::new("courier-1"))
+                .expect("read")
+                .is_some()
+        );
+    }
+
+    /// FR-444: a failed write aborts the registration (fail closed).
+    #[test]
+    fn failed_relationship_write_persists_nothing() {
+        let store = MemoryStore::new();
+        let authorization = StaticAuthorization::allow_all();
+        let relationships = RecordingRelationships::failing("spicedb offline");
+        let handler = Handler {
+            authorization: &authorization,
+            couriers: &store,
+            relationships: &relationships,
+        };
+
+        assert!(matches!(
+            handler.execute(&operator(), input("courier-1")),
+            Err(CourierApplicationError::DependencyUnavailable(reason)) if reason.contains("spicedb offline")
+        ));
+        assert_eq!(store.get(&CourierId::new("courier-1")), Ok(None));
     }
 
     /// AC-303
@@ -112,9 +190,11 @@ mod tests {
         let existing = Courier::restore(CourierId::new("courier-1"), CourierStatus::Busy);
         store.add(&existing).expect("seed courier");
         let authorization = StaticAuthorization::allow_all();
+        let relationships = RecordingRelationships::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            relationships: &relationships,
         };
 
         assert_eq!(
@@ -124,12 +204,14 @@ mod tests {
             ))
         );
         assert_eq!(store.get(&CourierId::new("courier-1")), Ok(Some(existing)));
+        assert!(relationships.writes().is_empty());
     }
 
     /// AC-301
     #[test]
     fn denied_or_unavailable_authorization_fails_closed() {
         let store = MemoryStore::new();
+        let relationships = RecordingRelationships::new();
         for (authorization, expected) in [
             (
                 StaticAuthorization::deny_all(),
@@ -143,6 +225,7 @@ mod tests {
             let handler = Handler {
                 authorization: &authorization,
                 couriers: &store,
+                relationships: &relationships,
             };
             assert_eq!(
                 handler.execute(&operator(), input("courier-1")),
@@ -150,15 +233,18 @@ mod tests {
             );
         }
         assert_eq!(store.get(&CourierId::new("courier-1")), Ok(None));
+        assert!(relationships.writes().is_empty());
     }
 
     #[test]
     fn blank_courier_id_is_invalid() {
         let store = MemoryStore::new();
         let authorization = StaticAuthorization::allow_all();
+        let relationships = RecordingRelationships::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            relationships: &relationships,
         };
         assert_eq!(
             handler.execute(&operator(), input("  ")),
@@ -173,9 +259,11 @@ mod tests {
         let store = MemoryStore::new();
         store.set_unavailable(true);
         let authorization = StaticAuthorization::allow_all();
+        let relationships = RecordingRelationships::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            relationships: &relationships,
         };
         assert!(matches!(
             handler.execute(&operator(), input("courier-1")),

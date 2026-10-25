@@ -64,3 +64,28 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- fail "management.port must differ from service.targetPort" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Путь к JWKS кластера внутри контейнера (ADR 27): ConfigMap identity.jwksConfigMap
+монтируется read-only каталогом /etc/nomnom/identity, ключ jwks.json становится файлом.
+*/}}
+{{- define "delivery.identityJwksFile" -}}
+/etc/nomnom/identity/jwks.json
+{{- end -}}
+
+
+{{/*
+SpiceDB (ADR 18): при заданном endpoint preshared key обязателен и берётся только из Secret,
+иначе приложение не стартует.
+*/}}
+{{- define "delivery.validateSpiceDb" -}}
+{{- if not .Values.spicedb.presharedKeySecret.name -}}
+{{- fail "spicedb.presharedKeySecret.name is required when spicedb.endpoint is set" -}}
+{{- end -}}
+{{- if not .Values.spicedb.presharedKeySecret.key -}}
+{{- fail "spicedb.presharedKeySecret.key is required when spicedb.endpoint is set" -}}
+{{- end -}}
+{{- if not .Values.spicedb.timeout -}}
+{{- fail "spicedb.timeout is required when spicedb.endpoint is set" -}}
+{{- end -}}
+{{- end -}}

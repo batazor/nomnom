@@ -1,9 +1,10 @@
 //! Fixtures shared by the `delivery` slice handler tests.
 
 use crate::infrastructure::memory::{
-    ManualClock, MemoryStore, SequentialIdGenerator, StaticAuthorization, StaticCourierLocator,
+    ManualClock, MemoryStore, RecordingRelationships, RelationshipWrite, SequentialIdGenerator,
+    StaticAuthorization, StaticCourierLocator,
 };
-use crate::pkg::application::Subject;
+use crate::pkg::application::{RelationshipWriteError, Subject};
 use crate::slices::courier::domains::courier::{
     Courier, CourierId, CourierRepository, CourierStatus,
 };
@@ -14,6 +15,7 @@ use crate::slices::delivery::domains::delivery::{
 
 use super::courier_locator::CourierCandidate;
 use super::policy::AssignmentPolicy;
+use super::relationships::DeliveryRelationshipWriter;
 
 pub const NOW: i64 = 1_000;
 pub const OFFER_TTL: i64 = 60;
@@ -25,6 +27,7 @@ pub struct World {
     pub ids: SequentialIdGenerator,
     pub locator: StaticCourierLocator,
     pub policy: AssignmentPolicy,
+    pub relationships: RecordingRelationships,
 }
 
 impl World {
@@ -44,6 +47,7 @@ impl World {
                 maximum_active_assignments: 1,
                 offer_ttl_seconds: OFFER_TTL,
             },
+            relationships: RecordingRelationships::new(),
         }
     }
 
@@ -136,5 +140,55 @@ pub fn candidate(courier: &str, distance_to_pickup_meters: u32) -> CourierCandid
         within_delivery_zone: true,
         distance_to_pickup_meters,
         active_assignments: 0,
+    }
+}
+
+/// Relationship writer that records, for every write, the `courier_id` of the
+/// delivery as persisted at the moment of the write. It proves that writers
+/// run before the use case saves the delivery.
+pub struct ObservingRelationships<'a> {
+    pub store: &'a MemoryStore,
+    pub observed: std::cell::RefCell<Vec<(RelationshipWrite, Option<CourierId>)>>,
+}
+
+impl<'a> ObservingRelationships<'a> {
+    pub fn new(store: &'a MemoryStore) -> Self {
+        Self {
+            store,
+            observed: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    fn observe(&self, write: RelationshipWrite, delivery_id: &DeliveryId) {
+        let persisted = DeliveryRepository::get(self.store, delivery_id)
+            .expect("read delivery")
+            .and_then(|delivery| delivery.courier_id().cloned());
+        self.observed.borrow_mut().push((write, persisted));
+    }
+}
+
+impl DeliveryRelationshipWriter for ObservingRelationships<'_> {
+    fn assign_courier(
+        &self,
+        delivery_id: &DeliveryId,
+        courier_id: &CourierId,
+    ) -> Result<(), RelationshipWriteError> {
+        self.observe(
+            RelationshipWrite::AssignCourier(delivery_id.clone(), courier_id.clone()),
+            delivery_id,
+        );
+        Ok(())
+    }
+
+    fn unassign_courier(
+        &self,
+        delivery_id: &DeliveryId,
+        courier_id: &CourierId,
+    ) -> Result<(), RelationshipWriteError> {
+        self.observe(
+            RelationshipWrite::UnassignCourier(delivery_id.clone(), courier_id.clone()),
+            delivery_id,
+        );
+        Ok(())
     }
 }

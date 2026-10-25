@@ -9,3 +9,36 @@ port = 9083
 # Ожидание распространения not ready до остановки приёма работы.
 readiness_delay = "5s"
 drain_timeout = "20s"
+
+[identity]
+# Service identity (ADR 27). Пока issuer, audience или jwks_file пусты, все gRPC-вызовы
+# отклоняются UNAUTHENTICATED. Переменные: IDENTITY__ISSUER, IDENTITY__AUDIENCE,
+# IDENTITY__JWKS_FILE, IDENTITY__SERVICE_ACCOUNTS.
+issuer = ""
+audience = "nomnom.delivery"
+jwks_file = ""
+# Allowlist "namespace/serviceaccount=service-name" через запятую.
+service_accounts = ""
+
+[spicedb]
+# Авторизация в SpiceDB (ADR 18). Пустой endpoint — локальная авторизация процесса с
+# предупреждением. При заданном endpoint preshared_key обязателен. Переменные:
+# SPICEDB__ENDPOINT, SPICEDB__PRESHARED_KEY, SPICEDB__INSECURE, SPICEDB__TIMEOUT.
+endpoint = ""
+# Не храните ключ в файле окружения: задавайте SPICEDB__PRESHARED_KEY из Secret.
+preshared_key = ""
+# true — plaintext без TLS, только для kind и локального запуска.
+insecure = false
+# Deadline одного CheckPermission; ошибка или timeout — отказ (fail closed).
+timeout = "2s"
+
+[reconciler]
+# Фоновая сверка relationships courier#self и delivery#courier с business state
+# процесса (FR-445). Переменные: RECONCILER__INTERVAL, RECONCILER__GRACE,
+# RECONCILER__PAGE_SIZE. Первый проход — через 10s после старта.
+interval = "5m"
+# Orphan/stale связь удаляется, только если она была orphan на двух проходах с
+# интервалом не меньше grace.
+grace = "10m"
+# Размер страницы ReadRelationships (1..1000).
+page_size = 500

@@ -17,6 +17,7 @@ use crate::slices::delivery::applications::list_available_delivery_offers::{
 };
 use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
+use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
     find_courier, offer_delivery, reassign_courier, reject_delivery_offer, replan_delivery,
@@ -38,6 +39,7 @@ pub trait DeliveryPorts: Interface {
     fn locator(&self) -> &dyn CourierLocator;
     fn clock(&self) -> &dyn Clock;
     fn ids(&self) -> &dyn IdGenerator;
+    fn relationships(&self) -> &dyn DeliveryRelationshipWriter;
 }
 
 /// Числовые параметры назначения; значения задаёт корневой `di`.
@@ -215,6 +217,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             locator: self.ports.locator(),
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
+            relationships: self.ports.relationships(),
         }
         .execute(subject, input)
     }
@@ -243,6 +246,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.deliveries(),
             couriers: self.ports.couriers(),
             outbox: self.ports.outbox(),
+            relationships: self.ports.relationships(),
         }
         .execute(subject, input)
     }
@@ -302,6 +306,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.deliveries(),
             couriers: self.ports.couriers(),
             outbox: self.ports.outbox(),
+            relationships: self.ports.relationships(),
         }
         .execute(subject, input)
     }
@@ -322,6 +327,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             ids: self.ports.ids(),
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
+            relationships: self.ports.relationships(),
         }
         .execute(subject, input)
     }

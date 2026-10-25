@@ -1,7 +1,9 @@
 //! Reassign Courier: the assignment process or an authorized dispatcher ends
 //! the Courier Assignment of a not yet picked up Delivery. The delivery
 //! returns to waiting, the courier is released and the fact is written to the
-//! Outbox. The replacement search is started by the caller, not here.
+//! Outbox. The replacement search is started by the caller, not here. Before
+//! commit `delivery:<id>#courier@user:<courier_id>` is deleted from the
+//! authorization graph (AC-477); a failed delete rolls the reassignment back.
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
@@ -10,6 +12,7 @@ use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryRepository}
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
+use super::relationships::DeliveryRelationshipWriter;
 use super::{delivery_id, load_courier, load_delivery};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -29,6 +32,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierRepository,
     pub outbox: &'a dyn DeliveryOutbox,
+    pub relationships: &'a dyn DeliveryRelationshipWriter,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -53,6 +57,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
             })?;
             let mut courier = load_courier(self.couriers, &released_courier_id)?;
             courier.release()?;
+            // Revoke access before commit.
+            self.relationships
+                .unassign_courier(&delivery_id, &released_courier_id)?;
 
             self.deliveries.save(&delivery)?;
             self.couriers.save(&courier)?;
@@ -68,10 +75,14 @@ impl<U: UnitOfWork> Handler<'_, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::{
+        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+    };
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
-    use crate::slices::delivery::applications::test_support::{World, subject};
+    use crate::slices::delivery::applications::test_support::{
+        ObservingRelationships, World, subject,
+    };
     use crate::slices::delivery::domains::delivery::{
         DeliveryError, DomainEvent, OrderId, State, TransitionError, Trigger,
     };
@@ -83,6 +94,7 @@ mod tests {
             deliveries: &world.store,
             couriers: &world.store,
             outbox: &world.store,
+            relationships: &world.relationships,
         }
     }
 
@@ -117,6 +129,72 @@ mod tests {
                 }
             )]
         );
+        assert_eq!(world.relationships.writes(), vec![unassigned()]);
+    }
+
+    fn unassigned() -> RelationshipWrite {
+        RelationshipWrite::UnassignCourier(
+            DeliveryId::new("delivery-1"),
+            CourierId::new("courier-1"),
+        )
+    }
+
+    /// AC-477: the relationship is deleted before the delivery is saved.
+    #[test]
+    fn courier_relationship_is_deleted_before_delivery_is_saved() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+        let writer = ObservingRelationships::new(&world.store);
+        let handler = Handler {
+            relationships: &writer,
+            ..handler(&world)
+        };
+
+        handler
+            .execute(&subject("dispatcher-1"), input())
+            .expect("reassigned");
+
+        assert_eq!(
+            *writer.observed.borrow(),
+            vec![(unassigned(), Some(CourierId::new("courier-1")))]
+        );
+        assert_eq!(world.delivery("delivery-1").courier_id(), None);
+    }
+
+    /// FR-444: a failed delete rolls the reassignment back (fail closed).
+    #[test]
+    fn failed_relationship_delete_rolls_reassignment_back() {
+        let world = World {
+            relationships: RecordingRelationships::failing("spicedb offline"),
+            ..World::new()
+        };
+        world.assigned_delivery("delivery-1", "courier-1");
+
+        assert!(matches!(
+            handler(&world).execute(&subject("dispatcher-1"), input()),
+            Err(DeliveryApplicationError::DependencyUnavailable(_))
+        ));
+        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+        assert_eq!(
+            world.delivery("delivery-1").courier_id(),
+            Some(&CourierId::new("courier-1"))
+        );
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
+        assert!(world.store.outbox_messages().is_empty());
+    }
+
+    /// A waiting delivery has no assignment to end: nothing is written.
+    #[test]
+    fn waiting_delivery_cannot_be_reassigned_and_writes_nothing() {
+        let world = World::new();
+        world.waiting_delivery("delivery-1");
+
+        assert!(
+            handler(&world)
+                .execute(&subject("dispatcher-1"), input())
+                .is_err()
+        );
+        assert!(world.relationships.writes().is_empty());
     }
 
     /// AC-332
@@ -137,6 +215,7 @@ mod tests {
         assert_eq!(world.delivery_state("delivery-1"), State::PickedUp);
         assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
         assert!(world.store.outbox_messages().is_empty());
+        assert!(world.relationships.writes().is_empty());
     }
 
     #[test]

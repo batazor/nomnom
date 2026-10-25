@@ -35,6 +35,20 @@ impl Display for AuthorizationError {
 
 impl Error for AuthorizationError {}
 
+/// A relationship write that did not reach the authorization graph. Writers
+/// run before the local commit, so the use case fails closed and persists
+/// nothing (dual-write rules in `docs/security.md`).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RelationshipWriteError(pub String);
+
+impl Display for RelationshipWriteError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "relationship write failed: {}", self.0)
+    }
+}
+
+impl Error for RelationshipWriteError {}
+
 /// Source of the current time for application code; domain code receives
 /// the value explicitly.
 pub trait Clock {

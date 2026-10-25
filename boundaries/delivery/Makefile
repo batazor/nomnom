@@ -1,11 +1,15 @@
 CARGO ?= cargo
 
-.PHONY: check run generate proto-check test lint format format-check
+.PHONY: check run generate generate-spicedb proto-check test test-spicedb lint format format-check
 
 check: proto-check test lint format-check
 
-generate:
+generate: generate-spicedb
 	$(MAKE) -C ../.. buf-generate
+
+# SpiceDB client stubs (authzed.api.v1) из buf.build/authzed/api.
+generate-spicedb:
+	cd infrastructure/spicedb && buf generate --template buf.gen.yaml
 
 proto-check:
 	$(MAKE) -C ../.. buf-check
@@ -15,6 +19,11 @@ run:
 
 test:
 	$(CARGO) test
+
+# Integration-тесты против SpiceDB с authorization/bootstrap.yaml.
+SPICEDB_ENDPOINT ?= localhost:50051
+test-spicedb:
+	SPICEDB_ENDPOINT=$(SPICEDB_ENDPOINT) $(CARGO) test --test spicedb_authorization --test spicedb_relationships
 
 lint:
 	$(CARGO) clippy --all-targets --all-features

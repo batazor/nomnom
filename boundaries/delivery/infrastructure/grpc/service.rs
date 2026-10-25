@@ -26,8 +26,10 @@ use super::v1::{
     ReplanDeliveryRequest, ReplanDeliveryResponse,
 };
 
-/// Resolves only verified caller identities. Production defaults to rejecting
-/// every request until a JWT/mTLS adapter is wired into the composition root.
+/// Resolves only verified caller identities. Without identity configuration
+/// the composition root keeps [`RejectingSubjectResolver`]; otherwise
+/// [`super::ServiceTokenSubjectResolver`] verifies projected ServiceAccount
+/// tokens (ADR 27).
 pub trait SubjectResolver: Send + Sync + 'static {
     fn resolve(&self, metadata: &MetadataMap) -> Result<Subject, Status>;
 }
@@ -592,6 +594,71 @@ mod tests {
         assert_eq!(missing.code(), tonic::Code::NotFound);
 
         running.stop().await;
+    }
+
+    /// Delegates to the real token resolver and records what the handler got.
+    struct RecordingResolver {
+        inner: super::super::ServiceTokenSubjectResolver,
+        resolved: std::sync::Mutex<Vec<Subject>>,
+    }
+
+    impl SubjectResolver for RecordingResolver {
+        fn resolve(&self, metadata: &MetadataMap) -> Result<Subject, Status> {
+            let subject = self.inner.resolve(metadata)?;
+            self.resolved
+                .lock()
+                .expect("resolved lock")
+                .push(subject.clone());
+            Ok(subject)
+        }
+    }
+
+    #[tokio::test]
+    async fn service_token_reaches_the_handler_as_service_subject() {
+        let vectors = super::super::identity::fixtures::vectors();
+        let resolver = Arc::new(RecordingResolver {
+            inner: super::super::identity::fixtures::resolver(),
+            resolved: std::sync::Mutex::new(Vec::new()),
+        });
+        let worker = GrpcWorker::bind(
+            ([127, 0, 0, 1], 0).into(),
+            Arc::new(crate::di::build()),
+            resolver.clone(),
+        )
+        .expect("bind");
+        let addr = worker.local_addr().expect("local addr");
+        let (stop_tx, stop_rx) = watch::channel(false);
+        let running = tokio::spawn(worker.run(stop_rx));
+        let mut client = DeliveryServiceClient::connect(format!("http://{addr}"))
+            .await
+            .expect("connect");
+
+        let mut request = tonic::Request::new(create_request("order-identity"));
+        request.metadata_mut().insert(
+            "authorization",
+            format!("Bearer {}", vectors.token("valid"))
+                .parse()
+                .expect("metadata"),
+        );
+        let created = client
+            .create_delivery(request)
+            .await
+            .expect("verified service call handled")
+            .into_inner();
+        assert!(!created.delivery_id.is_empty());
+        assert_eq!(
+            *resolver.resolved.lock().expect("resolved lock"),
+            vec![Subject::Service("orders-worker".to_owned())]
+        );
+
+        let anonymous = client
+            .create_delivery(create_request("order-anonymous"))
+            .await
+            .expect_err("missing token");
+        assert_eq!(anonymous.code(), tonic::Code::Unauthenticated);
+
+        stop_tx.send(true).expect("stop");
+        running.await.expect("join").expect("graceful shutdown");
     }
 
     #[tokio::test]

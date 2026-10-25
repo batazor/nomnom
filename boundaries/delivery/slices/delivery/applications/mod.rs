@@ -13,6 +13,7 @@ pub mod outbox;
 pub mod policy;
 pub mod reassign_courier;
 pub mod reject_delivery_offer;
+pub mod relationships;
 pub mod replan_delivery;
 pub mod report_delivery_failure;
 

@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use crate::pkg::application::{AuthorizationError, UnitOfWorkError};
+use crate::pkg::application::{AuthorizationError, RelationshipWriteError, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{CourierError, CourierId};
 use crate::slices::delivery::domains::delivery::{
@@ -152,5 +152,11 @@ impl From<DeliveryOfferError> for DeliveryApplicationError {
 impl From<DeliveryValidationError> for DeliveryApplicationError {
     fn from(error: DeliveryValidationError) -> Self {
         Self::InvalidRequest(InvalidDeliveryRequest::Validation(error))
+    }
+}
+
+impl From<RelationshipWriteError> for DeliveryApplicationError {
+    fn from(error: RelationshipWriteError) -> Self {
+        Self::DependencyUnavailable(error.to_string())
     }
 }

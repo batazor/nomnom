@@ -115,6 +115,40 @@ extraEnv:
 
 Secret-ресурсы chart не создаёт.
 
+## Service identity
+
+Проверку projected ServiceAccount token ([ADR 27](../../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md))
+включает `identity.jwksConfigMap`: ConfigMap с ключом `jwks.json` (создаётся развёртыванием из
+`kubectl get --raw /openid/v1/jwks`) монтируется read-only в `/etc/nomnom/identity/jwks.json`, а
+контейнер получает `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` и
+`IDENTITY__SERVICE_ACCOUNTS`. Без `jwksConfigMap` переменные не задаются и приложение отклоняет все
+gRPC-вызовы `UNAUTHENTICATED`.
+
+```bash
+helm template delivery boundaries/delivery/ops/helm \
+  --set identity.issuer=https://kubernetes.default.svc.cluster.local \
+  --set identity.serviceAccounts=nomnom/orders-worker=orders-worker \
+  --set identity.jwksConfigMap=cluster-jwks
+```
+
+JWKS читается при старте: после обновления ConfigMap нужен rollout restart.
+
+## SpiceDB
+
+Авторизацию в SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-authorization.md)) включает
+`spicedb.endpoint`: контейнер получает `SPICEDB__ENDPOINT`, `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT`
+и `SPICEDB__PRESHARED_KEY` из Secret `spicedb.presharedKeySecret` (`secretKeyRef`, по умолчанию
+ключ `preshared-key`). Secret создаётся развёртыванием; без его имени при заданном endpoint chart
+не рендерится. Без endpoint переменные не задаются, и приложение не стартует:
+`SPICEDB__ENDPOINT` обязателен. `spicedb.insecure: true` (plaintext) — только для kind.
+
+```bash
+helm template delivery boundaries/delivery/ops/helm \
+  --set spicedb.endpoint=spicedb.nomnom-authz.svc:50051 \
+  --set spicedb.insecure=true \
+  --set spicedb.presharedKeySecret.name=spicedb-preshared-key
+```
+
 ## Security
 
 По умолчанию контейнер запускается с `runAsNonRoot: true`, `allowPrivilegeEscalation: false`,

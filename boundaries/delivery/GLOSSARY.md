@@ -8,6 +8,8 @@
 Исполнитель, который может быть доступен для одной доставки или занят ею.
 _Avoid_: Driver, delivery agent
 
+_Допущение_: курьер — пользователь платформы с тем же идентификатором (`courier_id` = `user_id`). Поэтому Register Courier пишет `courier:<id>#self@user:<id>`, а назначение — `delivery:<id>#courier@user:<courier_id>`.
+
 **Courier Availability**:
 Может ли курьер получать новые назначения: доступен, занят доставкой или вне линии.
 _Avoid_: Location, shift

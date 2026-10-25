@@ -33,6 +33,67 @@ pub const AUDIENCE_ENV: &str = "IDENTITY__AUDIENCE";
 pub const JWKS_FILE_ENV: &str = "IDENTITY__JWKS_FILE";
 pub const SERVICE_ACCOUNTS_ENV: &str = "IDENTITY__SERVICE_ACCOUNTS";
 
+/// SpiceDB (ADR 18): ключ конфигурации, переменная окружения и значение по умолчанию.
+const SPICEDB_SETTINGS: [(&str, &str, &str); 4] = [
+    ("spicedb.endpoint", SPICEDB_ENDPOINT_ENV, ""),
+    ("spicedb.preshared_key", SPICEDB_PRESHARED_KEY_ENV, ""),
+    ("spicedb.insecure", SPICEDB_INSECURE_ENV, "false"),
+    (
+        "spicedb.timeout",
+        SPICEDB_TIMEOUT_ENV,
+        DEFAULT_SPICEDB_TIMEOUT,
+    ),
+];
+pub const SPICEDB_ENDPOINT_ENV: &str = "SPICEDB__ENDPOINT";
+pub const SPICEDB_PRESHARED_KEY_ENV: &str = "SPICEDB__PRESHARED_KEY";
+pub const SPICEDB_INSECURE_ENV: &str = "SPICEDB__INSECURE";
+pub const SPICEDB_TIMEOUT_ENV: &str = "SPICEDB__TIMEOUT";
+pub const DEFAULT_SPICEDB_TIMEOUT: &str = "2s";
+
+/// Reconciliation of relationships (FR-445): ключ, переменная, значение по умолчанию.
+const RECONCILER_SETTINGS: [(&str, &str, &str); 3] = [
+    ("reconciler.interval", RECONCILER_INTERVAL_ENV, "5m"),
+    ("reconciler.grace", RECONCILER_GRACE_ENV, "10m"),
+    ("reconciler.page_size", RECONCILER_PAGE_SIZE_ENV, "500"),
+];
+pub const RECONCILER_INTERVAL_ENV: &str = "RECONCILER__INTERVAL";
+pub const RECONCILER_GRACE_ENV: &str = "RECONCILER__GRACE";
+pub const RECONCILER_PAGE_SIZE_ENV: &str = "RECONCILER__PAGE_SIZE";
+/// Максимум `ReadRelationships` limit SpiceDB по умолчанию.
+pub const MAX_RECONCILER_PAGE_SIZE: u32 = 1000;
+
+/// Фоновая сверка relationships `courier#self` и `delivery#courier` с
+/// business state процесса.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ReconcilerConfig {
+    /// Интервал между проходами.
+    #[serde(with = "humantime_serde")]
+    pub interval: Duration,
+    /// Минимальный интервал между двумя проходами, на которых связь была
+    /// orphan, прежде чем её удалить.
+    #[serde(with = "humantime_serde")]
+    pub grace: Duration,
+    /// Размер страницы `ReadRelationships` и чтения хранилища.
+    pub page_size: u32,
+}
+
+impl ReconcilerConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        if self.interval.is_zero() {
+            return Err(ConfigError::Message(
+                "reconciler interval must be positive".to_owned(),
+            ));
+        }
+        if self.page_size == 0 || self.page_size > MAX_RECONCILER_PAGE_SIZE {
+            return Err(ConfigError::Message(format!(
+                "reconciler page size must be between 1 and {MAX_RECONCILER_PAGE_SIZE}"
+            )));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ServerConfig {
@@ -74,6 +135,78 @@ pub struct IdentityConfig {
     pub service_accounts: String,
 }
 
+/// Проверка прав в SpiceDB (ADR 18). Пустой `endpoint` оставляет локальную
+/// авторизацию процесса.
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpiceDbConfig {
+    /// `host:port` или URL gRPC endpoint SpiceDB.
+    pub endpoint: String,
+    /// Preshared key, передаваемый как `authorization: Bearer <key>`.
+    pub preshared_key: String,
+    /// Plaintext без TLS — только для kind и локального запуска.
+    pub insecure: bool,
+    /// Deadline одного `CheckPermission`.
+    #[serde(with = "humantime_serde")]
+    pub timeout: Duration,
+}
+
+impl Default for SpiceDbConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: String::new(),
+            preshared_key: String::new(),
+            insecure: false,
+            timeout: Duration::from_secs(2),
+        }
+    }
+}
+
+/// Ключ не попадает в логи и сообщения об ошибках.
+impl std::fmt::Debug for SpiceDbConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SpiceDbConfig")
+            .field("endpoint", &self.endpoint)
+            .field(
+                "preshared_key",
+                &if self.preshared_key.is_empty() {
+                    ""
+                } else {
+                    "<redacted>"
+                },
+            )
+            .field("insecure", &self.insecure)
+            .field("timeout", &self.timeout)
+            .finish()
+    }
+}
+
+impl SpiceDbConfig {
+    /// SpiceDB выбран, если задан endpoint.
+    #[must_use]
+    pub fn enabled(&self) -> bool {
+        !self.endpoint.trim().is_empty()
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        if !self.enabled() {
+            return Ok(());
+        }
+        if self.preshared_key.is_empty() {
+            return Err(ConfigError::Message(format!(
+                "{SPICEDB_PRESHARED_KEY_ENV} is required when {SPICEDB_ENDPOINT_ENV} is set"
+            )));
+        }
+        if self.timeout.is_zero() {
+            return Err(ConfigError::Message(
+                "spicedb timeout must be positive".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AppConfig {
@@ -81,6 +214,8 @@ pub struct AppConfig {
     pub management: ManagementConfig,
     pub shutdown: ShutdownConfig,
     pub identity: IdentityConfig,
+    pub spicedb: SpiceDbConfig,
+    pub reconciler: ReconcilerConfig,
 }
 
 pub fn load() -> Result<AppConfig, ConfigError> {
@@ -99,11 +234,15 @@ fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigError> {
     builder = configure_management(builder)?;
     builder = configure_shutdown(builder)?;
     builder = configure_identity(builder, |name| std::env::var(name).ok())?;
+    builder = configure_spicedb(builder, |name| std::env::var(name).ok())?;
+    builder = configure_reconciler(builder, |name| std::env::var(name).ok())?;
 
     let config: AppConfig = builder.build()?.try_deserialize()?;
     config.server.validate()?;
     config.management.validate(&config.server)?;
     config.shutdown.validate()?;
+    config.spicedb.validate()?;
+    config.reconciler.validate()?;
 
     Ok(config)
 }
@@ -156,6 +295,32 @@ fn configure_identity(
 ) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
     for (key, name) in IDENTITY_SETTINGS {
         builder = builder.set_default(key, "")?;
+        if let Some(value) = env(name) {
+            builder = builder.set_override(key, value)?;
+        }
+    }
+    Ok(builder)
+}
+
+fn configure_spicedb(
+    mut builder: ConfigBuilder<DefaultState>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    for (key, name, default) in SPICEDB_SETTINGS {
+        builder = builder.set_default(key, default)?;
+        if let Some(value) = env(name) {
+            builder = builder.set_override(key, value)?;
+        }
+    }
+    Ok(builder)
+}
+
+fn configure_reconciler(
+    mut builder: ConfigBuilder<DefaultState>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    for (key, name, default) in RECONCILER_SETTINGS {
+        builder = builder.set_default(key, default)?;
         if let Some(value) = env(name) {
             builder = builder.set_override(key, value)?;
         }
@@ -361,6 +526,150 @@ mod tests {
                 audience: "nomnom.delivery".to_owned(),
                 jwks_file: "/etc/nomnom/identity/jwks.json".to_owned(),
                 service_accounts: "nomnom/orders-worker=orders-worker".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn spicedb_is_disabled_by_default() {
+        let config = load_toml("spicedb-default", "").expect("load config");
+
+        assert_eq!(config.spicedb, SpiceDbConfig::default());
+        assert!(!config.spicedb.enabled());
+        assert_eq!(config.spicedb.timeout, Duration::from_secs(2));
+    }
+
+    #[test]
+    fn loads_spicedb_from_toml() {
+        let config = load_toml(
+            "spicedb",
+            "[spicedb]\nendpoint = \"spicedb:50051\"\npreshared_key = \"key\"\n\
+             insecure = true\ntimeout = \"500ms\"\n",
+        )
+        .expect("load config");
+
+        assert!(config.spicedb.enabled());
+        assert_eq!(config.spicedb.endpoint, "spicedb:50051");
+        assert_eq!(config.spicedb.preshared_key, "key");
+        assert!(config.spicedb.insecure);
+        assert_eq!(config.spicedb.timeout, Duration::from_millis(500));
+    }
+
+    #[test]
+    fn rejects_spicedb_endpoint_without_preshared_key() {
+        let error = load_toml(
+            "spicedb-no-key",
+            "[spicedb]\nendpoint = \"spicedb:50051\"\n",
+        )
+        .expect_err("key is required");
+
+        assert!(error.to_string().contains(SPICEDB_PRESHARED_KEY_ENV));
+    }
+
+    #[test]
+    fn rejects_zero_spicedb_timeout() {
+        assert!(
+            load_toml(
+                "spicedb-zero-timeout",
+                "[spicedb]\nendpoint = \"spicedb:50051\"\npreshared_key = \"key\"\ntimeout = \"0s\"\n",
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn spicedb_env_overrides_file_values() {
+        let env = std::collections::HashMap::from([
+            (SPICEDB_ENDPOINT_ENV, "localhost:50051"),
+            (SPICEDB_PRESHARED_KEY_ENV, "devkey"),
+            (SPICEDB_INSECURE_ENV, "true"),
+            (SPICEDB_TIMEOUT_ENV, "250ms"),
+        ]);
+        let builder = ConfigLoader::builder()
+            .set_default("spicedb.endpoint", "file:50051")
+            .expect("default");
+        let spicedb: SpiceDbConfig = configure_spicedb(builder, |name| {
+            env.get(name).map(|value| (*value).to_owned())
+        })
+        .expect("configure")
+        .build()
+        .expect("build")
+        .get("spicedb")
+        .expect("spicedb section");
+
+        assert_eq!(
+            spicedb,
+            SpiceDbConfig {
+                endpoint: "localhost:50051".to_owned(),
+                preshared_key: "devkey".to_owned(),
+                insecure: true,
+                timeout: Duration::from_millis(250),
+            }
+        );
+    }
+
+    #[test]
+    fn spicedb_debug_redacts_preshared_key() {
+        let config = SpiceDbConfig {
+            preshared_key: "secret-key".to_owned(),
+            ..SpiceDbConfig::default()
+        };
+
+        assert!(!format!("{config:?}").contains("secret-key"));
+    }
+
+    #[test]
+    fn reconciler_defaults() {
+        let config = load_toml("reconciler-default", "").expect("load config");
+
+        assert_eq!(
+            config.reconciler,
+            ReconcilerConfig {
+                interval: Duration::from_secs(300),
+                grace: Duration::from_secs(600),
+                page_size: 500,
+            }
+        );
+    }
+
+    #[test]
+    fn loads_reconciler_from_toml_and_validates() {
+        let config = load_toml(
+            "reconciler",
+            "[reconciler]\ninterval = \"30s\"\ngrace = \"1m\"\npage_size = 100\n",
+        )
+        .expect("load config");
+        assert_eq!(config.reconciler.interval, Duration::from_secs(30));
+        assert_eq!(config.reconciler.grace, Duration::from_secs(60));
+        assert_eq!(config.reconciler.page_size, 100);
+
+        assert!(load_toml("reconciler-zero", "[reconciler]\ninterval = \"0s\"\n").is_err());
+        assert!(load_toml("reconciler-page", "[reconciler]\npage_size = 0\n").is_err());
+        assert!(load_toml("reconciler-big", "[reconciler]\npage_size = 5000\n").is_err());
+    }
+
+    #[test]
+    fn reconciler_env_overrides_file_values() {
+        let env = std::collections::HashMap::from([
+            (RECONCILER_INTERVAL_ENV, "1m"),
+            (RECONCILER_GRACE_ENV, "2m"),
+            (RECONCILER_PAGE_SIZE_ENV, "50"),
+        ]);
+        let reconciler: ReconcilerConfig = configure_reconciler(ConfigLoader::builder(), |name| {
+            env.get(name).map(|value| (*value).to_owned())
+        })
+        .expect("configure")
+        .build()
+        .expect("build")
+        .get("reconciler")
+        .expect("reconciler section");
+
+        assert_eq!(
+            reconciler,
+            ReconcilerConfig {
+                interval: Duration::from_secs(60),
+                grace: Duration::from_secs(120),
+                page_size: 50,
             }
         );
     }

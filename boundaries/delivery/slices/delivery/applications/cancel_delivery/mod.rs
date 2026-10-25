@@ -3,7 +3,9 @@
 //! cancelled, the assigned courier is released and the fact is written to the
 //! Outbox in one Unit of Work. A repeated cancellation succeeds without a new
 //! effect; after Pickup or a final state the cancellation is a business
-//! rejection, not an error.
+//! rejection, not an error. When a courier is released,
+//! `delivery:<id>#courier@user:<courier_id>` is deleted from the authorization
+//! graph before commit; a failed delete rolls the cancellation back.
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
@@ -14,6 +16,7 @@ use crate::slices::delivery::domains::delivery::{
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
+use super::relationships::DeliveryRelationshipWriter;
 use super::{load_courier, load_delivery_by_order, order_id};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -67,6 +70,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub couriers: &'a dyn CourierRepository,
     pub outbox: &'a dyn DeliveryOutbox,
+    pub relationships: &'a dyn DeliveryRelationshipWriter,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -99,6 +103,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 if let Some(courier_id) = &released_courier_id {
                     let mut courier = load_courier(self.couriers, courier_id)?;
                     courier.release()?;
+                    // Revoke access before commit.
+                    self.relationships
+                        .unassign_courier(&delivery_id, courier_id)?;
                     self.couriers.save(&courier)?;
                 }
                 self.deliveries.save(&delivery)?;
@@ -134,7 +141,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
+    use crate::infrastructure::memory::{
+        MemoryStore, RecordingRelationships, RelationshipWrite, StaticAuthorization,
+    };
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
@@ -150,6 +159,7 @@ mod tests {
             deliveries: &world.store,
             couriers: &world.store,
             outbox: &world.store,
+            relationships: &world.relationships,
         }
     }
 
@@ -206,6 +216,33 @@ mod tests {
         );
         assert_eq!(world.store.outbox_messages().len(), 1);
         assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
+        // The repeat changes nothing and writes nothing.
+        assert_eq!(world.relationships.writes(), vec![unassigned()]);
+    }
+
+    fn unassigned() -> RelationshipWrite {
+        RelationshipWrite::UnassignCourier(
+            DeliveryId::new("delivery-1"),
+            CourierId::new("courier-1"),
+        )
+    }
+
+    /// FR-444: a failed delete rolls the cancellation back (fail closed).
+    #[test]
+    fn failed_relationship_delete_rolls_cancellation_back() {
+        let world = World {
+            relationships: RecordingRelationships::failing("spicedb offline"),
+            ..World::new()
+        };
+        world.assigned_delivery("delivery-1", "courier-1");
+
+        assert!(matches!(
+            handler(&world).execute(&service(), input()),
+            Err(DeliveryApplicationError::DependencyUnavailable(_))
+        ));
+        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+        assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
+        assert!(world.store.outbox_messages().is_empty());
     }
 
     #[test]
@@ -240,6 +277,7 @@ mod tests {
                 reason: None,
             })]
         );
+        assert!(world.relationships.writes().is_empty());
     }
 
     /// AC-456
@@ -263,6 +301,7 @@ mod tests {
         assert_eq!(world.delivery_state("delivery-1"), State::PickedUp);
         assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
         assert!(world.store.outbox_messages().is_empty());
+        assert!(world.relationships.writes().is_empty());
     }
 
     #[test]
