@@ -12,6 +12,8 @@ Accepted
 
 Дополнено [25. Integration Event Publication](0025-integration-event-publication.md)
 
+Дополнено [31. Outbox Storage, Polling Relay and Client Libraries](0031-outbox-storage-polling-relay-and-clients.md)
+
 ## Context
 
 [ADR 4](0004-use-event-driven-architecture-with-apache-kafka.md) выбирает интеграционные события и Apache Kafka для асинхронного взаимодействия bounded contexts. Publisher должен одновременно изменить своё локальное состояние и сообщить об этом изменении другим контекстам.
@@ -160,7 +162,7 @@ Poison outbox record — невалидный payload или сообщение,
 
 Библиотеки не выбираются до определения storage engines и transaction capabilities этих контекстов. `restaurants` использует MongoDB и multi-document транзакцию, охватывающую изменённые документы и коллекцию Outbox. Для ещё не выбранных хранилищ `delivery` и `payments` эквивалентная атомарная запись state и Outbox обязательна и проверяется при выборе.
 
-**Открытый вопрос: polling или CDC.** Способ чтения Outbox для не-Go сервисов — polling worker или CDC (например, [Debezium Outbox Event Router](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html), MongoDB change streams) — не выбран. Решение принимается отдельным ADR после выбора хранилищ и должно сохранить ordering по key, head-of-line поведение, стабильный `event_id` и observability этого ADR.
+**Решено [ADR 31](0031-outbox-storage-polling-relay-and-clients.md): polling relay.** Исходная формулировка: Способ чтения Outbox для не-Go сервисов — polling worker или CDC (например, [Debezium Outbox Event Router](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html), MongoDB change streams) — не выбран. Решение принимается отдельным ADR после выбора хранилищ и должно сохранить ordering по key, head-of-line поведение, стабильный `event_id` и observability этого ADR.
 
 ### Связь с Inbox
 

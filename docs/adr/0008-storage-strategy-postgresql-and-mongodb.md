@@ -25,7 +25,7 @@ Bounded contexts BiteRoute имеют разные модели данных и 
 | `orders` | PostgreSQL |
 | `restaurants` | MongoDB |
 
-Выбор хранилищ для `payments` и `delivery` не является следствием этой таблицы и остаётся отдельным архитектурным решением.
+Хранилища `payments` и `delivery` (PostgreSQL) выбраны [ADR 31](0031-outbox-storage-polling-relay-and-clients.md).
 
 ### `orders`: PostgreSQL
 
