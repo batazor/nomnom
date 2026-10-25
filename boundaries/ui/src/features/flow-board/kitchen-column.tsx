@@ -66,12 +66,11 @@ export function KitchenColumn({
       <OwnedRestaurants demoRestaurants={demoRestaurants}>
         {(restaurants) => {
           const ids = restaurants.map((restaurant) => restaurant.id);
-          const restaurantId =
-            (preferredRestaurantId &&
-              ids.includes(preferredRestaurantId) &&
-              preferredRestaurantId) ||
-            ids[0] ||
-            null;
+          // Never another restaurant's kitchen in place of the picked one.
+          if (preferredRestaurantId && !ids.includes(preferredRestaurantId)) {
+            return <p className="board-empty">{t("board.kitchen.notOwned")}</p>;
+          }
+          const restaurantId = preferredRestaurantId ?? ids[0] ?? null;
           const restaurant = restaurants.find((r) => r.id === restaurantId);
           if (!restaurantId || !restaurant) {
             return <p className="board-empty">{t("board.kitchen.none")}</p>;
@@ -83,6 +82,7 @@ export function KitchenColumn({
                   key={restaurantId}
                   restaurant={{
                     id: restaurantId,
+                    name: restaurant.name,
                     acceptingOrders: restaurant.acceptingOrders,
                   }}
                 />

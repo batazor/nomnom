@@ -8,3 +8,5 @@ export type { SidePanelProps } from "./side-panel";
 export { SidePanel } from "./side-panel";
 export type { IllustrationName, IllustrationProps } from "./illustration";
 export { Illustration } from "./illustration";
+export type { SwitchProps } from "./switch";
+export { Switch } from "./switch";

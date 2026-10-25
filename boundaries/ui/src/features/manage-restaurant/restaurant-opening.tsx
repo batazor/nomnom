@@ -7,7 +7,7 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { Button } from "../../shared/ui";
+import { Switch } from "../../shared/ui";
 import { type OpeningErrorKind, openingErrorKind } from "./bff-error";
 import "./manage-restaurant.css";
 
@@ -24,12 +24,12 @@ const errorMessage: Record<OpeningErrorKind, MessageKey> = {
   failed: "manage.error.failed",
 };
 
-// Opening of a restaurant for new orders by its owner: state and the command
-// that flips it.
+// Opening of a restaurant for new orders by its owner: one switch, labelled
+// with the restaurant's name when it has one, that sends the command.
 export function RestaurantOpening({
   restaurant,
 }: {
-  restaurant: Readonly<{ id: string; acceptingOrders: boolean }>;
+  restaurant: Readonly<{ id: string; name?: string; acceptingOrders: boolean }>;
 }) {
   const { t } = useI18n();
   const [, openRestaurant] = useMutation(OpenRestaurantDocument);
@@ -70,21 +70,19 @@ export function RestaurantOpening({
   }
 
   return (
-    <section aria-label={t("manage.opening.title")} className="manage-card">
-      <div className="manage-opening">
-        <p className="manage-state" data-open={isOpen ? "true" : "false"}>
-          <span aria-hidden="true" className="manage-state-dot" />
-          {isOpen ? t("manage.state.open") : t("manage.state.closed")}
-        </p>
-        <Button
-          isPending={sending}
-          onPress={toggle}
-          size="sm"
-          variant={isOpen ? "outline" : "primary"}
-        >
-          {isOpen ? t("manage.close") : t("manage.open")}
-        </Button>
-      </div>
+    <section
+      aria-busy={sending || undefined}
+      aria-label={t("manage.opening.title")}
+      className="manage-opening"
+    >
+      <Switch
+        isSelected={isOpen}
+        label={restaurant.name ?? t("manage.opening.title")}
+        onChange={() => void toggle()}
+      />
+      <span className="manage-state" data-open={isOpen ? "true" : "false"}>
+        {isOpen ? t("manage.state.open") : t("manage.state.closed")}
+      </span>
 
       {state.kind === "error" ? (
         <p className="manage-error" role="alert">
@@ -92,7 +90,8 @@ export function RestaurantOpening({
         </p>
       ) : null}
 
-      <p aria-live="polite" className="manage-feedback">
+      {/* The switch shows the result; the text is for screen readers. */}
+      <p aria-live="polite" className="manage-feedback sr-only">
         {state.kind === "sending"
           ? t(state.opening ? "manage.sending.open" : "manage.sending.close")
           : null}

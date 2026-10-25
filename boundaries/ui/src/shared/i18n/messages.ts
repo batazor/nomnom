@@ -218,6 +218,7 @@ export const messages = {
     "board.session.needed":
       "Колонка станет доступна, когда загрузятся тестовые входы.",
     "board.kitchen.none": "У владельца пока нет ресторанов.",
+    "board.kitchen.notOwned": "Этот ресторан не принадлежит владельцу, вошедшему на доску.",
     "board.kitchen.orders": "Заказы кухни",
     "board.kitchen.empty": "Новых заказов нет.",
     "board.kitchen.error": "Не удалось загрузить заказы кухни.",
@@ -487,6 +488,7 @@ export const messages = {
     "board.session.neededSignIn": "Sign in to open this column.",
     "board.session.needed": "This column opens once the test sign-ins load.",
     "board.kitchen.none": "The owner has no restaurants yet.",
+    "board.kitchen.notOwned": "This restaurant does not belong to the owner signed in to the board.",
     "board.kitchen.orders": "Kitchen orders",
     "board.kitchen.empty": "No new orders.",
     "board.kitchen.error": "Could not load the kitchen orders.",

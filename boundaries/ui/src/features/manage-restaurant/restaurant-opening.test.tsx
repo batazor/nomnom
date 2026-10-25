@@ -59,10 +59,15 @@ describe("manage restaurant", () => {
 
     expect(await screen.findByText("Открыт")).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Закрыть ресторан" }));
+    await user.click(
+      screen.getByRole("switch", { name: "Приём заказов", checked: true }),
+    );
 
     expect(
-      await screen.findByRole("button", { name: "Открыть ресторан" }),
+      await screen.findByRole("switch", {
+        name: "Приём заказов",
+        checked: false,
+      }),
     ).toBeEnabled();
     expect(screen.getByText("Закрыт")).toBeVisible();
     expect(feedback()).toHaveTextContent("Ресторан закрыт для новых заказов.");
@@ -73,11 +78,17 @@ describe("manage restaurant", () => {
     renderManage(bakery);
 
     await user.click(
-      await screen.findByRole("button", { name: "Открыть ресторан" }),
+      await screen.findByRole("switch", {
+        name: "Приём заказов",
+        checked: false,
+      }),
     );
 
     expect(
-      await screen.findByRole("button", { name: "Закрыть ресторан" }),
+      await screen.findByRole("switch", {
+        name: "Приём заказов",
+        checked: true,
+      }),
     ).toBeInTheDocument();
     expect(feedback()).toHaveTextContent("Ресторан открыт и принимает заказы.");
 
@@ -102,18 +113,24 @@ describe("manage restaurant", () => {
     );
     renderManage();
 
-    const close = await screen.findByRole("button", {
-      name: "Закрыть ресторан",
+    const close = await screen.findByRole("switch", {
+      name: "Приём заказов",
+      checked: true,
     });
     await user.click(close);
     expect(await screen.findByText("Закрываем ресторан…")).toBeVisible();
-    expect(close).toHaveAttribute("data-pending");
+    expect(
+      screen.getByRole("region", { name: "Приём заказов" }),
+    ).toHaveAttribute("aria-busy", "true");
     await user.click(close);
     expect(sent).toBe(1);
 
     release();
     expect(
-      await screen.findByRole("button", { name: "Открыть ресторан" }),
+      await screen.findByRole("switch", {
+        name: "Приём заказов",
+        checked: false,
+      }),
     ).toBeInTheDocument();
   });
 
@@ -144,7 +161,10 @@ describe("manage restaurant", () => {
     renderManage();
 
     await user.click(
-      await screen.findByRole("button", { name: "Закрыть ресторан" }),
+      await screen.findByRole("switch", {
+        name: "Приём заказов",
+        checked: true,
+      }),
     );
 
     expect(
@@ -155,10 +175,24 @@ describe("manage restaurant", () => {
   // AC-756: a refusal of restaurants keeps the state and explains it.
   it("explains a missing right without changing the state", async () => {
     const user = userEvent.setup();
-    renderManage("restaurant-green-bowl");
+    mockServer.use(
+      publicGraphql.mutation(
+        "CloseRestaurant",
+        () =>
+          HttpResponse.json({
+            data: null,
+            errors: [bffError("PermissionDenied", "refused").toJSON()],
+          }),
+        { once: true },
+      ),
+    );
+    renderManage();
 
     await user.click(
-      await screen.findByRole("button", { name: "Закрыть ресторан" }),
+      await screen.findByRole("switch", {
+        name: "Приём заказов",
+        checked: true,
+      }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -166,7 +200,7 @@ describe("manage restaurant", () => {
     );
     expect(screen.getByText("Открыт")).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Закрыть ресторан" }),
+      screen.getByRole("switch", { name: "Приём заказов", checked: true }),
     ).toBeEnabled();
   });
 
@@ -190,7 +224,10 @@ describe("manage restaurant", () => {
     renderManage();
 
     await user.click(
-      await screen.findByRole("button", { name: "Закрыть ресторан" }),
+      await screen.findByRole("switch", {
+        name: "Приём заказов",
+        checked: true,
+      }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
@@ -206,8 +243,9 @@ describe("manage restaurant", () => {
     );
     renderManage();
 
-    const close = await screen.findByRole("button", {
-      name: "Закрыть ресторан",
+    const close = await screen.findByRole("switch", {
+      name: "Приём заказов",
+      checked: true,
     });
     await user.click(close);
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -216,25 +254,28 @@ describe("manage restaurant", () => {
 
     await user.click(close);
     expect(
-      await screen.findByRole("button", { name: "Открыть ресторан" }),
+      await screen.findByRole("switch", {
+        name: "Приём заказов",
+        checked: false,
+      }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 
 describe("manage restaurant quality", () => {
-  it("fits a 390px viewport, has one primary action and passes axe", async () => {
+  it("fits a 390px viewport and passes axe", async () => {
     Object.defineProperty(window, "innerWidth", {
       value: 390,
       configurable: true,
     });
     const { container } = renderManage(bakery);
-    await screen.findByRole("button", { name: "Открыть ресторан" });
+    await screen.findByRole("switch", {
+      name: "Приём заказов",
+      checked: false,
+    });
 
     expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-    expect(document.querySelectorAll('[data-ui-primary="true"]')).toHaveLength(
-      1,
-    );
     const result = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
     });

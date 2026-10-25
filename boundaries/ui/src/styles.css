@@ -155,6 +155,15 @@ a,
   color: var(--color-foreground);
 }
 
+/* Astra's switch is blue; ours takes the brand color when on. */
+.nomnom-switch .switch__control {
+  background: var(--color-border-strong);
+}
+
+.nomnom-switch[data-selected] .switch__control {
+  background: var(--color-primary);
+}
+
 .nomnom-card {
   border-color: var(--color-border);
   border-radius: var(--radius-card);
