@@ -253,7 +253,7 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
           image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
       # Kafka consumer restaurants (ADR 11, ADR 28): тот же образ и chart, OrderPlaced →
-      # Restaurant Order через Inbox. После restaurants: его init container создаёт Inbox.
+      # Restaurant Order через Inbox. Схему каждый процесс создаёт сам при старте (ADR 38).
       - name: restaurants-consumer
         chartPath: ../../../boundaries/restaurants/ops/helm
         namespace: nomnom-restaurants
@@ -266,7 +266,7 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
           image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
       # Temporal worker orders: Order Fulfillment Workflow, тот же образ и chart,
-      # command /orders-worker. После orders: его init container применяет миграции.
+      # command /orders-worker. Миграции процесс применяет сам при старте (ADR 38).
       - name: orders-worker
         chartPath: ../../../boundaries/orders/ops/helm
         namespace: nomnom-orders
@@ -289,8 +289,8 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_bff}}"
           image.tag: "{{.IMAGE_TAG_nomnom_bff}}"
-      # Fixtures проверок kind E2E (ADR 33): Helm-релиз, чтобы профиль core выключал их флагами,
-      # а helm upgrade удалял (rawYaml Skaffold только применяет). Индекс 8 — в patches core.
+      # Fixtures проверок kind E2E (ADR 33): Helm-релиз, а не rawYaml — профиль core убирает его
+      # из конфигурации и снимает helm uninstall. Индекс 8 — в patches core.
       - name: e2e
         chartPath: ../e2e/chart
         namespace: nomnom-bff
@@ -310,14 +310,21 @@ deploy:
           image.tag: "{{.IMAGE_TAG_nomnom_demo_seed}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
-  # (chart ../e2e/chart выключен целиком) — make kind-test на нём не проходит.
+  # (без release e2e и образа e2e-probe) — make kind-test на нём не проходит.
   - name: core
     patches:
-      # Индекс releases: 8 — e2e; helm upgrade удаляет его ресурсы.
+      # Индексы: releases 8 — e2e, build artifacts 5 — e2e-probe.
+      - op: remove
+        path: /deploy/helm/releases/8
+      - op: remove
+        path: /build/artifacts/5
+      # Skaffold не удаляет releases, исчезнувшие из конфигурации: fixtures, оставшиеся от
+      # полного стенда, снимаются здесь.
       - op: add
-        path: /deploy/helm/releases/8/setValues
+        path: /deploy/helm/hooks/before/-
         value:
-          enabled: false
+          host:
+            command: [sh, -c, 'helm uninstall e2e --kube-context "$SKAFFOLD_KUBE_CONTEXT" -n nomnom-bff --ignore-not-found']
   # make kind-deploy GRAFANA_CLOUD=1: метрики, traces и логи сервисов → Alloy → Grafana Cloud.
   # Индексы releases 0–6 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
   # своя telemetry); при изменении порядка releases поправить patches.
