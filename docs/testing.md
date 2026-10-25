@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Этот документ задаёт общесистемную стратегию тестирования BiteRoute. BDD-решение зафиксировано в [ADR 19](adr/0019-bdd-for-business-acceptance-testing.md) и дополняет существующие решения о Vertical Slice Architecture, Temporal, Inbox/Outbox, authorization и kind. Load и performance testing на k6 зафиксированы в [ADR 26](adr/0026-k6-for-performance-testing.md) и описаны в разделе [Performance Testing](#performance-testing).
+Этот документ задаёт общесистемную стратегию тестирования nomnom. BDD-решение зафиксировано в [ADR 19](adr/0019-bdd-for-business-acceptance-testing.md) и дополняет существующие решения о Vertical Slice Architecture, Temporal, Inbox/Outbox, authorization и kind. Load и performance testing на k6 зафиксированы в [ADR 26](adr/0026-k6-for-performance-testing.md) и описаны в разделе [Performance Testing](#performance-testing).
 
 ## SDD и executable acceptance
 

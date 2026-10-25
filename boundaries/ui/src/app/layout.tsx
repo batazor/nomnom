@@ -10,7 +10,7 @@ export function AppLayout() {
       <header className="app-topbar">
         <Link aria-label={t("app.brand")} className="brand" to="/">
           <span aria-hidden="true" className="brand-mark">
-            BR
+            NN
           </span>
           <span>{t("app.brand")}</span>
         </Link>

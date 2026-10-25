@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-Bounded contexts BiteRoute нужны синхронные service-to-service API с явно принадлежащими владельцам контрактами и воспроизводимой генерацией кода для Go, TypeScript, Rust и Python. Контракт не должен заставлять один контекст импортировать доменную модель или исходный код другого контекста, а protobuf-типы не должны проникать в `domains` и `applications`.
+Bounded contexts nomnom нужны синхронные service-to-service API с явно принадлежащими владельцам контрактами и воспроизводимой генерацией кода для Go, TypeScript, Rust и Python. Контракт не должен заставлять один контекст импортировать доменную модель или исходный код другого контекста, а protobuf-типы не должны проникать в `domains` и `applications`.
 
 Асинхронное взаимодействие уже определено через Apache Kafka в [ADR 4](0004-use-event-driven-architecture-with-apache-kafka.md). Структура слайса из [ADR 6](0006-ddd-structure-inside-vertical-slices.md) помещает транспортные адаптеры в `infrastructure/`. Это решение определяет только синхронные service-to-service контракты, их размещение, публикацию и потребление.
 

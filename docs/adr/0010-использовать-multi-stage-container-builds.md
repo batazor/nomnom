@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-BiteRoute содержит запускаемые приложения на Go, TypeScript/Node.js, Rust и Python.
+nomnom содержит запускаемые приложения на Go, TypeScript/Node.js, Rust и Python.
 Сборочные toolchain, генераторы и зависимости разработки не должны попадать в production
 образы. При этом минимизация образа не должна ломать TLS, конфигурацию, OpenTelemetry,
 Pyroscope и символизацию нативных профилей.

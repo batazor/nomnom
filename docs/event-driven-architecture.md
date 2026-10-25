@@ -1,6 +1,6 @@
 # Событийное взаимодействие
 
-Документ описывает надёжную доставку и обработку интеграционных событий между bounded contexts BiteRoute. Решения зафиксированы в [ADR 4](adr/0004-use-event-driven-architecture-with-apache-kafka.md) (EDA и Apache Kafka), [ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md) (Transactional Outbox на стороне publisher) и [ADR 11](adr/0011-transactional-inbox-and-idempotent-event-processing.md) (Transactional Inbox и идемпотентная обработка).
+Документ описывает надёжную доставку и обработку интеграционных событий между bounded contexts nomnom. Решения зафиксированы в [ADR 4](adr/0004-use-event-driven-architecture-with-apache-kafka.md) (EDA и Apache Kafka), [ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md) (Transactional Outbox на стороне publisher) и [ADR 11](adr/0011-transactional-inbox-and-idempotent-event-processing.md) (Transactional Inbox и идемпотентная обработка).
 
 Конкретные топики, контракты и схемы событий, Kafka-клиенты для TypeScript, Rust и Python, схемы Inbox и Outbox, миграции и consumer middleware этим документом не определяются.
 

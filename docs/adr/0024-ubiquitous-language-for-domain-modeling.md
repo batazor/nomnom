@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-BiteRoute разделён на bounded contexts `orders`, `restaurants`, `delivery` и `payments`, а BFF и runtime добавляют application/integration concepts. Существующие glossary, SDD, ADR, `.feature` и модели используют близкие, но не всегда одинаковые имена: например, `Kitchen Order` и `Restaurant Order`, domain `status` и `State`, presentation `stage` и orchestration `Stage`. Без нормативного языка такие расхождения проникают в контракты, события и observability, а одинаковое слово скрывает разные модели контекстов.
+nomnom разделён на bounded contexts `orders`, `restaurants`, `delivery` и `payments`, а BFF и runtime добавляют application/integration concepts. Существующие glossary, SDD, ADR, `.feature` и модели используют близкие, но не всегда одинаковые имена: например, `Kitchen Order` и `Restaurant Order`, domain `status` и `State`, presentation `stage` и orchestration `Stage`. Без нормативного языка такие расхождения проникают в контракты, события и observability, а одинаковое слово скрывает разные модели контекстов.
 
 [ADR 6](0006-ddd-structure-inside-vertical-slices.md) запрещает общей модели заменять модели bounded contexts, [ADR 7](0007-grpc-contracts-and-buf-schema-registry.md) помещает Protobuf на infrastructure boundary, [ADR 21](0021-pure-fsm-transitions.md) отделяет aggregate state от Temporal orchestration, а [ADR 22](0022-specification-pattern-for-domain-policies.md) задаёт язык domain policies. Нужен нормативный словарь, связывающий эти решения и задающий управляемую эволюцию терминов.
 

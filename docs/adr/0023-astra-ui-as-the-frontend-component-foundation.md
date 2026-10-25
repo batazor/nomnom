@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-BiteRoute нужен единый frontend foundation для customer web-приложения до реализации restaurant discovery, меню, корзины и заказов. Компоненты должны сохранять keyboard, focus, semantic и screen-reader поведение, поддерживать mobile-first layout, light/dark theme и единый semantic token layer.
+nomnom нужен единый frontend foundation для customer web-приложения до реализации restaurant discovery, меню, корзины и заказов. Компоненты должны сохранять keyboard, focus, semantic и screen-reader поведение, поддерживать mobile-first layout, light/dark theme и единый semantic token layer.
 
 [Локальный ADR 3 BFF](../../boundaries/bff/docs/adr/0003-use-wundergraph-cosmo-for-the-bff.md) уже определил WunderGraph Cosmo Router и публичный GraphQL API единственной клиентской точкой входа. [ADR 9](0009-использовать-opentelemetry-и-grafana-observability-stack.md) задаёт W3C trace context и правила telemetry, а [ADR 18](0018-spicedb-for-authorization.md) оставляет authoritative authorization backend-владельцам use cases.
 

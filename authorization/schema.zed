@@ -1,5 +1,5 @@
 /**
- * Authorization schema of BiteRoute (ADR 18). Each definition has one owning
+ * Authorization schema of nomnom (ADR 18). Each definition has one owning
  * bounded context; changes follow the review rules of docs/security.md.
  */
 

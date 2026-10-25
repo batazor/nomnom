@@ -14,7 +14,7 @@ Accepted
 
 ## Context
 
-[Testing Strategy](../testing.md) закрывает корректность: unit, BDD, Testcontainers и kind E2E отвечают на вопрос «работает ли поведение», но не на вопрос «как меняются latency и error rate при росте нагрузки и со временем». Цепочка BiteRoute — Cosmo Router, internal gateway, синхронные gRPC-вызовы, SpiceDB checks, Temporal workflows, Outbox/Inbox поверх Kafka, PostgreSQL и MongoDB — деградирует нелинейно, и часть деградации (backlog Outbox, Kafka lag, очередь Temporal task queue, утечки соединений) проявляется только под длительной нагрузкой.
+[Testing Strategy](../testing.md) закрывает корректность: unit, BDD, Testcontainers и kind E2E отвечают на вопрос «работает ли поведение», но не на вопрос «как меняются latency и error rate при росте нагрузки и со временем». Цепочка nomnom — Cosmo Router, internal gateway, синхронные gRPC-вызовы, SpiceDB checks, Temporal workflows, Outbox/Inbox поверх Kafka, PostgreSQL и MongoDB — деградирует нелинейно, и часть деградации (backlog Outbox, Kafka lag, очередь Temporal task queue, утечки соединений) проявляется только под длительной нагрузкой.
 
 Нагрузочный тест легко сделать недостоверным: обойти публичный путь и нагрузить сервис напрямую, придумать числовые пороги без требований, получать `PERMISSION_DENIED` от SpiceDB вместо бизнес-ответов, накапливать незавершённые workflows вместо steady state, мерить warm cache как cold path или запускать capacity-тест на эфемерном kind. Нужен один инструмент и правила, которые исключают эти ошибки.
 

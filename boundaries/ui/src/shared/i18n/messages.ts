@@ -1,6 +1,6 @@
 export const messages = {
   ru: {
-    "app.brand": "BiteRoute",
+    "app.brand": "nomnom",
     "app.location": "Доставка рядом с вами",
     "app.home": "Все рестораны",
     "restaurants.title": "Рестораны рядом",
@@ -173,7 +173,7 @@ export const messages = {
       "Не удалось изменить статус. Проверьте соединение и попробуйте ещё раз.",
   },
   en: {
-    "app.brand": "BiteRoute",
+    "app.brand": "nomnom",
     "app.location": "Delivery near you",
     "app.home": "All restaurants",
     "restaurants.title": "Restaurants near you",

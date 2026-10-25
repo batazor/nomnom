@@ -12,7 +12,7 @@ Accepted
 
 ## Context
 
-BiteRoute ведёт требования и архитектурные изменения через Spec-Driven Development (SDD) в `openspec/`. Спецификации описывают требования и acceptance criteria, но сами по себе не доказывают, что значимое бизнес-поведение выполняется production-кодом. Одновременно существующая стратегия уже разделяет быстрые проверки домена и application handlers, интеграционные проверки реальной инфраструктуры и системные E2E в kind.
+nomnom ведёт требования и архитектурные изменения через Spec-Driven Development (SDD) в `openspec/`. Спецификации описывают требования и acceptance criteria, но сами по себе не доказывают, что значимое бизнес-поведение выполняется production-кодом. Одновременно существующая стратегия уже разделяет быстрые проверки домена и application handlers, интеграционные проверки реальной инфраструктуры и системные E2E в kind.
 
 Если применять BDD ко всем требованиям или описывать в Gherkin транспорт, хранилище и middleware, сценарии станут дорогой копией unit/integration tests и спецификаций. Нужна ограниченная роль executable acceptance scenarios, сохраняющая Vertical Slice Architecture, отделение Temporal orchestration от домена, Inbox/Outbox guarantees и границу authorization между application use case и SpiceDB policy.
 

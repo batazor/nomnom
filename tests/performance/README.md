@@ -1,6 +1,6 @@
 # Performance tests
 
-Load и performance testing BiteRoute на [k6](https://grafana.com/docs/k6/latest/). Решение — [ADR 26](../../docs/adr/0026-k6-for-performance-testing.md), место в общей стратегии — [Testing Strategy](../../docs/testing.md#performance-testing).
+Load и performance testing nomnom на [k6](https://grafana.com/docs/k6/latest/). Решение — [ADR 26](../../docs/adr/0026-k6-for-performance-testing.md), место в общей стратегии — [Testing Strategy](../../docs/testing.md#performance-testing).
 
 На текущем шаге каталог содержит только этот документ: scripts, fixtures, симулятор и pipeline не созданы.
 

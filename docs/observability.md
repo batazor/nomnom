@@ -1,6 +1,6 @@
 # Observability
 
-Этот документ задаёт целевую архитектуру observability для BiteRoute: состав стека, движение телеметрии, общий контекст и правила инструментирования. Он не добавляет зависимости, конфигурацию Grafana Alloy, Docker Compose, Kubernetes-манифесты или единицы развёртывания; dashboards as code описаны в разделе [Dashboards](#dashboards). Решение зафиксировано в [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md).
+Этот документ задаёт целевую архитектуру observability для nomnom: состав стека, движение телеметрии, общий контекст и правила инструментирования. Он не добавляет зависимости, конфигурацию Grafana Alloy, Docker Compose, Kubernetes-манифесты или единицы развёртывания; dashboards as code описаны в разделе [Dashboards](#dashboards). Решение зафиксировано в [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md).
 
 ## Ответственность компонентов
 

@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-BiteRoute состоит из нескольких запускаемых приложений: bounded contexts `orders`,
+nomnom состоит из нескольких запускаемых приложений: bounded contexts `orders`,
 `restaurants`, `delivery`, `payments` с собственными Dockerfile и BFF на WunderGraph Cosmo
 Router. Образы собираются по [ADR 10](0010-использовать-multi-stage-container-builds.md),
 но способ описания и развёртывания workload в Kubernetes до сих пор не был определён.

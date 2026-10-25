@@ -8,7 +8,7 @@ import type {
 // business rules: the scenarios are fixed snapshots of the order lifecycle.
 
 export const bffInfoFixture = Object.freeze({
-  name: "BiteRoute BFF",
+  name: "nomnom BFF",
   version: "0.1.0-mock",
 });
 

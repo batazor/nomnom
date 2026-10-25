@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-BiteRoute состоит из BFF, API и workers на Go, TypeScript/Node.js, Rust и Python. Синхронные gRPC-вызовы, Kafka, Temporal, PostgreSQL и MongoDB образуют цепочки, которые невозможно диагностировать только локальными логами отдельного процесса. Нужны единый контекст и согласованные traces, metrics, logs и continuous profiles без зависимости доменной модели от observability SDK.
+nomnom состоит из BFF, API и workers на Go, TypeScript/Node.js, Rust и Python. Синхронные gRPC-вызовы, Kafka, Temporal, PostgreSQL и MongoDB образуют цепочки, которые невозможно диагностировать только локальными логами отдельного процесса. Нужны единый контекст и согласованные traces, metrics, logs и continuous profiles без зависимости доменной модели от observability SDK.
 
 Один универсальный backend для всех сигналов упростил бы список компонентов, но ухудшил бы специализированные запросы и эксплуатацию каждого типа данных. Одновременно отдельный collector для каждого сигнала создал бы несколько точек конфигурации, буферизации и контроля доставки.
 

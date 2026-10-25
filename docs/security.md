@@ -1,6 +1,6 @@
 # Security: authentication and authorization
 
-Документ определяет общесистемный contract authentication context и authorization в BiteRoute. Архитектурное решение зафиксировано в [ADR 18](adr/0018-spicedb-for-authorization.md). Конкретная `.zed` schema, deployment SpiceDB, datastore, SDK-интеграция и manifests относятся к следующим шагам.
+Документ определяет общесистемный contract authentication context и authorization в nomnom. Архитектурное решение зафиксировано в [ADR 18](adr/0018-spicedb-for-authorization.md). Конкретная `.zed` schema, deployment SpiceDB, datastore, SDK-интеграция и manifests относятся к следующим шагам.
 
 ## Разделение ответственности
 

@@ -2,7 +2,7 @@
 
 ## Why
 
-Текущий placeholder подтверждает frontend foundation, но не показывает, как customer-сценарии BiteRoute складываются в цельный продукт. Один комплексный fixture-driven экран даст быструю визуализацию restaurant discovery, оформления и доставки без преждевременного создания набора маршрутов и backend-интеграции.
+Текущий placeholder подтверждает frontend foundation, но не показывает, как customer-сценарии nomnom складываются в цельный продукт. Один комплексный fixture-driven экран даст быструю визуализацию restaurant discovery, оформления и доставки без преждевременного создания набора маршрутов и backend-интеграции.
 
 ## What Changes
 

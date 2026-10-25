@@ -51,7 +51,7 @@ describe("customer application shell", () => {
     renderApp("/orders/order-preparing");
     await screen.findByRole("heading", { level: 1, name: "Готовится" });
 
-    await user.click(screen.getByRole("link", { name: "BiteRoute" }));
+    await user.click(screen.getByRole("link", { name: "nomnom" }));
     expect(
       await screen.findByRole("heading", { level: 1, name: "Рестораны рядом" }),
     ).toBeInTheDocument();

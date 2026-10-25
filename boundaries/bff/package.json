@@ -2,7 +2,7 @@
   "name": "bff",
   "version": "0.1.0",
   "private": true,
-  "description": "BiteRoute client BFF powered by WunderGraph Cosmo",
+  "description": "nomnom client BFF powered by WunderGraph Cosmo",
   "scripts": {
     "generate": "wgc router plugin generate plugins/bff",
     "test": "wgc router plugin test plugins/bff",

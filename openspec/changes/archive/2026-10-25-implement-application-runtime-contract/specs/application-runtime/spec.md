@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Определяет наблюдаемое снаружи поведение процесса backend-приложения BiteRoute в container lifecycle: health, остановку и exit code. Требования одинаковы для всех языков и проверяются black-box сценариями `ops/runtime-contract`.
+Определяет наблюдаемое снаружи поведение процесса backend-приложения nomnom в container lifecycle: health, остановку и exit code. Требования одинаковы для всех языков и проверяются black-box сценариями `ops/runtime-contract`.
 
 ## ADDED Requirements
 
