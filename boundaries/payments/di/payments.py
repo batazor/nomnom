@@ -25,7 +25,9 @@ from infrastructure.authorization import (
     create_spicedb_client,
 )
 from infrastructure.grpc.identity import SubjectResolver, create_subject_resolver
-from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers, UuidIdentifiers
+from infrastructure.grpc.servicer import PaymentsHandlers
+from infrastructure.grpc.worker import GrpcWorker
+from infrastructure.ids import UuidIdentifiers
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
 from infrastructure.postgres import (
