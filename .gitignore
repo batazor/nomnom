@@ -17,3 +17,6 @@ boundaries/*/ops/helm/charts/
 
 # Локальные артефакты taste-skill.
 .taste-skill/
+
+# Временные git worktree субагентов Claude Code
+.claude/worktrees/
