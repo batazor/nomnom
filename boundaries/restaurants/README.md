@@ -206,20 +206,22 @@ Change [`add-restaurant-delivery-relationships`](../../openspec/changes/add-rest
 
 Writer — `SpiceDbRelationshipWriter` (`infrastructure/spicedb/relationships.ts`), реализует порты `OwnerRelationshipWriter` и `StaffRelationshipWriter` слайса `restaurant`. Запись синхронная, с deadline `SPICEDB__TIMEOUT`; ошибка или timeout — `AuthorizationUnavailableError`, команда отменяется без сохранения (fail closed). Assign/Revoke Staff требуют `restaurant#manage`; повтор — no-op без записи. `cmd/restaurants` собирает Register Restaurant, Assign Staff и Revoke Staff с `SpiceDbAccessControl` и этим writer над одним SpiceDB-клиентом и той же MongoDB-коллекцией `restaurants`, что читает reconciler.
 
-`RelationshipReconciler` (`slices/restaurant/infrastructure/reconcile`) повторяет алгоритм `orders`: graph → business — постраничный `ReadRelationships` (`fully_consistent`) по `restaurant#owner` и `restaurant#staff` с проверкой по хранилищу; business → graph — по всем ресторанам. Orphan или stale связь удаляется только если она была сиротой на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` сразу; id, не подходящие под SpiceDB object id `^[a-zA-Z0-9/_|\-=+]+$`, пропускаются и считаются `unrepairable`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`, `missing_repaired`, `unrepairable`.
+`RelationshipReconciler` (`slices/restaurant/infrastructure/reconcile`) повторяет алгоритм `orders`: graph → business — постраничный `ReadRelationships` (`fully_consistent`) по `restaurant#owner` и `restaurant#staff` с проверкой по хранилищу; business → graph — по всем ресторанам. Orphan или stale связь удаляется только если она была сиротой на двух проходах с интервалом не меньше grace. Missing связь восстанавливается `TOUCH` по тому же правилу — только если отсутствовала с тем же пользователем на двух проходах с интервалом не меньше grace (FR-445, AC-700): Revoke Staff делает `DELETE` до сохранения ресторана, а MongoDB не держит lock, которого reconciler мог бы дождаться (как `FOR SHARE` в `orders`), поэтому проход, прочитавший граф после `DELETE` и ресторан до сохранения, иначе вернул бы снятому сотруднику доступ к кухне и заказам до истечения orphan grace. Кандидат, ставший present или исчезнувший из ресторана (revoke сохранён), забывается без записи; кандидаты обоих видов хранятся в памяти процесса, restart лишь откладывает исправление на grace. id, не подходящие под SpiceDB object id `^[a-zA-Z0-9/_|\-=+]+$`, пропускаются и считаются `unrepairable`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`, `missing_pending`, `missing_repaired`, `unrepairable`.
 
 Reconciler — фоновый цикл (`PeriodicLoop`, `pkg/lifecycle/periodic.ts`) внутри основного процесса: первый проход через `min(10s, RECONCILER__INTERVAL)` после старта, следующие — через интервал после окончания предыдущего; ошибка прохода пишется в log, цикл продолжается. При shutdown цикл останавливается (текущий проход прерывается между вызовами SpiceDB) до drain gRPC.
 
 | Переменная | Значение | По умолчанию |
 | --- | --- | --- |
 | `RECONCILER__INTERVAL` | Пауза между проходами (`30s`, `5m`) | `5m` |
-| `RECONCILER__GRACE` | Минимальное время, которое связь остаётся сиротой до удаления | `10m` |
+| `RECONCILER__GRACE` | Минимальное время, которое связь остаётся сиротой до удаления или missing до восстановления; должно превышать длительность Revoke Staff (`SPICEDB__TIMEOUT` + сохранение) | `10m` |
 | `RECONCILER__PAGE_SIZE` | Размер страницы `ReadRelationships` и хранилища, 1…1000 | `500` |
 
-Unit-тесты: `test/staff-applications.test.ts`, `test/spicedb-relationships.test.ts`, `test/reconcile.test.ts` (fake клиент), `test/periodic.test.ts`. Integration-тесты `test/spicedb-relationships-integration.test.ts` (AC-476, AC-478) используют уникальный префикс id и ограничивают reconciler им, чтобы не трогать чужие связи общего SpiceDB:
+Unit-тесты: `test/staff-applications.test.ts`, `test/spicedb-relationships.test.ts`, `test/reconcile.test.ts` (fake клиент), `test/periodic.test.ts`. Integration-тесты `test/spicedb-relationships-integration.test.ts` (AC-476, AC-478) используют уникальный префикс id и ограничивают reconciler им, чтобы не трогать чужие связи общего SpiceDB; `test/reconcile-mongodb-integration.test.ts` (AC-700) воспроизводит Revoke Staff в полёте над MongoDB replica set и SpiceDB и пропускается без `MONGODB_URI` или `SPICEDB_ENDPOINT`:
 
 ```bash
 SPICEDB_ENDPOINT=localhost:50051 node --test test/spicedb-integration.test.ts test/spicedb-relationships-integration.test.ts
+MONGODB_URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true' SPICEDB_ENDPOINT=localhost:50051 \
+  node --test test/reconcile-mongodb-integration.test.ts
 ```
 
 TypeScript-код генерируется в `infrastructure/grpc/gen` командой `npm run generate:proto` (`buf generate` по `infrastructure/grpc/buf.gen.yaml`, плагин `buf.build/bufbuild/es`).

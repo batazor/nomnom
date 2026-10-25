@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import { FixedClock } from "../pkg/infrastructure/memory/clock.ts";
-import type { StoredRestaurantSnapshot } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import type {
+  Restaurant,
+  StoredRestaurantSnapshot,
+} from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   createRestaurantStore,
   InMemoryRestaurantMemberships,
+  InMemoryRestaurantRepository,
 } from "../slices/restaurant/infrastructure/memory/restaurants.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import { FakeRelationshipsClient } from "./support/relationships.ts";
+import { owner } from "./support/restaurants.ts";
 
 const GRACE = 10 * 60_000;
 
@@ -41,21 +48,34 @@ const setup = (
   return { store, client, clock, reconciler, logs };
 };
 
-test("AC-478 restores missing owner and staff relationships immediately", async () => {
-  const { client, reconciler, logs, store } = setup(
+test("AC-478 AC-701 restores missing owner and staff relationships after two passes grace apart", async () => {
+  const { client, clock, reconciler, logs, store } = setup(
     [{ id: "r-1", ownerId: "alice", staff: ["bob"] }],
     [],
   );
 
+  const first = await reconciler.reconcile();
+  assert.equal(first.missingPending, 2);
+  assert.equal(first.missingRepaired, 0);
+  assert.match(logs.at(-1) ?? "", /missing_pending=2 missing_repaired=0/);
+  clock.advance(GRACE - 1);
+  const early = await reconciler.reconcile();
+  assert.equal(early.missingPending, 2);
+  assert.deepEqual(client.writes, []);
+  assert.equal(reconciler.pendingMissing, 2);
+
+  clock.advance(1);
   const stats = await reconciler.reconcile();
 
   assert.deepEqual(stats, {
     checked: 0,
     orphansPending: 0,
     orphansDeleted: 0,
+    missingPending: 0,
     missingRepaired: 2,
     unrepairable: 0,
   });
+  assert.equal(reconciler.pendingMissing, 0);
   assert.ok(client.has("restaurant:r-1#owner@user:alice"));
   assert.ok(client.has("restaurant:r-1#staff@user:bob"));
   // FR-447: the revision of the last repairing TOUCH is stored.
@@ -64,7 +84,7 @@ test("AC-478 restores missing owner and staff relationships immediately", async 
   assert.equal(stored?.version, 3);
   assert.match(
     logs.at(-1) ?? "",
-    /checked=0 orphans_pending=0 orphans_deleted=0 missing_repaired=2 unrepairable=0/,
+    /checked=0 orphans_pending=0 orphans_deleted=0 missing_pending=0 missing_repaired=2 unrepairable=0/,
   );
 });
 
@@ -188,8 +208,8 @@ test("a resource id prefix scopes both sides of the reconciliation", async () =>
   await reconciler.reconcile();
 
   assert.deepEqual(client.writes, [
-    "touch restaurant:mine-1#owner@user:alice",
     "delete restaurant:mine-orphan#owner@user:x",
+    "touch restaurant:mine-1#owner@user:alice",
   ]);
   assert.ok(client.has("restaurant:foreign#owner@user:x"));
 });
@@ -222,4 +242,98 @@ test("a consistent restaurant keeps its revision; an orphan delete stores none",
   assert.equal(store.get("r-1")?.document.authorizationRevision, "zed-old");
   assert.equal(store.get("r-1")?.version, 1);
   assert.equal(store.get("r-gone"), undefined);
+});
+
+/** Repository whose save waits for `commit()`: the use case is "in flight". */
+class GatedRestaurantRepository extends InMemoryRestaurantRepository {
+  readonly saving: Promise<void>;
+  #saving: () => void = () => {};
+  #commit: () => void = () => {};
+  readonly #committed: Promise<void>;
+
+  constructor(store: ReturnType<typeof createRestaurantStore>) {
+    super(store);
+    this.saving = new Promise((resolve) => {
+      this.#saving = resolve;
+    });
+    this.#committed = new Promise((resolve) => {
+      this.#commit = resolve;
+    });
+  }
+
+  commit(): void {
+    this.#commit();
+  }
+
+  override async save(restaurant: Restaurant): Promise<number> {
+    this.#saving();
+    await this.#committed;
+    return super.save(restaurant);
+  }
+}
+
+test("AC-700 a revoke in flight is not restored and its candidate is forgotten after the save", async () => {
+  const { store, client, clock, reconciler } = setup(
+    [{ id: "r-1", ownerId: owner.id, staff: ["bob"] }],
+    [`restaurant:r-1#owner@user:${owner.id}`, "restaurant:r-1#staff@user:bob"],
+  );
+  const restaurants = new GatedRestaurantRepository(store);
+  const revoke = new RevokeStaffHandler({
+    accessControl: {
+      canRegisterRestaurant: async () => false,
+      canManageRestaurant: async () => true,
+    },
+    staffRelationships: new SpiceDbRelationshipWriter({
+      client,
+      timeoutMs: 1000,
+    }),
+    restaurants,
+  });
+
+  // Revoke Staff DELETEs in SpiceDB and waits before its save.
+  const revoking = revoke.execute({
+    subject: owner,
+    restaurantId: "r-1",
+    userId: "bob",
+  });
+  await restaurants.saving;
+  assert.equal(client.has("restaurant:r-1#staff@user:bob"), false);
+  assert.deepEqual(store.get("r-1")?.document.staff, ["bob"]);
+
+  // The pass reads the graph after the DELETE and the restaurant before the save.
+  const during = await reconciler.reconcile();
+  assert.equal(client.has("restaurant:r-1#staff@user:bob"), false);
+  assert.equal(during.missingRepaired, 0);
+  assert.equal(during.missingPending, 1);
+
+  restaurants.commit();
+  assert.equal((await revoking).changed, true);
+  clock.advance(GRACE);
+  const after = await reconciler.reconcile();
+
+  assert.equal(after.missingPending, 0);
+  assert.equal(after.missingRepaired, 0);
+  assert.equal(reconciler.pendingMissing, 0);
+  assert.deepEqual(client.writes, ["delete restaurant:r-1#staff@user:bob"]);
+  assert.equal(client.has("restaurant:r-1#staff@user:bob"), false);
+});
+
+test("a missing candidate whose relationship came back is forgotten", async () => {
+  const { client, clock, reconciler } = setup(
+    [{ id: "r-1", ownerId: "alice" }],
+    [],
+  );
+  await reconciler.reconcile();
+  assert.equal(reconciler.pendingMissing, 1);
+
+  client.tuples.add("restaurant:r-1#owner@user:alice");
+  await reconciler.reconcile();
+  assert.equal(reconciler.pendingMissing, 0);
+
+  // Lost again: the grace starts over.
+  client.tuples.delete("restaurant:r-1#owner@user:alice");
+  clock.advance(GRACE);
+  const stats = await reconciler.reconcile();
+  assert.equal(stats.missingPending, 1);
+  assert.deepEqual(client.writes, []);
 });

@@ -4,7 +4,11 @@
 // ReadRelationships pages, then business → graph over all restaurants. Orphan
 // and stale relationships are deleted only when they stayed orphan on two
 // passes at least `grace` apart, because writers TOUCH before the restaurant
-// is stored; missing relationships are restored with TOUCH immediately.
+// is stored. Missing relationships are restored with TOUCH by the same
+// two-pass rule (FR-445): Revoke Staff DELETEs before the restaurant is saved
+// and holds no lock MongoDB could make the reconciler wait on, so a pass that
+// read the graph after the DELETE and the restaurant before the save would
+// otherwise TOUCH the revoked staff member back.
 // SpiceDB stays a derived graph; the restaurant storage is the source of truth.
 import { v1 } from "@authzed/authzed-node";
 
@@ -62,8 +66,8 @@ export interface RelationshipReconcilerOptions {
 }
 
 /**
- * Remembers orphan candidates between passes in memory: a restaurant's
- * storage lives in the same process, so a restart forgets both.
+ * Remembers orphan and missing candidates between passes in memory; a
+ * restart forgets them and only delays repairs by one grace period.
  */
 export class RelationshipReconciler {
   readonly #client: RelationshipsClient;
@@ -76,6 +80,8 @@ export class RelationshipReconciler {
   readonly #log: (message: string) => void;
   /** `relation:restaurantId:userId` → first time seen orphan (ms). */
   readonly #candidates = new Map<string, number>();
+  /** `relation:restaurantId:userId` → first time seen missing (ms). */
+  readonly #missing = new Map<string, number>();
 
   constructor(options: RelationshipReconcilerOptions) {
     this.#client = options.client;
@@ -93,6 +99,11 @@ export class RelationshipReconciler {
     return this.#candidates.size;
   }
 
+  /** Missing relationships waiting for their grace period; for tests and logs. */
+  get pendingMissing(): number {
+    return this.#missing.size;
+  }
+
   /**
    * Runs one pass over both relations. `signal` stops it between SpiceDB
    * calls (shutdown); an error ends the pass and is rethrown.
@@ -102,10 +113,12 @@ export class RelationshipReconciler {
       checked: 0,
       orphansPending: 0,
       orphansDeleted: 0,
+      missingPending: 0,
       missingRepaired: 0,
       unrepairable: 0,
     };
     const orphans = new Set<string>();
+    const missing = new Set<string>();
     for (const relation of RELATIONS) {
       const present = await this.#graphToBusiness(
         relation,
@@ -113,14 +126,19 @@ export class RelationshipReconciler {
         orphans,
         signal,
       );
-      await this.#businessToGraph(relation, present, stats, signal);
+      await this.#businessToGraph(relation, present, stats, missing, signal);
     }
-    // A candidate that is no longer orphan (its restaurant was stored) is forgotten.
+    // A candidate that is no longer orphan (its restaurant was stored) or no
+    // longer missing (the revoke was saved, or the relationship came back) is
+    // forgotten.
     for (const key of this.#candidates.keys()) {
       if (!orphans.has(key)) this.#candidates.delete(key);
     }
+    for (const key of this.#missing.keys()) {
+      if (!missing.has(key)) this.#missing.delete(key);
+    }
     this.#log(
-      `reconcile restaurant#owner,staff: checked=${stats.checked} orphans_pending=${stats.orphansPending} orphans_deleted=${stats.orphansDeleted} missing_repaired=${stats.missingRepaired} unrepairable=${stats.unrepairable}`,
+      `reconcile restaurant#owner,staff: checked=${stats.checked} orphans_pending=${stats.orphansPending} orphans_deleted=${stats.orphansDeleted} missing_pending=${stats.missingPending} missing_repaired=${stats.missingRepaired} unrepairable=${stats.unrepairable}`,
     );
     return stats;
   }
@@ -182,6 +200,7 @@ export class RelationshipReconciler {
     relation: RestaurantRelation,
     present: ReadonlySet<string>,
     stats: ReconcileStats,
+    missing: Set<string>,
     signal: AbortSignal | undefined,
   ): Promise<void> {
     let after: string | undefined;
@@ -202,6 +221,22 @@ export class RelationshipReconciler {
             stats.unrepairable += 1;
             continue;
           }
+          // The restaurant may have been read before a Revoke Staff that
+          // already DELETEd the relationship was saved: restore only what
+          // stayed missing on two passes at least grace apart.
+          const key = `${relation}:${members.restaurantId}:${userId}`;
+          missing.add(key);
+          const now = this.#clock.now().getTime();
+          const first = this.#missing.get(key);
+          if (first === undefined) {
+            this.#missing.set(key, now);
+            stats.missingPending += 1;
+            continue;
+          }
+          if (now - first < this.#graceMs) {
+            stats.missingPending += 1;
+            continue;
+          }
           signal?.throwIfAborted();
           const revision = await this.#write(
             "touch",
@@ -215,6 +250,7 @@ export class RelationshipReconciler {
               revision,
             );
           }
+          this.#missing.delete(key);
           stats.missingRepaired += 1;
         }
       }
