@@ -60,7 +60,7 @@ spec:
 # Транспортные политики по умолчанию для всех маршрутов gateway.
 # Встроенный request timeout Envoy Gateway (15s) обрезал бы длинные gRPC deadlines,
 # поэтому задан явный верхний предел; фактический deadline определяет grpc-timeout клиента.
-# Retries по умолчанию не включены; методы с retries — в отдельных route со своей политикой.
+# Retries задают политики reads и commands на route; Gateway по умолчанию не повторяет.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
@@ -75,6 +75,8 @@ spec:
     http:
       requestTimeout: 300s
 ---
+# Команды orders (PlaceOrder, RequestOrderCancellation): совпадение только по сервису —
+# самое общее правило; методы с точным совпадением ниже его перекрывают.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -94,8 +96,8 @@ spec:
           namespace: nomnom-orders
           port: 8081
 ---
-# Идемпотентные чтения orders (ADR 15): отдельный route с retries. Совпадение по методу
-# точнее совпадения по сервису, поэтому эти RPC не попадают в orders-v1.
+# Идемпотентные чтения orders: совпадение по методу точнее совпадения по сервису,
+# поэтому эти RPC не попадают в orders-v1.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -120,34 +122,7 @@ spec:
           namespace: nomnom-orders
           port: 8081
 ---
-# Политика route заменяет политику Gateway, поэтому верхний предел 300s повторяется.
-# Не более 2 повторов только на отказы до обработки или UNAVAILABLE; без per-try timeout,
-# поэтому все попытки укладываются в deadline клиента. cancelled и deadline-exceeded
-# не повторяются.
-apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: BackendTrafficPolicy
-metadata:
-  name: orders-v1-reads
-  namespace: nomnom-gateway
-spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: GRPCRoute
-      name: orders-v1-reads
-  timeout:
-    http:
-      requestTimeout: 300s
-  retry:
-    numRetries: 2
-    retryOn:
-      triggers:
-        - unavailable
-        - connect-failure
-        - refused-stream
-        - reset-before-request
----
-# Публичные чтения restaurants (ADR 15) для catalog Place Order: идемпотентны, поэтому с
-# retries, как orders-v1-reads. Остальные методы RestaurantsService пока не опубликованы.
+# Публичные чтения restaurants: каталог Place Order и BFF.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -167,19 +142,122 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: GetMenu
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ListRestaurants
       backendRefs:
         - name: restaurants
           namespace: nomnom-restaurants
           port: 8082
 ---
-# Та же политика, что у orders-v1-reads.
+# Команды restaurants, которые вызывает Order Fulfillment (orders-worker). Команды кухни
+# и управления рестораном не опубликованы: у них ещё нет вызывающих, gateway отвечает
+# UNIMPLEMENTED.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: restaurants-v1-commands
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ReceiveOrderRequest
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: CancelRestaurantOrder
+      backendRefs:
+        - name: restaurants
+          namespace: nomnom-restaurants
+          port: 8082
+---
+# Команды delivery, которые вызывает Order Fulfillment (orders-worker).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: delivery-v1-commands
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: CreateDelivery
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: ReplanDelivery
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: CancelDelivery
+      backendRefs:
+        - name: delivery
+          namespace: nomnom-delivery
+          port: 8083
+---
+# Команды payments, которые вызывает Order Fulfillment (orders-worker).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: payments-v1-commands
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.payments.v1.PaymentsService
+            method: CreatePayment
+        - method:
+            type: Exact
+            service: nomnom.payments.v1.PaymentsService
+            method: AuthorizePayment
+        - method:
+            type: Exact
+            service: nomnom.payments.v1.PaymentsService
+            method: CapturePayment
+        - method:
+            type: Exact
+            service: nomnom.payments.v1.PaymentsService
+            method: CancelAuthorization
+        - method:
+            type: Exact
+            service: nomnom.payments.v1.PaymentsService
+            method: RefundPayment
+      backendRefs:
+        - name: payments
+          namespace: nomnom-payments
+          port: 8084
+---
+# Retries идемпотентных чтений (ADR 15). Политика route заменяет политику Gateway, поэтому
+# верхний предел 300s повторяется. Не более 2 повторов на отказы до обработки и UNAVAILABLE;
+# без per-try timeout — все попытки укладываются в deadline клиента; cancelled и
+# deadline-exceeded не повторяются.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
-  name: restaurants-v1-reads
+  name: reads
   namespace: nomnom-gateway
 spec:
   targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: orders-v1-reads
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: restaurants-v1-reads
@@ -191,6 +269,41 @@ spec:
     retryOn:
       triggers:
         - unavailable
+        - connect-failure
+        - refused-stream
+        - reset-before-request
+---
+# Retries команд (ADR 15): только отказы, при которых запрос гарантированно не дошёл до
+# приложения — соединение не установлено, stream отклонён (REFUSED_STREAM) или headers не
+# отправлены. UNAVAILABLE от приложения не повторяется: команда могла быть частично
+# выполнена. Повторы после обработки — дело вызывающего: activities Temporal повторяются
+# с тем же idempotency key.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: commands
+  namespace: nomnom-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: orders-v1
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: restaurants-v1-commands
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: delivery-v1-commands
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: payments-v1-commands
+  timeout:
+    http:
+      requestTimeout: 300s
+  retry:
+    numRetries: 2
+    retryOn:
+      triggers:
         - connect-failure
         - refused-stream
         - reset-before-request
@@ -224,3 +337,33 @@ spec:
     - group: ""
       kind: Service
       name: restaurants
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-internal-gateway
+  namespace: nomnom-delivery
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      namespace: nomnom-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: delivery
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-internal-gateway
+  namespace: nomnom-payments
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      namespace: nomnom-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: payments

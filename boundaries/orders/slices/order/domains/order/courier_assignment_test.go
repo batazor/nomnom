@@ -9,16 +9,18 @@ import (
 
 var assignedAt = time.Date(2026, 5, 1, 12, 30, 0, 0, time.UTC)
 
-// AC-636: the domain model decides that an older assignment event is stale.
-func TestCourierAssignmentSupersedesOnlyNotOlderAssignments(t *testing.T) {
-	stored := CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt}
+// AC-636: the domain model decides that an older assignment event is stale,
+// by the Delivery version and not by occurred_at.
+func TestCourierAssignmentSupersedesOnlyNotOlderVersions(t *testing.T) {
+	stored := CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt, DeliveryVersion: 3}
 
-	assert.True(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-2", AssignedAt: assignedAt.Add(time.Minute)}.Supersedes(stored))
-	assert.True(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt}.Supersedes(stored), "a redelivery repeats the same assignment")
-	assert.False(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-0", AssignedAt: assignedAt.Add(-time.Minute)}.Supersedes(stored))
+	assert.True(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-2", DeliveryVersion: 4}.Supersedes(stored))
+	assert.True(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", DeliveryVersion: 3}.Supersedes(stored), "a redelivery repeats the same assignment")
+	assert.False(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-0", AssignedAt: assignedAt.Add(time.Hour), DeliveryVersion: 2}.Supersedes(stored),
+		"a later occurred_at of an older version is still stale")
 
-	released := CourierAssignment{DeliveryID: "delivery-1", AssignedAt: assignedAt.Add(time.Hour)}
-	assert.False(t, stored.Supersedes(released), "a release keeps its time and orders older assignments")
+	released := CourierRelease{DeliveryID: "delivery-1", DeliveryVersion: 5}.Kept()
+	assert.False(t, stored.Supersedes(released), "a release keeps its version and orders older assignments")
 }
 
 func TestCourierAssignmentDisplacesOnlyDifferentParts(t *testing.T) {
@@ -31,26 +33,29 @@ func TestCourierAssignmentDisplacesOnlyDifferentParts(t *testing.T) {
 	assert.Zero(t, next.Displaced(CourierAssignment{}))
 }
 
-func TestCourierAssignmentReleaseKeepsItsTime(t *testing.T) {
-	stored := CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt}
+func TestCourierAssignmentReleaseKeepsItsTimeAndVersion(t *testing.T) {
+	stored := CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt, DeliveryVersion: 2}
 	releasedAt := assignedAt.Add(time.Minute)
 
-	kept, ok := stored.Release(CourierRelease{DeliveryID: "delivery-1", CourierID: "courier-1", OccurredAt: releasedAt})
+	kept, ok := stored.Release(CourierRelease{DeliveryID: "delivery-1", CourierID: "courier-1", OccurredAt: releasedAt, DeliveryVersion: 3})
 	assert.True(t, ok)
-	assert.Equal(t, CourierAssignment{DeliveryID: "delivery-1", AssignedAt: releasedAt}, kept)
+	assert.Equal(t, CourierAssignment{DeliveryID: "delivery-1", AssignedAt: releasedAt, DeliveryVersion: 3}, kept)
 
-	kept, ok = stored.Release(CourierRelease{DeliveryID: "delivery-1", DeliveryCancelled: true, OccurredAt: releasedAt})
+	kept, ok = stored.Release(CourierRelease{DeliveryID: "delivery-1", CourierID: "courier-9", OccurredAt: releasedAt, DeliveryVersion: 3})
+	assert.True(t, ok, "the Delivery has no courier afterwards, whichever one the event names")
+	assert.Equal(t, CourierAssignment{DeliveryID: "delivery-1", AssignedAt: releasedAt, DeliveryVersion: 3}, kept)
+
+	kept, ok = stored.Release(CourierRelease{DeliveryID: "delivery-1", DeliveryCancelled: true, OccurredAt: releasedAt, DeliveryVersion: 3})
 	assert.True(t, ok, "a cancellation releases whichever courier the Delivery has")
-	assert.Equal(t, CourierAssignment{AssignedAt: releasedAt}, kept)
+	assert.Equal(t, CourierAssignment{AssignedAt: releasedAt, DeliveryVersion: 3}, kept)
 }
 
 func TestCourierAssignmentIgnoresStaleRelease(t *testing.T) {
-	stored := CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt}
+	stored := CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt, DeliveryVersion: 3}
 	for name, release := range map[string]CourierRelease{
-		"another delivery": {DeliveryID: "delivery-2", CourierID: "courier-1", OccurredAt: assignedAt.Add(time.Minute)},
-		"another courier":  {DeliveryID: "delivery-1", CourierID: "courier-2", OccurredAt: assignedAt.Add(time.Minute)},
-		"older release":    {DeliveryID: "delivery-1", CourierID: "courier-1", OccurredAt: assignedAt.Add(-time.Minute)},
-		"older cancel":     {DeliveryID: "delivery-1", DeliveryCancelled: true, OccurredAt: assignedAt.Add(-time.Minute)},
+		"another delivery": {DeliveryID: "delivery-2", CourierID: "courier-1", DeliveryVersion: 4},
+		"older release":    {DeliveryID: "delivery-1", CourierID: "courier-1", DeliveryVersion: 2},
+		"older cancel":     {DeliveryID: "delivery-1", DeliveryCancelled: true, DeliveryVersion: 2},
 	} {
 		t.Run(name, func(t *testing.T) {
 			kept, ok := stored.Release(release)
@@ -58,4 +63,14 @@ func TestCourierAssignmentIgnoresStaleRelease(t *testing.T) {
 			assert.Zero(t, kept)
 		})
 	}
+}
+
+func TestCourierAssignmentHoldsRelations(t *testing.T) {
+	cancel := CourierRelease{DeliveryID: "delivery-1", DeliveryCancelled: true}
+	unassign := CourierRelease{DeliveryID: "delivery-1", CourierID: "courier-1"}
+
+	assert.True(t, CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}.HoldsRelationsOf(unassign))
+	assert.False(t, CourierAssignment{DeliveryID: "delivery-1"}.HoldsRelationsOf(unassign), "an already released courier")
+	assert.True(t, CourierAssignment{DeliveryID: "delivery-1"}.HoldsRelationsOf(cancel), "the delivery relation of a cancelled Delivery")
+	assert.False(t, CourierAssignment{}.HoldsRelationsOf(cancel))
 }

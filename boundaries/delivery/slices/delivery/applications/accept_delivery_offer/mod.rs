@@ -116,8 +116,10 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 self.offers.save(&other)?;
             }
         }
+        let accepted = offer.pull_events();
         self.offers.save(&offer)?;
         self.deliveries.save(&delivery)?;
+        publish(self.outbox, accepted)?;
         publish(self.outbox, delivery.pull_events())?;
         Ok(output(&offer, false))
     }

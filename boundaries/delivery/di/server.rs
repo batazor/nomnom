@@ -15,7 +15,7 @@
 use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use shaku::{Component, HasComponent, HasProvider, Interface, Module, Provider, module};
@@ -29,11 +29,15 @@ use crate::infrastructure::spicedb::{
     SpiceDbConfigError, SpiceDbRelationships,
 };
 use crate::pkg::config::{AppConfig, DatabaseConfig, SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
+use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 
 use super::ReconcilingWorker;
 use super::infrastructure::{InfrastructureModule, ProcessStore, SharedStore, infrastructure};
 use super::service::{ServiceModule, service};
+
+/// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
+pub const SERVICE_NAME: &str = "delivery";
 
 /// Первый проход reconciliation вскоре после старта.
 const FIRST_RECONCILIATION: Duration = Duration::from_secs(10);
@@ -171,9 +175,35 @@ where
     }
 }
 
+/// Metrics pipeline процесса (`pkg/telemetry`): бизнес-метрики use cases.
+pub trait ServerTelemetry: Interface {
+    /// Выгружает накопленные точки; повторный вызов ничего не делает.
+    fn shutdown(&self);
+}
+
+#[derive(Component)]
+#[shaku(interface = ServerTelemetry)]
+pub struct OtlpServerTelemetry {
+    /// `None` после shutdown.
+    telemetry: Mutex<Option<Telemetry>>,
+}
+
+impl ServerTelemetry for OtlpServerTelemetry {
+    fn shutdown(&self) {
+        if let Some(telemetry) = self
+            .telemetry
+            .lock()
+            .ok()
+            .and_then(|mut telemetry| telemetry.take())
+        {
+            telemetry.shutdown();
+        }
+    }
+}
+
 module! {
     pub ServerModule {
-        components = [TonicTransport, SpiceDbReconciliation],
+        components = [TonicTransport, SpiceDbReconciliation, OtlpServerTelemetry],
         providers = [DeliveryWorkerProvider],
 
         use InfrastructureModule {
@@ -188,11 +218,17 @@ impl ServerModule {
     pub fn worker(&self) -> Result<DeliveryWorker, Box<dyn Error>> {
         HasProvider::<DeliveryWorker>::provide(self).map(|worker| *worker)
     }
+
+    /// Выгружает метрики после остановки worker.
+    pub fn shutdown(&self) {
+        HasComponent::<dyn ServerTelemetry>::resolve_ref(self).shutdown();
+    }
 }
 
 /// Собирает граф процесса `delivery`. Обязательная инфраструктура
 /// (SpiceDB, PostgreSQL) и невалидная конфигурация identity прерывают startup
 /// до открытия портов.
+/// Вызывается внутри tokio runtime: OTLP exporter держит соединение на нём.
 pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // Невалидный JWKS или allowlist service identity прерывает startup.
     let subjects = subject_resolver(&config.identity)?;
@@ -203,6 +239,9 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // прерывают startup. Revisions записей relationships хранятся с Courier и
     // Delivery; checks читают их из того же хранилища (FR-447).
     let store: Arc<dyn ProcessStore> = Arc::new(postgres(&config.database)?);
+    // Instruments берутся у глобального MeterProvider при сборке портов,
+    // поэтому pipeline запускается до них.
+    let telemetry = telemetry::start(SERVICE_NAME)?;
     let infrastructure = infrastructure(
         Arc::clone(&store),
         StaticCourierLocator::new(Vec::new()),
@@ -221,6 +260,9 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
             grace: config.reconciler.grace,
             page_size: config.reconciler.page_size,
             interval: config.reconciler.interval,
+        })
+        .with_component_parameters::<OtlpServerTelemetry>(OtlpServerTelemetryParameters {
+            telemetry: Mutex::new(Some(telemetry)),
         })
         .build())
 }

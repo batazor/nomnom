@@ -2,12 +2,12 @@ package memory
 
 import (
 	"context"
-	"errors"
 
+	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 )
 
-var ErrIdempotencyKeyTaken = errors.New("idempotency key already identifies another order")
+var ErrIdempotencyKeyTaken = placeorder.ErrIdempotencyKeyTaken
 
 func (s *Store) FindOrder(ctx context.Context, customerID order.CustomerID, key string) (order.ID, bool, error) {
 	defer s.lock(ctx)()

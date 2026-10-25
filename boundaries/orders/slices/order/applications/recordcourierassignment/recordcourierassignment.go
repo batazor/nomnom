@@ -21,6 +21,9 @@ type Input struct {
 	EventID    string
 	OrderID    order.ID
 	OccurredAt time.Time
+	// DeliveryVersion is the aggregate_version of the Delivery in the event
+	// envelope; it orders the courier events of the Order.
+	DeliveryVersion uint64
 	// DeliveryID and CourierID name the assignment; an event without them
 	// records the fact without relationships.
 	DeliveryID string
@@ -87,7 +90,7 @@ func (h Handler) assign(ctx context.Context, in Input) error {
 	if in.DeliveryID == "" || in.CourierID == "" {
 		return nil
 	}
-	next := order.CourierAssignment{DeliveryID: in.DeliveryID, CourierID: in.CourierID, AssignedAt: in.OccurredAt}
+	next := order.CourierAssignment{DeliveryID: in.DeliveryID, CourierID: in.CourierID, AssignedAt: in.OccurredAt, DeliveryVersion: in.DeliveryVersion}
 	stored, found, err := h.assignments.CourierAssignment(ctx, in.OrderID)
 	if err != nil {
 		return fmt.Errorf("read courier assignment: %w", err)

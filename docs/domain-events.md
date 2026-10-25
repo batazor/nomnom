@@ -252,20 +252,21 @@ Topic и партиционирование новой версии опреде
 - Повтор команды, который FSM возвращает как `AlreadyInState` и application превращает в no-op, не записывает Domain Event и не создаёт Outbox Record.
 - Имена `PreparationStarted`, `PreparationDelayed`, `PreparationFailed` не следуют форме `<Aggregate><Fact>` из [словаря](ubiquitous-language.md#грамматика-именования); окончательные имена выбираются при создании контракта.
 
-## Каталог кандидатов: `restaurants` / Restaurant и Menu
+## Каталог: `restaurants` / Restaurant и Menu
 
-Кандидаты для aggregates `Restaurant` и `Menu`, не окончательный контракт. Публикуемые факты передаются в Outbox port application-слоем ([design.md change `implement-restaurants-application-layer`](../openspec/changes/implement-restaurants-application-layer/design.md)); payload Integration Event и consumers определяются при создании контракта.
+Опубликованные контракты aggregates `Restaurant` и `Menu` (`nomnom/restaurants/v1/events.proto`, change [`publish-restaurant-and-menu-events`](../openspec/changes/publish-restaurant-and-menu-events/)). Факты передаются в Outbox port application-слоем; у каждого aggregate свой стрим, key — `aggregate_id`.
 
-| Domain Event | Маппинг | Integration Event `nomnom.restaurants.v1.*` | Consumer |
-| --- | --- | --- | --- |
-| `RestaurantRegistered`, `RestaurantRenamed` | 1 → 0 | — | — |
-| `RestaurantOpened` | 1 → 1 | Кандидат; имя — при создании контракта | Не определён |
-| `RestaurantClosed` | 1 → 1 | Кандидат; имя — при создании контракта | Не определён |
-| `MenuCreated`, `MenuItemAdded`, `MenuItemUpdated` | 1 → 0 | — | — |
-| `MenuItemAvailabilityChanged` | 1 → 1 | Кандидат; имя — при создании контракта | Не определён |
+| Domain Event | Маппинг | Integration Event `nomnom.restaurants.v1.*` | Topic | Consumer |
+| --- | --- | --- | --- | --- |
+| `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged` | 1 → 0 | — | — | — |
+| `RestaurantOpened` | 1 → 1 | `RestaurantOpened` (`restaurant_id`) | `restaurants.v1.restaurant-events` | Не определён |
+| `RestaurantClosed` | 1 → 1 | `RestaurantClosed` (`restaurant_id`) | `restaurants.v1.restaurant-events` | Не определён |
+| `MenuCreated`, `MenuItemAdded`, `MenuItemUpdated` | 1 → 0 | — | — | — |
+| `MenuItemAvailabilityChanged` | 1 → 1, `isAvailable` → `available` | `MenuItemAvailabilityChanged` (`menu_id`, `restaurant_id`, `menu_item_id`, `available`) | `restaurants.v1.menu-events` | Не определён |
 
 - `MenuItemAvailabilityChanged` записывают и Set Menu Item Availability, и Update Menu Item при изменении доступности, чтобы факт не зависел от команды.
 - Повтор Open/Close Restaurant — no-op без Domain Event.
+- Назначение и отзыв staff — relationships SpiceDB, Domain Events не порождают.
 
 ## Каталог кандидатов: `orders`, `delivery`, `payments`
 

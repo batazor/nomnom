@@ -29,24 +29,42 @@ export class MongoOutboxRelayStore implements RelayStore {
     this.#leaseId = options.leaseId ?? RELAY_LEASE_ID;
   }
 
+  /**
+   * Expiry is compared and computed with the server clock (`$$NOW`), not the
+   * relay's `now`: relays with skewed clocks cannot take a live lease. One
+   * atomic upsert takes the lease when this owner holds it, it expired or it
+   * does not exist; otherwise the document is left as it is.
+   */
   async acquireLease(
     owner: string,
-    now: Date,
+    _now: Date,
     ttlMs: number,
   ): Promise<boolean> {
+    const mine = {
+      $or: [
+        { $eq: ["$owner", { $literal: owner }] },
+        // A missing `expiresAt` (new document) sorts before any date.
+        { $lte: ["$expiresAt", "$$NOW"] },
+      ],
+    };
     try {
-      // Matches when this owner holds the lease or it expired; otherwise the
-      // upsert collides with the existing `_id` and the lease stays foreign.
-      await this.#leases.updateOne(
-        {
-          _id: this.#leaseId,
-          $or: [{ owner }, { expiresAt: { $lte: now } }],
-        },
-        { $set: { owner, expiresAt: new Date(now.getTime() + ttlMs) } },
-        { upsert: true },
+      const lease = await this.#leases.findOneAndUpdate(
+        { _id: this.#leaseId },
+        [
+          {
+            $set: {
+              owner: { $cond: [mine, { $literal: owner }, "$owner"] },
+              expiresAt: {
+                $cond: [mine, { $add: ["$$NOW", ttlMs] }, "$expiresAt"],
+              },
+            },
+          },
+        ],
+        { upsert: true, returnDocument: "after" },
       );
-      return true;
+      return lease?.owner === owner;
     } catch (error) {
+      // Two first-time upserts raced on `_id`: the other relay won.
       if (error instanceof MongoServerError && error.code === DUPLICATE_KEY) {
         return false;
       }

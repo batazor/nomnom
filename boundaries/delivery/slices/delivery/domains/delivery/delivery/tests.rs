@@ -54,6 +54,7 @@ fn delivery_lifecycle_is_strict_and_records_facts() {
                 delivery_id: delivery_id.clone(),
                 order_id: order_id.clone(),
                 courier_id: courier_id.clone(),
+                created_at_epoch_seconds: None,
             },
             DomainEvent::DeliveryPickedUp {
                 delivery_id: delivery_id.clone(),
@@ -64,6 +65,7 @@ fn delivery_lifecycle_is_strict_and_records_facts() {
                 delivery_id,
                 order_id,
                 courier_id,
+                created_at_epoch_seconds: None,
             },
         ]
     );

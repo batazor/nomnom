@@ -7,11 +7,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 // ErrIdempotencyKeyTaken: the key already identifies another Order.
-var ErrIdempotencyKeyTaken = errors.New("idempotency key already identifies another order")
+var ErrIdempotencyKeyTaken = placeorder.ErrIdempotencyKeyTaken
 
 func (s *Store) FindOrder(ctx context.Context, customerID order.CustomerID, key string) (order.ID, bool, error) {
 	var id order.ID
@@ -26,6 +27,9 @@ func (s *Store) FindOrder(ctx context.Context, customerID order.CustomerID, key 
 	return id, true, nil
 }
 
+// RememberOrder inserts the key in the active transaction. The unique index
+// makes a concurrent insert of the same key wait for the first transaction;
+// if that one committed another Order, ErrIdempotencyKeyTaken.
 func (s *Store) RememberOrder(ctx context.Context, customerID order.CustomerID, key string, orderID order.ID) error {
 	tag, err := s.q(ctx).Exec(ctx, `
 		INSERT INTO idempotency_keys (customer_id, key, order_id) VALUES ($1, $2, $3)

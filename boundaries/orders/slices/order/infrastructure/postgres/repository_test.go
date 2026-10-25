@@ -37,8 +37,12 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), saved.Version())
 	assert.Equal(t, order.StateConfirmed, saved.State())
-	require.Len(t, saved.Facts(), 1)
-	assert.Equal(t, order.FactPreparationStarted, saved.Facts()[0].Fact)
+	// Confirm records restaurant_accepted with the transition.
+	facts := make([]order.FulfillmentFact, 0, len(saved.Facts()))
+	for _, recorded := range saved.Facts() {
+		facts = append(facts, recorded.Fact)
+	}
+	assert.ElementsMatch(t, []order.FulfillmentFact{order.FactRestaurantAccepted, order.FactPreparationStarted}, facts)
 	assert.Equal(t, ordertest.New(t, id).Items(), saved.Items())
 }
 

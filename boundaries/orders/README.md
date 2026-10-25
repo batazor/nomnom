@@ -399,27 +399,32 @@ OpenSpec change `add-order-command-rpcs-and-relationships` (FR-464…FR-470, AC-
 
 `view = customer + restaurant->view_orders + courier + delivery->act_as_courier`, `cancel` — только
 customer. Назначение хранится в `orders.delivery_id`, `courier_id`, `courier_assigned_at`
-(миграция `00002`); reassignment — один атомарный запрос `TOUCH` нового и `DELETE` прежнего
-курьера, событие старше сохранённого назначения пропускается, ZedToken записи сохраняется в
-`authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
+(миграция `00002`) и `courier_delivery_version` (миграция `00004`, Delivery `aggregate_version`
+события); reassignment — один атомарный запрос `TOUCH` нового и `DELETE` прежнего
+курьера, событие с версией Delivery ниже сохранённой пропускается (`occurred_at` порядок commit не
+задаёт), ZedToken записи сохраняется в `authorization_revision`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
 
 Не реализованы: выпуск user assertions в BFF (verifier в `orders` готов), поэтому Place Order пока
 недоступен клиентам.
 
 Снятие курьера без замены (`CourierUnassignedFromDelivery`) удаляет `order#courier` и очищает
 `courier_id`, отмена Delivery (`DeliveryCancelled`) — ещё и `order#delivery`/`delivery_id`; событие
-применяется, только если называет сохранённые Delivery и курьера и не старше назначения, а
-`courier_assigned_at` хранит время снятия, поэтому более старое назначение после него пропускается
-(миграция `00003`). См. [Record Courier Release](slices/order/applications/recordcourierrelease/README.md).
+применяется, если относится к сохранённой Delivery и его версия не ниже сохранённой, и снимает
+сохранённого курьера. Снятие сохраняется со своей версией (миграции `00003`, `00004`), даже если
+назначение ещё не обработано, поэтому более старое назначение после него пропускается. См. [Record Courier Release](slices/order/applications/recordcourierrelease/README.md).
 
 Reconciliation `order#customer`, `order#restaurant`, `order#courier` и `order#delivery` —
 [`slices/order/infrastructure/reconcile`](slices/order/infrastructure/reconcile)
 и процесс `cmd/orders-reconciler` (Helm `values-reconciler.yaml`): для каждой relation orphan и
 stale relationships удаляются, только если остались такими на двух проходах с интервалом не
 меньше `RECONCILER__GRACE` (связь пишется до commit); missing relationship восстанавливается
-`TOUCH` с обновлением `authorization_revision`. Business-сторона — колонки `customer_id`,
+`TOUCH` сразу, но только если subject, перечитанный под `FOR SHARE` lock строки заказа, всё ещё
+совпадает: Record Courier Assignment/Release держат row lock от чтения назначения до commit и
+удаляют прежнего курьера в SpiceDB до commit, поэтому перечитывание ждёт их commit и не
+возвращает доступ снятому курьеру. `TOUCH` и `authorization_revision` пишутся в той же транзакции;
+несовпавшие считаются `missing_superseded`. Business-сторона — колонки `customer_id`,
 `restaurant_id`, `courier_id`, `delivery_id`; заказ без курьера не ожидает `courier`/`delivery`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`,
-`missing_repaired`, `unrepairable`. Query handlers зарегистрированы в DI и доступны
+`missing_repaired`, `missing_superseded`, `unrepairable`. Query handlers зарегистрированы в DI и доступны
 через gRPC. `.feature` сценарии `confirmorder` и
 `recordcourierassignment` покрыты unit-тестами handlers; Gherkin runner не подключён.
 

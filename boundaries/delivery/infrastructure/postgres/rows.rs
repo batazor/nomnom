@@ -95,7 +95,7 @@ pub(super) fn courier_from_row(row: &PgRow) -> Result<Courier, RepositoryError> 
 }
 
 pub(super) const DELIVERY_COLUMNS: &str = "id, order_id, courier_id, pickup_address, dropoff_address, \
-     state, failure_reason, authorization_revision, version";
+     state, failure_reason, authorization_revision, version, created_at";
 
 pub(super) fn delivery_from_row(row: &PgRow) -> Result<Delivery, RepositoryError> {
     let failure_reason = column::<Option<String>>(row, "failure_reason")?
@@ -105,6 +105,7 @@ pub(super) fn delivery_from_row(row: &PgRow) -> Result<Delivery, RepositoryError
         .transpose()?;
     let revision: Option<String> = column(row, "authorization_revision")?;
     let version = domain_version(column(row, "version")?)?;
+    let created_at: Option<i64> = column(row, "created_at")?;
     Delivery::restore(
         DeliveryId::new(column::<String>(row, "id")?),
         OrderId::new(column::<String>(row, "order_id")?),
@@ -117,6 +118,7 @@ pub(super) fn delivery_from_row(row: &PgRow) -> Result<Delivery, RepositoryError
     .map_err(|error| corrupt("delivery", error))
     .map(|delivery| {
         delivery
+            .with_created_at(created_at)
             .with_authorization_revision(revision.map(AuthorizationRevision::new))
             .with_version(version)
     })

@@ -35,15 +35,15 @@ sequenceDiagram
 
 Handler: [`recordcourierrelease.go`](recordcourierrelease.go), unit-тесты: [`recordcourierrelease_test.go`](recordcourierrelease_test.go).
 
-- **Поведение:** `Input{EventID, OrderID, OccurredAt, DeliveryID, CourierID, DeliveryCancelled}`. В одном unit of work (`application.AcceptOnce`, тот же протокол Inbox, что у `fulfillment.Reflector`): чтение назначения под row lock; устарело ли событие и какое назначение остаётся, решает `order.CourierAssignment.Release`; затем `Relationships.ReleaseCourier` и `CourierAssignments.RememberCourierAssignment` с пустым курьером (и Delivery при отмене), временем события и ZedToken.
-- **Guard:** событие применяется, только если сохранённое назначение относится к той же Delivery, к тому же курьеру (для снятия) и не новее события; иначе `ignored_stale` без изменений, но с Inbox record. Время снятия сохраняется в `courier_assigned_at`, поэтому более старое `CourierAssignedToDelivery`, доставленное позже, пропускается Record Courier Assignment.
+- **Поведение:** `Input{EventID, OrderID, OccurredAt, DeliveryVersion, DeliveryID, CourierID, DeliveryCancelled}`; `DeliveryVersion` — `aggregate_version` envelope. В одном unit of work (`application.AcceptOnce`, тот же протокол Inbox, что у `fulfillment.Reflector`): чтение назначения под row lock; устарело ли событие и какое назначение остаётся, решает домен (`order.CourierAssignment.Release`, `CourierRelease.Kept`); затем `Relationships.ReleaseCourier` для сохранённого курьера и `CourierAssignments.RememberCourierAssignment` с пустым курьером (и Delivery при отмене), временем, версией события и ZedToken.
+- **Guard:** порядок задаёт версия Delivery (у Order одна Delivery, каждая транзакция Delivery увеличивает версию), а не `occurred_at` (`DEFAULT now()` — начало транзакции delivery). Событие другой Delivery или с версией ниже сохранённой — `ignored_stale` без изменений, но с Inbox record. Применённое событие снимает сохранённого курьера, даже если называет другого: после этой версии у Delivery нет курьера, а назначение названного старше и будет пропущено. Без сохранённого назначения ничего не удаляется, но снятие запоминается со своей версией (`remembered_ahead`), поэтому более старое `CourierAssignedToDelivery`, обработанное позже, пропускается Record Courier Assignment.
 - **Почему не fulfillment-факт:** отмену Delivery запрашивает сам Order Fulfillment workflow (компенсация `CancelDelivery`), снятие курьера возвращает Delivery в поиск; `DeliveryFailed` (после Pickup) обрабатывает Record Delivery Failure. Поэтому `Order` и workflow не меняются, `reason` отмены не используется.
 - **Reconciliation:** `NULL` в `courier_id`/`delivery_id` — отсутствующая relation; остаток в SpiceDB удаляется как orphan после grace.
 - **Порты:** `application.UnitOfWork`, `application.Inbox`, `order.CourierAssignments` (контракт хранения домена), `Relationships`.
 - **Inbox consumer:** `orders.recordcourierrelease`; повтор `event_id` даёт outcome `duplicate`.
-- **Outcomes:** `released`, `ignored_stale`, `duplicate`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
+- **Outcomes:** `released`, `remembered_ahead`, `ignored_stale`, `duplicate`. Ошибка SpiceDB откатывает Inbox record, и redelivery повторяет событие.
 - **Outbox:** не пишется.
-- **Требования:** FR-476, FR-477, AC-534…AC-538 в OpenSpec change `add-order-command-rpcs-and-relationships`.
+- **Требования:** FR-476, FR-477, AC-534…AC-538 в OpenSpec change `add-order-command-rpcs-and-relationships`; FR-564, AC-669, AC-670 в change `harden-courier-relationship-ordering`.
 - **`.feature`:** сценарии проверяются unit-тестами handler на in-memory адаптерах; Gherkin runner (`godog`) пока не подключён.
 
 ## Acceptance

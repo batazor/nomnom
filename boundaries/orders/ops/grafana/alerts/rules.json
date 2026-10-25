@@ -1,0 +1,199 @@
+{
+  "folderUid": "nomnom",
+  "interval": 60,
+  "rules": [
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-orders-overview",
+        "summary": "Больше 5% входящих gRPC-вызовов завершаются техническими кодами (UNAVAILABLE, INTERNAL, DEADLINE_EXCEEDED…)."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0.05",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-orders-overview",
+        "severity": "critical"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "orders",
+      "title": "Orders: gRPC technical errors",
+      "uid": "nomnom-orders-grpc-errors"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-orders-overview",
+        "summary": "p95 входящих gRPC-вызовов дольше 1 s."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "histogram_quantile(0.95, sum by (job, le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[5m])))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 1",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-orders-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "orders",
+      "title": "Orders: gRPC p95 latency",
+      "uid": "nomnom-orders-grpc-latency"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-orders-overview",
+        "summary": "Больше 5% вызовов соседних контекстов через internal gateway — технические ошибки."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (job) (rate(rpc_client_call_duration_seconds_count{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (rate(rpc_client_call_duration_seconds_count{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0.05",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "10m",
+      "labels": {
+        "nomnom_dashboard": "nomnom-orders-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "orders",
+      "title": "Orders: neighbour calls failing",
+      "uid": "nomnom-orders-neighbour-errors"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-orders-overview",
+        "summary": "Integration Events ушли в <stream>.dlq: их обработка не повторяется сама."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (job, messaging_destination_name) (increase(nomnom_messaging_poison_messages_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "0s",
+      "labels": {
+        "nomnom_dashboard": "nomnom-orders-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "orders",
+      "title": "Orders: messages sent to DLQ",
+      "uid": "nomnom-orders-kafka-poison"
+    }
+  ],
+  "title": "orders"
+}

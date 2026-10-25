@@ -15,6 +15,7 @@ make grafana-tools      # go install gcx
 | `overview/` | `ServiceOverview(options)` — общая структура rows; `services.go` — options и domain-панели каждого сервиса; `platform.go` — `PlatformOverview()` (SpiceDB, PostgreSQL, pods). |
 | `dashboards/` | Артефакт `Platform / Overview` (`platform.json`) и его README. |
 | `cmd/dashboards/` | CLI: запись артефактов, `-check`, `-preview DIR` (все метрики «есть»). |
+| `alerts/` | Rule group Platform / Overview (`platform.json`); rule groups сервисов — `boundaries/<service>/ops/grafana/alerts/rules.json`. Формат provisioning API, push — `make grafana-cloud-push`. |
 | `git-sync/` | Git Sync `Repository` на сервис и на Platform (`provisioning.grafana.app/v1beta1`, read-only). |
 
 ## Версии

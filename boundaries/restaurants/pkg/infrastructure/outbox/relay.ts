@@ -27,7 +27,11 @@ export type PendingStats = Readonly<{
 }>;
 
 export interface RelayStore {
-  /** Takes or renews the lease; `false` while another owner holds it. */
+  /**
+   * Takes or renews the lease; `false` while another owner holds it. `now` is
+   * the relay's clock; a store with a server clock (MongoDB `$$NOW`) MAY
+   * ignore it so that clock skew between relays cannot steal a live lease.
+   */
   acquireLease(owner: string, now: Date, ttlMs: number): Promise<boolean>;
   releaseLease(owner: string): Promise<void>;
   /** Unpublished records ordered by `seq`. */
@@ -124,12 +128,36 @@ export interface OutboxRelayOptions {
 
 const DEFAULT_CLEANUP_INTERVAL_MS = 60_000;
 
+/**
+ * Part of the lease TTL after which the relay renews the lease before the
+ * next record. With a publish bounded by {@link relayMessageTimeoutMs} (at
+ * most a third of the TTL as well), a record is never published after the
+ * lease could have expired and been taken over by a standby relay.
+ */
+const LEASE_RENEW_FRACTION = 3;
+
+/**
+ * `message.timeout.ms` of the relay producer: a third of the lease TTL and of
+ * the drain timeout, so a stuck broker neither outlives the lease nor delays
+ * SIGTERM beyond the drain (librdkafka defaults to 300 s).
+ */
+export const relayMessageTimeoutMs = (
+  leaseTtlMs: number,
+  drainTimeoutMs: number,
+): number =>
+  Math.max(
+    1000,
+    Math.floor(Math.min(leaseTtlMs, drainTimeoutMs) / LEASE_RENEW_FRACTION),
+  );
+
 export class OutboxRelay {
   readonly #options: OutboxRelayOptions;
   readonly #metrics: RelayMetrics;
   readonly #clock: { now(): Date };
   #lastCleanup: number | undefined;
   #leased = false;
+  /** `performance.now()` when the current lease was last confirmed. */
+  #renewedAt = 0;
 
   constructor(options: OutboxRelayOptions) {
     this.#options = options;
@@ -139,19 +167,8 @@ export class OutboxRelay {
 
   /** One polling cycle; stops early when `signal` aborts. */
   async cycle(signal?: AbortSignal): Promise<CycleResult> {
-    const { store, owner } = this.#options;
-    const leased = await store.acquireLease(
-      owner,
-      this.#clock.now(),
-      this.#options.leaseTtlMs,
-    );
-    if (leased !== this.#leased) {
-      this.#options.log?.(
-        leased ? `lease acquired by ${owner}` : `lease held by another relay`,
-      );
-      this.#leased = leased;
-    }
-    if (!leased) {
+    const { store } = this.#options;
+    if (!(await this.#renewLease())) {
       this.#metrics.backlog([]);
       return { leased: false, published: 0, deleted: 0 };
     }
@@ -161,6 +178,16 @@ export class OutboxRelay {
     const batch = await store.fetchPending(this.#options.batchSize);
     for (const record of batch) {
       if (signal?.aborted) break;
+      // A slow batch (broker retries) renews the lease before the next
+      // record; a lost lease stops the batch so the new owner keeps order.
+      if (
+        performance.now() - this.#renewedAt >=
+          this.#options.leaseTtlMs / LEASE_RENEW_FRACTION &&
+        !(await this.#renewLease())
+      ) {
+        this.#metrics.backlog([]);
+        return { leased: false, published, deleted: 0 };
+      }
       const started = performance.now();
       try {
         await this.#options.publisher.publish(toIntegrationMessage(record));
@@ -190,6 +217,26 @@ export class OutboxRelay {
     return failedId === undefined
       ? { leased: true, published, deleted }
       : { leased: true, published, failedId, deleted };
+  }
+
+  /** Takes or renews the lease and remembers when it was confirmed. */
+  async #renewLease(): Promise<boolean> {
+    const { store, owner } = this.#options;
+    const requestedAt = performance.now();
+    const leased = await store.acquireLease(
+      owner,
+      this.#clock.now(),
+      this.#options.leaseTtlMs,
+    );
+    if (leased !== this.#leased) {
+      this.#options.log?.(
+        leased ? `lease acquired by ${owner}` : `lease held by another relay`,
+      );
+      this.#leased = leased;
+    }
+    // The server computed the expiry no earlier than the request was sent.
+    if (leased) this.#renewedAt = requestedAt;
+    return leased;
   }
 
   /** Gives the lease up so a standby relay takes over without waiting. */

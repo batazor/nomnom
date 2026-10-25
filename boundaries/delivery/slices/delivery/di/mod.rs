@@ -164,8 +164,11 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     ) -> Result<create_delivery::Output, DeliveryApplicationError> {
         create_delivery::Handler {
             authorization: self.ports.authorization(),
+            unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.deliveries(),
+            outbox: self.ports.outbox(),
             ids: self.ports.ids(),
+            clock: self.ports.clock(),
         }
         .execute(subject, input)
     }
@@ -256,7 +259,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     ) -> Result<reject_delivery_offer::Output, DeliveryApplicationError> {
         reject_delivery_offer::Handler {
             authorization: self.ports.authorization(),
+            unit_of_work: &self.unit_of_work(),
             offers: self.ports.offers(),
+            outbox: self.ports.outbox(),
             clock: self.ports.clock(),
         }
         .execute(subject, input)

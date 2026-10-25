@@ -97,12 +97,18 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 
 func (c consumer) publish(t *testing.T, topic, eventID string, event proto.Message) {
 	t.Helper()
+	c.publishVersion(t, topic, eventID, 1, event)
+}
+
+// publishVersion publishes event with aggregate_version version.
+func (c consumer) publishVersion(t *testing.T, topic, eventID string, version uint64, event proto.Message) {
+	t.Helper()
 	msg, err := messaging.NewIntegrationEventMessage(messaging.Envelope{
 		EventID:          eventID,
 		OccurredAt:       occurredAt,
 		AggregateType:    "source",
 		AggregateID:      "aggregate-1",
-		AggregateVersion: 1,
+		AggregateVersion: version,
 	}, event)
 	require.NoError(t, err)
 	done := make(chan error, 1)
@@ -197,18 +203,18 @@ func TestCourierReleaseEventsRevokeCourierAccess(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed)))
 	assigned := &deliveryv1.CourierAssignedToDelivery{OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1"}
 
-	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-1", assigned)
+	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-1", 1, assigned)
 	require.True(t, courierCanView(c, "courier-1"))
-	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-2",
+	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-2", 2,
 		&deliveryv1.CourierUnassignedFromDelivery{OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1"})
 	assert.False(t, courierCanView(c, "courier-1"))
-	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-3",
+	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-3", 3,
 		&deliveryv1.DeliveryCancelled{OrderId: "order-1", DeliveryId: "delivery-1", Reason: "customer request"})
 
 	stored, found, err := c.store.CourierAssignment(context.Background(), "order-1")
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, order.CourierAssignment{AssignedAt: occurredAt}, stored)
+	assert.Equal(t, order.CourierAssignment{AssignedAt: occurredAt, DeliveryVersion: 3}, stored, "aggregate_version orders courier events")
 	assert.Equal(t, []fulfillment.Kind{fulfillment.KindCourierAssigned}, kinds(c.workflow.Notifications()))
 	assert.Equal(t, 3, c.store.InboxSize())
 	c.noPoison(t)

@@ -1,7 +1,9 @@
 //! Create Delivery: the fulfillment process of `orders` requests delivery of
-//! an order. Idempotent by `OrderId`; does not start the courier search.
+//! an order. Idempotent by `OrderId`; does not start the courier search. The
+//! new Delivery and its `DeliveryCreated` fact are written in one Unit of Work;
+//! a replay writes nothing.
 
-use crate::pkg::application::{IdGenerator, Subject};
+use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryId, DeliveryRepository, OrderId,
@@ -10,6 +12,7 @@ use crate::slices::delivery::domains::delivery::{
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::order_id;
+use super::outbox::{DeliveryOutbox, publish};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
@@ -25,13 +28,38 @@ pub struct Output {
     pub created: bool,
 }
 
-pub struct Handler<'a> {
+pub struct Handler<'a, U: UnitOfWork> {
     pub authorization: &'a dyn DeliveryAuthorization,
+    pub unit_of_work: &'a U,
     pub deliveries: &'a dyn DeliveryRepository,
+    pub outbox: &'a dyn DeliveryOutbox,
     pub ids: &'a dyn IdGenerator,
+    pub clock: &'a dyn Clock,
 }
 
-impl Handler<'_> {
+/// Failure of the insert transaction; a uniqueness conflict is a lost race
+/// against a concurrent identical request, resolved after the rollback.
+enum InsertError {
+    Conflict,
+    Failed(DeliveryApplicationError),
+}
+
+impl From<UnitOfWorkError> for InsertError {
+    fn from(error: UnitOfWorkError) -> Self {
+        Self::Failed(error.into())
+    }
+}
+
+impl From<RepositoryError> for InsertError {
+    fn from(error: RepositoryError) -> Self {
+        match error {
+            RepositoryError::Conflict => Self::Conflict,
+            other => Self::Failed(other.into()),
+        }
+    }
+}
+
+impl<U: UnitOfWork> Handler<'_, U> {
     pub fn execute(
         &self,
         subject: &Subject,
@@ -49,22 +77,29 @@ impl Handler<'_> {
         if let Some(existing) = self.deliveries.find_by_order(&order_id)? {
             return replay(&existing, &pickup_address, &dropoff_address);
         }
-        let delivery = Delivery::new(
+        let mut delivery = Delivery::create(
             DeliveryId::new(self.ids.next_id()),
             order_id.clone(),
             pickup_address.clone(),
             dropoff_address.clone(),
+            self.clock.now_epoch_seconds(),
         );
-        match self.deliveries.add(&delivery) {
+        let delivery_id = delivery.id().clone();
+        let inserted = self.unit_of_work.run(|| {
+            self.deliveries.add(&delivery)?;
+            publish(self.outbox, delivery.pull_events())?;
+            Ok::<(), InsertError>(())
+        });
+        match inserted {
             Ok(()) => Ok(Output {
-                delivery_id: delivery.id().clone(),
+                delivery_id,
                 created: true,
             }),
-            Err(RepositoryError::Conflict) => {
+            Err(InsertError::Conflict) => {
                 let existing = self.concurrent_delivery(&order_id)?;
                 replay(&existing, &pickup_address, &dropoff_address)
             }
-            Err(error) => Err(error.into()),
+            Err(InsertError::Failed(error)) => Err(error),
         }
     }
 
@@ -102,10 +137,11 @@ fn replay(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::memory::{MemoryStore, StaticAuthorization};
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
-    use crate::slices::delivery::applications::test_support::{World, service};
-    use crate::slices::delivery::domains::delivery::{DeliveryValidationError, State};
+    use crate::slices::delivery::applications::outbox::OutboxMessage;
+    use crate::slices::delivery::applications::test_support::{NOW, World, service};
+    use crate::slices::delivery::domains::delivery::{DeliveryValidationError, DomainEvent, State};
 
     fn input(pickup: &str) -> Input {
         Input {
@@ -115,11 +151,14 @@ mod tests {
         }
     }
 
-    fn handler(world: &World) -> Handler<'_> {
+    fn handler(world: &World) -> Handler<'_, MemoryStore> {
         Handler {
             authorization: &world.authorization,
+            unit_of_work: &world.store,
             deliveries: &world.store,
+            outbox: &world.store,
             ids: &world.ids,
+            clock: &world.clock,
         }
     }
 
@@ -144,7 +183,16 @@ mod tests {
         assert_eq!(delivery.courier_id(), None);
         assert_eq!(delivery.order_id(), &OrderId::new("order-1"));
         assert_eq!(delivery.pickup_address().as_str(), "Restaurant street 1");
-        assert!(world.store.outbox_messages().is_empty());
+        assert_eq!(delivery.created_at_epoch_seconds(), Some(NOW));
+        assert_eq!(
+            world.store.outbox_messages(),
+            vec![OutboxMessage::delivery(DomainEvent::DeliveryCreated {
+                delivery_id: DeliveryId::new("generated-1"),
+                order_id: OrderId::new("order-1"),
+                created_at_epoch_seconds: NOW,
+            })]
+        );
+        assert_eq!(world.store.commits(), 1);
     }
 
     /// AC-314
@@ -172,6 +220,8 @@ mod tests {
                 .map(|delivery| delivery.id().clone()),
             Some(DeliveryId::new("generated-1"))
         );
+        // The replay records no second `DeliveryCreated`.
+        assert_eq!(world.store.outbox_messages().len(), 1);
     }
 
     /// AC-315

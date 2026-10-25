@@ -23,9 +23,12 @@ const (
 	// OutcomeReleased: the stored assignment matched and its relationships
 	// were deleted.
 	OutcomeReleased fulfillment.Outcome = "released"
-	// OutcomeIgnoredStale: no stored assignment matches the event (another
-	// delivery or courier, or a newer assignment); nothing changes except the
-	// Inbox record.
+	// OutcomeRememberedAhead: no assignment is stored yet (the older
+	// CourierAssignedToDelivery has not been handled); the release is
+	// remembered with its Delivery version, so that assignment is skipped.
+	OutcomeRememberedAhead fulfillment.Outcome = "remembered_ahead"
+	// OutcomeIgnoredStale: the stored assignment belongs to another Delivery
+	// or has a newer Delivery version; nothing changes except the Inbox record.
 	OutcomeIgnoredStale fulfillment.Outcome = "ignored_stale"
 )
 
@@ -34,7 +37,10 @@ type Input struct {
 	EventID    string
 	OrderID    order.ID
 	OccurredAt time.Time
-	DeliveryID string
+	// DeliveryVersion is the aggregate_version of the Delivery in the event
+	// envelope; it orders the courier events of the Order.
+	DeliveryVersion uint64
+	DeliveryID      string
 	// CourierID is the unassigned courier; it is empty for a cancellation,
 	// which releases whichever courier the Delivery has.
 	CourierID string
@@ -108,32 +114,39 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 }
 
 // release applies the event to the stored assignment; order.CourierAssignment
-// decides whether the event names it and what assignment is kept. The release
-// is remembered with its time, so an older assignment redelivered afterwards
-// is skipped by Record Courier Assignment.
+// decides whether the event is stale (another Delivery or an older Delivery
+// version), which relationships it removes and what assignment is kept.
+// Without a stored assignment nothing is deleted. In every applied case the
+// release is remembered with its version, so an older assignment handled
+// afterwards is skipped by Record Courier Assignment.
 func (h Handler) release(ctx context.Context, in Input) (fulfillment.Outcome, error) {
 	stored, found, err := h.assignments.CourierAssignment(ctx, in.OrderID)
 	if err != nil {
 		return "", fmt.Errorf("read courier assignment: %w", err)
 	}
-	if !found {
-		return OutcomeIgnoredStale, nil
-	}
-	kept, ok := stored.Release(order.CourierRelease{
+	release := order.CourierRelease{
 		DeliveryID:        in.DeliveryID,
 		CourierID:         in.CourierID,
 		DeliveryCancelled: in.DeliveryCancelled,
 		OccurredAt:        in.OccurredAt,
-	})
-	if !ok {
-		return OutcomeIgnoredStale, nil
+		DeliveryVersion:   in.DeliveryVersion,
 	}
-	revision, err := h.relationships.ReleaseCourier(ctx, in.OrderID, stored, in.DeliveryCancelled)
-	if err != nil {
-		return "", fmt.Errorf("delete courier relationships: %w", err)
+	outcome, kept := OutcomeRememberedAhead, release.Kept()
+	var revision application.AuthorizationRevision
+	if found {
+		var ok bool
+		if kept, ok = stored.Release(release); !ok {
+			return OutcomeIgnoredStale, nil
+		}
+		outcome = OutcomeReleased
+		if stored.HoldsRelationsOf(release) {
+			if revision, err = h.relationships.ReleaseCourier(ctx, in.OrderID, stored, in.DeliveryCancelled); err != nil {
+				return "", fmt.Errorf("delete courier relationships: %w", err)
+			}
+		}
 	}
 	if err := h.assignments.RememberCourierAssignment(ctx, in.OrderID, kept, string(revision)); err != nil {
 		return "", fmt.Errorf("remember courier release: %w", err)
 	}
-	return OutcomeReleased, nil
+	return outcome, nil
 }
