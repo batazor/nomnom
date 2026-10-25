@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+# Вызов gRPC-метода через internal gateway от имени пользователя (ADR 32): fixture e2e-driver
+# (manifests/fixtures/net-probe.yaml) предъявляет свой projected token audience контекста и
+# user assertion, который тест выпускает на хосте kind-ключом BFF (scripts/mint-jwt.py) —
+# так играются оператор, владелец, кухня и курьер, у которых ещё нет клиентов.
+#
+# Состояние прогона — ConfigMap $state теста (ids, выданные сервисами); jq-программы ниже
+# видят его как $s. Bindings:
+#   audience — nomnom.restaurants или nomnom.delivery (token и aud assertion);
+#   subject  — jq: user id из состояния, например $s.owner;
+#   method   — <полное имя сервиса>/<метод>;
+#   request  — jq: JSON запроса (по умолчанию {});
+#   until    — jq над ответом: вызов повторяется, пока результат не true (по умолчанию —
+#              любой успешный ответ);
+#   wait     — сколько секунд повторять; 0 — одна попытка (команды, кроме идемпотентных);
+#   save     — jq над ответом: объект новых ключей состояния (по умолчанию {}).
+# Assertion живёт 30 s, поэтому выпускается на каждую попытку.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: driver-call
+spec:
+  bindings:
+    - name: request
+      value: '{}'
+    - name: until
+      value: 'true'
+    - name: wait
+      value: 0
+    - name: save
+      value: '{}'
+    - name: gateway
+      value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+  try:
+    - script:
+        timeout: 5m
+        env:
+          - name: STATE
+            value: ($state)
+          - name: AUDIENCE
+            value: ($audience)
+          - name: SUBJECT
+            value: ($subject)
+          - name: METHOD
+            value: ($method)
+          - name: REQUEST
+            value: ($request)
+          - name: UNTIL
+            value: ($until)
+          - name: WAIT
+            value: (to_string($wait))
+          - name: SAVE
+            value: ($save)
+          - name: GATEWAY
+            value: ($gateway)
+        content: |
+          set -eu
+          root="$(git rev-parse --show-toplevel)"
+          state="$(kubectl -n nomnom-bff get configmap "$STATE" -o json | jq -c .data)"
+          request="$(jq -cn --argjson s "$state" "$REQUEST")"
+          subject="$(jq -rn --argjson s "$state" "$SUBJECT")"
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          kubectl -n nomnom-bff get secret bff-assertion-key -o jsonpath='{.data.key\.pem}' | base64 -d >"$key"
+          deadline=$(($(date +%s) + WAIT))
+          while :; do
+            assertion="$(python3 -I "$root/ops/kind/scripts/mint-jwt.py" user-assertion "$key" nomnom-bff-kind "$AUDIENCE" "$subject")"
+            # Ответ с ошибкой grpcurl печатает в stderr как JSON {code, message}.
+            ok=true
+            response="$(kubectl -n nomnom-bff exec deploy/e2e-driver -- sh -c '
+              grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb \
+                -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/$0)" \
+                -H "x-nomnom-user-assertion: $1" -d "$2" "$3" "$4" 2>&1
+            ' "$AUDIENCE" "$assertion" "$request" "$GATEWAY" "$METHOD")" || ok=false
+            if $ok && printf '%s' "$response" | jq -e --argjson s "$state" "$UNTIL" >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "$METHOD as $subject: $response" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          printf '%s\n' "$response"
+          saved="$(printf '%s' "$response" | jq -c --argjson s "$state" "$SAVE | map_values(tostring)")"
+          if [ "$saved" != '{}' ]; then
+            printf '%s' "$saved" | jq -e 'all(.[]; . != "null" and . != "")' >/dev/null ||
+              { echo "$METHOD: nothing to save in $saved" >&2; exit 1; }
+            kubectl -n nomnom-bff patch configmap "$STATE" --type merge -p "{\"data\":$saved}" >/dev/null
+          fi

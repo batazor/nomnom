@@ -1,0 +1,333 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+# Путь заказа насквозь (FR-585, AC-740; design раздела 7 close-order-lifecycle-in-kind).
+# Оператор, владелец, кухня и курьер — fixture e2e-driver с user assertion (templates/
+# driver-call.yaml), покупатель — BFF GraphQL с access token (templates/customer-graphql.yaml).
+#
+# Общий кластер: все ids уникальны на прогон ($run), чужие данные не читаются и не удаляются.
+# Ids, выданные сервисами, шаги передают через ConfigMap $state: outputs Chainsaw живут только
+# внутри шага. Ожидания асинхронных переходов — повтор вызова до условия с таймаутом (wait).
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: order-lifecycle
+spec:
+  description: >
+    Оператор регистрирует ресторан и курьера, владелец заводит меню и открывает ресторан,
+    курьер выходит на линию. Покупатель оформляет заказ через BFF; кухня принимает и готовит
+    его, курьер принимает предложение, забирает и доставляет заказ. В BFF заказ DELIVERED с
+    milestones COURIER_ASSIGNED, PICKED_UP, DELIVERED, оплата списана.
+  bindings:
+    - name: run
+      value: (random('[a-z0-9]{10}'))
+    - name: state
+      value: (join('-', ['order-lifecycle', $run]))
+    - name: courier
+      value: (join('-', ['kind-e2e-courier', $run]))
+  steps:
+    - name: prepare run state
+      try:
+        - assert:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: e2e-driver
+              status:
+                availableReplicas: 1
+        # kind-operator — оператор платформы из ops/kind/authz/bootstrap-kind.yaml.
+        - create:
+            resource:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: ($state)
+              data:
+                run: ($run)
+                operator: kind-operator
+                owner: (join('-', ['kind-e2e-owner', $run]))
+                staff: (join('-', ['kind-e2e-staff', $run]))
+                courier: ($courier)
+                customer: (join('-', ['kind-e2e-customer', $run]))
+                # Адрес доставки отличает предложения этого прогона у курьера.
+                dropoff: (join(' ', ['Kind e2e dropoff', $run]))
+      # В конце теста, в том числе после провала, курьер прогона уходит с линии (если успел
+      # выйти; ответ лишь пишется в log): свободный курьер прошлого прогона получал бы предложения следующих прогонов
+      # до истечения каждого.
+      cleanup:
+        - script:
+            env:
+              - name: COURIER
+                value: ($courier)
+            content: |
+              set -eu
+              root="$(git rev-parse --show-toplevel)"
+              key="$(mktemp)"
+              trap 'rm -f "$key"' EXIT
+              kubectl -n nomnom-bff get secret bff-assertion-key -o jsonpath='{.data.key\.pem}' | base64 -d >"$key"
+              assertion="$(python3 -I "$root/ops/kind/scripts/mint-jwt.py" user-assertion "$key" nomnom-bff-kind nomnom.delivery "$COURIER")"
+              kubectl -n nomnom-bff exec deploy/e2e-driver -- sh -c '
+                grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb \
+                  -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/nomnom.delivery)" \
+                  -H "x-nomnom-user-assertion: $0" -d "{\"courierId\":\"$1\",\"availability\":\"COURIER_AVAILABILITY_UNAVAILABLE\"}" \
+                  internal-gateway.envoy-gateway-system.svc.cluster.local:8080 \
+                  nomnom.delivery.v1.DeliveryService/SetCourierAvailability 2>&1
+              ' "$assertion" "$COURIER" || echo "courier $COURIER stays as is (not registered or not online)"
+
+    # 1. Оператор: ресторан и курьер.
+    - name: operator registers restaurant
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.operator}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant}
+            - name: request
+              value: '{name: ("Kind e2e " + $s.run), ownerId: $s.owner, address: ("Kind e2e pickup " + $s.run)}'
+            - {name: save, value: '{restaurant_id: .restaurant.restaurantId}'}
+    - name: operator registers courier
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.delivery}
+            - {name: subject, value: $s.operator}
+            - {name: method, value: nomnom.delivery.v1.DeliveryService/RegisterCourier}
+            - {name: request, value: '{courierId: $s.courier}'}
+
+    # 2. Владелец: персонал, меню, открытие.
+    - name: owner assigns staff
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.owner}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AssignStaff}
+            - {name: request, value: '{restaurantId: $s.restaurant_id, userId: $s.staff}'}
+    - name: owner creates menu
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.owner}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/CreateMenu}
+            - {name: request, value: '{restaurantId: $s.restaurant_id}'}
+    - name: owner adds menu item
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.owner}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AddMenuItem}
+            - name: request
+              value: '{restaurantId: $s.restaurant_id, name: "Kind e2e soup", price: {amount: "12.50", currency: "EUR"}}'
+            - {name: save, value: '{menu_item_id: .menuItem.menuItemId}'}
+    - name: owner opens restaurant
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.owner}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/OpenRestaurant}
+            - {name: request, value: '{restaurantId: $s.restaurant_id}'}
+
+    # 3. Курьер выходит на линию: позиция и доступность. Dispatch предлагает доставку только
+    # свободному курьеру с позицией.
+    - name: courier reports location
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.delivery}
+            - {name: subject, value: $s.courier}
+            - {name: method, value: nomnom.delivery.v1.DeliveryService/UpdateCourierLocation}
+            - {name: request, value: '{courierId: $s.courier, latitude: 52.52, longitude: 13.405}'}
+    - name: courier goes online
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.delivery}
+            - {name: subject, value: $s.courier}
+            - {name: method, value: nomnom.delivery.v1.DeliveryService/SetCourierAvailability}
+            - {name: request, value: '{courierId: $s.courier, availability: "COURIER_AVAILABILITY_AVAILABLE"}'}
+    # 4. Покупатель оформляет заказ через BFF; повтор с тем же idempotencyKey идемпотентен.
+    - name: customer places order
+      use:
+        template: ../templates/customer-graphql.yaml
+        with:
+          bindings:
+            - name: body
+              value: >-
+                {query: "mutation($input: PlaceOrderInput!) { placeOrder(input: $input) { order { id status } problems { code menuItemIds } } }",
+                 variables: {input: {restaurantId: $s.restaurant_id, items: [{menuItemId: $s.menu_item_id, quantity: 1}],
+                 deliveryAddress: $s.dropoff, idempotencyKey: $s.run}}}
+            - {name: until, value: '.data.placeOrder.order.id != null'}
+            - {name: wait, value: 30}
+            - {name: save, value: '{order_id: .data.placeOrder.order.id}'}
+
+    # 5. Кухня: новый заказ (RECEIVED) — в ListIncomingOrders после авторизации оплаты и
+    # Receive Order Request workflow; принятый попадает в Kitchen Queue (QUEUED).
+    - name: kitchen sees incoming order
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.staff}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ListIncomingOrders}
+            - {name: request, value: '{restaurantId: $s.restaurant_id}'}
+            - name: until
+              value: '[.orders[]?.restaurantOrder | select(.orderId == $s.order_id and .state == "RESTAURANT_ORDER_STATE_RECEIVED")] | length > 0'
+            - {name: wait, value: 120}
+            - name: save
+              value: '{restaurant_order_id: ([.orders[].restaurantOrder | select(.orderId == $s.order_id)][0].restaurantOrderId)}'
+    - name: kitchen accepts order
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.staff}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder}
+            - {name: request, value: '{restaurantId: $s.restaurant_id, restaurantOrderId: $s.restaurant_order_id}'}
+    - name: order is in kitchen queue
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.staff}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/GetKitchenQueue}
+            - {name: request, value: '{restaurantId: $s.restaurant_id}'}
+            - name: until
+              value: >-
+                [.entries[]?.restaurantOrder | select(.restaurantOrderId == $s.restaurant_order_id
+                 and .state == "RESTAURANT_ORDER_STATE_QUEUED")] | length > 0
+            - {name: wait, value: 30}
+
+    # 6. Курьер: после Restaurant Order Accepted workflow создаёт доставку, Dispatch
+    # предлагает её свободному курьеру.
+    - name: courier receives offer
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.delivery}
+            - {name: subject, value: $s.courier}
+            - {name: method, value: nomnom.delivery.v1.DeliveryService/ListAvailableDeliveryOffers}
+            - {name: request, value: '{courierId: $s.courier}'}
+            - {name: until, value: '[.. | objects | select(has("offerId") and (tostring | contains($s.dropoff)))] | length > 0'}
+            - {name: wait, value: 180}
+            - name: save
+              value: >-
+                [.. | objects | select(has("offerId") and (tostring | contains($s.dropoff)))][0]
+                | {offer_id: .offerId, delivery_id: .deliveryId}
+    - name: courier accepts offer
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.delivery}
+            - {name: subject, value: $s.courier}
+            - {name: method, value: nomnom.delivery.v1.DeliveryService/AcceptDeliveryOffer}
+            - {name: request, value: '{offerId: $s.offer_id, courierId: $s.courier}'}
+
+    # 7. Кухня готовит заказ: Preparing → Assembled → Ready.
+    - name: kitchen starts preparation
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.staff}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/StartPreparation}
+            - {name: request, value: '{restaurantId: $s.restaurant_id, restaurantOrderId: $s.restaurant_order_id}'}
+    - name: kitchen assembles order
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.staff}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderAssembled}
+            - {name: request, value: '{restaurantId: $s.restaurant_id, restaurantOrderId: $s.restaurant_order_id}'}
+    - name: kitchen marks order ready
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.staff}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderReady}
+            - {name: request, value: '{restaurantId: $s.restaurant_id, restaurantOrderId: $s.restaurant_order_id}'}
+    # Факты кухни и назначения доходят до orders через Kafka: Pickup — после того, как
+    # покупатель видит готовность и курьера.
+    - name: customer sees courier and readiness
+      use:
+        template: ../templates/customer-graphql.yaml
+        with:
+          bindings:
+            - name: body
+              value: '{query: "query($id: ID!) { order(id: $id) { status milestones { kind } } }", variables: {id: $s.order_id}}'
+            - name: until
+              value: >-
+                [.data.order.milestones[]?.kind] as $kinds
+                | ($kinds | index("COURIER_ASSIGNED")) != null and ($kinds | index("READY_FOR_PICKUP")) != null
+            - {name: wait, value: 120}
+
+    # 8. Курьер забирает и доставляет заказ.
+    - name: courier confirms pickup
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.delivery}
+            - {name: subject, value: $s.courier}
+            - {name: method, value: nomnom.delivery.v1.DeliveryService/ConfirmPickup}
+            - {name: request, value: '{deliveryId: $s.delivery_id, courierId: $s.courier}'}
+    - name: courier confirms delivery
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.delivery}
+            - {name: subject, value: $s.courier}
+            - {name: method, value: nomnom.delivery.v1.DeliveryService/ConfirmDelivery}
+            - {name: request, value: '{deliveryId: $s.delivery_id, courierId: $s.courier}'}
+
+    # 9. Покупатель видит доставленный заказ; workflow списал оплату после Pickup.
+    - name: customer sees delivered order
+      use:
+        template: ../templates/customer-graphql.yaml
+        with:
+          bindings:
+            - name: body
+              value: '{query: "query($id: ID!) { order(id: $id) { status milestones { kind } } }", variables: {id: $s.order_id}}'
+            - name: until
+              value: >-
+                .data.order.status == "DELIVERED"
+                and ([.data.order.milestones[].kind] | contains(["COURIER_ASSIGNED", "PICKED_UP", "DELIVERED"]))
+            - {name: wait, value: 120}
+    - name: payment is captured
+      try:
+        # Оплата — в PostgreSQL payments (ADR 8); у e2e-driver нет identity payments.
+        - script:
+            timeout: 1m
+            env:
+              - name: STATE
+                value: ($state)
+            content: |
+              set -eu
+              order="$(kubectl -n nomnom-bff get configmap "$STATE" -o jsonpath='{.data.order_id}')"
+              # psql подставляет переменные только во входной поток, не в -c.
+              echo "SELECT state FROM payments WHERE order_id = :'order';" |
+                kubectl -n nomnom-data exec -i deploy/postgres-payments -- \
+                  psql -U payments -d payments -tA -v ON_ERROR_STOP=1 -v order="$order"
+            check:
+              ($error): ~
+              (trim_space($stdout)): captured
