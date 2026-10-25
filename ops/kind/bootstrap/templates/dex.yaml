@@ -1,6 +1,7 @@
 # Вход в браузере (ADR 35). ТОЛЬКО для kind.
-#   - Dex: OIDC provider со staticPasswords и storage memory. Issuer — адрес, по которому его
-#     видит браузер (port-forward svc/dex на localhost); Router и BFF берут JWKS по адресу
+#   - Dex: OIDC provider со staticPasswords и storage sqlite3 на PVC dex-data: ключи подписи
+#     и refresh tokens переживают перезапуск pod, входы и JWKS не сбрасываются. Issuer — адрес,
+#     по которому его видит браузер (port-forward svc/dex на localhost); Router и BFF берут JWKS по адресу
 #     Service. Ключи подписи Dex создаёт при старте и ротирует сам, поэтому JWKS читается по
 #     URL, а не из ConfigMap. oauth2.passwordConnector включает password grant: кнопка демо
 #     на доске входит под demo@nomnom.test одним запросом, без формы Dex.
@@ -9,7 +10,7 @@
 {{- $dex := .Values.dex }}
 {{- $config := dict
   "issuer" $dex.issuer
-  "storage" (dict "type" "memory")
+  "storage" (dict "type" "sqlite3" "config" (dict "file" "/var/dex/dex.db"))
   "web" (dict "http" "0.0.0.0:5556" "allowedOrigins" $dex.allowedOrigins)
   "telemetry" (dict "http" "0.0.0.0:5558")
   "oauth2" (dict "skipApprovalScreen" true "responseTypes" (list "code") "passwordConnector" "local")
@@ -40,6 +41,13 @@ metadata:
     {{- include "bootstrap.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  # Один pod владеет файлом sqlite на ReadWriteOnce томе: старый pod останавливается до
+  # запуска нового.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: dex
@@ -54,6 +62,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
+        fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -87,13 +96,31 @@ spec:
             # Entrypoint образа рендерит конфигурацию (gomplate) во временный файл.
             - name: tmp
               mountPath: /tmp
+            - name: data
+              mountPath: /var/dex
       volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: dex-data
         - name: config
           configMap:
             name: dex
         - name: tmp
           emptyDir:
             sizeLimit: 1Mi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dex-data
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 64Mi
 ---
 apiVersion: v1
 kind: Service
