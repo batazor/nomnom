@@ -586,6 +586,41 @@ test("MongoDB commands become client spans and db.client.operation.duration with
   }
 });
 
+test("MongoDB commands outside a trace record the metric but open no root span", async () => {
+  const { exporter, telemetry, collect } =
+    startTestTelemetry("restaurants-relay");
+  try {
+    const mongo = new MongoCommandTelemetry();
+    // Relay lease polling runs outside any trace.
+    mongo.started(
+      {
+        databaseName: "restaurants",
+        address: "mongodb-0:27017",
+        connectionId: 1,
+        requestId: 7,
+        commandName: "findAndModify",
+        command: { findAndModify: "outbox_leases" },
+      } as never,
+      ROOT_CONTEXT,
+    );
+    mongo.succeeded({ requestId: 7, connectionId: 1 } as never);
+    assert.equal(exporter.getFinishedSpans().length, 0);
+    const labels = pointsOf(
+      await collect(),
+      "db.client.operation.duration",
+    ).map((point) => point.attributes);
+    assert.deepEqual(labels, [
+      {
+        "db.system.name": "mongodb",
+        "db.operation.name": "findAndModify",
+        "db.collection.name": "outbox_leases",
+      },
+    ]);
+  } finally {
+    await telemetry.shutdown();
+  }
+});
+
 test("runtime and process metrics share the resource of the traces", async () => {
   const { exporter, telemetry, collect } = startTestTelemetry("restaurants", {
     OTEL_RESOURCE_ATTRIBUTES:

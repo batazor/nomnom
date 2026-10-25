@@ -2,6 +2,7 @@ import {
   type Context,
   context,
   type Histogram,
+  INVALID_SPAN_CONTEXT,
   type Meter,
   metrics,
   type Span,
@@ -121,21 +122,30 @@ export class MongoCommandTelemetry {
       "db.operation.name": event.commandName,
       ...(collection === undefined ? {} : { "db.collection.name": collection }),
     };
-    const span = trace.getTracer(TRACER_NAME).startSpan(
-      collection === undefined
-        ? event.commandName
-        : `${event.commandName} ${collection}`,
-      {
-        kind: SpanKind.CLIENT,
-        attributes: {
-          ...attributes,
-          "db.namespace": event.databaseName,
-          "server.address": server.address,
-          ...(server.port === undefined ? {} : { "server.port": server.port }),
-        },
-      },
-      parent,
-    );
+    // Spans only inside an existing trace: background polling (relay lease, outbox
+    // reads) would otherwise open a root trace per command. The metric is still
+    // recorded through the non-recording span.
+    const parentSpan = trace.getSpanContext(parent);
+    const span =
+      parentSpan !== undefined && trace.isSpanContextValid(parentSpan)
+        ? trace.getTracer(TRACER_NAME).startSpan(
+            collection === undefined
+              ? event.commandName
+              : `${event.commandName} ${collection}`,
+            {
+              kind: SpanKind.CLIENT,
+              attributes: {
+                ...attributes,
+                "db.namespace": event.databaseName,
+                "server.address": server.address,
+                ...(server.port === undefined
+                  ? {}
+                  : { "server.port": server.port }),
+              },
+            },
+            parent,
+          )
+        : trace.wrapSpanContext(INVALID_SPAN_CONTEXT);
     this.#inFlight.set(key(event), {
       span,
       started: this.#now(),
