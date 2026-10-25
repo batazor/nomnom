@@ -1,0 +1,6 @@
+# Бинарники и покрытие Go.
+bin/
+*.test
+coverage.out
+config.local.yaml
+ops/helm/charts/

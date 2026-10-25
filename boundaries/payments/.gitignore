@@ -1,0 +1,9 @@
+# Окружение и кэши Python.
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.coverage
+.env
+ops/helm/charts/

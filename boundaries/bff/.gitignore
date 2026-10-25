@@ -1,2 +1,4 @@
 # Ignore the binary files
 release/
+node_modules/
+plugins/bff/bin/

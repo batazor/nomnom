@@ -1,0 +1,4 @@
+# Артефакты сборки Cargo.
+target/
+config.local.toml
+ops/helm/charts/

@@ -1,0 +1,6 @@
+# Зависимости и сборка Node.
+node_modules/
+dist/
+coverage/
+.env
+ops/helm/charts/
