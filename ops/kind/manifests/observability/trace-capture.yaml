@@ -1,12 +1,6 @@
 # Приёмник traces для проверок kind (verify.sh 4.2): OTLP gRPC → debug exporter в stdout.
 # Не заменяет Alloy (ADR 9): traces не хранятся и никуда не отправляются.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: nomnom-observability
-  labels:
-    nomnom.dev/tier: infra
----
+# Namespace nomnom-observability — manifests/base/namespaces.yaml.
 apiVersion: v1
 kind: ConfigMap
 metadata:

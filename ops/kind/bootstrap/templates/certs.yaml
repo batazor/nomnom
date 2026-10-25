@@ -1,10 +1,12 @@
 # Локальный CA тестового окружения: самоподписанный bootstrap issuer выпускает корневой
 # сертификат nomnom-local-ca, а ClusterIssuer nomnom-local-ca подписывает им сертификаты
-# gateway. Корень для клиентов: scripts/local-ca.sh (curl --cacert).
+# gateway. Корень для клиентов: make kind-local-ca (curl --cacert).
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: nomnom-selfsigned-bootstrap
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
 spec:
   selfSigned: {}
 ---
@@ -13,6 +15,8 @@ kind: Certificate
 metadata:
   name: nomnom-local-ca
   namespace: cert-manager
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
 spec:
   isCA: true
   commonName: nomnom local CA
@@ -30,6 +34,8 @@ apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: nomnom-local-ca
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
 spec:
   ca:
     secretName: nomnom-local-ca

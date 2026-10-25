@@ -5,6 +5,9 @@
 include ops/kind/versions.env
 export GATEWAY_API_VERSION
 export KIND_CLUSTER_NAME ?= nomnom-test
+# Host-порты extraPortMappings ops/kind/cluster.yaml: NodePort 30080 (BFF) и 30085 (public gateway).
+export BFF_HOST_PORT ?= 18080
+export WEBHOOKS_HOST_PORT ?= 18085
 KIND_SCRIPTS := ops/kind/scripts
 # Skaffold запускается из каталога конфигурации: его пути относительны рабочему каталогу.
 SKAFFOLD := cd ops/kind/skaffold && skaffold
@@ -12,7 +15,7 @@ SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
 # GRAFANA_CLOUD=1: kind-deploy/kind-dev с profile grafana-cloud (ops/grafana-cloud/README.md).
 SKAFFOLD_APP_FLAGS := --module apps $(SKAFFOLD_FLAGS) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
 
-.PHONY: buf-check buf-generate kind-up kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop
+.PHONY: buf-check buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop
 buf-check: ## проверить формат, lint и компилируемость всех Protobuf-модулей
 	@buf format --diff --exit-code
 	@buf lint
@@ -22,9 +25,19 @@ buf-generate: ## сгенерировать stubs владельцев для в
 	@cd boundaries/restaurants/infrastructure/grpc && buf generate --template buf.gen.yaml
 	@cd boundaries/delivery/infrastructure/grpc && buf generate --template buf.gen.yaml
 	@cd boundaries/payments/infrastructure/grpc && buf generate --template buf.gen.yaml
-kind-up: ## создать кластер, предзагрузить образы платформы, установить Cilium и Envoy Gateway
-	@$(KIND_SCRIPTS)/cluster.sh create
+kind-cluster: ## создать single-node кластер kind из ops/kind/cluster.yaml (существующий переиспользуется)
+	@test "$$(kind version | cut -d' ' -f2)" = "$(KIND_VERSION)" || { echo "kind $(KIND_VERSION) is required by ops/kind/versions.env" >&2; exit 1; }
+	@test "$$(skaffold version)" = "$(SKAFFOLD_VERSION)" || { echo "skaffold $(SKAFFOLD_VERSION) is required by ops/kind/versions.env" >&2; exit 1; }
+	@kind get clusters | grep -Fxq '$(KIND_CLUSTER_NAME)' || \
+	  sed -e 's|__BFF_HOST_PORT__|$(BFF_HOST_PORT)|' -e 's|__WEBHOOKS_HOST_PORT__|$(WEBHOOKS_HOST_PORT)|' ops/kind/cluster.yaml | \
+	  kind create cluster --name '$(KIND_CLUSTER_NAME)' --image '$(KIND_NODE_IMAGE)' --config=-
+kind-up: kind-cluster ## создать кластер и установить платформу: Cilium + Hubble, Envoy Gateway, cert-manager
 	@$(SKAFFOLD) run --module platform $(SKAFFOLD_FLAGS)
+kind-local-ca: ## сохранить корень локального CA в ops/kind/.artifacts/nomnom-local-ca.crt и вывести путь
+	@mkdir -p ops/kind/.artifacts
+	@kubectl --context kind-$(KIND_CLUSTER_NAME) -n cert-manager get secret nomnom-local-ca \
+	  -o jsonpath='{.data.ca\.crt}' | base64 -d >ops/kind/.artifacts/nomnom-local-ca.crt
+	@echo ops/kind/.artifacts/nomnom-local-ca.crt
 kind-deploy: ## Skaffold: собрать образы, загрузить в kind, развернуть gateway и приложения, дождаться readiness
 	@$(SKAFFOLD) run $(SKAFFOLD_APP_FLAGS) --status-check=true
 kind-dev: ## Skaffold dev loop: пересборка и передеплой приложений при изменении исходников
@@ -39,8 +52,8 @@ kind-policies-delete: ## удалить NetworkPolicy
 	@$(KIND_SCRIPTS)/policies.sh delete
 kind-diagnostics: ## сохранить logs, events, Gateway API и Cilium/Hubble в ops/kind/.artifacts
 	@$(KIND_SCRIPTS)/diagnostics.sh
-kind-down: ## удалить тестовый кластер
-	@$(KIND_SCRIPTS)/cluster.sh delete
+kind-down: ## удалить тестовый кластер (несуществующий — не ошибка)
+	@kind delete cluster --name '$(KIND_CLUSTER_NAME)'
 kind-grafana-cloud-stop: ## остановить Alloy → Grafana Cloud, чтобы не расходовать квоту free tier
 	@kubectl --context kind-$(KIND_CLUSTER_NAME) -n nomnom-observability scale deployment/alloy --replicas=0
 kind-e2e: ## полный неинтерактивный прогон для CI; KIND_KEEP=1 сохраняет кластер

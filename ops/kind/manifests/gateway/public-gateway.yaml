@@ -3,7 +3,7 @@
 # service-to-service вызовов. Публикуется только явно перечисленные HTTP-пути.
 #
 # Только HTTPS: TLS терминирует Envoy сертификатом, который cert-manager выпускает по
-# аннотации Gateway от локального CA (manifests/certs/issuers.yaml) и продлевает сам.
+# аннотации Gateway от локального CA (chart ops/kind/bootstrap, templates/certs.yaml) и продлевает сам.
 # kind: NodePort 30085 → host 127.0.0.1:${WEBHOOKS_HOST_PORT} (cluster.yaml); имя
 # webhooks.nomnom.localhost резолвится в 127.0.0.1.
 apiVersion: gateway.envoyproxy.io/v1alpha1

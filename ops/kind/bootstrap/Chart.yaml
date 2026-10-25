@@ -1,0 +1,8 @@
+apiVersion: v2
+name: kind-bootstrap
+description: >-
+  Bootstrap тестового kind-окружения (ADR 34): локальный CA и ключ user assertions BFF
+  (cert-manager), SpiceDB, PostgreSQL и MongoDB со случайными учётными данными, JWKS для
+  проверки identity. ТОЛЬКО для kind.
+type: application
+version: 0.1.0

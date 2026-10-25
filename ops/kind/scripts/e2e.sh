@@ -12,13 +12,13 @@ on_exit() {
     "${scripts}/diagnostics.sh" || true
   fi
   if [[ "${KIND_KEEP:-0}" != 1 ]]; then
-    "${scripts}/cluster.sh" delete || true
+    kind delete cluster --name "${KIND_CLUSTER_NAME}" || true
   fi
   exit "${status}"
 }
 trap on_exit EXIT
 
-"${scripts}/cluster.sh" create
+make -C "${KIND_DIR}/../.." kind-cluster
 (cd "${KIND_DIR}/skaffold" && GATEWAY_API_VERSION="${GATEWAY_API_VERSION}" \
   skaffold run --kube-context "${KUBE_CONTEXT}" --status-check=true)
 # Тот же набор проверок, что make kind-test: verify.sh и Chainsaw (ops/kind/e2e).

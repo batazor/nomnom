@@ -71,3 +71,12 @@ metadata:
   name: nomnom-data
   labels:
     nomnom.dev/tier: infra
+---
+# Observability (ADR 9): trace-capture всегда, Alloy — с profile grafana-cloud. Нужен до chart
+# kind-bootstrap: в нём Secret alloy-postgres.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-observability
+  labels:
+    nomnom.dev/tier: infra

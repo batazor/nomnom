@@ -1,0 +1,231 @@
+# MongoDB restaurants тестового окружения (ADR 8, ADR 31): single-node replica set rs0,
+# нужен для multi-document транзакций. emptyDir, данные не переживают пересоздание Pod.
+# Root-пароль, пароль restaurants и keyFile — Secret mongodb-restaurants, URI приложения —
+# Secret restaurants-mongodb (nomnom-restaurants); значения сохраняются между deploy.
+# rs.initiate и пользователя restaurants создаёт post-install/post-upgrade Job.
+{{- $secret := dict "namespace" "nomnom-data" "name" "mongodb-restaurants" }}
+{{- $rootPassword := include "bootstrap.secretValue" (merge (dict "key" "root-password" "length" 48) $secret) }}
+{{- $password := include "bootstrap.secretValue" (merge (dict "key" "password" "length" 48) $secret) }}
+{{- $keyfile := include "bootstrap.secretValue" (merge (dict "key" "keyfile" "length" 756) $secret) }}
+{{- $host := "mongodb-restaurants.nomnom-data.svc.cluster.local:27017" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-restaurants
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  root-password: {{ $rootPassword | b64enc }}
+  password: {{ $password | b64enc }}
+  keyfile: {{ $keyfile | b64enc }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: restaurants-mongodb
+  namespace: nomnom-restaurants
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  uri: {{ printf "mongodb://restaurants:%s@%s/restaurants?replicaSet=rs0&authSource=restaurants" $password $host | b64enc }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-restaurants
+  namespace: nomnom-data
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/instance: restaurants
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/instance: restaurants
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb
+        app.kubernetes.io/instance: restaurants
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # mongod отвергает keyFile, доступный группе: копия с режимом 0400 владельца 999.
+        - name: keyfile
+          image: {{ .Values.images.mongodb }}
+          command: ["sh", "-c", "cp /secret/keyfile /keyfile/keyfile && chmod 0400 /keyfile/keyfile"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: secret
+              mountPath: /secret
+              readOnly: true
+            - name: keyfile
+              mountPath: /keyfile
+      containers:
+        - name: mongodb
+          image: {{ .Values.images.mongodb }}
+          args: ["--replSet", "rs0", "--bind_ip_all", "--keyFile", "/keyfile/keyfile"]
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: root
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-restaurants
+                  key: root-password
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          readinessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            - name: configdb
+              mountPath: /data/configdb
+            - name: keyfile
+              mountPath: /keyfile
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: secret
+          secret:
+            secretName: mongodb-restaurants
+            items:
+              - key: keyfile
+                path: keyfile
+        - name: keyfile
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+        - name: configdb
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-restaurants
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  # rs.initiate регистрирует member по DNS Service: адрес должен резолвиться до readiness.
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/instance: restaurants
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: mongodb
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-restaurants-init
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+data:
+  init.js: {{ .Files.Get "files/mongodb-init.js" | toJson }}
+---
+# Идемпотентно: rs.initiate, если replica set ещё не создан, затем пользователь restaurants
+# (readWrite и dbAdmin: restaurants-migrate создаёт коллекции и индексы). Hook запускается
+# после --wait, то есть после readiness MongoDB, и пересоздаётся при каждом upgrade.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-restaurants-init
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb-restaurants-init
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: init
+          image: {{ .Values.images.mongodb }}
+          command: ["mongosh"]
+          args:
+            - --quiet
+            - mongodb://{{ $host }}/admin?directConnection=true
+            - --username=root
+            - --password=$(MONGO_ROOT_PASSWORD)
+            - --authenticationDatabase=admin
+            - --file=/init/init.js
+          env:
+            - name: HOME
+              value: /tmp
+            - name: MONGODB_MEMBER
+              value: {{ $host }}
+            - name: MONGO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-restaurants
+                  key: root-password
+            - name: RESTAURANTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-restaurants
+                  key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: init
+              mountPath: /init
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: init
+          configMap:
+            name: mongodb-restaurants-init
+        - name: tmp
+          emptyDir: {}
