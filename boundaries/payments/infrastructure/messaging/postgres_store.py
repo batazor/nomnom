@@ -32,15 +32,8 @@ class PostgresOutboxStore:
 
         A lost lock session is dropped and the lock is retried on a new connection.
         """
-        conn = self._lock_conn
-        if conn is not None:
-            try:
-                conn.execute("SELECT 1")
-                return True
-            except psycopg.Error:
-                # Session lost: so is the lock; another replica may take over.
-                logger.warning("outbox relay lock session lost", exc_info=True)
-                self._close_lock_conn()
+        if self._lock_conn is not None and self.holds_lock():
+            return True
         conn = psycopg.connect(self._dsn, autocommit=True)
         try:
             row = conn.execute("SELECT pg_try_advisory_lock(%s)", (ADVISORY_LOCK_KEY,)).fetchone()
@@ -53,6 +46,24 @@ class PostgresOutboxStore:
             return True
         conn.close()
         return False
+
+    def holds_lock(self) -> bool:
+        """Round-trip on the lock session: the lock lives exactly as long as that session.
+
+        libpq never reconnects silently, so a successful query on the same connection
+        means the same session and the same lock. A failed query drops the connection.
+        """
+        conn = self._lock_conn
+        if conn is None:
+            return False
+        try:
+            conn.execute("SELECT 1")
+        except psycopg.Error:
+            # Session lost: so is the lock; another replica may take over.
+            logger.warning("outbox relay lock session lost", exc_info=True)
+            self._close_lock_conn()
+            return False
+        return True
 
     def unlock(self) -> None:
         """Release the advisory lock and close its session; failures are logged."""

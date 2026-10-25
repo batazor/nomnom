@@ -6,6 +6,11 @@ publishes them one by one with an idempotent Kafka producer (``acks=all``) and m
 ``published_at`` only after the broker's delivery report. The first failure stops the
 batch (head-of-line): it gets ``attempts``/``last_error`` and the next cycle starts
 from it again. Published records older than the retention are deleted.
+
+The lock session is checked before every publish: a replica that lost it mid-batch
+stops at once instead of publishing next to the new active replica. A fatal producer
+error stops the worker with an error, so the process exits non-zero and is restarted.
+Shutdown interrupts the delivery report wait; the record stays unpublished.
 """
 
 import logging
@@ -18,10 +23,12 @@ from datetime import UTC, datetime, timedelta
 from .kafka_publisher import DEFAULT_DELIVERY_TIMEOUT, KafkaPublisher
 from .outbox import (
     WATERMILL_UUID_HEADER,
+    FatalPublishError,
     OutboxRecord,
     OutboxStore,
     Publisher,
     PublishError,
+    PublishInterruptedError,
     TopicBacklog,
     format_rfc3339_nano,
     kafka_headers,
@@ -35,12 +42,14 @@ __all__ = [
     "DEFAULT_DELIVERY_TIMEOUT",
     "WATERMILL_UUID_HEADER",
     "CycleResult",
+    "FatalPublishError",
     "KafkaPublisher",
     "OutboxRecord",
     "OutboxRelay",
     "OutboxStore",
     "PostgresOutboxStore",
     "PublishError",
+    "PublishInterruptedError",
     "Publisher",
     "RelayMetrics",
     "RelayWorker",
@@ -57,12 +66,16 @@ CLEANUP_INTERVAL = timedelta(minutes=1)
 
 @dataclass(frozen=True)
 class CycleResult:
-    """Outcome of one relay cycle; ``active`` is ``False`` on a standby replica."""
+    """Outcome of one relay cycle; ``active`` is ``False`` on a standby replica.
+
+    ``lock_lost`` means the lock session died during the batch; the batch stopped.
+    """
 
     active: bool
     published: int = 0
     failed: bool = False
     deleted: int = 0
+    lock_lost: bool = False
 
 
 class OutboxRelay:
@@ -92,7 +105,13 @@ class OutboxRelay:
         """Publish one batch in ``seq`` order, then run retention cleanup and refresh metrics.
 
         The batch stops at the first failed record, so records of an aggregate are never
-        reordered; ``should_stop`` is checked between records.
+        reordered; ``should_stop`` is checked between records and interrupts the wait for
+        a delivery report. Before every publish the lock session is checked: once it is
+        lost another replica may already publish the same records, so the batch stops.
+
+        Raises:
+            FatalPublishError: the producer can no longer publish; the failed attempt is
+                recorded first.
         """
         if not self._store.try_lock():
             # Standby: the active replica reports the backlog.
@@ -103,9 +122,28 @@ class OutboxRelay:
         for record in self._store.fetch_pending(self._batch_size):
             if should_stop():
                 break
+            if not self._store.holds_lock():
+                logger.warning(
+                    "outbox relay lock lost mid-batch, stopping after %d published records",
+                    published,
+                )
+                # Standby from now on: the new active replica reports the backlog.
+                self._metrics.set_backlog([])
+                return CycleResult(active=True, published=published, lock_lost=True)
             started = time.perf_counter()
             try:
-                self._publisher.publish(record)
+                self._publisher.publish(record, should_stop)
+            except PublishInterruptedError:
+                logger.info(
+                    "outbox record %s (%s) left unpublished: shutdown",
+                    record.event_id,
+                    record.event_type,
+                )
+                break
+            except FatalPublishError as error:
+                self._store.record_failure(record.seq, str(error))
+                self._metrics.failed(record, "permanent")
+                raise
             except PublishError as error:
                 self._store.record_failure(record.seq, str(error))
                 self._metrics.failed(record, "transient" if error.retriable else "permanent")
@@ -159,7 +197,11 @@ class RelayWorker:
         """Nothing to start: the loop runs in ``run``."""
 
     def run(self) -> None:
-        """Run relay cycles until shutdown; a failed cycle is logged and retried later."""
+        """Run relay cycles until shutdown; a failed cycle is logged and retried later.
+
+        Raises:
+            FatalPublishError: the producer is unusable; the lock is released first.
+        """
         try:
             while not self._stop.is_set():
                 busy = False
@@ -167,8 +209,17 @@ class RelayWorker:
                     result = self._relay.run_once(self._stop.is_set)
                     # A full successful batch: more records are probably waiting.
                     busy = (
-                        result.active and not result.failed and result.published >= self._batch_size
+                        result.active
+                        and not result.failed
+                        and not result.lock_lost
+                        and result.published >= self._batch_size
                     )
+                except FatalPublishError:
+                    # Restart is the only recovery: the process exits non-zero (runtime
+                    # contract) and Kubernetes restarts it; the lock goes to a standby now.
+                    logger.exception("outbox relay stopped: kafka producer is unusable")
+                    self._store.unlock()
+                    raise
                 except Exception:
                     logger.exception("outbox relay cycle failed")
                 if not busy:

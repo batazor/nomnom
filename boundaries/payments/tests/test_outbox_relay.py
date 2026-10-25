@@ -1,15 +1,20 @@
 """Outbox relay logic of ADR 31: headers, head-of-line, retention, single active instance."""
 
+import threading
+import time
 import unittest
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, ClassVar
 
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 from infrastructure.messaging import OutboxRecord, OutboxRelay, kafka_headers
 from infrastructure.messaging.relay import (
+    FatalPublishError,
     PublishError,
+    PublishInterruptedError,
     RelayMetrics,
     RelayWorker,
     TopicBacklog,
@@ -46,8 +51,17 @@ class FakeStore:
         self.locked = True
         self.cutoffs: list[datetime] = []
         self.unlocked = False
+        self.lock_checks = 0
+        # Lock session dies after this many successful holds_lock checks.
+        self.lose_lock_after: int | None = None
 
     def try_lock(self) -> bool:
+        return self.locked
+
+    def holds_lock(self) -> bool:
+        if self.lose_lock_after is not None and self.lock_checks >= self.lose_lock_after:
+            self.locked = False
+        self.lock_checks += 1
         return self.locked
 
     def unlock(self) -> None:
@@ -79,14 +93,31 @@ class FakeStore:
 
 
 class FakePublisher:
-    def __init__(self, fail_seqs: set[int] | None = None, retriable: bool = True) -> None:
+    def __init__(
+        self,
+        fail_seqs: set[int] | None = None,
+        retriable: bool = True,
+        fatal_seqs: set[int] | None = None,
+        block_seqs: set[int] | None = None,
+    ) -> None:
         self.fail_seqs = set(fail_seqs or ())
         self.retriable = retriable
+        self.fatal_seqs = set(fatal_seqs or ())
+        # Records whose delivery report never arrives (broker outage) until should_stop.
+        self.block_seqs = set(block_seqs or ())
+        self.blocked = threading.Event()
         self.sent: list[int] = []
 
-    def publish(self, record: OutboxRecord) -> None:
+    def publish(self, record: OutboxRecord, should_stop: Callable[[], bool]) -> None:
+        if record.seq in self.fatal_seqs:
+            raise FatalPublishError("delivery: fatal idempotent producer error")
         if record.seq in self.fail_seqs:
             raise PublishError("broker down", retriable=self.retriable)
+        if record.seq in self.block_seqs:
+            self.blocked.set()
+            while not should_stop():
+                time.sleep(0.01)
+            raise PublishInterruptedError("interrupted")
         self.sent.append(record.seq)
 
     def close(self, timeout: float) -> None:
@@ -258,6 +289,45 @@ class RelayCycleTest(unittest.TestCase):
         self.assertEqual(duration.count, 1)
         self.assertEqual(duration.attributes["nomnom.outcome"], "success")
 
+    def test_lock_checked_before_every_publish(self) -> None:
+        store = FakeStore([_record(1), _record(2), _record(3)])
+        self._relay(store, FakePublisher()).run_once()
+        self.assertEqual(store.lock_checks, 3)
+
+    def test_lock_lost_mid_batch_stops_publishing(self) -> None:
+        store = FakeStore([_record(1), _record(2), _record(3)])
+        store.lose_lock_after = 2
+        publisher = FakePublisher()
+        result = self._relay(store, publisher).run_once()
+        # The standby may already publish 3: this replica must not publish it too.
+        self.assertEqual(publisher.sent, [1, 2])
+        self.assertEqual(set(store.published), {1, 2})
+        self.assertEqual(store.failures, {})
+        self.assertEqual((result.published, result.failed, result.lock_lost), (2, False, True))
+        # No retention cleanup and no backlog report without the lock.
+        self.assertEqual(store.cutoffs, [])
+        self.assertEqual(_points(self.reader).get("nomnom.outbox.pending.messages", []), [])
+
+    def test_fatal_publish_error_is_recorded_and_raised(self) -> None:
+        store = FakeStore([_record(1), _record(2), _record(3)])
+        publisher = FakePublisher(fatal_seqs={2})
+        with self.assertRaises(FatalPublishError):
+            self._relay(store, publisher).run_once()
+        self.assertEqual(publisher.sent, [1])
+        self.assertEqual(set(store.published), {1})
+        self.assertEqual(list(store.failures), [2])
+        retries = _points(self.reader)["nomnom.outbox.publish.retries"]
+        self.assertEqual(retries[0].attributes["nomnom.error.class"], "permanent")
+
+    def test_interrupted_publish_leaves_record_unpublished_without_failure(self) -> None:
+        store = FakeStore([_record(1), _record(2)])
+        publisher = FakePublisher(block_seqs={1})
+        result = self._relay(store, publisher).run_once(lambda: publisher.blocked.is_set())
+        self.assertEqual(publisher.sent, [])
+        self.assertEqual(store.published, {})
+        self.assertEqual(store.failures, {})
+        self.assertEqual((result.published, result.failed), (0, False))
+
 
 class RelayWorkerTest(unittest.TestCase):
     def test_shutdown_stops_loop_and_releases_lock(self) -> None:
@@ -282,6 +352,222 @@ class RelayWorkerTest(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(publisher.sent, [1])
         self.assertTrue(store.unlocked)
+
+    def _worker(
+        self, store: FakeStore, publisher: FakePublisher
+    ) -> tuple[RelayWorker, threading.Thread, list[BaseException]]:
+        metrics, _ = _metrics()
+        relay = OutboxRelay(
+            store, publisher, batch_size=10, retention=timedelta(days=7), metrics_=metrics
+        )
+        worker = RelayWorker(relay, store, publisher, batch_size=10, poll_interval=0.01)
+        errors: list[BaseException] = []
+
+        def run() -> None:
+            try:
+                worker.run()
+            except BaseException as error:
+                errors.append(error)
+
+        worker.start()
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        return worker, thread, errors
+
+    def test_fatal_publish_error_stops_worker_with_error(self) -> None:
+        store = FakeStore([_record(1)])
+        worker, thread, errors = self._worker(store, FakePublisher(fatal_seqs={1}))
+        thread.join(2)
+        self.assertFalse(thread.is_alive(), "worker kept running after a fatal error")
+        self.assertEqual([type(e) for e in errors], [FatalPublishError])
+        # A standby takes over without waiting for the process to exit.
+        self.assertTrue(store.unlocked)
+        worker.shutdown(time.monotonic() + 1)
+
+    def test_fatal_error_ends_lifecycle_with_error(self) -> None:
+        from pkg.lifecycle import Lifecycle, LifecycleConfig, LifecycleError
+
+        store = FakeStore([_record(1)])
+        publisher = FakePublisher(fatal_seqs={1})
+        metrics, _ = _metrics()
+        relay = OutboxRelay(
+            store, publisher, batch_size=10, retention=timedelta(days=7), metrics_=metrics
+        )
+        worker = RelayWorker(relay, store, publisher, batch_size=10, poll_interval=0.01)
+        lifecycle = Lifecycle(LifecycleConfig(0, readiness_delay=0.0, drain_timeout=1.0))
+        with self.assertRaisesRegex(LifecycleError, "worker stopped before shutdown"):
+            lifecycle.run(worker, threading.Event())
+
+    def test_shutdown_interrupts_blocked_publish_within_deadline(self) -> None:
+        store = FakeStore([_record(1), _record(2)])
+        publisher = FakePublisher(block_seqs={1})
+        worker, thread, errors = self._worker(store, publisher)
+        self.assertTrue(publisher.blocked.wait(2))
+        started = time.monotonic()
+        # Raises TimeoutError if the cycle does not finish before the deadline.
+        worker.shutdown(started + 1)
+        self.assertLess(time.monotonic() - started, 1)
+        thread.join(1)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual((publisher.sent, store.published, store.failures), ([], {}, {}))
+        self.assertTrue(store.unlocked)
+
+
+class _FakeProducer:
+    """``confluent_kafka.Producer`` stand-in: reports are scripted per test."""
+
+    instances: ClassVar[list[_FakeProducer]] = []
+
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config = config
+        self.produced: list[Callable[[Any, Any], None]] = []
+        self.produce_error: Exception | None = None
+        # Called on every flush: scripts delivery reports and error callbacks.
+        self.on_flush: Callable[[_FakeProducer], None] = lambda _p: None
+        self.purged = False
+        self.queued = 0
+        _FakeProducer.instances.append(self)
+
+    def produce(self, topic: str, **kwargs: Any) -> None:
+        if self.produce_error is not None:
+            raise self.produce_error
+        self.produced.append(kwargs["on_delivery"])
+        self.queued += 1
+
+    def flush(self, timeout: float) -> int:
+        self.on_flush(self)
+        if not self.purged:
+            time.sleep(min(timeout, 0.01))
+        return self.queued
+
+    def purge(self) -> None:
+        self.purged = True
+        self.queued = 0
+
+    def deliver(self, error: Any) -> None:
+        self.queued = 0
+        for callback in self.produced:
+            callback(error, None)
+        self.produced.clear()
+
+
+class KafkaPublisherTest(unittest.TestCase):
+    def _publisher(self, delivery_timeout: float = 5.0) -> tuple[Any, _FakeProducer]:
+        from unittest import mock
+
+        from infrastructure.messaging import KafkaPublisher
+
+        with mock.patch("confluent_kafka.Producer", _FakeProducer):
+            publisher = KafkaPublisher("broker:9092", "test", delivery_timeout=delivery_timeout)
+        return publisher, _FakeProducer.instances[-1]
+
+    def test_success_and_retriable_delivery_errors(self) -> None:
+        from confluent_kafka import KafkaError
+
+        publisher, producer = self._publisher()
+        producer.on_flush = lambda p: p.deliver(None)
+        publisher.publish(_record(1))
+        producer.on_flush = lambda p: p.deliver(
+            KafkaError(KafkaError._MSG_TIMED_OUT, retriable=True)
+        )
+        with self.assertRaises(PublishError) as raised:
+            publisher.publish(_record(2))
+        self.assertNotIsInstance(raised.exception, FatalPublishError)
+        self.assertTrue(raised.exception.retriable)
+
+    def test_fatal_delivery_error_poisons_producer(self) -> None:
+        from confluent_kafka import KafkaError
+
+        publisher, producer = self._publisher()
+        producer.on_flush = lambda p: p.deliver(
+            KafkaError(KafkaError.OUT_OF_ORDER_SEQUENCE_NUMBER, fatal=True)
+        )
+        with self.assertRaises(FatalPublishError):
+            publisher.publish(_record(1))
+        # Later publishes fail at once, without producing.
+        with self.assertRaises(FatalPublishError):
+            publisher.publish(_record(2))
+        self.assertEqual(producer.produced, [])
+
+    def test_fatal_code_in_delivery_report_is_fatal(self) -> None:
+        from confluent_kafka import KafkaError
+
+        publisher, producer = self._publisher()
+        producer.on_flush = lambda p: p.deliver(KafkaError(KafkaError._FATAL))
+        with self.assertRaises(FatalPublishError):
+            publisher.publish(_record(1))
+
+    def test_fatal_error_callback_ends_wait(self) -> None:
+        from confluent_kafka import KafkaError
+
+        publisher, producer = self._publisher(delivery_timeout=30.0)
+        error_cb = producer.config["error_cb"]
+        producer.on_flush = lambda _p: error_cb(
+            KafkaError(KafkaError.CLUSTER_AUTHORIZATION_FAILED, fatal=True)
+        )
+        started = time.monotonic()
+        with self.assertRaises(FatalPublishError):
+            publisher.publish(_record(1))
+        self.assertLess(time.monotonic() - started, 1)
+
+    def test_non_fatal_error_callback_keeps_waiting(self) -> None:
+        from confluent_kafka import KafkaError
+
+        publisher, producer = self._publisher()
+        error_cb = producer.config["error_cb"]
+
+        def flush(p: _FakeProducer) -> None:
+            error_cb(KafkaError(KafkaError._ALL_BROKERS_DOWN))
+            p.deliver(None)
+
+        producer.on_flush = flush
+        publisher.publish(_record(1))
+
+    def test_fatal_produce_exception(self) -> None:
+        from confluent_kafka import KafkaError, KafkaException
+
+        publisher, producer = self._publisher()
+        producer.produce_error = KafkaException(KafkaError(KafkaError._FATAL, fatal=True))
+        with self.assertRaises(FatalPublishError):
+            publisher.publish(_record(1))
+        producer.produce_error = BufferError("queue full")
+        with self.assertRaises(FatalPublishError):
+            publisher.publish(_record(2))
+
+    def test_non_fatal_produce_errors(self) -> None:
+        from confluent_kafka import KafkaError, KafkaException
+
+        publisher, producer = self._publisher()
+        for error in (
+            BufferError("queue full"),
+            KafkaException(KafkaError(KafkaError._UNKNOWN_TOPIC)),
+        ):
+            producer.produce_error = error
+            with self.assertRaises(PublishError) as raised:
+                publisher.publish(_record(1))
+            self.assertNotIsInstance(raised.exception, FatalPublishError)
+
+    def test_should_stop_interrupts_delivery_wait(self) -> None:
+        publisher, _producer = self._publisher(delivery_timeout=30.0)
+        stop_at = time.monotonic() + 0.2
+        started = time.monotonic()
+        with self.assertRaises(PublishInterruptedError):
+            publisher.publish(_record(1), lambda: time.monotonic() >= stop_at)
+        self.assertLess(time.monotonic() - started, 1)
+
+    def test_close_purges_undelivered_messages(self) -> None:
+        publisher, producer = self._publisher()
+        with self.assertRaises(PublishInterruptedError):
+            publisher.publish(_record(1), lambda: True)
+        publisher.close(0.05)
+        self.assertTrue(producer.purged)
+        self.assertEqual(producer.queued, 0)
+
+    def test_close_without_leftovers_does_not_purge(self) -> None:
+        publisher, producer = self._publisher()
+        publisher.close(0.05)
+        self.assertFalse(producer.purged)
 
 
 class RelayConfigTest(unittest.TestCase):
