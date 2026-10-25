@@ -6,4 +6,4 @@
 - [x] 1.4 Роли хранилища вместо `Store`; декоратор метрик в `observability`.
 - [x] 1.5 Порты соседей в `slices/fulfillment/applications/neighbours`.
 - [x] 1.6 Identity: `jwks`, `serviceTokenVerifier`, `userAssertionVerifier`; общие векторы проходят.
-- [ ] 1.7 README; `go test ./...`, `go vet ./...`, `make lint`, `go tool wire ./di`; `openspec validate refactor-orders-responsibilities --strict`.
+- [x] 1.7 README; `go test ./...`, `go vet ./...`, `make lint`, `go tool wire ./di`; `openspec validate refactor-orders-responsibilities --strict`.
