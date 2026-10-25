@@ -24,3 +24,6 @@ inputs:
   - directory: ../../../../../restaurants/infrastructure/grpc
     exclude_paths:
       - ../../../../../restaurants/infrastructure/grpc/nomnom/restaurants/v1/events.proto
+  - directory: ../../../../../delivery/infrastructure/grpc
+    exclude_paths:
+      - ../../../../../delivery/infrastructure/grpc/nomnom/delivery/v1/events.proto

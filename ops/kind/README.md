@@ -211,18 +211,18 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `restaurants-v1-commands` | `ReceiveOrderRequest`, `CancelRestaurantOrder` | `commands` |
 | `restaurants-v1-management` | `OpenRestaurant`, `CloseRestaurant`, `CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability` | `commands` |
 | `restaurants-v1-kitchen` | `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure` | `commands` |
-| `restaurants-v1-kitchen-reads` | `GetKitchenQueue`, `ListIncomingOrders` | `reads` |
+| `restaurants-v1-kitchen-reads` | `GetKitchenQueue`, `ListIncomingOrders`, `ListActiveRestaurantOrders` | `reads` |
 | `restaurants-v1-administration` | `RegisterRestaurant`, `AssignStaff`, `RevokeStaff` | `commands` |
 | `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
 | `delivery-v1-courier` | `UpdateCourierLocation`, `SetCourierAvailability`, `AcceptDeliveryOffer`, `RejectDeliveryOffer`, `ConfirmPickup`, `ConfirmDelivery`, `ReportDeliveryFailure` | `commands` |
-| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers` | `reads` |
+| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery` | `reads` |
 | `delivery-v1-administration` | `RegisterCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
 
 `reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и
 `reset-before-request`; `commands` — только на `connect-failure`, `refused-stream` и
 `reset-before-request`. Вызов незарегистрированного сервиса или метода получает 404 (gRPC
-`UNIMPLEMENTED`), например `GetCourierCurrentDelivery`, у которого ещё нет вызывающих. Новый бизнес-RPC публикуется так:
+`UNIMPLEMENTED`). Новый бизнес-RPC публикуется так:
 
 1. Метод (`method.type: Exact`, полное имя сервиса и метод) — в route своего класса и
    `targetRefs` политики `reads` или `commands`; новый route добавляется в `targetRefs` нужной

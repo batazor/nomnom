@@ -21,7 +21,7 @@ build:
 generate:
 	npm run generate
 
-# gRPC-клиенты orders и restaurants для слайсов BFF (plugins/bff/infrastructure/grpc/buf.gen.yaml).
+# gRPC-клиенты orders, restaurants и delivery для слайсов BFF (plugins/bff/infrastructure/grpc/buf.gen.yaml).
 proto-generate:
 	cd plugins/bff/infrastructure/grpc && buf generate --template buf.gen.yaml
 

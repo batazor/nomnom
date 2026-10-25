@@ -11,7 +11,11 @@ import (
 	cataloginfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/infrastructure"
 	checkoutapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
 	checkoutinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/infrastructure"
+	courierapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/applications"
+	courierinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/infrastructure"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	kitchenapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
+	kitcheninfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/infrastructure"
 	trackingapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 	trackinginfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/infrastructure"
 	managementapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
@@ -27,6 +31,7 @@ const envInternalGateway = "BFF__INTERNAL_GATEWAY_ADDR"
 const (
 	audienceOrders      = "nomnom.orders"
 	audienceRestaurants = "nomnom.restaurants"
+	audienceDelivery    = "nomnom.delivery"
 )
 
 // config is the environment of the plugin, read once at start.
@@ -54,10 +59,16 @@ type requestCancellationHandler interface {
 	Handle(ctx context.Context, request trackingapp.CancellationRequest) (trackingapp.CancellationResult, error)
 }
 
-// orderTracking holds the scenarios of the order tracking screen.
+type listCustomerOrdersHandler interface {
+	Handle(ctx context.Context, customerID string, first int, after string) (trackingapp.OrderPage, error)
+}
+
+// orderTracking holds the scenarios of the order tracking and order history
+// screens.
 type orderTracking struct {
 	getOrder            getOrderHandler
 	requestCancellation requestCancellationHandler
+	listCustomerOrders  listCustomerOrdersHandler
 }
 
 type listRestaurantsHandler interface {
@@ -90,6 +101,44 @@ type restaurantManagement struct {
 	listOwnedRestaurants ownedRestaurantsHandler
 }
 
+type getKitchenHandler interface {
+	Handle(ctx context.Context, restaurantID string) (kitchenapp.KitchenView, error)
+}
+
+type kitchenActionHandler interface {
+	Handle(ctx context.Context, request kitchenapp.ActionRequest) (kitchenapp.ActionResult, error)
+}
+
+// kitchen holds the scenarios of the kitchen screen.
+type kitchen struct {
+	getKitchen  getKitchenHandler
+	applyAction kitchenActionHandler
+}
+
+type getCourierHandler interface {
+	Handle(ctx context.Context, courierID string) (courierapp.CourierView, error)
+}
+
+type setAvailabilityHandler interface {
+	Handle(ctx context.Context, courierID string, availability courierapp.Availability) (courierapp.CommandResult, error)
+}
+
+type acceptOfferHandler interface {
+	Handle(ctx context.Context, courierID, offerID string) (courierapp.CommandResult, error)
+}
+
+type deliveryActionHandler interface {
+	Handle(ctx context.Context, courierID, deliveryID string, action courierapp.Action) (courierapp.CommandResult, error)
+}
+
+// courier holds the scenarios of the courier screen.
+type courier struct {
+	getCourier      getCourierHandler
+	setAvailability setAvailabilityHandler
+	acceptOffer     acceptOfferHandler
+	applyAction     deliveryActionHandler
+}
+
 // newBffService assembles BFF from cfg. A partial identity configuration is an
 // error: customer operations must not run without a verified customer
 // (ADR 32). Without BFF identity or a gateway address the slices stay nil:
@@ -106,7 +155,7 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 		service.accessTokens = customers.AccessTokens
 	}
 	if customers == nil || cfg.internalGateway == "" {
-		log.Printf("%s or BFF identity is not set: catalog, checkout, order and restaurant management operations are unavailable", envInternalGateway)
+		log.Printf("%s or BFF identity is not set: catalog, checkout, order, restaurant management, kitchen and courier operations are unavailable", envInternalGateway)
 		return service, nil
 	}
 	orders, err := dial(cfg.internalGateway, audienceOrders, customers.Outgoing)
@@ -117,19 +166,46 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	if err != nil {
 		return nil, err
 	}
+	delivery, err := dial(cfg.internalGateway, audienceDelivery, customers.Outgoing)
+	if err != nil {
+		return nil, err
+	}
 	service.tracking = newOrderTracking(orders, restaurants)
 	service.catalog = newRestaurantCatalog(restaurants)
 	// The payload of checkout reuses the GetOrder scenario of order tracking.
 	service.checkout = newCheckout(orders, service.tracking.getOrder)
 	service.management = newRestaurantManagement(restaurants)
+	service.kitchen = newKitchen(restaurants)
+	service.courier = newCourier(delivery)
 	return service, nil
 }
 
 func newOrderTracking(orders, restaurants grpc.ClientConnInterface) *orderTracking {
 	ordersAPI := trackinginfra.NewOrders(orders)
+	getOrder := trackingapp.NewGetOrder(ordersAPI, trackinginfra.NewCatalog(restaurants))
 	return &orderTracking{
-		getOrder:            trackingapp.NewGetOrder(ordersAPI, trackinginfra.NewCatalog(restaurants)),
+		getOrder:            getOrder,
 		requestCancellation: trackingapp.NewRequestCancellation(ordersAPI),
+		// Every Order of the history page is the GetOrder view.
+		listCustomerOrders: trackingapp.NewListCustomerOrders(ordersAPI, getOrder),
+	}
+}
+
+func newKitchen(restaurants grpc.ClientConnInterface) *kitchen {
+	restaurantsAPI := kitcheninfra.NewRestaurants(restaurants)
+	return &kitchen{
+		getKitchen:  kitchenapp.NewGetKitchen(restaurantsAPI, restaurantsAPI),
+		applyAction: kitchenapp.NewApplyKitchenAction(restaurantsAPI, restaurantsAPI, restaurantsAPI),
+	}
+}
+
+func newCourier(delivery grpc.ClientConnInterface) *courier {
+	deliveryAPI := courierinfra.NewDelivery(delivery)
+	return &courier{
+		getCourier:      courierapp.NewGetCourier(deliveryAPI),
+		setAvailability: courierapp.NewSetAvailability(deliveryAPI),
+		acceptOffer:     courierapp.NewAcceptOffer(deliveryAPI),
+		applyAction:     courierapp.NewApplyDeliveryAction(deliveryAPI),
 	}
 }
 

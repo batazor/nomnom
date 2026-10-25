@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "urql";
 
 import {
@@ -45,15 +46,17 @@ const finalStatuses = new Set<OrderStatus>([
   "FAILED",
 ]);
 
+// The order, undefined while it loads, null when BFF does not know it (any
+// more): mock orders live only as long as the page.
 function useBoardOrder(orderId: string) {
   const [{ data }, reexecute] = useQuery({
     query: BoardOrderStatusDocument,
     variables: { id: orderId },
   });
-  const order = data?.order ?? null;
+  const order = data?.order;
   usePolling(
     () => reexecute({ requestPolicy: "network-only" }),
-    !order || !finalStatuses.has(order.status),
+    order !== null && (!order || !finalStatuses.has(order.status)),
   );
   return order;
 }
@@ -64,10 +67,12 @@ export function OrderStrip({
   orderIds,
   selectedId,
   onSelect,
+  onMissing,
 }: {
   orderIds: readonly string[];
   selectedId: string | null;
   onSelect: (orderId: string) => void;
+  onMissing: (orderId: string) => void;
 }) {
   const { t } = useI18n();
   if (orderIds.length === 0) {
@@ -78,6 +83,7 @@ export function OrderStrip({
       {orderIds.map((orderId) => (
         <li key={orderId}>
           <OrderChip
+            onMissing={onMissing}
             onSelect={onSelect}
             orderId={orderId}
             selected={orderId === selectedId}
@@ -92,13 +98,19 @@ function OrderChip({
   orderId,
   selected,
   onSelect,
+  onMissing,
 }: {
   orderId: string;
   selected: boolean;
   onSelect: (orderId: string) => void;
+  onMissing: (orderId: string) => void;
 }) {
   const { t, formatters } = useI18n();
   const order = useBoardOrder(orderId);
+  useEffect(() => {
+    if (order === null) onMissing(orderId);
+  }, [order, orderId, onMissing]);
+  if (order === null) return null;
   return (
     <button
       aria-pressed={selected}
@@ -136,6 +148,7 @@ export function OrderTimeline({
 }) {
   const { t } = useI18n();
   const order = useBoardOrder(orderId);
+  if (order === null) return null;
   if (!order) {
     return <p className="board-timeline-empty">{t("board.orders.loading")}</p>;
   }

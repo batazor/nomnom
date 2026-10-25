@@ -237,6 +237,26 @@ describe("flow board", () => {
   });
 });
 
+describe("board orders", () => {
+  it("drops orders BFF no longer knows instead of loading them forever", async () => {
+    localStorage.setItem(
+      "nomnom.board.orders.v1",
+      JSON.stringify(["order-gone", "order-preparing"]),
+    );
+    renderBoard();
+
+    expect(
+      await screen.findByRole("button", { name: /Кухня №8.*Готовится/ }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        parseBoardOrders(localStorage.getItem("nomnom.board.orders.v1")),
+      ).toEqual(["order-preparing"]),
+    );
+    expect(screen.queryByText("Загружаем заказ")).toBeNull();
+  });
+});
+
 describe("board state", () => {
   it("reads only order ids from storage", () => {
     expect(parseBoardOrders('["a", 1, "b"]')).toEqual(["a", "b"]);

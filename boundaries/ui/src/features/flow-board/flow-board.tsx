@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { useQuery } from "urql";
 
 import { BoardOrderStatusDocument } from "../../shared/graphql/generated/graphql";
@@ -76,6 +76,15 @@ function Board() {
   const [activeColumn, setActiveColumn] = useState<Column>("customer");
   const selectedRestaurantId = useOrderRestaurant(selectedOrderId);
 
+  const { remove } = orders;
+  const forget = useCallback(
+    (orderId: string) => {
+      remove(orderId);
+      setSelectedOrderId((current) => (current === orderId ? null : current));
+    },
+    [remove],
+  );
+
   function placed(orderId: string) {
     orders.add(orderId);
     setSelectedOrderId(orderId);
@@ -101,6 +110,7 @@ function Board() {
           {t("board.orders.title")}
         </h2>
         <OrderStrip
+          onMissing={forget}
           onSelect={setSelectedOrderId}
           orderIds={orders.ids}
           selectedId={selectedOrderId}

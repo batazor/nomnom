@@ -19,7 +19,7 @@ BFF — отдельный сервис и единая прикладная т�
 - generated-код и lock-файл контракта коммитятся;
 - минимальный stateless-запрос `bffInfo` подтверждает сборку полного контура.
 
-Реализованы слайсы `catalog`, `checkout`, `ordertracking` и `restaurantmanagement` поверх `restaurants` и `orders` через internal gateway (см. [Customer API](#customer-api)); `customerOrders` пока только в схеме.
+Реализованы слайсы `catalog`, `checkout`, `ordertracking`, `restaurantmanagement`, `kitchen` и `courier` поверх `restaurants`, `orders` и `delivery` через internal gateway (см. [Customer API](#customer-api)); операций «только схема» не осталось.
 
 ## Customer API
 
@@ -31,11 +31,15 @@ BFF — отдельный сервис и единая прикладная т�
 | `restaurants(first, after)` | рестораны с cursor-пагинацией | реализована (`catalog`) |
 | `restaurant(id)` | ресторан с меню | реализована (`catalog`) |
 | `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | реализована (`ordertracking`) |
-| `customerOrders(first, after)` | история заказов покупателя | только схема |
+| `customerOrders(first, after)` | история заказов покупателя от новых к старым (`orders.ListCustomerOrders` + `GetOrder` на каждый заказ) | реализована (`ordertracking`) |
 | `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey` | реализована (`checkout`) |
 | `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | реализована (`ordertracking`) |
 | `openRestaurant(restaurantId)`, `closeRestaurant(restaurantId)` | открытие ресторана владельцем, повтор — `changed = false` | реализованы (`restaurantmanagement`) |
 | `myRestaurants(first, after)` | открытые и закрытые рестораны текущего пользователя (`restaurants.ListOwnedRestaurants`), `menu = null`; нужен access token | реализован (`restaurantmanagement`) |
+| `kitchen(restaurantId)` | активные заказы ресторана для кухни; `null` для отсутствующего ресторана и кухни, которой пользователь не управляет | реализован (`kitchen`) |
+| `applyKitchenAction(input)` | команда кухни над заказом ресторана; конфликт стадии — `problem` | реализована (`kitchen`) |
+| `courier` | работа текущего пользователя как курьера; `null`, если он не курьер | реализован (`courier`) |
+| `setCourierAvailability(availability)`, `acceptDeliveryOffer(offerId)`, `applyCourierDeliveryAction(deliveryId, action)` | команды курьера; payload — курьер после команды и `problem` | реализованы (`courier`) |
 
 Операции «только схема» возвращают GraphQL error с gRPC `Unimplemented`: `BffService` встраивает `UnimplementedBffServiceServer`.
 
@@ -52,6 +56,8 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order
 | `RequestOrderCancellation`: `ORDER_STATE_CONFLICT` | `problem = ORDER_ALREADY_FINAL` |
 | `RequestOrderCancellation`: `NOT_FOUND`, `PERMISSION_DENIED` | error `NOT_FOUND` |
 | остальные сбои | error `UNAVAILABLE` без внутренних деталей |
+
+`customerOrders(first, after)`: `ListCustomerOrders` `orders` от имени покупателя (`customer_id` — subject access token) даёт id заказов страницы, каждый узел — тот же `Order`, что у `order(id)` (сценарий `GetOrder`: в `OrderSummary` нет позиций и Fulfillment Facts), заказы читаются по одному. `first` — 1..100, иначе error `INVALID_ARGUMENT`; cursor ребра — `OrderSummary.cursor` `orders` (продолжение после этого заказа), `pageInfo.endCursor` — `next_page_token`, на последней странице — cursor последнего ребра, на пустой — `null`; чужой или неизвестный `after` — error `INVALID_ARGUMENT`; заказ, исчезнувший между двумя чтениями, пропускается.
 
 Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — тест `bff-end-to-end` в `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
 
@@ -79,7 +85,7 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checko
 | `INVALID_ARGUMENT` (`INVALID_ORDER`, `INVALID_ARGUMENT`) | error `INVALID_ARGUMENT` без деталей `orders` |
 | остальные сбои, в том числе отказ без известных кодов | error `UNAVAILABLE` без внутренних деталей |
 
-Повтор с тем же `idempotencyKey` возвращает уже оформленный заказ. `customerOrders` не реализован: `OrderSummary` `orders` не содержит позиций и истории.
+Повтор с тем же `idempotencyKey` возвращает уже оформленный заказ.
 
 Правила контракта:
 
@@ -107,6 +113,46 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 | остальные сбои, в том числе `UNAVAILABLE` | error `UNAVAILABLE` без внутренних деталей |
 
 Бизнес-отказа, который пользователь исправит в форме, у открытия нет, поэтому отказы — GraphQL errors, а не `problems`. Router отдаёт gRPC-код в `errors[].extensions.errors[].extensions.code` (`PermissionDenied`, `NotFound`, …).
+
+### Слайс `kitchen`
+
+`plugins/bff/kitchen/applications` — сценарии Get Kitchen и Apply Kitchen Action без Protobuf и GraphQL-типов; `kitchen/infrastructure` вызывает `restaurants` от имени пользователя (service token BFF и user assertion, ADR 32): доска кухни — `ListActiveRestaurantOrders` и `GetKitchenQueue` (GRPCRoute `restaurants-v1-kitchen-reads`), команды — `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady` (`restaurants-v1-kitchen`); публичные `GetRestaurant` и `GetMenu` — без пользователя. Право `restaurant#operate_kitchen` (персонал или владелец) проверяет `restaurants`.
+
+- `kitchen(restaurantId)`: заказы в `RECEIVED`…`READY` из `ListActiveRestaurantOrders` (позиции, `received_at`); порядок — `RECEIVED` по `receivedAt`, затем `QUEUED` в порядке `GetKitchenQueue` (заказ, которого нет в очереди из-за гонки двух чтений, — после неё по `receivedAt`), затем остальные по `receivedAt`; названия позиций — из `GetMenu` (позиции, которой нет в меню, — пустое имя), `restaurant.menu = null`. `ListIncomingOrders` не нужен: новый RPC покрывает и `RECEIVED`.
+- `applyKitchenAction`: после команды заказ перечитывается из `ListActiveRestaurantOrders` (ответ команды без позиций и `receivedAt`); у `REJECT` и у заказа, ушедшего с доски, `order = null`. Причина отказа `RejectRestaurantOrder` не передаётся: в схеме её нет.
+
+| Ответ `restaurants` | GraphQL |
+| --- | --- |
+| нет или невалидный access token | error `UNAUTHENTICATED`, `restaurants` не вызывается |
+| пустые `restaurantId`, `kitchenOrderId` или `action` | error `INVALID_ARGUMENT` |
+| нет gateway или identity | error `UNAVAILABLE` (`kitchen operations are not available`) |
+| доска: `NOT_FOUND`, `PERMISSION_DENIED`; `GetRestaurant`: `NOT_FOUND` | `kitchen = null` |
+| команда: `FAILED_PRECONDITION` | `problem = ORDER_STAGE_CONFLICT`, `order = null`; у `ACCEPT` так же отвечают закрытый ресторан и недоступная позиция — у `restaurants` для них один reason |
+| команда: `NOT_FOUND` | error `NOT_FOUND` |
+| команда: `PERMISSION_DENIED` | error `PERMISSION_DENIED` |
+| команда: `INVALID_ARGUMENT` | error `INVALID_ARGUMENT` без деталей `restaurants` |
+| остальные сбои | error `UNAVAILABLE` без внутренних деталей |
+
+### Слайс `courier`
+
+`plugins/bff/courier/applications` — сценарии Get Courier, Set Availability, Accept Offer и Apply Delivery Action; `courier/infrastructure` вызывает RPC курьера `delivery` от имени пользователя (audience `nomnom.delivery`, GRPCRoute `delivery-v1-courier` и `delivery-v1-courier-reads`). Курьер — сам пользователь: `delivery` регистрирует курьера под user id (`RegisterCourier`), поэтому `courier_id` — subject access token; `courier#act` и принадлежность доставки или offer курьеру проверяет `delivery`.
+
+- `courier`: `GetCourierCurrentDelivery` — статус курьера (`courier_status`) и текущая доставка с адресами; `offers` — `ListAvailableDeliveryOffers`, только пока курьер `AVAILABLE`, иначе `[]`; `expiresAt` — из `expires_at_epoch_seconds`.
+- Mutations отвечают `CourierPayload`: курьер перечитывается после команды, в том числе после бизнес-отказа.
+- **Местоположение.** Dispatch предлагает доставку только курьеру с известной позицией (`UpdateCourierLocation`, e2e `order-lifecycle` вызывает его перед `SetCourierAvailability`). В схеме нет операции для позиции, и BFF её не выдумывает: `setCourierAvailability(AVAILABLE)` не меняет позицию, offers приходят курьеру, чья позиция уже известна `delivery`. Позицию курьерского приложения должна передавать отдельная mutation (например `reportCourierLocation(latitude, longitude)`) — её нужно добавить в контракт; до тех пор в kind позицию задаёт seed или fixture.
+
+| Ответ `delivery` | GraphQL |
+| --- | --- |
+| нет или невалидный access token | error `UNAUTHENTICATED`, `delivery` не вызывается |
+| `setCourierAvailability(BUSY)`, пустые `offerId`, `deliveryId` или `action` | error `INVALID_ARGUMENT` |
+| нет gateway или identity | error `UNAVAILABLE` (`courier operations are not available`) |
+| `GetCourierCurrentDelivery`: `NOT_FOUND`, `PERMISSION_DENIED` | `courier = null` |
+| команды: `PERMISSION_DENIED` (или `NOT_FOUND` курьера) | error `PERMISSION_DENIED`: пользователь не курьер |
+| `AcceptDeliveryOffer`: `NOT_FOUND`, `FAILED_PRECONDITION` | `problem = OFFER_NOT_AVAILABLE` |
+| `ConfirmPickup`/`ConfirmDelivery`: `FAILED_PRECONDITION` | `problem = DELIVERY_STAGE_CONFLICT` |
+| `ConfirmPickup`/`ConfirmDelivery`: `NOT_FOUND` | error `NOT_FOUND` |
+| `SetCourierAvailability`: `FAILED_PRECONDITION` | error `FAILED_PRECONDITION`: в `CourierProblemCode` нет кода для отказа по статусу курьера |
+| остальные сбои, в том числе `ABORTED` гонки | error `UNAVAILABLE` без внутренних деталей |
 
 ## Identity покупателя
 
@@ -213,7 +259,7 @@ boundaries/bff/
 
 Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`, `restaurantmanagement`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`, `RestaurantOpener`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
 
-Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и открывает по одному соединению к `nomnom.orders` и `nomnom.restaurants` на все слайсы; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
+Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и открывает по одному соединению к `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery` на все слайсы; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
 
 Внутренние клиенты будут генерироваться из закреплённых BSR commits согласно [общесистемному ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). Интеграция этих клиентов с plugin относится к следующему шагу.
 
@@ -290,7 +336,7 @@ docker run --rm -p 3010:3010 nomnom/bff:local   # /health/live, /health/ready, P
 
 Helm chart и команды его проверки описаны в [ops/README.md](ops/README.md). Probes — штатные `/health/live` и `/health/ready` Router на порту `http`: отдельного технического порта для health у Router нет (исключение из ADR 17).
 
-В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders` и `nomnom.restaurants`. Ключ подписи user assertions выпускает cert-manager один раз на кластер (chart `ops/kind/bootstrap`, Secret `bff-assertion-key`, ключ `tls.key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Наружу BFF не опубликован: проверки обращаются к нему через `kubectl port-forward`.
+В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`. Ключ подписи user assertions выпускает cert-manager один раз на кластер (chart `ops/kind/bootstrap`, Secret `bff-assertion-key`, ключ `tls.key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Наружу BFF не опубликован: проверки обращаются к нему через `kubectl port-forward`.
 
 ## Следующие шаги
 

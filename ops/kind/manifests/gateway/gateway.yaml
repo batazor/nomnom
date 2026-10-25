@@ -242,8 +242,8 @@ spec:
           namespace: nomnom-restaurants
           port: 8082
 ---
-# Команды кухни от имени сотрудника ресторана (restaurant#operate_kitchen). Клиента кухни
-# ещё нет: в kind их вызывает fixture e2e-driver (manifests/fixtures/net-probe.yaml).
+# Команды кухни от имени сотрудника ресторана (restaurant#operate_kitchen): их вызывает BFF
+# (kitchen-экран) и в kind — fixture e2e-driver (manifests/fixtures/net-probe.yaml).
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -309,6 +309,11 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: ListIncomingOrders
+        # Вся текущая работа кухни (RECEIVED…READY) для kitchen-экрана BFF.
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ListActiveRestaurantOrders
       backendRefs:
         - name: restaurants
           namespace: nomnom-restaurants
@@ -374,7 +379,7 @@ spec:
           port: 8083
 ---
 # Команды курьера (courier#act) и Report Delivery Failure (курьер или диспетчер,
-# platform#dispatch_delivery). Клиента курьера ещё нет: в kind их вызывает fixture e2e-driver.
+# platform#dispatch_delivery). Их вызывает BFF (courier-экран) и в kind — fixture e2e-driver.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -435,6 +440,11 @@ spec:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
             method: ListAvailableDeliveryOffers
+        # Статус курьера и текущая доставка для courier-экрана BFF.
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: GetCourierCurrentDelivery
       backendRefs:
         - name: delivery
           namespace: nomnom-delivery

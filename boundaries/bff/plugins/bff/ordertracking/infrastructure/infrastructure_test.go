@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -50,6 +51,20 @@ func (s *ordersServer) RequestOrderCancellation(ctx context.Context, _ *ordersv1
 		return nil, s.err
 	}
 	return &ordersv1.RequestOrderCancellationResponse{Outcome: ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_REQUESTED}, nil
+}
+
+func (s *ordersServer) ListCustomerOrders(ctx context.Context, request *ordersv1.ListCustomerOrdersRequest) (*ordersv1.ListCustomerOrdersResponse, error) {
+	s.seenMD, _ = metadata.FromIncomingContext(ctx)
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &ordersv1.ListCustomerOrdersResponse{
+		Orders: []*ordersv1.OrderSummary{
+			{OrderId: "order-2", Cursor: "cursor-2"},
+			{OrderId: "order-1", Cursor: "cursor-1"},
+		},
+		NextPageToken: request.GetCustomerId() + "/" + request.GetPageToken() + "/" + string(rune('0'+request.GetPageSize())),
+	}, nil
 }
 
 type restaurantsServer struct {
@@ -198,4 +213,26 @@ func TestCatalogIsPublicAndToleratesMissingMenu(t *testing.T) {
 	names, err = catalog.MenuItemNames(customerContext(), "restaurant-1")
 	require.NoError(t, err)
 	assert.Empty(t, names)
+}
+
+// The history goes to orders on behalf of the customer, with the customer id.
+func TestOrdersListCustomerOrdersCarriesCustomerAndCursors(t *testing.T) {
+	server := &ordersServer{}
+	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
+
+	page, err := orders.ListCustomerOrders(customerContext(), "customer-1", 2, "cursor-3")
+
+	require.NoError(t, err)
+	assert.Equal(t, applications.HistoryPage{
+		Entries:    []applications.HistoryEntry{{OrderID: "order-2", Cursor: "cursor-2"}, {OrderID: "order-1", Cursor: "cursor-1"}},
+		NextCursor: "customer-1/cursor-3/2",
+	}, page)
+	assert.Len(t, server.seenMD.Get(identity.AssertionMetadata), 1)
+
+	server.err = status.Error(codes.InvalidArgument, "cursor is malformed")
+	_, err = orders.ListCustomerOrders(customerContext(), "customer-1", 2, "%%%")
+	assert.ErrorIs(t, err, applications.ErrInvalidCursor)
+	server.err = status.Error(codes.Unavailable, "down")
+	_, err = orders.ListCustomerOrders(customerContext(), "customer-1", 2, "")
+	assert.Equal(t, codes.Unavailable, status.Code(errors.Unwrap(err)))
 }

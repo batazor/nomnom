@@ -28,6 +28,7 @@ func NewOrders(conn grpc.ClientConnInterface) *Orders {
 var (
 	_ applications.OrderReader           = (*Orders)(nil)
 	_ applications.CancellationRequester = (*Orders)(nil)
+	_ applications.OrderHistory          = (*Orders)(nil)
 )
 
 var orderStates = map[ordersv1.OrderState]string{
@@ -61,6 +62,30 @@ func (o *Orders) RequestCancellation(ctx context.Context, request applications.C
 		return applications.OutcomeAlreadyCancelled, nil
 	}
 	return "", fmt.Errorf("request order cancellation: unknown outcome %s", response.GetOutcome())
+}
+
+// ListCustomerOrders reads the history of customerID, the verified user of
+// ctx: orders lets a customer read their own history.
+func (o *Orders) ListCustomerOrders(ctx context.Context, customerID string, size int, cursor string) (applications.HistoryPage, error) {
+	response, err := o.client.ListCustomerOrders(ctx, &ordersv1.ListCustomerOrdersRequest{
+		CustomerId: customerID,
+		PageSize:   int32(size),
+		PageToken:  cursor,
+	})
+	if status.Code(err) == codes.InvalidArgument && cursor != "" {
+		return applications.HistoryPage{}, applications.ErrInvalidCursor
+	}
+	if err != nil {
+		return applications.HistoryPage{}, fmt.Errorf("list customer orders: %w", err)
+	}
+	page := applications.HistoryPage{
+		Entries:    make([]applications.HistoryEntry, 0, len(response.GetOrders())),
+		NextCursor: response.GetNextPageToken(),
+	}
+	for _, summary := range response.GetOrders() {
+		page.Entries = append(page.Entries, applications.HistoryEntry{OrderID: summary.GetOrderId(), Cursor: summary.GetCursor()})
+	}
+	return page, nil
 }
 
 // getOrderError hides whether a foreign Order exists. GetOrder has no

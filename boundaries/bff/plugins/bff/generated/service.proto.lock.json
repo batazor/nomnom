@@ -8,7 +8,9 @@
         "restaurant": 4,
         "order": 5,
         "customerOrders": 6,
-        "myRestaurants": 7
+        "myRestaurants": 7,
+        "kitchen": 8,
+        "courier": 9
       },
       "reservedNumbers": [
         1
@@ -118,7 +120,11 @@
         "placeOrder": 1,
         "requestOrderCancellation": 2,
         "openRestaurant": 3,
-        "closeRestaurant": 4
+        "closeRestaurant": 4,
+        "applyKitchenAction": 5,
+        "setCourierAvailability": 6,
+        "acceptDeliveryOffer": 7,
+        "applyCourierDeliveryAction": 8
       }
     },
     "MutationPlaceOrderRequest": {
@@ -345,6 +351,156 @@
       "fields": {
         "my_restaurants": 1
       }
+    },
+    "QueryKitchenRequest": {
+      "fields": {
+        "restaurant_id": 1
+      }
+    },
+    "QueryKitchen": {
+      "fields": {
+        "restaurantId": 1
+      }
+    },
+    "QueryKitchenResponse": {
+      "fields": {
+        "kitchen": 1
+      }
+    },
+    "QueryCourierRequest": {
+      "fields": {}
+    },
+    "QueryCourierResponse": {
+      "fields": {
+        "courier": 1
+      }
+    },
+    "MutationApplyKitchenActionRequest": {
+      "fields": {
+        "input": 1
+      }
+    },
+    "MutationApplyKitchenAction": {
+      "fields": {
+        "input": 1
+      }
+    },
+    "MutationApplyKitchenActionResponse": {
+      "fields": {
+        "apply_kitchen_action": 1
+      }
+    },
+    "MutationSetCourierAvailabilityRequest": {
+      "fields": {
+        "availability": 1
+      }
+    },
+    "MutationSetCourierAvailability": {
+      "fields": {
+        "availability": 1
+      }
+    },
+    "MutationSetCourierAvailabilityResponse": {
+      "fields": {
+        "set_courier_availability": 1
+      }
+    },
+    "MutationAcceptDeliveryOfferRequest": {
+      "fields": {
+        "offer_id": 1
+      }
+    },
+    "MutationAcceptDeliveryOffer": {
+      "fields": {
+        "offerId": 1
+      }
+    },
+    "MutationAcceptDeliveryOfferResponse": {
+      "fields": {
+        "accept_delivery_offer": 1
+      }
+    },
+    "MutationApplyCourierDeliveryActionRequest": {
+      "fields": {
+        "delivery_id": 1,
+        "action": 2
+      }
+    },
+    "MutationApplyCourierDeliveryAction": {
+      "fields": {
+        "deliveryId": 1,
+        "action": 2
+      }
+    },
+    "MutationApplyCourierDeliveryActionResponse": {
+      "fields": {
+        "apply_courier_delivery_action": 1
+      }
+    },
+    "Kitchen": {
+      "fields": {
+        "restaurant": 1,
+        "orders": 2
+      }
+    },
+    "Courier": {
+      "fields": {
+        "availability": 1,
+        "offers": 2,
+        "currentDelivery": 3
+      }
+    },
+    "KitchenActionInput": {
+      "fields": {
+        "restaurantId": 1,
+        "kitchenOrderId": 2,
+        "action": 3
+      }
+    },
+    "KitchenActionPayload": {
+      "fields": {
+        "order": 1,
+        "problem": 2
+      }
+    },
+    "CourierPayload": {
+      "fields": {
+        "courier": 1,
+        "problem": 2
+      }
+    },
+    "KitchenOrderItem": {
+      "fields": {
+        "name": 1,
+        "quantity": 2
+      }
+    },
+    "KitchenOrder": {
+      "fields": {
+        "id": 1,
+        "orderId": 2,
+        "stage": 3,
+        "items": 4,
+        "receivedAt": 5
+      }
+    },
+    "DeliveryOffer": {
+      "fields": {
+        "id": 1,
+        "deliveryId": 2,
+        "pickupAddress": 3,
+        "dropoffAddress": 4,
+        "expiresAt": 5
+      }
+    },
+    "CourierDelivery": {
+      "fields": {
+        "id": 1,
+        "orderId": 2,
+        "stage": 3,
+        "pickupAddress": 4,
+        "dropoffAddress": 5
+      }
     }
   },
   "enums": {
@@ -399,6 +555,54 @@
         "CANCELLATION_WINDOW_NOT_OPEN": 1,
         "CANCELLATION_WINDOW_EXPIRED": 2,
         "ORDER_ALREADY_FINAL": 3
+      }
+    },
+    "KitchenOrderStage": {
+      "fields": {
+        "RECEIVED": 1,
+        "QUEUED": 2,
+        "PREPARING": 3,
+        "ASSEMBLED": 4,
+        "READY": 5
+      }
+    },
+    "KitchenAction": {
+      "fields": {
+        "ACCEPT": 1,
+        "REJECT": 2,
+        "START_PREPARATION": 3,
+        "MARK_ASSEMBLED": 4,
+        "MARK_READY": 5
+      }
+    },
+    "KitchenActionProblemCode": {
+      "fields": {
+        "ORDER_STAGE_CONFLICT": 1
+      }
+    },
+    "CourierAvailability": {
+      "fields": {
+        "AVAILABLE": 1,
+        "BUSY": 2,
+        "UNAVAILABLE": 3
+      }
+    },
+    "CourierDeliveryStage": {
+      "fields": {
+        "ASSIGNED": 1,
+        "PICKED_UP": 2
+      }
+    },
+    "CourierDeliveryAction": {
+      "fields": {
+        "CONFIRM_PICKUP": 1,
+        "CONFIRM_DELIVERY": 2
+      }
+    },
+    "CourierProblemCode": {
+      "fields": {
+        "OFFER_NOT_AVAILABLE": 1,
+        "DELIVERY_STAGE_CONFLICT": 2
       }
     }
   }

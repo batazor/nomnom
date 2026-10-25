@@ -48,5 +48,14 @@ export function useBoardOrders() {
     });
   }, []);
 
-  return { ids, add };
+  // Drops an order BFF no longer knows, so the strip does not wait for it.
+  const remove = useCallback((orderId: string) => {
+    setIds((current) => {
+      const next = current.filter((id) => id !== orderId);
+      writeOrders(next);
+      return next;
+    });
+  }, []);
+
+  return { ids, add, remove };
 }

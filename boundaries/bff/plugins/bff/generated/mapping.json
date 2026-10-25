@@ -45,6 +45,20 @@
       "response": "QueryMyRestaurantsResponse"
     },
     {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "kitchen",
+      "mapped": "QueryKitchen",
+      "request": "QueryKitchenRequest",
+      "response": "QueryKitchenResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "courier",
+      "mapped": "QueryCourier",
+      "request": "QueryCourierRequest",
+      "response": "QueryCourierResponse"
+    },
+    {
       "type": "OPERATION_TYPE_MUTATION",
       "original": "placeOrder",
       "mapped": "MutationPlaceOrder",
@@ -71,6 +85,34 @@
       "mapped": "MutationCloseRestaurant",
       "request": "MutationCloseRestaurantRequest",
       "response": "MutationCloseRestaurantResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "applyKitchenAction",
+      "mapped": "MutationApplyKitchenAction",
+      "request": "MutationApplyKitchenActionRequest",
+      "response": "MutationApplyKitchenActionResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "setCourierAvailability",
+      "mapped": "MutationSetCourierAvailability",
+      "request": "MutationSetCourierAvailabilityRequest",
+      "response": "MutationSetCourierAvailabilityResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "acceptDeliveryOffer",
+      "mapped": "MutationAcceptDeliveryOffer",
+      "request": "MutationAcceptDeliveryOfferRequest",
+      "response": "MutationAcceptDeliveryOfferResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "applyCourierDeliveryAction",
+      "mapped": "MutationApplyCourierDeliveryAction",
+      "request": "MutationApplyCourierDeliveryActionRequest",
+      "response": "MutationApplyCourierDeliveryActionResponse"
     }
   ],
   "typeFieldMappings": [
@@ -142,6 +184,20 @@
               "mapped": "after"
             }
           ]
+        },
+        {
+          "original": "kitchen",
+          "mapped": "kitchen",
+          "argumentMappings": [
+            {
+              "original": "restaurantId",
+              "mapped": "restaurant_id"
+            }
+          ]
+        },
+        {
+          "original": "courier",
+          "mapped": "courier"
         }
       ]
     },
@@ -185,6 +241,50 @@
             {
               "original": "restaurantId",
               "mapped": "restaurant_id"
+            }
+          ]
+        },
+        {
+          "original": "applyKitchenAction",
+          "mapped": "apply_kitchen_action",
+          "argumentMappings": [
+            {
+              "original": "input",
+              "mapped": "input"
+            }
+          ]
+        },
+        {
+          "original": "setCourierAvailability",
+          "mapped": "set_courier_availability",
+          "argumentMappings": [
+            {
+              "original": "availability",
+              "mapped": "availability"
+            }
+          ]
+        },
+        {
+          "original": "acceptDeliveryOffer",
+          "mapped": "accept_delivery_offer",
+          "argumentMappings": [
+            {
+              "original": "offerId",
+              "mapped": "offer_id"
+            }
+          ]
+        },
+        {
+          "original": "applyCourierDeliveryAction",
+          "mapped": "apply_courier_delivery_action",
+          "argumentMappings": [
+            {
+              "original": "deliveryId",
+              "mapped": "delivery_id"
+            },
+            {
+              "original": "action",
+              "mapped": "action"
             }
           ]
         }
@@ -442,6 +542,167 @@
       ]
     },
     {
+      "type": "KitchenOrderItem",
+      "fieldMappings": [
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "quantity",
+          "mapped": "quantity"
+        }
+      ]
+    },
+    {
+      "type": "KitchenOrder",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "orderId",
+          "mapped": "order_id"
+        },
+        {
+          "original": "stage",
+          "mapped": "stage"
+        },
+        {
+          "original": "items",
+          "mapped": "items"
+        },
+        {
+          "original": "receivedAt",
+          "mapped": "received_at"
+        }
+      ]
+    },
+    {
+      "type": "Kitchen",
+      "fieldMappings": [
+        {
+          "original": "restaurant",
+          "mapped": "restaurant"
+        },
+        {
+          "original": "orders",
+          "mapped": "orders"
+        }
+      ]
+    },
+    {
+      "type": "KitchenActionInput",
+      "fieldMappings": [
+        {
+          "original": "restaurantId",
+          "mapped": "restaurant_id"
+        },
+        {
+          "original": "kitchenOrderId",
+          "mapped": "kitchen_order_id"
+        },
+        {
+          "original": "action",
+          "mapped": "action"
+        }
+      ]
+    },
+    {
+      "type": "KitchenActionPayload",
+      "fieldMappings": [
+        {
+          "original": "order",
+          "mapped": "order"
+        },
+        {
+          "original": "problem",
+          "mapped": "problem"
+        }
+      ]
+    },
+    {
+      "type": "DeliveryOffer",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "deliveryId",
+          "mapped": "delivery_id"
+        },
+        {
+          "original": "pickupAddress",
+          "mapped": "pickup_address"
+        },
+        {
+          "original": "dropoffAddress",
+          "mapped": "dropoff_address"
+        },
+        {
+          "original": "expiresAt",
+          "mapped": "expires_at"
+        }
+      ]
+    },
+    {
+      "type": "CourierDelivery",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "orderId",
+          "mapped": "order_id"
+        },
+        {
+          "original": "stage",
+          "mapped": "stage"
+        },
+        {
+          "original": "pickupAddress",
+          "mapped": "pickup_address"
+        },
+        {
+          "original": "dropoffAddress",
+          "mapped": "dropoff_address"
+        }
+      ]
+    },
+    {
+      "type": "Courier",
+      "fieldMappings": [
+        {
+          "original": "availability",
+          "mapped": "availability"
+        },
+        {
+          "original": "offers",
+          "mapped": "offers"
+        },
+        {
+          "original": "currentDelivery",
+          "mapped": "current_delivery"
+        }
+      ]
+    },
+    {
+      "type": "CourierPayload",
+      "fieldMappings": [
+        {
+          "original": "courier",
+          "mapped": "courier"
+        },
+        {
+          "original": "problem",
+          "mapped": "problem"
+        }
+      ]
+    },
+    {
       "type": "OrderLineInput",
       "fieldMappings": [
         {
@@ -647,6 +908,121 @@
         {
           "original": "ENDED",
           "mapped": "ORDER_MILESTONE_KIND_ENDED"
+        }
+      ]
+    },
+    {
+      "type": "KitchenOrderStage",
+      "values": [
+        {
+          "original": "RECEIVED",
+          "mapped": "KITCHEN_ORDER_STAGE_RECEIVED"
+        },
+        {
+          "original": "QUEUED",
+          "mapped": "KITCHEN_ORDER_STAGE_QUEUED"
+        },
+        {
+          "original": "PREPARING",
+          "mapped": "KITCHEN_ORDER_STAGE_PREPARING"
+        },
+        {
+          "original": "ASSEMBLED",
+          "mapped": "KITCHEN_ORDER_STAGE_ASSEMBLED"
+        },
+        {
+          "original": "READY",
+          "mapped": "KITCHEN_ORDER_STAGE_READY"
+        }
+      ]
+    },
+    {
+      "type": "KitchenAction",
+      "values": [
+        {
+          "original": "ACCEPT",
+          "mapped": "KITCHEN_ACTION_ACCEPT"
+        },
+        {
+          "original": "REJECT",
+          "mapped": "KITCHEN_ACTION_REJECT"
+        },
+        {
+          "original": "START_PREPARATION",
+          "mapped": "KITCHEN_ACTION_START_PREPARATION"
+        },
+        {
+          "original": "MARK_ASSEMBLED",
+          "mapped": "KITCHEN_ACTION_MARK_ASSEMBLED"
+        },
+        {
+          "original": "MARK_READY",
+          "mapped": "KITCHEN_ACTION_MARK_READY"
+        }
+      ]
+    },
+    {
+      "type": "KitchenActionProblemCode",
+      "values": [
+        {
+          "original": "ORDER_STAGE_CONFLICT",
+          "mapped": "KITCHEN_ACTION_PROBLEM_CODE_ORDER_STAGE_CONFLICT"
+        }
+      ]
+    },
+    {
+      "type": "CourierAvailability",
+      "values": [
+        {
+          "original": "AVAILABLE",
+          "mapped": "COURIER_AVAILABILITY_AVAILABLE"
+        },
+        {
+          "original": "BUSY",
+          "mapped": "COURIER_AVAILABILITY_BUSY"
+        },
+        {
+          "original": "UNAVAILABLE",
+          "mapped": "COURIER_AVAILABILITY_UNAVAILABLE"
+        }
+      ]
+    },
+    {
+      "type": "CourierDeliveryStage",
+      "values": [
+        {
+          "original": "ASSIGNED",
+          "mapped": "COURIER_DELIVERY_STAGE_ASSIGNED"
+        },
+        {
+          "original": "PICKED_UP",
+          "mapped": "COURIER_DELIVERY_STAGE_PICKED_UP"
+        }
+      ]
+    },
+    {
+      "type": "CourierDeliveryAction",
+      "values": [
+        {
+          "original": "CONFIRM_PICKUP",
+          "mapped": "COURIER_DELIVERY_ACTION_CONFIRM_PICKUP"
+        },
+        {
+          "original": "CONFIRM_DELIVERY",
+          "mapped": "COURIER_DELIVERY_ACTION_CONFIRM_DELIVERY"
+        }
+      ]
+    },
+    {
+      "type": "CourierProblemCode",
+      "values": [
+        {
+          "original": "OFFER_NOT_AVAILABLE",
+          "mapped": "COURIER_PROBLEM_CODE_OFFER_NOT_AVAILABLE"
+        },
+        {
+          "original": "DELIVERY_STAGE_CONFLICT",
+          "mapped": "COURIER_PROBLEM_CODE_DELIVERY_STAGE_CONFLICT"
         }
       ]
     },

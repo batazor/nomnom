@@ -56,12 +56,14 @@ func TestWiringOpensOneConnectionPerAudience(t *testing.T) {
 	dial := &recordingDial{}
 	bff, err := newBffService(config{identity: identityConfig(t), internalGateway: "gateway:8080"}, dial.dial)
 	require.NoError(t, err)
-	assert.Equal(t, []string{audienceOrders, audienceRestaurants}, dial.audiences)
+	assert.Equal(t, []string{audienceOrders, audienceRestaurants, audienceDelivery}, dial.audiences)
 	assert.NotNil(t, bff.accessTokens)
 	assert.NotNil(t, bff.tracking)
 	assert.NotNil(t, bff.catalog)
 	assert.NotNil(t, bff.checkout)
 	assert.NotNil(t, bff.management)
+	assert.NotNil(t, bff.kitchen)
+	assert.NotNil(t, bff.courier)
 }
 
 func TestWiringWithoutGatewayOrIdentityLeavesSlicesUnconnected(t *testing.T) {
@@ -77,6 +79,8 @@ func TestWiringWithoutGatewayOrIdentityLeavesSlicesUnconnected(t *testing.T) {
 	assert.Nil(t, bff.catalog)
 	assert.Nil(t, bff.checkout)
 	assert.Nil(t, bff.management)
+	assert.Nil(t, bff.kitchen)
+	assert.Nil(t, bff.courier)
 	assert.Empty(t, dial.audiences)
 }
 

@@ -489,12 +489,14 @@ func (x *Order) GetCancellationWindow() *CancellationWindow {
 }
 
 type OrderSummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	RestaurantId  string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
-	State         OrderState             `protobuf:"varint,3,opt,name=state,proto3,enum=nomnom.orders.v1.OrderState" json:"state,omitempty"`
-	Total         *Money                 `protobuf:"bytes,4,opt,name=total,proto3" json:"total,omitempty"`
-	PlacedAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	OrderId      string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	RestaurantId string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	State        OrderState             `protobuf:"varint,3,opt,name=state,proto3,enum=nomnom.orders.v1.OrderState" json:"state,omitempty"`
+	Total        *Money                 `protobuf:"bytes,4,opt,name=total,proto3" json:"total,omitempty"`
+	PlacedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
+	// page_token of ListCustomerOrders that continues after this Order.
+	Cursor        string `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -564,6 +566,13 @@ func (x *OrderSummary) GetPlacedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *OrderSummary) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
 var File_nomnom_orders_v1_orders_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
@@ -604,13 +613,14 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x11fulfillment_facts\x18\t \x03(\v2!.nomnom.orders.v1.FulfillmentFactR\x10fulfillmentFacts\x12B\n" +
 	"\fcancellation\x18\n" +
 	" \x01(\v2\x1e.nomnom.orders.v1.CancellationR\fcancellation\x12U\n" +
-	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindow\"\xea\x01\n" +
+	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindow\"\x82\x02\n" +
 	"\fOrderSummary\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x122\n" +
 	"\x05state\x18\x03 \x01(\x0e2\x1c.nomnom.orders.v1.OrderStateR\x05state\x12-\n" +
 	"\x05total\x18\x04 \x01(\v2\x17.nomnom.orders.v1.MoneyR\x05total\x127\n" +
-	"\tplaced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt*\x92\x01\n" +
+	"\tplaced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\x12\x16\n" +
+	"\x06cursor\x18\x06 \x01(\tR\x06cursor*\x92\x01\n" +
 	"\n" +
 	"OrderState\x12\x1b\n" +
 	"\x17ORDER_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +

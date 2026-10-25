@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
@@ -105,4 +107,24 @@ func money(value applications.Money) *service.Money {
 // timestamp formats moments in RFC 3339, as the public schema requires.
 func timestamp(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
+}
+
+// orderConnection presents a page of the order history; every node is the
+// same Order as order(id).
+func orderConnection(page applications.OrderPage) (*service.OrderConnection, error) {
+	connection := &service.OrderConnection{
+		Edges:    make([]*service.OrderEdge, 0, len(page.Edges)),
+		PageInfo: &service.PageInfo{HasNextPage: page.HasNextPage},
+	}
+	if page.EndCursor != "" {
+		connection.PageInfo.EndCursor = wrapperspb.String(page.EndCursor)
+	}
+	for _, edge := range page.Edges {
+		order, err := orderMessage(edge.Order)
+		if err != nil {
+			return nil, err
+		}
+		connection.Edges = append(connection.Edges, &service.OrderEdge{Cursor: edge.Cursor, Node: order})
+	}
+	return connection, nil
 }

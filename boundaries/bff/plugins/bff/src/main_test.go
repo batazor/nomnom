@@ -27,12 +27,16 @@ func TestQueryBffInfo(t *testing.T) {
 }
 
 // Customer operations are published in the schema ahead of their resolvers.
-func TestCustomerOperationsAreNotImplementedYet(t *testing.T) {
-	_, err := newClient(t).QueryCustomerOrders(
-		context.Background(),
-		&service.QueryCustomerOrdersRequest{First: 10},
-	)
-	require.Equal(t, codes.Unimplemented, status.Code(err))
+// Every operation of the schema is implemented: without identity the
+// customer operations are UNAUTHENTICATED, not UNIMPLEMENTED.
+func TestCustomerOperationsNeedAuthentication(t *testing.T) {
+	client := newClient(t)
+	_, err := client.QueryCustomerOrders(context.Background(), &service.QueryCustomerOrdersRequest{First: 10})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	_, err = client.QueryCourier(context.Background(), &service.QueryCourierRequest{})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	_, err = client.QueryKitchen(context.Background(), &service.QueryKitchenRequest{RestaurantId: "restaurant-1"})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
 func newClient(t *testing.T) service.BffServiceClient {

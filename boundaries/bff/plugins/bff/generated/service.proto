@@ -7,6 +7,15 @@ import "google/protobuf/wrappers.proto";
 
 // Service definition for BffService
 service BffService {
+  // Accept a delivery offer addressed to the current courier
+  rpc MutationAcceptDeliveryOffer(MutationAcceptDeliveryOfferRequest) returns (MutationAcceptDeliveryOfferResponse) {}
+  // Apply a command to the current delivery of the courier
+  rpc MutationApplyCourierDeliveryAction(MutationApplyCourierDeliveryActionRequest) returns (MutationApplyCourierDeliveryActionResponse) {}
+  /*
+   * Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
+   * changes nothing
+   */
+  rpc MutationApplyKitchenAction(MutationApplyKitchenActionRequest) returns (MutationApplyKitchenActionResponse) {}
   // Close a restaurant of the current user for new orders; repeating it changes nothing
   rpc MutationCloseRestaurant(MutationCloseRestaurantRequest) returns (MutationCloseRestaurantResponse) {}
   // Open a restaurant of the current user for new orders; repeating it changes nothing
@@ -15,10 +24,19 @@ service BffService {
   rpc MutationPlaceOrder(MutationPlaceOrderRequest) returns (MutationPlaceOrderResponse) {}
   // Request cancellation of an order of the current customer
   rpc MutationRequestOrderCancellation(MutationRequestOrderCancellationRequest) returns (MutationRequestOrderCancellationResponse) {}
+  // Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
+  rpc MutationSetCourierAvailability(MutationSetCourierAvailabilityRequest) returns (MutationSetCourierAvailabilityResponse) {}
   // Metadata for the client BFF
   rpc QueryBffInfo(QueryBffInfoRequest) returns (QueryBffInfoResponse) {}
+  // Work of the current user as a courier, null if the user is not a registered courier
+  rpc QueryCourier(QueryCourierRequest) returns (QueryCourierResponse) {}
   // Orders of the current customer, newest first
   rpc QueryCustomerOrders(QueryCustomerOrdersRequest) returns (QueryCustomerOrdersResponse) {}
+  /*
+   * Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
+   * restaurant, null if the restaurant does not exist or the user may not operate its kitchen
+   */
+  rpc QueryKitchen(QueryKitchenRequest) returns (QueryKitchenResponse) {}
   // Restaurants the current user owns, open and closed, ordered by identifier; menu is null
   rpc QueryMyRestaurants(QueryMyRestaurantsRequest) returns (QueryMyRestaurantsResponse) {}
   // Order of the current customer, null if it does not exist or belongs to someone else
@@ -85,6 +103,32 @@ message QueryMyRestaurantsResponse {
   // Restaurants the current user owns, open and closed, ordered by identifier; menu is null
   RestaurantConnection my_restaurants = 1;
 }
+/*
+ * Request message for kitchen operation: Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
+ * restaurant, null if the restaurant does not exist or the user may not operate its kitchen.
+ */
+message QueryKitchenRequest {
+  string restaurant_id = 1;
+}
+/*
+ * Response message for kitchen operation: Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
+ * restaurant, null if the restaurant does not exist or the user may not operate its kitchen.
+ */
+message QueryKitchenResponse {
+  /*
+   * Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
+   * restaurant, null if the restaurant does not exist or the user may not operate its kitchen
+   */
+  Kitchen kitchen = 1;
+}
+// Request message for courier operation: Work of the current user as a courier, null if the user is not a registered courier.
+message QueryCourierRequest {
+}
+// Response message for courier operation: Work of the current user as a courier, null if the user is not a registered courier.
+message QueryCourierResponse {
+  // Work of the current user as a courier, null if the user is not a registered courier
+  Courier courier = 1;
+}
 // Request message for placeOrder operation: Place an order for the current customer.
 message MutationPlaceOrderRequest {
   PlaceOrderInput input = 1;
@@ -120,6 +164,52 @@ message MutationCloseRestaurantRequest {
 message MutationCloseRestaurantResponse {
   // Close a restaurant of the current user for new orders; repeating it changes nothing
   RestaurantOpeningPayload close_restaurant = 1;
+}
+/*
+ * Request message for applyKitchenAction operation: Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
+ * changes nothing.
+ */
+message MutationApplyKitchenActionRequest {
+  KitchenActionInput input = 1;
+}
+/*
+ * Response message for applyKitchenAction operation: Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
+ * changes nothing.
+ */
+message MutationApplyKitchenActionResponse {
+  /*
+   * Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
+   * changes nothing
+   */
+  KitchenActionPayload apply_kitchen_action = 1;
+}
+// Request message for setCourierAvailability operation: Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only.
+message MutationSetCourierAvailabilityRequest {
+  CourierAvailability availability = 1;
+}
+// Response message for setCourierAvailability operation: Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only.
+message MutationSetCourierAvailabilityResponse {
+  // Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
+  CourierPayload set_courier_availability = 1;
+}
+// Request message for acceptDeliveryOffer operation: Accept a delivery offer addressed to the current courier.
+message MutationAcceptDeliveryOfferRequest {
+  string offer_id = 1;
+}
+// Response message for acceptDeliveryOffer operation: Accept a delivery offer addressed to the current courier.
+message MutationAcceptDeliveryOfferResponse {
+  // Accept a delivery offer addressed to the current courier
+  CourierPayload accept_delivery_offer = 1;
+}
+// Request message for applyCourierDeliveryAction operation: Apply a command to the current delivery of the courier.
+message MutationApplyCourierDeliveryActionRequest {
+  string delivery_id = 1;
+  CourierDeliveryAction action = 2;
+}
+// Response message for applyCourierDeliveryAction operation: Apply a command to the current delivery of the courier.
+message MutationApplyCourierDeliveryActionResponse {
+  // Apply a command to the current delivery of the courier
+  CourierPayload apply_courier_delivery_action = 1;
 }
 
 message BffInfo {
@@ -181,6 +271,27 @@ message OrderConnection {
   PageInfo page_info = 2;
 }
 
+// Active orders of one restaurant for its kitchen staff
+message Kitchen {
+  // Restaurant the kitchen belongs to; menu is null
+  Restaurant restaurant = 1;
+  /*
+   * Orders in RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY: RECEIVED by ascending
+   * receivedAt, then the kitchen queue order, then the rest by ascending receivedAt
+   */
+  repeated KitchenOrder orders = 2;
+}
+
+// Work of the current courier
+message Courier {
+  // Current availability
+  CourierAvailability availability = 1;
+  // Pending delivery offers, empty unless AVAILABLE
+  repeated DeliveryOffer offers = 2;
+  // Delivery in progress, null if none
+  CourierDelivery current_delivery = 3;
+}
+
 message PlaceOrderInput {
   // Restaurant to order from
   string restaurant_id = 1;
@@ -221,6 +332,29 @@ message RestaurantOpeningPayload {
   Restaurant restaurant = 1;
   // False when the restaurant was already in the requested state
   bool changed = 2;
+}
+
+message KitchenActionInput {
+  // Restaurant of the order
+  string restaurant_id = 1;
+  // Restaurant order identifier (KitchenOrder.id)
+  string kitchen_order_id = 2;
+  // Command to apply
+  KitchenAction action = 3;
+}
+
+message KitchenActionPayload {
+  // Order after the command; null if problem is set or the order left the kitchen
+  KitchenOrder order = 1;
+  // Business problem, null on success
+  KitchenActionProblemCode problem = 2;
+}
+
+message CourierPayload {
+  // Courier after the command
+  Courier courier = 1;
+  // Business problem, null on success
+  CourierProblemCode problem = 2;
 }
 
 // Exact monetary amount
@@ -358,6 +492,131 @@ message OrderEdge {
   string cursor = 1;
   // Order
   Order node = 2;
+}
+
+// Stage of a restaurant order in the kitchen
+enum KitchenOrderStage {
+  KITCHEN_ORDER_STAGE_UNSPECIFIED = 0;
+  // Order arrived and waits for the kitchen to accept or reject it
+  KITCHEN_ORDER_STAGE_RECEIVED = 1;
+  // Order is accepted and waits in the kitchen queue
+  KITCHEN_ORDER_STAGE_QUEUED = 2;
+  // Kitchen is preparing the order
+  KITCHEN_ORDER_STAGE_PREPARING = 3;
+  // Order is assembled and waits to be marked ready
+  KITCHEN_ORDER_STAGE_ASSEMBLED = 4;
+  // Order is ready for pickup
+  KITCHEN_ORDER_STAGE_READY = 5;
+}
+
+// Line of a restaurant order as the kitchen sees it
+message KitchenOrderItem {
+  // Display name of the menu item, empty if it is no longer in the menu
+  string name = 1;
+  // Number of units
+  int32 quantity = 2;
+}
+
+// Order of a restaurant as its kitchen sees it
+message KitchenOrder {
+  // Restaurant order identifier, used by the kitchen commands
+  string id = 1;
+  // Customer order identifier
+  string order_id = 2;
+  // Current stage in the kitchen
+  KitchenOrderStage stage = 3;
+  // Ordered items
+  repeated KitchenOrderItem items = 4;
+  // Moment the restaurant received the order in RFC 3339
+  string received_at = 5;
+}
+
+// Command of the kitchen over one restaurant order
+enum KitchenAction {
+  KITCHEN_ACTION_UNSPECIFIED = 0;
+  // Accept a RECEIVED order into the kitchen queue
+  KITCHEN_ACTION_ACCEPT = 1;
+  // Reject a RECEIVED order
+  KITCHEN_ACTION_REJECT = 2;
+  // Start preparing a QUEUED order
+  KITCHEN_ACTION_START_PREPARATION = 3;
+  // Mark a PREPARING order assembled
+  KITCHEN_ACTION_MARK_ASSEMBLED = 4;
+  // Mark an ASSEMBLED order ready for pickup
+  KITCHEN_ACTION_MARK_READY = 5;
+}
+
+// Business reason why a kitchen command cannot be applied
+enum KitchenActionProblemCode {
+  KITCHEN_ACTION_PROBLEM_CODE_UNSPECIFIED = 0;
+  // The order is not in a stage that allows this command
+  KITCHEN_ACTION_PROBLEM_CODE_ORDER_STAGE_CONFLICT = 1;
+}
+
+// Availability of a courier for new deliveries
+enum CourierAvailability {
+  COURIER_AVAILABILITY_UNSPECIFIED = 0;
+  // Courier receives delivery offers
+  COURIER_AVAILABILITY_AVAILABLE = 1;
+  // Courier is on a delivery
+  COURIER_AVAILABILITY_BUSY = 2;
+  // Courier does not receive delivery offers
+  COURIER_AVAILABILITY_UNAVAILABLE = 3;
+}
+
+// Delivery offered to the courier, valid until expiresAt
+message DeliveryOffer {
+  // Offer identifier
+  string id = 1;
+  // Delivery the offer is for
+  string delivery_id = 2;
+  // Where to pick the order up
+  string pickup_address = 3;
+  // Where to deliver the order
+  string dropoff_address = 4;
+  // Moment in RFC 3339 after which the offer cannot be accepted
+  string expires_at = 5;
+}
+
+// Stage of a delivery assigned to the courier
+enum CourierDeliveryStage {
+  COURIER_DELIVERY_STAGE_UNSPECIFIED = 0;
+  // Courier is going to the restaurant
+  COURIER_DELIVERY_STAGE_ASSIGNED = 1;
+  // Courier has the order and is going to the customer
+  COURIER_DELIVERY_STAGE_PICKED_UP = 2;
+}
+
+// Delivery the courier is currently carrying out
+message CourierDelivery {
+  // Delivery identifier
+  string id = 1;
+  // Customer order identifier
+  string order_id = 2;
+  // Current stage
+  CourierDeliveryStage stage = 3;
+  // Where to pick the order up
+  string pickup_address = 4;
+  // Where to deliver the order
+  string dropoff_address = 5;
+}
+
+// Command of the courier over the current delivery
+enum CourierDeliveryAction {
+  COURIER_DELIVERY_ACTION_UNSPECIFIED = 0;
+  // Confirm the order is picked up at the restaurant
+  COURIER_DELIVERY_ACTION_CONFIRM_PICKUP = 1;
+  // Confirm the order is handed to the customer
+  COURIER_DELIVERY_ACTION_CONFIRM_DELIVERY = 2;
+}
+
+// Business reason why a courier command cannot be applied
+enum CourierProblemCode {
+  COURIER_PROBLEM_CODE_UNSPECIFIED = 0;
+  // The offer expired or was taken
+  COURIER_PROBLEM_CODE_OFFER_NOT_AVAILABLE = 1;
+  // The delivery is not in a stage that allows this command
+  COURIER_PROBLEM_CODE_DELIVERY_STAGE_CONFLICT = 2;
 }
 
 message OrderLineInput {
