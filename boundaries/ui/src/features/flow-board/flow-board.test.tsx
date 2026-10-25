@@ -155,6 +155,30 @@ describe("flow board", () => {
     expect(within(courier).getByText("На линии")).toBeVisible();
   }, 15_000);
 
+  it("places the order when the cart is dragged to the kitchen", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить в корзину: Манго и клейкий рис",
+      }),
+    );
+
+    // The cart itself is dragged; there is no separate handle for it.
+    const cart = screen
+      .getByRole("region", { name: "Корзина" })
+      .closest<HTMLElement>('[draggable="true"]');
+    if (!cart) throw new Error("The filled cart is not draggable");
+    fireEvent.dragStart(cart, { dataTransfer: dataTransfer() });
+    expect(column("Кухня")).toHaveAttribute("data-drop", "ready");
+    fireEvent.drop(column("Кухня"), { dataTransfer: dataTransfer() });
+
+    expect(
+      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
+    ).toBeInTheDocument();
+  });
+
   it("carries an accepted order to the courier by dragging", async () => {
     const user = userEvent.setup();
     renderBoard();

@@ -491,3 +491,12 @@ button.board-card-head {
   padding-block: var(--space-4);
   text-align: center;
 }
+
+/* The filled cart can be dragged to the kitchen to place the order. */
+.restaurant-cart-carrier[draggable="true"] {
+  cursor: grab;
+}
+
+.restaurant-cart-carrier[draggable="true"]:active {
+  cursor: grabbing;
+}

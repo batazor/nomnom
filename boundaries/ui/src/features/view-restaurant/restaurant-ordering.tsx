@@ -1,5 +1,11 @@
 import { m } from "motion/react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type HTMLAttributes,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useQuery } from "urql";
 
 import {
@@ -23,9 +29,13 @@ type ViewedRestaurant = NonNullable<ViewRestaurantQuery["restaurant"]>;
 export function RestaurantOrdering({
   restaurantId,
   onPlaced,
+  cartDrag,
 }: {
   restaurantId: string;
   onPlaced: (orderId: string) => void;
+  // Props that let the filled cart be carried somewhere else, e.g. dragged
+  // to the kitchen on the board.
+  cartDrag?: HTMLAttributes<HTMLElement>;
 }) {
   const { t } = useI18n();
   const [{ data, error, fetching }, reexecute] = useQuery({
@@ -55,15 +65,23 @@ export function RestaurantOrdering({
       />
     );
   }
-  return <RestaurantView onPlaced={onPlaced} restaurant={data.restaurant} />;
+  return (
+    <RestaurantView
+      cartDrag={cartDrag}
+      onPlaced={onPlaced}
+      restaurant={data.restaurant}
+    />
+  );
 }
 
 function RestaurantView({
   restaurant,
   onPlaced,
+  cartDrag,
 }: {
   restaurant: ViewedRestaurant;
   onPlaced: (orderId: string) => void;
+  cartDrag?: HTMLAttributes<HTMLElement>;
 }) {
   const { t } = useI18n();
   const cart = useCart(restaurant.id);
@@ -149,29 +167,36 @@ function RestaurantView({
               />
             ) : null}
           </div>
-          <CartPanel
-            entries={entries}
-            itemProblems={itemProblems}
-            onQuantity={cart.setQuantity}
-            onRemove={cart.remove}
-            subtotal={subtotal}
+          <div
+            className="restaurant-cart-carrier"
+            {...(restaurant.acceptingOrders && entries.length > 0
+              ? cartDrag
+              : {})}
           >
-            {restaurant.acceptingOrders ? (
-              <PlaceOrder
-                lines={entries.map(({ line }) => line)}
-                onItemProblems={setItemProblems}
-                onPlaced={(orderId) => {
-                  cart.clear();
-                  toast({
-                    title: t("order.sentToKitchen"),
-                    description: restaurant.name,
-                  });
-                  onPlaced(orderId);
-                }}
-                restaurantId={restaurant.id}
-              />
-            ) : null}
-          </CartPanel>
+            <CartPanel
+              entries={entries}
+              itemProblems={itemProblems}
+              onQuantity={cart.setQuantity}
+              onRemove={cart.remove}
+              subtotal={subtotal}
+            >
+              {restaurant.acceptingOrders ? (
+                <PlaceOrder
+                  lines={entries.map(({ line }) => line)}
+                  onItemProblems={setItemProblems}
+                  onPlaced={(orderId) => {
+                    cart.clear();
+                    toast({
+                      title: t("order.sentToKitchen"),
+                      description: restaurant.name,
+                    });
+                    onPlaced(orderId);
+                  }}
+                  restaurantId={restaurant.id}
+                />
+              ) : null}
+            </CartPanel>
+          </div>
         </div>
       ) : (
         <p className="restaurant-no-menu">{t("restaurant.noMenu")}</p>

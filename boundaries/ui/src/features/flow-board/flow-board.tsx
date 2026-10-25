@@ -16,8 +16,9 @@ import { AsRole, useCanAct } from "../../shared/session/roles";
 import { Button, ExpandedCard, HelpTip, Illustration } from "../../shared/ui";
 import { RestaurantPicker } from "../browse-restaurants";
 import { OrderDetails } from "../view-order";
+import { checkoutFormId } from "../place-order";
 import { RestaurantOrdering } from "../view-restaurant";
-import { BoardDragProvider } from "./board-dnd";
+import { BoardDragProvider, useDragSource, useDropTarget } from "./board-dnd";
 import { useBoardOrders } from "./board-orders";
 import { CourierColumn } from "./courier-column";
 import { KitchenColumn } from "./kitchen-column";
@@ -152,7 +153,7 @@ function Board() {
                 >
                   {t("board.customer.back")}
                 </Button>
-                <RestaurantOrdering
+                <DraggableOrdering
                   onPlaced={placed}
                   restaurantId={customerRestaurantId}
                 />
@@ -170,7 +171,7 @@ function Board() {
             )}
           </BoardColumn>
 
-          <BoardColumn column="kitchen">
+          <KitchenDropColumn>
             {canAct ? (
               <KitchenColumn
                 onOpenOrder={(orderId) => openDetails(orderId, "kitchen")}
@@ -183,7 +184,7 @@ function Board() {
                 <p className="board-empty">{t("board.session.neededSignIn")}</p>
               </div>
             )}
-          </BoardColumn>
+          </KitchenDropColumn>
 
           <BoardColumn column="courier">
             {canAct ? (
@@ -215,11 +216,47 @@ function Board() {
   );
 }
 
+// The filled cart itself is the thing to drag: dropped on the kitchen it is
+// checked out, the same as its checkout button.
+function DraggableOrdering({
+  restaurantId,
+  onPlaced,
+}: {
+  restaurantId: string;
+  onPlaced: (orderId: string) => void;
+}) {
+  const cartDrag = useDragSource({
+    kind: "cart",
+    submit: () =>
+      document
+        .querySelector<HTMLFormElement>(`#${checkoutFormId}`)
+        ?.requestSubmit(),
+  });
+  return (
+    <RestaurantOrdering
+      cartDrag={cartDrag}
+      onPlaced={onPlaced}
+      restaurantId={restaurantId}
+    />
+  );
+}
+
+function KitchenDropColumn({ children }: { children: ReactNode }) {
+  const drop = useDropTarget("cart", (cargo) => cargo.submit());
+  return (
+    <BoardColumn column="kitchen" drop={drop}>
+      {children}
+    </BoardColumn>
+  );
+}
+
 function BoardColumn({
   column,
+  drop,
   children,
 }: {
   column: Column;
+  drop?: ReturnType<typeof useDropTarget>;
   children: ReactNode;
 }) {
   const { t } = useI18n();
@@ -228,6 +265,7 @@ function BoardColumn({
       aria-labelledby={`board-column-${column}-title`}
       className="board-column"
       data-column={column}
+      {...drop}
     >
       <header className="board-column-header">
         <h2 id={`board-column-${column}-title`}>{t(columnTitle[column])}</h2>
