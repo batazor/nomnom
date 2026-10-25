@@ -7,7 +7,7 @@ use crate::infrastructure::memory::RecordingRelationships;
 use crate::infrastructure::postgres::test_support::TestStore;
 use crate::slices::courier::applications::{register_courier, update_courier_location};
 use crate::slices::delivery::applications::{create_delivery, dispatch_deliveries};
-use crate::slices::delivery::domains::delivery::State;
+use crate::slices::delivery::domains::delivery::{ExpectedTime, State};
 use crate::slices::simulator::applications::work::{
     ActiveDeliveryWork, PendingOfferWork, SimulatorWork,
 };
@@ -93,9 +93,11 @@ impl SimulatorWork for FakeWork {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Call {
-    Accept(String, String),
+    /// Courier, offer, named Pickup time.
+    Accept(String, String, i64),
     Reject(String, String),
-    Pickup(String, String),
+    /// Courier, delivery, named handover time.
+    Pickup(String, String, i64),
     Deliver(String, String),
     Fail(String, String, DeliveryFailureCode),
 }
@@ -125,8 +127,14 @@ impl CourierActions for RecordingActions {
         &self,
         courier: &CourierId,
         offer: &DeliveryOfferId,
-    ) -> Result<(), DeliveryApplicationError> {
-        self.record(Call::Accept(courier.as_str().into(), offer.as_str().into()))
+        expected_pickup_at_epoch_seconds: i64,
+    ) -> Result<DeliveryId, DeliveryApplicationError> {
+        self.record(Call::Accept(
+            courier.as_str().into(),
+            offer.as_str().into(),
+            expected_pickup_at_epoch_seconds,
+        ))
+        .map(|()| delivery_of(offer.as_str()))
     }
 
     fn reject_offer(
@@ -141,10 +149,12 @@ impl CourierActions for RecordingActions {
         &self,
         courier: &CourierId,
         delivery: &DeliveryId,
+        expected_delivered_at_epoch_seconds: i64,
     ) -> Result<(), DeliveryApplicationError> {
         self.record(Call::Pickup(
             courier.as_str().into(),
             delivery.as_str().into(),
+            expected_delivered_at_epoch_seconds,
         ))
     }
 
@@ -171,6 +181,11 @@ impl CourierActions for RecordingActions {
             reason,
         ))
     }
+}
+
+/// Delivery of an offer accepted through [`RecordingActions`].
+fn delivery_of(offer: &str) -> DeliveryId {
+    DeliveryId::new(format!("delivery-of-{offer}"))
 }
 
 struct Harness {
@@ -240,9 +255,10 @@ fn acts_only_when_the_delay_from_first_sight_is_over() {
 
     h.clock.advance(1);
     h.simulator.tick();
+    // The handover delay falls back to MIN_DELAY: planned at 1040 + 30.
     assert_eq!(
         h.actions.calls(),
-        [Call::Pickup("c-1".into(), "d-1".into())]
+        [Call::Pickup("c-1".into(), "d-1".into(), 1_070)]
     );
 }
 
@@ -292,7 +308,7 @@ fn outcome_is_selected_by_the_weights_of_each_entity() {
     assert_eq!(
         h.actions.calls()[2..],
         [
-            Call::Pickup("c-1".into(), "d-1".into()),
+            Call::Pickup("c-1".into(), "d-1".into(), 1_090),
             Call::Fail(
                 "c-2".into(),
                 "d-2".into(),
@@ -381,7 +397,66 @@ fn offer_delay_ends_before_the_offer_expires() {
     h.simulator.tick();
     assert_eq!(
         h.actions.calls(),
-        [Call::Accept("c-2".into(), "o-2".into())]
+        [Call::Accept("c-2".into(), "o-2".into(), 1_045)]
+    );
+}
+
+/// FR-610: the Simulator names the moments it plans and acts at them —
+/// Pickup at the time named on acceptance, handover at the time named on
+/// Pickup.
+#[test]
+fn names_planned_times_and_acts_at_them() {
+    let mut h = harness(scripted(&[30, 45, 50], &[0, 0, 0]));
+    h.work
+        .offers
+        .lock()
+        .expect("offers")
+        .push(offer("o-1", "c-1", 10_000));
+    h.simulator.tick();
+    h.clock.advance(30);
+    h.simulator.tick();
+    assert_eq!(
+        h.actions.calls(),
+        [Call::Accept("c-1".into(), "o-1".into(), 1_075)]
+    );
+
+    h.work.offers.lock().expect("offers").clear();
+    h.work
+        .deliveries
+        .lock()
+        .expect("deliveries")
+        .push(ActiveDeliveryWork {
+            delivery_id: delivery_of("o-1"),
+            courier_id: CourierId::new("c-1"),
+            step: DeliveryStep::Pickup,
+        });
+    h.clock.advance(44);
+    h.simulator.tick();
+    assert_eq!(
+        h.actions.calls().len(),
+        1,
+        "not before the named Pickup time"
+    );
+    h.clock.advance(1);
+    h.simulator.tick();
+    assert_eq!(
+        h.actions.calls()[1],
+        Call::Pickup("c-1".into(), "delivery-of-o-1".into(), 1_125)
+    );
+
+    h.work.deliveries.lock().expect("deliveries")[0].step = DeliveryStep::Handover;
+    h.clock.advance(49);
+    h.simulator.tick();
+    assert_eq!(
+        h.actions.calls().len(),
+        2,
+        "not before the named handover time"
+    );
+    h.clock.advance(1);
+    h.simulator.tick();
+    assert_eq!(
+        h.actions.calls()[2],
+        Call::Deliver("c-1".into(), "delivery-of-o-1".into())
     );
 }
 
@@ -441,7 +516,8 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
         Arc::clone(&store) as _,
         Arc::new(UseCaseCourierActions::new(Arc::clone(&use_cases))),
         Arc::clone(&clock) as _,
-        Box::new(scripted(&[0], &[0])),
+        // Offer delay 0, then the Pickup delay of the named Pickup time.
+        Box::new(scripted(&[0, 600], &[0])),
         SimulatorSchedule {
             interval: Duration::from_secs(1),
             min_delay: Duration::from_secs(1),
@@ -459,6 +535,11 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
     .expect("read delivery")
     .expect("delivery exists");
     assert_eq!(delivery.state(), State::Assigned);
+    // FR-610: the planned Pickup moment reaches the Delivery.
+    assert_eq!(
+        delivery.expected_pickup_at(),
+        Some(ExpectedTime::restore(clock.now_epoch_seconds() + 600))
+    );
     assert_eq!(
         store.active_deliveries().expect("work"),
         [ActiveDeliveryWork {

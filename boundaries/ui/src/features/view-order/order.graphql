@@ -35,6 +35,10 @@ fragment ViewedOrder on Order {
   cancellation {
     availableUntil
   }
+  # Deadlines named by the kitchen and the courier, null until named (FR-612).
+  expectedReadyAt
+  expectedPickupAt
+  expectedDeliveredAt
 }
 
 query ViewOrder($id: ID!) {

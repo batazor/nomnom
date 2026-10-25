@@ -1,8 +1,9 @@
 //! Confirm Pickup: the assigned courier confirms that the order was picked up
-//! at the restaurant. The Pickup fact is written to the Outbox in the same
-//! Unit of Work.
+//! at the restaurant and may name the expected handover time; a named one
+//! must be in the future (FR-610). The Pickup fact with that time is written
+//! to the Outbox in the same Unit of Work.
 
-use crate::pkg::application::{Subject, UnitOfWork};
+use crate::pkg::application::{Clock, Subject, UnitOfWork};
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };
@@ -10,12 +11,14 @@ use crate::slices::delivery::domains::delivery::{
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
-use super::{courier_id, delivery_id, load_delivery};
+use super::{courier_id, delivery_id, expected_time, load_delivery};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
     pub delivery_id: String,
     pub courier_id: String,
+    /// Handover time the courier names; `None` — not named.
+    pub expected_delivered_at_epoch_seconds: Option<i64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -31,6 +34,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub unit_of_work: &'a U,
     pub deliveries: &'a dyn DeliveryRepository,
     pub outbox: &'a dyn DeliveryOutbox,
+    pub clock: &'a dyn Clock,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -41,6 +45,11 @@ impl<U: UnitOfWork> Handler<'_, U> {
     ) -> Result<Output, DeliveryApplicationError> {
         let delivery_id = delivery_id(&input.delivery_id)?;
         let courier_id = courier_id(&input.courier_id)?;
+        let expected_delivered_at = expected_time(
+            "expected_delivered_at",
+            input.expected_delivered_at_epoch_seconds,
+            self.clock,
+        )?;
         self.authorization.check(
             subject,
             DeliveryPermission::ConfirmPickup,
@@ -49,7 +58,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
 
         self.unit_of_work.run(|| {
             let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
-            let changed = match delivery.confirm_pickup(&courier_id) {
+            let changed = match delivery.confirm_pickup(&courier_id, expected_delivered_at) {
                 Ok(_) => true,
                 Err(DeliveryError::Transition(TransitionError::AlreadyInState { .. }))
                     if delivery.courier_id() == Some(&courier_id) =>
@@ -78,9 +87,12 @@ mod tests {
     use crate::infrastructure::postgres::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::delivery::applications::authorization::DeliveryResource;
+    use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
-    use crate::slices::delivery::applications::test_support::{World, subject};
-    use crate::slices::delivery::domains::delivery::{DomainEvent, OrderId};
+    use crate::slices::delivery::applications::test_support::{NOW, World, subject};
+    use crate::slices::delivery::domains::delivery::{
+        DeliveryValidationError, DomainEvent, ExpectedTime, OrderId,
+    };
 
     fn handler(world: &World) -> Handler<'_, TestStore> {
         Handler {
@@ -88,6 +100,7 @@ mod tests {
             unit_of_work: &world.store,
             deliveries: &world.store,
             outbox: &world.store,
+            clock: &world.clock,
         }
     }
 
@@ -95,6 +108,14 @@ mod tests {
         Input {
             delivery_id: "delivery-1".to_owned(),
             courier_id: courier.to_owned(),
+            expected_delivered_at_epoch_seconds: None,
+        }
+    }
+
+    fn input_expecting(courier: &str, expected_delivered_at: i64) -> Input {
+        Input {
+            expected_delivered_at_epoch_seconds: Some(expected_delivered_at),
+            ..input(courier)
         }
     }
 
@@ -117,8 +138,60 @@ mod tests {
                 delivery_id: DeliveryId::new("delivery-1"),
                 order_id: OrderId::new("order-of-delivery-1"),
                 courier_id: CourierId::new("courier-1"),
+                expected_delivered_at_epoch_seconds: None,
             })]
         );
+    }
+
+    /// AC-770: the handover time named on Pickup is stored and reaches
+    /// `DeliveryPickedUp`.
+    #[test]
+    fn pickup_with_expected_handover_time_records_it() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+
+        handler(&world)
+            .execute(
+                &subject("courier-1"),
+                input_expecting("courier-1", NOW + 900),
+            )
+            .expect("pickup confirmed");
+
+        assert_eq!(
+            world.delivery("delivery-1").expected_delivered_at(),
+            Some(ExpectedTime::restore(NOW + 900))
+        );
+        assert_eq!(
+            world.store.outbox_messages(),
+            vec![OutboxMessage::delivery(DomainEvent::DeliveryPickedUp {
+                delivery_id: DeliveryId::new("delivery-1"),
+                order_id: OrderId::new("order-of-delivery-1"),
+                courier_id: CourierId::new("courier-1"),
+                expected_delivered_at_epoch_seconds: Some(NOW + 900),
+            })]
+        );
+    }
+
+    /// FR-610: a named handover time not in the future is an invalid request.
+    #[test]
+    fn handover_time_not_in_the_future_is_rejected() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+
+        for at in [NOW, NOW - 1] {
+            assert_eq!(
+                handler(&world).execute(&subject("courier-1"), input_expecting("courier-1", at)),
+                Err(DeliveryApplicationError::InvalidRequest(
+                    InvalidDeliveryRequest::Validation(
+                        DeliveryValidationError::ExpectedTimeNotInFuture {
+                            field: "expected_delivered_at"
+                        }
+                    )
+                ))
+            );
+        }
+        assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+        assert!(world.store.outbox_messages().is_empty());
     }
 
     /// AC-337

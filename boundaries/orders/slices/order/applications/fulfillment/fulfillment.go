@@ -34,8 +34,9 @@ const (
 	KindPickedUp           Kind = "picked_up"
 	KindDeliveryCompleted  Kind = "delivery_completed"
 	KindDeliveryFailed     Kind = "delivery_failed"
-	// KindPreparationDelayed and KindPreparationFailed are orchestration inputs
-	// only: they are not Fulfillment Facts of the Order.
+	// KindPreparationDelayed and KindPreparationFailed are not Fulfillment
+	// Facts of the Order: a delay only replaces its expected ready time, a
+	// failure is an orchestration input only.
 	KindPreparationDelayed Kind = "preparation_delayed"
 	KindPreparationFailed  Kind = "preparation_failed"
 )

@@ -131,6 +131,17 @@ func TestPreparingOrderWithCourierMilestones(t *testing.T) {
 }
 
 // AC-558: the window is offered only while it is open and the Order is active.
+// FR-611: the view carries the deadlines orders named, unnamed ones stay nil.
+func TestViewCarriesDeadlines(t *testing.T) {
+	ready, pickup := at(12), at(15)
+	order := snapshot("confirmed", Fact{Kind: "restaurant_accepted", OccurredAt: at(1)})
+	order.Deadlines = Deadlines{ExpectedReadyAt: &ready, ExpectedPickupAt: &pickup}
+
+	got := view(t, order, at(2))
+
+	assert.Equal(t, Deadlines{ExpectedReadyAt: &ready, ExpectedPickupAt: &pickup}, got.Deadlines)
+}
+
 func TestCancellationAvailability(t *testing.T) {
 	order := snapshot("placed")
 	order.Window = &CancellationWindow{OpensAt: placedAt, ClosesAt: at(5)}

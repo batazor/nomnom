@@ -168,13 +168,13 @@ fn closed_delivery_is_rejected_as_already_closed() {
     world.courier("courier-1", CourierStatus::Available);
 
     let mut delivered = new_delivery("delivery-1");
-    delivered.assign(courier.clone()).expect("assign");
-    delivered.confirm_pickup(&courier).expect("pickup");
+    delivered.assign(courier.clone(), None).expect("assign");
+    delivered.confirm_pickup(&courier, None).expect("pickup");
     delivered.complete(&courier).expect("complete");
     DeliveryRepository::add(&world.store, &delivered).expect("seed delivered");
 
     let mut failed = new_delivery("delivery-2");
-    failed.assign(courier).expect("assign");
+    failed.assign(courier, None).expect("assign");
     failed
         .fail(
             DeliveryFailureReason::new("no_access", Some("door closed")).expect("reason"),

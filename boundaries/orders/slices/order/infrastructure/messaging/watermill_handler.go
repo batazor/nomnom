@@ -23,6 +23,7 @@ import (
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
 	"nomnom/orders/slices/order/applications/recordorderready"
 	"nomnom/orders/slices/order/applications/recordpickup"
+	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -41,6 +42,7 @@ type Handlers struct {
 	RejectOrder              application.Handler[rejectorder.Input, rejectorder.Result]
 	RecordPreparationStarted application.Handler[recordpreparationstarted.Input, recordpreparationstarted.Result]
 	RecordOrderReady         application.Handler[recordorderready.Input, recordorderready.Result]
+	RecordPreparationDelay   application.Handler[recordpreparationdelay.Input, recordpreparationdelay.Result]
 	RelayPreparationIssue    application.Handler[relaypreparationissue.Input, relaypreparationissue.Result]
 	RecordCourierAssignment  application.Handler[recordcourierassignment.Input, recordcourierassignment.Result]
 	RecordCourierRelease     application.Handler[recordcourierrelease.Input, recordcourierrelease.Result]
@@ -60,7 +62,7 @@ func Streams(h Handlers) []messaging.Stream {
 				handle(h.RejectOrder.Handle, toRejectOrder),
 				handle(h.RecordPreparationStarted.Handle, toRecordPreparationStarted),
 				handle(h.RecordOrderReady.Handle, toRecordOrderReady),
-				handle(h.RelayPreparationIssue.Handle, toPreparationDelayed),
+				handle(h.RecordPreparationDelay.Handle, toRecordPreparationDelay),
 				handle(h.RelayPreparationIssue.Handle, toPreparationFailed),
 			},
 		},
@@ -120,6 +122,8 @@ func isDuplicate(out any) bool {
 	case recordpreparationstarted.Result:
 		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
 	case recordorderready.Result:
+		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case recordpreparationdelay.Result:
 		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
 	case recordcourierassignment.Result:
 		return reflection(r).Outcome == fulfillment.OutcomeDuplicate

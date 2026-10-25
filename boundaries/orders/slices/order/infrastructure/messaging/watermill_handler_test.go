@@ -22,6 +22,7 @@ import (
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
 	"nomnom/orders/slices/order/applications/recordorderready"
 	"nomnom/orders/slices/order/applications/recordpickup"
+	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -59,6 +60,7 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
 		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
 		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
+		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, workflow),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
 		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, authorizer),
 		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, authorizer),
@@ -221,7 +223,7 @@ func TestCourierEventsKeepDeliveryLink(t *testing.T) {
 }
 
 func TestPreparationDelayedIsRelayedToWorkflow(t *testing.T) {
-	c := startConsumer(t)
+	c := startConsumer(t, ordertest.New(t, "order-1"))
 	expected := occurredAt.Add(15 * time.Minute)
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.PreparationDelayed{
@@ -231,7 +233,36 @@ func TestPreparationDelayedIsRelayedToWorkflow(t *testing.T) {
 	assert.Equal(t, []fulfillment.Notification{{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPreparationDelayed, OccurredAt: occurredAt, ExpectedReadyAt: expected,
 	}}, c.workflow.Notifications())
-	assert.Zero(t, c.store.InboxSize())
+	assert.Equal(t, 1, c.store.InboxSize())
+	c.noPoison(t)
+}
+
+// FR-611, AC-771: the consumer carries the deadlines of the events into the
+// Order; a delay replaces the ready time, a reassignment the pickup time.
+func TestEventsCarryExpectedTimesIntoOrder(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1"))
+	readyAt, delayedAt := occurredAt.Add(12*time.Minute), occurredAt.Add(20*time.Minute)
+	firstPickup, secondPickup := occurredAt.Add(25*time.Minute), occurredAt.Add(30*time.Minute)
+	deliveredAt := occurredAt.Add(45 * time.Minute)
+
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "accepted", &restaurantsv1.RestaurantOrderAccepted{
+		OrderId: "order-1", ExpectedReadyAt: timestamppb.New(readyAt),
+	})
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "delayed", &restaurantsv1.PreparationDelayed{
+		OrderId: "order-1", ExpectedReadyAt: timestamppb.New(delayedAt),
+	})
+	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "assigned-1", 2, &deliveryv1.CourierAssignedToDelivery{
+		OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1", ExpectedPickupAt: timestamppb.New(firstPickup),
+	})
+	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "assigned-2", 4, &deliveryv1.CourierAssignedToDelivery{
+		OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-2", ExpectedPickupAt: timestamppb.New(secondPickup),
+	})
+	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "picked-up", 5, &deliveryv1.DeliveryPickedUp{
+		OrderId: "order-1", ExpectedDeliveredAt: timestamppb.New(deliveredAt),
+	})
+
+	snapshot, _ := c.store.Snapshot("order-1")
+	assert.Equal(t, order.ExpectedTimes{ReadyAt: delayedAt, PickupAt: secondPickup, DeliveredAt: deliveredAt}, snapshot.Expected)
 	c.noPoison(t)
 }
 

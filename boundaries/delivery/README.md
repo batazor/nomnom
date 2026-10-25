@@ -66,7 +66,7 @@ Accept Delivery Offer, Reassign Courier, Confirm Delivery, Report Delivery Failu
 
 Слайс `slices/simulator` (change [`add-demo-simulator`](../../openspec/changes/add-demo-simulator/), FR-604…FR-606) владеет переключателем Simulator (таблица `simulator`, одна строка; нет строки — выключен) и глобальной выборкой работы (pending offers всех курьеров, доставки в `assigned`/`picked_up`). RPC `GetSimulator` и `SetSimulatorEnabled` требуют `platform#operate_simulator`.
 
-Фоновый `di::SimulatorWorker` каждые `SIMULATOR__INTERVAL` читает переключатель: выключенный Simulator сбрасывает расписание и ничего не меняет. Включённый назначает новой сущности момент `firstSeen + random[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` и, когда он наступил, вызывает настоящий use case от имени курьера (`Subject::User(courier_id)`): pending offer — accept 85% / reject 15%; `Assigned` — Confirm Pickup 95% / Report Delivery Failure 5%; `PickedUp` — Confirm Delivery 95% / Report Delivery Failure 5% (причина — случайный код каталога, не требующий пояснения). Offer живёт 60s, поэтому верхняя граница его задержки обрезается до `expiresAt − SIMULATOR__INTERVAL`; если не успевает и `MIN_DELAY`, offer получает действие на последнем проходе до истечения. Отказ use case пишется в лог, запись расписания удаляется, Simulator продолжает. Все три `SIMULATOR__*` обязательны, значений по умолчанию нет; `MIN_DELAY > MAX_DELAY` или нулевое значение завершают startup (kind: 5s / 30s / 2m).
+Фоновый `di::SimulatorWorker` каждые `SIMULATOR__INTERVAL` читает переключатель: выключенный Simulator сбрасывает расписание и ничего не меняет. Включённый назначает новой сущности момент `firstSeen + random[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` и, когда он наступил, вызывает настоящий use case от имени курьера (`Subject::User(courier_id)`): pending offer — accept 85% / reject 15%; `Assigned` — Confirm Pickup 95% / Report Delivery Failure 5%; `PickedUp` — Confirm Delivery 95% / Report Delivery Failure 5% (причина — случайный код каталога, не требующий пояснения). Offer живёт 60s, поэтому верхняя граница его задержки обрезается до `expiresAt − SIMULATOR__INTERVAL`; если не успевает и `MIN_DELAY`, offer получает действие на последнем проходе до истечения. Сроки — запланированные моменты (FR-610): принимая offer, Simulator сразу выбирает задержку Pickup и передаёт `expected_pickup_at = now + delay`, а Pickup ставит в расписание на этот момент; подтверждая Pickup, так же выбирает задержку вручения, передаёт `expected_delivered_at` и вручает в этот момент. Планы живут только в расписании процесса: после выключения или рестарта доставка планируется заново от первого прохода. Отказ use case пишется в лог, запись расписания удаляется, Simulator продолжает. Все три `SIMULATOR__*` обязательны, значений по умолчанию нет; `MIN_DELAY > MAX_DELAY` или нулевое значение завершают startup (kind: 5s / 30s / 2m).
 
 ## gRPC-адаптер
 
@@ -98,9 +98,9 @@ RPC сервиса `DeliveryService`:
 | `UpdateCourierLocation` | Update Courier Location (`courier_id`, `latitude`, `longitude`) | позиция и `recorded_at_epoch_seconds`; координаты вне диапазона — `INVALID_ARGUMENT` |
 | `SetCourierAvailability` | Set Courier Availability (`courier_id`, `availability`) | `status`, `changed = false`, если доступность уже такая; `COURIER_AVAILABILITY_UNSPECIFIED` — `INVALID_ARGUMENT` |
 | `ListAvailableDeliveryOffers` | List Available Delivery Offers (`courier_id`) | pending и непротухшие `DeliveryOffer` курьера |
-| `AcceptDeliveryOffer` | Accept Delivery Offer (`offer_id`, `courier_id`) | `offer_id`, `delivery_id`, `courier_id`, `already_accepted` |
+| `AcceptDeliveryOffer` | Accept Delivery Offer (`offer_id`, `courier_id`, необязательный `expected_pickup_at`) | `offer_id`, `delivery_id`, `courier_id`, `already_accepted` |
 | `RejectDeliveryOffer` | Reject Delivery Offer (`offer_id`, `courier_id`) | `offer_id`, `delivery_id`, `changed` |
-| `ConfirmPickup` | Confirm Pickup (`delivery_id`, `courier_id`) | `delivery_id`, `state`, `changed` |
+| `ConfirmPickup` | Confirm Pickup (`delivery_id`, `courier_id`, необязательный `expected_delivered_at`) | `delivery_id`, `state`, `changed` |
 | `ConfirmDelivery` | Confirm Delivery (`delivery_id`, `courier_id`) | `delivery_id`, `state = COMPLETED`, `changed` |
 | `ReportDeliveryFailure` | Report Delivery Failure (`delivery_id`, `courier_id` или пусто для диспетчера, `reason` — код каталога, `detail`) | `delivery_id`, `reason`, `detail`, `released_courier_id`; неизвестный код — `INVALID_ARGUMENT` |
 
@@ -293,7 +293,7 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test postgres_store
 | Тип | Минимальные поля | Назначение |
 | --- | --- | --- |
 | `Courier` — aggregate root | `id`, `status` | Хранит доступность курьера для назначения |
-| `Delivery` — aggregate root | `id`, `orderId`, `courierId`, `pickupAddress`, `status`, `failureReason` | Управляет назначением курьера и выполнением доставки |
+| `Delivery` — aggregate root | `id`, `orderId`, `courierId`, `pickupAddress`, `status`, `failureReason`, `expectedPickupAt`, `expectedDeliveredAt` | Управляет назначением курьера и выполнением доставки |
 | `DeliveryOffer` — aggregate root | `id`, `deliveryId`, `courierId`, `offeredAt`, `expiresAt`, `state` | Ограниченное по времени предложение одному курьеру |
 
 Состояния `Courier`: `available`, `busy`, `unavailable` (вне линии, не получает новых назначений). Состояния `Delivery`: `waiting`, `assigned`, `pickedUp`, `delivered`, `failed`, `cancelled`. В `DeliveryState` контракта `nomnom.delivery.v1` значения для `cancelled` пока нет: отменённая доставка не бывает текущей доставкой курьера. Состояния `DeliveryOffer`: `pending`, `accepted`, `rejected`, `withdrawn`, `expired`. Pending offer после `expiresAt` уже закрыт для принятия и отклонения; переход `Expire` (только из `pending` и только при `now > expiresAt`) сохраняет это как `expired`. Повторный `Expire` — `AlreadyApplied`, `Expire` из других состояний и `Accept`/`Reject`/`Withdraw` из `expired` — `Invalid`.
@@ -320,6 +320,7 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 | --- | --- |
 | `Address` | Непустая нормализованная строка; на первом этапе без геокодирования и отдельных полей адреса |
 | `DeliveryFailureReason` | Код закрытого каталога `DeliveryFailureCode` — `customer_unreachable`, `address_not_found`, `no_access`, `customer_refused`, `order_damaged`, `courier_incident`, `other` — и необязательное пояснение (`detail`): пробелы нормализуются, не длиннее 500 символов. Неизвестный или пустой код — ошибка валидации, а не `other`. Строки, записанные до каталога свободным текстом, читаются как `other` с прежним текстом в `detail`. Retryability кодов не классифицируется |
+| `ExpectedTime` | Срок, названный курьером (FR-610), целые epoch seconds: `expectedPickupAt` — при Accept Delivery Offer, `expectedDeliveredAt` — при Confirm Pickup. Новый срок строго позже текущего времени (injected `Clock`), иначе `ExpectedTimeNotInFuture` → `INVALID_ARGUMENT`; дробная секунда `Timestamp` округляется вверх. Не назван — пусто, а не подстановка. Срок Pickup принадлежит Courier Assignment: Reassignment и отмена его сбрасывают, новое назначение несёт свой. Хранится в nullable `deliveries.expected_pickup_at`/`expected_delivered_at` (миграция `0007`) |
 | `Location` | Широта в [-90, 90] и долгота в [-180, 180], конечные значения; последняя позиция курьера хранится вне aggregate |
 
 Идентификаторы и статусы пока остаются типизированными значениями и перечислениями, а не отдельными value objects. Маршрут, зоны и расчёт расстояния не входят в модель: расстояние до pickup, принадлежность зоне и число активных назначений поставляет порт `CourierLocator`.
@@ -373,8 +374,8 @@ Topic `delivery.v1.delivery-events`, контракт `infrastructure/grpc/nomno
 
 | Domain Event | Integration Event (`event_type`) |
 | --- | --- |
-| `CourierAssignedToDelivery` | `nomnom.delivery.v1.CourierAssignedToDelivery` |
-| `DeliveryPickedUp` | `nomnom.delivery.v1.DeliveryPickedUp` |
+| `CourierAssignedToDelivery` | `nomnom.delivery.v1.CourierAssignedToDelivery`: `expected_pickup_at` (поле 4) — срок Pickup, названный курьером; пусто — не назван |
+| `DeliveryPickedUp` | `nomnom.delivery.v1.DeliveryPickedUp`: `expected_delivered_at` (поле 3) — срок вручения, названный курьером; пусто — не назван |
 | `DeliveryCompleted` | `nomnom.delivery.v1.DeliveryCompleted` |
 | `DeliveryFailed` | `nomnom.delivery.v1.DeliveryFailed`: `reason` — код каталога (до каталога — свободный текст), `detail` (поле 4) — пояснение, пустое, если не указано |
 | `CourierUnassignedFromDelivery` | `nomnom.delivery.v1.CourierUnassignedFromDelivery` (курьер снят без замены) |

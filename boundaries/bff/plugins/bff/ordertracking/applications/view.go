@@ -69,6 +69,7 @@ type OrderView struct {
 	Milestones []Milestone
 	// AvailableUntil is set only while the customer may request cancellation.
 	AvailableUntil *time.Time
+	Deadlines      Deadlines
 }
 
 type ItemView struct {

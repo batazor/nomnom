@@ -25,6 +25,7 @@ fn maps_courier_assignment() {
         order_id,
         courier_id,
         created_at_epoch_seconds: Some(1_000),
+        expected_pickup_at_epoch_seconds: None,
     })
     .expect("published");
     assert_eq!(record.event_type, COURIER_ASSIGNED_TO_DELIVERY);
@@ -34,7 +35,49 @@ fn maps_courier_assignment() {
             order_id: "order-1".to_owned(),
             delivery_id: "delivery-1".to_owned(),
             courier_id: "courier-1".to_owned(),
+            expected_pickup_at: None,
         }
+    );
+}
+
+/// FR-610, AC-770: expected times named by the courier reach the contract;
+/// an unnamed one stays empty (see the tests above).
+#[test]
+fn maps_expected_times_named_by_the_courier() {
+    let (delivery_id, order_id, courier_id) = ids();
+    let assigned = map(DomainEvent::CourierAssignedToDelivery {
+        delivery_id: delivery_id.clone(),
+        order_id: order_id.clone(),
+        courier_id: courier_id.clone(),
+        created_at_epoch_seconds: Some(1_000),
+        expected_pickup_at_epoch_seconds: Some(1_600),
+    })
+    .expect("published");
+    assert_eq!(
+        v1::CourierAssignedToDelivery::decode(assigned.payload.as_slice())
+            .expect("decode")
+            .expected_pickup_at,
+        Some(prost_types::Timestamp {
+            seconds: 1_600,
+            nanos: 0
+        })
+    );
+
+    let picked = map(DomainEvent::DeliveryPickedUp {
+        delivery_id,
+        order_id,
+        courier_id,
+        expected_delivered_at_epoch_seconds: Some(2_400),
+    })
+    .expect("published");
+    assert_eq!(
+        v1::DeliveryPickedUp::decode(picked.payload.as_slice())
+            .expect("decode")
+            .expected_delivered_at,
+        Some(prost_types::Timestamp {
+            seconds: 2_400,
+            nanos: 0
+        })
     );
 }
 
@@ -45,6 +88,7 @@ fn maps_pickup_and_completion() {
         delivery_id: delivery_id.clone(),
         order_id: order_id.clone(),
         courier_id: courier_id.clone(),
+        expected_delivered_at_epoch_seconds: None,
     })
     .expect("published");
     assert_eq!(picked.event_type, DELIVERY_PICKED_UP);
@@ -53,6 +97,7 @@ fn maps_pickup_and_completion() {
         v1::DeliveryPickedUp {
             order_id: "order-1".to_owned(),
             delivery_id: "delivery-1".to_owned(),
+            expected_delivered_at: None,
         }
     );
 

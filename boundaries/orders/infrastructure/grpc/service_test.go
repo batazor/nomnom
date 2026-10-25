@@ -177,6 +177,25 @@ func TestGetOrderMapsCancellationWindow(t *testing.T) {
 	assert.Nil(t, completed.GetOrder().GetCancellationWindow())
 }
 
+// FR-611: GetOrder returns the named deadlines and leaves an unnamed one empty.
+func TestGetOrderMapsExpectedTimes(t *testing.T) {
+	store := postgrestest.Open(t)
+	authorizer := fake.NewAuthorizer()
+	expected := order.ExpectedTimes{ReadyAt: ordertest.PlacedAt.Add(20 * time.Minute), PickupAt: ordertest.PlacedAt.Add(25 * time.Minute)}
+	o := ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed), ordertest.WithExpectedTimes(expected))
+	require.NoError(t, store.Add(context.Background(), o))
+	_, err := authorizer.GrantOrderRelationships(context.Background(), o.ID(), o.CustomerID(), o.RestaurantID())
+	require.NoError(t, err)
+	client := newClientWith(t, fixedSubject{subject: customer}, store, authorizer)
+
+	response, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-1"})
+
+	require.NoError(t, err)
+	assert.Equal(t, expected.ReadyAt, response.GetOrder().GetExpectedReadyAt().AsTime())
+	assert.Equal(t, expected.PickupAt, response.GetOrder().GetExpectedPickupAt().AsTime())
+	assert.Nil(t, response.GetOrder().GetExpectedDeliveredAt())
+}
+
 var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
 
 func requireReason(t *testing.T, err error, code codes.Code, reason string) {

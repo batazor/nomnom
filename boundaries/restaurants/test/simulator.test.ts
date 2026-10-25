@@ -14,7 +14,11 @@ import {
 import { chooseKitchenAction } from "../slices/simulator/domains/simulator/simulator.ts";
 import { MongoSimulatorState } from "../slices/simulator/infrastructure/mongodb/simulator-state.ts";
 import { RepositoryRestaurantOwners } from "../slices/simulator/infrastructure/restaurant-owners.ts";
-import { createKitchenWorld } from "./support/kitchen.ts";
+import {
+  createKitchenWorld,
+  minutes,
+  PREPARATION_MINUTES,
+} from "./support/kitchen.ts";
 import { createTestDatabase } from "./support/mongodb.ts";
 import { FixedClock, owner, startOfDay } from "./support/restaurants.ts";
 
@@ -187,8 +191,11 @@ test("AC-764 a disabled Simulator changes nothing", async () => {
 });
 
 test("AC-763 an incoming order of every restaurant is accepted or rejected by its owner after the delay", async () => {
-  // Delay of order 1, delay of order 2, then outcomes: accept, reject.
-  const world = await createSimulatorWorld(sequence(0, 1 - 1e-9, 0, 0.95));
+  // Delay of order 1, delay of order 2, then outcome accept with its three
+  // planned step delays, outcome reject.
+  const world = await createSimulatorWorld(
+    sequence(0, 1 - 1e-9, 0, 0, 0, 0, 0.95),
+  );
   const pho = await world.givenOwnedKitchen("Pho Bar");
   const ramen = await world.givenOwnedKitchen("Ramen Bar");
   const first = await world.givenReceivedOrder(pho.restaurantId, pho.phoId);
@@ -224,11 +231,13 @@ test("AC-763 an incoming order of every restaurant is accepted or rejected by it
   assert.deepEqual(world.logged, []);
 });
 
-test("FR-605 an order walks QUEUED → PREPARING → ASSEMBLED → READY through the real handlers", async () => {
-  // Per state: schedule delay 0, outcome 0.
+test("FR-605 an order without a plan walks QUEUED → PREPARING → ASSEMBLED → READY through the real handlers", async () => {
+  // A plan from now (three step delays 0), then outcome 0 per state. The
+  // planned READY is before expected_ready_at, so no delay is reported.
   const world = await createSimulatorWorld(sequence(0, 0, 0, 0, 0, 0));
   const { restaurantId, phoId } = await world.givenOwnedKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  const before = await world.board.get(restaurantId, order.restaurantOrderId);
   await world.state.setEnabled(true, world.clock.now());
 
   for (const expected of ["PREPARING", "ASSEMBLED", "READY"]) {
@@ -240,12 +249,21 @@ test("FR-605 an order walks QUEUED → PREPARING → ASSEMBLED → READY through
       expected,
     );
   }
+  const ready = await world.board.get(restaurantId, order.restaurantOrderId);
+  assert.deepEqual(
+    ready?.timeline.expectedReadyAt,
+    before?.timeline.expectedReadyAt,
+  );
+  assert.ok(!(await world.outbox.eventTypes()).includes("PreparationDelayed"));
 });
 
 test("FR-605 delay moves expected_ready_at later and failure fails the order", async () => {
-  // Orders come sorted by state (PREPARING before QUEUED): schedule delays
-  // 0 and 0, then PREPARING → failure (0.93), QUEUED → delay (0.95) by 0.5.
-  const world = await createSimulatorWorld(sequence(0, 0, 0.93, 0.95, 0.5));
+  // Orders come sorted by state (PREPARING before QUEUED): plans from now
+  // with step delays 0 (two and three steps), then PREPARING → failure
+  // (0.93), QUEUED → delay (0.95) by 0.5.
+  const world = await createSimulatorWorld(
+    sequence(0, 0, 0, 0, 0, 0.93, 0.95, 0.5),
+  );
   const { restaurantId, phoId } = await world.givenOwnedKitchen();
   const queued = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const preparing = await world.givenOrderIn("PREPARING", restaurantId, phoId);
@@ -272,7 +290,11 @@ test("FR-605 delay moves expected_ready_at later and failure fails the order", a
 
 test("FR-605 a failed use case is logged, dropped and does not stop the pass", async () => {
   // Order of the stranger kitchen first (sorted by receivedAt): denied.
-  const world = await createSimulatorWorld(sequence(0, 0, 0, 0));
+  // Decision delays 0 and 0, then per order outcome accept and three step
+  // delays.
+  const world = await createSimulatorWorld(
+    sequence(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+  );
   const denied = await world.givenKitchen("No Owner Access");
   const allowed = await world.givenOwnedKitchen("Pho Bar");
   const deniedOrder = await world.givenReceivedOrder(
@@ -300,7 +322,143 @@ test("FR-605 a failed use case is logged, dropped and does not stop the pass", a
   assert.equal(world.logged.length, 1);
   assert.equal(world.logged[0]?.action, "accept");
   assert.ok(world.logged[0]?.error instanceof PermissionDeniedError);
-  assert.equal(world.simulator.scheduled, 0, "the failed entry is dropped");
+  assert.equal(
+    world.simulator.planOf(deniedOrder.restaurantOrderId),
+    undefined,
+    "the failed entry is dropped",
+  );
+  assert.equal(world.simulator.scheduled, 1, "only the accepted order's plan");
+});
+
+test("FR-609 accepting plans the whole Preparation, passes the planned READY and acts at the planned moments", async () => {
+  // Decision delay 0, outcome accept, step delays 1500 / 1000 / 2000, then
+  // outcome 0 for each step.
+  const world = await createSimulatorWorld(
+    sequence(0, 0, 0.5, 0, 1 - 1e-9, 0, 0, 0),
+  );
+  const { restaurantId, phoId } = await world.givenOwnedKitchen();
+  const order = await world.givenReceivedOrder(restaurantId, phoId);
+  await world.state.setEnabled(true, world.clock.now());
+
+  await world.simulator.tick();
+  world.clock.advance(DELAY.minMs);
+  const acceptedAt = world.clock.now().getTime();
+  const outboxBefore = (await world.outbox.records()).length;
+  await world.simulator.tick();
+
+  const readyAt = new Date(acceptedAt + 4_500);
+  const accepted = await world.board.get(restaurantId, order.restaurantOrderId);
+  assert.equal(accepted?.state, "QUEUED");
+  assert.deepEqual(accepted?.timeline.expectedReadyAt, readyAt);
+  const [fact] = (await world.outbox.records()).slice(outboxBefore);
+  assert.ok(fact !== undefined);
+  assert.equal(fact.event.type, "RestaurantOrderAccepted");
+  assert.deepEqual(
+    (fact.event as { expectedReadyAt?: Date }).expectedReadyAt,
+    readyAt,
+  );
+  assert.deepEqual(world.simulator.planOf(order.restaurantOrderId), {
+    steps: [
+      { state: "QUEUED", dueAt: acceptedAt + 1_500 },
+      { state: "PREPARING", dueAt: acceptedAt + 2_500 },
+      { state: "ASSEMBLED", dueAt: acceptedAt + 4_500 },
+    ],
+  });
+
+  for (const [dueAt, from, to] of [
+    [acceptedAt + 1_500, "QUEUED", "PREPARING"],
+    [acceptedAt + 2_500, "PREPARING", "ASSEMBLED"],
+    [acceptedAt + 4_500, "ASSEMBLED", "READY"],
+  ] as const) {
+    world.clock.set(new Date(dueAt - 1));
+    await world.simulator.tick();
+    assert.equal(
+      await world.stateOf(restaurantId, order.restaurantOrderId),
+      from,
+      `nothing happens before ${from} is due`,
+    );
+    world.clock.set(new Date(dueAt));
+    await world.simulator.tick();
+    assert.equal(
+      await world.stateOf(restaurantId, order.restaurantOrderId),
+      to,
+    );
+  }
+  const ready = await world.board.get(restaurantId, order.restaurantOrderId);
+  assert.deepEqual(ready?.timeline.readyAt, readyAt);
+  assert.deepEqual(world.logged, []);
+});
+
+test("FR-609 a delay moves expected_ready_at and shifts the remaining plan to it", async () => {
+  // Decision delay 0, outcome accept, step delays 1500 / 1000 / 2000; at the
+  // QUEUED step outcome delay (0.95) by 1500; then outcome 0 per step.
+  const world = await createSimulatorWorld(
+    sequence(0, 0, 0.5, 0, 1 - 1e-9, 0.95, 0.5, 0, 0, 0),
+  );
+  const { restaurantId, phoId } = await world.givenOwnedKitchen();
+  const order = await world.givenReceivedOrder(restaurantId, phoId);
+  await world.state.setEnabled(true, world.clock.now());
+  await world.simulator.tick();
+  world.clock.advance(DELAY.minMs);
+  const acceptedAt = world.clock.now().getTime();
+  await world.simulator.tick();
+
+  world.clock.set(new Date(acceptedAt + 1_500));
+  await world.simulator.tick();
+
+  const delayed = await world.board.get(restaurantId, order.restaurantOrderId);
+  assert.equal(delayed?.state, "QUEUED");
+  assert.deepEqual(
+    delayed?.timeline.expectedReadyAt,
+    new Date(acceptedAt + 6_000),
+  );
+  assert.deepEqual(world.simulator.planOf(order.restaurantOrderId), {
+    steps: [
+      { state: "QUEUED", dueAt: acceptedAt + 3_000 },
+      { state: "PREPARING", dueAt: acceptedAt + 4_000 },
+      { state: "ASSEMBLED", dueAt: acceptedAt + 6_000 },
+    ],
+  });
+  for (const [dueAt, to] of [
+    [acceptedAt + 3_000, "PREPARING"],
+    [acceptedAt + 4_000, "ASSEMBLED"],
+    [acceptedAt + 6_000, "READY"],
+  ] as const) {
+    world.clock.set(new Date(dueAt));
+    await world.simulator.tick();
+    assert.equal(
+      await world.stateOf(restaurantId, order.restaurantOrderId),
+      to,
+    );
+  }
+  const ready = await world.board.get(restaurantId, order.restaurantOrderId);
+  assert.deepEqual(ready?.timeline.readyAt, new Date(acceptedAt + 6_000));
+});
+
+test("FR-609 an order without a plan whose planned READY is late reports a delay to it", async () => {
+  // After a restart: planned from now with step delays 0, READY at now + 3s
+  // is later than expected_ready_at.
+  const world = await createSimulatorWorld(sequence(0, 0, 0));
+  const { restaurantId, phoId } = await world.givenOwnedKitchen();
+  const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  world.clock.advance(minutes(PREPARATION_MINUTES));
+  await world.state.setEnabled(true, world.clock.now());
+  const now = world.clock.now().getTime();
+
+  await world.simulator.tick();
+
+  const delayed = await world.board.get(restaurantId, order.restaurantOrderId);
+  assert.equal(delayed?.state, "QUEUED");
+  assert.deepEqual(delayed?.timeline.expectedReadyAt, new Date(now + 3_000));
+  assert.equal((await world.outbox.eventTypes()).at(-1), "PreparationDelayed");
+  assert.deepEqual(world.simulator.planOf(order.restaurantOrderId), {
+    steps: [
+      { state: "QUEUED", dueAt: now + 1_000 },
+      { state: "PREPARING", dueAt: now + 2_000 },
+      { state: "ASSEMBLED", dueAt: now + 3_000 },
+    ],
+  });
+  assert.deepEqual(world.logged, []);
 });
 
 test("AC-764 disabling forgets the schedule", async () => {

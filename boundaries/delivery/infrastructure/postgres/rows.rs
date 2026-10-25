@@ -5,7 +5,7 @@ use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierStatus};
 use crate::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    OfferState, OrderId, State,
+    ExpectedTime, OfferState, OrderId, State,
 };
 
 use super::{corrupt, domain_version};
@@ -102,6 +102,8 @@ pub(super) struct DeliveryRow {
     pub(super) authorization_revision: Option<String>,
     pub(super) version: i64,
     pub(super) created_at: Option<i64>,
+    pub(super) expected_pickup_at: Option<i64>,
+    pub(super) expected_delivered_at: Option<i64>,
 }
 
 pub(super) fn delivery_from_row(row: DeliveryRow) -> Result<Delivery, RepositoryError> {
@@ -122,6 +124,10 @@ pub(super) fn delivery_from_row(row: DeliveryRow) -> Result<Delivery, Repository
     .map(|delivery| {
         delivery
             .with_created_at(row.created_at)
+            .with_expected_times(
+                row.expected_pickup_at.map(ExpectedTime::restore),
+                row.expected_delivered_at.map(ExpectedTime::restore),
+            )
             .with_authorization_revision(row.authorization_revision.map(AuthorizationRevision::new))
             .with_version(version)
     })

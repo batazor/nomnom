@@ -31,10 +31,12 @@ func (s *Store) Add(ctx context.Context, created *order.Order) error {
 	outcome, code := cancellation(snap.CancellationReason)
 	_, err := s.exec(ctx, psql.Insert("orders").
 		Columns("id", "customer_id", "restaurant_id", "total_amount", "total_currency",
-			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version").
+			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
+			"expected_ready_at", "expected_pickup_at", "expected_delivered_at").
 		Values(snap.ID, snap.CustomerID, snap.RestaurantID,
 			created.Total().Amount().String(), created.Total().Currency(),
-			snap.State, snap.PlacedAt, nullTime(snap.CancelledAt), outcome, code, snap.Version+1))
+			snap.State, snap.PlacedAt, nullTime(snap.CancelledAt), outcome, code, snap.Version+1,
+			nullTime(snap.Expected.ReadyAt), nullTime(snap.Expected.PickupAt), nullTime(snap.Expected.DeliveredAt)))
 	if isUniqueViolation(err) {
 		return fmt.Errorf("%w: %q", order.ErrOrderAlreadyExists, snap.ID)
 	}
@@ -63,6 +65,9 @@ func (s *Store) Save(ctx context.Context, changed *order.Order) error {
 		Set("cancelled_at", nullTime(snap.CancelledAt)).
 		Set("negative_outcome", outcome).
 		Set("cancellation_code", code).
+		Set("expected_ready_at", nullTime(snap.Expected.ReadyAt)).
+		Set("expected_pickup_at", nullTime(snap.Expected.PickupAt)).
+		Set("expected_delivered_at", nullTime(snap.Expected.DeliveredAt)).
 		Set("version", sq.Expr("version + 1")).
 		Where(sq.Eq{"id": snap.ID, "version": snap.Version}))
 	if err != nil {
@@ -101,13 +106,18 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 		amount, currency string
 		cancelledAt      *time.Time
 		outcome, code    *string
+		readyAt          *time.Time
+		pickupAt         *time.Time
+		deliveredAt      *time.Time
 	)
 	err := s.queryRow(ctx, psql.
 		Select("customer_id", "restaurant_id", "total_amount::text", "total_currency",
-			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version").
+			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
+			"expected_ready_at", "expected_pickup_at", "expected_delivered_at").
 		From("orders").Where(sq.Eq{"id": id}),
 		&snap.CustomerID, &snap.RestaurantID, &amount, &currency,
-		&snap.State, &snap.PlacedAt, &cancelledAt, &outcome, &code, &snap.Version)
+		&snap.State, &snap.PlacedAt, &cancelledAt, &outcome, &code, &snap.Version,
+		&readyAt, &pickupAt, &deliveredAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return order.Snapshot{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, id)
 	}
@@ -116,9 +126,8 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	}
 	snap.ID = id
 	snap.PlacedAt = snap.PlacedAt.UTC()
-	if cancelledAt != nil {
-		snap.CancelledAt = cancelledAt.UTC()
-	}
+	snap.CancelledAt = utcTime(cancelledAt)
+	snap.Expected = order.ExpectedTimes{ReadyAt: utcTime(readyAt), PickupAt: utcTime(pickupAt), DeliveredAt: utcTime(deliveredAt)}
 	if outcome != nil && code != nil {
 		if snap.CancellationReason, err = order.NewCancellationReason(order.NegativeOutcome(*outcome), *code); err != nil {
 			return order.Snapshot{}, fmt.Errorf("order %s cancellation: %w", id, err)
@@ -189,6 +198,14 @@ func cancellation(reason order.CancellationReason) (*string, *string) {
 	}
 	outcome, code := string(reason.Outcome()), reason.Code()
 	return &outcome, &code
+}
+
+// utcTime reads a nullable timestamp: NULL is the zero time.
+func utcTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.UTC()
 }
 
 func nullTime(t time.Time) *time.Time {

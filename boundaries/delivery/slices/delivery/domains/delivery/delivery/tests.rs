@@ -10,7 +10,9 @@ fn delivery() -> Delivery {
 
 fn assigned(courier: &str) -> Delivery {
     let mut delivery = delivery();
-    delivery.assign(CourierId::new(courier)).expect("assign");
+    delivery
+        .assign(CourierId::new(courier), None)
+        .expect("assign");
     delivery.pull_events();
     delivery
 }
@@ -25,19 +27,25 @@ fn delivery_lifecycle_is_strict_and_records_facts() {
     let courier_id = CourierId::new("courier-1");
 
     assert_eq!(
-        delivery.assign(courier_id.clone()).expect("assign").to,
+        delivery
+            .assign(courier_id.clone(), None)
+            .expect("assign")
+            .to,
         State::Assigned
     );
     assert_eq!(
         delivery
-            .assign(courier_id.clone())
+            .assign(courier_id.clone(), None)
             .expect_err("duplicate assignment"),
         TransitionError::AlreadyInState {
             state: State::Assigned
         }
     );
     assert_eq!(
-        delivery.confirm_pickup(&courier_id).expect("pickup").to,
+        delivery
+            .confirm_pickup(&courier_id, None)
+            .expect("pickup")
+            .to,
         State::PickedUp
     );
     assert_eq!(
@@ -54,11 +62,13 @@ fn delivery_lifecycle_is_strict_and_records_facts() {
                 order_id: order_id.clone(),
                 courier_id: courier_id.clone(),
                 created_at_epoch_seconds: None,
+                expected_pickup_at_epoch_seconds: None,
             },
             DomainEvent::DeliveryPickedUp {
                 delivery_id: delivery_id.clone(),
                 order_id: order_id.clone(),
                 courier_id: courier_id.clone(),
+                expected_delivered_at_epoch_seconds: None,
             },
             DomainEvent::DeliveryCompleted {
                 delivery_id,
@@ -76,7 +86,7 @@ fn invalid_transition_does_not_change_state() {
     let mut delivery = delivery();
     assert_eq!(
         delivery
-            .confirm_pickup(&CourierId::new("courier-1"))
+            .confirm_pickup(&CourierId::new("courier-1"), None)
             .expect_err("pickup before assignment"),
         DeliveryError::Transition(TransitionError::InvalidTransition {
             from: State::Waiting,
@@ -93,13 +103,13 @@ fn only_assigned_courier_confirms_pickup_and_completion() {
     let other = CourierId::new("courier-2");
 
     assert_eq!(
-        delivery.confirm_pickup(&other),
+        delivery.confirm_pickup(&other, None),
         Err(DeliveryError::CourierNotAssigned)
     );
     assert_eq!(delivery.state(), State::Assigned);
 
     delivery
-        .confirm_pickup(&CourierId::new("courier-1"))
+        .confirm_pickup(&CourierId::new("courier-1"), None)
         .expect("pickup");
     assert_eq!(
         delivery.complete(&other),
@@ -206,7 +216,7 @@ fn cancellation_before_pickup_releases_the_courier() {
 fn picked_up_delivery_cannot_be_cancelled() {
     let mut delivery = assigned("courier-1");
     delivery
-        .confirm_pickup(&CourierId::new("courier-1"))
+        .confirm_pickup(&CourierId::new("courier-1"), None)
         .expect("pickup");
     delivery.pull_events();
 
@@ -313,4 +323,95 @@ fn active_courier_exists_only_while_assigned_or_picked_up() {
     }
     // A closed delivery keeps the fact of who carried it.
     assert_eq!(cases[3].0.courier_id(), Some(&courier));
+}
+
+/// FR-610: a newly named expected time is after the current time.
+#[test]
+fn expected_time_is_named_in_the_future() {
+    assert_eq!(
+        ExpectedTime::named("expected_pickup_at", 1_001, 1_000).map(ExpectedTime::epoch_seconds),
+        Ok(1_001)
+    );
+    for at in [1_000, 999] {
+        assert_eq!(
+            ExpectedTime::named("expected_pickup_at", at, 1_000),
+            Err(DeliveryValidationError::ExpectedTimeNotInFuture {
+                field: "expected_pickup_at"
+            })
+        );
+    }
+}
+
+/// FR-610: the Pickup time belongs to the Courier Assignment — a
+/// reassignment drops it and the next assignment names its own.
+#[test]
+fn reassignment_replaces_the_expected_pickup_time() {
+    let mut delivery = delivery();
+    delivery
+        .assign(
+            CourierId::new("courier-1"),
+            Some(ExpectedTime::restore(1_600)),
+        )
+        .expect("assign");
+    assert_eq!(
+        delivery.expected_pickup_at(),
+        Some(ExpectedTime::restore(1_600))
+    );
+
+    delivery.unassign().expect("unassign");
+    assert_eq!(delivery.expected_pickup_at(), None);
+
+    delivery
+        .assign(CourierId::new("courier-2"), None)
+        .expect("assign");
+    assert_eq!(delivery.expected_pickup_at(), None);
+    delivery.unassign().expect("unassign");
+    delivery
+        .assign(
+            CourierId::new("courier-3"),
+            Some(ExpectedTime::restore(2_000)),
+        )
+        .expect("assign");
+    assert_eq!(
+        delivery.expected_pickup_at(),
+        Some(ExpectedTime::restore(2_000))
+    );
+    let named: Vec<Option<i64>> = delivery
+        .pull_events()
+        .into_iter()
+        .filter_map(|event| match event {
+            DomainEvent::CourierAssignedToDelivery {
+                expected_pickup_at_epoch_seconds,
+                ..
+            } => Some(expected_pickup_at_epoch_seconds),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(named, vec![Some(1_600), None, Some(2_000)]);
+}
+
+/// AC-770: the handover time named on Pickup is stored and carried by
+/// `DeliveryPickedUp`.
+#[test]
+fn pickup_carries_the_expected_handover_time() {
+    let mut delivery = assigned("courier-1");
+    delivery
+        .confirm_pickup(
+            &CourierId::new("courier-1"),
+            Some(ExpectedTime::restore(2_400)),
+        )
+        .expect("pickup");
+    assert_eq!(
+        delivery.expected_delivered_at(),
+        Some(ExpectedTime::restore(2_400))
+    );
+    assert_eq!(
+        delivery.pull_events(),
+        vec![DomainEvent::DeliveryPickedUp {
+            delivery_id: DeliveryId::new("delivery-1"),
+            order_id: OrderId::new("order-1"),
+            courier_id: CourierId::new("courier-1"),
+            expected_delivered_at_epoch_seconds: Some(2_400),
+        }]
+    );
 }

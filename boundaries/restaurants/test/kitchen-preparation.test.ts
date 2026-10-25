@@ -30,7 +30,7 @@ test("AC-251 queue restaurant order queues an ACCEPTED order without publishing"
   assert.ok(order);
   order.accept({
     acceptedAt: world.clock.now(),
-    expectedReadyAt: world.clock.now(),
+    expectedReadyAt: new Date(world.clock.now().getTime() + minutes(20)),
     eligibility: { satisfied: true, reasons: [] },
   });
   await world.restaurantOrders.save(order);

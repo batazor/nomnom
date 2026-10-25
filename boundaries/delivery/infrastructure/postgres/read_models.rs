@@ -63,7 +63,8 @@ impl WaitingDeliveries for PostgresStore {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
             "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,
-                 failure_detail, authorization_revision, version, created_at
+                 failure_detail, authorization_revision, version, created_at,
+                 expected_pickup_at, expected_delivered_at
              FROM deliveries
              WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)
                AND NOT EXISTS (SELECT 1 FROM delivery_offers o

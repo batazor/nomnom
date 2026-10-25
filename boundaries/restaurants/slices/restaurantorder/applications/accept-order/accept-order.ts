@@ -20,7 +20,11 @@ import {
   toRestaurantOrderView,
 } from "../restaurant-order-view.ts";
 
-export type AcceptOrder = KitchenCommand;
+/**
+ * `expectedReadyAt` is the ready time named by the kitchen; without it the
+ * {@link ReadyTimeEstimator} computes it (FR-609).
+ */
+export type AcceptOrder = KitchenCommand & Readonly<{ expectedReadyAt?: Date }>;
 
 /**
  * Facts of the restaurant and its menu that Acceptance needs: whether the
@@ -72,7 +76,9 @@ export interface ReadyTimeEstimator {
 
 /**
  * Accepts a `RECEIVED` order of an open restaurant whose items are available,
- * then queues it in the same Unit of Work (MVP). Only
+ * with the kitchen's or the estimated `expectedReadyAt` (later than now,
+ * otherwise `invalid_restaurant_order`), then queues it in the same Unit of
+ * Work (MVP). Only
  * `RestaurantOrderAccepted` is published; `RestaurantOrderQueued` stays local.
  */
 export class AcceptOrderHandler {
@@ -147,11 +153,15 @@ export class AcceptOrderHandler {
         })),
         conditions,
       });
-      const expectedReadyAt = await this.#readyTimeEstimator.estimate({
-        restaurantId: order.restaurantId,
-        items: order.items,
-        acceptedAt: now,
-      });
+      // The kitchen names the time or the Ready Time Estimator computes it.
+      const expectedReadyAt =
+        command.expectedReadyAt === undefined
+          ? await this.#readyTimeEstimator.estimate({
+              restaurantId: order.restaurantId,
+              items: order.items,
+              acceptedAt: now,
+            })
+          : command.expectedReadyAt;
       order.accept({ acceptedAt: now, expectedReadyAt, eligibility });
       order.queue({ queuedAt: now });
       const version = await saveAndPublish(

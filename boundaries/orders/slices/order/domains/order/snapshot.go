@@ -17,6 +17,7 @@ type Snapshot struct {
 	Facts              []RecordedFact
 	CancellationReason CancellationReason
 	CancelledAt        time.Time
+	Expected           ExpectedTimes
 }
 
 func (o *Order) Snapshot() Snapshot {
@@ -31,6 +32,7 @@ func (o *Order) Snapshot() Snapshot {
 		Facts:              o.Facts(),
 		CancellationReason: o.cancellation,
 		CancelledAt:        o.cancelledAt,
+		Expected:           o.expected,
 	}
 }
 
@@ -56,6 +58,7 @@ func Restore(snapshot Snapshot) (*Order, error) {
 	order.facts = append([]RecordedFact(nil), snapshot.Facts...)
 	order.cancellation = snapshot.CancellationReason
 	order.cancelledAt = snapshot.CancelledAt
+	order.expected = snapshot.Expected
 	return order, nil
 }
 

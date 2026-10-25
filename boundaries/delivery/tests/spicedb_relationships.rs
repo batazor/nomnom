@@ -214,6 +214,7 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &DatabaseConfig) -> 
         accept_delivery_offer::Input {
             offer_id: offer,
             courier_id: courier.clone(),
+            expected_pickup_at_epoch_seconds: None,
         },
     )
     .expect("offer accepted");
@@ -326,12 +327,14 @@ fn pick_up(world: &Assigned) {
         unit_of_work: &*world.store,
         deliveries: &*world.store,
         outbox: &*world.store,
+        clock: &ManualClock::new(NOW),
     }
     .execute(
         &user(&world.courier),
         confirm_pickup::Input {
             delivery_id: world.delivery.clone(),
             courier_id: world.courier.clone(),
+            expected_delivered_at_epoch_seconds: None,
         },
     )
     .expect("picked up");

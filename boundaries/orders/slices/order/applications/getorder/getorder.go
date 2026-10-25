@@ -30,6 +30,8 @@ type OrderView struct {
 	State        order.State
 	PlacedAt     time.Time
 	Facts        []FactView
+	// Expected are the latest named Fulfillment deadlines; a zero time is not named.
+	Expected order.ExpectedTimes
 	// Cancellation is nil unless the Order is cancelled.
 	Cancellation *CancellationView
 	// CancellationWindow is nil when the Order State does not admit Order

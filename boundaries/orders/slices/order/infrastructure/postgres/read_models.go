@@ -33,6 +33,7 @@ func (s *Store) OrderView(ctx context.Context, id order.ID) (getorder.OrderView,
 		Total:        restored.Total(),
 		State:        snap.State,
 		PlacedAt:     snap.PlacedAt,
+		Expected:     snap.Expected,
 	}
 	for _, item := range snap.Items {
 		view.Items = append(view.Items, getorder.ItemView{

@@ -562,6 +562,18 @@
         {
           "original": "cancellation",
           "mapped": "cancellation"
+        },
+        {
+          "original": "expectedReadyAt",
+          "mapped": "expected_ready_at"
+        },
+        {
+          "original": "expectedPickupAt",
+          "mapped": "expected_pickup_at"
+        },
+        {
+          "original": "expectedDeliveredAt",
+          "mapped": "expected_delivered_at"
         }
       ]
     },

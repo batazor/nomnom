@@ -19,31 +19,25 @@ var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 func TestHandleNotifiesWorkflow(t *testing.T) {
 	workflow := fake.NewWorkflow()
-	in := relaypreparationissue.Input{
-		EventID:         "event-1",
-		OrderID:         "order-1",
-		Kind:            fulfillment.KindPreparationDelayed,
-		OccurredAt:      occurredAt,
-		ExpectedReadyAt: occurredAt.Add(10 * time.Minute),
-	}
+	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", OccurredAt: occurredAt, Reason: "oven_broken"}
 
 	result, err := relaypreparationissue.NewHandler(workflow).Handle(context.Background(), in)
 
 	require.NoError(t, err)
 	assert.True(t, result.WorkflowNotified)
 	assert.Equal(t, []fulfillment.Notification{{
-		OrderID:         "order-1",
-		EventID:         "event-1",
-		Kind:            fulfillment.KindPreparationDelayed,
-		OccurredAt:      occurredAt,
-		ExpectedReadyAt: occurredAt.Add(10 * time.Minute),
+		OrderID:    "order-1",
+		EventID:    "event-1",
+		Kind:       fulfillment.KindPreparationFailed,
+		OccurredAt: occurredAt,
+		Reason:     "oven_broken",
 	}}, workflow.Notifications())
 }
 
 func TestClosedWorkflowIsNotAnError(t *testing.T) {
 	workflow := fake.NewWorkflow()
 	workflow.Close("order-1")
-	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", Kind: fulfillment.KindPreparationFailed, OccurredAt: occurredAt}
+	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", OccurredAt: occurredAt}
 
 	result, err := relaypreparationissue.NewHandler(workflow).Handle(context.Background(), in)
 
@@ -54,7 +48,7 @@ func TestClosedWorkflowIsNotAnError(t *testing.T) {
 func TestNotifyFailureIsReturned(t *testing.T) {
 	workflow := fake.NewWorkflow()
 	workflow.FailNotify(errors.New("temporal unavailable"))
-	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", Kind: fulfillment.KindPreparationFailed, OccurredAt: occurredAt}
+	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", OccurredAt: occurredAt}
 
 	_, err := relaypreparationissue.NewHandler(workflow).Handle(context.Background(), in)
 
@@ -62,7 +56,7 @@ func TestNotifyFailureIsReturned(t *testing.T) {
 }
 
 func TestRejectsInvalidInput(t *testing.T) {
-	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1", Kind: fulfillment.KindPreparationDelayed, OccurredAt: occurredAt}
+	in := relaypreparationissue.Input{EventID: "event-1", OrderID: "order-1"}
 
 	_, err := relaypreparationissue.NewHandler(fake.NewWorkflow()).Handle(context.Background(), in)
 

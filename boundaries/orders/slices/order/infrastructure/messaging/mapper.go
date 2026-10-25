@@ -1,15 +1,19 @@
 package messaging
 
 import (
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/slices/order/applications/confirmorder"
-	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
 	"nomnom/orders/slices/order/applications/recordorderready"
 	"nomnom/orders/slices/order/applications/recordpickup"
+	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -21,8 +25,21 @@ import (
 // Mapping Transport DTO + Envelope → Command. Pure functions: no storage,
 // network, clock or random (ADR 6).
 
+// expectedTime reads a deadline of an event: an absent one is not named (zero).
+func expectedTime(at *timestamppb.Timestamp) time.Time {
+	if at == nil {
+		return time.Time{}
+	}
+	return at.AsTime()
+}
+
 func toConfirmOrder(e messaging.Envelope, event *restaurantsv1.RestaurantOrderAccepted) confirmorder.Input {
-	return confirmorder.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
+	return confirmorder.Input{
+		EventID:         e.EventID,
+		OrderID:         order.ID(event.GetOrderId()),
+		OccurredAt:      e.OccurredAt,
+		ExpectedReadyAt: expectedTime(event.GetExpectedReadyAt()),
+	}
 }
 
 func toRejectOrder(e messaging.Envelope, event *restaurantsv1.RestaurantOrderRejected) rejectorder.Input {
@@ -37,24 +54,19 @@ func toRecordOrderReady(e messaging.Envelope, event *restaurantsv1.RestaurantOrd
 	return recordorderready.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
 }
 
-func toPreparationDelayed(e messaging.Envelope, event *restaurantsv1.PreparationDelayed) relaypreparationissue.Input {
-	in := relaypreparationissue.Input{
-		EventID:    e.EventID,
-		OrderID:    order.ID(event.GetOrderId()),
-		Kind:       fulfillment.KindPreparationDelayed,
-		OccurredAt: e.OccurredAt,
+func toRecordPreparationDelay(e messaging.Envelope, event *restaurantsv1.PreparationDelayed) recordpreparationdelay.Input {
+	return recordpreparationdelay.Input{
+		EventID:         e.EventID,
+		OrderID:         order.ID(event.GetOrderId()),
+		OccurredAt:      e.OccurredAt,
+		ExpectedReadyAt: expectedTime(event.GetExpectedReadyAt()),
 	}
-	if event.GetExpectedReadyAt() != nil {
-		in.ExpectedReadyAt = event.GetExpectedReadyAt().AsTime()
-	}
-	return in
 }
 
 func toPreparationFailed(e messaging.Envelope, event *restaurantsv1.PreparationFailed) relaypreparationissue.Input {
 	return relaypreparationissue.Input{
 		EventID:    e.EventID,
 		OrderID:    order.ID(event.GetOrderId()),
-		Kind:       fulfillment.KindPreparationFailed,
 		OccurredAt: e.OccurredAt,
 		Reason:     event.GetReason(),
 	}
@@ -62,12 +74,13 @@ func toPreparationFailed(e messaging.Envelope, event *restaurantsv1.PreparationF
 
 func toRecordCourierAssignment(e messaging.Envelope, event *deliveryv1.CourierAssignedToDelivery) recordcourierassignment.Input {
 	return recordcourierassignment.Input{
-		EventID:         e.EventID,
-		OrderID:         order.ID(event.GetOrderId()),
-		OccurredAt:      e.OccurredAt,
-		DeliveryVersion: e.AggregateVersion,
-		DeliveryID:      event.GetDeliveryId(),
-		CourierID:       event.GetCourierId(),
+		EventID:          e.EventID,
+		OrderID:          order.ID(event.GetOrderId()),
+		OccurredAt:       e.OccurredAt,
+		DeliveryVersion:  e.AggregateVersion,
+		DeliveryID:       event.GetDeliveryId(),
+		CourierID:        event.GetCourierId(),
+		ExpectedPickupAt: expectedTime(event.GetExpectedPickupAt()),
 	}
 }
 
@@ -96,7 +109,12 @@ func toDeliveryCancellation(e messaging.Envelope, event *deliveryv1.DeliveryCanc
 }
 
 func toRecordPickup(e messaging.Envelope, event *deliveryv1.DeliveryPickedUp) recordpickup.Input {
-	return recordpickup.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
+	return recordpickup.Input{
+		EventID:             e.EventID,
+		OrderID:             order.ID(event.GetOrderId()),
+		OccurredAt:          e.OccurredAt,
+		ExpectedDeliveredAt: expectedTime(event.GetExpectedDeliveredAt()),
+	}
 }
 
 func toRecordDeliveryCompletion(e messaging.Envelope, event *deliveryv1.DeliveryCompleted) recorddeliverycompletion.Input {

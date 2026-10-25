@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at\n             FROM deliveries WHERE order_id = $1",
+  "query": "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at,\n                 expected_pickup_at, expected_delivered_at\n             FROM deliveries WHERE order_id = $1",
   "describe": {
     "columns": [
       {
@@ -112,6 +112,28 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "expected_pickup_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "expected_pickup_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "expected_delivered_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "expected_delivered_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -129,8 +151,10 @@
       true,
       true,
       false,
+      true,
+      true,
       true
     ]
   },
-  "hash": "b533f53a2ca6cb818e3fe40dce783fee50e037afe7380c05035bf57472aecb0b"
+  "hash": "e6096624a9353f3a83442b379fa37b1fccef9e5d41f47ef228b7fd392204e4c3"
 }

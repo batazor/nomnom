@@ -62,6 +62,12 @@ const stageOrder: KitchenOrderStage[] = [
   "READY",
 ];
 
+// Deadlines the mock kitchen and courier name, like the emulators of
+// restaurants and delivery (FR-609, FR-610).
+const preparationMs = 15 * 60_000;
+const pickupMs = 10 * 60_000;
+const deliveryMs = 15 * 60_000;
+
 // Courier.id of the mock user, the entity key of courierChanged (ADR 36).
 export const mockCourierId = "courier-demo";
 
@@ -77,6 +83,10 @@ export function createFulfillment({
   const kitchenOrders = new Map<string, KitchenOrder>();
   const deliveries = new Map<string, Delivery>();
   let availability: CourierAvailability = "UNAVAILABLE";
+
+  function after(ms: number): string {
+    return new Date(clock().getTime() + ms).toISOString();
+  }
 
   function advanceOrder(
     orderId: string,
@@ -179,7 +189,9 @@ export function createFulfillment({
     }
     order.stage = to;
     if (action === "ACCEPT") {
-      advanceOrder(order.orderId, "CONFIRMED", "CONFIRMED");
+      advanceOrder(order.orderId, "CONFIRMED", "CONFIRMED", {
+        expectedReadyAt: after(preparationMs),
+      });
       createDelivery(order);
     }
     if (action === "START_PREPARATION") {
@@ -248,6 +260,7 @@ export function createFulfillment({
     if (order) {
       orders.set(delivery.orderId, {
         ...order,
+        expectedPickupAt: after(pickupMs),
         milestones: [
           ...order.milestones,
           { kind: "COURIER_ASSIGNED", occurredAt: clock().toISOString() },
@@ -272,7 +285,9 @@ export function createFulfillment({
       }
       delivery.stage = "PICKED_UP";
       kitchenOrders.delete(kitchenOrder.id);
-      advanceOrder(delivery.orderId, "PICKED_UP", "PICKED_UP");
+      advanceOrder(delivery.orderId, "PICKED_UP", "PICKED_UP", {
+        expectedDeliveredAt: after(deliveryMs),
+      });
       return { courier: courier(), problem: null };
     }
     if (delivery.stage !== "PICKED_UP") {

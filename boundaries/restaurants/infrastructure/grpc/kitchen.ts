@@ -60,7 +60,13 @@ export const createKitchenRpcs = (
     async acceptRestaurantOrder(request, context) {
       try {
         const command = await kitchenCommand(request, context);
-        const view = await dependencies.acceptRestaurantOrder.execute(command);
+        const view = await dependencies.acceptRestaurantOrder.execute({
+          ...command,
+          expectedReadyAt:
+            request.expectedReadyAt === undefined
+              ? undefined
+              : timestampDate(request.expectedReadyAt),
+        });
         return create(AcceptRestaurantOrderResponseSchema, {
           restaurantOrder: toRestaurantOrderMessage(view),
         });

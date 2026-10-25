@@ -4,6 +4,7 @@ package grpcadapter
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -186,6 +187,9 @@ func orderView(view getorder.OrderView) *ordersv1.Order {
 			CancelledAt: timestamppb.New(view.Cancellation.CancelledAt),
 		}
 	}
+	result.ExpectedReadyAt = expectedTime(view.Expected.ReadyAt)
+	result.ExpectedPickupAt = expectedTime(view.Expected.PickupAt)
+	result.ExpectedDeliveredAt = expectedTime(view.Expected.DeliveredAt)
 	if view.CancellationWindow != nil {
 		result.CancellationWindow = &ordersv1.CancellationWindow{
 			OpensAt:  timestamppb.New(view.CancellationWindow.OpensAt),
@@ -193,6 +197,14 @@ func orderView(view getorder.OrderView) *ordersv1.Order {
 		}
 	}
 	return result
+}
+
+// expectedTime leaves a deadline that is not named empty.
+func expectedTime(at time.Time) *timestamppb.Timestamp {
+	if at.IsZero() {
+		return nil
+	}
+	return timestamppb.New(at)
 }
 
 func orderSummary(summary listcustomerorders.OrderSummary) *ordersv1.OrderSummary {

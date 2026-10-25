@@ -352,6 +352,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
             outbox: self.ports.store(),
+            clock: self.ports.clock(),
         }
         .execute(subject, input)
     }

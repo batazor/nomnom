@@ -9,7 +9,7 @@ use crate::infrastructure::memory::{
     RecordingRelationships, RelationshipWrite, StaticAuthorization,
 };
 use crate::infrastructure::postgres::test_support::TestStore;
-use crate::pkg::application::RelationshipWriteError;
+use crate::pkg::application::{Clock, RelationshipWriteError};
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::applications::authorization::{CourierPermission, CourierResource};
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
@@ -270,6 +270,7 @@ impl Api {
                 AcceptDeliveryOfferRequest {
                     offer_id,
                     courier_id: courier.to_owned(),
+                    expected_pickup_at: None,
                 },
             ))
             .await
@@ -359,6 +360,7 @@ async fn courier_accepts_picks_up_and_completes_the_delivery() {
             ConfirmPickupRequest {
                 delivery_id: delivery_id.clone(),
                 courier_id: "courier-1".to_owned(),
+                expected_delivered_at: None,
             },
         ))
         .await
@@ -416,6 +418,7 @@ async fn another_courier_cannot_confirm_pickup() {
             ConfirmPickupRequest {
                 delivery_id: delivery_id.clone(),
                 courier_id: "courier-1".to_owned(),
+                expected_delivered_at: None,
             },
         ))
         .await
@@ -424,6 +427,74 @@ async fn another_courier_cannot_confirm_pickup() {
     assert_eq!(denied.code(), tonic::Code::PermissionDenied);
     assert_eq!(api.delivery_state(&delivery_id), State::Assigned);
     assert_eq!(api.store.outbox_messages(), outbox_before);
+    api.stop().await;
+}
+
+/// FR-610, AC-770: expected times of the requests reach the facts; a time
+/// not in the future is `INVALID_ARGUMENT`.
+#[tokio::test]
+async fn courier_names_expected_times_on_acceptance_and_pickup() {
+    let mut api = Api::start(authorization(&["courier-1"], &["order-1"])).await;
+    api.courier_on_line("courier-1").await;
+    let delivery_id = api.offered("order-1").await;
+    let offer_id = api.offers("courier-1").await[0].offer_id.clone();
+    let now = crate::di::infrastructure::SystemClock.now_epoch_seconds();
+    let at = |seconds: i64| prost_types::Timestamp { seconds, nanos: 0 };
+
+    api.client
+        .accept_delivery_offer(as_user(
+            "courier-1",
+            AcceptDeliveryOfferRequest {
+                offer_id,
+                courier_id: "courier-1".to_owned(),
+                expected_pickup_at: Some(at(now + 600)),
+            },
+        ))
+        .await
+        .expect("accepted");
+    let past = api
+        .client
+        .confirm_pickup(as_user(
+            "courier-1",
+            ConfirmPickupRequest {
+                delivery_id: delivery_id.clone(),
+                courier_id: "courier-1".to_owned(),
+                expected_delivered_at: Some(at(now - 60)),
+            },
+        ))
+        .await
+        .expect_err("past handover time");
+    assert_eq!(past.code(), tonic::Code::InvalidArgument);
+    assert_eq!(api.delivery_state(&delivery_id), State::Assigned);
+    api.client
+        .confirm_pickup(as_user(
+            "courier-1",
+            ConfirmPickupRequest {
+                delivery_id: delivery_id.clone(),
+                courier_id: "courier-1".to_owned(),
+                expected_delivered_at: Some(at(now + 1_800)),
+            },
+        ))
+        .await
+        .expect("picked up");
+
+    let named: Vec<Option<i64>> = api
+        .store
+        .outbox_messages()
+        .into_iter()
+        .filter_map(|message| match message.event {
+            DomainEvent::CourierAssignedToDelivery {
+                expected_pickup_at_epoch_seconds,
+                ..
+            } => Some(expected_pickup_at_epoch_seconds),
+            DomainEvent::DeliveryPickedUp {
+                expected_delivered_at_epoch_seconds,
+                ..
+            } => Some(expected_delivered_at_epoch_seconds),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(named, vec![Some(now + 600), Some(now + 1_800)]);
     api.stop().await;
 }
 
@@ -605,6 +676,7 @@ async fn invalid_courier_requests_are_invalid_arguments() {
             AcceptDeliveryOfferRequest {
                 offer_id: "missing".to_owned(),
                 courier_id: "courier-1".to_owned(),
+                expected_pickup_at: None,
             },
         ))
         .await

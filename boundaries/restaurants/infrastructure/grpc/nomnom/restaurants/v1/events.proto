@@ -14,9 +14,11 @@ import "google/protobuf/timestamp.proto";
 
 // --- restaurants.v1.restaurant-order-events (aggregate_id — Kitchen Order) ---
 
-// Ресторан принял Kitchen Order (Order Acceptance).
+// Ресторан принял Kitchen Order (Order Acceptance); expected_ready_at —
+// ожидаемая готовность на момент принятия (FR-609).
 message RestaurantOrderAccepted {
   string order_id = 1;
+  google.protobuf.Timestamp expected_ready_at = 2;
 }
 
 // Ресторан отказался принять Kitchen Order.

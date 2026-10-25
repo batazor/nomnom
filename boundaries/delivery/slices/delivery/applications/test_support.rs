@@ -69,7 +69,9 @@ impl World {
     pub fn assigned_delivery(&self, id: &str, courier: &str) {
         self.courier(courier, CourierStatus::Busy);
         let mut delivery = new_delivery(id);
-        delivery.assign(CourierId::new(courier)).expect("assign");
+        delivery
+            .assign(CourierId::new(courier), None)
+            .expect("assign");
         DeliveryRepository::add(&self.store, &delivery).expect("seed delivery");
     }
 
@@ -78,8 +80,8 @@ impl World {
         self.courier(courier, CourierStatus::Busy);
         let courier_id = CourierId::new(courier);
         let mut delivery = new_delivery(id);
-        delivery.assign(courier_id.clone()).expect("assign");
-        delivery.confirm_pickup(&courier_id).expect("pickup");
+        delivery.assign(courier_id.clone(), None).expect("assign");
+        delivery.confirm_pickup(&courier_id, None).expect("pickup");
         DeliveryRepository::add(&self.store, &delivery).expect("seed delivery");
     }
 

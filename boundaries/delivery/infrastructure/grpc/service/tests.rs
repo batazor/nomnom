@@ -172,6 +172,7 @@ async fn assigned_over_grpc(running: &mut Running, order: &str, courier: &str) -
             accept_delivery_offer::Input {
                 offer_id: offer.offer_id.as_str().to_owned(),
                 courier_id: courier.to_owned(),
+                expected_pickup_at_epoch_seconds: None,
             },
         )
         .expect("accepted");
@@ -326,6 +327,7 @@ async fn cancel_after_pickup_is_a_business_rejection() {
             confirm_pickup::Input {
                 delivery_id: delivery_id.clone(),
                 courier_id: "courier-1".to_owned(),
+                expected_delivered_at_epoch_seconds: None,
             },
         )
         .expect("picked up");

@@ -18,6 +18,8 @@ type Input struct {
 	EventID    string
 	OrderID    order.ID
 	OccurredAt time.Time
+	// ExpectedReadyAt is the ready time named by the restaurant; zero — not named.
+	ExpectedReadyAt time.Time
 }
 
 type Result struct {
@@ -47,7 +49,10 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		OccurredAt: in.OccurredAt,
 	}
 	reflection, err := h.reflector.Reflect(ctx, fact, func(current *order.Order) error {
-		_, err := current.Confirm(in.OccurredAt)
+		if _, err := current.Confirm(in.OccurredAt); err != nil {
+			return err
+		}
+		_, err := current.ExpectReadyAt(in.OccurredAt, in.ExpectedReadyAt)
 		return err
 	})
 	return Result(reflection), err

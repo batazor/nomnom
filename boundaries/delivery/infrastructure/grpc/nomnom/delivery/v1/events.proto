@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package nomnom.delivery.v1;
 
+import "google/protobuf/timestamp.proto";
+
 // Integration Events стрима delivery.v1.delivery-events (ADR 25, ADR 28).
 // Envelope (event_id, event_type, occurred_at, aggregate_*) передаётся в Kafka
 // headers; event_type — полное имя сообщения ниже, partition key — aggregate_id
@@ -12,12 +14,16 @@ message CourierAssignedToDelivery {
   string order_id = 1;
   string delivery_id = 2;
   string courier_id = 3;
+  // Срок Pickup, названный курьером при принятии оффера; пусто — не назван (FR-610).
+  google.protobuf.Timestamp expected_pickup_at = 4;
 }
 
 // Курьер забрал заказ (Pickup).
 message DeliveryPickedUp {
   string order_id = 1;
   string delivery_id = 2;
+  // Срок вручения, названный курьером при Pickup; пусто — не назван (FR-610).
+  google.protobuf.Timestamp expected_delivered_at = 3;
 }
 
 // Delivery завершена (Delivery Completion).

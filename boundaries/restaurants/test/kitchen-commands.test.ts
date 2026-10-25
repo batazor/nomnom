@@ -7,6 +7,7 @@ import {
 } from "../pkg/application/errors.ts";
 import {
   GuardFailedError,
+  InvalidRestaurantOrderError,
   InvalidTransitionError,
 } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
@@ -63,6 +64,55 @@ test("AC-246 accept queues the order and publishes only RestaurantOrderAccepted"
       },
     },
   ]);
+});
+
+test("AC-769 the kitchen names expected_ready_at; the order and RestaurantOrderAccepted carry it", async () => {
+  const world = await createKitchenWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const received = await world.givenReceivedOrder(restaurantId, phoId);
+  const outboxBefore = (await world.outbox.records()).length;
+  const now = world.clock.now();
+  const expectedReadyAt = new Date(now.getTime() + minutes(12));
+
+  const result = await world.accept.execute({
+    ...staffCommand(restaurantId, received.restaurantOrderId),
+    expectedReadyAt,
+  });
+
+  assert.equal(result.state, "QUEUED");
+  assert.deepEqual(result.timeline.expectedReadyAt, expectedReadyAt);
+  const stored = await world.restaurantOrders.get(received.restaurantOrderId);
+  assert.deepEqual(stored?.timeline.expectedReadyAt, expectedReadyAt);
+  const [accepted] = (await world.outbox.records()).slice(outboxBefore);
+  assert.ok(accepted !== undefined);
+  assert.equal(accepted.event.type, "RestaurantOrderAccepted");
+  assert.deepEqual(
+    (accepted.event as { expectedReadyAt?: Date }).expectedReadyAt,
+    expectedReadyAt,
+  );
+});
+
+test("FR-609 expected_ready_at not later than the acceptance moment is an invalid argument", async () => {
+  const world = await createKitchenWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const received = await world.givenReceivedOrder(restaurantId, phoId);
+  const outboxBefore = (await world.outbox.records()).length;
+  const now = world.clock.now();
+
+  for (const expectedReadyAt of [new Date(now.getTime() - 1), now]) {
+    await assert.rejects(
+      world.accept.execute({
+        ...staffCommand(restaurantId, received.restaurantOrderId),
+        expectedReadyAt,
+      }),
+      (error: unknown) =>
+        error instanceof InvalidRestaurantOrderError &&
+        error.reason === "expected_ready_at_not_later",
+    );
+  }
+  const order = await world.restaurantOrders.get(received.restaurantOrderId);
+  assert.equal(order?.state, "RECEIVED");
+  assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-247 accept is rejected with reasons when the restaurant is closed or items unavailable", async () => {

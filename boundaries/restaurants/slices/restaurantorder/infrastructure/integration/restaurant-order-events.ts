@@ -30,7 +30,10 @@ const integration = protobufIntegrationEvents(RESTAURANT_ORDER_EVENTS_TOPIC);
 /** Explicit allowlist: Domain Event type → Integration Event. */
 const MAPPERS: EventAllowlist<RestaurantOrderEvent> = {
   RestaurantOrderAccepted: (event) =>
-    integration(RestaurantOrderAcceptedSchema, { orderId: event.orderId }),
+    integration(RestaurantOrderAcceptedSchema, {
+      orderId: event.orderId,
+      expectedReadyAt: timestampFromDate(event.expectedReadyAt),
+    }),
   RestaurantOrderRejected: (event) =>
     integration(RestaurantOrderRejectedSchema, {
       orderId: event.orderId,

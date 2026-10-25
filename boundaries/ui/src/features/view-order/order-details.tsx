@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useI18n } from "../../shared/i18n/i18n";
 import { Button, Illustration } from "../../shared/ui";
 import { CancelOrder } from "./cancel-order";
+import { FulfillmentProgress } from "./fulfillment-progress";
 import {
   endPresentation,
   milestoneLabel,
@@ -111,6 +112,7 @@ function OrderView({
           ) : (
             <OrderProgress current={status.step} order={order} />
           )}
+          <FulfillmentProgress order={order} />
 
           {status.final ? null : (
             <CancelOrder

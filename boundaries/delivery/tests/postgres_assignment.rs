@@ -123,6 +123,7 @@ fn accept(
         Input {
             offer_id: seed.offer_id.as_str().to_owned(),
             courier_id: seed.courier_id.as_str().to_owned(),
+            expected_pickup_at_epoch_seconds: None,
         },
     )
     .map(drop)

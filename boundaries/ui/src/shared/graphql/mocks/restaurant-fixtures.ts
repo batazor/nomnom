@@ -52,6 +52,10 @@ export type MockOrder = {
   placedAt: string;
   milestones: MockOrderMilestone[];
   cancellation: { availableUntil: string } | null;
+  // Deadlines named by the kitchen and the courier, null until named.
+  expectedReadyAt: string | null;
+  expectedPickupAt: string | null;
+  expectedDeliveredAt: string | null;
 };
 
 const currency = "RUB";

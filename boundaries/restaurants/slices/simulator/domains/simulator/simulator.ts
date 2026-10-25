@@ -75,3 +75,61 @@ export const randomDelayMs = (
   bounds: Readonly<{ minMs: number; maxMs: number }>,
   random: number,
 ): number => bounds.minMs + Math.round(random * (bounds.maxMs - bounds.minMs));
+
+/** States of an accepted order whose next step the Simulator plans. */
+export const PREPARATION_STAGES = [
+  RestaurantOrderState.Queued,
+  RestaurantOrderState.Preparing,
+  RestaurantOrderState.Assembled,
+] as const;
+
+export type PreparationStage = (typeof PREPARATION_STAGES)[number];
+
+/** Planned moment (epoch ms) of the step taken in `state`. */
+export type PlannedStep = Readonly<{ state: PreparationStage; dueAt: number }>;
+
+/**
+ * Planned remaining Preparation of one order (FR-609): the steps in state
+ * order; the step of `ASSEMBLED` (mark ready) is the planned `READY` moment.
+ */
+export type PreparationPlan = Readonly<{ steps: readonly PlannedStep[] }>;
+
+/**
+ * Plans the steps from `from` to `READY`: each step comes a random delay in
+ * `[minMs, maxMs]` (at least 1 ms) after the previous one, starting at `now`.
+ * `random` is called once per step.
+ */
+export const planPreparation = (
+  from: PreparationStage,
+  now: number,
+  bounds: Readonly<{ minMs: number; maxMs: number }>,
+  random: () => number,
+): PreparationPlan => {
+  const steps: PlannedStep[] = [];
+  let dueAt = now;
+  for (const state of PREPARATION_STAGES.slice(
+    PREPARATION_STAGES.indexOf(from),
+  )) {
+    dueAt += Math.max(1, randomDelayMs(bounds, random()));
+    steps.push({ state, dueAt });
+  }
+  return { steps };
+};
+
+/** Planned `READY` moment: the due time of the last step. */
+export const plannedReadyAt = (plan: PreparationPlan): number => {
+  const last = plan.steps.at(-1);
+  if (last === undefined) throw new Error("preparation plan has no steps");
+  return last.dueAt;
+};
+
+/** Moves every step by the same amount so `READY` lands at `readyAt`. */
+export const shiftPlan = (
+  plan: PreparationPlan,
+  readyAt: number,
+): PreparationPlan => {
+  const shift = readyAt - plannedReadyAt(plan);
+  return {
+    steps: plan.steps.map((step) => ({ ...step, dueAt: step.dueAt + shift })),
+  };
+};

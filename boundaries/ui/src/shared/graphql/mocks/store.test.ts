@@ -100,6 +100,72 @@ describe("mock store", () => {
     expect(nodes.map((node) => node.id)).not.toContain(nightBakery.id);
   });
 
+  it("names the deadlines like the kitchen and the courier do (FR-612)", async () => {
+    const start = new Date("2026-10-25T12:00:00Z");
+    let now = start;
+    const store = createMockStore({ now: () => now });
+    const deadlines =
+      "query ($id: ID!) { order(id: $id) { expectedReadyAt expectedPickupAt expectedDeliveredAt } }";
+    type Deadlines = {
+      order: {
+        expectedReadyAt: string | null;
+        expectedPickupAt: string | null;
+        expectedDeliveredAt: string | null;
+      };
+    };
+    const placed = await run<PlaceOrderData>(store, placeOrder, placeInput());
+    const id = placed.placeOrder.order?.id;
+    expect(await run<Deadlines>(store, deadlines, { id })).toEqual({
+      order: {
+        expectedReadyAt: null,
+        expectedPickupAt: null,
+        expectedDeliveredAt: null,
+      },
+    });
+
+    const kitchen = `mutation ($input: KitchenActionInput!) { applyKitchenAction(input: $input) { problem } }`;
+    const act = (action: string) =>
+      run(store, kitchen, {
+        input: {
+          restaurantId: kitchenEight.id,
+          kitchenOrderId: `kitchen-${id}`,
+          action,
+        },
+      });
+    await act("ACCEPT");
+    now = new Date(start.getTime() + 60_000);
+    await run(
+      store,
+      "mutation { setCourierAvailability(availability: AVAILABLE) { problem } }",
+    );
+    await run(
+      store,
+      "mutation ($offerId: ID!) { acceptDeliveryOffer(offerId: $offerId) { problem } }",
+      { offerId: `offer-${id}` },
+    );
+    for (const action of [
+      "START_PREPARATION",
+      "MARK_ASSEMBLED",
+      "MARK_READY",
+    ]) {
+      await act(action);
+    }
+    now = new Date(start.getTime() + 20 * 60_000);
+    await run(
+      store,
+      "mutation ($deliveryId: ID!) { applyCourierDeliveryAction(deliveryId: $deliveryId, action: CONFIRM_PICKUP) { problem } }",
+      { deliveryId: `delivery-${id}` },
+    );
+
+    expect(await run<Deadlines>(store, deadlines, { id })).toEqual({
+      order: {
+        expectedReadyAt: "2026-10-25T12:15:00.000Z",
+        expectedPickupAt: "2026-10-25T12:11:00.000Z",
+        expectedDeliveredAt: "2026-10-25T12:35:00.000Z",
+      },
+    });
+  });
+
   it("returns null for a missing order", async () => {
     const data = await run<OrderData>(createMockStore(), orderStatus, {
       id: "order-unknown",

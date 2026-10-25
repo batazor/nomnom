@@ -185,6 +185,9 @@ message RestaurantOrder {
 message AcceptRestaurantOrderRequest {
   string restaurant_id = 1;
   string restaurant_order_id = 2;
+  // Срок готовности, который называет кухня; не задан — его считает Ready Time
+  // Estimator (FR-609). Должен быть позже момента принятия.
+  google.protobuf.Timestamp expected_ready_at = 3;
 }
 
 message AcceptRestaurantOrderResponse {

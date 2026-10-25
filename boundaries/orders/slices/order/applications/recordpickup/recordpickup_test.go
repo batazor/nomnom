@@ -68,3 +68,18 @@ func TestHandleByOrderState(t *testing.T) {
 		})
 	}
 }
+
+// FR-611: Pickup stores the handover time named by the courier.
+func TestHandleStoresExpectedDeliveredTime(t *testing.T) {
+	store := postgrestest.Open(t)
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed))))
+	in := input("event-1")
+	in.ExpectedDeliveredAt = occurredAt.Add(20 * time.Minute)
+
+	result, err := recordpickup.NewHandler(store, store, store, fake.NewWorkflow()).Handle(context.Background(), in)
+
+	require.NoError(t, err)
+	assert.Equal(t, fulfillment.OutcomeApplied, result.Outcome)
+	snapshot, _ := store.Snapshot("order-1")
+	assert.Equal(t, order.ExpectedTimes{DeliveredAt: in.ExpectedDeliveredAt}, snapshot.Expected)
+}

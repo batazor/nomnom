@@ -314,6 +314,21 @@ type Order @key(fields: "id") {
   Cancellation availability, null when cancellation is not possible now
   """
   cancellation: OrderCancellationAvailability
+  """
+  Moment the kitchen expects the order to be ready in RFC 3339, null until
+  the kitchen names it; the latest one after a delay
+  """
+  expectedReadyAt: String
+  """
+  Moment the assigned courier expects to pick the order up in RFC 3339, null
+  until the courier names it
+  """
+  expectedPickupAt: String
+  """
+  Moment the courier expects to deliver the order in RFC 3339, null until
+  the courier names it at pickup
+  """
+  expectedDeliveredAt: String
 }
 
 type OrderEdge {

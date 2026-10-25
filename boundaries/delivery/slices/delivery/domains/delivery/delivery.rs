@@ -1,8 +1,8 @@
 use super::fsm::{ensure_allowed, transition};
 use super::{
     Address, DeliveryCancellationReason, DeliveryError, DeliveryFailureReason, DeliveryId,
-    DeliveryValidationError, DomainEvent, OrderId, State, TransitionError, TransitionResult,
-    Trigger,
+    DeliveryValidationError, DomainEvent, ExpectedTime, OrderId, State, TransitionError,
+    TransitionResult, Trigger,
 };
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::domains::courier::CourierId;
@@ -24,6 +24,11 @@ pub struct Delivery {
     pickup_address: Address,
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
+    /// Pickup time named by the courier of the current Courier Assignment;
+    /// `None` — not named (FR-610).
+    expected_pickup_at: Option<ExpectedTime>,
+    /// Handover time named by the courier on Pickup; `None` — not named.
+    expected_delivered_at: Option<ExpectedTime>,
     /// Creation time; `None` for a Delivery stored before it was recorded.
     created_at_epoch_seconds: Option<i64>,
     /// Technical field: revision of the last `delivery:<id>#courier` write.
@@ -43,6 +48,8 @@ impl Delivery {
             pickup_address,
             state: State::Waiting,
             failure_reason: None,
+            expected_pickup_at: None,
+            expected_delivered_at: None,
             created_at_epoch_seconds: None,
             authorization_revision: None,
             version: 0,
@@ -99,6 +106,8 @@ impl Delivery {
             pickup_address,
             state,
             failure_reason,
+            expected_pickup_at: None,
+            expected_delivered_at: None,
             created_at_epoch_seconds: None,
             authorization_revision: None,
             version: 0,
@@ -131,6 +140,28 @@ impl Delivery {
         self.created_at_epoch_seconds
     }
 
+    /// Snapshot fields `expected_pickup_at` and `expected_delivered_at`.
+    #[must_use]
+    pub fn with_expected_times(
+        mut self,
+        expected_pickup_at: Option<ExpectedTime>,
+        expected_delivered_at: Option<ExpectedTime>,
+    ) -> Self {
+        self.expected_pickup_at = expected_pickup_at;
+        self.expected_delivered_at = expected_delivered_at;
+        self
+    }
+
+    #[must_use]
+    pub const fn expected_pickup_at(&self) -> Option<ExpectedTime> {
+        self.expected_pickup_at
+    }
+
+    #[must_use]
+    pub const fn expected_delivered_at(&self) -> Option<ExpectedTime> {
+        self.expected_delivered_at
+    }
+
     /// Snapshot field `authorization_revision`, absent in old snapshots.
     #[must_use]
     pub fn with_authorization_revision(mut self, revision: Option<AuthorizationRevision>) -> Self {
@@ -155,23 +186,33 @@ impl Delivery {
         ensure_allowed(self.state, Trigger::Assign)
     }
 
-    pub fn assign(&mut self, courier_id: CourierId) -> Result<TransitionResult, TransitionError> {
+    /// Starts a Courier Assignment; `expected_pickup_at` is the Pickup time
+    /// the courier named, it replaces the one of a previous assignment.
+    pub fn assign(
+        &mut self,
+        courier_id: CourierId,
+        expected_pickup_at: Option<ExpectedTime>,
+    ) -> Result<TransitionResult, TransitionError> {
         let result = transition(self.state, Trigger::Assign, Some(&courier_id))?;
         self.events.push(DomainEvent::CourierAssignedToDelivery {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
             courier_id: courier_id.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
+            expected_pickup_at_epoch_seconds: expected_pickup_at.map(ExpectedTime::epoch_seconds),
         });
         self.courier_id = Some(courier_id);
+        self.expected_pickup_at = expected_pickup_at;
         self.state = result.to;
         Ok(result)
     }
 
     /// Ends the current Courier Assignment and returns the delivery to the
-    /// search for a replacement.
+    /// search for a replacement; the Pickup time of the ended assignment is
+    /// dropped.
     pub fn unassign(&mut self) -> Result<TransitionResult, TransitionError> {
         let result = transition(self.state, Trigger::Unassign, self.courier_id.as_ref())?;
+        self.expected_pickup_at = None;
         if let Some(courier_id) = self.courier_id.take() {
             self.events
                 .push(DomainEvent::CourierUnassignedFromDelivery {
@@ -184,16 +225,22 @@ impl Delivery {
         Ok(result)
     }
 
+    /// Records the Pickup; `expected_delivered_at` is the handover time the
+    /// courier named.
     pub fn confirm_pickup(
         &mut self,
         courier_id: &CourierId,
+        expected_delivered_at: Option<ExpectedTime>,
     ) -> Result<TransitionResult, DeliveryError> {
         let result = self.transition_by(Trigger::Pickup, courier_id)?;
         self.state = result.to;
+        self.expected_delivered_at = expected_delivered_at;
         self.events.push(DomainEvent::DeliveryPickedUp {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
             courier_id: courier_id.clone(),
+            expected_delivered_at_epoch_seconds: expected_delivered_at
+                .map(ExpectedTime::epoch_seconds),
         });
         Ok(result)
     }
@@ -246,6 +293,7 @@ impl Delivery {
     ) -> Result<Option<CourierId>, TransitionError> {
         let result = transition(self.state, Trigger::Cancel, self.courier_id.as_ref())?;
         let released_courier_id = self.courier_id.take();
+        self.expected_pickup_at = None;
         self.state = result.to;
         self.events.push(DomainEvent::DeliveryCancelled {
             delivery_id: self.id.clone(),

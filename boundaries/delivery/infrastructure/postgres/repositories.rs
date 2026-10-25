@@ -8,7 +8,7 @@ use crate::slices::courier::applications::update_courier_location::{
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository, Location};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    DeliveryOfferRepository, DeliveryRepository, OrderId,
+    DeliveryOfferRepository, DeliveryRepository, ExpectedTime, OrderId,
 };
 
 use super::outbox::row_traceparent;
@@ -129,7 +129,8 @@ impl DeliveryRepository for PostgresStore {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
             "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,
-                 failure_detail, authorization_revision, version, created_at
+                 failure_detail, authorization_revision, version, created_at,
+                 expected_pickup_at, expected_delivered_at
              FROM deliveries WHERE id = $1",
             id.as_str()
         )
@@ -142,7 +143,8 @@ impl DeliveryRepository for PostgresStore {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
             "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,
-                 failure_detail, authorization_revision, version, created_at
+                 failure_detail, authorization_revision, version, created_at,
+                 expected_pickup_at, expected_delivered_at
              FROM deliveries WHERE order_id = $1",
             order_id.as_str()
         )
@@ -158,8 +160,9 @@ impl DeliveryRepository for PostgresStore {
         let inserted = sql!(self, "INSERT", |connection| sqlx::query!(
             "INSERT INTO deliveries (id, order_id, courier_id, pickup_address,
                  state, failure_reason, authorization_revision, version,
-                 created_at, failure_detail)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING",
+                 created_at, failure_detail, expected_pickup_at, expected_delivered_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             ON CONFLICT DO NOTHING",
             delivery.id().as_str(),
             delivery.order_id().as_str(),
             delivery.courier_id().map(CourierId::as_str),
@@ -173,7 +176,13 @@ impl DeliveryRepository for PostgresStore {
             delivery.created_at_epoch_seconds(),
             delivery
                 .failure_reason()
-                .and_then(DeliveryFailureReason::detail)
+                .and_then(DeliveryFailureReason::detail),
+            delivery
+                .expected_pickup_at()
+                .map(ExpectedTime::epoch_seconds),
+            delivery
+                .expected_delivered_at()
+                .map(ExpectedTime::epoch_seconds)
         )
         .execute(connection))?;
         if inserted.rows_affected() == 0 {
@@ -196,7 +205,8 @@ impl DeliveryRepository for PostgresStore {
         })?;
         let updated = sql!(self, "UPDATE", |connection| sqlx::query!(
             "UPDATE deliveries SET courier_id = $3, state = $4, failure_reason = $5,
-                 authorization_revision = $6, failure_detail = $7, version = version + 1
+                 authorization_revision = $6, failure_detail = $7,
+                 expected_pickup_at = $8, expected_delivered_at = $9, version = version + 1
              WHERE id = $1 AND version = $2",
             delivery.id().as_str(),
             version,
@@ -208,7 +218,13 @@ impl DeliveryRepository for PostgresStore {
                 .map(AuthorizationRevision::as_str),
             delivery
                 .failure_reason()
-                .and_then(DeliveryFailureReason::detail)
+                .and_then(DeliveryFailureReason::detail),
+            delivery
+                .expected_pickup_at()
+                .map(ExpectedTime::epoch_seconds),
+            delivery
+                .expected_delivered_at()
+                .map(ExpectedTime::epoch_seconds)
         )
         .execute(connection))?;
         optimistic(updated.rows_affected(), || {

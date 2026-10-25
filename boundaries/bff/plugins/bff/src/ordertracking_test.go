@@ -87,6 +87,7 @@ func TestQueryOrderRequiresAccessToken(t *testing.T) {
 func TestQueryOrderMapsTheView(t *testing.T) {
 	placed := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	until := placed.Add(5 * time.Minute)
+	ready := placed.Add(12 * time.Minute)
 	getOrder := &fakeGetOrder{view: applications.OrderView{
 		ID: "order-1", Status: applications.StatusPreparing,
 		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
@@ -96,6 +97,7 @@ func TestQueryOrderMapsTheView(t *testing.T) {
 		PlacedAt:       placed,
 		Milestones:     []applications.Milestone{{Kind: applications.MilestoneCourierAssigned, OccurredAt: placed.Add(time.Minute)}},
 		AvailableUntil: &until,
+		Deadlines:      applications.Deadlines{ExpectedReadyAt: &ready},
 	}}
 	svc, ctx := newService(t, getOrder, &fakeCancellation{})
 
@@ -110,6 +112,9 @@ func TestQueryOrderMapsTheView(t *testing.T) {
 	assert.Equal(t, service.OrderMilestoneKind_ORDER_MILESTONE_KIND_COURIER_ASSIGNED, order.GetMilestones()[0].GetKind())
 	assert.Equal(t, "2026-10-25T12:00:00Z", order.GetPlacedAt())
 	assert.Equal(t, "2026-10-25T12:05:00Z", order.GetCancellation().GetAvailableUntil())
+	assert.Equal(t, "2026-10-25T12:12:00Z", order.GetExpectedReadyAt().GetValue())
+	assert.Nil(t, order.GetExpectedPickupAt(), "a deadline nobody named is null")
+	assert.Nil(t, order.GetExpectedDeliveredAt(), "a deadline nobody named is null")
 }
 
 func TestQueryOrderNotFoundIsNull(t *testing.T) {
@@ -122,8 +127,10 @@ func TestQueryOrderNotFoundIsNull(t *testing.T) {
 // ADR 36: an orderChanged event is resolved as the customer, a foreign or
 // missing order is NOT_FOUND, never order data.
 func TestLookupOrderByIdResolvesAsTheCustomer(t *testing.T) {
-	getOrder := &fakeGetOrder{view: applications.OrderView{ID: "order-1", Status: applications.StatusPreparing,
-		Total: applications.Money{Amount: "0.30", Currency: "EUR"}}}
+	delivered := time.Date(2026, 10, 25, 12, 30, 0, 0, time.UTC)
+	getOrder := &fakeGetOrder{view: applications.OrderView{ID: "order-1", Status: applications.StatusPickedUp,
+		Total:     applications.Money{Amount: "0.30", Currency: "EUR"},
+		Deadlines: applications.Deadlines{ExpectedDeliveredAt: &delivered}}}
 	svc, ctx := newService(t, getOrder, &fakeCancellation{})
 	request := &service.LookupOrderByIdRequest{Keys: []*service.LookupOrderByIdRequestKey{{Id: "order-1"}}}
 
@@ -131,6 +138,8 @@ func TestLookupOrderByIdResolvesAsTheCustomer(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, response.GetResult(), 1)
 	assert.Equal(t, "order-1", response.GetResult()[0].GetId())
+	assert.Equal(t, "2026-10-25T12:30:00Z", response.GetResult()[0].GetExpectedDeliveredAt().GetValue(),
+		"orderChanged carries the deadlines (FR-611)")
 	assert.Equal(t, "customer-1", getOrder.user.ID)
 
 	getOrder.err = applications.ErrOrderNotFound

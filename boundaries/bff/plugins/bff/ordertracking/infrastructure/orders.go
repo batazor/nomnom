@@ -5,10 +5,12 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpcerr"
@@ -120,6 +122,11 @@ func snapshot(order *ordersv1.Order) applications.OrderSnapshot {
 		State:        orderStates[order.GetState()],
 		Total:        money(order.GetTotal()),
 		PlacedAt:     order.GetPlacedAt().AsTime(),
+		Deadlines: applications.Deadlines{
+			ExpectedReadyAt:     moment(order.GetExpectedReadyAt()),
+			ExpectedPickupAt:    moment(order.GetExpectedPickupAt()),
+			ExpectedDeliveredAt: moment(order.GetExpectedDeliveredAt()),
+		},
 	}
 	for _, item := range order.GetItems() {
 		result.Items = append(result.Items, applications.OrderLine{
@@ -145,6 +152,16 @@ func snapshot(order *ordersv1.Order) applications.OrderSnapshot {
 		}
 	}
 	return result
+}
+
+// moment reads an optional deadline: an unset Timestamp is a deadline nobody
+// named.
+func moment(value *timestamppb.Timestamp) *time.Time {
+	if value == nil {
+		return nil
+	}
+	t := value.AsTime()
+	return &t
 }
 
 func money(value *ordersv1.Money) applications.Money {

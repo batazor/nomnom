@@ -57,6 +57,7 @@ type Order struct {
 	facts        []RecordedFact
 	cancellation CancellationReason
 	cancelledAt  time.Time
+	expected     ExpectedTimes
 	events       []DomainEvent
 }
 

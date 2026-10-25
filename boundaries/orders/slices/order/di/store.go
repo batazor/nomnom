@@ -43,7 +43,8 @@ func (s *ProcessStore) Add(ctx context.Context, created *order.Order) error {
 	if err := s.Store.Add(ctx, created); err != nil {
 		return err
 	}
-	return s.changes.Notify(ctx, created.ID(), created.Version(), time.Now())
+	// Add stores Version()+1, like Save.
+	return s.changes.Notify(ctx, created.ID(), created.Version()+1, time.Now())
 }
 
 func (s *ProcessStore) Save(ctx context.Context, changed *order.Order) error {

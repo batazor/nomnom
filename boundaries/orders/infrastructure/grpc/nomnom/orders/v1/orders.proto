@@ -56,6 +56,10 @@ message Order {
   Cancellation cancellation = 10;
   // Present only while the Order State admits Order Cancellation.
   CancellationWindow cancellation_window = 11;
+  // Последние известные сроки Fulfillment (FR-611); пусто — срок не назван.
+  google.protobuf.Timestamp expected_ready_at = 12;
+  google.protobuf.Timestamp expected_pickup_at = 13;
+  google.protobuf.Timestamp expected_delivered_at = 14;
 }
 
 message OrderSummary {

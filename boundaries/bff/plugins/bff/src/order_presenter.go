@@ -96,6 +96,9 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 	if view.AvailableUntil != nil {
 		order.Cancellation = &service.OrderCancellationAvailability{AvailableUntil: timestamp(*view.AvailableUntil)}
 	}
+	order.ExpectedReadyAt = deadline(view.Deadlines.ExpectedReadyAt)
+	order.ExpectedPickupAt = deadline(view.Deadlines.ExpectedPickupAt)
+	order.ExpectedDeliveredAt = deadline(view.Deadlines.ExpectedDeliveredAt)
 	return order, nil
 }
 
@@ -106,6 +109,15 @@ func money(value applications.Money) *service.Money {
 // timestamp formats moments in RFC 3339, as the public schema requires.
 func timestamp(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
+}
+
+// deadline presents an optional deadline; nil is null, a deadline nobody
+// named.
+func deadline(t *time.Time) *wrapperspb.StringValue {
+	if t == nil {
+		return nil
+	}
+	return wrapperspb.String(timestamp(*t))
 }
 
 // orderConnection presents a page of the order history; every node is the

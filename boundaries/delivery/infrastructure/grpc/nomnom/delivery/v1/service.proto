@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package nomnom.delivery.v1;
 
+import "google/protobuf/timestamp.proto";
 import "nomnom/delivery/v1/delivery.proto";
 
 service DeliveryService {
@@ -129,6 +130,8 @@ message ListAvailableDeliveryOffersResponse {
 message AcceptDeliveryOfferRequest {
   string offer_id = 1;
   string courier_id = 2;
+  // Когда курьер рассчитывает забрать заказ (FR-610); не задан — срока нет.
+  google.protobuf.Timestamp expected_pickup_at = 3;
 }
 
 message AcceptDeliveryOfferResponse {
@@ -154,6 +157,8 @@ message RejectDeliveryOfferResponse {
 message ConfirmPickupRequest {
   string delivery_id = 1;
   string courier_id = 2;
+  // Когда курьер рассчитывает вручить заказ (FR-610); не задан — срока нет.
+  google.protobuf.Timestamp expected_delivered_at = 3;
 }
 
 message ConfirmPickupResponse {

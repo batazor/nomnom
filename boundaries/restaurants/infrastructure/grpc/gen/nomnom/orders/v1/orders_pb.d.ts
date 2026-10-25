@@ -189,6 +189,23 @@ export declare type Order = Message<"nomnom.orders.v1.Order"> & {
    * @generated from field: nomnom.orders.v1.CancellationWindow cancellation_window = 11;
    */
   cancellationWindow?: CancellationWindow | undefined;
+
+  /**
+   * Последние известные сроки Fulfillment (FR-611); пусто — срок не назван.
+   *
+   * @generated from field: google.protobuf.Timestamp expected_ready_at = 12;
+   */
+  expectedReadyAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expected_pickup_at = 13;
+   */
+  expectedPickupAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expected_delivered_at = 14;
+   */
+  expectedDeliveredAt?: Timestamp | undefined;
 };
 
 /**

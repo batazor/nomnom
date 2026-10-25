@@ -144,6 +144,7 @@ fn assigned(created_at: Option<i64>) -> DomainEvent {
         order_id: OrderId::new("order-1"),
         courier_id: courier_id(),
         created_at_epoch_seconds: created_at,
+        expected_pickup_at_epoch_seconds: None,
     }
 }
 
@@ -210,6 +211,7 @@ fn committed_events_are_counted_by_metric() {
             delivery_id: delivery_id(),
             order_id: OrderId::new("order-1"),
             courier_id: courier_id(),
+            expected_delivered_at_epoch_seconds: None,
         },
         completed(Some(NOW - 1_800)),
         failed("no_access"),

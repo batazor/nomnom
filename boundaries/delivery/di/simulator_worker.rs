@@ -10,6 +10,14 @@
 //! - `Assigned` — confirm pickup 95%, failure 5%;
 //! - `PickedUp` — confirm delivery 95%, failure 5%.
 //!
+//! Сроки — запланированные моменты (FR-610): принимая offer, Simulator сразу
+//! выбирает задержку Pickup, передаёт `expected_pickup_at = now + delay` и
+//! ставит Pickup доставки в расписание на этот момент; подтверждая Pickup —
+//! так же выбирает задержку вручения, передаёт `expected_delivered_at` и
+//! ставит вручение на него. Доставку, которую принял не Simulator, он
+//! планирует от первого прохода, как раньше. Задержка срока округляется до
+//! целых секунд вверх: срок всегда в будущем.
+//!
 //! Offer живёт `offer_ttl` (60s) меньше `MAX_DELAY`, поэтому верхняя граница
 //! задержки offer обрезается до `expiresAt − interval`: действие успевает до
 //! истечения с учётом шага опроса. Если и `MIN_DELAY` уже не успевает, offer
@@ -124,20 +132,24 @@ impl Randomness for SystemRandomness {
 /// Действия курьера, которые выполняет Simulator: настоящие use cases слайса
 /// `delivery` от имени курьера.
 pub trait CourierActions: Send + Sync {
+    /// Принимает offer с названным сроком Pickup; возвращает доставку offer.
     fn accept_offer(
         &self,
         courier: &CourierId,
         offer: &DeliveryOfferId,
-    ) -> Result<(), DeliveryApplicationError>;
+        expected_pickup_at_epoch_seconds: i64,
+    ) -> Result<DeliveryId, DeliveryApplicationError>;
     fn reject_offer(
         &self,
         courier: &CourierId,
         offer: &DeliveryOfferId,
     ) -> Result<(), DeliveryApplicationError>;
+    /// Подтверждает Pickup с названным сроком вручения.
     fn confirm_pickup(
         &self,
         courier: &CourierId,
         delivery: &DeliveryId,
+        expected_delivered_at_epoch_seconds: i64,
     ) -> Result<(), DeliveryApplicationError>;
     fn confirm_delivery(
         &self,
@@ -173,7 +185,8 @@ impl CourierActions for UseCaseCourierActions {
         &self,
         courier: &CourierId,
         offer: &DeliveryOfferId,
-    ) -> Result<(), DeliveryApplicationError> {
+        expected_pickup_at_epoch_seconds: i64,
+    ) -> Result<DeliveryId, DeliveryApplicationError> {
         self.use_cases
             .deliveries()
             .accept_delivery_offer(
@@ -181,9 +194,10 @@ impl CourierActions for UseCaseCourierActions {
                 accept_delivery_offer::Input {
                     offer_id: offer.as_str().to_owned(),
                     courier_id: courier.as_str().to_owned(),
+                    expected_pickup_at_epoch_seconds: Some(expected_pickup_at_epoch_seconds),
                 },
             )
-            .map(|_| ())
+            .map(|output| output.delivery_id)
     }
 
     fn reject_offer(
@@ -207,6 +221,7 @@ impl CourierActions for UseCaseCourierActions {
         &self,
         courier: &CourierId,
         delivery: &DeliveryId,
+        expected_delivered_at_epoch_seconds: i64,
     ) -> Result<(), DeliveryApplicationError> {
         self.use_cases
             .deliveries()
@@ -215,6 +230,7 @@ impl CourierActions for UseCaseCourierActions {
                 confirm_pickup::Input {
                     delivery_id: delivery.as_str().to_owned(),
                     courier_id: courier.as_str().to_owned(),
+                    expected_delivered_at_epoch_seconds: Some(expected_delivered_at_epoch_seconds),
                 },
             )
             .map(|_| ())
@@ -285,6 +301,16 @@ pub struct Simulator {
 
 fn seconds(duration: Duration) -> i64 {
     i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
+}
+
+/// Целые секунды с округлением вверх: срок `now + delay` позже `now`.
+fn seconds_up(duration: Duration) -> i64 {
+    let whole = seconds(duration);
+    if duration.subsec_nanos() > 0 {
+        whole.saturating_add(1)
+    } else {
+        whole
+    }
 }
 
 impl Simulator {
@@ -372,13 +398,59 @@ impl Simulator {
     }
 
     fn schedule_work(&mut self, work: Work, courier: CourierId, now: i64, delay: Duration) {
+        self.plan(work, courier, now.saturating_add(seconds(delay)));
+    }
+
+    fn plan(&mut self, work: Work, courier: CourierId, at_epoch_seconds: i64) {
         self.due.insert(
             work,
             Due {
                 courier,
-                at_epoch_seconds: now.saturating_add(seconds(delay)),
+                at_epoch_seconds,
             },
         );
+    }
+
+    /// Запланированный момент следующего шага: `now + random[MIN, MAX]`.
+    fn planned_at(&mut self) -> i64 {
+        let now = self.clock.now_epoch_seconds();
+        let delay = self
+            .random
+            .delay(self.schedule.min_delay, self.schedule.max_delay);
+        now.saturating_add(seconds_up(delay))
+    }
+
+    /// Принимает offer со сроком Pickup и ставит Pickup на этот срок.
+    fn accept(
+        &mut self,
+        courier: &CourierId,
+        offer: &DeliveryOfferId,
+    ) -> Result<(), DeliveryApplicationError> {
+        let pickup_at = self.planned_at();
+        let delivery = self.actions.accept_offer(courier, offer, pickup_at)?;
+        self.plan(
+            Work::Delivery(delivery, DeliveryStep::Pickup),
+            courier.clone(),
+            pickup_at,
+        );
+        Ok(())
+    }
+
+    /// Подтверждает Pickup со сроком вручения и ставит вручение на этот срок.
+    fn pick_up(
+        &mut self,
+        courier: &CourierId,
+        delivery: &DeliveryId,
+    ) -> Result<(), DeliveryApplicationError> {
+        let handover_at = self.planned_at();
+        self.actions
+            .confirm_pickup(courier, delivery, handover_at)?;
+        self.plan(
+            Work::Delivery(delivery.clone(), DeliveryStep::Handover),
+            courier.clone(),
+            handover_at,
+        );
+        Ok(())
     }
 
     /// Задержка offer в `[MIN, MAX]`, обрезанная до `expiresAt − interval`.
@@ -398,10 +470,7 @@ impl Simulator {
         let (action, result) = match work {
             Work::Offer(offer) => {
                 if self.random.percent() < ACCEPT_OFFER_PERCENT {
-                    (
-                        "accept_delivery_offer",
-                        self.actions.accept_offer(courier, offer),
-                    )
+                    ("accept_delivery_offer", self.accept(courier, offer))
                 } else {
                     (
                         "reject_delivery_offer",
@@ -411,10 +480,7 @@ impl Simulator {
             }
             Work::Delivery(delivery, DeliveryStep::Pickup) => {
                 if self.random.percent() < CONFIRM_PICKUP_PERCENT {
-                    (
-                        "confirm_pickup",
-                        self.actions.confirm_pickup(courier, delivery),
-                    )
+                    ("confirm_pickup", self.pick_up(courier, delivery))
                 } else {
                     let reason = self.failure_reason();
                     (

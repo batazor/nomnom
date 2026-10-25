@@ -9,6 +9,7 @@ package deliveryv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -23,12 +24,14 @@ const (
 
 // Курьер назначен на Delivery (Courier Assignment).
 type CourierAssignedToDelivery struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	DeliveryId    string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
-	CourierId     string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OrderId    string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	DeliveryId string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	CourierId  string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
+	// Срок Pickup, названный курьером при принятии оффера; пусто — не назван (FR-610).
+	ExpectedPickupAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expected_pickup_at,json=expectedPickupAt,proto3" json:"expected_pickup_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CourierAssignedToDelivery) Reset() {
@@ -82,13 +85,22 @@ func (x *CourierAssignedToDelivery) GetCourierId() string {
 	return ""
 }
 
+func (x *CourierAssignedToDelivery) GetExpectedPickupAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpectedPickupAt
+	}
+	return nil
+}
+
 // Курьер забрал заказ (Pickup).
 type DeliveryPickedUp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	DeliveryId    string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OrderId    string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	DeliveryId string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	// Срок вручения, названный курьером при Pickup; пусто — не назван (FR-610).
+	ExpectedDeliveredAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expected_delivered_at,json=expectedDeliveredAt,proto3" json:"expected_delivered_at,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *DeliveryPickedUp) Reset() {
@@ -133,6 +145,13 @@ func (x *DeliveryPickedUp) GetDeliveryId() string {
 		return x.DeliveryId
 	}
 	return ""
+}
+
+func (x *DeliveryPickedUp) GetExpectedDeliveredAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpectedDeliveredAt
+	}
+	return nil
 }
 
 // Delivery завершена (Delivery Completion).
@@ -393,17 +412,19 @@ var File_nomnom_delivery_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1fnomnom/delivery/v1/events.proto\x12\x12nomnom.delivery.v1\"v\n" +
+	"\x1fnomnom/delivery/v1/events.proto\x12\x12nomnom.delivery.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc0\x01\n" +
 	"\x19CourierAssignedToDelivery\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12\x1d\n" +
 	"\n" +
-	"courier_id\x18\x03 \x01(\tR\tcourierId\"N\n" +
+	"courier_id\x18\x03 \x01(\tR\tcourierId\x12H\n" +
+	"\x12expected_pickup_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10expectedPickupAt\"\x9e\x01\n" +
 	"\x10DeliveryPickedUp\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
-	"deliveryId\"O\n" +
+	"deliveryId\x12N\n" +
+	"\x15expected_delivered_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAt\"O\n" +
 	"\x11DeliveryCompleted\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
@@ -447,13 +468,16 @@ var file_nomnom_delivery_v1_events_proto_goTypes = []any{
 	(*DeliveryFailed)(nil),                // 3: nomnom.delivery.v1.DeliveryFailed
 	(*CourierUnassignedFromDelivery)(nil), // 4: nomnom.delivery.v1.CourierUnassignedFromDelivery
 	(*DeliveryCancelled)(nil),             // 5: nomnom.delivery.v1.DeliveryCancelled
+	(*timestamppb.Timestamp)(nil),         // 6: google.protobuf.Timestamp
 }
 var file_nomnom_delivery_v1_events_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	6, // 0: nomnom.delivery.v1.CourierAssignedToDelivery.expected_pickup_at:type_name -> google.protobuf.Timestamp
+	6, // 1: nomnom.delivery.v1.DeliveryPickedUp.expected_delivered_at:type_name -> google.protobuf.Timestamp
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_delivery_v1_events_proto_init() }

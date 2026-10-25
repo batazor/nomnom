@@ -21,6 +21,7 @@ var (
 	RejectOrder              = telemetry.Command("reject_order")
 	RecordPreparationStarted = telemetry.Command("record_preparation_started")
 	RecordOrderReady         = telemetry.Command("record_order_ready")
+	RecordPreparationDelay   = telemetry.Command("record_preparation_delay")
 	RelayPreparationIssue    = telemetry.Command("relay_preparation_issue")
 	RecordCourierAssignment  = telemetry.Command("record_courier_assignment")
 	RecordCourierRelease     = telemetry.Command("record_courier_release")

@@ -4,7 +4,9 @@
 //! withdrawn and the assignment fact is written to the Outbox in one Unit of
 //! Work. Before commit `delivery:<id>#courier@user:<courier_id>` is written to
 //! the authorization graph; a failed write rolls the acceptance back. A repeated
-//! acceptance writes nothing.
+//! acceptance writes nothing. The courier may name the expected Pickup time;
+//! a named one must be in the future (FR-610) and reaches
+//! `CourierAssignedToDelivery`.
 
 use crate::pkg::application::{Clock, Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
@@ -12,7 +14,7 @@ use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository,
-    OfferAcceptanceConditions, OfferState,
+    ExpectedTime, OfferAcceptanceConditions, OfferState,
 };
 
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
@@ -21,12 +23,14 @@ use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
 use super::policy::AssignmentPolicy;
 use super::relationships::DeliveryRelationshipWriter;
-use super::{courier_id, load_delivery, load_offer, offer_id};
+use super::{courier_id, expected_time, load_delivery, load_offer, offer_id};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
     pub offer_id: String,
     pub courier_id: String,
+    /// Pickup time the courier names; `None` — not named.
+    pub expected_pickup_at_epoch_seconds: Option<i64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,6 +64,11 @@ impl<U: UnitOfWork> Handler<'_, U> {
     ) -> Result<Output, DeliveryApplicationError> {
         let offer_id = offer_id(&input.offer_id)?;
         let courier_id = courier_id(&input.courier_id)?;
+        let expected_pickup_at = expected_time(
+            "expected_pickup_at",
+            input.expected_pickup_at_epoch_seconds,
+            self.clock,
+        )?;
         self.authorization.check(
             subject,
             DeliveryPermission::AcceptDeliveryOffer,
@@ -85,7 +94,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
         };
 
         self.unit_of_work
-            .run(|| self.accept(&offer_id, &courier_id, conditions))
+            .run(|| self.accept(&offer_id, &courier_id, conditions, expected_pickup_at))
     }
 
     fn accept(
@@ -93,6 +102,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
         offer_id: &DeliveryOfferId,
         courier_id: &CourierId,
         conditions: OfferAcceptanceConditions,
+        expected_pickup_at: Option<ExpectedTime>,
     ) -> Result<Output, DeliveryApplicationError> {
         let mut offer = load_offer(self.offers, offer_id)?;
         if is_repeat(&offer, courier_id) {
@@ -101,7 +111,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
         let mut delivery = load_delivery(self.deliveries, offer.delivery_id())?;
 
         offer.accept(courier_id, conditions)?;
-        delivery.assign(courier_id.clone())?;
+        delivery.assign(courier_id.clone(), expected_pickup_at)?;
         // The courier becomes busy through the `courier` slice port in this
         // Unit of Work (FR-310, FR-485).
         self.couriers.occupy(courier_id)?;

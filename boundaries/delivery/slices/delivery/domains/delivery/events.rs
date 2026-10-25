@@ -18,6 +18,9 @@ pub enum DomainEvent {
         /// Creation time of the Delivery; `None` for a Delivery stored
         /// before the creation time was recorded.
         created_at_epoch_seconds: Option<i64>,
+        /// Pickup time named by the courier on acceptance; `None` — not
+        /// named (FR-610).
+        expected_pickup_at_epoch_seconds: Option<i64>,
     },
     CourierUnassignedFromDelivery {
         delivery_id: DeliveryId,
@@ -28,6 +31,9 @@ pub enum DomainEvent {
         delivery_id: DeliveryId,
         order_id: OrderId,
         courier_id: CourierId,
+        /// Handover time named by the courier on Pickup; `None` — not named
+        /// (FR-610).
+        expected_delivered_at_epoch_seconds: Option<i64>,
     },
     DeliveryCompleted {
         delivery_id: DeliveryId,

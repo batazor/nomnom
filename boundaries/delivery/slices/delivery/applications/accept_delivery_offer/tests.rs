@@ -8,13 +8,14 @@ use crate::pkg::application::UnitOfWorkError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
 use crate::slices::courier::domains::courier::CourierStatus;
 use crate::slices::delivery::applications::authorization::DeliveryResource;
+use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
 use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::applications::test_support::{
     NOW, OFFER_TTL, ObservingRelationships, World, candidate, subject,
 };
 use crate::slices::delivery::domains::delivery::{
-    DeliveryError, DeliveryOfferError, DeliveryOfferReason, DomainEvent, OfferTrigger, OrderId,
-    State, TransitionError,
+    DeliveryError, DeliveryOfferError, DeliveryOfferReason, DeliveryValidationError, DomainEvent,
+    ExpectedTime, OfferTrigger, OrderId, State, TransitionError,
 };
 
 fn handler(world: &World) -> Handler<'_, TestStore> {
@@ -37,6 +38,7 @@ fn input(offer: &str, courier: &str) -> Input {
     Input {
         offer_id: offer.to_owned(),
         courier_id: courier.to_owned(),
+        expected_pickup_at_epoch_seconds: None,
     }
 }
 
@@ -69,6 +71,7 @@ fn assignment_fact() -> Vec<OutboxMessage> {
             order_id: OrderId::new("order-of-delivery-1"),
             courier_id: CourierId::new("courier-1"),
             created_at_epoch_seconds: None,
+            expected_pickup_at_epoch_seconds: None,
         }),
     ]
 }
@@ -113,6 +116,62 @@ fn accepting_current_offer_creates_assignment_atomically() {
         world.delivery("delivery-1").authorization_revision(),
         Some(&revision)
     );
+}
+
+/// FR-610: the Pickup time named on acceptance is stored and reaches
+/// `CourierAssignedToDelivery`.
+#[test]
+fn accepting_with_expected_pickup_time_records_it() {
+    let world = world_with_two_offers();
+
+    handler(&world)
+        .execute(
+            &subject("courier-1"),
+            Input {
+                expected_pickup_at_epoch_seconds: Some(NOW + 300),
+                ..input("offer-1", "courier-1")
+            },
+        )
+        .expect("offer accepted");
+
+    assert_eq!(
+        world.delivery("delivery-1").expected_pickup_at(),
+        Some(ExpectedTime::restore(NOW + 300))
+    );
+    let mut expected = assignment_fact();
+    expected[1] = OutboxMessage::delivery(DomainEvent::CourierAssignedToDelivery {
+        delivery_id: DeliveryId::new("delivery-1"),
+        order_id: OrderId::new("order-of-delivery-1"),
+        courier_id: CourierId::new("courier-1"),
+        created_at_epoch_seconds: None,
+        expected_pickup_at_epoch_seconds: Some(NOW + 300),
+    });
+    assert_eq!(world.store.outbox_messages(), expected);
+}
+
+/// FR-610: a named Pickup time not in the future is an invalid request and
+/// changes nothing.
+#[test]
+fn pickup_time_not_in_the_future_is_rejected() {
+    let world = world_with_two_offers();
+
+    assert_eq!(
+        handler(&world).execute(
+            &subject("courier-1"),
+            Input {
+                expected_pickup_at_epoch_seconds: Some(NOW),
+                ..input("offer-1", "courier-1")
+            },
+        ),
+        Err(DeliveryApplicationError::InvalidRequest(
+            InvalidDeliveryRequest::Validation(DeliveryValidationError::ExpectedTimeNotInFuture {
+                field: "expected_pickup_at"
+            })
+        ))
+    );
+    assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
+    assert_eq!(world.offer_state("offer-1"), OfferState::Pending);
+    assert!(world.store.outbox_messages().is_empty());
 }
 
 fn assigned(courier: &str) -> RelationshipWrite {

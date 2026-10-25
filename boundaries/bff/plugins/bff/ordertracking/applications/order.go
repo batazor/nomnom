@@ -32,6 +32,17 @@ type OrderSnapshot struct {
 	Cancellation *Cancellation
 	// Window is set only while the Order State admits cancellation.
 	Window *CancellationWindow
+	// Deadlines named by the kitchen and the courier; nil until named.
+	Deadlines Deadlines
+}
+
+// Deadlines are the latest fulfillment deadlines of an Order (FR-611): the
+// kitchen names ExpectedReadyAt, the courier ExpectedPickupAt and
+// ExpectedDeliveredAt. A deadline nobody named is nil.
+type Deadlines struct {
+	ExpectedReadyAt     *time.Time
+	ExpectedPickupAt    *time.Time
+	ExpectedDeliveredAt *time.Time
 }
 
 type OrderLine struct {

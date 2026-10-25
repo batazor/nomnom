@@ -145,6 +145,9 @@ pub struct CourierAssignedToDelivery {
     pub delivery_id: ::prost::alloc::string::String,
     #[prost(string, tag="3")]
     pub courier_id: ::prost::alloc::string::String,
+    /// Срок Pickup, названный курьером при принятии оффера; пусто — не назван (FR-610).
+    #[prost(message, optional, tag="4")]
+    pub expected_pickup_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 /// Курьер забрал заказ (Pickup).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -153,6 +156,9 @@ pub struct DeliveryPickedUp {
     pub order_id: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
     pub delivery_id: ::prost::alloc::string::String,
+    /// Срок вручения, названный курьером при Pickup; пусто — не назван (FR-610).
+    #[prost(message, optional, tag="3")]
+    pub expected_delivered_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 /// Delivery завершена (Delivery Completion).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -332,6 +338,9 @@ pub struct AcceptDeliveryOfferRequest {
     pub offer_id: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
     pub courier_id: ::prost::alloc::string::String,
+    /// Когда курьер рассчитывает забрать заказ (FR-610); не задан — срока нет.
+    #[prost(message, optional, tag="3")]
+    pub expected_pickup_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AcceptDeliveryOfferResponse {
@@ -368,6 +377,9 @@ pub struct ConfirmPickupRequest {
     pub delivery_id: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
     pub courier_id: ::prost::alloc::string::String,
+    /// Когда курьер рассчитывает вручить заказ (FR-610); не задан — срока нет.
+    #[prost(message, optional, tag="3")]
+    pub expected_delivered_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConfirmPickupResponse {

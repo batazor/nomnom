@@ -401,7 +401,7 @@ fn delivery_reconciler_stores_revision_of_restored_assignment() {
         Address::new("Restaurant street 1").expect("pickup"),
     );
     delivery
-        .assign(CourierId::new("courier-1"))
+        .assign(CourierId::new("courier-1"), None)
         .expect("assign");
     delivery.record_authorization_revision(AuthorizationRevision::new("old"));
     DeliveryRepository::add(&*store, &delivery).expect("add");
@@ -463,12 +463,14 @@ fn closed_delivery_relationship_is_stale_and_never_restored() {
             OrderId::new(format!("order-of-{id}")),
             Address::new("Restaurant street 1").expect("pickup"),
         );
-        delivery.assign(CourierId::new(courier)).expect("assign");
+        delivery
+            .assign(CourierId::new(courier), None)
+            .expect("assign");
         delivery
     };
     let mut delivered = delivery("delivered", "courier-1");
     delivered
-        .confirm_pickup(&CourierId::new("courier-1"))
+        .confirm_pickup(&CourierId::new("courier-1"), None)
         .expect("pickup");
     delivered
         .complete(&CourierId::new("courier-1"))

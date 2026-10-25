@@ -185,3 +185,34 @@ func TestHandleRollsBackOnRelationshipFailure(t *testing.T) {
 	assert.Equal(t, fulfillment.OutcomeApplied, result.Outcome)
 	assert.Equal(t, "delivery-1", linkedDelivery(t, authorizer))
 }
+
+// FR-611: the assignment stores the pickup time named by the courier; a newer
+// reassignment replaces it and saves the Order, an out-of-order one does not.
+func TestHandleReplacesExpectedPickupTime(t *testing.T) {
+	store := postgrestest.Open(t)
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
+	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, fake.NewAuthorizer())
+	expecting := func(in recordcourierassignment.Input, pickupAt time.Time) recordcourierassignment.Input {
+		in.ExpectedPickupAt = pickupAt
+		return in
+	}
+	first, second := occurredAt.Add(10*time.Minute), occurredAt.Add(15*time.Minute)
+
+	_, err := handler.Handle(context.Background(), expecting(assignment("event-1", "courier-1", 2, occurredAt), first))
+	require.NoError(t, err)
+	snapshot, _ := store.Snapshot("order-1")
+	assert.Equal(t, order.ExpectedTimes{PickupAt: first}, snapshot.Expected)
+
+	result, err := handler.Handle(context.Background(), expecting(assignment("event-2", "courier-2", 4, occurredAt), second))
+	require.NoError(t, err)
+	assert.Equal(t, fulfillment.OutcomeAlreadyApplied, result.Outcome)
+	snapshot, _ = store.Snapshot("order-1")
+	assert.Equal(t, order.ExpectedTimes{PickupAt: second}, snapshot.Expected)
+	assert.Equal(t, uint64(3), snapshot.Version, "the reassignment saves the Order")
+
+	_, err = handler.Handle(context.Background(), expecting(assignment("event-3", "courier-1", 3, occurredAt), first))
+	require.NoError(t, err)
+	snapshot, _ = store.Snapshot("order-1")
+	assert.Equal(t, order.ExpectedTimes{PickupAt: second}, snapshot.Expected, "an older Delivery version changes nothing")
+	assert.Equal(t, uint64(3), snapshot.Version)
+}

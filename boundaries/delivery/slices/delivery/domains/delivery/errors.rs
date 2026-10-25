@@ -45,6 +45,10 @@ pub enum DeliveryValidationError {
     CancelledStateMustNotHaveCourier,
     FailedStateRequiresReason,
     FailureReasonRequiresFailedState,
+    /// An expected time named by the courier is not after the current time.
+    ExpectedTimeNotInFuture {
+        field: &'static str,
+    },
 }
 
 impl Display for DeliveryValidationError {
@@ -75,6 +79,9 @@ impl Display for DeliveryValidationError {
             }
             Self::FailureReasonRequiresFailedState => {
                 formatter.write_str("only a failed delivery has a failure reason")
+            }
+            Self::ExpectedTimeNotInFuture { field } => {
+                write!(formatter, "{field} must be in the future")
             }
         }
     }

@@ -33,8 +33,8 @@ use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelive
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use delivery::slices::delivery::domains::delivery::{
     Address, Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
-    DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DomainEvent, FailureReporter,
-    OfferState, OrderId, State,
+    DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DomainEvent, ExpectedTime,
+    FailureReporter, OfferState, OrderId, State,
 };
 
 fn config() -> DatabaseConfig {
@@ -372,6 +372,7 @@ fn outbox_writes_delete_rows_older_than_an_hour() {
         order_id: delivery.order_id().clone(),
         courier_id: courier.clone(),
         created_at_epoch_seconds: None,
+        expected_pickup_at_epoch_seconds: None,
     };
     DeliveryOutbox::add(&store, OutboxMessage::delivery(event)).expect("outbox");
     assert!(outbox_rows(&expired).is_empty(), "Integration Event");
@@ -443,6 +444,7 @@ fn concurrent_updates_conflict_and_only_one_wins() {
                             order_id: loaded.order_id().clone(),
                             courier_id: CourierId::new(courier),
                             created_at_epoch_seconds: None,
+                            expected_pickup_at_epoch_seconds: None,
                         }),
                     )?;
                     Ok::<_, TestError>(())
@@ -496,6 +498,7 @@ fn unit_of_work_commits_or_rolls_back_aggregate_and_outbox_together() {
         order_id: delivery.order_id().clone(),
         courier_id: CourierId::new("courier-1"),
         created_at_epoch_seconds: None,
+        expected_pickup_at_epoch_seconds: None,
     };
     // No contract: the mapper returns None and nothing is written.
     let unpublished = DomainEvent::DeliveryCancelled {
@@ -657,7 +660,7 @@ fn reconciliation_reads_only_active_assignments() {
     let mut closed = DeliveryRepository::get(&store, delivery.id())
         .expect("get")
         .expect("delivery");
-    closed.confirm_pickup(&courier_id).expect("pickup");
+    closed.confirm_pickup(&courier_id, None).expect("pickup");
     closed.complete(&courier_id).expect("complete");
     DeliveryRepository::save(&store, &closed).expect("deliver");
 
@@ -798,7 +801,9 @@ fn failure_reason_code_and_detail_round_trip_and_legacy_text_reads_as_other() {
     let store = store();
     let courier = unique("courier");
     let mut delivery = new_delivery(&unique("delivery"));
-    delivery.assign(CourierId::new(&courier)).expect("assign");
+    delivery
+        .assign(CourierId::new(&courier), None)
+        .expect("assign");
     DeliveryRepository::add(&store, &delivery).expect("delivery");
     let mut failed = DeliveryRepository::get(&store, delivery.id())
         .expect("get")
@@ -825,6 +830,70 @@ fn failure_reason_code_and_detail_round_trip_and_legacy_text_reads_as_other() {
     let legacy_reason = legacy.failure_reason().expect("reason");
     assert_eq!(legacy_reason.code(), DeliveryFailureCode::Other);
     assert_eq!(legacy_reason.detail(), Some("customer absent"));
+}
+
+/// FR-610: expected times named by the courier round-trip; not named ones
+/// stay empty, a reassignment clears the Pickup time.
+#[test]
+fn expected_times_round_trip_and_reassignment_clears_pickup_time() {
+    let store = store();
+    let courier = CourierId::new(unique("courier"));
+    let delivery = new_delivery(&unique("delivery"));
+    DeliveryRepository::add(&store, &delivery).expect("delivery");
+    let read = || {
+        DeliveryRepository::get(&store, delivery.id())
+            .expect("get")
+            .expect("delivery")
+    };
+    assert_eq!(read().expected_pickup_at(), None);
+    assert_eq!(read().expected_delivered_at(), None);
+
+    let mut assigned = read();
+    assigned
+        .assign(courier.clone(), Some(ExpectedTime::restore(1_600)))
+        .expect("assign");
+    DeliveryRepository::save(&store, &assigned).expect("save assigned");
+    assert_eq!(
+        read().expected_pickup_at(),
+        Some(ExpectedTime::restore(1_600))
+    );
+
+    let mut released = read();
+    released.unassign().expect("unassign");
+    DeliveryRepository::save(&store, &released).expect("save released");
+    assert_eq!(read().expected_pickup_at(), None);
+
+    let mut picked = read();
+    picked
+        .assign(courier.clone(), Some(ExpectedTime::restore(1_700)))
+        .expect("assign");
+    picked
+        .confirm_pickup(&courier, Some(ExpectedTime::restore(2_400)))
+        .expect("pickup");
+    DeliveryRepository::save(&store, &picked).expect("save picked up");
+    let stored = read();
+    assert_eq!(
+        stored.expected_pickup_at(),
+        Some(ExpectedTime::restore(1_700))
+    );
+    assert_eq!(
+        stored.expected_delivered_at(),
+        Some(ExpectedTime::restore(2_400))
+    );
+
+    // Inserted with the times too.
+    let mut inserted = new_delivery(&unique("delivery"));
+    inserted
+        .assign(courier.clone(), Some(ExpectedTime::restore(3_000)))
+        .expect("assign");
+    DeliveryRepository::add(&store, &inserted).expect("insert");
+    assert_eq!(
+        DeliveryRepository::get(&store, inserted.id())
+            .expect("get")
+            .expect("delivery")
+            .expected_pickup_at(),
+        Some(ExpectedTime::restore(3_000))
+    );
 }
 
 #[test]

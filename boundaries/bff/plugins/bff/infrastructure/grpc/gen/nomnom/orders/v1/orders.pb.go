@@ -376,8 +376,12 @@ type Order struct {
 	Cancellation     *Cancellation          `protobuf:"bytes,10,opt,name=cancellation,proto3" json:"cancellation,omitempty"`
 	// Present only while the Order State admits Order Cancellation.
 	CancellationWindow *CancellationWindow `protobuf:"bytes,11,opt,name=cancellation_window,json=cancellationWindow,proto3" json:"cancellation_window,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Последние известные сроки Fulfillment (FR-611); пусто — срок не назван.
+	ExpectedReadyAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=expected_ready_at,json=expectedReadyAt,proto3" json:"expected_ready_at,omitempty"`
+	ExpectedPickupAt    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=expected_pickup_at,json=expectedPickupAt,proto3" json:"expected_pickup_at,omitempty"`
+	ExpectedDeliveredAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expected_delivered_at,json=expectedDeliveredAt,proto3" json:"expected_delivered_at,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Order) Reset() {
@@ -476,6 +480,27 @@ func (x *Order) GetCancellation() *Cancellation {
 func (x *Order) GetCancellationWindow() *CancellationWindow {
 	if x != nil {
 		return x.CancellationWindow
+	}
+	return nil
+}
+
+func (x *Order) GetExpectedReadyAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpectedReadyAt
+	}
+	return nil
+}
+
+func (x *Order) GetExpectedPickupAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpectedPickupAt
+	}
+	return nil
+}
+
+func (x *Order) GetExpectedDeliveredAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpectedDeliveredAt
 	}
 	return nil
 }
@@ -591,7 +616,7 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\fcancelled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcancelledAt\"\x84\x01\n" +
 	"\x12CancellationWindow\x125\n" +
 	"\bopens_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\aopensAt\x127\n" +
-	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xba\x04\n" +
+	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\x9c\x06\n" +
 	"\x05Order\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -604,7 +629,10 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x11fulfillment_facts\x18\t \x03(\v2!.nomnom.orders.v1.FulfillmentFactR\x10fulfillmentFacts\x12B\n" +
 	"\fcancellation\x18\n" +
 	" \x01(\v2\x1e.nomnom.orders.v1.CancellationR\fcancellation\x12U\n" +
-	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindowJ\x04\b\x05\x10\x06R\x10delivery_address\"\x82\x02\n" +
+	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindow\x12F\n" +
+	"\x11expected_ready_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\x12H\n" +
+	"\x12expected_pickup_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x10expectedPickupAt\x12N\n" +
+	"\x15expected_delivered_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAtJ\x04\b\x05\x10\x06R\x10delivery_address\"\x82\x02\n" +
 	"\fOrderSummary\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x122\n" +
@@ -659,14 +687,17 @@ var file_nomnom_orders_v1_orders_proto_depIdxs = []int32{
 	3,  // 9: nomnom.orders.v1.Order.fulfillment_facts:type_name -> nomnom.orders.v1.FulfillmentFact
 	4,  // 10: nomnom.orders.v1.Order.cancellation:type_name -> nomnom.orders.v1.Cancellation
 	5,  // 11: nomnom.orders.v1.Order.cancellation_window:type_name -> nomnom.orders.v1.CancellationWindow
-	0,  // 12: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
-	1,  // 13: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
-	8,  // 14: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	8,  // 12: nomnom.orders.v1.Order.expected_ready_at:type_name -> google.protobuf.Timestamp
+	8,  // 13: nomnom.orders.v1.Order.expected_pickup_at:type_name -> google.protobuf.Timestamp
+	8,  // 14: nomnom.orders.v1.Order.expected_delivered_at:type_name -> google.protobuf.Timestamp
+	0,  // 15: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
+	1,  // 16: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
+	8,  // 17: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_orders_proto_init() }

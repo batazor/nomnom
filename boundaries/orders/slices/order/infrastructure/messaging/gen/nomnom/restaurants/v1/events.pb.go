@@ -22,12 +22,14 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Ресторан принял Kitchen Order (Order Acceptance).
+// Ресторан принял Kitchen Order (Order Acceptance); expected_ready_at —
+// ожидаемая готовность на момент принятия (FR-609).
 type RestaurantOrderAccepted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	OrderId         string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	ExpectedReadyAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expected_ready_at,json=expectedReadyAt,proto3" json:"expected_ready_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RestaurantOrderAccepted) Reset() {
@@ -65,6 +67,13 @@ func (x *RestaurantOrderAccepted) GetOrderId() string {
 		return x.OrderId
 	}
 	return ""
+}
+
+func (x *RestaurantOrderAccepted) GetExpectedReadyAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpectedReadyAt
+	}
+	return nil
 }
 
 // Ресторан отказался принять Kitchen Order.
@@ -543,9 +552,10 @@ var File_nomnom_restaurants_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\"nomnom/restaurants/v1/events.proto\x12\x15nomnom.restaurants.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"4\n" +
+	"\"nomnom/restaurants/v1/events.proto\x12\x15nomnom.restaurants.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"|\n" +
 	"\x17RestaurantOrderAccepted\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"L\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12F\n" +
+	"\x11expected_ready_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\"L\n" +
 	"\x17RestaurantOrderRejected\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"/\n" +
@@ -602,12 +612,13 @@ var file_nomnom_restaurants_v1_events_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil),       // 10: google.protobuf.Timestamp
 }
 var file_nomnom_restaurants_v1_events_proto_depIdxs = []int32{
-	10, // 0: nomnom.restaurants.v1.PreparationDelayed.expected_ready_at:type_name -> google.protobuf.Timestamp
-	1,  // [1:1] is the sub-list for method output_type
-	1,  // [1:1] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	10, // 0: nomnom.restaurants.v1.RestaurantOrderAccepted.expected_ready_at:type_name -> google.protobuf.Timestamp
+	10, // 1: nomnom.restaurants.v1.PreparationDelayed.expected_ready_at:type_name -> google.protobuf.Timestamp
+	2,  // [2:2] is the sub-list for method output_type
+	2,  // [2:2] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_restaurants_v1_events_proto_init() }

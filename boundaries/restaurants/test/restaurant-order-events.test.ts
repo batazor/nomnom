@@ -37,21 +37,22 @@ const map = (event: Record<string, unknown>) => {
   return mapped;
 };
 
-test("maps RestaurantOrderAccepted to its contract", () => {
+test("AC-769 maps RestaurantOrderAccepted with expected_ready_at to its contract", () => {
+  const expectedReadyAt = new Date("2026-10-25T09:42:00.000Z");
   const mapped = map({
     ...base,
     type: "RestaurantOrderAccepted",
     acceptedAt: at,
-    expectedReadyAt: at,
+    expectedReadyAt,
   });
   assert.equal(
     mapped.eventType,
     "nomnom.restaurants.v1.RestaurantOrderAccepted",
   );
-  assert.equal(
-    fromBinary(RestaurantOrderAcceptedSchema, mapped.payload).orderId,
-    "order-1",
-  );
+  const payload = fromBinary(RestaurantOrderAcceptedSchema, mapped.payload);
+  assert.equal(payload.orderId, "order-1");
+  assert.ok(payload.expectedReadyAt !== undefined);
+  assert.deepEqual(timestampDate(payload.expectedReadyAt), expectedReadyAt);
 });
 
 test("RestaurantOrderRejected carries an empty reason when none was given", () => {

@@ -25,6 +25,7 @@ import (
 	"nomnom/orders/slices/order/applications/recorddeliveryfailure"
 	"nomnom/orders/slices/order/applications/recordorderready"
 	"nomnom/orders/slices/order/applications/recordpickup"
+	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -195,6 +196,7 @@ func handlersOf(store *postgrestest.Store, workflow fulfillment.Notifier) orderm
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
 		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
 		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
+		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, workflow),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
 		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, fake.NewAuthorizer()),
 		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, fake.NewAuthorizer()),

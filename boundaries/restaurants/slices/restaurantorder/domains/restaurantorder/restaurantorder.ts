@@ -274,11 +274,20 @@ export class RestaurantOrder {
     return compositionKey(items) === compositionKey(this.items);
   }
 
+  /**
+   * Accepts with the expected ready time named by the kitchen or estimated;
+   * it MUST be later than the acceptance moment (FR-609).
+   */
   accept(input: {
     acceptedAt: Date;
     expectedReadyAt: Date;
     eligibility: AcceptanceEligibility;
   }): void {
+    if (input.expectedReadyAt.getTime() <= input.acceptedAt.getTime()) {
+      throw new InvalidRestaurantOrderError(
+        InvalidRestaurantOrderReason.ExpectedReadyAtNotLater,
+      );
+    }
     this.apply({ trigger: "Accept", eligibility: input.eligibility });
     this.extendTimeline({
       acceptedAt: input.acceptedAt,

@@ -1,7 +1,8 @@
-// Package relaypreparationissue hands PreparationDelayed and PreparationFailed of
-// restaurants to the fulfillment workflow. They are orchestration inputs, not
-// Fulfillment Facts of the Order, so the use case changes no local state and
-// uses no Inbox: the workflow deduplicates them by event_id.
+// Package relaypreparationissue hands PreparationFailed of restaurants to the
+// fulfillment workflow. It is an orchestration input, not a Fulfillment Fact
+// of the Order, so the use case changes no local state and uses no Inbox: the
+// workflow deduplicates it by event_id. PreparationDelayed changes the
+// expected ready time of the Order and belongs to recordpreparationdelay.
 package relaypreparationissue
 
 import (
@@ -19,12 +20,8 @@ import (
 type Input struct {
 	EventID    string
 	OrderID    order.ID
-	Kind       fulfillment.Kind
 	OccurredAt time.Time
-	// Reason is set for KindPreparationFailed.
-	Reason string
-	// ExpectedReadyAt is required for KindPreparationDelayed.
-	ExpectedReadyAt time.Time
+	Reason     string
 }
 
 func (in Input) validate() error {
@@ -35,10 +32,6 @@ func (in Input) validate() error {
 		return application.InvalidInput("order_id", "is required")
 	case in.OccurredAt.IsZero():
 		return application.InvalidInput("occurred_at", "is required")
-	case in.Kind != fulfillment.KindPreparationDelayed && in.Kind != fulfillment.KindPreparationFailed:
-		return application.InvalidInput("kind", "must be preparation_delayed or preparation_failed")
-	case in.Kind == fulfillment.KindPreparationDelayed && in.ExpectedReadyAt.IsZero():
-		return application.InvalidInput("expected_ready_at", "is required")
 	}
 	return nil
 }
@@ -60,12 +53,11 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, err
 	}
 	err := h.workflow.Notify(ctx, fulfillment.Notification{
-		OrderID:         in.OrderID,
-		EventID:         in.EventID,
-		Kind:            in.Kind,
-		OccurredAt:      in.OccurredAt,
-		Reason:          in.Reason,
-		ExpectedReadyAt: in.ExpectedReadyAt,
+		OrderID:    in.OrderID,
+		EventID:    in.EventID,
+		Kind:       fulfillment.KindPreparationFailed,
+		OccurredAt: in.OccurredAt,
+		Reason:     in.Reason,
 	})
 	switch {
 	case err == nil:

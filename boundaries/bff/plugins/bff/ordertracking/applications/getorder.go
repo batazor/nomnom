@@ -73,5 +73,6 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 		PlacedAt:       order.PlacedAt,
 		Milestones:     milestones(order),
 		AvailableUntil: availableUntil(order, current, h.now()),
+		Deadlines:      order.Deadlines,
 	}, nil
 }

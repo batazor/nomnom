@@ -12,6 +12,7 @@
 - **Владелец:** `restaurants/slices/restaurantorder`.
 - **Домен:** `domains/restaurantorder`.
 - **Взаимодействие:** Проверяет открытость ресторана и доступность позиций, затем записывает бизнес-факт в Outbox.
+- **Срок готовности:** необязательный `expected_ready_at` называет кухня; он MUST быть позже момента принятия, иначе `invalid_restaurant_order` (`expected_ready_at_not_later`, gRPC `INVALID_ARGUMENT`). Без него срок считает `ReadyTimeEstimator`. `RestaurantOrderAccepted` несёт `expected_ready_at` (FR-609, AC-769).
 
 ## Последовательность
 

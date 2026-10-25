@@ -302,6 +302,7 @@ impl DeliveryService for DeliveryGrpcService {
                 accept_delivery_offer::Input {
                     offer_id: request.offer_id,
                     courier_id: request.courier_id,
+                    expected_pickup_at_epoch_seconds: request.expected_pickup_at.map(epoch_seconds),
                 },
             )
             .map_err(delivery_transport_error)?;
@@ -349,6 +350,9 @@ impl DeliveryService for DeliveryGrpcService {
                 confirm_pickup::Input {
                     delivery_id: request.delivery_id,
                     courier_id: request.courier_id,
+                    expected_delivered_at_epoch_seconds: request
+                        .expected_delivered_at
+                        .map(epoch_seconds),
                 },
             )
             .map_err(delivery_transport_error)?;
@@ -427,6 +431,14 @@ impl DeliveryGrpcService {
     fn simulator(&self) -> &dyn SimulatorUseCases {
         self.module.simulator()
     }
+}
+
+/// Expected time of a request in whole epoch seconds: a fraction rounds up,
+/// so a moment in the future stays in the future.
+fn epoch_seconds(timestamp: prost_types::Timestamp) -> i64 {
+    timestamp
+        .seconds
+        .saturating_add(i64::from(timestamp.nanos > 0))
 }
 
 fn courier_status(status: DomainCourierStatus) -> CourierStatus {

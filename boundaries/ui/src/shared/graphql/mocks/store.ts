@@ -271,6 +271,9 @@ export function createMockStore({
           placedAt.getTime() + cancellationWindowMinutes * 60_000,
         ).toISOString(),
       },
+      expectedReadyAt: null,
+      expectedPickupAt: null,
+      expectedDeliveredAt: null,
     };
     state.orders.set(order.id, order);
     fulfillment.received(order);

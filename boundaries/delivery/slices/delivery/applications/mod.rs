@@ -25,11 +25,11 @@ pub mod report_delivery_failure;
 #[cfg(test)]
 mod test_support;
 
-use crate::pkg::application::required_identifier;
+use crate::pkg::application::{Clock, required_identifier};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryRepository, OrderId,
+    DeliveryRepository, ExpectedTime, OrderId,
 };
 
 use error::{DeliveryApplicationError, InvalidDeliveryRequest};
@@ -56,6 +56,18 @@ fn offer_id(value: &str) -> Result<DeliveryOfferId, DeliveryApplicationError> {
 
 fn order_id(value: &str) -> Result<OrderId, DeliveryApplicationError> {
     identifier(value, "order_id").map(OrderId::new)
+}
+
+/// Expected time named by the courier in `field`: in the future by `clock`.
+fn expected_time(
+    field: &'static str,
+    epoch_seconds: Option<i64>,
+    clock: &dyn Clock,
+) -> Result<Option<ExpectedTime>, DeliveryApplicationError> {
+    epoch_seconds
+        .map(|at| ExpectedTime::named(field, at, clock.now_epoch_seconds()))
+        .transpose()
+        .map_err(DeliveryApplicationError::from)
 }
 
 fn load_delivery(

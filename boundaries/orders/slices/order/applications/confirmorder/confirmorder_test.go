@@ -89,3 +89,16 @@ func TestConfirmOrderReceivedAgainHasNoAdditionalEffect(t *testing.T) {
 	assert.Equal(t, uint64(2), snapshot.Version, "only the first event saves the Order")
 	assert.Len(t, workflow.Notifications(), 3, "the workflow deduplicates by event_id")
 }
+
+// FR-611: acceptance stores the ready time named by the restaurant.
+func TestConfirmOrderStoresExpectedReadyTime(t *testing.T) {
+	handler, store, _ := setup(t, order.StatePlaced)
+	in := input("event-1")
+	in.ExpectedReadyAt = occurredAt.Add(12 * time.Minute)
+
+	_, err := handler.Handle(context.Background(), in)
+
+	require.NoError(t, err)
+	snapshot, _ := store.Snapshot("order-1")
+	assert.Equal(t, order.ExpectedTimes{ReadyAt: in.ExpectedReadyAt}, snapshot.Expected)
+}

@@ -116,7 +116,7 @@ mod tests {
         let store = store_with_courier();
         let mut assigned = delivery("delivery-1", "order-1");
         assigned
-            .assign(CourierId::new("courier-1"))
+            .assign(CourierId::new("courier-1"), None)
             .expect("assign");
         DeliveryRepository::add(&store, &assigned).expect("seed delivery");
         DeliveryRepository::add(&store, &delivery("delivery-2", "order-2")).expect("seed");
@@ -147,8 +147,8 @@ mod tests {
         let store = store_with_courier();
         let courier = CourierId::new("courier-1");
         let mut completed = delivery("delivery-1", "order-1");
-        completed.assign(courier.clone()).expect("assign");
-        completed.confirm_pickup(&courier).expect("pickup");
+        completed.assign(courier.clone(), None).expect("assign");
+        completed.confirm_pickup(&courier, None).expect("pickup");
         completed.complete(&courier).expect("complete");
         DeliveryRepository::add(&store, &completed).expect("seed delivery");
         let authorization = StaticAuthorization::allow_all();

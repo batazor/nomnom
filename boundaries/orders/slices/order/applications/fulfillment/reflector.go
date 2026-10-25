@@ -28,6 +28,8 @@ type InboundFact struct {
 	Kind       Kind
 	OccurredAt time.Time
 	Reason     string
+	// ExpectedReadyAt is handed to the workflow for KindPreparationDelayed.
+	ExpectedReadyAt time.Time
 }
 
 func (f InboundFact) validate() error {
@@ -74,10 +76,12 @@ func (r Reflector) Reflect(ctx context.Context, fact InboundFact, apply func(*or
 }
 
 // InTransaction runs inside the Inbox unit of work after the fact was applied
-// or found already applied, before commit. Its error rolls the event back, so
-// redelivery repeats it; it must therefore be idempotent. It does not run for
-// a duplicate or a late fact.
-type InTransaction func(ctx context.Context, current *order.Order, outcome Outcome) error
+// or found already applied, before the Order is saved and committed. Its error
+// rolls the event back, so redelivery repeats it; it must therefore be
+// idempotent. changed reports that it changed current, which is then saved
+// even for an already applied fact (a reassignment). It does not run for a
+// duplicate or a late fact.
+type InTransaction func(ctx context.Context, current *order.Order, outcome Outcome) (changed bool, err error)
 
 // ReflectWith is Reflect with a step inside the unit of work, for side effects
 // that must commit together with the Inbox record: a relationship write of the
@@ -97,15 +101,18 @@ func (r Reflector) ReflectWith(ctx context.Context, fact InboundFact, apply func
 		if err != nil {
 			return err
 		}
-		if outcome == OutcomeApplied {
-			if err := r.orders.Save(ctx, current); err != nil {
+		changed := outcome == OutcomeApplied
+		if inTransaction != nil && (outcome == OutcomeApplied || outcome == OutcomeAlreadyApplied) {
+			stepChanged, err := inTransaction(ctx, current, outcome)
+			if err != nil {
 				return err
 			}
+			changed = changed || stepChanged
 		}
-		if inTransaction == nil || (outcome != OutcomeApplied && outcome != OutcomeAlreadyApplied) {
+		if !changed {
 			return nil
 		}
-		return inTransaction(ctx, current, outcome)
+		return r.orders.Save(ctx, current)
 	})
 	if err != nil {
 		return Reflection{}, err
@@ -116,11 +123,12 @@ func (r Reflector) ReflectWith(ctx context.Context, fact InboundFact, apply func
 
 	reflection := Reflection{Outcome: outcome}
 	err = r.notifier.Notify(ctx, Notification{
-		OrderID:    fact.OrderID,
-		EventID:    fact.EventID,
-		Kind:       fact.Kind,
-		OccurredAt: fact.OccurredAt,
-		Reason:     fact.Reason,
+		OrderID:         fact.OrderID,
+		EventID:         fact.EventID,
+		Kind:            fact.Kind,
+		OccurredAt:      fact.OccurredAt,
+		Reason:          fact.Reason,
+		ExpectedReadyAt: fact.ExpectedReadyAt,
 	})
 	switch {
 	case err == nil:

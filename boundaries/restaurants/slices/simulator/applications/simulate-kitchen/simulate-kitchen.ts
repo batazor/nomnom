@@ -7,12 +7,17 @@ import type { RejectOrderHandler } from "../../../restaurantorder/applications/r
 import type { ReportPreparationDelayHandler } from "../../../restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import type { ReportPreparationFailureHandler } from "../../../restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import type { StartPreparationHandler } from "../../../restaurantorder/applications/start-preparation/start-preparation.ts";
+import { RestaurantOrderState } from "../../../restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   chooseKitchenAction,
   type KitchenAction,
+  type PreparationPlan,
+  plannedReadyAt,
+  planPreparation,
   randomDelayMs,
   type SimulatedState,
   type SimulatorStateRepository,
+  shiftPlan,
 } from "../../domains/simulator/simulator.ts";
 
 /** Restaurant Order waiting for an action of its restaurant. */
@@ -49,15 +54,33 @@ export const SIMULATED_REJECTION_REASON = "KITCHEN_BUSY";
 export const SIMULATED_DELAY_REASON = "KITCHEN_BUSY";
 export const SIMULATED_FAILURE_REASON = "ITEM_UNAVAILABLE";
 
-type ScheduledAction = { readonly dueAt: number };
+/**
+ * In-process schedule entry of one order: the due time of the accept/reject
+ * decision of a `RECEIVED` order, or the plan of an accepted order's
+ * remaining Preparation.
+ */
+type ScheduleEntry =
+  | Readonly<{ kind: "decision"; dueAt: number }>
+  | Readonly<{ kind: "preparation"; plan: PreparationPlan }>;
+
+type KitchenOrderCommand = Readonly<{
+  subject: Subject;
+  restaurantId: string;
+  restaurantOrderId: string;
+}>;
 
 /**
- * One pass of the kitchen Simulator (FR-605). Disabled: forgets the schedule
- * and does nothing (AC-764). Enabled: every pending Restaurant Order gets a
- * due time `firstSeen + random [minDelay, maxDelay]` per state; when due, one
- * weighted action is performed through the real use case on behalf of the
- * restaurant owner, so the normal `operate_kitchen` check applies. A failed
- * action is logged and dropped; the pass continues.
+ * One pass of the kitchen Simulator (FR-605, FR-609). Disabled: forgets the
+ * schedule and does nothing (AC-764). Enabled: a `RECEIVED` order is decided
+ * `firstSeen + random [minDelay, maxDelay]`; accepting plans the whole
+ * Preparation upfront (a random delay per step) and passes the planned
+ * `READY` moment as `expectedReadyAt`; later steps run at their planned
+ * moments. A delay moves `expectedReadyAt` and shifts the remaining plan to
+ * it. An accepted order without a plan (restart, or accepted by a person) is
+ * planned from now, and a planned `READY` later than its `expectedReadyAt` is
+ * reported as a delay. Every action goes through the real use case on behalf
+ * of the restaurant owner, so the normal `operate_kitchen` check applies. A
+ * failed action is logged and its entry dropped; the pass continues.
  */
 export class KitchenSimulator {
   readonly #state: SimulatorStateRepository;
@@ -68,8 +91,8 @@ export class KitchenSimulator {
   readonly #random: () => number;
   readonly #delay: Readonly<{ minMs: number; maxMs: number }>;
   readonly #log: (message: string, fields?: Record<string, unknown>) => void;
-  /** Keyed by `restaurantOrderId:state`; in-process only. */
-  readonly #schedule = new Map<string, ScheduledAction>();
+  /** Keyed by `restaurantOrderId`; in-process only. */
+  readonly #schedule = new Map<string, ScheduleEntry>();
 
   constructor(dependencies: {
     state: SimulatorStateRepository;
@@ -91,9 +114,15 @@ export class KitchenSimulator {
     this.#log = dependencies.log;
   }
 
-  /** Orders waiting for their due time. */
+  /** Orders with a scheduled decision or a Preparation plan. */
   get scheduled(): number {
     return this.#schedule.size;
+  }
+
+  /** Planned remaining Preparation of an order; `undefined` without a plan. */
+  planOf(restaurantOrderId: string): PreparationPlan | undefined {
+    const entry = this.#schedule.get(restaurantOrderId);
+    return entry?.kind === "preparation" ? entry.plan : undefined;
   }
 
   async tick(signal?: AbortSignal): Promise<void> {
@@ -105,55 +134,103 @@ export class KitchenSimulator {
     const pending = await this.#orders.listPendingKitchenOrders();
     const seen = new Set<string>();
     const due: PendingKitchenOrder[] = [];
+    const late: Array<{ order: PendingKitchenOrder; readyAt: number }> = [];
     for (const order of pending) {
-      const key = `${order.restaurantOrderId}:${order.state}`;
-      seen.add(key);
-      let entry = this.#schedule.get(key);
-      if (entry === undefined) {
-        entry = { dueAt: now + randomDelayMs(this.#delay, this.#random()) };
-        this.#schedule.set(key, entry);
+      seen.add(order.restaurantOrderId);
+      const { state } = order;
+      const entry = this.#schedule.get(order.restaurantOrderId);
+      if (state === RestaurantOrderState.Received) {
+        let decision = entry;
+        if (decision === undefined || decision.kind !== "decision") {
+          decision = {
+            kind: "decision",
+            dueAt: now + randomDelayMs(this.#delay, this.#random()),
+          };
+          this.#schedule.set(order.restaurantOrderId, decision);
+        }
+        if (decision.dueAt <= now) due.push(order);
+        continue;
       }
-      if (entry.dueAt <= now) due.push(order);
+      const step =
+        entry?.kind === "preparation"
+          ? entry.plan.steps.find((candidate) => candidate.state === state)
+          : undefined;
+      if (step !== undefined) {
+        if (step.dueAt <= now) due.push(order);
+        continue;
+      }
+      // No plan: plan the remaining steps from now.
+      const plan = planPreparation(state, now, this.#delay, this.#random);
+      this.#schedule.set(order.restaurantOrderId, {
+        kind: "preparation",
+        plan,
+      });
+      const readyAt = plannedReadyAt(plan);
+      if (
+        order.expectedReadyAt === undefined ||
+        readyAt > order.expectedReadyAt.getTime()
+      ) {
+        late.push({ order, readyAt });
+      }
     }
     for (const key of this.#schedule.keys()) {
       if (!seen.has(key)) this.#schedule.delete(key);
     }
+    for (const { order, readyAt } of late) {
+      if (signal?.aborted) return;
+      await this.#attempt(order, "report_delay", () =>
+        this.#reportDelay(order, readyAt),
+      );
+    }
     for (const order of due) {
       if (signal?.aborted) return;
-      this.#schedule.delete(`${order.restaurantOrderId}:${order.state}`);
       const action = chooseKitchenAction(order.state, this.#random());
-      try {
-        await this.#perform(order, action);
-      } catch (error) {
-        this.#log("simulated kitchen action failed", {
-          restaurant_order_id: order.restaurantOrderId,
-          restaurant_id: order.restaurantId,
-          action,
-          error,
-        });
-      }
+      await this.#attempt(order, action, () => this.#act(order, action));
     }
   }
 
-  async #perform(
+  /** Runs `step`; a failure is logged and drops the order's entry. */
+  async #attempt(
     order: PendingKitchenOrder,
     action: KitchenAction,
+    step: () => Promise<void>,
   ): Promise<void> {
-    const ownerId = await this.#owners.ownerOf(order.restaurantId);
-    if (ownerId === undefined) {
-      throw new Error(`restaurant ${order.restaurantId} has no owner`);
+    try {
+      await step();
+    } catch (error) {
+      this.#schedule.delete(order.restaurantOrderId);
+      this.#log("simulated kitchen action failed", {
+        restaurant_order_id: order.restaurantOrderId,
+        restaurant_id: order.restaurantId,
+        action,
+        error,
+      });
     }
-    const subject: Subject = { type: "user", id: ownerId };
-    const command = {
-      subject,
-      restaurantId: order.restaurantId,
-      restaurantOrderId: order.restaurantOrderId,
-    };
+  }
+
+  async #act(order: PendingKitchenOrder, action: KitchenAction): Promise<void> {
+    const command = await this.#commandFor(order);
     switch (action) {
-      case "accept":
-        await this.#commands.accept.execute(command);
+      case "accept": {
+        this.#schedule.delete(order.restaurantOrderId);
+        const plan = planPreparation(
+          RestaurantOrderState.Queued,
+          this.#clock.now().getTime(),
+          this.#delay,
+          this.#random,
+        );
+        await this.#commands.accept.execute({
+          ...command,
+          expectedReadyAt: new Date(plannedReadyAt(plan)),
+        });
+        this.#schedule.set(order.restaurantOrderId, {
+          kind: "preparation",
+          plan,
+        });
         return;
+      }
       case "reject":
+        this.#schedule.delete(order.restaurantOrderId);
         await this.#commands.reject.execute({
           ...command,
           reason: SIMULATED_REJECTION_REASON,
@@ -175,18 +252,65 @@ export class KitchenSimulator {
         });
         return;
       case "report_delay": {
-        // Later than both the current expected time and now.
-        const now = this.#clock.now().getTime();
-        const base = Math.max(order.expectedReadyAt?.getTime() ?? now, now);
-        await this.#commands.reportDelay.execute({
-          ...command,
-          expectedReadyAt: new Date(
-            base + Math.max(1, randomDelayMs(this.#delay, this.#random())),
-          ),
-          reason: SIMULATED_DELAY_REASON,
-        });
+        // Later than the planned READY, the current expected time and now.
+        const known = [this.#planned(order), this.#clock.now().getTime()];
+        if (order.expectedReadyAt !== undefined) {
+          known.push(order.expectedReadyAt.getTime());
+        }
+        const readyAt =
+          Math.max(...known) +
+          Math.max(1, randomDelayMs(this.#delay, this.#random()));
+        await this.#reportDelay(order, readyAt);
         return;
       }
     }
+  }
+
+  /**
+   * Reports `readyAt` as the new `expectedReadyAt` and shifts the order's
+   * plan so `READY` lands at it.
+   */
+  async #reportDelay(
+    order: PendingKitchenOrder,
+    readyAt: number,
+  ): Promise<void> {
+    const entry = this.#schedule.get(order.restaurantOrderId);
+    if (entry === undefined || entry.kind !== "preparation") {
+      throw new Error(
+        `restaurant order ${order.restaurantOrderId} has no preparation plan`,
+      );
+    }
+    await this.#commands.reportDelay.execute({
+      ...(await this.#commandFor(order)),
+      expectedReadyAt: new Date(readyAt),
+      reason: SIMULATED_DELAY_REASON,
+    });
+    this.#schedule.set(order.restaurantOrderId, {
+      kind: "preparation",
+      plan: shiftPlan(entry.plan, readyAt),
+    });
+  }
+
+  /** Planned `READY` moment of an order with a plan. */
+  #planned(order: PendingKitchenOrder): number {
+    const plan = this.planOf(order.restaurantOrderId);
+    if (plan === undefined) {
+      throw new Error(
+        `restaurant order ${order.restaurantOrderId} has no preparation plan`,
+      );
+    }
+    return plannedReadyAt(plan);
+  }
+
+  async #commandFor(order: PendingKitchenOrder): Promise<KitchenOrderCommand> {
+    const ownerId = await this.#owners.ownerOf(order.restaurantId);
+    if (ownerId === undefined) {
+      throw new Error(`restaurant ${order.restaurantId} has no owner`);
+    }
+    return {
+      subject: { type: "user", id: ownerId },
+      restaurantId: order.restaurantId,
+      restaurantOrderId: order.restaurantOrderId,
+    };
   }
 }

@@ -29,6 +29,8 @@ type Input struct {
 	// records the fact without relationships.
 	DeliveryID string
 	CourierID  string
+	// ExpectedPickupAt is the pickup time named by the courier; zero — not named.
+	ExpectedPickupAt time.Time
 }
 
 type Result struct {
@@ -73,13 +75,17 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		OccurredAt: in.OccurredAt,
 	}
 	// The fact is recorded once; a later event of the same Order is a
-	// reassignment and only replaces the assignment and, for another
-	// Delivery, order#delivery.
+	// reassignment and only replaces the assignment, its expected pickup time
+	// and, for another Delivery, order#delivery.
 	reflection, err := h.reflector.ReflectWith(ctx, fact, func(current *order.Order) error {
 		_, err := current.RecordCourierAssignment(in.OccurredAt)
 		return err
-	}, func(ctx context.Context, _ *order.Order, _ fulfillment.Outcome) error {
-		return h.assign(ctx, in)
+	}, func(ctx context.Context, current *order.Order, _ fulfillment.Outcome) (bool, error) {
+		superseded, err := h.assign(ctx, in)
+		if err != nil || !superseded {
+			return false, err
+		}
+		return current.ExpectPickupAt(in.OccurredAt, in.ExpectedPickupAt)
 	})
 	return Result(reflection), err
 }
@@ -89,28 +95,30 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 // stored assignment and which Delivery it links or displaces is decided by
 // order.CourierAssignment; the use case only writes and stores the result. A
 // reassignment within the linked Delivery writes nothing to SpiceDB and keeps
-// the stored revision.
-func (h Handler) assign(ctx context.Context, in Input) error {
+// the stored revision. superseded is false for an out-of-order event, which
+// changes nothing; an event without names has nothing to order by and is the
+// latest one.
+func (h Handler) assign(ctx context.Context, in Input) (superseded bool, err error) {
 	if in.DeliveryID == "" || in.CourierID == "" {
-		return nil
+		return true, nil
 	}
 	next := order.CourierAssignment{DeliveryID: in.DeliveryID, CourierID: in.CourierID, AssignedAt: in.OccurredAt, DeliveryVersion: in.DeliveryVersion}
 	stored, found, err := h.assignments.CourierAssignment(ctx, in.OrderID)
 	if err != nil {
-		return fmt.Errorf("read courier assignment: %w", err)
+		return false, fmt.Errorf("read courier assignment: %w", err)
 	}
 	if found && !next.Supersedes(stored) {
-		return nil
+		return false, nil
 	}
 	var revision application.AuthorizationRevision
 	if !found || !next.LinksDelivery(stored) {
 		revision, err = h.relationships.LinkDelivery(ctx, in.OrderID, next.DeliveryID, next.DisplacedDelivery(stored))
 		if err != nil {
-			return fmt.Errorf("write order#delivery: %w", err)
+			return false, fmt.Errorf("write order#delivery: %w", err)
 		}
 	}
 	if err := h.assignments.RememberCourierAssignment(ctx, in.OrderID, next, string(revision)); err != nil {
-		return fmt.Errorf("remember courier assignment: %w", err)
+		return false, fmt.Errorf("remember courier assignment: %w", err)
 	}
-	return nil
+	return true, nil
 }

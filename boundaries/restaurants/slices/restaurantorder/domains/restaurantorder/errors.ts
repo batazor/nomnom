@@ -4,6 +4,7 @@ export const InvalidRestaurantOrderReason = {
   InvalidQuantity: "invalid_quantity",
   DuplicateItem: "duplicate_item",
   EmptyFailureReason: "empty_failure_reason",
+  ExpectedReadyAtNotLater: "expected_ready_at_not_later",
 } as const;
 
 export type InvalidRestaurantOrderReason =

@@ -184,7 +184,10 @@
         "total": 6,
         "placedAt": 8,
         "milestones": 9,
-        "cancellation": 10
+        "cancellation": 10,
+        "expectedReadyAt": 11,
+        "expectedPickupAt": 12,
+        "expectedDeliveredAt": 13
       },
       "reservedNumbers": [
         7

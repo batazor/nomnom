@@ -361,6 +361,14 @@ export declare type AcceptRestaurantOrderRequest = Message<"nomnom.restaurants.v
    * @generated from field: string restaurant_order_id = 2;
    */
   restaurantOrderId: string;
+
+  /**
+   * Срок готовности, который называет кухня; не задан — его считает Ready Time
+   * Estimator (FR-609). Должен быть позже момента принятия.
+   *
+   * @generated from field: google.protobuf.Timestamp expected_ready_at = 3;
+   */
+  expectedReadyAt?: Timestamp | undefined;
 };
 
 /**

@@ -32,6 +32,10 @@ func WithFacts(facts ...order.RecordedFact) Option {
 	return func(snapshot *order.Snapshot) { snapshot.Facts = facts }
 }
 
+func WithExpectedTimes(expected order.ExpectedTimes) Option {
+	return func(snapshot *order.Snapshot) { snapshot.Expected = expected }
+}
+
 // New returns a standard Order with one item "menu-1" × 2 at 10 EUR for
 // customer-1 in restaurant-1, not yet persisted (version 0).
 func New(t testing.TB, id order.ID, options ...Option) *order.Order {

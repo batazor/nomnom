@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at\n             FROM deliveries\n             WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)\n               AND NOT EXISTS (SELECT 1 FROM delivery_offers o\n                               WHERE o.delivery_id = deliveries.id AND o.state = $4)\n             ORDER BY COALESCE(created_at, 0), id LIMIT $5",
+  "query": "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at,\n                 expected_pickup_at, expected_delivered_at\n             FROM deliveries WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -112,15 +112,33 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "expected_pickup_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "expected_pickup_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "expected_delivered_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "expected_delivered_at"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int8",
-        "Text",
-        "Text",
-        "Int8"
+        "Text"
       ]
     },
     "nullable": [
@@ -133,8 +151,10 @@
       true,
       true,
       false,
+      true,
+      true,
       true
     ]
   },
-  "hash": "5ea3f6fcf8bde74930b42642c6a48aa214fa1896e9b4ee1387709586a5360c5f"
+  "hash": "600f7a747564b57d95f4f6adc6e45c1f26444852599357db29a53333946abfb1"
 }

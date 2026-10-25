@@ -37,6 +37,7 @@ impl OutboxMapper for DeliveryIntegrationEvents {
                 delivery_id,
                 order_id,
                 courier_id,
+                expected_pickup_at_epoch_seconds,
                 ..
             } => (
                 COURIER_ASSIGNED_TO_DELIVERY,
@@ -44,18 +45,21 @@ impl OutboxMapper for DeliveryIntegrationEvents {
                     order_id: order_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
                     courier_id: courier_id.as_str().to_owned(),
+                    expected_pickup_at: expected_pickup_at_epoch_seconds.map(timestamp),
                 }
                 .encode_to_vec(),
             ),
             DomainEvent::DeliveryPickedUp {
                 delivery_id,
                 order_id,
+                expected_delivered_at_epoch_seconds,
                 ..
             } => (
                 DELIVERY_PICKED_UP,
                 v1::DeliveryPickedUp {
                     order_id: order_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
+                    expected_delivered_at: expected_delivered_at_epoch_seconds.map(timestamp),
                 }
                 .encode_to_vec(),
             ),
@@ -121,6 +125,14 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             event_type: event_type.to_owned(),
             payload,
         })
+    }
+}
+
+/// Expected time of the contract: whole epoch seconds.
+fn timestamp(epoch_seconds: i64) -> prost_types::Timestamp {
+    prost_types::Timestamp {
+        seconds: epoch_seconds,
+        nanos: 0,
     }
 }
 

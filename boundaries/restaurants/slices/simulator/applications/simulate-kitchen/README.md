@@ -5,16 +5,22 @@
 - **Тип:** Фоновый процесс (`PeriodicLoop` процесса `restaurants`, период `SIMULATOR__INTERVAL`).
 - **Actor:** Demo Simulator от имени владельца ресторана.
 - **Намерение:** Продвигать Restaurant Orders без участника, пока Simulator включён.
-- **Результат:** Для заказа в `RECEIVED`/`QUEUED`/`PREPARING`/`ASSEMBLED` через случайную задержку `[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` от момента, когда Simulator его увидел, вызывается настоящий kitchen use case: `RECEIVED` — accept 90 / reject 10; `QUEUED` — start preparation 90 / delay 10; `PREPARING` — assemble 92 / failure 5 / delay 3; `ASSEMBLED` — ready. Выключенный Simulator ничего не делает и забывает расписание (AC-764).
+- **Результат:** Для заказа в `RECEIVED` через случайную задержку `[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` от момента, когда Simulator его увидел, вызывается настоящий kitchen use case; для `QUEUED`/`PREPARING`/`ASSEMBLED` — в запланированный момент шага (см. «План готовки»). Веса: `RECEIVED` — accept 90 / reject 10; `QUEUED` — start preparation 90 / delay 10; `PREPARING` — assemble 92 / failure 5 / delay 3; `ASSEMBLED` — ready. Выключенный Simulator ничего не делает и забывает расписание (AC-764).
+
+## План готовки (FR-609)
+
+- Принимая заказ, Simulator заранее тянет задержки шагов `QUEUED → start`, `PREPARING → assemble`, `ASSEMBLED → ready` (каждая random в `[MIN_DELAY, MAX_DELAY]`, не меньше 1 мс) и передаёт `expected_ready_at` = момент принятия + их сумма; шаги выполняются в эти моменты.
+- Задержка: новый `expected_ready_at` = max(план `READY`, текущий срок, now) + random-задержка; весь остаток плана сдвигается так, чтобы `READY` попал в новый срок. Отказ — как раньше.
+- Заказ без плана (рестарт процесса или принят человеком): оставшиеся шаги планируются от текущего момента; если запланированный `READY` позже `expected_ready_at` заказа, Simulator сообщает задержку (`ReportPreparationDelay`) до него — это доменное действие, а не подстановка значения. Не удалась — план отбрасывается и строится заново на следующем проходе.
 
 ## Границы
 
 - **Владелец:** `restaurants/slices/simulator`.
 - **Домен:** `domains/simulator` (веса исходов).
-- **Взаимодействие:** Читает ожидающие заказы всех ресторанов и владельца ресторана; subject — `user:<ownerId>`, поэтому действует обычная проверка `restaurant#operate_kitchen`. Ошибка use case (например, переход уже сделан человеком) пишется в лог, запись расписания отбрасывается, цикл продолжается. Расписание хранится только в памяти процесса.
+- **Взаимодействие:** Читает ожидающие заказы всех ресторанов и владельца ресторана; subject — `user:<ownerId>`, поэтому действует обычная проверка `restaurant#operate_kitchen`. Ошибка use case (например, переход уже сделан человеком) пишется в лог, запись расписания отбрасывается, цикл продолжается. Расписание и планы хранятся только в памяти процесса.
 
 ## Acceptance
 
-FR-605, AC-763, AC-764 change [`add-demo-simulator`](../../../../../../openspec/changes/add-demo-simulator/).
+FR-605, AC-763, AC-764 change [`add-demo-simulator`](../../../../../../openspec/changes/add-demo-simulator/); FR-609 change [`add-fulfillment-eta`](../../../../../../openspec/changes/add-fulfillment-eta/).
 
 Общий каталог: [Restaurants use cases](../../../../README.md#use-cases).

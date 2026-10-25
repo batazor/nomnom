@@ -22,6 +22,38 @@ impl Address {
     }
 }
 
+/// Moment the courier expects to reach a step of the Delivery (FR-610), in
+/// epoch seconds. Named by the courier; a newly named one is after the
+/// current time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExpectedTime(i64);
+
+impl ExpectedTime {
+    /// A moment named now: it must be after `now_epoch_seconds`; `field`
+    /// names the request field in the error.
+    pub fn named(
+        field: &'static str,
+        epoch_seconds: i64,
+        now_epoch_seconds: i64,
+    ) -> Result<Self, DeliveryValidationError> {
+        if epoch_seconds <= now_epoch_seconds {
+            return Err(DeliveryValidationError::ExpectedTimeNotInFuture { field });
+        }
+        Ok(Self(epoch_seconds))
+    }
+
+    /// A stored moment: it was in the future when it was named.
+    #[must_use]
+    pub const fn restore(epoch_seconds: i64) -> Self {
+        Self(epoch_seconds)
+    }
+
+    #[must_use]
+    pub const fn epoch_seconds(self) -> i64 {
+        self.0
+    }
+}
+
 /// Code of the Delivery Failure Reason catalog: a closed set. Retryability
 /// of a code is not decided by `delivery`.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

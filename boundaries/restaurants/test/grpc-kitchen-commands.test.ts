@@ -265,3 +265,39 @@ test("AC-545 AcceptRestaurantOrder answers the expected ready time", async () =>
   assert.ok(timestampDate(expected).getTime() > 0);
   assert.ok((response.restaurantOrder?.version ?? 0n) > 0n);
 });
+
+test("AC-769 AcceptRestaurantOrder keeps the expected ready time named by the kitchen", async () => {
+  const { world, service } = await createKitchenCallerWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const order = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+  const expectedReadyAt = new Date(world.clock.now().getTime() + minutes(12));
+
+  const response = await service.acceptRestaurantOrder(
+    { ...order, expectedReadyAt: timestampFromDate(expectedReadyAt) },
+    context,
+  );
+
+  const answered = response.restaurantOrder?.expectedReadyAt;
+  assert.ok(answered !== undefined);
+  assert.deepEqual(timestampDate(answered), expectedReadyAt);
+});
+
+test("FR-609 AcceptRestaurantOrder with expected_ready_at in the past is INVALID_ARGUMENT", async () => {
+  const { world, service } = await createKitchenCallerWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const order = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+
+  await assert.rejects(
+    async () =>
+      service.acceptRestaurantOrder(
+        {
+          ...order,
+          expectedReadyAt: timestampFromDate(
+            new Date(world.clock.now().getTime() - minutes(1)),
+          ),
+        },
+        context,
+      ),
+    rejectsWith(Code.InvalidArgument),
+  );
+});

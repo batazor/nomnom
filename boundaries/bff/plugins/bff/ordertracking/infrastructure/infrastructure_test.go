@@ -136,6 +136,7 @@ func TestOrdersGetOrderCarriesCustomerAndMapsOrder(t *testing.T) {
 		CancellationWindow: &ordersv1.CancellationWindow{
 			OpensAt: timestamppb.New(placedAt), ClosesAt: timestamppb.New(placedAt.Add(5 * time.Minute)),
 		},
+		ExpectedReadyAt: timestamppb.New(placedAt.Add(12 * time.Minute)),
 	}}
 	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
 
@@ -145,6 +146,10 @@ func TestOrdersGetOrderCarriesCustomerAndMapsOrder(t *testing.T) {
 	assert.Equal(t, "confirmed", got.State)
 	assert.Equal(t, []applications.Fact{{Kind: "preparation_started", OccurredAt: placedAt.Add(time.Minute)}}, got.Facts)
 	assert.Equal(t, placedAt.Add(5*time.Minute), got.Window.ClosesAt)
+	require.NotNil(t, got.Deadlines.ExpectedReadyAt)
+	assert.Equal(t, placedAt.Add(12*time.Minute), *got.Deadlines.ExpectedReadyAt)
+	assert.Nil(t, got.Deadlines.ExpectedPickupAt, "an unset deadline is not named")
+	assert.Nil(t, got.Deadlines.ExpectedDeliveredAt, "an unset deadline is not named")
 	assert.Equal(t, []string{"Bearer token-nomnom.orders"}, server.seenMD.Get("authorization"))
 	assert.Len(t, server.seenMD.Get(identity.AssertionMetadata), 1)
 }

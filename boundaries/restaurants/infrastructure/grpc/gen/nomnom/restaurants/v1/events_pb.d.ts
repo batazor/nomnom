@@ -12,7 +12,8 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 export declare const file_nomnom_restaurants_v1_events: GenFile;
 
 /**
- * Ресторан принял Kitchen Order (Order Acceptance).
+ * Ресторан принял Kitchen Order (Order Acceptance); expected_ready_at —
+ * ожидаемая готовность на момент принятия (FR-609).
  *
  * @generated from message nomnom.restaurants.v1.RestaurantOrderAccepted
  */
@@ -21,6 +22,11 @@ export declare type RestaurantOrderAccepted = Message<"nomnom.restaurants.v1.Res
    * @generated from field: string order_id = 1;
    */
   orderId: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expected_ready_at = 2;
+   */
+  expectedReadyAt?: Timestamp | undefined;
 };
 
 /**
