@@ -6,7 +6,7 @@ import {
   type ViewRestaurantQuery,
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
-import { Button } from "../../shared/ui";
+import { Button, useToast } from "../../shared/ui";
 import { type ItemProblems, PlaceOrder } from "../place-order";
 import { useCart } from "./cart";
 import { type CartEntry, CartPanel } from "./cart-panel";
@@ -78,7 +78,7 @@ function RestaurantView({
   const [itemProblems, setItemProblems] = useState<ItemProblems>(
     () => new Map(),
   );
-  const [announcement, setAnnouncement] = useState("");
+  const toast = useToast();
   const menu = restaurant.menu;
 
   const menuById = useMemo(
@@ -108,7 +108,7 @@ function RestaurantView({
 
   function add(item: MenuEntry) {
     cart.add(item.id);
-    setAnnouncement(
+    toast(
       t("menu.added", {
         item: item.name,
         count: (quantities.get(item.id) ?? 0) + 1,
@@ -149,6 +149,7 @@ function RestaurantView({
                 onItemProblems={setItemProblems}
                 onPlaced={(orderId) => {
                   cart.clear();
+                  toast(t("order.sentToKitchen"));
                   onPlaced(orderId);
                 }}
                 restaurantId={restaurant.id}
@@ -160,10 +161,6 @@ function RestaurantView({
       ) : (
         <p className="restaurant-no-menu">{t("restaurant.noMenu")}</p>
       )}
-
-      <p aria-live="polite" className="sr-only">
-        {announcement}
-      </p>
     </article>
   );
 }

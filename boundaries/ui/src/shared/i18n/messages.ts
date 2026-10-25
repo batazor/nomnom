@@ -205,6 +205,9 @@ export const messages = {
     "board.done": "Заказ доставлен.",
     "board.details": "Подробнее о заказе",
     "board.close": "Закрыть",
+    "toast.region": "Уведомления",
+    "toast.close": "Скрыть уведомление",
+    "order.sentToKitchen": "Заказ отправлен на кухню",
     "board.customer.back": "← Все рестораны",
     "board.loading": "Загружаем…",
     "board.actionFailed":
@@ -473,6 +476,9 @@ export const messages = {
     "board.done": "The order is delivered.",
     "board.details": "Order details",
     "board.close": "Close",
+    "toast.region": "Notifications",
+    "toast.close": "Dismiss notification",
+    "order.sentToKitchen": "Order sent to the kitchen",
     "board.customer.back": "← All restaurants",
     "board.loading": "Loading…",
     "board.actionFailed":

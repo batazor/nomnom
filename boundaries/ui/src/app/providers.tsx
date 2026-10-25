@@ -4,13 +4,14 @@ import { type ReactNode, useMemo } from "react";
 import { SignInProvider } from "../shared/auth/sign-in";
 import type { RuntimeConfig } from "../shared/config/runtime-config";
 import type { SubscriptionTransport } from "../shared/graphql/client";
-import { I18nProvider } from "../shared/i18n/i18n";
+import { I18nProvider, useI18n } from "../shared/i18n/i18n";
 import {
   AsRole,
   RoleClientSettings,
   RoleSessionProvider,
 } from "../shared/session/roles";
 import { reportGraphqlError } from "../shared/telemetry/faro";
+import { ToastProvider } from "../shared/ui";
 
 // Mocks answer subscriptions in process; the module loads only with mocks.
 const mockSubscriptions: SubscriptionTransport = (request, sink, connected) => {
@@ -61,16 +62,30 @@ export function AppProviders({
     <LazyMotion features={loadMotionFeatures} strict>
       <MotionConfig reducedMotion="user">
         <I18nProvider locale={config.locale}>
-          <SignInProvider config={config.oidc}>
-            <RoleSessionProvider mocks={config.enableMocks}>
-              <RoleClientSettings settings={settings}>
-                {/* Outside the board columns the app acts as the customer. */}
-                <AsRole as="customer">{children}</AsRole>
-              </RoleClientSettings>
-            </RoleSessionProvider>
-          </SignInProvider>
+          <AppToasts>
+            <SignInProvider config={config.oidc}>
+              <RoleSessionProvider mocks={config.enableMocks}>
+                <RoleClientSettings settings={settings}>
+                  {/* Outside the board columns the app acts as the customer. */}
+                  <AsRole as="customer">{children}</AsRole>
+                </RoleClientSettings>
+              </RoleSessionProvider>
+            </SignInProvider>
+          </AppToasts>
         </I18nProvider>
       </MotionConfig>
     </LazyMotion>
+  );
+}
+
+function AppToasts({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
+  return (
+    <ToastProvider
+      closeLabel={t("toast.close")}
+      regionLabel={t("toast.region")}
+    >
+      {children}
+    </ToastProvider>
   );
 }
