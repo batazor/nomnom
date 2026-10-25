@@ -20,7 +20,6 @@ trap on_exit EXIT
 
 make -C "${KIND_DIR}/../.." kind-cluster
 (cd "${KIND_DIR}/skaffold" && GATEWAY_API_VERSION="${GATEWAY_API_VERSION}" \
-  DOCKER_CONFIG="$("${KIND_DIR}/scripts/docker-config.sh")" \
   skaffold run --kube-context "${KUBE_CONTEXT}" --status-check=true)
 # Тот же набор проверок, что make kind-test: тесты Chainsaw (ops/kind/e2e).
 make -C "${KIND_DIR}/../.." kind-test

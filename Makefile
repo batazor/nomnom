@@ -10,9 +10,7 @@ export BFF_HOST_PORT ?= 18080
 export WEBHOOKS_HOST_PORT ?= 18085
 KIND_SCRIPTS := ops/kind/scripts
 # Skaffold запускается из каталога конфигурации: его пути относительны рабочему каталогу.
-# DOCKER_CONFIG без credential helper (scripts/docker-config.sh); KIND_DOCKER_CONFIG=<dir> задаёт свой.
-KIND_DOCKER_CONFIG ?= $$($(CURDIR)/$(KIND_SCRIPTS)/docker-config.sh)
-SKAFFOLD := cd ops/kind/skaffold && DOCKER_CONFIG="$(KIND_DOCKER_CONFIG)" skaffold
+SKAFFOLD := cd ops/kind/skaffold && skaffold
 SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
 # GRAFANA_CLOUD=1: kind-deploy/kind-dev с profile grafana-cloud (ops/grafana-cloud/README.md).
 SKAFFOLD_APP_FLAGS := --module apps $(SKAFFOLD_FLAGS) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
