@@ -4,6 +4,9 @@
 # интервал и grace — env RECONCILER__INTERVAL, RECONCILER__GRACE.
 component: reconciler
 
+telemetry:
+  serviceName: orders-reconciler
+
 replicaCount: 1
 
 command:
@@ -11,3 +14,8 @@ command:
 
 service:
   enabled: false
+
+# Пул PostgreSQL роли (README, «Пулер PostgreSQL»): Страницы сверки читаются последовательно раз в RECONCILER__INTERVAL.
+postgres:
+  maxConns: 2
+  minConns: 0

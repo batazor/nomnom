@@ -90,10 +90,8 @@ resources:
 
 # Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
 # Пример:
+# OpenTelemetry — секция telemetry ниже, не env.
 # env:
-#   OTEL_SERVICE_NAME: orders
-#   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-#   OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
 #   CANCELLATION__WINDOW: 5m  # окно отмены; без значения действует placeholder 5m
 env: {}
 
@@ -202,7 +200,20 @@ postgres:
   dsnSecret:
     name: ""
     key: dsn
+  # Пул процесса (POSTGRES__*). За пулером PostgreSQL в session mode каждое соединение
+  # держит server-соединение: Σ(replicas × maxConns) всех ролей должна помещаться в
+  # pool_size пулера (README, «Пулер PostgreSQL»). maxConns — по конкурентности роли:
+  # API 10, worker и consumer 5, forwarder и reconciler 2 (values-<role>.yaml).
   maxConns: 10
+  # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
+  minConns: 1
+  # Lifetime с jitter: реплики не переоткрывают соединения одновременно.
+  maxConnLifetime: 30m
+  maxConnLifetimeJitter: 5m
+  maxConnIdleTime: 5m
+  connectTimeout: 5s
+  healthCheckPeriod: 1m
+  # Init container использует пул 2 (advisory lock goose + миграция), minConns 0.
   migrate: true
 
 # ADR 9: OTel resource attributes процесса. service.instance.id (имя pod) и service.version
@@ -210,4 +221,12 @@ postgres:
 # deployment.environment.name. Не задавать OTEL_RESOURCE_ATTRIBUTES через env: явная
 # переменная chart её перекроет.
 telemetry:
+  # service.name роли: orders, orders-worker, orders-consumer, orders-forwarder,
+  # orders-reconciler (values-<role>.yaml). Совпадает с default процесса.
+  serviceName: orders
   resourceAttributes: {}
+  # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT), например
+  # http://alloy.observability.svc:4317. Пусто — задаётся env окружения или не экспортируется.
+  otlpEndpoint: ""
+  # LOG__LEVEL: debug | info | warn | error; пусто — info.
+  logLevel: ""

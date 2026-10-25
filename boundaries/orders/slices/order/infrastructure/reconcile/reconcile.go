@@ -12,7 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"regexp"
 	"time"
 
@@ -167,7 +167,8 @@ func (r *Reconciler) reconcile(ctx context.Context, relation Relation, stats *St
 				continue
 			}
 			if !objectID.MatchString(row.OrderID) || !objectID.MatchString(row.SubjectID) {
-				log.Printf("reconcile: order %q with %s %q has an id SpiceDB cannot store", row.OrderID, relation.Name, row.SubjectID)
+				slog.WarnContext(ctx, "reconcile: relationship id cannot be stored in SpiceDB",
+					slog.String("order_id", row.OrderID), slog.String("relation", string(relation.Name)), slog.String("subject_id", row.SubjectID))
 				stats.Unrepairable++
 				continue
 			}

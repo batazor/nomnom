@@ -3,7 +3,7 @@
 package di
 
 import (
-	"log"
+	"log/slog"
 	"nomnom/orders/pkg/application"
 	gatewayclient "nomnom/orders/pkg/gateway"
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
@@ -57,7 +57,7 @@ func NewNeighbours(cfg config.FulfillmentConfig, gateway config.InternalGatewayC
 			Delivery:    grpcclient.NewDelivery(conn),
 		}, func() { _ = conn.Close() }, nil
 	case config.NeighboursSimulated:
-		log.Printf("WARNING: fulfillment neighbours are simulated: payments, restaurants and delivery calls are approved without effect")
+		slog.Warn("fulfillment neighbours are simulated: payments, restaurants and delivery calls are approved without effect")
 		return Neighbours{Payments: neighbours.Simulated{}, Restaurants: neighbours.Simulated{}, Delivery: neighbours.Simulated{}}, func() {}, nil
 	default:
 		return Neighbours{Payments: neighbours.Unavailable{}, Restaurants: neighbours.Unavailable{}, Delivery: neighbours.Unavailable{}}, func() {}, nil

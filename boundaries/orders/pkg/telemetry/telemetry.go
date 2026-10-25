@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/metric"
@@ -36,6 +37,18 @@ const ServiceNamespace = "nomnom"
 
 // TemporalMeterName — scope метрик Temporal SDK (contrib/opentelemetry).
 const TemporalMeterName = "temporal-sdk-go"
+
+// PgxScope — instrumentation scope otelpgx (traces и db.client.operation.duration).
+const PgxScope = "github.com/exaring/otelpgx"
+
+// DBOperationDurationMetric — semconv histogram длительности операций БД.
+const DBOperationDurationMetric = "db.client.operation.duration"
+
+// DBOperationDurationAttributes — labels db_client_operation_duration_seconds
+// из ops/grafana/inventory; pgx.operation.type otelpgx отбрасывается.
+var DBOperationDurationAttributes = []attribute.Key{
+	semconv.DBSystemNameKey, semconv.DBOperationNameKey, semconv.DBCollectionNameKey, semconv.ErrorTypeKey,
+}
 
 // SecondsBuckets — границы histograms длительностей в секундах.
 var SecondsBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300}
@@ -92,7 +105,9 @@ func Start(ctx context.Context, serviceName string) (*Metrics, error) {
 
 func newResource(ctx context.Context, serviceName string) (*resource.Resource, error) {
 	res, err := resource.New(ctx,
-		resource.WithAttributes(semconv.ServiceName(serviceName), semconv.ServiceNamespace(ServiceNamespace)),
+		// service.version по умолчанию — revision сборки; OTEL_RESOURCE_ATTRIBUTES
+		// (Helm задаёт image tag) переопределяет. Одно значение для всех сигналов.
+		resource.WithAttributes(semconv.ServiceName(serviceName), semconv.ServiceNamespace(ServiceNamespace), semconv.ServiceVersion(buildVersion())),
 		resource.WithFromEnv(),
 		resource.WithTelemetrySDK(),
 	)
@@ -113,6 +128,17 @@ func New(ctx context.Context, serviceName string, newReader ReaderFactory) (*Met
 	options := []sdkmetric.Option{
 		sdkmetric.WithResource(res),
 		sdkmetric.WithView(sdkmetric.NewView(sdkmetric.Instrument{Name: "system.*"}, sdkmetric.Stream{Aggregation: sdkmetric.AggregationDrop{}})),
+		// otelpgx: db.client.operation.duration — только с attributes инвентаря
+		// (section db); собственный counter db.client.operation.errors не входит
+		// в semconv и в ops/semconv, поэтому отбрасывается.
+		sdkmetric.WithView(sdkmetric.NewView(
+			sdkmetric.Instrument{Name: DBOperationDurationMetric, Scope: instrumentation.Scope{Name: PgxScope}},
+			sdkmetric.Stream{AttributeFilter: attribute.NewAllowKeysFilter(DBOperationDurationAttributes...)},
+		)),
+		sdkmetric.WithView(sdkmetric.NewView(
+			sdkmetric.Instrument{Name: "db.client.operation.errors", Scope: instrumentation.Scope{Name: PgxScope}},
+			sdkmetric.Stream{Aggregation: sdkmetric.AggregationDrop{}},
+		)),
 		// Timers Temporal SDK — histograms в секундах без своих границ; дефолтные
 		// границы SDK рассчитаны на миллисекунды.
 		sdkmetric.WithView(sdkmetric.NewView(
