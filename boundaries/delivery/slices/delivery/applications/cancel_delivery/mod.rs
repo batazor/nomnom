@@ -14,6 +14,7 @@ use crate::slices::delivery::domains::delivery::{
     DeliveryCancellationReason, DeliveryId, DeliveryRepository, OrderId, State, TransitionError,
 };
 
+use super::assignment::{Revoke, release_assignment};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -102,13 +103,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
         let outcome = match delivery.cancel(reason) {
             Ok(released_courier_id) => {
                 if let Some(courier_id) = &released_courier_id {
-                    self.couriers.release(courier_id)?;
-                    // Revoke access before commit; the revision of the DELETE
-                    // makes the revocation visible to the next check (FR-447).
-                    let revision = self
-                        .relationships
-                        .unassign_courier(&delivery_id, courier_id)?;
-                    delivery.record_authorization_revision(revision);
+                    release_assignment(
+                        &mut delivery,
+                        courier_id,
+                        self.couriers,
+                        Revoke::Relationship(self.relationships),
+                    )?;
                 }
                 self.deliveries.save(&delivery)?;
                 publish(self.outbox, delivery.pull_events())?;

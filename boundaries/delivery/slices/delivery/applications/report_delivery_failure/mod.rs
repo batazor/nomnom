@@ -10,6 +10,7 @@ use crate::slices::delivery::domains::delivery::{
     DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter,
 };
 
+use super::assignment::{Revoke, release_assignment};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -77,7 +78,14 @@ impl<U: UnitOfWork> Handler<'_, U> {
             let released_courier_id = delivery.courier_id().cloned().ok_or_else(|| {
                 DeliveryApplicationError::Internal("failed delivery had no courier".to_owned())
             })?;
-            self.couriers.release(&released_courier_id)?;
+            // The failed delivery keeps its courier, so does the
+            // relationship (FR-444).
+            release_assignment(
+                &mut delivery,
+                &released_courier_id,
+                self.couriers,
+                Revoke::Keep,
+            )?;
 
             self.deliveries.save(&delivery)?;
             publish(self.outbox, delivery.pull_events())?;

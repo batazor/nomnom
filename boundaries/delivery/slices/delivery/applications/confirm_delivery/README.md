@@ -34,7 +34,8 @@ sequenceDiagram
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-316, FR-318.
 - **Порты:** `DeliveryAuthorization` (`ConfirmDelivery` над `Courier(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
-- **Транзакция:** UoW: `Delivery` + освобождение `Courier` + Outbox (`DeliveryCompleted`); повтор назначенным курьером — no-op.
+- **Транзакция:** UoW: `Delivery` + освобождение `Courier` (`release_assignment` с `Revoke::Keep`) + Outbox (`DeliveryCompleted`); повтор назначенным курьером — no-op.
+- **Relationship:** `delivery#courier` не отзывается: `Delivery.courier_id` сохраняется, а связь следует за ним (FR-444); закрытая доставка запрещает дальнейшие действия курьера. Revision не меняется (FR-447 касается только записей relationship).
 
 ## Acceptance
 

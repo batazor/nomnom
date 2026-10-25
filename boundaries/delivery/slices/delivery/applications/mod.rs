@@ -1,4 +1,5 @@
 pub mod accept_delivery_offer;
+pub mod assignment;
 pub mod authorization;
 pub mod cancel_delivery;
 pub mod confirm_delivery;

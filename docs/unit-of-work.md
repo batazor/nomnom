@@ -458,6 +458,7 @@ Application-слой всех четырёх boundaries уже реализов�
 | --- | --- | --- |
 | `accept_delivery_offer` | Да | `Delivery Offer` + `Courier Assignment` + резервирование курьера и доставки + Outbox; контроль конкуренции. В текущей реализации дополнительно withdraw остальных pending offers этой `Delivery` |
 | `reassign_courier` | Да | Завершение текущего назначения + `Delivery` + освобождение курьера + [Outbox] |
+| `replan_delivery` | Да | Одна UoW под одной проверкой `ReplanDelivery`: [завершение назначения, как `reassign_courier`] + выбор кандидата + offer |
 | `confirm_pickup` | Да | `Delivery` + Outbox |
 | `confirm_delivery`, `report_delivery_failure` | Да | `Delivery` + освобождение `Courier` + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md)) |
 | `cancel_delivery` | Да | `Delivery` (`waiting\|assigned → cancelled`) + освобождение `Courier`, если он был назначен + Outbox |

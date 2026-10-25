@@ -4,12 +4,16 @@
 //! Outbox. The replacement search is started by the caller, not here. Before
 //! commit `delivery:<id>#courier@user:<courier_id>` is deleted from the
 //! authorization graph (AC-477); a failed delete rolls the reassignment back.
+//!
+//! [`end_assignment`] is the application service without authorization;
+//! Replan Delivery reuses it under its own check and Unit of Work.
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
-use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryRepository};
+use crate::slices::delivery::domains::delivery::{Delivery, DeliveryId, DeliveryRepository};
 
+use super::assignment::{Revoke, release_assignment};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -51,27 +55,47 @@ impl<U: UnitOfWork> Handler<'_, U> {
 
         self.unit_of_work.run(|| {
             let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
-            let assigned = delivery.courier_id().cloned();
-            delivery.unassign()?;
-            let released_courier_id = assigned.ok_or_else(|| {
-                DeliveryApplicationError::Internal("unassigned delivery had no courier".to_owned())
-            })?;
-            self.couriers.release(&released_courier_id)?;
-            // Revoke access before commit; the revision of the DELETE makes
-            // the revocation visible to the next check (FR-447, AC-483).
-            let revision = self
-                .relationships
-                .unassign_courier(&delivery_id, &released_courier_id)?;
-            delivery.record_authorization_revision(revision);
-
-            self.deliveries.save(&delivery)?;
-            publish(self.outbox, delivery.pull_events())?;
+            let released_courier_id = end_assignment(
+                &mut delivery,
+                self.deliveries,
+                self.couriers,
+                self.outbox,
+                self.relationships,
+            )?;
             Ok(Output {
                 delivery_id: delivery_id.clone(),
                 released_courier_id,
             })
         })
     }
+}
+
+/// Ends the Courier Assignment of a loaded delivery: the delivery returns to
+/// waiting, the courier is released, its relationship is revoked and the fact
+/// is written to the Outbox. Runs inside the caller's Unit of Work; returns
+/// the released courier.
+pub fn end_assignment(
+    delivery: &mut Delivery,
+    deliveries: &dyn DeliveryRepository,
+    couriers: &dyn CourierAssignment,
+    outbox: &dyn DeliveryOutbox,
+    relationships: &dyn DeliveryRelationshipWriter,
+) -> Result<CourierId, DeliveryApplicationError> {
+    let assigned = delivery.courier_id().cloned();
+    delivery.unassign()?;
+    let released_courier_id = assigned.ok_or_else(|| {
+        DeliveryApplicationError::Internal("unassigned delivery had no courier".to_owned())
+    })?;
+    release_assignment(
+        delivery,
+        &released_courier_id,
+        couriers,
+        Revoke::Relationship(relationships),
+    )?;
+
+    deliveries.save(delivery)?;
+    publish(outbox, delivery.pull_events())?;
+    Ok(released_courier_id)
 }
 
 #[cfg(test)]

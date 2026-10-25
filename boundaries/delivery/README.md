@@ -174,7 +174,9 @@ SPICEDB_ENDPOINT=localhost:50051 cargo test --test spicedb_authorization
 | Relationship | Source of truth | Запись |
 | --- | --- | --- |
 | `courier:<id>#self@user:<id>` | зарегистрированный `Courier` | `TOUCH` в Register Courier до сохранения |
-| `delivery:<id>#courier@user:<courier_id>` | `Delivery.courier_id` | `TOUCH` в Accept Delivery Offer (Assignment); `DELETE` в Reassign Courier (и Replan Delivery через него) и в Cancel Delivery, если курьер освобождён — внутри Unit of Work до commit |
+| `delivery:<id>#courier@user:<courier_id>` | `Delivery.courier_id` | `TOUCH` в Accept Delivery Offer (Assignment); `DELETE` в Reassign Courier (и Replan Delivery через сервис `end_assignment`) и в Cancel Delivery, если курьер освобождён — внутри Unit of Work до commit |
+
+Снятие назначения реализовано одной функцией `release_assignment` (`slices/delivery/applications/assignment.rs`) с явным выбором `Revoke`: `Revoke::Relationship` — Reassign Courier, Replan Delivery и Cancel Delivery (переход очищает `Delivery.courier_id`, связь удаляется до commit, revision `DELETE` сохраняется с доставкой — FR-444, FR-447, AC-483); `Revoke::Keep` — Confirm Delivery и Report Delivery Failure. Последние два не отзывают связь намеренно, и это не расхождение с FR-447: FR-447 требует хранить revision каждой записи relationship, а FR-444 связывает `delivery#courier` с `Delivery.courier_id`, который у доставленной или неуспешной доставки сохраняется (reconciliation восстановила бы удалённую связь как missing). Закрытое состояние доставки запрещает курьеру дальнейшие действия.
 
 Допущение: курьер — пользователь с тем же id (`courier_id` = `user_id`, см. `GLOSSARY.md`). Ошибка записи отменяет use case (fail closed, `UNAVAILABLE`). Повторы, не меняющие состояние (повторная регистрация, повторное принятие offer, повторная отмена, отмена доставки без курьера), ничего не пишут. Если запись прошла, а commit нет, лишнюю связь удалит reconciliation; `DELETE` до commit при неуспешном commit временно отнимает доступ, его восстановит reconciliation.
 

@@ -34,7 +34,8 @@ sequenceDiagram
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-317.
 - **Порты:** `DeliveryAuthorization` (`ReportDeliveryFailure` над `Courier(id)` для курьера или `Delivery(id)` для диспетчера), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
-- **Транзакция:** UoW: `Delivery` (`failed` с причиной) + освобождение `Courier` + Outbox (`DeliveryFailed`).
+- **Транзакция:** UoW: `Delivery` (`failed` с причиной) + освобождение `Courier` (`release_assignment` с `Revoke::Keep`) + Outbox (`DeliveryFailed`).
+- **Relationship:** `delivery#courier` не отзывается: `Delivery.courier_id` сохраняется, а связь следует за ним (FR-444); revision не меняется (FR-447 касается только записей relationship).
 - **Допущение:** Причина не классифицируется как retryable — решение остаётся за `orders`; неудача фиксируется только для `assigned`/`pickedUp`, курьер освобождается.
 
 ## Acceptance

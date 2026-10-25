@@ -8,6 +8,7 @@ use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };
 
+use super::assignment::{Revoke, release_assignment};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -64,7 +65,8 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 }
                 Err(error) => return Err(error.into()),
             }
-            self.couriers.release(&courier_id)?;
+            // The delivery keeps its courier, so does the relationship (FR-444).
+            release_assignment(&mut delivery, &courier_id, self.couriers, Revoke::Keep)?;
 
             self.deliveries.save(&delivery)?;
             publish(self.outbox, delivery.pull_events())?;

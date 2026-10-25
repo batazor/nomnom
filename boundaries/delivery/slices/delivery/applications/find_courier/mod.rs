@@ -1,6 +1,9 @@
 //! Find Courier: the assignment process selects the nearest available and
 //! eligible courier for a waiting Delivery, or reports that there is none.
 //! No offer or assignment is created and no state changes.
+//!
+//! [`select_candidate`] is the application service without authorization;
+//! Replan Delivery reuses it under its own check and Unit of Work.
 
 use std::collections::HashSet;
 
@@ -11,7 +14,7 @@ use crate::slices::courier::domains::courier::{
     courier_eligible_for_delivery,
 };
 use crate::slices::delivery::domains::delivery::{
-    DeliveryId, DeliveryOfferRepository, DeliveryRepository,
+    Delivery, DeliveryId, DeliveryOfferRepository, DeliveryRepository,
 };
 
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
@@ -57,6 +60,14 @@ pub struct Output {
     pub rejections: Vec<CandidateRejection>,
 }
 
+/// Result of [`select_candidate`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Selection {
+    pub outcome: Outcome,
+    /// Every considered courier that was not selectable, with its reason.
+    pub rejections: Vec<CandidateRejection>,
+}
+
 pub struct Handler<'a> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub deliveries: &'a dyn DeliveryRepository,
@@ -80,77 +91,102 @@ impl Handler<'_> {
         )?;
 
         let delivery = load_delivery(self.deliveries, &delivery_id)?;
-        delivery.ensure_assignable()?;
-        let offered: HashSet<CourierId> = self
-            .offers
-            .list_for_delivery(&delivery_id)?
-            .into_iter()
-            .map(|offer| offer.courier_id().clone())
-            .collect();
-
-        let mut eligible = Vec::new();
-        let mut rejections = Vec::new();
-        for candidate in self.locator.candidates_near(delivery.pickup_address())? {
-            match self.evaluate(&candidate, &offered)? {
-                Some(reason) => rejections.push(CandidateRejection {
-                    courier_id: candidate.courier_id,
-                    reason,
-                }),
-                None => eligible.push(candidate),
-            }
-        }
-
-        let outcome = eligible
-            .into_iter()
-            .min_by(|left, right| {
-                left.distance_to_pickup_meters
-                    .cmp(&right.distance_to_pickup_meters)
-                    .then_with(|| left.courier_id.cmp(&right.courier_id))
-            })
-            .map_or(Outcome::NoCandidate, |selected| Outcome::CandidateFound {
-                courier_id: selected.courier_id,
-                distance_to_pickup_meters: selected.distance_to_pickup_meters,
-            });
+        let Selection {
+            outcome,
+            rejections,
+        } = select_candidate(
+            &delivery,
+            self.offers,
+            self.couriers,
+            self.locator,
+            self.policy,
+        )?;
         Ok(Output {
             delivery_id,
             outcome,
             rejections,
         })
     }
+}
 
-    /// Returns why the candidate cannot be selected, or `None` if it can.
-    fn evaluate(
-        &self,
-        candidate: &CourierCandidate,
-        offered: &HashSet<CourierId>,
-    ) -> Result<Option<CandidateRejectionReason>, DeliveryApplicationError> {
-        if offered.contains(&candidate.courier_id) {
-            return Ok(Some(CandidateRejectionReason::AlreadyOffered));
+/// Selects the nearest available and eligible courier for an assignable
+/// delivery; ties are broken by courier id. Changes no state.
+pub fn select_candidate(
+    delivery: &Delivery,
+    offers: &dyn DeliveryOfferRepository,
+    couriers: &dyn CourierAssignment,
+    locator: &dyn CourierLocator,
+    policy: AssignmentPolicy,
+) -> Result<Selection, DeliveryApplicationError> {
+    delivery.ensure_assignable()?;
+    let offered: HashSet<CourierId> = offers
+        .list_for_delivery(delivery.id())?
+        .into_iter()
+        .map(|offer| offer.courier_id().clone())
+        .collect();
+
+    let mut eligible = Vec::new();
+    let mut rejections = Vec::new();
+    for candidate in locator.candidates_near(delivery.pickup_address())? {
+        match evaluate(&candidate, &offered, couriers, policy)? {
+            Some(reason) => rejections.push(CandidateRejection {
+                courier_id: candidate.courier_id,
+                reason,
+            }),
+            None => eligible.push(candidate),
         }
-        match self.couriers.ensure_available(&candidate.courier_id) {
-            Ok(()) => {}
-            Err(CourierAssignmentError::CourierNotFound(_)) => {
-                return Ok(Some(CandidateRejectionReason::CourierNotRegistered));
-            }
-            Err(CourierAssignmentError::Precondition(error)) => {
-                return Ok(Some(CandidateRejectionReason::NotAvailable(error)));
-            }
-            Err(error @ CourierAssignmentError::Repository(_)) => return Err(error.into()),
-        }
-        let eligibility = courier_eligible_for_delivery(CourierEligibilityContext {
-            within_delivery_zone: candidate.within_delivery_zone,
-            distance_to_pickup_meters: candidate.distance_to_pickup_meters,
-            maximum_distance_meters: self.policy.maximum_distance_meters,
-            active_assignments: candidate.active_assignments,
-            maximum_active_assignments: self.policy.maximum_active_assignments,
+    }
+
+    let outcome = eligible
+        .into_iter()
+        .min_by(|left, right| {
+            left.distance_to_pickup_meters
+                .cmp(&right.distance_to_pickup_meters)
+                .then_with(|| left.courier_id.cmp(&right.courier_id))
+        })
+        .map_or(Outcome::NoCandidate, |selected| Outcome::CandidateFound {
+            courier_id: selected.courier_id,
+            distance_to_pickup_meters: selected.distance_to_pickup_meters,
         });
-        if eligibility.satisfied() {
-            Ok(None)
-        } else {
-            Ok(Some(CandidateRejectionReason::Ineligible(
-                eligibility.reasons,
-            )))
+    Ok(Selection {
+        outcome,
+        rejections,
+    })
+}
+
+/// Returns why the candidate cannot be selected, or `None` if it can.
+fn evaluate(
+    candidate: &CourierCandidate,
+    offered: &HashSet<CourierId>,
+    couriers: &dyn CourierAssignment,
+    policy: AssignmentPolicy,
+) -> Result<Option<CandidateRejectionReason>, DeliveryApplicationError> {
+    if offered.contains(&candidate.courier_id) {
+        return Ok(Some(CandidateRejectionReason::AlreadyOffered));
+    }
+    match couriers.ensure_available(&candidate.courier_id) {
+        Ok(()) => {}
+        Err(CourierAssignmentError::CourierNotFound(_)) => {
+            return Ok(Some(CandidateRejectionReason::CourierNotRegistered));
         }
+        Err(CourierAssignmentError::Precondition(error)) => {
+            return Ok(Some(CandidateRejectionReason::NotAvailable(error)));
+        }
+        Err(error @ CourierAssignmentError::Repository(_)) => return Err(error.into()),
+    }
+    let eligibility = courier_eligible_for_delivery(CourierEligibilityContext {
+        within_delivery_zone: candidate.within_delivery_zone,
+        distance_to_pickup_meters: candidate.distance_to_pickup_meters,
+        maximum_distance_meters: policy.maximum_distance_meters,
+        active_assignments: candidate.active_assignments,
+        maximum_active_assignments: policy.maximum_active_assignments,
+    });
+    if eligibility.satisfied() {
+        Ok(None)
+    } else {
+        Ok(Some(CandidateRejectionReason::Ineligible(
+            eligibility.reasons,
+        )))
     }
 }
 
