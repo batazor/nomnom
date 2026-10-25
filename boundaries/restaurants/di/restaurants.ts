@@ -185,6 +185,7 @@ const processRegistrations = (
       subjects: cradle.subjects,
       getRestaurant: cradle.getRestaurant,
       getMenu: cradle.getMenu,
+      listRestaurants: cradle.listRestaurants,
       receiveOrderRequest: cradle.receiveOrderRequest,
       cancelRestaurantOrder: cradle.cancelRestaurantOrder,
       acceptRestaurantOrder: cradle.acceptRestaurantOrder,

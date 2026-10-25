@@ -17,6 +17,7 @@ const STATUS_BY_ERROR_CODE: Readonly<Record<string, Code>> = {
   invalid_restaurant: Code.InvalidArgument,
   invalid_restaurant_order: Code.InvalidArgument,
   invalid_quantity: Code.InvalidArgument,
+  invalid_page_size: Code.InvalidArgument,
   invalid_transition: Code.FailedPrecondition,
   guard_failed: Code.FailedPrecondition,
   already_in_state: Code.FailedPrecondition,

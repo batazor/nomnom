@@ -2,7 +2,7 @@
 
 ## 1. restaurants
 
-- [ ] 1.1 `ListRestaurants` в proto, генерация, обработчик поверх use case, тесты (`FR-496`, `AC-565`); README.
+- [x] 1.1 `ListRestaurants` в proto, генерация, обработчик поверх use case, тесты (`FR-496`, `AC-565`); README.
 
 ## 2. orders
 

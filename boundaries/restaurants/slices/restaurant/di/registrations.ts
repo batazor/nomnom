@@ -20,6 +20,7 @@ import type {
 } from "../applications/access-control.ts";
 import { AssignStaffHandler } from "../applications/assign-staff/assign-staff.ts";
 import { GetRestaurantHandler } from "../applications/get-restaurant/get-restaurant.ts";
+import { ListRestaurantsHandler } from "../applications/list-restaurants/list-restaurants.ts";
 import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
 import {
@@ -57,6 +58,7 @@ export interface RestaurantCradle {
   readonly restaurantMemberships: MongoRestaurantMemberships;
   readonly restaurantCatalog: MongoRestaurantCatalog;
   readonly getRestaurant: GetRestaurantHandler;
+  readonly listRestaurants: ListRestaurantsHandler;
   readonly registerRestaurant: RegisterRestaurantHandler;
   readonly assignStaff: AssignStaffHandler;
   readonly revokeStaff: RevokeStaffHandler;
@@ -87,6 +89,10 @@ export const registerRestaurant = (
     getRestaurant: asFunction(
       ({ restaurantCatalog }: Cradle) =>
         new GetRestaurantHandler({ reader: restaurantCatalog }),
+    ).singleton(),
+    listRestaurants: asFunction(
+      ({ restaurantCatalog }: Cradle) =>
+        new ListRestaurantsHandler({ reader: restaurantCatalog }),
     ).singleton(),
     registerRestaurant: asFunction(
       ({

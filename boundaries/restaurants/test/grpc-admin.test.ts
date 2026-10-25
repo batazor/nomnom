@@ -38,6 +38,7 @@ const createWorld = () => {
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: unused,
+    listRestaurants: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,
@@ -233,6 +234,7 @@ test("staff RPCs map missing input to INVALID_ARGUMENT and unknown restaurants t
   const service = createRestaurantsService({
     getRestaurant: unused,
     getMenu: unused,
+    listRestaurants: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,
@@ -266,6 +268,7 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
   const service = createRestaurantsService({
     getRestaurant: unused,
     getMenu: unused,
+    listRestaurants: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,
@@ -308,6 +311,7 @@ test("admin RPCs are UNAUTHENTICATED with the default rejecting resolver", async
   const service = createRestaurantsService({
     getRestaurant: unused,
     getMenu: unused,
+    listRestaurants: unused,
     receiveOrderRequest: unused,
     cancelRestaurantOrder: unused,
     acceptRestaurantOrder: unused,

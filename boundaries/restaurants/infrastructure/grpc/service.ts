@@ -3,6 +3,7 @@ import type { ServiceImpl } from "@connectrpc/connect";
 import type { GetMenuHandler } from "../../slices/menu/applications/get-menu/get-menu.ts";
 import type { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import type { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import type { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import type { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import type { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import type { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
@@ -20,6 +21,7 @@ import {
   CancelRestaurantOrderResponseSchema,
   GetMenuResponseSchema,
   GetRestaurantResponseSchema,
+  ListRestaurantsResponseSchema,
   ReceiveOrderRequestResponseSchema,
   RegisterRestaurantResponseSchema,
   type RestaurantsService,
@@ -42,6 +44,7 @@ export {
 export type RestaurantsServiceDependencies = Readonly<{
   getRestaurant: Pick<GetRestaurantHandler, "execute">;
   getMenu: Pick<GetMenuHandler, "execute">;
+  listRestaurants: Pick<ListRestaurantsHandler, "execute">;
   receiveOrderRequest: Pick<ReceiveOrderRequestHandler, "execute">;
   cancelRestaurantOrder: Pick<CancelRestaurantOrderHandler, "execute">;
   acceptRestaurantOrder: Pick<AcceptOrderHandler, "execute">;
@@ -85,6 +88,23 @@ export const createRestaurantsService = (
         });
         return create(GetMenuResponseSchema, {
           items: toMenuItemMessages(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async listRestaurants(request) {
+      try {
+        // Zero values of proto3 mean "not set": default page size, first page.
+        const result = await dependencies.listRestaurants.execute({
+          includeClosed: request.includeClosed,
+          limit: request.pageSize === 0 ? undefined : request.pageSize,
+          cursor: request.pageToken === "" ? undefined : request.pageToken,
+        });
+        return create(ListRestaurantsResponseSchema, {
+          restaurants: result.restaurants.map(toRestaurantMessage),
+          nextPageToken: result.nextCursor ?? "",
         });
       } catch (error) {
         throw transportError(error);
