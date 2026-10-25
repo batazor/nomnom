@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -62,7 +63,7 @@ func Markdown() string {
 
 func statuses(m Metric) string {
 	var parts []string
-	for _, s := range AllServices {
+	for _, s := range append(slices.Clone(AllServices), InfraTargets...) {
 		if st, ok := m.Status[s]; ok {
 			parts = append(parts, fmt.Sprintf("`%s`: %s", s, st))
 		}

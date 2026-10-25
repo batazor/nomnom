@@ -32,6 +32,8 @@ ADR 9 принял OpenTelemetry, Alloy, Tempo, Mimir, Loki, Pyroscope и Grafan
 
 **gcx.** `gcx` (замена deprecated `grafanactl`) используется в CI для `gcx dev lint run` закоммиченных и live-вариантов (все метрики «есть»: проверка PromQL правилом `target-valid-promql`), локально — `gcx dev serve`, при необходимости — `gcx resources validate/push` против инстанса.
 
+**Platform / Overview.** Серверная сторона общей инфраструктуры (SpiceDB, PostgreSQL) не входит в overview сервисов, но и не уходит в community dashboards: тот же генератор строит `Platform / Overview` (uid `nomnom-platform-overview`, `ops/grafana/dashboards/platform.json`, Git Sync `ops/grafana/git-sync/platform.yaml`) из тех же правил инвентаря. Источник — Prometheus scrape Alloy с `job="infra/<target>"`; у таких метрик нет `target_info`, поэтому environment/version не фильтруются. Pods сервиса (cAdvisor, kube-state-metrics) — row Pods в его overview с фильтром по неймспейсу контекста и префиксу pod; Platform показывает pods всех прикладных неймспейсов.
+
 **Alert rules** создаются следующим шагом тем же путём: Foundation SDK, генерация из того же инвентаря, артефакты рядом с dashboard, проверка в CI. Сейчас не создаются.
 
 ## Consequences

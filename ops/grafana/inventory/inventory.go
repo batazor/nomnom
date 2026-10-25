@@ -44,6 +44,15 @@ const (
 
 var AllServices = []string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments, BFF}
 
+// Инфраструктурные цели Platform / Overview: собираются Alloy Prometheus scrape, а не OTLP,
+// поэтому job — "infra/<target>", без target_info.
+const (
+	SpiceDB          = "spicedb"
+	PostgreSQLServer = "postgresql"
+)
+
+var InfraTargets = []string{SpiceDB, PostgreSQLServer}
+
 // Bounded contexts с ролями на технологиях, а не на имени.
 var (
 	goServices      = []string{Orders, OrdersWorker, OrdersConsumer}
@@ -105,7 +114,7 @@ var Sections = []Section{
 	{"rpc", "gRPC (server и client через internal gateway)", "`otelgrpc` v0.72 (stats handler) в `orders`; grpc-node / tonic / grpcio — при подключении в других контекстах. Используются актуальные semconv RPC: `rpc.server.call.duration`/`rpc.client.call.duration` в секундах, статус — имя кода в `rpc_response_status_code`, сервис и метод — в `rpc_method`."},
 	{"graphql", "GraphQL / HTTP (BFF, Cosmo Router)", "Встроенная telemetry Cosmo Router. Router экспортирует метрики по умолчанию, но OTLP exporter к Alloy в `config.yaml` не настроен и Alloy не развёрнут — метрики не доставляются."},
 	{"runtime", "Runtime", "Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). Node.js: `@opentelemetry/instrumentation-runtime-node`. Python: `opentelemetry-instrumentation-system-metrics`. Rust: semconv process metrics; метрики tokio runtime не имеют semconv и не инвентаризированы."},
-	{"db", "Database client (PostgreSQL, MongoDB)", "Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL/MongoDB — отдельные community dashboards, не overview."},
+	{"db", "Database client (PostgreSQL, MongoDB)", "Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL — Platform / Overview (раздел [PostgreSQL](#postgresql)), MongoDB — пока нет; в overview сервисов не дублируются."},
 	{"watermill", "Kafka: встроенные метрики Watermill", "`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`, `outbox_forwarder`). Экспорт через OTel Prometheus bridge (`orders/pkg/telemetry`) в общий OTLP pipeline; имена Prometheus сохраняются без изменений. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся."},
 	{"messaging-otel", "Kafka: semconv messaging (не-Go контексты)", "Kafka-клиенты TypeScript, Rust и Python не выбраны; при выборе используется OTel messaging semconv."},
 	{"messaging", "Kafka: собственный OTel middleware и consumer lag", "Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Labels только `handler_name`, `event_type`, `stream`, `error_class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill."},
@@ -118,6 +127,9 @@ var Sections = []Section{
 	{"authz", "Authorization (SpiceDB)", "Декоратор порта авторизации (ADR 18). `denied` — бизнес-результат, `error`/`timeout` — технический сбой. Без subject/resource ID."},
 	{"provider", "Payment provider", "Клиентский адаптер платёжного провайдера; провайдер не выбран."},
 	{"domain", "Domain metrics", "Бизнес-счётчики увеличиваются в точке идемпотентно подтверждённого перехода (docs/observability.md). Финансовые значения и ID не labels. Gauge «currently in state» требует projection/polling и из counters не выводится."},
+	{"pods", "Pods (Kubernetes)", "Alloy: cAdvisor kubelet через API server proxy и kube-state-metrics (только pods прикладных неймспейсов), `job=\"infra/kubernetes\"`. Метрики Prometheus, без `target_info`: сервис выбирается `namespace` и префиксом `pod`. Row Pods в overview каждого сервиса и в Platform / Overview."},
+	{"spicedb", "SpiceDB (сервер)", "Alloy scrape `:9090` pod SpiceDB, `job=\"infra/spicedb\"`. Серверная сторона; клиентская — row Authorization сервисов. Platform / Overview."},
+	{"postgresql", "PostgreSQL (сервер)", "Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job=\"infra/postgresql\"`, label `owner`; `stat_database` и размер — только база владельца. Клиентская сторона — row Dependencies сервисов. Platform / Overview."},
 }
 
 var Metrics = []Metric{
@@ -242,6 +254,43 @@ var Metrics = []Metric{
 	{Name: "nomnom_payments_authorizations_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: authorized | declined | failed; attempts = сумма."},
 	{Name: "nomnom_payments_captures_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: captured | failed."},
 	{Name: "nomnom_payments_refunds_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"outcome"}, Status: expected(Payments), Note: "`outcome`: refunded | failed."},
+
+	// pods (Alloy: cAdvisor kubelet + kube-state-metrics, job infra/kubernetes)
+	{Name: "container_cpu_usage_seconds_total", Section: "pods", Type: Counter, Source: "cAdvisor kubelet", Labels: []string{"namespace", "pod", "container"}, Status: podStatus(), Note: "Только контейнеры: pod-level cgroup и pause отбрасываются в Alloy."},
+	{Name: "container_memory_working_set_bytes", Section: "pods", Type: Gauge, Source: "cAdvisor kubelet", Labels: []string{"namespace", "pod", "container"}, Status: podStatus(), Note: "Working set — то, что учитывает OOM killer и eviction."},
+	{Name: "container_network_receive_bytes_total", Section: "pods", Type: Counter, Source: "cAdvisor kubelet", Labels: []string{"namespace", "pod"}, Status: podStatus(), Note: "Уровень pod, без `lo`."},
+	{Name: "container_network_transmit_bytes_total", Section: "pods", Type: Counter, Source: "cAdvisor kubelet", Labels: []string{"namespace", "pod"}, Status: podStatus(), Note: "Уровень pod, без `lo`."},
+	{Name: "kube_pod_status_ready", Section: "pods", Type: Gauge, Source: "kube-state-metrics v2.20", Labels: []string{"namespace", "pod", "condition"}, Status: podStatus(), Note: "В Alloy остаётся только `condition=\"true\"`."},
+	{Name: "kube_pod_container_status_restarts_total", Section: "pods", Type: Counter, Source: "kube-state-metrics v2.20", Labels: []string{"namespace", "pod", "container"}, Status: podStatus()},
+	{Name: "kube_pod_container_status_waiting_reason", Section: "pods", Type: Gauge, Source: "kube-state-metrics v2.20", Labels: []string{"namespace", "pod", "container", "reason"}, Status: podStatus(), Note: "`CrashLoopBackOff`, `ImagePullBackOff`, `CreateContainerConfigError` и т. п."},
+
+	// spicedb (Alloy scrape :9090, job infra/spicedb)
+	{Name: "grpc_server_handled_total", Section: "spicedb", Type: Counter, Source: "SpiceDB go-grpc-prometheus", Labels: []string{"grpc_service", "grpc_method", "grpc_code", "grpc_type"}, Status: verified([]string{SpiceDB}), Note: "Health-check `grpc.health.v1.Health` отбрасывается в Alloy."},
+	{Name: "grpc_server_handling_seconds", Section: "spicedb", Type: Histogram, Source: "SpiceDB go-grpc-prometheus", Labels: []string{"grpc_service", "grpc_method", "grpc_type"}, Status: verified([]string{SpiceDB})},
+	{Name: "spicedb_v1_check_permissionship_total", Section: "spicedb", Type: Counter, Source: "SpiceDB", Labels: []string{"method", "permissionship"}, Status: verified([]string{SpiceDB}), Note: "`permissionship`: HAS_PERMISSION | NO_PERMISSION | CONDITIONAL_PERMISSION — решение, не ошибка."},
+	{Name: "spicedb_dispatch_client_check_total", Section: "spicedb", Type: Counter, Source: "SpiceDB dispatcher", Status: verified([]string{SpiceDB})},
+	{Name: "spicedb_dispatch_client_check_from_cache_total", Section: "spicedb", Type: Counter, Source: "SpiceDB dispatcher", Status: verified([]string{SpiceDB})},
+	{Name: "spicedb_datastore_query_latency", Section: "spicedb", Type: Histogram, Source: "SpiceDB datastore", Labels: []string{"operation", "query_shape"}, Status: verified([]string{SpiceDB}), Note: "Доставляются только `_sum`/`_count` (средняя latency): buckets — ~100 series."},
+	{Name: "process_cpu_seconds_total", Section: "spicedb", Type: Counter, Source: "Prometheus Go client", Status: verified([]string{SpiceDB})},
+	{Name: "process_resident_memory_bytes", Section: "spicedb", Type: Gauge, Source: "Prometheus Go client", Status: verified([]string{SpiceDB})},
+
+	// postgresql (Alloy prometheus.exporter.postgres, job infra/postgresql)
+	{Name: "pg_up", Section: "postgresql", Type: Gauge, Source: "postgres_exporter", Labels: []string{"owner"}, Status: verified([]string{PostgreSQLServer})},
+	{Name: "pg_stat_database_numbackends", Section: "postgresql", Type: Gauge, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
+	{Name: "pg_stat_database_xact_commit", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer}), Note: "Counter без `_total` (имя postgres_exporter)."},
+	{Name: "pg_stat_database_xact_rollback", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
+	{Name: "pg_stat_database_blks_hit", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
+	{Name: "pg_stat_database_blks_read", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
+	{Name: "pg_stat_database_deadlocks", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
+	{Name: "pg_stat_database_conflicts", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
+	{Name: "pg_stat_database_temp_bytes", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer}), Note: "Запросы, вылезшие за `work_mem`."},
+	{Name: "pg_database_size_bytes", Section: "postgresql", Type: Gauge, Source: "postgres_exporter `database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
+}
+
+// podStatus — pods ролей, развёрнутых в kind и подтверждённых в Grafana Cloud;
+// orders-worker и BFF в тестовом окружении пока не запускаются.
+func podStatus() map[string]Status {
+	return verified([]string{Orders, OrdersConsumer, Restaurants, Delivery, Payments}, OrdersWorker, BFF)
 }
 
 // ForbiddenLabels — индивидуальные идентификаторы, которые не становятся labels.

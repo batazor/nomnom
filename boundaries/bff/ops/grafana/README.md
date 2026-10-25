@@ -41,6 +41,17 @@ JSON — артефакт генератора: правки вносятся в
 | Technical error ratio | TODO | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`router_http_requests_total`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Latency p50 / p95 / p99 | TODO | [`router_http_request_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
+### Pods
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Ready pods | TODO | [`kube_pod_status_ready`](../../../../docs/observability/metric-inventory.md#pods) |
+| Restarts | TODO | [`kube_pod_container_status_restarts_total`](../../../../docs/observability/metric-inventory.md#pods) |
+| Waiting containers by reason | TODO | [`kube_pod_container_status_waiting_reason`](../../../../docs/observability/metric-inventory.md#pods) |
+| CPU by pod | TODO | [`container_cpu_usage_seconds_total`](../../../../docs/observability/metric-inventory.md#pods) |
+| Memory working set by pod | TODO | [`container_memory_working_set_bytes`](../../../../docs/observability/metric-inventory.md#pods) |
+| Network by pod | TODO | [`container_network_receive_bytes_total`](../../../../docs/observability/metric-inventory.md#pods), [`container_network_transmit_bytes_total`](../../../../docs/observability/metric-inventory.md#pods) |
+
 ### Dependencies
 
 | Панель | Статус | Недостающие метрики |
@@ -49,7 +60,7 @@ JSON — артефакт генератора: правки вносятся в
 | Subgraph calls: errors | TODO | [`router_http_requests_error_total`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Subgraph calls: p95 | TODO | [`router_http_request_duration_milliseconds`](../../../../docs/observability/metric-inventory.md#graphql), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
-Живых панелей: 0 из 7. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 0 из 13. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Переходы
 

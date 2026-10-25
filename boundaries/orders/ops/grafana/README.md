@@ -53,6 +53,17 @@ JSON — артефакт генератора: правки вносятся в
 | Goroutines | live | — |
 | GOMAXPROCS | live | — |
 
+### Pods
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Ready pods | live | — |
+| Restarts | live | — |
+| Waiting containers by reason | live | — |
+| CPU by pod | live | — |
+| Memory working set by pod | live | — |
+| Network by pod | live | — |
+
 ### Dependencies
 
 | Панель | Статус | Недостающие метрики |
@@ -137,7 +148,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 19 из 54. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 25 из 60. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Переходы
 

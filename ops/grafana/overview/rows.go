@@ -1,5 +1,7 @@
 package overview
 
+import "fmt"
+
 // gRPC status codes по классам ошибки (rpc_response_status_code — имя кода):
 // transport/availability — сеть, deadline, перегрузка, недоступность зависимости;
 // application — дефект или неожиданный сбой; business rejection — отказ по правилам
@@ -282,6 +284,36 @@ func kitchen(sc Scope) []Panel {
 		}},
 		{Title: "Preparation duration", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_kitchen_preparation_duration_seconds")},
 		{Title: "Delays", Unit: "ops", Queries: []Query{{Sum("reason", sc.Rate("nomnom_kitchen_delays_total")), "{{reason}}"}}},
+	}
+}
+
+// servicePods — pods ролей сервиса: неймспейс контекста и имя Deployment как префикс
+// pod (<deployment>-<replicaset hash>-<suffix>), чтобы orders не захватывал orders-worker.
+func servicePods(o Options) Scope {
+	return Scope{Var: "service", Services: o.Services, Job: jobKubernetes, Matchers: []string{
+		fmt.Sprintf(`namespace="nomnom-%s"`, o.Context),
+		`pod=~"(${service:pipe})-[a-z0-9]+-[a-z0-9]+"`,
+	}}
+}
+
+const jobKubernetes = "infra/kubernetes"
+
+func pods(sc Scope) []Panel {
+	return []Panel{
+		{Title: "Ready pods", Unit: "short", Queries: []Query{
+			{Sum("", sc.Gauge("kube_pod_status_ready", `condition="true"`)), "ready"},
+			{"count(" + sc.Gauge("kube_pod_status_ready", `condition="true"`) + ")", "pods"},
+		}, Description: "Разрыв ready и pods — pod не проходит readinessProbe и выведен из Service."},
+		{Title: "Restarts", Unit: "short", Queries: []Query{{Sum("pod", sc.Increase("kube_pod_container_status_restarts_total")), "{{pod}}"}}},
+		{Title: "Waiting containers by reason", Unit: "short", Queries: []Query{{Sum("reason", sc.Gauge("kube_pod_container_status_waiting_reason")), "{{reason}}"}},
+			Description: "CrashLoopBackOff, ImagePullBackOff и т. п.: контейнер не запущен."},
+		{Title: "CPU by pod", Unit: "short", Queries: []Query{{Sum("pod", sc.Rate("container_cpu_usage_seconds_total")), "{{pod}}"}},
+			Description: "Ядра CPU (cAdvisor), включая то, что runtime не видит (GC, sidecar-процессы контейнера)."},
+		{Title: "Memory working set by pod", Unit: "bytes", Queries: []Query{{Sum("pod", sc.Gauge("container_memory_working_set_bytes")), "{{pod}}"}}},
+		{Title: "Network by pod", Unit: "Bps", Queries: []Query{
+			{Sum("pod", sc.Rate("container_network_receive_bytes_total")), "{{pod}} rx"},
+			{Sum("pod", sc.Rate("container_network_transmit_bytes_total")), "{{pod}} tx"},
+		}},
 	}
 }
 

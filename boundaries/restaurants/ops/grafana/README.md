@@ -51,6 +51,17 @@ JSON — артефакт генератора: правки вносятся в
 | Event loop delay p99 | TODO | [`nodejs_eventloop_delay_p99_seconds`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | GC duration p95 | TODO | [`target_info`](../../../../docs/observability/metric-inventory.md#resource), [`v8js_gc_duration_seconds`](../../../../docs/observability/metric-inventory.md#runtime) |
 
+### Pods
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Ready pods | live | — |
+| Restarts | live | — |
+| Waiting containers by reason | live | — |
+| CPU by pod | live | — |
+| Memory working set by pod | live | — |
+| Network by pod | live | — |
+
 ### Dependencies
 
 | Панель | Статус | Недостающие метрики |
@@ -118,7 +129,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
-Живых панелей: 0 из 41. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 6 из 47. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Переходы
 

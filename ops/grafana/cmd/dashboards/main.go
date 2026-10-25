@@ -32,30 +32,32 @@ func main() {
 	}
 
 	files := map[string][]byte{}
+	// previews — имя файла preview-варианта для каждого dashboard.
+	previews := map[string]string{}
 	for _, opts := range overview.Services() {
 		d, err := overview.ServiceOverview(opts)
 		if err != nil {
 			fail(err)
 		}
-		var raw bytes.Buffer
-		enc := json.NewEncoder(&raw)
-		enc.SetEscapeHTML(false)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(d.Manifest); err != nil {
-			fail(err)
-		}
 		dir := filepath.Join("boundaries", opts.Context, "ops", "grafana")
-		files[filepath.Join(dir, "dashboards", "overview.json")] = raw.Bytes()
+		path := filepath.Join(dir, "dashboards", "overview.json")
+		files[path] = encode(d)
+		previews[path] = opts.Context + ".json"
 		files[filepath.Join(dir, "README.md")] = []byte(overview.README(opts, d))
 	}
+	platform, err := overview.PlatformOverview()
+	if err != nil {
+		fail(err)
+	}
+	files[overview.PlatformPath] = encode(platform)
+	previews[overview.PlatformPath] = "platform.json"
+	files[filepath.Join(filepath.Dir(overview.PlatformPath), "README.md")] = []byte(overview.PlatformREADME(platform))
 	files[inventory.DocPath] = []byte(inventory.Markdown())
 
 	switch {
 	case *preview != "":
-		for path, content := range files {
-			if filepath.Ext(path) == ".json" {
-				write(filepath.Join(*preview, filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(path)))))+".json"), content)
-			}
+		for path, name := range previews {
+			write(filepath.Join(*preview, name), files[path])
 		}
 	case *check:
 		stale := 0
@@ -74,6 +76,17 @@ func main() {
 			write(filepath.Join(*root, path), content)
 		}
 	}
+}
+
+func encode(d overview.Dashboard) []byte {
+	var raw bytes.Buffer
+	enc := json.NewEncoder(&raw)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(d.Manifest); err != nil {
+		fail(err)
+	}
+	return raw.Bytes()
 }
 
 func write(path string, content []byte) {

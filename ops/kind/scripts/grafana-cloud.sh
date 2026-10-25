@@ -23,6 +23,16 @@ k -n nomnom-observability create secret generic grafana-cloud-otlp \
   --from-literal=GRAFANA_CLOUD_OTLP_INSTANCE_ID="${GRAFANA_CLOUD_OTLP_INSTANCE_ID}" \
   --from-literal=GRAFANA_CLOUD_OTLP_TOKEN="${GRAFANA_CLOUD_OTLP_TOKEN}" \
   --dry-run=client -o yaml | k apply -f - >/dev/null
+# DSN экспортеров PostgreSQL Alloy: пароли владельцев публикует postgres.sh (идемпотентно).
+"$(dirname "$0")/postgres.sh" "${context}" >/dev/null
+dsn_args=()
+for owner in orders payments delivery; do
+  password="$(k -n nomnom-data get secret "postgres-${owner}" -o jsonpath='{.data.password}' | base64 -d)"
+  upper="$(printf '%s' "${owner}" | tr '[:lower:]' '[:upper:]')"
+  dsn_args+=("--from-literal=POSTGRES_${upper}_DSN=postgres://${owner}:${password}@postgres-${owner}.nomnom-data.svc.cluster.local:5432/${owner}?sslmode=disable")
+done
+k -n nomnom-observability create secret generic alloy-postgres "${dsn_args[@]}" \
+  --dry-run=client -o yaml | k apply -f - >/dev/null
 # Secret и config.alloy читаются при старте процесса.
 k -n nomnom-observability rollout restart deployment/alloy >/dev/null
 k -n nomnom-observability rollout status deployment/alloy --timeout=180s >/dev/null

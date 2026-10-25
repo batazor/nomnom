@@ -161,6 +161,9 @@ func (g *generator) links() []cog.Builder[dashboard.DashboardLink] {
 		link("Profiles (Pyroscope)", profilesURL(), "external link"),
 		link("Metric inventory", inventory.RepoURL+inventory.DocPath, "info"),
 		link("Dashboard README", inventory.RepoURL+"boundaries/"+g.opts.Context+"/ops/grafana/README.md", "info"),
+		// Серверная сторона SpiceDB и PostgreSQL, pods всех контекстов.
+		dashboard.NewDashboardLinkBuilder().Title("Platform / Overview").Type(dashboard.DashboardLinkTypeLink).
+			Url("/d/" + PlatformUID).Icon("dashboard").TargetBlank(false).KeepTime(true).IncludeVars(false).Tags([]string{}),
 	}
 	var deps []string
 	if g.opts.Database != "" {

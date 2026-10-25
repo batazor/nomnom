@@ -13,9 +13,19 @@ type Scope struct {
 	// Instance включает фильтр dashboard variable service_instance; он относится к
 	// $service и не применяется к rows с section variable.
 	Instance bool
+	// Job — job инфраструктурного Prometheus scrape (infra/kubernetes и т. п.) вместо
+	// nomnom/<service.name>; у таких метрик нет target_info, фильтр environment не применяется.
+	Job string
+	// Matchers добавляются к каждому selector row (namespace и pod сервиса).
+	Matchers []string
 }
 
-func (s Scope) job() string { return fmt.Sprintf(`job=~"nomnom/(${%s:pipe})"`, s.Var) }
+func (s Scope) job() string {
+	if s.Job != "" {
+		return fmt.Sprintf(`job=%q`, s.Job)
+	}
+	return fmt.Sprintf(`job=~"nomnom/(${%s:pipe})"`, s.Var)
+}
 
 // Sel строит selector с фильтром service и instance.
 func (s Scope) Sel(metric string, matchers ...string) string {
@@ -23,8 +33,14 @@ func (s Scope) Sel(metric string, matchers ...string) string {
 	if s.Instance {
 		ms = append(ms, `instance=~"$service_instance"`)
 	}
+	ms = append(ms, s.Matchers...)
 	ms = append(ms, matchers...)
 	return metric + "{" + strings.Join(ms, ", ") + "}"
+}
+
+// Increase — increase() серии за $__rate_interval (рестарты и т. п.).
+func (s Scope) Increase(metric string, matchers ...string) string {
+	return s.filter("increase(" + s.Sel(metric, matchers...) + "[$__rate_interval])")
 }
 
 // Env — фильтр environment и version через target_info: resource attributes не
@@ -33,7 +49,12 @@ func (s Scope) Env() string {
 	return fmt.Sprintf(`target_info{%s, deployment_environment_name=~"$environment", service_version=~"$version"}`, s.job())
 }
 
-func (s Scope) filter(inner string) string { return inner + " and on (job, instance) " + s.Env() }
+func (s Scope) filter(inner string) string {
+	if s.Job != "" {
+		return inner
+	}
+	return inner + " and on (job, instance) " + s.Env()
+}
 
 // Rate — rate() серии с фильтром environment/version.
 func (s Scope) Rate(metric string, matchers ...string) string {

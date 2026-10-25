@@ -29,12 +29,25 @@ Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) зап
 | --- | --- |
 | Только метрики: traces, logs и profiles в pipeline Alloy нет | `alloy.yaml` |
 | Только `service.namespace=nomnom`, остальной OTLP отбрасывается | `otelcol.processor.filter "nomnom"` |
-| Собственные метрики Alloy и Kubernetes не отправляются | `alloy.yaml` |
+| Собственные метрики Alloy не отправляются | `alloy.yaml` |
+| Инфраструктура — только allowlist метрик (`prometheus.relabel`): SpiceDB без health-check и buckets datastore, PostgreSQL только база владельца, pods только прикладных неймспейсов и `condition="true"` readiness; kube-state-metrics генерирует три метрики pods | `alloy.yaml` |
 | Экспорт раз в 60 s | `OTEL_METRIC_EXPORT_INTERVAL` |
 | Метрики только orders и orders-consumer (остальные сервисы OTel не подключили) | `values/grafana-cloud.yaml` |
 | Отправка выключается без удаления кластера | `make kind-grafana-cloud-stop` |
 
-Расход виден в stack (**Cost management → Usage**) или запросом `count by (job) ({job=~"nomnom/.+"})`: OTLP ingestion собирает `job` из `service.namespace/service.name`.
+Расход виден в stack (**Cost management → Usage**) или запросом `count by (job) ({job=~"(nomnom|infra)/.+"})`: OTLP ingestion собирает `job` из `service.namespace/service.name`, у Prometheus scrape инфраструктуры `job` — `infra/spicedb`, `infra/postgresql`, `infra/kubernetes`.
+
+## Инфраструктура
+
+Тот же Alloy собирает Prometheus-метрики для [Platform / Overview](../grafana/dashboards/README.md) и row Pods overview сервисов и отправляет их по OTLP мимо фильтра `service.namespace=nomnom`:
+
+| Источник | Как | `job` |
+| --- | --- | --- |
+| SpiceDB | scrape `:9090` pod в `nomnom-authz` | `infra/spicedb` |
+| PostgreSQL | `prometheus.exporter.postgres` на владельца (`orders`, `payments`, `delivery`), DSN из Secret `alloy-postgres` (собирает `grafana-cloud.sh` из паролей `postgres.sh`) | `infra/postgresql` |
+| Pods | cAdvisor kubelet через API server proxy (ClusterRole `nomnom-alloy`: `nodes/proxy`) и kube-state-metrics v2.20.0 в `nomnom-observability` | `infra/kubernetes` |
+
+Инфраструктурные неймспейсы без NetworkPolicy, поэтому отдельных разрешений Alloy не нужно.
 
 ## Отличия от self-managed Mimir
 

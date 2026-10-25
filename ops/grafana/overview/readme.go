@@ -7,6 +7,49 @@ import (
 	"nomnom/ops/grafana/inventory"
 )
 
+// rowsTable — rows и статусы панелей; root — путь от README до корня репозитория.
+func rowsTable(b *strings.Builder, d Dashboard, root string) {
+	b.WriteString("## Rows\n\n")
+	live, total := 0, 0
+	for _, r := range d.Rows {
+		fmt.Fprintf(b, "### %s\n\n| Панель | Статус | Недостающие метрики |\n| --- | --- | --- |\n", r.Title)
+		for _, p := range r.Panels {
+			total++
+			status := "TODO"
+			if p.Live {
+				status = "live"
+				live++
+			}
+			missing := "—"
+			if len(p.Missing) > 0 {
+				var links []string
+				for _, m := range p.Missing {
+					metric, _ := inventory.Lookup(m)
+					links = append(links, fmt.Sprintf("[`%s`](%s%s#%s)", m, root, inventory.DocPath, metric.Section))
+				}
+				missing = strings.Join(links, ", ")
+			}
+			fmt.Fprintf(b, "| %s | %s | %s |\n", p.Title, status, missing)
+		}
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(b, "Живых панелей: %d из %d. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.\n\n", live, total)
+}
+
+// PlatformREADME — ops/grafana/dashboards/README.md рядом с platform.json.
+func PlatformREADME(d Dashboard) string {
+	var b strings.Builder
+	b.WriteString("<!-- Сгенерировано ops/grafana (make grafana-generate). Не редактировать вручную. -->\n\n# Platform / Overview\n\n")
+	b.WriteString("Серверная сторона общей инфраструктуры и pods всех прикладных неймспейсов. Клиентская сторона (Authorization, Dependencies) и Pods конкретного сервиса — в overview сервиса; оттуда ведёт ссылка сюда.\n\n")
+	fmt.Fprintf(&b, "| | |\n| --- | --- |\n| UID | `%s` |\n| Файл | [`platform.json`](platform.json) |\n| Схема | `dashboard.grafana.app/v2` (Grafana 13) |\n| Доставка | Git Sync, repository [`ops/grafana/git-sync/platform.yaml`](../git-sync/platform.yaml) |\n| Генератор | [`ops/grafana`](../README.md), функция `overview.PlatformOverview` |\n| Источники | Alloy Prometheus scrape: `infra/spicedb`, `infra/postgresql`, `infra/kubernetes` ([`alloy.yaml`](../../kind/manifests/observability/alloy.yaml)) |\n\n", d.UID)
+	b.WriteString("## Variables\n\n| Variable | Источник | Назначение |\n| --- | --- | --- |\n")
+	fmt.Fprintf(&b, "| `owner` | владельцы PostgreSQL (`%s`) | label `owner` экспортера. |\n", strings.Join(postgresOwners, "`, `"))
+	fmt.Fprintf(&b, "| `namespace` | прикладные неймспейсы (`%s`) | Row Pods. |\n\n", strings.Join(appNamespaces, "`, `"))
+	b.WriteString("Environment и version не фильтруются: у Prometheus-метрик инфраструктуры нет `target_info`.\n\n")
+	rowsTable(&b, d, "../../../")
+	return b.String()
+}
+
 // README — boundaries/<context>/ops/grafana/README.md, генерируется вместе с dashboard,
 // чтобы описание rows и статусы панелей не расходились с JSON.
 func README(o Options, d Dashboard) string {
@@ -28,31 +71,7 @@ func README(o Options, d Dashboard) string {
 	}
 	b.WriteString("\n`namespace` не добавлен: `k8s.namespace.name` не входит в принятые resource attributes. High-cardinality variables (`order_id`, `user_id`, `payment_id`, `event_id`, `workflow_id`) запрещены — для них traces и logs.\n\n")
 
-	b.WriteString("## Rows\n\n")
-	live, total := 0, 0
-	for _, r := range d.Rows {
-		fmt.Fprintf(&b, "### %s\n\n| Панель | Статус | Недостающие метрики |\n| --- | --- | --- |\n", r.Title)
-		for _, p := range r.Panels {
-			total++
-			status := "TODO"
-			if p.Live {
-				status = "live"
-				live++
-			}
-			missing := "—"
-			if len(p.Missing) > 0 {
-				var links []string
-				for _, m := range p.Missing {
-					metric, _ := inventory.Lookup(m)
-					links = append(links, fmt.Sprintf("[`%s`](../../../../%s#%s)", m, inventory.DocPath, metric.Section))
-				}
-				missing = strings.Join(links, ", ")
-			}
-			fmt.Fprintf(&b, "| %s | %s | %s |\n", p.Title, status, missing)
-		}
-		b.WriteString("\n")
-	}
-	fmt.Fprintf(&b, "Живых панелей: %d из %d. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.\n\n", live, total)
+	rowsTable(&b, d, "../../../../")
 
 	b.WriteString("## Переходы\n\n")
 	b.WriteString("- **Logs** — Explore Loki по `service_name`, `deployment_environment_name`, `service_version` и интервалу dashboard. Переход log → trace — derived field `trace_id` data source Loki.\n")

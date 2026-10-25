@@ -60,7 +60,7 @@ func TestUIDsAreStable(t *testing.T) {
 
 // Порядок rows задан кодом: у сервисов отличается только набор включённых rows.
 func TestRowOrderIsShared(t *testing.T) {
-	order := []string{"Service health", "Runtime", "Dependencies", "Kafka", "Use cases", "Transactions", "Domain Lifecycle", "Domain metrics", "Temporal", "Kitchen", "Authorization"}
+	order := []string{"Service health", "Runtime", "Pods", "Dependencies", "Kafka", "Use cases", "Transactions", "Domain Lifecycle", "Domain metrics", "Temporal", "Kitchen", "Authorization"}
 	for ctx, d := range render(t) {
 		last := -1
 		for _, r := range d.Rows {
@@ -155,6 +155,38 @@ func TestInventoryHasNoForbiddenLabels(t *testing.T) {
 		if !slices.ContainsFunc(inventory.Sections, func(s inventory.Section) bool { return s.ID == m.Section }) {
 			t.Errorf("%s: section %s", m.Name, m.Section)
 		}
+	}
+}
+
+func TestPlatformPanelsFollowInventory(t *testing.T) {
+	for _, tc := range []struct {
+		status inventory.Status
+		live   bool
+	}{{inventory.Present, true}, {inventory.Expected, false}} {
+		withStatus(t, tc.status)
+		d, err := PlatformOverview()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.UID != PlatformUID || d.Manifest.Metadata.Name != PlatformUID {
+			t.Errorf("uid %q, name %q", d.UID, d.Manifest.Metadata.Name)
+		}
+		for _, r := range d.Rows {
+			for _, p := range r.Panels {
+				if p.Live != tc.live {
+					t.Errorf("%s/%s: live=%v при статусе %s", r.Title, p.Title, p.Live, tc.status)
+				}
+			}
+		}
+	}
+}
+
+// Метрики инфраструктуры без target_info: join с ним сделал бы панели пустыми.
+func TestInfraScopeHasNoTargetInfoJoin(t *testing.T) {
+	sc := servicePods(Options{Context: "orders", Services: []string{inventory.Orders}})
+	expr := Sum("pod", sc.Rate("container_cpu_usage_seconds_total"))
+	if strings.Contains(expr, "target_info") || !strings.Contains(expr, `job="infra/kubernetes"`) || !strings.Contains(expr, `namespace="nomnom-orders"`) {
+		t.Errorf("expr %s", expr)
 	}
 }
 

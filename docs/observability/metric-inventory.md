@@ -18,7 +18,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 85; пар «метрика × сервис» со статусом «есть»: 38.
+Метрик в инвентаре: 110; пар «метрика × сервис» со статусом «есть»: 91.
 
 Подтверждение статуса «есть»: 2026-10-25: `orders`, `orders-worker`, `orders-consumer` → OTLP gRPC → Grafana Alloy → OTLP/HTTP → Mimir 3.2.3 с `-distributor.otel-metric-suffixes-enabled=true` (локальный стенд Docker, Temporal dev server). Тестовая доставка из kind — Grafana Cloud (`ops/grafana-cloud`).
 
@@ -85,7 +85,7 @@ Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). 
 
 ## Database client (PostgreSQL, MongoDB)
 
-Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL/MongoDB — отдельные community dashboards, не overview.
+Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver instrumentation в `restaurants`. Хранилища `delivery` и `payments` не выбраны (ADR 8) — метрик для них нет. Серверные метрики PostgreSQL — Platform / Overview (раздел [PostgreSQL](#postgresql)), MongoDB — пока нет; в overview сервисов не дублируются.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
@@ -263,4 +263,56 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_payments_authorizations_total` | use case decorator | counter | `outcome` | `payments`: ожидается | `outcome`: authorized | declined | failed; attempts = сумма. |
 | `nomnom_payments_captures_total` | use case decorator | counter | `outcome` | `payments`: ожидается | `outcome`: captured | failed. |
 | `nomnom_payments_refunds_total` | use case decorator | counter | `outcome` | `payments`: ожидается | `outcome`: refunded | failed. |
+
+<a id="pods"></a>
+
+## Pods (Kubernetes)
+
+Alloy: cAdvisor kubelet через API server proxy и kube-state-metrics (только pods прикладных неймспейсов), `job="infra/kubernetes"`. Метрики Prometheus, без `target_info`: сервис выбирается `namespace` и префиксом `pod`. Row Pods в overview каждого сервиса и в Platform / Overview.
+
+| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
+| --- | --- | --- | --- | --- | --- |
+| `container_cpu_usage_seconds_total` | cAdvisor kubelet | counter | `namespace`, `pod`, `container` | `orders`: есть<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | Только контейнеры: pod-level cgroup и pause отбрасываются в Alloy. |
+| `container_memory_working_set_bytes` | cAdvisor kubelet | gauge | `namespace`, `pod`, `container` | `orders`: есть<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | Working set — то, что учитывает OOM killer и eviction. |
+| `container_network_receive_bytes_total` | cAdvisor kubelet | counter | `namespace`, `pod` | `orders`: есть<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | Уровень pod, без `lo`. |
+| `container_network_transmit_bytes_total` | cAdvisor kubelet | counter | `namespace`, `pod` | `orders`: есть<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | Уровень pod, без `lo`. |
+| `kube_pod_status_ready` | kube-state-metrics v2.20 | gauge | `namespace`, `pod`, `condition` | `orders`: есть<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | В Alloy остаётся только `condition="true"`. |
+| `kube_pod_container_status_restarts_total` | kube-state-metrics v2.20 | counter | `namespace`, `pod`, `container` | `orders`: есть<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | — |
+| `kube_pod_container_status_waiting_reason` | kube-state-metrics v2.20 | gauge | `namespace`, `pod`, `container`, `reason` | `orders`: есть<br>`orders-worker`: ожидается<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть<br>`bff`: ожидается | `CrashLoopBackOff`, `ImagePullBackOff`, `CreateContainerConfigError` и т. п. |
+
+<a id="spicedb"></a>
+
+## SpiceDB (сервер)
+
+Alloy scrape `:9090` pod SpiceDB, `job="infra/spicedb"`. Серверная сторона; клиентская — row Authorization сервисов. Platform / Overview.
+
+| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
+| --- | --- | --- | --- | --- | --- |
+| `grpc_server_handled_total` | SpiceDB go-grpc-prometheus | counter | `grpc_service`, `grpc_method`, `grpc_code`, `grpc_type` | `spicedb`: есть | Health-check `grpc.health.v1.Health` отбрасывается в Alloy. |
+| `grpc_server_handling_seconds` | SpiceDB go-grpc-prometheus | histogram | `grpc_service`, `grpc_method`, `grpc_type` | `spicedb`: есть | — |
+| `spicedb_v1_check_permissionship_total` | SpiceDB | counter | `method`, `permissionship` | `spicedb`: есть | `permissionship`: HAS_PERMISSION | NO_PERMISSION | CONDITIONAL_PERMISSION — решение, не ошибка. |
+| `spicedb_dispatch_client_check_total` | SpiceDB dispatcher | counter | — | `spicedb`: есть | — |
+| `spicedb_dispatch_client_check_from_cache_total` | SpiceDB dispatcher | counter | — | `spicedb`: есть | — |
+| `spicedb_datastore_query_latency` | SpiceDB datastore | histogram | `operation`, `query_shape` | `spicedb`: есть | Доставляются только `_sum`/`_count` (средняя latency): buckets — ~100 series. |
+| `process_cpu_seconds_total` | Prometheus Go client | counter | — | `spicedb`: есть | — |
+| `process_resident_memory_bytes` | Prometheus Go client | gauge | — | `spicedb`: есть | — |
+
+<a id="postgresql"></a>
+
+## PostgreSQL (сервер)
+
+Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job="infra/postgresql"`, label `owner`; `stat_database` и размер — только база владельца. Клиентская сторона — row Dependencies сервисов. Platform / Overview.
+
+| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
+| --- | --- | --- | --- | --- | --- |
+| `pg_up` | postgres_exporter | gauge | `owner` | `postgresql`: есть | — |
+| `pg_stat_database_numbackends` | postgres_exporter `stat_database` | gauge | `owner`, `datname` | `postgresql`: есть | — |
+| `pg_stat_database_xact_commit` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | Counter без `_total` (имя postgres_exporter). |
+| `pg_stat_database_xact_rollback` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | — |
+| `pg_stat_database_blks_hit` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | — |
+| `pg_stat_database_blks_read` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | — |
+| `pg_stat_database_deadlocks` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | — |
+| `pg_stat_database_conflicts` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | — |
+| `pg_stat_database_temp_bytes` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | Запросы, вылезшие за `work_mem`. |
+| `pg_database_size_bytes` | postgres_exporter `database` | gauge | `owner`, `datname` | `postgresql`: есть | — |
 

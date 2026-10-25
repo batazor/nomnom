@@ -141,6 +141,7 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 	rows := []row{
 		{title: "Service health", scope: main, panels: g.health(main)},
 		{title: "Runtime", scope: main, collapsed: true, panels: g.runtime(main)},
+		{title: "Pods", scope: servicePods(opts), collapsed: true, panels: pods(servicePods(opts))},
 		{title: "Dependencies", scope: main, collapsed: true, panels: g.dependencies(main)},
 	}
 	if opts.Kafka != nil {

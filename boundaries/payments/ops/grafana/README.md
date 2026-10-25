@@ -51,6 +51,17 @@ JSON — артефакт генератора: правки вносятся в
 | Threads (gRPC worker pool) | TODO | [`process_thread_count`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | CPU by mode | TODO | [`process_cpu_time_seconds_total`](../../../../docs/observability/metric-inventory.md#runtime), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
+### Pods
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Ready pods | live | — |
+| Restarts | live | — |
+| Waiting containers by reason | live | — |
+| CPU by pod | live | — |
+| Memory working set by pod | live | — |
+| Network by pod | live | — |
+
 ### Dependencies
 
 | Панель | Статус | Недостающие метрики |
@@ -108,7 +119,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz), [`target_info`](../../../../docs/observability/metric-inventory.md#resource) |
 
-Живых панелей: 0 из 36. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 6 из 42. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Переходы
 

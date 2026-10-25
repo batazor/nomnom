@@ -1,8 +1,9 @@
 # Grafana Alloy тестового окружения (ADR 9): приём OTLP метрик приложений и отправка в
 # Grafana Cloud (free tier). Подключается Skaffold profile grafana-cloud; Secret
 # grafana-cloud-otlp создаёт scripts/grafana-cloud.sh из ops/grafana-cloud/.env.grafana-cloud.
-# Free tier ограничен активными series, поэтому уходят только метрики service.namespace=nomnom:
-# без traces, logs, profiles и собственных метрик Alloy/Kubernetes.
+# Free tier ограничен активными series, поэтому уходят только метрики service.namespace=nomnom
+# и allowlist инфраструктуры (SpiceDB, PostgreSQL, pods nomnom-*): без traces, logs, profiles
+# и собственных метрик Alloy.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -55,6 +56,208 @@ data:
       }
     }
 
+    // Инфраструктура: Prometheus scrape → OTLP мимо фильтра nomnom (у этих метрик нет
+    // service.namespace). Каждый источник ограничен allowlist метрик: квота series free tier.
+    otelcol.receiver.prometheus "infra" {
+      output {
+        metrics = [otelcol.processor.batch.default.input]
+      }
+    }
+
+    // SpiceDB: серверная сторона Check/Write, кэш dispatch и datastore. Health-check gRPC и
+    // buckets datastore отбрасываются.
+    discovery.kubernetes "spicedb" {
+      role = "pod"
+      namespaces {
+        names = ["nomnom-authz"]
+      }
+      selectors {
+        role  = "pod"
+        label = "app.kubernetes.io/name=spicedb"
+      }
+    }
+
+    discovery.relabel "spicedb" {
+      targets = discovery.kubernetes.spicedb.targets
+      rule {
+        source_labels = ["__meta_kubernetes_pod_ip"]
+        target_label  = "__address__"
+        replacement   = "$1:9090"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+    }
+
+    prometheus.scrape "spicedb" {
+      targets         = discovery.relabel.spicedb.output
+      job_name        = "infra/spicedb"
+      scrape_interval = "60s"
+      forward_to      = [prometheus.relabel.spicedb.receiver]
+    }
+
+    prometheus.relabel "spicedb" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "grpc_server_handled_total|grpc_server_handling_seconds_(bucket|sum|count)|spicedb_v1_check_permissionship_total|spicedb_dispatch_client_check(_from_cache)?_total|spicedb_datastore_query_latency_(sum|count)|process_cpu_seconds_total|process_resident_memory_bytes|go_goroutines"
+        action        = "keep"
+      }
+      rule {
+        source_labels = ["grpc_service"]
+        regex         = "grpc\\.health\\.v1\\.Health"
+        action        = "drop"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
+    // PostgreSQL: по экспортеру на владельца (ADR 8); DSN из Secret alloy-postgres
+    // (scripts/grafana-cloud.sh). Только своя база владельца, без pg_settings.
+    prometheus.exporter.postgres "orders" {
+      data_source_names  = [sys.env("POSTGRES_ORDERS_DSN")]
+      enabled_collectors = ["database", "stat_database"]
+      autodiscovery {
+        enabled = false
+      }
+    }
+
+    prometheus.exporter.postgres "payments" {
+      data_source_names  = [sys.env("POSTGRES_PAYMENTS_DSN")]
+      enabled_collectors = ["database", "stat_database"]
+      autodiscovery {
+        enabled = false
+      }
+    }
+
+    prometheus.exporter.postgres "delivery" {
+      data_source_names  = [sys.env("POSTGRES_DELIVERY_DSN")]
+      enabled_collectors = ["database", "stat_database"]
+      autodiscovery {
+        enabled = false
+      }
+    }
+
+    discovery.relabel "postgres" {
+      targets = array.concat(
+        prometheus.exporter.postgres.orders.targets,
+        prometheus.exporter.postgres.payments.targets,
+        prometheus.exporter.postgres.delivery.targets,
+      )
+      rule {
+        source_labels = ["__meta_component_id"]
+        regex         = "prometheus\\.exporter\\.postgres\\.(.+)"
+        target_label  = "owner"
+      }
+      rule {
+        source_labels = ["owner"]
+        target_label  = "instance"
+        replacement   = "postgres-$1"
+      }
+      // Экспортер задаёт свой job (integrations/postgres), он важнее job_name scrape.
+      rule {
+        target_label = "job"
+        replacement  = "infra/postgresql"
+      }
+    }
+
+    prometheus.scrape "postgres" {
+      targets         = discovery.relabel.postgres.output
+      job_name        = "infra/postgresql"
+      scrape_interval = "60s"
+      forward_to      = [prometheus.relabel.postgres.receiver]
+    }
+
+    prometheus.relabel "postgres" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "pg_up|pg_database_size_bytes|pg_stat_database_(numbackends|xact_commit|xact_rollback|deadlocks|blks_hit|blks_read|conflicts|temp_bytes)"
+        action        = "keep"
+      }
+      // stat_database и размер есть у каждой базы сервера: только база владельца
+      // (datname == owner); pg_up без datname проходит всегда.
+      rule {
+        source_labels = ["__name__", "datname", "owner"]
+        regex         = "pg_up;.*;.*|pg_(database_size_bytes|stat_database_.+);(orders;orders|payments;payments|delivery;delivery)"
+        action        = "keep"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
+    // Pods nomnom-*: CPU, память и сеть из cAdvisor kubelet (через API server proxy),
+    // restarts и readiness из kube-state-metrics.
+    discovery.kubernetes "nodes" {
+      role = "node"
+    }
+
+    discovery.relabel "cadvisor" {
+      targets = discovery.kubernetes.nodes.targets
+      rule {
+        target_label = "__address__"
+        replacement  = "kubernetes.default.svc:443"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_node_name"]
+        target_label  = "__metrics_path__"
+        replacement   = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
+      }
+    }
+
+    prometheus.scrape "cadvisor" {
+      targets           = discovery.relabel.cadvisor.output
+      job_name          = "infra/kubernetes"
+      scheme            = "https"
+      scrape_interval   = "60s"
+      bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+      tls_config {
+        ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+      }
+      forward_to = [prometheus.relabel.pods.receiver]
+    }
+
+    prometheus.scrape "kube_state_metrics" {
+      targets         = [{"__address__" = "kube-state-metrics.nomnom-observability.svc:8080"}]
+      job_name        = "infra/kubernetes"
+      scrape_interval = "60s"
+      honor_labels    = true
+      forward_to      = [prometheus.relabel.pods.receiver]
+    }
+
+    prometheus.relabel "pods" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "container_cpu_usage_seconds_total|container_memory_working_set_bytes|container_network_(receive|transmit)_bytes_total|kube_pod_container_status_restarts_total|kube_pod_status_ready|kube_pod_container_status_waiting_reason"
+        action        = "keep"
+      }
+      rule {
+        source_labels = ["namespace"]
+        regex         = "nomnom-(orders|payments|delivery|restaurants|bff)"
+        action        = "keep"
+      }
+      // Readiness: достаточно condition="true"; false/unknown утроили бы series.
+      rule {
+        source_labels = ["__name__", "condition"]
+        regex         = "kube_pod_status_ready;(false|unknown)"
+        action        = "drop"
+      }
+      // cAdvisor отдаёт и pod-level cgroup (container=""), и pause (container="POD"):
+      // CPU и память считаются по контейнерам, сеть — только на уровне pod.
+      rule {
+        source_labels = ["__name__", "container"]
+        regex         = "container_(cpu_usage_seconds_total|memory_working_set_bytes);(|POD)"
+        action        = "drop"
+      }
+      rule {
+        source_labels = ["__name__", "interface"]
+        regex         = "container_network_.+;(lo|cilium.*|lxc.*)"
+        action        = "drop"
+      }
+      rule {
+        regex  = "id|image|name|endpoint|uid|interface"
+        action = "labeldrop"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
     otelcol.auth.basic "grafana_cloud" {
       username = sys.env("GRAFANA_CLOUD_OTLP_INSTANCE_ID")
       password = sys.env("GRAFANA_CLOUD_OTLP_TOKEN")
@@ -66,6 +269,38 @@ data:
         auth     = otelcol.auth.basic.grafana_cloud.handler
       }
     }
+---
+# Discovery pods SpiceDB и nodes, cAdvisor kubelet через API server proxy.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: nomnom-observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nomnom-alloy
+rules:
+  - apiGroups: [""]
+    resources: [pods, nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [nodes/proxy]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nomnom-alloy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nomnom-alloy
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: nomnom-observability
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -84,7 +319,7 @@ spec:
       labels:
         app.kubernetes.io/name: alloy
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: alloy
       securityContext:
         runAsNonRoot: true
         runAsUser: 473
@@ -103,6 +338,9 @@ spec:
           envFrom:
             - secretRef:
                 name: grafana-cloud-otlp
+            # POSTGRES_<OWNER>_DSN экспортеров PostgreSQL (scripts/grafana-cloud.sh).
+            - secretRef:
+                name: alloy-postgres
           ports:
             - name: otlp-grpc
               containerPort: 4317
@@ -148,3 +386,89 @@ spec:
     - name: otlp-http
       port: 4318
       targetPort: otlp-http
+---
+# kube-state-metrics: только pods прикладных неймспейсов и три метрики (restarts,
+# readiness, причина ожидания); остальное не генерируется и не расходует квоту.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  namespace: nomnom-observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nomnom-kube-state-metrics
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nomnom-kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nomnom-kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: nomnom-observability
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: nomnom-observability
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-state-metrics
+    spec:
+      serviceAccountName: kube-state-metrics
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
+          args:
+            - --resources=pods
+            - --namespaces=nomnom-orders,nomnom-payments,nomnom-delivery,nomnom-restaurants,nomnom-bff
+            - --metric-allowlist=kube_pod_container_status_restarts_total,kube_pod_status_ready,kube_pod_container_status_waiting_reason
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: nomnom-observability
+spec:
+  selector:
+    app.kubernetes.io/name: kube-state-metrics
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -39,4 +39,6 @@ for source in "${root}"/boundaries/*/ops/grafana/dashboards/overview.json; do
   jq --arg folder "${folder}" '.metadata.annotations["grafana.app/folder"] = $folder' "${source}" \
     >"${config_dir}/dashboards/${service}.json"
 done
+jq --arg folder "${folder}" '.metadata.annotations["grafana.app/folder"] = $folder' \
+  "${root}/ops/grafana/dashboards/platform.json" >"${config_dir}/dashboards/platform.json"
 g resources push -p "${config_dir}/dashboards" -o text

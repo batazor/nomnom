@@ -12,9 +12,10 @@ make grafana-tools      # go install gcx
 | Каталог | Содержимое |
 | --- | --- |
 | `inventory/` | Инвентарь метрик: имя в Mimir, labels, источник, статус по service.name. Единственный источник для панелей и `docs/observability/metric-inventory.md`. |
-| `overview/` | `ServiceOverview(options)` — общая структура rows; `services.go` — options и domain-панели каждого сервиса. |
+| `overview/` | `ServiceOverview(options)` — общая структура rows; `services.go` — options и domain-панели каждого сервиса; `platform.go` — `PlatformOverview()` (SpiceDB, PostgreSQL, pods). |
+| `dashboards/` | Артефакт `Platform / Overview` (`platform.json`) и его README. |
 | `cmd/dashboards/` | CLI: запись артефактов, `-check`, `-preview DIR` (все метрики «есть»). |
-| `git-sync/` | Git Sync `Repository` на сервис (`provisioning.grafana.app/v1beta1`, read-only). |
+| `git-sync/` | Git Sync `Repository` на сервис и на Platform (`provisioning.grafana.app/v1beta1`, read-only). |
 
 ## Версии
 
@@ -44,5 +45,5 @@ make grafana-tools      # go install gcx
 ## Отступления
 
 - Генератор в `ops/grafana`, а не в `tooling/grafana`: по конвенции репозитория системные ops-инструменты живут в `ops/`.
-- `namespace` variable не добавлена: `k8s.namespace.name` не входит в принятые resource attributes.
+- `namespace` variable в overview сервисов не добавлена: `k8s.namespace.name` не входит в принятые resource attributes. Row Pods фильтрует по label `namespace` Prometheus-метрик Kubernetes (фиксированный неймспейс контекста), а variable `namespace` есть только в Platform / Overview.
 - Runtime row BFF не строится: runtime-метрики Cosmo Router не инвентаризированы.
