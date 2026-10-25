@@ -176,7 +176,9 @@
   font-weight: 600;
 }
 
-/* Columns: always side by side; a narrow screen scrolls them sideways. */
+/* Columns: side by side on a wide desktop; a phone scrolls them sideways; a
+   tablet in either orientation keeps the customer on the left and stacks the kitchen over the courier on the
+   right, so the cart can still be dragged to the kitchen without scrolling. */
 
 .board-columns {
   display: grid;
@@ -189,6 +191,29 @@
   min-width: 0;
   overflow-x: auto;
   scroll-snap-type: x proximity;
+}
+
+@container style(--viewport: md) or style(--viewport: lg) {
+  .board-columns {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    grid-template-areas:
+      "customer kitchen"
+      "customer courier";
+    grid-template-rows: auto 1fr;
+    overflow-x: visible;
+  }
+
+  .board-column[data-column="customer"] {
+    grid-area: customer;
+  }
+
+  .board-column[data-column="kitchen"] {
+    grid-area: kitchen;
+  }
+
+  .board-column[data-column="courier"] {
+    grid-area: courier;
+  }
 }
 
 .board-column {

@@ -374,7 +374,7 @@
 }
 
 /* Phone order: what happens now, what was ordered, then the history. */
-@container style(--viewport: lg) {
+@container style(--viewport: lg) or style(--viewport: xl) {
   .order-layout {
     grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 1fr);
     grid-template-areas:

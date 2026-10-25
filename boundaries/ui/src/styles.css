@@ -303,7 +303,9 @@ a,
   font-size: var(--font-size-sm);
 }
 
-@container style(--viewport: md) or style(--viewport: lg) {
+@container style(--viewport: md) or style(--viewport: lg) or style(
+  --viewport: xl
+) {
   .app-topbar {
     padding-inline: var(--space-8);
   }

@@ -96,6 +96,10 @@
   @media (min-width: 64rem) {
     --viewport: lg;
   }
+
+  @media (min-width: 80rem) {
+    --viewport: xl;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
