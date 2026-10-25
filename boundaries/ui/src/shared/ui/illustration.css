@@ -5,6 +5,10 @@
   color: var(--color-primary);
 }
 
+.illustration .ill-ground {
+  fill: var(--illustration-ground);
+}
+
 .illustration svg {
   display: block;
   width: 100%;
@@ -21,46 +25,154 @@
   height: 10rem;
 }
 
-/* Fades in when it appears, then drifts gently: vehicles and couriers move
-   sideways, everything else floats. */
-.illustration {
-  animation: illustration-enter var(--motion-standard) var(--motion-easing) both;
+/* Parts of a picture move on their own; the picture itself stays put. The
+   groups are marked in the SVG files with ill-* classes. */
+.illustration :where(g[class^="ill-"]) {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: 3s ease-in-out infinite;
 }
 
-.illustration svg {
-  animation: illustration-float 4s ease-in-out 0.3s infinite;
+.illustration .ill-spin {
+  animation: illustration-spin 1.6s linear infinite;
 }
 
-.illustration:is([data-name="delivery-truck"], [data-name="on-the-way"]) svg {
-  animation-name: illustration-drive;
-  animation-duration: 3s;
+.illustration .ill-sway {
+  transform-origin: bottom center;
+  animation-name: illustration-sway;
+  animation-duration: 4s;
 }
 
-@keyframes illustration-enter {
-  from {
-    opacity: 0;
-    transform: translateY(0.5rem) scale(0.97);
+.illustration .ill-sway-late {
+  animation-delay: -2s;
+}
+
+.illustration .ill-flag {
+  /* The pivot is the rivet near the bottom of the flag. */
+  transform-origin: 83% 91%;
+  animation: illustration-flag 5s var(--motion-easing) infinite;
+}
+
+.illustration .ill-ride {
+  animation-name: illustration-ride;
+  animation-duration: 0.6s;
+}
+
+.illustration .ill-hair {
+  transform-origin: right center;
+  animation-name: illustration-hair;
+  animation-duration: 0.5s;
+}
+
+.illustration .ill-pop {
+  animation: illustration-pop 2.4s var(--motion-easing) infinite;
+}
+
+.illustration .ill-hop {
+  transform-origin: bottom center;
+  animation-name: illustration-hop;
+  animation-duration: 2.4s;
+}
+
+.illustration .ill-hop-2 {
+  animation-delay: 0.2s;
+}
+
+.illustration .ill-hop-3 {
+  animation-delay: 0.4s;
+}
+
+.illustration .ill-hop-4 {
+  animation-delay: 0.6s;
+}
+
+.illustration .ill-pulse {
+  animation-name: illustration-pulse;
+  animation-duration: 2.4s;
+}
+
+.illustration .ill-handover {
+  animation-name: illustration-handover;
+}
+
+@keyframes illustration-spin {
+  to {
+    transform: rotate(1turn);
   }
 }
 
-@keyframes illustration-float {
+@keyframes illustration-sway {
   50% {
-    transform: translateY(-0.25rem);
+    transform: rotate(4deg);
   }
 }
 
-@keyframes illustration-drive {
-  25% {
-    transform: translateX(0.25rem) rotate(0.4deg);
+@keyframes illustration-flag {
+  0%,
+  35% {
+    transform: rotate(0deg);
   }
-  75% {
-    transform: translateX(-0.25rem) rotate(-0.4deg);
+  50%,
+  85% {
+    transform: rotate(-80deg);
+  }
+}
+
+@keyframes illustration-ride {
+  50% {
+    transform: translateY(-1.5%);
+  }
+}
+
+@keyframes illustration-hair {
+  50% {
+    transform: rotate(-6deg) scaleX(1.04);
+  }
+}
+
+@keyframes illustration-pop {
+  0%,
+  60%,
+  100% {
+    transform: scale(1);
+  }
+  70% {
+    transform: scale(1.18);
+  }
+  80% {
+    transform: scale(0.95);
+  }
+}
+
+@keyframes illustration-hop {
+  0%,
+  30%,
+  100% {
+    transform: translateY(0);
+  }
+  15% {
+    transform: translateY(-25%);
+  }
+}
+
+@keyframes illustration-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes illustration-handover {
+  50% {
+    transform: translate(-4%, -6%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .illustration,
-  .illustration svg {
+  .illustration g[class^="ill-"] {
     animation: none;
   }
 }
