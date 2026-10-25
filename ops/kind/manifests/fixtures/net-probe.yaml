@@ -171,12 +171,14 @@ spec:
             capabilities:
               drop: ["ALL"]
 ---
-# Вызывающий с service identity вместо BFF, пока нет образа BFF (ADR 27): ServiceAccount
-# nomnom-bff/bff из allowlist orders и projected token с audience nomnom.orders.
+# Вызывающий gRPC с собственной service identity (ADR 27) для проверок gateway: ServiceAccount
+# nomnom-bff/grpc-caller допущен allowlist orders (values/orders.yaml), но не входит в
+# userDelegates — проверка 7.x предъявляет им user assertion BFF и ждёт UNAUTHENTICATED (ADR 32).
+# ServiceAccount nomnom-bff/bff принадлежит chart BFF.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: bff
+  name: grpc-caller
   namespace: nomnom-bff
 automountServiceAccountToken: false
 ---
@@ -198,7 +200,7 @@ spec:
         app.kubernetes.io/name: grpc-caller
     spec:
       terminationGracePeriodSeconds: 1
-      serviceAccountName: bff
+      serviceAccountName: grpc-caller
       automountServiceAccountToken: false
       containers:
         - name: grpc-caller

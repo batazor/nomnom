@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Проверки схемы «синхронные вызовы бизнес-API только через internal gateway».
 # Фаза A выполняется без NetworkPolicy, фаза B — с ними; по завершении политики остаются.
-# Проверки, которым нужны бизнес-RPC, инфраструктура или BFF, выводятся как BLOCKED.
+# Проверки, которым нужна ещё не развёрнутая инфраструктура, выводятся как BLOCKED.
 source "$(dirname "$0")/lib.sh"
 
-require_command kubectl jq
+require_command kubectl jq python3 openssl
 assert_test_context
 
 # Прямые вызовы реальных gRPC-методов backend'ов в обход gateway (h2c, бизнес-порт grpc).
@@ -168,7 +168,7 @@ section "4–5. Metadata, status, trace context, deadlines, retries"
 # Без token backend отвечает UNAUTHENTICATED (1.1); с token — ответ SpiceDB: authorization
 # metadata дошла до backend, grpc-status и grpc-message backend'а дошли до вызывающего.
 expect "4.1 authorization metadata через gateway: PERMISSION_DENIED от SpiceDB" \
-  "0 200 7 permission denied: service:bff view_orders on customer:c1" "$(grpc_orders_authenticated)"
+  "0 200 7 permission denied: service:grpc-caller view_orders on customer:c1" "$(grpc_orders_authenticated)"
 # Trace id и span id вызывающего случайны на каждый прогон: server span orders в приёмнике
 # trace-capture должен принадлежать тому же trace и иметь parent — span вызывающего.
 trace_id="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
@@ -289,8 +289,83 @@ for app in orders restaurants delivery payments; do
     '["/health/startup","/health/live","/health/ready","metrics","metrics","metrics"]' "${probes}"
 done
 
-section "E2E через публичный API BFF"
-blocked "образ BFF не определён (ADR 10); NodePort 30080 → 127.0.0.1:${BFF_HOST_PORT} подготовлен"
+section "7. BFF насквозь: access token → user assertion → orders (ADR 32)"
+# BFF доступен проверке только через port-forward: наружу он не опубликован, а egress BFF
+# ограничен DNS и internal gateway (app-baseline.yaml). Access token выпускает тестовый
+# identity provider (ключ tests/identity/fixtures, только для kind).
+BFF_FORWARD_PORT="${BFF_FORWARD_PORT:-18090}"
+fixtures="${REPO_ROOT}/tests/identity/fixtures"
+mint() { python3 -I "${KIND_DIR}/scripts/mint-jwt.py" "$@"; }
+# graphql <query> [access token] → тело ответа BFF.
+graphql() {
+  local auth=()
+  [[ -n "${2:-}" ]] && auth=(-H "authorization: Bearer $2")
+  curl -sS --max-time 10 "http://127.0.0.1:${BFF_FORWARD_PORT}/graphql" -H 'content-type: application/json' \
+    ${auth[@]+"${auth[@]}"} -d "$(jq -cn --arg q "$1" '{query: $q}')"
+}
+# Из grpc-caller: тот же неймспейс nomnom-bff и те же политики, что у BFF.
+bff_tcp() {
+  k -n nomnom-bff exec deploy/grpc-caller -- sh -c \
+    "nc -z -w 3 '$1' '$2' >/dev/null 2>&1 && echo open || echo closed" 2>/dev/null || true
+}
+expect "7.1 BFF Available" True \
+  "$(k -n nomnom-bff get deployment bff -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')"
+expect "7.2 probes BFF на /health/* Router" '["/health/live","/health/ready"]' \
+  "$(k -n nomnom-bff get deployment bff -o json |
+    jq -c '.spec.template.spec.containers[0] | [.livenessProbe.httpGet.path, .readinessProbe.httpGet.path]')"
+expect "7.3 nomnom-bff → orders напрямую закрыт" closed "$(bff_tcp orders.nomnom-orders.svc.cluster.local 8081)"
+expect "7.4 nomnom-bff → PostgreSQL orders закрыт" closed "$(bff_tcp "${POSTGRES_ORDERS}" 5432)"
+k -n nomnom-bff port-forward svc/bff "${BFF_FORWARD_PORT}:3010" >/dev/null 2>&1 &
+bff_forward=$!
+for _ in $(seq 1 20); do
+  curl -fsS "http://127.0.0.1:${BFF_FORWARD_PORT}/health/ready" >/dev/null 2>&1 && break
+  sleep 1
+done
+e2e_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+customer="kind-e2e-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
+missing_order="$(python3 -I -c 'import uuid; print(uuid.uuid4())')"
+token="$(mint access-token "${fixtures}/idp-signing-key.pem" "${fixtures}/idp-jwks.json" \
+  "${fixtures}/idp-vectors.json" "${customer}")"
+order_query="{ order(id: \"${missing_order}\") { id status } }"
+expect "7.5 bffInfo без access token" '{"data":{"bffInfo":{"name":"nomnom-bff","version":"0.1.0"}}}' \
+  "$(graphql '{ bffInfo { name version } }' | jq -c .)"
+expect "7.6 order(id) без Authorization: ошибка аутентификации (AC-576)" \
+  '{"order":null,"codes":["Unauthenticated"]}' \
+  "$(graphql "${order_query}" | jq -c '{order: .data.order, codes: [.errors[]?.extensions.errors[]?.extensions.code]}')"
+expect "7.7 order(id) отсутствующего заказа с access token: null без ошибок (AC-575)" \
+  '{"data":{"order":null}}' "$(graphql "${order_query}" "${token}" | jq -c .)"
+kill "${bff_forward}" 2>/dev/null || true
+# orders_log <pattern> → yes, если строка появилась в log orders после начала раздела.
+orders_log() {
+  local _
+  for _ in $(seq 1 10); do
+    if k -n nomnom-orders logs deploy/orders --since-time="${e2e_started_at}" 2>/dev/null | grep -qF "$1"; then
+      echo yes
+      return
+    fi
+    sleep 1
+  done
+  echo no
+}
+expect "7.8 orders принял user assertion BFF как Subject{user} (log)" yes \
+  "$(orders_log "user assertion accepted: delegate=bff")"
+# Тот же user assertion (ключ BFF из Secret, aud nomnom.orders, sub покупателя) от другого
+# workload: nomnom-bff/grpc-caller допущен allowlist orders, но не делегат.
+assertion_key="$(mktemp)"
+k -n nomnom-bff get secret bff-assertion-key -o jsonpath='{.data.key\.pem}' | base64 -d >"${assertion_key}"
+assertion="$(mint user-assertion "${assertion_key}" nomnom-bff-kind nomnom.orders "${customer}")"
+rm -f "${assertion_key}"
+# GetOrderRequest{order_id: UUID}: tag 0x0a, длина 36 (0x24); сообщение 38 байт (0x26).
+replay="$(k -n nomnom-bff exec deploy/grpc-caller -- sh -c \
+  "printf '\\000\\000\\000\\000\\046\\012\\044%s' '${missing_order}' | curl -sS -o /dev/null \
+    -w '%{http_code} %header{grpc-status}' --max-time 5 --http2-prior-knowledge -X POST \
+    -H 'content-type: application/grpc' -H 'te: trailers' \
+    -H \"authorization: Bearer \$(cat /var/run/secrets/nomnom/identity/nomnom.orders)\" \
+    -H 'x-nomnom-user-assertion: ${assertion}' \
+    --data-binary @- '${GATEWAY}/nomnom.orders.v1.OrdersService/GetOrder'" 2>/dev/null)" || true
+expect "7.9 тот же user assertion от другого workload: UNAUTHENTICATED" "200 16" "${replay}"
+expect "7.10 orders отклонил assertion: grpc-caller не делегат (log)" yes \
+  "$(orders_log "user assertion from grpc-caller: service is not an allowed delegate")"
 
 printf '\nfailures: %s, report: %s\n' "${failures}" "${REPORT}" >&2
 ((failures == 0))

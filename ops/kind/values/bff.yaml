@@ -1,0 +1,31 @@
+# Values тестового kind-окружения для chart boundaries/bff/ops/helm (ADR 12).
+# image.repository и image.tag задаёт Skaffold (setValueTemplates) тегом локальной сборки.
+image:
+  # Образ загружен через kind load; Never гарантирует запуск именно собранной версии.
+  pullPolicy: Never
+
+# ADR 27: service identity BFF — nomnom-bff/bff; её разрешают allowlist и userDelegates
+# orders и restaurants (values/orders.yaml, values/restaurants.yaml).
+serviceAccount:
+  name: bff
+
+# ADR 15: контексты вызываются только через internal gateway; egress BFF ограничен базовыми
+# политиками неймспейса (manifests/netpol/app-baseline.yaml). Публикации наружу нет:
+# проверки обращаются к BFF через kubectl port-forward.
+internalGateway:
+  address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+
+# ADR 32. ТОЛЬКО для kind: identity provider — тестовый (tests/identity/fixtures, ConfigMap
+# idp-jwks), его ключ подписи лежит в репозитории. Ключ подписи user assertions (Secret
+# bff-assertion-key) создаётся один раз на кластер. Оба создаёт scripts/bff-identity.sh.
+identity:
+  idpIssuer: https://idp.nomnom.test
+  idpAudience: nomnom-bff
+  idpJwksConfigMap: idp-jwks
+  assertionKeySecret:
+    name: bff-assertion-key
+    key: key.pem
+  assertionKeyId: nomnom-bff-kind
+  tokenAudiences:
+    - nomnom.orders
+    - nomnom.restaurants
