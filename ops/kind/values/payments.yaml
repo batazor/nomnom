@@ -13,6 +13,8 @@ env:
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
   # Sandbox-провайдер в памяти процесса: реальные деньги в kind не двигаются.
   PROVIDER__KIND: fake
+  # Тестовый секрет подписи webhooks kind; в других окружениях приходит из Secret.
+  PROVIDER__WEBHOOK_SECRET: kind-provider-webhook-secret
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # создаёт scripts/identity-jwks.sh) и allowlist вызывающих workloads.
