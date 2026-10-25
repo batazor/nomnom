@@ -215,6 +215,8 @@ export const messages = {
     "board.kitchen.orders": "Заказы кухни",
     "board.kitchen.empty": "Новых заказов нет.",
     "board.kitchen.error": "Не удалось загрузить заказы кухни.",
+    "board.kitchen.restaurantsError":
+      "Не удалось загрузить рестораны владельца.",
     "board.kitchen.notPermitted":
       "У сотрудника нет доступа к кухне этого ресторана.",
     "board.kitchen.order": "Заказ от {time}",
@@ -479,6 +481,7 @@ export const messages = {
     "board.kitchen.orders": "Kitchen orders",
     "board.kitchen.empty": "No new orders.",
     "board.kitchen.error": "Could not load the kitchen orders.",
+    "board.kitchen.restaurantsError": "Could not load the owner's restaurants.",
     "board.kitchen.notPermitted":
       "The staff member cannot operate this kitchen.",
     "board.kitchen.order": "Order from {time}",

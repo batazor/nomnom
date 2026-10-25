@@ -1,3 +1,0 @@
-# Профиль dev (make kind-dev): образ stage dev запускает TypeScript без сборки dist;
-# node --watch перезапускает процесс после file sync, как CMD основного dev-образа.
-command: ["/usr/bin/tini", "--", "node", "--watch", "cmd/restaurants-relay/main.ts"]

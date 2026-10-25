@@ -98,7 +98,8 @@ type KitchenRestaurant = Readonly<{
 }>;
 
 // Restaurants of the signed-in owner; nothing until the list loads, so the
-// kitchen never claims a restaurant is someone else's while it is loading.
+// kitchen never claims a restaurant is someone else's while it is loading. A
+// failed load is said and retried by hand.
 function OwnedRestaurants({
   children,
 }: {
@@ -107,9 +108,25 @@ function OwnedRestaurants({
   const { t } = useI18n();
   // Opening changes come with the kitchen board of the chosen restaurant;
   // the opening mutations refresh this list through the urql document cache.
-  const [{ data }] = useQuery({
+  const [{ data, error }, reload] = useQuery({
     query: BoardOwnedRestaurantsDocument,
   });
+  if (error && !data) {
+    return (
+      <div className="board-empty-state">
+        <p className="board-error" role="alert">
+          {t("board.kitchen.restaurantsError")}
+        </p>
+        <Button
+          onClick={() => reload({ requestPolicy: "network-only" })}
+          size="sm"
+          variant="outline"
+        >
+          {t("restaurants.retry")}
+        </Button>
+      </div>
+    );
+  }
   if (!data) return <p className="board-empty">{t("board.loading")}</p>;
   return <>{children(data.myRestaurants.edges.map((edge) => edge.node))}</>;
 }

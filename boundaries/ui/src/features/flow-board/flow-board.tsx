@@ -143,10 +143,7 @@ function Board() {
           ) : (
             <div className="board-empty-state">
               <Illustration name="take-out-boxes" size="sm" />
-              <div className="board-empty-state">
-                <Illustration name="delivery-truck" size="sm" />
-                <p className="board-empty">{t("board.session.neededSignIn")}</p>
-              </div>
+              <p className="board-empty">{t("board.session.neededSignIn")}</p>
             </div>
           )}
         </KitchenDropColumn>
@@ -160,7 +157,10 @@ function Board() {
               />
             </AsRole>
           ) : (
-            <p className="board-empty">{t("board.session.neededSignIn")}</p>
+            <div className="board-empty-state">
+              <Illustration name="delivery-truck" size="sm" />
+              <p className="board-empty">{t("board.session.neededSignIn")}</p>
+            </div>
           )}
         </BoardColumn>
       </div>
