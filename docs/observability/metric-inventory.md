@@ -212,7 +212,7 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_kitchen_preparations_active` | Kitchen Board projection | gauge | — | `restaurants`: ожидается | — |
 | `nomnom_kitchen_ready_for_pickup` | Kitchen Board projection | gauge | — | `restaurants`: ожидается | — |
 | `nomnom_kitchen_preparation_duration_seconds` | Kitchen use case decorator | histogram | — | `restaurants`: ожидается | — |
-| `nomnom_kitchen_delays_total` | Kitchen use case decorator | counter | `nomnom_reason` | `restaurants`: ожидается | — |
+| `nomnom_kitchen_delays_total` | Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox) | counter | `nomnom_reason` | `restaurants`: ожидается | `nomnom_reason` — временный закрытый набор `too_busy | item_unavailable`, остальное `other`. |
 
 <a id="authz"></a>
 
@@ -250,18 +250,18 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_orders_cancellation_requests_total` | use case decorator | counter | `nomnom_outcome` | `orders`: ожидается | — |
 | `nomnom_orders_fulfillment_duration_seconds` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | histogram | — | `orders-worker`: ожидается | — |
 | `nomnom_orders_in_state` | projection/polling | gauge | `nomnom_order_state` | `orders`: ожидается | Требует отдельной projection; PromQL по counters не эмулируется. |
-| `nomnom_restaurants_orders_received_total` | use case decorator | counter | — | `restaurants`: ожидается | — |
-| `nomnom_restaurants_orders_accepted_total` | use case decorator | counter | — | `restaurants`: ожидается | — |
-| `nomnom_restaurants_orders_rejected_total` | use case decorator | counter | `nomnom_reason` | `restaurants`: ожидается | — |
-| `nomnom_delivery_created_total` | use case decorator | counter | — | `delivery`: ожидается | — |
-| `nomnom_delivery_assignments_total` | use case decorator | counter | — | `delivery`: ожидается | — |
-| `nomnom_delivery_reassignments_total` | use case decorator | counter | `nomnom_reason` | `delivery`: ожидается | — |
-| `nomnom_delivery_offers_total` | use case decorator | counter | `nomnom_outcome` | `delivery`: ожидается | `outcome`: accepted | rejected | expired. |
-| `nomnom_delivery_pickups_total` | use case decorator | counter | — | `delivery`: ожидается | — |
-| `nomnom_delivery_completed_total` | use case decorator | counter | — | `delivery`: ожидается | — |
-| `nomnom_delivery_failed_total` | use case decorator | counter | `nomnom_reason` | `delivery`: ожидается | — |
-| `nomnom_delivery_assignment_latency_seconds` | use case decorator | histogram | — | `delivery`: ожидается | — |
-| `nomnom_delivery_duration_seconds` | use case decorator | histogram | — | `delivery`: ожидается | — |
+| `nomnom_restaurants_orders_received_total` | Receive Order Request после commit (`created: true`) | counter | — | `restaurants`: ожидается | Пишут `restaurants` (gRPC) и `restaurants-consumer` (OrderPlaced): каждый заказ один раз, на dashboard — сумма обоих. |
+| `nomnom_restaurants_orders_accepted_total` | Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox) | counter | — | `restaurants`: ожидается | — |
+| `nomnom_restaurants_orders_rejected_total` | Domain Events после commit Unit of Work (ObservedMongoUnitOfWork / ObservedOutbox) | counter | `nomnom_reason` | `restaurants`: ожидается | `nomnom_reason` — временный закрытый набор `too_busy | item_unavailable | restaurant_closed`, остальное `other`; каталог причин не согласован. |
+| `nomnom_delivery_created_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | — | `delivery`: ожидается | — |
+| `nomnom_delivery_assignments_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | — | `delivery`: ожидается | — |
+| `nomnom_delivery_reassignments_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | `nomnom_reason` | `delivery`: ожидается | `nomnom_reason` всегда `other`: у снятия курьера в домене нет причины. |
+| `nomnom_delivery_offers_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | `nomnom_outcome` | `delivery`: ожидается | `nomnom_outcome`: accepted | rejected | expired. `expired` пока не пишется: перехода Expire нет, истечение — функция `expires_at`. |
+| `nomnom_delivery_pickups_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | — | `delivery`: ожидается | — |
+| `nomnom_delivery_completed_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | — | `delivery`: ожидается | — |
+| `nomnom_delivery_failed_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | `nomnom_reason` | `delivery`: ожидается | `nomnom_reason` — закрытый набор `DELIVERY_FAILURE_REASONS`; пока пуст, поэтому всё — `other`. |
+| `nomnom_delivery_assignment_latency_seconds` | Domain Events после commit Unit of Work (ObservedOutbox) | histogram | — | `delivery`: ожидается | — |
+| `nomnom_delivery_duration_seconds` | Domain Events после commit Unit of Work (ObservedOutbox) | histogram | — | `delivery`: ожидается | — |
 | `nomnom_payments_authorizations_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `nomnom_outcome`: authorized | declined | failed; attempts = сумма. `failed` пока без источника: сбой провайдера оставляет операцию pending без события. |
 | `nomnom_payments_captures_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `nomnom_outcome`: captured | declined | failed. `declined` — отказ провайдера (бизнес-результат), `failed` — технический сбой. |
 | `nomnom_payments_refunds_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_outcome` | `payments`: ожидается | `nomnom_outcome`: refunded | declined | failed. `declined` — отказ провайдера (бизнес-результат), `failed` — технический сбой. |

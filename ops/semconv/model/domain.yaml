@@ -113,7 +113,7 @@ groups:
     type: metric
     metric_name: nomnom.delivery.offers
     stability: development
-    brief: "Delivery offers: accepted, rejected, expired."
+    brief: "Delivery offers: accepted, rejected, expired (expired is not emitted until delivery has an Expire transition)."
     instrument: counter
     unit: "{offer}"
     attributes:
