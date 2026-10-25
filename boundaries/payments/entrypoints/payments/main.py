@@ -30,7 +30,7 @@ def run() -> None:
     container.init_resources(TelemetryResource)
     try:
         # Недоступная база или неудачная миграция завершают процесс до открытия портов:
-        # ресурс базы применяет недостающие миграции под advisory lock.
+        # ресурс базы применяет недостающие миграции под lock-ом yoyo.
         container.init_resources(ProcessResource)
         container.lifecycle().run(container.workers())
     finally:

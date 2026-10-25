@@ -7,6 +7,7 @@ import (
 	"math"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
 	"nomnom/orders/slices/order/domains/order"
@@ -21,9 +22,10 @@ func (s *Store) CourierAssignment(ctx context.Context, orderID order.ID) (order.
 		assignedAt            *time.Time
 		version               int64
 	)
-	err := s.q(ctx).QueryRow(ctx, `
-		SELECT delivery_id, courier_id, courier_assigned_at, courier_delivery_version FROM orders WHERE id = $1 FOR UPDATE`, orderID,
-	).Scan(&deliveryID, &courierID, &assignedAt, &version)
+	err := s.queryRow(ctx, psql.
+		Select("delivery_id", "courier_id", "courier_assigned_at", "courier_delivery_version").
+		From("orders").Where(sq.Eq{"id": orderID}).Suffix("FOR UPDATE"),
+		&deliveryID, &courierID, &assignedAt, &version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return order.CourierAssignment{}, false, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
 	}
@@ -57,14 +59,13 @@ func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID,
 	if assignment.DeliveryVersion > math.MaxInt64 {
 		return fmt.Errorf("remember courier assignment of %s: delivery version %d overflows BIGINT", orderID, assignment.DeliveryVersion)
 	}
-	tag, err := s.q(ctx).Exec(ctx, `
-		UPDATE orders
-		SET delivery_id = NULLIF($2, ''), courier_id = NULLIF($3, ''), courier_assigned_at = $4,
-		    courier_delivery_version = $5,
-		    authorization_revision = COALESCE(NULLIF($6, ''), authorization_revision)
-		WHERE id = $1`,
-		orderID, assignment.DeliveryID, assignment.CourierID, assignment.AssignedAt,
-		int64(assignment.DeliveryVersion), revision)
+	tag, err := s.exec(ctx, psql.Update("orders").
+		Set("delivery_id", sq.Expr("NULLIF(?, '')", assignment.DeliveryID)).
+		Set("courier_id", sq.Expr("NULLIF(?, '')", assignment.CourierID)).
+		Set("courier_assigned_at", assignment.AssignedAt).
+		Set("courier_delivery_version", int64(assignment.DeliveryVersion)).
+		Set("authorization_revision", sq.Expr("COALESCE(NULLIF(?, ''), authorization_revision)", revision)).
+		Where(sq.Eq{"id": orderID}))
 	if err != nil {
 		return fmt.Errorf("remember courier assignment of %s: %w", orderID, err)
 	}

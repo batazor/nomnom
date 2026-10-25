@@ -35,8 +35,7 @@ fn statement_summary_has_operation_and_table_only() {
 #[test]
 fn call_site_source_yields_the_literal_statement() {
     let source = stringify!(
-        sqlx::query_scalar("SELECT version FROM deliveries WHERE id = $1")
-            .bind(aggregate_id)
+        sqlx::query_scalar!("SELECT version FROM deliveries WHERE id = $1", aggregate_id)
             .fetch_optional(connection)
     );
     assert_eq!(
@@ -44,13 +43,45 @@ fn call_site_source_yields_the_literal_statement() {
         Some("deliveries")
     );
     assert_eq!(
-        Statement::of_source(stringify!(sqlx::query(AssertSqlSafe(format!(
-            "SELECT {DELIVERY_COLUMNS} FROM deliveries WHERE order_id = $1"
-        ))))),
+        Statement::of_source(stringify!(sqlx::query_as!(
+            DeliveryRow,
+            "SELECT id, order_id FROM deliveries WHERE order_id = $1",
+            order_id.as_str()
+        ))),
         Statement {
             operation: Some("SELECT"),
             collection: Some("deliveries".to_owned()),
         }
+    );
+}
+
+#[test]
+fn column_overrides_do_not_end_the_statement_literal() {
+    let deliveries = Statement {
+        operation: Some("SELECT"),
+        collection: Some("deliveries".to_owned()),
+    };
+    assert_eq!(
+        Statement::of_source(stringify!(sqlx::query!(
+            r#"SELECT id, courier_id AS "courier_id!" FROM deliveries WHERE id = ANY($1)"#,
+            ids
+        ))),
+        deliveries
+    );
+    assert_eq!(
+        Statement::of_source(stringify!(sqlx::query!(
+            "SELECT courier_id AS \"courier_id!\" FROM deliveries WHERE id = $1",
+            id
+        ))),
+        deliveries
+    );
+    assert_eq!(
+        Statement::of_source(stringify!(sqlx::query!(
+            r##"SELECT id AS "id!" FROM delivery_offers WHERE note = '"#'"##
+        )))
+        .collection
+        .as_deref(),
+        Some("delivery_offers")
     );
 }
 

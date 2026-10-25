@@ -13,7 +13,7 @@ import {
   type ConsumerCradle,
   createConsumerContainer,
 } from "../../di/consumer.ts";
-import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/collections.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/migrate.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import {
   type ConsumerClient,

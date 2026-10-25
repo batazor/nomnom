@@ -47,8 +47,10 @@ pub fn migrate(config: &DatabaseConfig) -> Result<Vec<i64>, String> {
     })
 }
 
+/// Versions in sqlx's own `_sqlx_migrations` (checked against the migrated
+/// schema of the offline cache); before the first run the table is absent.
 async fn applied_versions(pool: &sqlx::PgPool) -> Vec<i64> {
-    sqlx::query_scalar("SELECT version FROM _sqlx_migrations WHERE success")
+    sqlx::query_scalar!("SELECT version FROM _sqlx_migrations WHERE success")
         .fetch_all(pool)
         .await
         .unwrap_or_default()

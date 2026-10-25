@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
 	"nomnom/orders/slices/order/applications/placeorder"
@@ -16,8 +17,8 @@ var ErrIdempotencyKeyTaken = placeorder.ErrIdempotencyKeyTaken
 
 func (s *Store) FindOrder(ctx context.Context, customerID order.CustomerID, key string) (order.ID, bool, error) {
 	var id order.ID
-	err := s.q(ctx).QueryRow(ctx, `
-		SELECT order_id FROM idempotency_keys WHERE customer_id = $1 AND key = $2`, customerID, key).Scan(&id)
+	err := s.queryRow(ctx, psql.Select("order_id").From("idempotency_keys").
+		Where(sq.Eq{"customer_id": customerID, "key": key}), &id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
@@ -31,10 +32,10 @@ func (s *Store) FindOrder(ctx context.Context, customerID order.CustomerID, key 
 // makes a concurrent insert of the same key wait for the first transaction;
 // if that one committed another Order, ErrIdempotencyKeyTaken.
 func (s *Store) RememberOrder(ctx context.Context, customerID order.CustomerID, key string, orderID order.ID) error {
-	tag, err := s.q(ctx).Exec(ctx, `
-		INSERT INTO idempotency_keys (customer_id, key, order_id) VALUES ($1, $2, $3)
-		ON CONFLICT (customer_id, key) DO UPDATE SET order_id = EXCLUDED.order_id
-		WHERE idempotency_keys.order_id = EXCLUDED.order_id`, customerID, key, orderID)
+	tag, err := s.exec(ctx, psql.Insert("idempotency_keys").
+		Columns("customer_id", "key", "order_id").Values(customerID, key, orderID).
+		Suffix(`ON CONFLICT (customer_id, key) DO UPDATE SET order_id = EXCLUDED.order_id
+		WHERE idempotency_keys.order_id = EXCLUDED.order_id`))
 	if err != nil {
 		return fmt.Errorf("remember idempotency key: %w", err)
 	}

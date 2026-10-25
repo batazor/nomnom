@@ -1,212 +1,129 @@
-import { randomUUID } from "node:crypto";
+import { extname } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
-import {
-  BSON,
-  type CreateIndexesOptions,
-  type Db,
-  type Document,
-  type IndexSpecification,
-} from "mongodb";
+import { config, up } from "migrate-mongo";
+import type { Db, Document, IndexDescription } from "mongodb";
 
-/** Collection with its validator and indexes, owned by one slice. */
-export type CollectionSpec = Readonly<{
-  name: string;
-  /** `$jsonSchema` validator; documents violating it are rejected. */
-  validator: Document;
-  indexes: readonly (Readonly<{ key: IndexSpecification }> &
-    CreateIndexesOptions & { name: string })[];
-}>;
+/** Applied migrations of migrate-mongo: one `{ fileName, appliedAt }` each. */
+export const MIGRATIONS_CHANGELOG_COLLECTION = "migrations_changelog";
+/** migrate-mongo lock: at most one document while a process migrates. */
+export const MIGRATIONS_LOCK_COLLECTION = "migrations_lock";
 
 /**
- * Data migration of already stored documents, applied once and recorded in
- * `schema_migrations`. Must be idempotent: a crash before the record is
- * written runs it again.
+ * TTL of the lock document: a crashed holder blocks the others until the
+ * MongoDB TTL monitor (every 60 s) removes it. The lock is not renewed, so a
+ * run longer than this lets another process in; migrations are idempotent.
  */
-export type DocumentMigration = Readonly<{
-  id: string;
-  up(db: Db): Promise<void>;
+const LOCK_TTL_SECONDS = 30;
+const LOCK_POLL_MS = 500;
+/** `.ts` under Node type stripping, `.js` in `dist`. */
+const MIGRATION_FILE_EXTENSION = extname(import.meta.filename);
+
+/** Collection with its `$jsonSchema` validator and indexes, as of one migration. */
+export type CollectionSchema = Readonly<{
+  name: string;
+  validator: Document;
+  indexes: readonly (IndexDescription & { name: string })[];
 }>;
 
-export const MIGRATIONS_COLLECTION = "schema_migrations";
-/** Lease of the process that is migrating the database right now. */
-export const MIGRATION_LOCK_COLLECTION = "schema_migrations_lock";
-
-const LOCK_ID = "migrate";
-/** A crashed holder blocks the others at most this long. */
-const LEASE_MS = 30_000;
-const RENEW_INTERVAL_MS = 10_000;
-const ACQUIRE_POLL_MS = 500;
+/**
+ * Migration step: creates the collection with its validator or replaces the
+ * validator of an existing one (`collMod`), then creates the indexes.
+ * Idempotent, also on a database created before migrate-mongo: an existing
+ * index with the same name and other options fails with IndexOptionsConflict
+ * instead of being silently kept.
+ */
+export async function ensureCollection(
+  db: Db,
+  schema: CollectionSchema,
+): Promise<void> {
+  const validation = {
+    validator: schema.validator,
+    validationLevel: "strict",
+    validationAction: "error",
+  } as const;
+  const exists =
+    (
+      await db
+        .listCollections({ name: schema.name }, { nameOnly: true })
+        .toArray()
+    ).length > 0;
+  if (exists) {
+    await db.command({ collMod: schema.name, ...validation });
+  } else {
+    try {
+      await db.createCollection(schema.name, validation);
+    } catch (error) {
+      // NamespaceExists: created by a concurrent run after listCollections.
+      if (!(isMongoError(error) && error.code === 48)) throw error;
+      await db.command({ collMod: schema.name, ...validation });
+    }
+  }
+  if (schema.indexes.length > 0) {
+    await db.collection(schema.name).createIndexes([...schema.indexes]);
+  }
+}
 
 /**
- * Brings the database to the current schema and returns what changed (empty
- * when it already was current): creates missing collections with validators,
- * replaces changed validators (`collMod`), creates missing indexes and
- * applies pending document migrations in order. Every process of restaurants
- * runs it at startup before serving.
+ * Applies the pending migrate-mongo migrations of `migrationsDir` in file
+ * name order with the client of the process and returns their file names
+ * (empty when the database already is current). Every process of restaurants
+ * runs it at startup before serving; a failed migration rejects.
  *
- * The run holds a lease in `schema_migrations_lock`: API and consumer pods
- * start together, and while the DDL steps tolerate a concurrent run, document
- * migrations do not (two `dropIndex` of the same index fail on the loser). The
- * lease expires after `LEASE_MS` without renewal, so a crashed holder blocks
- * the others only that long; the next holder finds nothing to change.
+ * migrate-mongo's lock is a document in `migrations_lock`, but `up` rejects
+ * instead of waiting when it is taken and checks and inserts it in two steps.
+ * A unique index on a field the lock documents never have makes the insert
+ * atomic (one missing value per unique index), and a taken lock is retried
+ * until the holder clears it or its TTL expires. `up` reads the changelog
+ * before taking the lock, so a process that read it just before the holder
+ * finished repeats the holder's migrations: they must be idempotent.
  */
 export async function migrate(
   db: Db,
-  specs: readonly CollectionSpec[],
-  migrations: readonly DocumentMigration[] = [],
+  migrationsDir: URL,
   log: (message: string) => void = () => {},
 ): Promise<readonly string[]> {
-  const release = await acquireLease(db, log);
-  try {
-    const changes = [
-      ...(await ensureCollections(db, specs)),
-      ...(await applyMigrations(db, migrations)),
-    ];
-    for (const change of changes) log(change);
-    log(
-      changes.length === 0
-        ? "database schema is up to date, nothing to migrate"
-        : `database schema migrated: ${changes.length} changes`,
-    );
-    return changes;
-  } finally {
-    await release();
-  }
-}
-
-async function ensureCollections(
-  db: Db,
-  specs: readonly CollectionSpec[],
-): Promise<string[]> {
-  const changes: string[] = [];
-  const existing = new Map(
-    (await db.listCollections().toArray()).map((collection) => [
-      collection.name,
-      "options" in collection ? collection.options : undefined,
-    ]),
-  );
-  for (const spec of specs) {
-    const options = existing.get(spec.name);
-    if (options === undefined) {
-      try {
-        await db.createCollection(spec.name, {
-          validator: spec.validator,
-          validationLevel: "strict",
-          validationAction: "error",
-        });
-      } catch (error) {
-        // NamespaceExists: created after listCollections (an expired lease).
-        if (!(isMongoError(error) && error.code === 48)) throw error;
-        await db.command({ collMod: spec.name, validator: spec.validator });
-      }
-      changes.push(`created collection ${spec.name}`);
-    } else if (!hasValidator(options, spec.validator)) {
-      await db.command({
-        collMod: spec.name,
-        validator: spec.validator,
-        validationLevel: "strict",
-        validationAction: "error",
-      });
-      changes.push(`updated validator of ${spec.name}`);
-    }
-    if (spec.indexes.length === 0) continue;
-    const collection = db.collection(spec.name);
-    const indexes = new Set(
-      (await collection.listIndexes().toArray()).map((index) => index.name),
-    );
-    // All specs, not only the missing ones: an existing index with the same
-    // name and other options fails with IndexOptionsConflict instead of
-    // being silently kept.
-    await collection.createIndexes(
-      spec.indexes.map(({ key, ...options }) => ({ key, ...options })) as {
-        key: Record<string, 1 | -1>;
-      }[],
-    );
-    for (const index of spec.indexes) {
-      if (!indexes.has(index.name)) {
-        changes.push(`created index ${spec.name}.${index.name}`);
-      }
-    }
-  }
-  return changes;
-}
-
-async function applyMigrations(
-  db: Db,
-  migrations: readonly DocumentMigration[],
-): Promise<string[]> {
-  const changes: string[] = [];
-  const applied = db.collection<{ _id: string; appliedAt: Date }>(
-    MIGRATIONS_COLLECTION,
-  );
-  for (const migration of migrations) {
-    if ((await applied.findOne({ _id: migration.id })) !== null) continue;
-    await migration.up(db);
-    await applied.updateOne(
-      { _id: migration.id },
-      { $setOnInsert: { appliedAt: new Date() } },
-      { upsert: true },
-    );
-    changes.push(`applied migration ${migration.id}`);
-  }
-  return changes;
-}
-
-const hasValidator = (options: Document | undefined, validator: Document) =>
-  options?.validationLevel === "strict" &&
-  options.validationAction === "error" &&
-  BSON.EJSON.stringify(options.validator) === BSON.EJSON.stringify(validator);
-
-type MigrationLock = Readonly<{
-  _id: string;
-  owner: string;
-  expiresAt: Date;
-}>;
-
-/**
- * Takes the lease, waiting while another live process holds it, and renews
- * it until the returned release. Expiry is computed by the server (`$$NOW`),
- * so pod clock skew does not matter.
- */
-async function acquireLease(
-  db: Db,
-  log: (message: string) => void,
-): Promise<() => Promise<void>> {
-  const locks = db.collection<MigrationLock>(MIGRATION_LOCK_COLLECTION);
-  const owner = randomUUID();
-  const extend = [
-    { $set: { owner, expiresAt: { $add: ["$$NOW", LEASE_MS] } } },
-  ];
+  config.set({
+    migrationsDir: fileURLToPath(migrationsDir),
+    migrationFileExtension: MIGRATION_FILE_EXTENSION,
+    changelogCollectionName: MIGRATIONS_CHANGELOG_COLLECTION,
+    lockCollectionName: MIGRATIONS_LOCK_COLLECTION,
+    lockTtl: LOCK_TTL_SECONDS,
+    useFileHash: false,
+  });
+  // The same TTL index migrate-mongo creates (without awaiting) on every
+  // lock access, plus the one that makes the lock exclusive.
+  await db.collection(MIGRATIONS_LOCK_COLLECTION).createIndexes([
+    {
+      key: { createdAt: 1 },
+      name: "createdAt_1",
+      expireAfterSeconds: LOCK_TTL_SECONDS,
+    },
+    { key: { exclusive: 1 }, name: "migrations_lock_exclusive", unique: true },
+  ]);
   for (let waiting = false; ; waiting = true) {
     try {
-      // Matches a missing (upsert) or expired lease; a live one of another
-      // process makes the upsert collide on `_id`. An upsert filter cannot
-      // use `$$NOW`, so the server time comes from `hello`.
-      const { localTime } = await db.command({ hello: 1 });
-      await locks.updateOne(
-        { _id: LOCK_ID, expiresAt: { $lt: localTime as Date } },
-        extend,
-        { upsert: true },
-      );
-      break;
+      const migrated = await up(db, db.client);
+      for (const fileName of migrated) log(`applied migration ${fileName}`);
+      if (migrated.length === 0) {
+        log("database schema is up to date, nothing to migrate");
+      }
+      return migrated;
     } catch (error) {
-      if (!(isMongoError(error) && error.code === 11000)) throw error;
+      if (!isLockTaken(error)) throw error;
     }
     if (!waiting) log("waiting for another process to finish migrating");
-    await delay(ACQUIRE_POLL_MS);
+    await delay(LOCK_POLL_MS);
   }
-  // A failed renewal is retried on the next tick; if the lease expires
-  // meanwhile, the next holder repeats only idempotent steps.
-  const renewal = setInterval(() => {
-    locks.updateOne({ _id: LOCK_ID, owner }, extend).catch(() => {});
-  }, RENEW_INTERVAL_MS);
-  renewal.unref();
-  return async () => {
-    clearInterval(renewal);
-    await locks.deleteOne({ _id: LOCK_ID, owner });
-  };
 }
+
+/** migrate-mongo reports a taken lock only by message. */
+const isLockTaken = (error: unknown) =>
+  error instanceof Error &&
+  (error.message === "Could not migrate up, a lock is in place." ||
+    (error.message.startsWith("Could not create a lock:") &&
+      error.message.includes("E11000")));
 
 const isMongoError = (error: unknown): error is { code: unknown } =>
   typeof error === "object" && error !== null && "code" in error;

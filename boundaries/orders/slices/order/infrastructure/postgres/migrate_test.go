@@ -57,8 +57,12 @@ func TestStartupMigrationAppliesOnceAndThenChangesNothing(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = conn.Close(ctx) }()
 	version := func() int64 {
-		var v int64
-		require.NoError(t, conn.QueryRow(ctx, `SELECT max(version_id) FROM goose_db_version`).Scan(&v))
+		var (
+			v     int64
+			dirty bool
+		)
+		require.NoError(t, conn.QueryRow(ctx, `SELECT version, dirty FROM schema_migrations`).Scan(&v, &dirty))
+		require.False(t, dirty, "the last migration completed")
 		return v
 	}
 	applied := version()

@@ -9,16 +9,17 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
+	"github.com/golang-migrate/migrate/v4"
+	pgxmigrate "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
-	"github.com/pressly/goose/v3/lock"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
@@ -28,10 +29,16 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// migrateMaxConns bounds the database/sql pool of Migrate: goose holds the
-// session advisory lock on one connection and applies migrations on another.
-// One connection would deadlock.
-const migrateMaxConns = 2
+// migrateMaxConns bounds the database/sql pool of Migrate: golang-migrate
+// takes the session advisory lock and applies migrations on one connection.
+const migrateMaxConns = 1
+
+// migrateLockTimeout bounds the wait for the advisory lock held by another
+// process applying migrations at the same start.
+const migrateLockTimeout = 5 * time.Minute
+
+// psql builds statements with PostgreSQL $n placeholders.
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 // Store shares one pool between the API, worker and consumer of
 // orders. The transaction of a Unit of Work travels in context.
@@ -118,23 +125,30 @@ func Migrate(ctx context.Context, cfg config.PostgresConfig) error {
 	db.SetConnMaxIdleTime(cfg.MaxConnIdleTime)
 	defer func() { _ = db.Close() }()
 
-	locker, err := lock.NewPostgresSessionLocker()
-	if err != nil {
-		return fmt.Errorf("migration lock: %w", err)
-	}
-	files, err := fs.Sub(migrations, "migrations")
+	files, err := iofs.New(migrations, "migrations")
 	if err != nil {
 		return fmt.Errorf("migration files: %w", err)
 	}
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, files, goose.WithSessionLocker(locker))
+	driver, err := pgxmigrate.WithInstance(db, &pgxmigrate.Config{})
+	if err != nil {
+		return fmt.Errorf("migration database: %w", err)
+	}
+	migrator, err := migrate.NewWithInstance("iofs", files, "pgx5", driver)
 	if err != nil {
 		return fmt.Errorf("migration provider: %w", err)
 	}
-	applied, err := provider.Up(ctx)
-	if err != nil {
+	defer func() { _, _ = migrator.Close() }()
+	migrator.LockTimeout = migrateLockTimeout
+	err = migrator.Up()
+	applied := !errors.Is(err, migrate.ErrNoChange)
+	if applied && err != nil {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
-	slog.InfoContext(ctx, "postgres migrations checked", slog.Int("applied", len(applied)))
+	version, _, err := migrator.Version()
+	if err != nil {
+		return fmt.Errorf("migration version: %w", err)
+	}
+	slog.InfoContext(ctx, "postgres migrations checked", slog.Uint64("version", uint64(version)), slog.Bool("applied", applied))
 	return nil
 }
 
@@ -152,6 +166,34 @@ func (s *Store) q(ctx context.Context) querier {
 		return tx
 	}
 	return s.pool
+}
+
+// exec runs the built statement in the active transaction or on the pool.
+func (s *Store) exec(ctx context.Context, stmt sq.Sqlizer) (pgconn.CommandTag, error) {
+	sql, args, err := stmt.ToSql()
+	if err != nil {
+		return pgconn.CommandTag{}, fmt.Errorf("build statement: %w", err)
+	}
+	return s.q(ctx).Exec(ctx, sql, args...)
+}
+
+// query runs the built query in the active transaction or on the pool.
+func (s *Store) query(ctx context.Context, stmt sq.Sqlizer) (pgx.Rows, error) {
+	sql, args, err := stmt.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build query: %w", err)
+	}
+	return s.q(ctx).Query(ctx, sql, args...)
+}
+
+// queryRow scans the single row of the built query into dest; no row is
+// pgx.ErrNoRows.
+func (s *Store) queryRow(ctx context.Context, stmt sq.Sqlizer, dest ...any) error {
+	sql, args, err := stmt.ToSql()
+	if err != nil {
+		return fmt.Errorf("build query: %w", err)
+	}
+	return s.q(ctx).QueryRow(ctx, sql, args...).Scan(dest...)
 }
 
 func transaction(ctx context.Context) (pgx.Tx, bool) {

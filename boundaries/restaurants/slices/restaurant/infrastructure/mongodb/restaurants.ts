@@ -1,7 +1,6 @@
 import type { Db } from "mongodb";
 
 import { ConcurrencyConflictError } from "../../../../pkg/application/errors.ts";
-import type { CollectionSpec } from "../../../../pkg/infrastructure/mongodb/migrate.ts";
 import type { MongoUnitOfWork } from "../../../../pkg/infrastructure/mongodb/unit-of-work.ts";
 import {
   VersionedCollection,
@@ -268,40 +267,3 @@ export class MongoRestaurantCatalog
     return documents.map(toView);
   }
 }
-
-export const restaurantCollectionSpec: CollectionSpec = {
-  name: RESTAURANTS_COLLECTION,
-  validator: {
-    $jsonSchema: {
-      bsonType: "object",
-      required: [
-        "_id",
-        "version",
-        "schemaVersion",
-        "name",
-        "ownerId",
-        "isOpen",
-      ],
-      properties: {
-        _id: { bsonType: "string", minLength: 1 },
-        version: { bsonType: ["int", "long"], minimum: 1 },
-        schemaVersion: { bsonType: "int", minimum: 1 },
-        name: { bsonType: "string", minLength: 1 },
-        ownerId: { bsonType: "string", minLength: 1 },
-        isOpen: { bsonType: "bool" },
-        address: { bsonType: "string" },
-        staff: {
-          bsonType: "array",
-          uniqueItems: true,
-          items: { bsonType: "string", minLength: 1 },
-        },
-        authorizationRevision: { bsonType: "string", minLength: 1 },
-      },
-    },
-  },
-  indexes: [
-    // Public catalog: open restaurants paged by id.
-    { key: { isOpen: 1, _id: 1 }, name: "restaurants_open_by_id" },
-    { key: { ownerId: 1 }, name: "restaurants_owner" },
-  ],
-};

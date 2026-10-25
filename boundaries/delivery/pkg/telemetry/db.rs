@@ -31,13 +31,11 @@ pub struct Statement {
 
 impl Statement {
     /// Summary of the first string literal of `source`: the statement text
-    /// of a call site as `stringify!` renders it, or the statement itself.
+    /// of a call site as `stringify!` renders it (a `sqlx::query!` family
+    /// macro call, plain or raw literal), or the statement itself.
     #[must_use]
     pub fn of_source(source: &str) -> Self {
-        let text = source
-            .split_once('"')
-            .map_or(source, |(_, rest)| rest.split('"').next().unwrap_or(rest));
-        Self::of_sql(text)
+        Self::of_sql(first_literal(source).unwrap_or(source))
     }
 
     #[must_use]
@@ -88,6 +86,37 @@ impl Statement {
             (None, _) => "postgresql".to_owned(),
         }
     }
+}
+
+/// Body of the first string literal of Rust `source`: `"..."` up to the first
+/// unescaped quote, `r#"..."#` up to its closing quote and hashes (column
+/// overrides such as `AS "courier_id!"` keep their quotes). An unterminated
+/// literal runs to the end of `source`.
+fn first_literal(source: &str) -> Option<&str> {
+    let open = source.find('"')?;
+    let prefix = &source[..open];
+    let hashes = prefix.len() - prefix.trim_end_matches('#').len();
+    let prefix = &prefix[..prefix.len() - hashes];
+    let raw = prefix.strip_suffix('r').is_some_and(|before| {
+        !before
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+    });
+    let body = &source[open + 1..];
+    let end = if raw {
+        body.find(&format!("\"{}", "#".repeat(hashes)))
+    } else {
+        let mut escaped = false;
+        body.char_indices()
+            .find(|&(_, c)| {
+                let quote = c == '"' && !escaped;
+                escaped = c == '\\' && !escaped;
+                quote
+            })
+            .map(|(index, _)| index)
+    };
+    Some(end.map_or(body, |end| &body[..end]))
 }
 
 /// Starts the client span of `statement` under the current context; `None`

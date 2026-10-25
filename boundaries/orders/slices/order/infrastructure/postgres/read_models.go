@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
+
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
@@ -52,20 +54,16 @@ func (s *Store) OrderView(ctx context.Context, id order.ID) (getorder.OrderView,
 
 // ListCustomerOrders pages by (placed_at desc, id desc) with a keyset cursor.
 func (s *Store) ListCustomerOrders(ctx context.Context, request listcustomerorders.PageRequest) (listcustomerorders.Page, error) {
-	args := []any{request.CustomerID, request.Limit + 1}
-	where := ""
+	query := psql.Select("id", "restaurant_id", "state", "total_amount::text", "total_currency", "placed_at").
+		From("orders").Where(sq.Eq{"customer_id": request.CustomerID})
 	if request.Cursor != "" {
 		placedAt, id, err := decodeCursor(request.Cursor)
 		if err != nil {
 			return listcustomerorders.Page{}, application.InvalidInput("cursor", "is malformed")
 		}
-		where = " AND (placed_at, id) < ($3, $4)"
-		args = append(args, placedAt, id)
+		query = query.Where("(placed_at, id) < (?, ?)", placedAt, id)
 	}
-	rows, err := s.q(ctx).Query(ctx, `
-		SELECT id, restaurant_id, state, total_amount::text, total_currency, placed_at
-		FROM orders WHERE customer_id = $1`+where+`
-		ORDER BY placed_at DESC, id DESC LIMIT $2`, args...)
+	rows, err := s.query(ctx, query.OrderBy("placed_at DESC", "id DESC").Suffix("LIMIT ?", request.Limit+1))
 	if err != nil {
 		return listcustomerorders.Page{}, fmt.Errorf("list orders of %s: %w", request.CustomerID, err)
 	}
@@ -116,7 +114,7 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 
 // CountByState — число Orders в каждом состоянии для gauge nomnom.orders.in_state.
 func (s *Store) CountByState(ctx context.Context) (map[order.State]int64, error) {
-	rows, err := s.q(ctx).Query(ctx, `SELECT state, count(*) FROM orders GROUP BY state`)
+	rows, err := s.query(ctx, psql.Select("state", "count(*)").From("orders").GroupBy("state"))
 	if err != nil {
 		return nil, fmt.Errorf("count orders by state: %w", err)
 	}

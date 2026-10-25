@@ -9,12 +9,12 @@ use crate::slices::simulator::applications::work::{
 };
 use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
-use super::rows::{column, delivery_state, offer_state, parse_delivery_state};
+use super::rows::{delivery_state, offer_state, parse_delivery_state};
 use super::{PostgresStore, corrupt, storage_error};
 
 impl SimulatorStateRepository for PostgresStore {
     fn enabled(&self) -> Result<bool, RepositoryError> {
-        sql!(self, "SELECT", |connection| sqlx::query_scalar::<_, bool>(
+        sql!(self, "SELECT", |connection| sqlx::query_scalar!(
             "SELECT enabled FROM simulator"
         )
         .fetch_optional(connection))
@@ -22,11 +22,11 @@ impl SimulatorStateRepository for PostgresStore {
     }
 
     fn set_enabled(&self, enabled: bool) -> Result<(), RepositoryError> {
-        sql!(self, "INSERT", |connection| sqlx::query(
+        sql!(self, "INSERT", |connection| sqlx::query!(
             "INSERT INTO simulator (singleton, enabled) VALUES (TRUE, $1)
-             ON CONFLICT (singleton) DO UPDATE SET enabled = EXCLUDED.enabled"
+             ON CONFLICT (singleton) DO UPDATE SET enabled = EXCLUDED.enabled",
+            enabled
         )
-        .bind(enabled)
         .execute(connection))
         .map(|_| ())
     }
@@ -34,21 +34,21 @@ impl SimulatorStateRepository for PostgresStore {
 
 impl SimulatorWork for PostgresStore {
     fn pending_offers(&self) -> Result<Vec<PendingOfferWork>, RepositoryError> {
-        sql!(self, "SELECT", |connection| sqlx::query(
+        sql!(self, "SELECT", |connection| sqlx::query!(
             "SELECT id, courier_id, expires_at FROM delivery_offers
-             WHERE state = $1 ORDER BY position"
+             WHERE state = $1 ORDER BY position",
+            offer_state(OfferState::Pending)
         )
-        .bind(offer_state(OfferState::Pending))
-        .fetch_all(connection))?
-        .iter()
-        .map(|row| {
-            Ok(PendingOfferWork {
-                offer_id: DeliveryOfferId::new(column::<String>(row, "id")?),
-                courier_id: CourierId::new(column::<String>(row, "courier_id")?),
-                expires_at_epoch_seconds: column(row, "expires_at")?,
-            })
+        .fetch_all(connection))
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| PendingOfferWork {
+                    offer_id: DeliveryOfferId::new(row.id),
+                    courier_id: CourierId::new(row.courier_id),
+                    expires_at_epoch_seconds: row.expires_at,
+                })
+                .collect()
         })
-        .collect()
     }
 
     fn active_deliveries(&self) -> Result<Vec<ActiveDeliveryWork>, RepositoryError> {
@@ -56,23 +56,24 @@ impl SimulatorWork for PostgresStore {
             delivery_state(State::Assigned),
             delivery_state(State::PickedUp),
         ];
-        sql!(self, "SELECT", |connection| sqlx::query(
-            "SELECT id, courier_id, state FROM deliveries
-             WHERE state = ANY($1) AND courier_id IS NOT NULL ORDER BY id"
+        // `courier_id IS NOT NULL` narrows the nullable column: `courier_id!`.
+        sql!(self, "SELECT", |connection| sqlx::query!(
+            r#"SELECT id, courier_id AS "courier_id!", state FROM deliveries
+             WHERE state = ANY($1) AND courier_id IS NOT NULL ORDER BY id"#,
+            &states[..] as &[&str]
         )
-        .bind(&states[..])
         .fetch_all(connection))?
-        .iter()
+        .into_iter()
         .map(|row| {
-            let state = parse_delivery_state(column(row, "state")?)?;
+            let state = parse_delivery_state(&row.state)?;
             let step = match state {
                 State::Assigned => DeliveryStep::Pickup,
                 State::PickedUp => DeliveryStep::Handover,
                 other => return Err(corrupt("active delivery state", format!("{other:?}"))),
             };
             Ok(ActiveDeliveryWork {
-                delivery_id: DeliveryId::new(column::<String>(row, "id")?),
-                courier_id: CourierId::new(column::<String>(row, "courier_id")?),
+                delivery_id: DeliveryId::new(row.id),
+                courier_id: CourierId::new(row.courier_id),
                 step,
             })
         })

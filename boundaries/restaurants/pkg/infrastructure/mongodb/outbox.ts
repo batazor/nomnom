@@ -9,16 +9,10 @@ import type {
   Outbox,
   PublishableEvent,
 } from "../../application/outbox.ts";
-import type { CollectionSpec, DocumentMigration } from "./migrate.ts";
 import type { MongoUnitOfWork } from "./unit-of-work.ts";
 
 export const OUTBOX_COLLECTION = "outbox";
 export const OUTBOX_SCHEMA_VERSION = 2;
-/**
- * TTL of a record (ADR 37): Debezium reads it from the change stream right
- * after commit, the stream keeps it independently of the collection.
- */
-export const OUTBOX_RETENTION_SECONDS = 60 * 60;
 
 /** UUIDv5 namespace of Outbox event ids (ADR 31). */
 export const OUTBOX_EVENT_ID_NAMESPACE = "8f1d3c2a-5b7e-4a90-9c61-2e4f7b8d0a13";
@@ -207,82 +201,3 @@ export class MongoOutbox implements Outbox, ChangeNotifications {
     );
   }
 }
-
-export const outboxCollectionSpec: CollectionSpec = {
-  name: OUTBOX_COLLECTION,
-  validator: {
-    $jsonSchema: {
-      bsonType: "object",
-      required: [
-        "_id",
-        "schemaVersion",
-        "eventId",
-        "eventType",
-        "aggregateType",
-        "aggregateId",
-        "aggregateVersion",
-        "occurredAt",
-        "topic",
-        "payload",
-        "traceparent",
-        "createdAt",
-      ],
-      properties: {
-        _id: { bsonType: "string" },
-        schemaVersion: { bsonType: "int", minimum: 1 },
-        eventId: {
-          bsonType: "string",
-          pattern:
-            "^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-        },
-        eventType: { bsonType: "string", minLength: 1 },
-        aggregateType: { bsonType: "string", minLength: 1 },
-        aggregateId: { bsonType: "string", minLength: 1 },
-        aggregateVersion: { bsonType: "long", minimum: 1 },
-        occurredAt: { bsonType: "date" },
-        topic: { bsonType: "string", minLength: 1 },
-        payload: { bsonType: "binData" },
-        traceparent: { bsonType: "string" },
-        createdAt: { bsonType: "date" },
-      },
-    },
-  },
-  indexes: [
-    { key: { eventId: 1 }, name: "outbox_event_id_unique", unique: true },
-    // Retention (ADR 37): MongoDB removes records older than an hour.
-    {
-      key: { createdAt: 1 },
-      name: "outbox_created_at_ttl",
-      expireAfterSeconds: OUTBOX_RETENTION_SECONDS,
-    },
-  ],
-};
-
-/**
- * Removes what the polling relay (ADR 31) left behind once CDC publishes the
- * Outbox (ADR 37): its indexes, the `seq` counter and lease collections and
- * the records written before, which the change stream never delivers
- * (`snapshot.mode=no_data`) and which have no `createdAt` for the TTL.
- * Idempotent: missing indexes and collections are skipped.
- */
-export const dropOutboxRelayMigration: DocumentMigration = {
-  id: "0001-outbox-cdc-drop-relay",
-  async up(db) {
-    const outbox = db.collection(OUTBOX_COLLECTION);
-    const indexes = new Set(
-      (await outbox.listIndexes().toArray()).map((index) => index.name),
-    );
-    for (const name of ["outbox_seq_unique", "outbox_pending_by_seq"]) {
-      if (indexes.has(name)) await outbox.dropIndex(name);
-    }
-    await outbox.deleteMany({ createdAt: { $exists: false } });
-    const collections = new Set(
-      (await db.listCollections({}, { nameOnly: true }).toArray()).map(
-        (collection) => collection.name,
-      ),
-    );
-    for (const name of ["outbox_counters", "outbox_leases"]) {
-      if (collections.has(name)) await db.dropCollection(name);
-    }
-  },
-};

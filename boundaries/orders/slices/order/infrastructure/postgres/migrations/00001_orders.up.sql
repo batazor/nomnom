@@ -1,4 +1,3 @@
--- +goose Up
 -- Business storage of orders (ADR 8, ADR 20). References to other bounded
 -- contexts are identifiers without foreign keys.
 CREATE TABLE orders (
@@ -70,12 +69,3 @@ CREATE TABLE "watermill_offsets_orders_outbox" (
     last_processed_transaction_id xid8         NOT NULL,
     PRIMARY KEY (consumer_group)
 );
-
--- +goose Down
-DROP TABLE "watermill_offsets_orders_outbox";
-DROP TABLE "watermill_orders_outbox";
-DROP TABLE idempotency_keys;
-DROP TABLE inbox;
-DROP TABLE order_facts;
-DROP TABLE order_items;
-DROP TABLE orders;

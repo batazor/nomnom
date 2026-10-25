@@ -6,7 +6,7 @@ import {
   MenuItemAvailabilityChangedSchema,
   RestaurantOpenedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import {
   connectMongoDb,

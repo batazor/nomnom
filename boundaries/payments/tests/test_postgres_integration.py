@@ -8,6 +8,7 @@ import contextlib
 import unittest
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from typing import Any, override
 
 import psycopg
@@ -416,9 +417,9 @@ class OutboxMigrationTest(unittest.TestCase):
             admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
         self.addCleanup(self._drop, name)
         dsn = self.dsn.rsplit("/", 1)[0] + f"/{name}"
-        (_, _, first), (_, _, second) = migrations()[:2]
+        first, second = (Path(migration.path).read_bytes() for migration in migrations()[:2])
         with psycopg.connect(dsn) as conn:
-            conn.execute(first.encode())
+            conn.execute(first)
             conn.execute(
                 "INSERT INTO outbox (event_id, event_type, aggregate_type, aggregate_id, "
                 "aggregate_version, topic, payload, metadata, published_at) VALUES "
@@ -427,7 +428,7 @@ class OutboxMigrationTest(unittest.TestCase):
                 "(%s, 't', 'Payment', 'untraced', 1, 'topic', '', '{}', NULL)",
                 (uuid.uuid4(), uuid.uuid4()),
             )
-            conn.execute(second.encode())
+            conn.execute(second)
             rows = conn.execute(
                 "SELECT aggregate_id, traceparent FROM payments_outbox ORDER BY aggregate_id"
             ).fetchall()

@@ -13,7 +13,7 @@ import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurant
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import {
   connectMongoDb,

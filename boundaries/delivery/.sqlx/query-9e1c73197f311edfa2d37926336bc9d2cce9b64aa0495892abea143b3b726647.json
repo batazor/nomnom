@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT latitude, longitude, recorded_at FROM courier_positions\n             WHERE courier_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "latitude",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "courier_positions",
+            "name": "latitude"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "longitude",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "courier_positions",
+            "name": "longitude"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "recorded_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "courier_positions",
+            "name": "recorded_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9e1c73197f311edfa2d37926336bc9d2cce9b64aa0495892abea143b3b726647"
+}

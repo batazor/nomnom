@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE couriers SET authorization_revision = $2, version = version + 1\n             WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5e99af1d77299f31cf72acfcae3307ae7f2b7f3c555831f2040d9d2e69655022"
+}

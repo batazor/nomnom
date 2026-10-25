@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO courier_positions (courier_id, latitude, longitude, recorded_at)\n             VALUES ($1, $2, $3, $4)\n             ON CONFLICT (courier_id) DO UPDATE SET latitude = EXCLUDED.latitude,\n                 longitude = EXCLUDED.longitude, recorded_at = EXCLUDED.recorded_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8",
+        "Float8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8baa34b41b2836ca4e771f52393f68951bd2138f40638799a584f3f70dcd6af7"
+}

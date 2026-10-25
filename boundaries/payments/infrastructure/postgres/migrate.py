@@ -1,61 +1,47 @@
-"""Forward-only SQL migrations of the payments database.
+"""Forward-only SQL migrations of the payments database, applied by yoyo-migrations.
 
-Files ``migrations/<version>_<name>.sql`` are applied in version order, each in its
-own transaction together with its ``schema_migrations`` row. The ``payments`` process
-applies them at startup; a session advisory lock serializes concurrent runs (several
-replicas starting together), so the rest find nothing to change.
+Files ``migrations/<version>_<name>.sql`` are applied in file name order, each in its
+own transaction together with its ``_yoyo_migration`` row. The ``payments`` process
+applies them at startup; the yoyo lock (a row in ``yoyo_lock``) serializes concurrent
+runs (several replicas starting together), so the rest find nothing to change.
 """
 
-import re
-from importlib import resources
-
-import psycopg
+from psycopg.conninfo import conninfo_to_dict
+from yoyo import read_migrations
+from yoyo.backends import get_backend_class
+from yoyo.connections import DatabaseURI
+from yoyo.migrations import MigrationList, default_migration_table
 
 from pkg.config import DatabaseSettings
 
 from .database import connect_timeout_seconds
 
-_FILE = re.compile(r"^(\d+)_[\w-]+\.sql$")
-# Arbitrary constant shared by every payments migrator.
-_LOCK_KEY = 0x7061796D656E7473  # "payments"
+# Бэкенд yoyo на psycopg 3.
+_BACKEND = "postgresql+psycopg"
+_SOURCE = f"package:{__package__}:migrations"
+# Ожидание lock-а другой реплики; строка lock-а процесса, убитого посреди миграции,
+# остаётся в yoyo_lock и снимается вручную (`yoyo break-lock`).
+_LOCK_TIMEOUT_SECONDS = 60
 
 
-def migrations() -> list[tuple[int, str, str]]:
-    """Return the bundled migrations as ``(version, file name, SQL)`` sorted by version."""
-    found = []
-    for entry in resources.files(__package__).joinpath("migrations").iterdir():
-        match = _FILE.match(entry.name)
-        if match is not None:
-            found.append((int(match.group(1)), entry.name, entry.read_text(encoding="utf-8")))
-    return sorted(found)
+def migrations() -> MigrationList:
+    """Return the bundled migrations in the order they are applied."""
+    return read_migrations(_SOURCE)
 
 
 def migrate(settings: DatabaseSettings) -> list[str]:
-    """Apply pending migrations on one connection and return the names of the applied files."""
-    applied: list[str] = []
-    with psycopg.connect(
-        settings.url,
-        autocommit=True,
-        connect_timeout=connect_timeout_seconds(settings.connect_timeout),
-    ) as conn:
-        conn.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
-        try:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS schema_migrations ("
-                "version BIGINT PRIMARY KEY, name TEXT NOT NULL, "
-                "applied_at TIMESTAMPTZ NOT NULL DEFAULT now())"
-            )
-            done = {row[0] for row in conn.execute("SELECT version FROM schema_migrations")}
-            for version, name, sql in migrations():
-                if version in done:
-                    continue
-                with conn.transaction():
-                    conn.execute(sql.encode())
-                    conn.execute(
-                        "INSERT INTO schema_migrations (version, name) VALUES (%s, %s)",
-                        (version, name),
-                    )
-                applied.append(name)
-        finally:
-            conn.execute("SELECT pg_advisory_unlock(%s)", (_LOCK_KEY,))
-    return applied
+    """Apply pending migrations on one connection and return the ids of the applied ones."""
+    # Параметры libpq DSN (URI или key=value) передаются в psycopg.connect как есть.
+    params = conninfo_to_dict(
+        settings.url, connect_timeout=connect_timeout_seconds(settings.connect_timeout)
+    )
+    uri = DatabaseURI(_BACKEND, None, None, None, None, None, params)
+    backend = get_backend_class(_BACKEND)(uri, default_migration_table)
+    try:
+        backend.init_database()
+        with backend.lock(timeout=_LOCK_TIMEOUT_SECONDS):
+            pending = backend.to_apply(migrations())
+            backend.apply_migrations(pending)
+        return [migration.id for migration in pending]
+    finally:
+        backend.connection.close()

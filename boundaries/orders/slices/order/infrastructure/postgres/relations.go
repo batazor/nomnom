@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
 	"nomnom/orders/pkg/application"
@@ -50,8 +51,8 @@ func (s *Store) SubjectsOf(ctx context.Context, relation Relation, ids []string)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.q(ctx).Query(ctx,
-		`SELECT id, `+column+` FROM orders WHERE id = ANY($1) AND `+column+` IS NOT NULL`, ids)
+	rows, err := s.query(ctx, psql.Select("id", column).From("orders").
+		Where("id = ANY(?)", ids).Where(sq.NotEq{column: nil}))
 	if err != nil {
 		return nil, fmt.Errorf("read order %s subjects: %w", relation, err)
 	}
@@ -73,8 +74,8 @@ func (s *Store) RelationPage(ctx context.Context, relation Relation, afterID str
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.q(ctx).Query(ctx,
-		`SELECT id, `+column+` FROM orders WHERE id > $1 AND `+column+` IS NOT NULL ORDER BY id LIMIT $2`, afterID, limit)
+	rows, err := s.query(ctx, psql.Select("id", column).From("orders").
+		Where(sq.Gt{"id": afterID}).Where(sq.NotEq{column: nil}).OrderBy("id").Suffix("LIMIT ?", limit))
 	if err != nil {
 		return nil, fmt.Errorf("page order %s subjects: %w", relation, err)
 	}
@@ -109,7 +110,7 @@ func (s *Store) RestoreRelation(
 	restored := false
 	err = s.Do(ctx, func(ctx context.Context) error {
 		var current *string
-		err := s.q(ctx).QueryRow(ctx, `SELECT `+column+` FROM orders WHERE id = $1 FOR SHARE`, orderID).Scan(&current)
+		err := s.queryRow(ctx, psql.Select(column).From("orders").Where(sq.Eq{"id": orderID}).Suffix("FOR SHARE"), &current)
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (current == nil || *current != subject)) {
 			return nil
 		}

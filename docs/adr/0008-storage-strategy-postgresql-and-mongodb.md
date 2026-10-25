@@ -75,7 +75,7 @@ MongoDB не отменяет моделирование схемы. Конкр�
 Отдельными решениями или SDD-сценариями должны быть определены:
 
 - поддерживаемые версии PostgreSQL и MongoDB;
-- драйверы, ORM/ODM и инструменты миграций или эволюции документов;
+- ~~драйверы, ORM/ODM и инструменты миграций или эволюции документов~~ — [ADR 39](0039-data-access-without-orm.md);
 - физические схемы, коллекции, поля, индексы и partitioning/sharding при необходимости;
 - конкретные транзакционные границы, isolation level и механизм optimistic или pessimistic concurrency control в `orders`;
 - требования к multi-document atomicity в `restaurants`;

@@ -3,7 +3,7 @@ import { after } from "node:test";
 
 import { BSON, type Db } from "mongodb";
 
-import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/collections.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/migrate.ts";
 import type {
   AggregateRef,
   PublishableEvent,

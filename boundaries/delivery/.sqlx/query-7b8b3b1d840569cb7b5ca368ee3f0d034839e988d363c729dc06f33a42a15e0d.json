@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE deliveries SET authorization_revision = $3, version = version + 1\n             WHERE id = $1 AND courier_id = $2 AND state = ANY($4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b8b3b1d840569cb7b5ca368ee3f0d034839e988d363c729dc06f33a42a15e0d"
+}

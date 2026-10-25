@@ -47,9 +47,9 @@ Authorization через SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-au
 multi-document транзакции. Пока `mongodb.uriSecret.name` пуст, `MONGODB__*` не задаются и
 приложение не стартует: `MONGODB__URI` обязателен. Если Secret задан, рендерятся `MONGODB__URI` из
 `secretKeyRef` (Secret chart не создаёт), `MONGODB__DATABASE` и `MONGODB__TIMEOUT`. Init container
-миграций нет: каждый процесс при старте сам создаёт недостающие коллекции, JSON Schema validators,
-индексы и применяет новые миграции документов (на актуальной базе — ничего), под lease в MongoDB;
-ошибка останавливает pod. Время миграции входит в бюджет `startupProbe`.
+миграций нет: каждый процесс при старте сам применяет новые миграции migrate-mongo — коллекции,
+JSON Schema validators, индексы и миграции документов (на актуальной базе — ничего), под lock
+migrate-mongo в коллекции `migrations_lock`; ошибка останавливает pod. Время миграции входит в бюджет `startupProbe`.
 Лимиты connection pool задаёт `mongodb.pool` (`maxPoolSize` 20, `minPoolSize` 0, `maxIdleTime`
 `5m`, `waitQueueTimeout` `5s`, `maxConnecting` 2) → `MONGODB__MAX_POOL_SIZE`, `MONGODB__MIN_POOL_SIZE`,
 `MONGODB__MAX_IDLE_TIME`, `MONGODB__WAIT_QUEUE_TIMEOUT`, `MONGODB__MAX_CONNECTING`;

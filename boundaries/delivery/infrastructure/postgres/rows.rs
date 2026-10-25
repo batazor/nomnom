@@ -1,7 +1,5 @@
-//! Column lists and row ↔ domain mapping of [`super::PostgresStore`].
-
-use sqlx::postgres::PgRow;
-use sqlx::{Postgres, Row};
+//! Rows of the compile-time checked queries (`sqlx::query_as!`) and row ↔
+//! domain mapping of [`super::PostgresStore`].
 
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierStatus};
@@ -77,65 +75,78 @@ pub(super) fn address(value: &str) -> Result<Address, RepositoryError> {
     Address::new(value).map_err(|error| corrupt("address", error))
 }
 
-pub(super) fn column<'r, T>(row: &'r PgRow, name: &str) -> Result<T, RepositoryError>
-where
-    T: sqlx::Decode<'r, Postgres> + sqlx::Type<Postgres>,
-{
-    row.try_get(name).map_err(|error| corrupt(name, error))
+/// Row of `couriers` as `sqlx::query_as!` reads it.
+pub(super) struct CourierRow {
+    pub(super) id: String,
+    pub(super) status: String,
+    pub(super) authorization_revision: Option<String>,
+    pub(super) version: i64,
 }
 
-pub(super) const COURIER_COLUMNS: &str = "id, status, authorization_revision, version";
-
-pub(super) fn courier_from_row(row: &PgRow) -> Result<Courier, RepositoryError> {
-    let status = parse_courier_status(column(row, "status")?)?;
-    let revision: Option<String> = column(row, "authorization_revision")?;
-    Ok(
-        Courier::restore(CourierId::new(column::<String>(row, "id")?), status)
-            .with_authorization_revision(revision.map(AuthorizationRevision::new))
-            .with_version(domain_version(column(row, "version")?)?),
-    )
+pub(super) fn courier_from_row(row: CourierRow) -> Result<Courier, RepositoryError> {
+    let status = parse_courier_status(&row.status)?;
+    Ok(Courier::restore(CourierId::new(row.id), status)
+        .with_authorization_revision(row.authorization_revision.map(AuthorizationRevision::new))
+        .with_version(domain_version(row.version)?))
 }
 
-pub(super) const DELIVERY_COLUMNS: &str = "id, order_id, courier_id, pickup_address, \
-     state, failure_reason, failure_detail, authorization_revision, version, created_at";
+/// Row of `deliveries` as `sqlx::query_as!` reads it.
+pub(super) struct DeliveryRow {
+    pub(super) id: String,
+    pub(super) order_id: String,
+    pub(super) courier_id: Option<String>,
+    pub(super) pickup_address: String,
+    pub(super) state: String,
+    pub(super) failure_reason: Option<String>,
+    pub(super) failure_detail: Option<String>,
+    pub(super) authorization_revision: Option<String>,
+    pub(super) version: i64,
+    pub(super) created_at: Option<i64>,
+}
 
-pub(super) fn delivery_from_row(row: &PgRow) -> Result<Delivery, RepositoryError> {
+pub(super) fn delivery_from_row(row: DeliveryRow) -> Result<Delivery, RepositoryError> {
     // A free-text reason stored before the catalog reads back as `other`.
-    let failure_detail: Option<String> = column(row, "failure_detail")?;
-    let failure_reason = column::<Option<String>>(row, "failure_reason")?
-        .map(|reason| DeliveryFailureReason::restore(&reason, failure_detail.as_deref()));
-    let revision: Option<String> = column(row, "authorization_revision")?;
-    let version = domain_version(column(row, "version")?)?;
-    let created_at: Option<i64> = column(row, "created_at")?;
+    let failure_reason = row
+        .failure_reason
+        .map(|reason| DeliveryFailureReason::restore(&reason, row.failure_detail.as_deref()));
+    let version = domain_version(row.version)?;
     Delivery::restore(
-        DeliveryId::new(column::<String>(row, "id")?),
-        OrderId::new(column::<String>(row, "order_id")?),
-        column::<Option<String>>(row, "courier_id")?.map(CourierId::new),
-        address(column(row, "pickup_address")?)?,
-        parse_delivery_state(column(row, "state")?)?,
+        DeliveryId::new(row.id),
+        OrderId::new(row.order_id),
+        row.courier_id.map(CourierId::new),
+        address(&row.pickup_address)?,
+        parse_delivery_state(&row.state)?,
         failure_reason,
     )
     .map_err(|error| corrupt("delivery", error))
     .map(|delivery| {
         delivery
-            .with_created_at(created_at)
-            .with_authorization_revision(revision.map(AuthorizationRevision::new))
+            .with_created_at(row.created_at)
+            .with_authorization_revision(row.authorization_revision.map(AuthorizationRevision::new))
             .with_version(version)
     })
 }
 
-pub(super) const OFFER_COLUMNS: &str =
-    "id, delivery_id, courier_id, offered_at, expires_at, state, version";
+/// Row of `delivery_offers` as `sqlx::query_as!` reads it.
+pub(super) struct OfferRow {
+    pub(super) id: String,
+    pub(super) delivery_id: String,
+    pub(super) courier_id: String,
+    pub(super) offered_at: i64,
+    pub(super) expires_at: i64,
+    pub(super) state: String,
+    pub(super) version: i64,
+}
 
-pub(super) fn offer_from_row(row: &PgRow) -> Result<DeliveryOffer, RepositoryError> {
-    let version = domain_version(column(row, "version")?)?;
+pub(super) fn offer_from_row(row: OfferRow) -> Result<DeliveryOffer, RepositoryError> {
+    let version = domain_version(row.version)?;
     DeliveryOffer::restore(
-        DeliveryOfferId::new(column::<String>(row, "id")?),
-        DeliveryId::new(column::<String>(row, "delivery_id")?),
-        CourierId::new(column::<String>(row, "courier_id")?),
-        column(row, "offered_at")?,
-        column(row, "expires_at")?,
-        parse_offer_state(column(row, "state")?)?,
+        DeliveryOfferId::new(row.id),
+        DeliveryId::new(row.delivery_id),
+        CourierId::new(row.courier_id),
+        row.offered_at,
+        row.expires_at,
+        parse_offer_state(&row.state)?,
     )
     .map_err(|error| corrupt("delivery offer", error))
     .map(|offer| offer.with_version(version))

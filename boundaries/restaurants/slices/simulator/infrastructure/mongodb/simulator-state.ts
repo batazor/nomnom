@@ -1,6 +1,5 @@
 import type { Collection, Db } from "mongodb";
 
-import type { CollectionSpec } from "../../../../pkg/infrastructure/mongodb/migrate.ts";
 import type { SimulatorStateRepository } from "../../domains/simulator/simulator.ts";
 
 export const SIMULATOR_COLLECTION = "simulator";
@@ -13,23 +12,6 @@ export type SimulatorStateDocument = {
   schemaVersion: number;
   enabled: boolean;
   changedAt: Date;
-};
-
-export const simulatorCollectionSpec: CollectionSpec = {
-  name: SIMULATOR_COLLECTION,
-  validator: {
-    $jsonSchema: {
-      bsonType: "object",
-      required: ["_id", "schemaVersion", "enabled", "changedAt"],
-      properties: {
-        _id: { enum: [SIMULATOR_STATE_ID] },
-        schemaVersion: { bsonType: "int", minimum: 1 },
-        enabled: { bsonType: "bool" },
-        changedAt: { bsonType: "date" },
-      },
-    },
-  },
-  indexes: [],
 };
 
 /**

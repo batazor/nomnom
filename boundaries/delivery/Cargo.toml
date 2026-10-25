@@ -23,7 +23,7 @@ prost-types = "0.14.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 shaku = "0.6.3"
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "tls-rustls-ring-webpki"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid", "tls-rustls-ring-webpki"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "io-util", "sync"] }
 tonic = { version = "0.14.6", features = ["tls-ring", "tls-webpki-roots"] }
 tonic-prost = "0.14.4"

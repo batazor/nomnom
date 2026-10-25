@@ -185,11 +185,15 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_migrated_database_is_left_unchanged(self) -> None:
         with psycopg.connect(self.dsn) as conn:
-            before = conn.execute("SELECT version, applied_at FROM schema_migrations").fetchall()
+            before = conn.execute(
+                "SELECT migration_id, applied_at_utc FROM _yoyo_migration"
+            ).fetchall()
         logs = self.start(self.dsn)
         self.assertIn("payments migrations applied: none pending", logs[-1])
         with psycopg.connect(self.dsn) as conn:
-            after = conn.execute("SELECT version, applied_at FROM schema_migrations").fetchall()
+            after = conn.execute(
+                "SELECT migration_id, applied_at_utc FROM _yoyo_migration"
+            ).fetchall()
         self.assertEqual(after, before)
 
     def test_empty_database_gets_every_migration(self) -> None:
@@ -199,11 +203,11 @@ class StartupMigrationTest(unittest.TestCase):
         self.addCleanup(self._drop, name)
         dsn = self.dsn.rsplit("/", 1)[0] + f"/{name}"
         logs = self.start(dsn)
-        files = [file for _, file, _ in migrations()]
-        self.assertIn(f"payments migrations applied: {', '.join(files)}", logs[-1])
+        ids = [migration.id for migration in migrations()]
+        self.assertIn(f"payments migrations applied: {', '.join(ids)}", logs[-1])
         with psycopg.connect(dsn) as conn:
-            versions = conn.execute("SELECT name FROM schema_migrations ORDER BY version")
-            self.assertEqual([row[0] for row in versions], files)
+            applied = conn.execute("SELECT migration_id FROM _yoyo_migration ORDER BY migration_id")
+            self.assertEqual([row[0] for row in applied], ids)
 
     def _drop(self, name: str) -> None:
         with psycopg.connect(self.dsn, autocommit=True) as admin:

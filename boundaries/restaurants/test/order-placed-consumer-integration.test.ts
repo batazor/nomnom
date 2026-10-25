@@ -6,7 +6,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import kafka from "@confluentinc/kafka-javascript";
 import { createConsumerContainer } from "../di/consumer.ts";
 import { OrderPlacedSchema } from "../infrastructure/grpc/gen/nomnom/orders/v1/events_pb.js";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
 import { loadConfig } from "../pkg/config/config.ts";
 import {
   createConsumerClient,

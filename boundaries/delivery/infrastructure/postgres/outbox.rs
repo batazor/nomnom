@@ -64,43 +64,18 @@ pub(super) fn row_traceparent() -> String {
     current_traceparent().unwrap_or_default()
 }
 
-/// Retention of the Outbox (ADR 37) as a CTE `expired` of every Outbox
-/// write: rows older than an hour go in the transaction of the next write,
-/// without a background job; the replication slot keeps the WAL of rows
-/// Debezium has not read yet, and the publication ignores deletes. `SKIP
-/// LOCKED`: concurrent writes neither wait for nor deadlock on each other's
-/// deletes.
-macro_rules! expire_outbox {
-    () => {
-        "expired AS (
-            DELETE FROM delivery_outbox WHERE event_id IN (
-                SELECT event_id FROM delivery_outbox
-                WHERE created_at < now() - interval '1 hour'
-                FOR UPDATE SKIP LOCKED))"
-    };
-}
-
 /// Kafka topic of Courier Change Notifications (ADR 36): the BFF Router turns
 /// them into `courierChanged` subscription events. Not an Integration Event:
 /// no bounded context consumes it.
 pub const COURIER_CHANGES_TOPIC: &str = "delivery.v1.courier-changes";
 
-/// SQL tail that writes the Change Notification of every courier id a CTE
-/// `changed (id)` returns: a write, its notification and the Outbox
-/// retention are one statement, atomic with or without a Unit of Work. `$1`
-/// is the [`row_traceparent`].
-pub(super) const NOTIFY_CHANGED_COURIERS: &str = concat!(
-    ", ",
-    expire_outbox!(),
-    "
-    INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
-        aggregate_version, topic, payload, traceparent)
-    SELECT gen_random_uuid(), 'CourierChanged', 'Courier', id, 0,
-        'delivery.v1.courier-changes',
-        convert_to(json_build_object('__typename', 'Courier', 'id', id)::text, 'UTF8'),
-        $1
-    FROM changed"
-);
+// Retention of the Outbox (ADR 37): every Outbox write statement carries the
+// CTE `expired`, so rows older than an hour go in the transaction of the next
+// write, without a background job; the replication slot keeps the WAL of rows
+// Debezium has not read yet, and the publication ignores deletes. `SKIP
+// LOCKED`: concurrent writes neither wait for nor deadlock on each other's
+// deletes. `sqlx::query!` takes only a string literal, so each statement
+// (here and the courier writes of `repositories`) spells the CTE out.
 
 impl PostgresStore {
     /// Writes the Change Notification of `Courier(courier_id)` next to the
@@ -110,19 +85,21 @@ impl PostgresStore {
     /// UUIDv7 rather than the aggregate-version UUIDv5 of Integration Events.
     pub(super) fn notify_courier(&self, courier_id: &str) -> Result<(), RepositoryError> {
         let payload = serde_json::json!({ "__typename": "Courier", "id": courier_id }).to_string();
-        sql!(self, "INSERT", |connection| sqlx::query(concat!(
-            "WITH ",
-            expire_outbox!(),
-            "
+        sql!(self, "INSERT", |connection| sqlx::query!(
+            "WITH expired AS (
+                 DELETE FROM delivery_outbox WHERE event_id IN (
+                     SELECT event_id FROM delivery_outbox
+                     WHERE created_at < now() - interval '1 hour'
+                     FOR UPDATE SKIP LOCKED))
              INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
                  aggregate_version, topic, payload, traceparent)
-             VALUES ($1::uuid, 'CourierChanged', 'Courier', $2, 0, $3, $4, $5)"
-        ))
-        .bind(Uuid::now_v7().to_string())
-        .bind(courier_id)
-        .bind(COURIER_CHANGES_TOPIC)
-        .bind(payload.into_bytes())
-        .bind(row_traceparent())
+             VALUES ($1, 'CourierChanged', 'Courier', $2, 0, $3, $4, $5)",
+            Uuid::now_v7(),
+            courier_id,
+            COURIER_CHANGES_TOPIC,
+            payload.into_bytes(),
+            row_traceparent()
+        )
         .execute(connection))
         .map(drop)
     }
@@ -137,10 +114,10 @@ impl DeliveryOutbox for PostgresStore {
             return Ok(());
         };
         let aggregate_id = message.aggregate_id.as_str();
-        let version: Option<i64> = sql!(self, "SELECT", |connection| sqlx::query_scalar(
-            "SELECT version FROM deliveries WHERE id = $1"
+        let version: Option<i64> = sql!(self, "SELECT", |connection| sqlx::query_scalar!(
+            "SELECT version FROM deliveries WHERE id = $1",
+            aggregate_id
         )
-        .bind(aggregate_id)
         .fetch_optional(connection))?;
         let version = version.ok_or_else(|| {
             RepositoryError::Unavailable(format!(
@@ -153,24 +130,25 @@ impl DeliveryOutbox for PostgresStore {
             aggregate_id,
             version,
             &record.event_type,
-        )
-        .to_string();
-        sql!(self, "INSERT", |connection| sqlx::query(concat!(
-            "WITH ",
-            expire_outbox!(),
-            "
+        );
+        sql!(self, "INSERT", |connection| sqlx::query!(
+            "WITH expired AS (
+                 DELETE FROM delivery_outbox WHERE event_id IN (
+                     SELECT event_id FROM delivery_outbox
+                     WHERE created_at < now() - interval '1 hour'
+                     FOR UPDATE SKIP LOCKED))
              INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
                  aggregate_version, topic, payload, traceparent)
-             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)"
-        ))
-        .bind(&id)
-        .bind(&record.event_type)
-        .bind(message.aggregate_type)
-        .bind(aggregate_id)
-        .bind(version)
-        .bind(OUTBOX_TOPIC)
-        .bind(&record.payload)
-        .bind(row_traceparent())
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            id,
+            record.event_type,
+            message.aggregate_type,
+            aggregate_id,
+            version,
+            OUTBOX_TOPIC,
+            record.payload,
+            row_traceparent()
+        )
         .execute(connection))
         .map(drop)
     }

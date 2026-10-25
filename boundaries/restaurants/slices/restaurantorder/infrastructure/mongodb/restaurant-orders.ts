@@ -43,13 +43,8 @@ import {
   RestaurantOrderState,
 } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenChangeNotifier } from "../integration/kitchen-changes.ts";
-import { RESTAURANT_ORDERS_COLLECTION } from "./collection-spec.ts";
 
-export {
-  RESTAURANT_ORDERS_COLLECTION,
-  restaurantOrderCollectionSpec,
-} from "./collection-spec.ts";
-
+export const RESTAURANT_ORDERS_COLLECTION = "restaurant_orders";
 export const RESTAURANT_ORDER_SCHEMA_VERSION = 1;
 
 /**

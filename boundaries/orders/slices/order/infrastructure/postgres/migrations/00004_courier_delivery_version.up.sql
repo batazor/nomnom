@@ -1,4 +1,3 @@
--- +goose Up
 -- Delivery aggregate_version of the courier event (CourierAssignedToDelivery,
 -- CourierUnassignedFromDelivery, DeliveryCancelled) that recorded the stored
 -- Courier Assignment or release. It orders courier events of the Order: an
@@ -8,6 +7,3 @@
 ALTER TABLE orders
     ADD COLUMN courier_delivery_version BIGINT NOT NULL DEFAULT 0
         CONSTRAINT orders_courier_delivery_version_non_negative CHECK (courier_delivery_version >= 0);
-
--- +goose Down
-ALTER TABLE orders DROP COLUMN courier_delivery_version;

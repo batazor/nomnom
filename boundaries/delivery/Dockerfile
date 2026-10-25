@@ -11,6 +11,10 @@ COPY di ./di
 COPY infrastructure ./infrastructure
 COPY pkg ./pkg
 COPY slices ./slices
+# Offline query cache of the compile-time checked sqlx macros (`make sqlx-prepare`):
+# the build checks queries against it and never connects to a database.
+COPY .sqlx ./.sqlx
+ENV SQLX_OFFLINE=true
 # target — общий cache mount всех сборок на хосте, в том числе других деревьев исходников.
 # Cargo сравнивает mtime исходников с fingerprint, а COPY сохраняет mtime контекста: более
 # старый файл другого содержимого выглядел бы собранным, и в образ попал бы чужой бинарь.

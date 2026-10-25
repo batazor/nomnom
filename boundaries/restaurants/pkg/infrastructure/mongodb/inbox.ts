@@ -1,16 +1,10 @@
 import { type Collection, type Db, MongoServerError } from "mongodb";
 
 import type { Inbox, InboxRecord } from "../messaging/processor.ts";
-import type { CollectionSpec } from "./migrate.ts";
 import type { MongoUnitOfWork } from "./unit-of-work.ts";
 
 export const INBOX_COLLECTION = "inbox";
 export const INBOX_SCHEMA_VERSION = 1;
-/**
- * Retention записей Inbox (ADR 11): больше retention Kafka по умолчанию
- * (7 дней) и окна, в котором consumer group может перечитать стрим.
- */
-export const INBOX_RETENTION_SECONDS = 30 * 24 * 60 * 60;
 
 /** Факт обработки одного Integration Event одним consumer (ADR 11). */
 export type InboxDocument = {
@@ -97,45 +91,3 @@ export class MongoInbox implements Inbox {
     }
   }
 }
-
-export const inboxCollectionSpec: CollectionSpec = {
-  name: INBOX_COLLECTION,
-  validator: {
-    $jsonSchema: {
-      bsonType: "object",
-      required: [
-        "_id",
-        "schemaVersion",
-        "consumer",
-        "eventId",
-        "eventType",
-        "aggregateId",
-        "topic",
-        "processedAt",
-      ],
-      properties: {
-        _id: { bsonType: "string", minLength: 1 },
-        schemaVersion: { bsonType: "int", minimum: 1 },
-        consumer: { bsonType: "string", minLength: 1 },
-        eventId: { bsonType: "string", minLength: 1 },
-        eventType: { bsonType: "string", minLength: 1 },
-        aggregateId: { bsonType: "string", minLength: 1 },
-        topic: { bsonType: "string", minLength: 1 },
-        processedAt: { bsonType: "date" },
-      },
-    },
-  },
-  indexes: [
-    {
-      key: { consumer: 1, eventId: 1 },
-      name: "inbox_consumer_event_unique",
-      unique: true,
-    },
-    // Retention (ADR 11): MongoDB удаляет записи старше срока фоновым TTL.
-    {
-      key: { processedAt: 1 },
-      name: "inbox_processed_at_ttl",
-      expireAfterSeconds: INBOX_RETENTION_SECONDS,
-    },
-  ],
-};

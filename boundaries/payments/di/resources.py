@@ -78,7 +78,7 @@ def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetr
 def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
     """The psycopg pool over the migrated schema; any failure stops the process before ports open.
 
-    Pending migrations are applied first, on one connection under the advisory lock of
+    Pending migrations are applied first, on one connection under the yoyo lock of
     ``migrate``: replicas starting together apply them once, the rest find nothing to
     change. The pool opens only after that connection is closed.
     """

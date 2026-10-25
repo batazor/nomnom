@@ -9,7 +9,7 @@ import {
   createRestaurantsContainer,
   type RestaurantsResources,
 } from "../di/restaurants.ts";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
 import {
   type AppConfig,
   loadConfig,

@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
+import { pathToFileURL } from "node:url";
 
-import { MongoServerError } from "mongodb";
-
+import { type Db, MongoServerError } from "mongodb";
 import {
-  COLLECTIONS,
+  MIGRATIONS_DIR,
   migrateRestaurantsDatabase,
-} from "../infrastructure/mongodb/collections.ts";
+} from "../infrastructure/mongodb/migrate.ts";
+import { up as dropOutboxRelay } from "../infrastructure/mongodb/migrations/0007-pkg-outbox-drop-polling-relay.ts";
 import {
   AlreadyExistsError,
   ConcurrencyConflictError,
@@ -17,11 +21,11 @@ import {
   type MongoDbConnection,
 } from "../pkg/infrastructure/mongodb/client.ts";
 import {
-  MIGRATION_LOCK_COLLECTION,
-  MIGRATIONS_COLLECTION,
+  MIGRATIONS_CHANGELOG_COLLECTION,
+  MIGRATIONS_LOCK_COLLECTION,
+  migrate,
 } from "../pkg/infrastructure/mongodb/migrate.ts";
 import {
-  dropOutboxRelayMigration,
   MongoOutbox,
   OUTBOX_COLLECTION,
   type OutboxEventMapper,
@@ -68,6 +72,7 @@ const testMapper: OutboxEventMapper = (_aggregate, event) => ({
 
 describe("startup migration", () => {
   let mongo: MongoDbConnection;
+  let migrations: string[];
 
   before(async () => {
     mongo = await connectMongoDb({
@@ -76,6 +81,9 @@ describe("startup migration", () => {
       database: "restaurants_test",
       timeoutMs: 5000,
     });
+    migrations = (await readdir(MIGRATIONS_DIR))
+      .filter((name) => name.endsWith(".ts"))
+      .sort();
   });
 
   after(async () => {
@@ -90,25 +98,37 @@ describe("startup migration", () => {
     return db;
   };
 
-  test("applies everything on an empty database and nothing on a migrated one", async (t) => {
+  const collectionNames = async (db: Db) =>
+    (await db.listCollections({}, { nameOnly: true }).toArray()).map(
+      (collection) => collection.name,
+    );
+
+  test("applies every migration on an empty database and nothing on a migrated one", async (t) => {
     const db = freshDatabase(t);
-    const messages: string[] = [];
 
-    const first = await migrateRestaurantsDatabase(db, (message) =>
-      messages.push(message),
-    );
-    for (const spec of COLLECTIONS) {
-      assert.ok(first.includes(`created collection ${spec.name}`), spec.name);
+    assert.deepEqual(await migrateRestaurantsDatabase(db), migrations);
+    const collections = await collectionNames(db);
+    for (const name of [
+      "restaurants",
+      "menus",
+      "restaurant_orders",
+      "simulator",
+      OUTBOX_COLLECTION,
+      "inbox",
+    ]) {
+      assert.ok(collections.includes(name), name);
     }
-    assert.ok(first.includes("created index menus.menus_restaurant_unique"));
-    assert.ok(first.includes("applied migration 0001-outbox-cdc-drop-relay"));
-    assert.ok(
-      await db
-        .collection(MIGRATIONS_COLLECTION)
-        .findOne({ _id: "0001-outbox-cdc-drop-relay" as never }),
+    assert.deepEqual(
+      (
+        await db
+          .collection<{ fileName: string }>(MIGRATIONS_CHANGELOG_COLLECTION)
+          .find()
+          .toArray()
+      ).map((entry) => entry.fileName),
+      migrations,
     );
 
-    messages.length = 0;
+    const messages: string[] = [];
     assert.deepEqual(
       await migrateRestaurantsDatabase(db, (message) => messages.push(message)),
       [],
@@ -116,51 +136,113 @@ describe("startup migration", () => {
     assert.deepEqual(messages, [
       "database schema is up to date, nothing to migrate",
     ]);
-    // The lease is released after every run.
+    // The lock is released after every run.
     assert.equal(
-      await db.collection(MIGRATION_LOCK_COLLECTION).countDocuments(),
+      await db.collection(MIGRATIONS_LOCK_COLLECTION).countDocuments(),
       0,
     );
   });
 
-  test("restores a changed validator and a dropped index", async (t) => {
+  test("adopts a database created by the previous migrator", async (t) => {
     const db = freshDatabase(t);
-    await migrateRestaurantsDatabase(db);
-    await db.command({ collMod: "menus", validator: {} });
-    await db.collection("menus").dropIndex("menus_restaurant_unique");
+    await db.createCollection("menus", { validator: {} });
+    await db
+      .collection("menus")
+      .createIndex(
+        { restaurantId: 1 },
+        { name: "menus_restaurant_unique", unique: true },
+      );
+    await db
+      .collection("schema_migrations")
+      .insertOne({ _id: "0001-outbox-cdc-drop-relay" as never });
+    await db.createCollection("schema_migrations_lock");
 
-    assert.deepEqual(await migrateRestaurantsDatabase(db), [
-      "updated validator of menus",
-      "created index menus.menus_restaurant_unique",
-    ]);
-    assert.deepEqual(await migrateRestaurantsDatabase(db), []);
+    assert.deepEqual(await migrateRestaurantsDatabase(db), migrations);
+    const [menus] = await db
+      .listCollections({ name: "menus" }, { nameOnly: false })
+      .toArray();
+    assert.equal(menus?.options?.validationLevel, "strict");
+    await assert.rejects(
+      db.collection("menus").insertOne({ restaurantId: 42 }),
+      (error) => error instanceof MongoServerError && error.code === 121,
+    );
+    const collections = await collectionNames(db);
+    assert.equal(collections.includes("schema_migrations"), false);
+    assert.equal(collections.includes("schema_migrations_lock"), false);
   });
 
-  test("processes starting together migrate once under the lease", async (t) => {
+  test("processes starting together are serialized by the lock", async (t) => {
     const db = freshDatabase(t);
     const runs = await Promise.all(
       Array.from({ length: 4 }, () => migrateRestaurantsDatabase(db)),
     );
-    // One holder applies the changes; the others wait for the lease and find
-    // nothing to change.
-    assert.equal(runs.filter((changes) => changes.length > 0).length, 1);
+    // The first holder applies everything; the others wait for the lock.
+    assert.ok(runs.some((applied) => applied.length === migrations.length));
+    assert.deepEqual(
+      [
+        ...new Set(
+          (
+            await db
+              .collection<{ fileName: string }>(MIGRATIONS_CHANGELOG_COLLECTION)
+              .find()
+              .toArray()
+          ).map((entry) => entry.fileName),
+        ),
+      ].sort(),
+      migrations,
+    );
     assert.equal(
-      runs.flat().filter((change) => change.startsWith("applied migration"))
-        .length,
-      1,
+      await db.collection(MIGRATIONS_LOCK_COLLECTION).countDocuments(),
+      0,
     );
   });
 
-  test("an expired lease of a crashed process does not block startup", async (t) => {
-    const db = freshDatabase(t);
-    await db.collection(MIGRATION_LOCK_COLLECTION).insertOne({
-      _id: "migrate" as never,
-      owner: "crashed",
-      expiresAt: new Date(Date.now() - 1000),
+  test("the lock of a crashed process expires", async (t) => {
+    // The TTL monitor removes expired documents every second instead of 60.
+    const admin = mongo.client.db("admin");
+    const { was } = await admin.command({
+      setParameter: 1,
+      ttlMonitorSleepSecs: 1,
     });
-    assert.ok((await migrateRestaurantsDatabase(db)).length > 0);
+    t.after(async () => {
+      await admin.command({ setParameter: 1, ttlMonitorSleepSecs: was });
+    });
+    const db = freshDatabase(t);
+    await migrateRestaurantsDatabase(db);
+    await db
+      .collection(MIGRATIONS_LOCK_COLLECTION)
+      .insertOne({ createdAt: new Date(Date.now() - 60_000) });
+
+    const messages: string[] = [];
+    assert.deepEqual(
+      await migrateRestaurantsDatabase(db, (message) => messages.push(message)),
+      [],
+    );
     assert.equal(
-      await db.collection(MIGRATION_LOCK_COLLECTION).countDocuments(),
+      messages[0],
+      "waiting for another process to finish migrating",
+    );
+  });
+
+  test("a failed migration rejects and releases the lock", async (t) => {
+    const dir = await mkdtemp(join(tmpdir(), "restaurants-migrations-"));
+    t.after(() => rm(dir, { recursive: true }));
+    await writeFile(
+      join(dir, "0001-fails.ts"),
+      'export async function up() { throw new Error("boom"); }\n',
+    );
+    const db = freshDatabase(t);
+
+    await assert.rejects(
+      migrate(db, pathToFileURL(`${dir}/`)),
+      /Could not migrate up 0001-fails.ts: boom/,
+    );
+    assert.equal(
+      await db.collection(MIGRATIONS_LOCK_COLLECTION).countDocuments(),
+      0,
+    );
+    assert.equal(
+      await db.collection(MIGRATIONS_CHANGELOG_COLLECTION).countDocuments(),
       0,
     );
   });
@@ -262,9 +344,9 @@ describe("MongoDB storage", () => {
       { bypassDocumentValidation: true },
     );
 
-    // Twice: a crash before `schema_migrations` is written runs it again.
-    await dropOutboxRelayMigration.up(mongo.db);
-    await dropOutboxRelayMigration.up(mongo.db);
+    // Twice: a crash before the changelog entry is written runs it again.
+    await dropOutboxRelay(mongo.db);
+    await dropOutboxRelay(mongo.db);
 
     assert.equal(await outbox.countDocuments({ _id: relayRecord as never }), 0);
     assert.equal(

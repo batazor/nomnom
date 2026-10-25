@@ -4,7 +4,7 @@ import { after, before, describe, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/collections.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import {
   connectMongoDb,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
 	"nomnom/orders/pkg/application"
@@ -14,7 +15,8 @@ import (
 // RememberRevision stores the ZedToken of the creation-time relationship in the
 // Order row, inside the placement transaction (ADR 18).
 func (s *Store) RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error {
-	tag, err := s.q(ctx).Exec(ctx, `UPDATE orders SET authorization_revision = $2 WHERE id = $1`, orderID, string(revision))
+	tag, err := s.exec(ctx, psql.Update("orders").
+		Set("authorization_revision", string(revision)).Where(sq.Eq{"id": orderID}))
 	if err != nil {
 		return fmt.Errorf("remember authorization revision of %s: %w", orderID, err)
 	}
@@ -27,7 +29,7 @@ func (s *Store) RememberRevision(ctx context.Context, orderID order.ID, revision
 // Revision returns the stored authorization revision of an Order, if any.
 func (s *Store) Revision(ctx context.Context, orderID string) (application.AuthorizationRevision, bool, error) {
 	var revision *string
-	err := s.q(ctx).QueryRow(ctx, `SELECT authorization_revision FROM orders WHERE id = $1`, orderID).Scan(&revision)
+	err := s.queryRow(ctx, psql.Select("authorization_revision").From("orders").Where(sq.Eq{"id": orderID}), &revision)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && revision == nil) {
 		return "", false, nil
 	}

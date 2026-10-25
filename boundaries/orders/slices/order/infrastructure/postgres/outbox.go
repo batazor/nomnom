@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/ThreeDotsLabs/watermill/message"
 
 	"nomnom/orders/pkg/messaging"
@@ -27,8 +28,7 @@ func (s *Store) AppendMessages(ctx context.Context, topic string, messages ...*m
 	if len(messages) == 0 {
 		return nil
 	}
-	tx, ok := transaction(ctx)
-	if !ok {
+	if _, ok := transaction(ctx); !ok {
 		return ErrOutboxOutsideTransaction
 	}
 	// Trace context операции, записавшей событие, едет в Outbox до Kafka headers.
@@ -42,23 +42,21 @@ func (s *Store) AppendMessages(ctx context.Context, topic string, messages ...*m
 		if err != nil {
 			return fmt.Errorf("outbox %s occurred_at: %w", msg.UUID, err)
 		}
-		_, err = tx.Exec(ctx, `
-			INSERT INTO orders_outbox (event_id, event_type, aggregate_type, aggregate_id,
-				aggregate_version, occurred_at, topic, payload, traceparent)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			msg.UUID, msg.Metadata.Get(messaging.EventTypeMetadata),
-			msg.Metadata.Get(messaging.AggregateTypeMetadata), msg.Metadata.Get(messaging.AggregateIDMetadata),
-			version, occurredAt, topic, []byte(msg.Payload), msg.Metadata.Get(messaging.TraceParentMetadata))
+		_, err = s.exec(ctx, psql.Insert("orders_outbox").
+			Columns("event_id", "event_type", "aggregate_type", "aggregate_id",
+				"aggregate_version", "occurred_at", "topic", "payload", "traceparent").
+			Values(msg.UUID, msg.Metadata.Get(messaging.EventTypeMetadata),
+				msg.Metadata.Get(messaging.AggregateTypeMetadata), msg.Metadata.Get(messaging.AggregateIDMetadata),
+				version, occurredAt, topic, []byte(msg.Payload), msg.Metadata.Get(messaging.TraceParentMetadata)))
 		if err != nil {
 			return fmt.Errorf("append outbox %s for %s: %w", msg.UUID, topic, err)
 		}
 	}
 	// SKIP LOCKED: concurrent Units of Work do not wait on the same old rows.
-	if _, err := tx.Exec(ctx, `
-		DELETE FROM orders_outbox WHERE event_id IN (
-			SELECT event_id FROM orders_outbox WHERE created_at < now() - $1::interval
-			FOR UPDATE SKIP LOCKED)`,
-		outboxRetention.String()); err != nil {
+	expired := psql.Select("event_id").From("orders_outbox").
+		Where("created_at < now() - ?::interval", outboxRetention.String()).
+		Suffix("FOR UPDATE SKIP LOCKED")
+	if _, err := s.exec(ctx, psql.Delete("orders_outbox").Where(sq.Expr("event_id IN (?)", expired))); err != nil {
 		return fmt.Errorf("outbox retention: %w", err)
 	}
 	return nil

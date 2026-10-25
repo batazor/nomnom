@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO simulator (singleton, enabled) VALUES (TRUE, $1)\n             ON CONFLICT (singleton) DO UPDATE SET enabled = EXCLUDED.enabled",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6b10c71fe381f35984256b80edcb5434a04c70b2aca805e2c9357ee470512391"
+}

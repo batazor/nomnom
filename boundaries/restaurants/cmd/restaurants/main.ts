@@ -4,7 +4,7 @@
 // asynchronously acquired resources and the shutdown order.
 import { createRestaurantsContainer } from "../../di/restaurants.ts";
 import { createSubjectResolver } from "../../infrastructure/grpc/subject.ts";
-import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/collections.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/migrate.ts";
 import {
   loadConfig,
   loadLocalEnv,

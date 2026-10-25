@@ -2,6 +2,8 @@
 //! ADR 0001 of the context) on `sqlx`: repositories with optimistic
 //! concurrency, the Transactional Outbox (ADR 13, ADR 31), the courier
 //! location store, read models, the Unit of Work and the reconciliation reads.
+//! Every statement is a compile-time checked `sqlx` macro; `.sqlx` holds the
+//! query cache for builds without a database (`make sqlx-prepare`).
 //!
 //! Optimistic concurrency: every aggregate row carries `version`. `save`
 //! runs `UPDATE ... SET version = version + 1 WHERE id = $1 AND version = $2`
@@ -191,8 +193,9 @@ impl Drop for PostgresStore {
 }
 
 /// Runs one statement on the leased connection and maps the sqlx error.
-/// Dynamic statements are `format!` over column-list constants only
-/// (`AssertSqlSafe`); values are always bound.
+/// Statements are `sqlx::query!` / `query_as!` / `query_scalar!` literals,
+/// checked at compile time against the migrated schema (the `.sqlx` offline
+/// cache); values are always bound.
 /// `$operation` is the SQL keyword for `db.client.operation.duration`; the
 /// table (`db.collection.name`) is read once from the statement literal of
 /// the call site. Inside a trace the statement gets a client span.

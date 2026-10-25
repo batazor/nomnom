@@ -8,11 +8,15 @@ import (
 	"fmt"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
 )
+
+// psql builds statements with PostgreSQL $n placeholders.
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 type State struct {
 	pool *pgxpool.Pool
@@ -26,8 +30,12 @@ func NewState(pool *pgxpool.Pool) *State {
 
 // Enabled is false while no state is stored.
 func (s *State) Enabled(ctx context.Context) (bool, error) {
+	query, args, err := psql.Select("enabled").From("simulator_state").ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build simulator_state query: %w", err)
+	}
 	var enabled bool
-	err := s.pool.QueryRow(ctx, `SELECT enabled FROM simulator_state`).Scan(&enabled)
+	err = s.pool.QueryRow(ctx, query, args...).Scan(&enabled)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return false, nil
@@ -38,11 +46,14 @@ func (s *State) Enabled(ctx context.Context) (bool, error) {
 }
 
 func (s *State) SetEnabled(ctx context.Context, enabled bool) error {
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO simulator_state (singleton, enabled, updated_at) VALUES (TRUE, $1, $2)
-		ON CONFLICT (singleton) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at`,
-		enabled, time.Now().UTC())
+	statement, args, err := psql.Insert("simulator_state").
+		Columns("singleton", "enabled", "updated_at").Values(sq.Expr("TRUE"), enabled, time.Now().UTC()).
+		Suffix("ON CONFLICT (singleton) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at").
+		ToSql()
 	if err != nil {
+		return fmt.Errorf("build simulator_state upsert: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx, statement, args...); err != nil {
 		return fmt.Errorf("upsert simulator_state: %w", err)
 	}
 	return nil
