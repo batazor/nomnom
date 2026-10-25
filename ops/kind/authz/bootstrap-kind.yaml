@@ -5,5 +5,9 @@
 #
 # kind-operator — оператор платформы в e2e пути заказа (e2e/order-lifecycle): регистрирует
 # ресторан и курьера через fixture e2e-driver.
+#
+# Тот же оператор при входе через Dex (operator@nomnom.test): sub Dex — base64url(protobuf{userID,
+# "local"}), ADR 35.
 relationships: |-
   platform:nomnom#operator@user:kind-operator
+  platform:nomnom#operator@user:Cg1raW5kLW9wZXJhdG9yEgVsb2NhbA

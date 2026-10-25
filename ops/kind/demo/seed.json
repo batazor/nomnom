@@ -1,9 +1,9 @@
 {
   "operator": "kind-operator",
-  "owner": "nomnom-demo-owner",
-  "kitchen": "nomnom-demo-kitchen",
+  "owner": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
+  "kitchen": "ChNub21ub20tZGVtby1raXRjaGVuEgVsb2NhbA",
   "courier": {
-    "id": "nomnom-demo-courier",
+    "id": "ChNub21ub20tZGVtby1jb3VyaWVyEgVsb2NhbA",
     "latitude": 52.5262,
     "longitude": 13.4006
   },

@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_OIDC_ISSUER?: string;
   readonly VITE_OIDC_CLIENT_ID?: string;
   readonly VITE_OIDC_AUDIENCE?: string;
+  readonly VITE_OIDC_DEMO_EMAIL_DOMAIN?: string;
+  readonly VITE_OIDC_DEMO_PASSWORD?: string;
 }
 
 interface ImportMeta {

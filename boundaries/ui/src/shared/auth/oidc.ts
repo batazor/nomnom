@@ -1,6 +1,7 @@
 // Browser login with OIDC authorization code + PKCE (ADR 35): a public client,
-// no client secret. The access token lives only in page memory; the PKCE
-// verifier and state survive the redirect in sessionStorage.
+// no client secret. The access token lives only in page memory and is renewed
+// with the refresh token (offline_access, rotated by Dex on every use); the
+// PKCE verifier and state survive the redirect in sessionStorage.
 
 export type OidcConfig = Readonly<{
   issuer: string;
@@ -8,10 +9,15 @@ export type OidcConfig = Readonly<{
   // Client id of BFF: Dex puts it into aud through a cross-client scope.
   audience: string;
   redirectUri: string;
+  // Demo users of kind (<role>@domain, one password) shown next to sign-in.
+  demoEmailDomain?: string;
+  demoPassword?: string;
 }>;
 
 export type OidcLogin = Readonly<{
   accessToken: string;
+  // Absent when the provider issues none; the login then ends with the token.
+  refreshToken?: string;
   // Epoch milliseconds.
   expiresAt: number;
   // Display name of the user: email, falling back to sub.
@@ -100,7 +106,7 @@ export async function beginLogin(
     redirect_uri: config.redirectUri,
     // No nonce: Dex would copy it into the access token, and BFF rejects
     // tokens with nonce as ID tokens (ADR 35).
-    scope: `openid email audience:server:client_id:${config.audience}`,
+    scope: `openid email offline_access audience:server:client_id:${config.audience}`,
     state: pending.state,
     code_challenge: await codeChallenge(pending.verifier),
     code_challenge_method: "S256",
@@ -140,17 +146,51 @@ export async function completeLogin(
       code_verifier: pending.verifier,
     }),
   });
-  if (!response.ok) throw new Error(`Token exchange: HTTP ${response.status}`);
-  const body = (await response.json()) as { access_token?: unknown };
+  return tokenLogin(response, pending.purpose, pending.returnTo);
+}
+
+// Renews the access token of purpose. The provider rotates the refresh token:
+// the returned login carries the new one, the old one is spent.
+export async function refreshLogin(
+  config: OidcConfig,
+  refreshToken: string,
+  purpose: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<OidcLogin> {
+  const { token_endpoint } = await discover(config.issuer, fetchFn);
+  const response = await fetchFn(token_endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: config.clientId,
+      refresh_token: refreshToken,
+    }),
+  });
+  return tokenLogin(response, purpose, "/");
+}
+
+async function tokenLogin(
+  response: Response,
+  purpose: string,
+  returnTo: string,
+): Promise<OidcLogin> {
+  if (!response.ok) throw new Error(`Token request: HTTP ${response.status}`);
+  const body = (await response.json()) as {
+    access_token?: unknown;
+    refresh_token?: unknown;
+  };
   if (typeof body.access_token !== "string") {
     throw new Error("Token response has no access_token");
   }
   const claims = tokenClaims(body.access_token);
   return {
     accessToken: body.access_token,
+    refreshToken:
+      typeof body.refresh_token === "string" ? body.refresh_token : undefined,
     expiresAt: Number(claims.exp) * 1000,
     user: String(claims.email ?? claims.sub ?? ""),
-    purpose: pending.purpose,
-    returnTo: pending.returnTo,
+    purpose,
+    returnTo,
   };
 }

@@ -27,6 +27,8 @@ type RuntimeEnv = Readonly<{
   VITE_OIDC_ISSUER?: string;
   VITE_OIDC_CLIENT_ID?: string;
   VITE_OIDC_AUDIENCE?: string;
+  VITE_OIDC_DEMO_EMAIL_DOMAIN?: string;
+  VITE_OIDC_DEMO_PASSWORD?: string;
 }>;
 
 function parseHttpUrl(name: string, value: string): string {
@@ -79,6 +81,8 @@ function parseOidc(env: RuntimeEnv): OidcConfig | undefined {
     ),
     clientId: env.VITE_OIDC_CLIENT_ID || "nomnom-ui",
     audience: env.VITE_OIDC_AUDIENCE || "nomnom-bff",
+    demoEmailDomain: env.VITE_OIDC_DEMO_EMAIL_DOMAIN || undefined,
+    demoPassword: env.VITE_OIDC_DEMO_PASSWORD || undefined,
     redirectUri: new URL(
       "/auth/callback",
       globalThis.location?.origin,

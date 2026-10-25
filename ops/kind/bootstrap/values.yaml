@@ -8,8 +8,10 @@ images:
   mongodb: mongo:8.3.13@sha256:0e900a3364da37b76d642b73b0bba56bd4c6c509ab470cf700436fd866bee3ff
   # Job публикации JWKS: только stdlib Python, Kubernetes API вызывается напрямую.
   python: python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
-  # ADR 35: OIDC provider входа в браузере.
-  dex: ghcr.io/dexidp/dex:v2.46.1@sha256:65b72ca0f4b0bf6d4ada84ec21da8851782563404ac7b8f926923d27ceced9ab
+  # ADR 35: OIDC provider входа в браузере. Не последний релиз: v2.46.1 зависает на первом
+  # refresh_token grant (весь HTTP-сервер и проверка storage, memory и sqlite3; проверено
+  # 2026-10-25), v2.45.1 проходит вход, обновление и отказ на повторный refresh token.
+  dex: ghcr.io/dexidp/dex:v2.45.1@sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462
   # HTTP-раздача JWKS тестового identity provider (test-idp).
   busybox: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
 
@@ -62,25 +64,26 @@ dex:
   # выдаёт его, потому что nomnom-bff доверяет nomnom-ui (trustedPeers).
   bffClientId: nomnom-bff
   tokenLifetime: 1h
-  # Тестовые пользователи, пароль у всех nomnom (bcrypt). sub в tokens — не userID, а
-  # base64url(protobuf{userID, "local"}): для kind-owner — CgpraW5kLW93bmVyEgVsb2NhbA. Этот
-  # sub и есть subject пользователя в SpiceDB и ownerId ресторана (ADR 35).
+  # Демо-пользователи, пароль у всех nomnom (bcrypt). sub в tokens — не userID, а
+  # base64url(protobuf{userID, "local"}), например ChFub21ub20tZGVtby1vd25lchIFbG9jYWw для
+  # owner. Эти sub — subjects демо-данных (ops/kind/demo/seed.json, seed-demo.py) и dev token
+  # issuer, поэтому вход через Dex и demo-токены действуют от одних и тех же пользователей.
   users:
     - email: customer@nomnom.test
       username: customer
-      userID: kind-customer
+      userID: nomnom-demo-customer
       hash: $2y$10$oeFTwhqIb2WGgPVjAMtQN.lkMABy5mKxpUrRgnAS0jDhGqfjGIgyq
     - email: owner@nomnom.test
       username: owner
-      userID: kind-owner
+      userID: nomnom-demo-owner
       hash: $2y$10$oeFTwhqIb2WGgPVjAMtQN.lkMABy5mKxpUrRgnAS0jDhGqfjGIgyq
     - email: kitchen@nomnom.test
       username: kitchen
-      userID: kind-kitchen
+      userID: nomnom-demo-kitchen
       hash: $2y$10$oeFTwhqIb2WGgPVjAMtQN.lkMABy5mKxpUrRgnAS0jDhGqfjGIgyq
     - email: courier@nomnom.test
       username: courier
-      userID: kind-courier
+      userID: nomnom-demo-courier
       hash: $2y$10$oeFTwhqIb2WGgPVjAMtQN.lkMABy5mKxpUrRgnAS0jDhGqfjGIgyq
     - email: operator@nomnom.test
       username: operator

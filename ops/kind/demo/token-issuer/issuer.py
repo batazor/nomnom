@@ -7,7 +7,7 @@ GET /tokens returns short-lived access tokens of the test identity provider
 ops/kind/scripts/seed-demo.py:
 
     {"expiresAt": <unix seconds>, "tokens": {"customer": "...", ...},
-     "subjects": {"customer": "nomnom-demo-customer", ...},
+     "subjects": {"customer": "<Dex sub>", ...},
      "restaurants": [{"id": "...", "name": "..."}]}
 
 Configuration (environment):
@@ -22,11 +22,13 @@ import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# sub of the same demo users in Dex (ops/kind/bootstrap/values.yaml, dex.users):
+# base64url(protobuf{userID, "local"}), so a Dex login and a demo token act as one user.
 SUBJECTS = {
-    "customer": "nomnom-demo-customer",
-    "owner": "nomnom-demo-owner",
-    "kitchen": "nomnom-demo-kitchen",
-    "courier": "nomnom-demo-courier",
+    "customer": "ChRub21ub20tZGVtby1jdXN0b21lchIFbG9jYWw",
+    "owner": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
+    "kitchen": "ChNub21ub20tZGVtby1raXRjaGVuEgVsb2NhbA",
+    "courier": "ChNub21ub20tZGVtby1jb3VyaWVyEgVsb2NhbA",
 }
 # DigestInfo prefix of SHA-256 for RSASSA-PKCS1-v1_5 (RFC 8017, section 9.2).
 SHA256_DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")

@@ -73,7 +73,9 @@
         "VITE_LOCALE": "ru",
         "VITE_ENABLE_MOCKS": "false",
         "VITE_OIDC_ISSUER": "http://localhost:5556/dex",
-        "VITE_DEPLOYMENT_ENVIRONMENT": "kind"
+        "VITE_DEPLOYMENT_ENVIRONMENT": "kind",
+        "VITE_OIDC_DEMO_EMAIL_DOMAIN": "nomnom.test",
+        "VITE_OIDC_DEMO_PASSWORD": "nomnom"
       },
       "port": 4180,
       "autoPort": false

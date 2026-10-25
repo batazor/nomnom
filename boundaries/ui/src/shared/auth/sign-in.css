@@ -13,3 +13,8 @@
 .sign-in-user {
   overflow-wrap: anywhere;
 }
+
+.sign-in-demo {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
