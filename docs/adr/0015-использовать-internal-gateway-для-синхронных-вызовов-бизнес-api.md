@@ -59,13 +59,19 @@ Alloy для telemetry ([ADR 9](0009-использовать-opentelemetry-и-g
   отмена клиента сбрасывает upstream stream. Встроенный request timeout Envoy Gateway (15 s)
   заменён явным верхним пределом `300s` в `BackendTrafficPolicy`, поэтому фактический
   deadline задаёт клиент.
-- Автоматические retries включаются только для методов с определённой политикой
-  идемпотентности: такие методы выносятся в отдельный `GRPCRoute` с собственной
-  `BackendTrafficPolicy`. Повторы — не более 2, только на `unavailable`, `connect-failure`,
-  `refused-stream`, `reset-before-request`, без per-try timeout, в пределах deadline клиента.
-  `cancelled` и `deadline-exceeded` не повторяются. Сейчас retries включены для чтений
-  `OrdersService.GetOrder` и `ListCustomerOrders` (route `orders-v1-reads`); команды orders
-  не повторяются. Каждый новый метод добавляется в реестр с явным решением о повторах.
+- Retries задаются по классам методов, каждый класс — свои `GRPCRoute` с точным совпадением
+  по методу и общая `BackendTrafficPolicy`; Gateway без политики не повторяет. Повторы — не
+  более 2, без per-try timeout, в пределах deadline клиента; `cancelled` и `deadline-exceeded`
+  не повторяются никогда.
+  - Идемпотентные чтения (политика `reads`): `unavailable`, `connect-failure`,
+    `refused-stream`, `reset-before-request`.
+  - Команды (политика `commands`): только `connect-failure`, `refused-stream` и
+    `reset-before-request` — отказы, при которых запрос гарантированно не дошёл до приложения
+    (как transparent retries в [gRPC A6](https://github.com/grpc/proposal/blob/master/A6-client-retries.md)).
+    `UNAVAILABLE` от приложения не повторяется: команда могла быть частично выполнена.
+    Повтор после обработки — решение вызывающего с тем же idempotency key (activities Temporal).
+- В реестр попадают только методы, у которых есть вызывающий; остальные получают
+  `UNIMPLEMENTED` от gateway. Каждый новый метод добавляется с явным выбором класса.
 
 ## Consequences
 
