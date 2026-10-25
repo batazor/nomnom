@@ -186,7 +186,45 @@ a,
   border-color: var(--color-border-strong);
 }
 
-.nomnom-button[data-variant="ghost"][data-hover] {
+/* Headless UI sets data-hover only for a mouse over an enabled button, so
+   touch taps and disabled buttons do not light up. */
+.nomnom-button[data-variant="primary"][data-hover] {
+  border-color: color-mix(
+    in oklch,
+    var(--color-primary) 85%,
+    var(--color-foreground)
+  );
+  background: color-mix(
+    in oklch,
+    var(--color-primary) 85%,
+    var(--color-foreground)
+  );
+}
+
+.nomnom-button[data-variant="danger"][data-hover] {
+  border-color: color-mix(
+    in oklch,
+    var(--color-danger) 85%,
+    var(--color-foreground)
+  );
+  background: color-mix(
+    in oklch,
+    var(--color-danger) 85%,
+    var(--color-foreground)
+  );
+}
+
+.nomnom-button[data-variant="outline"][data-hover] {
+  border-color: var(--color-foreground);
+  background: var(--color-surface-muted);
+}
+
+.nomnom-button[data-variant="secondary"][data-hover] {
+  border-color: var(--color-border-strong);
+}
+
+.nomnom-button[data-variant="ghost"][data-hover],
+.nomnom-button[data-variant="secondary"][data-hover] {
   background: var(--color-surface-muted);
 }
 
@@ -283,7 +321,9 @@ a,
   .nomnom-button {
     transition:
       transform var(--motion-fast) var(--motion-easing),
-      opacity var(--motion-fast) var(--motion-easing);
+      opacity var(--motion-fast) var(--motion-easing),
+      background-color var(--motion-fast) var(--motion-easing),
+      border-color var(--motion-fast) var(--motion-easing);
   }
 
   .nomnom-button[data-active] {
@@ -381,7 +421,6 @@ a,
 .nomnom-number-slot > * {
   grid-area: 1 / 1;
 }
-
 
 .nomnom-toasts {
   position: fixed;
@@ -538,4 +577,55 @@ a,
 .nomnom-dish-icon[data-tone="3"] {
   background: var(--color-surface-muted);
   color: var(--color-muted);
+}
+
+.nomnom-help {
+  display: inline-flex;
+}
+
+.nomnom-help-button {
+  display: inline-grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nomnom-help-button[data-hover],
+.nomnom-help-button[data-open] {
+  border-color: var(--color-foreground);
+  color: var(--color-foreground);
+}
+
+.nomnom-help-panel {
+  z-index: 70;
+  max-width: 16rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--color-foreground);
+  box-shadow: var(--shadow-floating);
+  color: var(--color-background);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nomnom-help-panel {
+    transition:
+      opacity var(--motion-fast) var(--motion-easing),
+      transform var(--motion-fast) var(--motion-easing);
+  }
+}
+
+.nomnom-help-panel[data-closed] {
+  opacity: 0;
+  transform: translateY(-0.25rem);
 }

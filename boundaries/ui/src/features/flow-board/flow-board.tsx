@@ -13,7 +13,7 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { AsRole, useCanAct } from "../../shared/session/roles";
-import { Button, ExpandedCard, Illustration } from "../../shared/ui";
+import { Button, ExpandedCard, HelpTip, Illustration } from "../../shared/ui";
 import { RestaurantPicker } from "../browse-restaurants";
 import { OrderDetails } from "../view-order";
 import { RestaurantOrdering } from "../view-restaurant";
@@ -258,7 +258,9 @@ function BoardColumn({
     >
       <header className="board-column-header">
         <h2 id={`board-column-${column}-title`}>{t(columnTitle[column])}</h2>
-        <p>{t(`board.${column}.lead` as MessageKey)}</p>
+        <HelpTip label={t("help.about", { topic: t(columnTitle[column]) })}>
+          {t(`board.${column}.lead` as MessageKey)}
+        </HelpTip>
       </header>
       <div className="board-column-body">{children}</div>
     </section>

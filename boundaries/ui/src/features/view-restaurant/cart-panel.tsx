@@ -3,7 +3,7 @@ import { type ReactNode, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { AnimatedNumber, Button } from "../../shared/ui";
+import { AnimatedNumber, Button, HelpTip } from "../../shared/ui";
 import { type CartLine, maxQuantity } from "./cart";
 import type { MenuEntry } from "./menu";
 import { estimateSubtotal, type Money, useMoney } from "./money";
@@ -150,7 +150,14 @@ export function CartPanel({
             <div className="cart-subtotal">
               <dl>
                 <div>
-                  <dt>{t("cart.subtotal")}</dt>
+                  <dt className="cart-subtotal-term">
+                    {t("cart.subtotal")}
+                    <HelpTip
+                      label={t("help.about", { topic: t("cart.subtotal") })}
+                    >
+                      {t("cart.subtotalNote")}
+                    </HelpTip>
+                  </dt>
                   <dd aria-live="polite" data-testid="cart-subtotal">
                     <AnimatedNumber
                       text={money(subtotal)}
@@ -159,7 +166,6 @@ export function CartPanel({
                   </dd>
                 </div>
               </dl>
-              <p>{t("cart.subtotalNote")}</p>
             </div>
           ) : null}
 

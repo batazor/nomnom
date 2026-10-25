@@ -13,3 +13,5 @@ export { AnimatedNumber } from "./animated-number";
 export { ToastProvider, useToast } from "./toast";
 export type { DishIconProps } from "./dish-icon";
 export { DishIcon } from "./dish-icon";
+export type { HelpTipProps } from "./help-tip";
+export { HelpTip } from "./help-tip";

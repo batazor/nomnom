@@ -14,10 +14,10 @@ import {
 } from "vitest";
 
 import { AppProviders } from "../../app/providers";
-import { RestaurantOrdering } from "./restaurant-ordering";
 import { mockStore } from "../../shared/graphql/mocks/handlers";
 import { mockServer } from "../../shared/graphql/mocks/server";
 import { cartStorageKey } from "./cart";
+import { RestaurantOrdering } from "./restaurant-ordering";
 
 const config = {
   publicGraphqlUrl: "https://public.example.test/graphql",
@@ -98,8 +98,11 @@ describe("view restaurant", () => {
     ).toHaveTextContent("2");
     expect(within(cart()).getByText("Предварительно")).toBeVisible();
     expect(screen.getByTestId("cart-subtotal")).toHaveTextContent(/1.?530/);
+    await user.click(
+      within(cart()).getByRole("button", { name: "Справка: Предварительно" }),
+    );
     expect(
-      within(cart()).getByText(/Точную сумму ресторан рассчитает/),
+      await screen.findByText(/Точную сумму ресторан рассчитает/),
     ).toBeVisible();
   });
 
