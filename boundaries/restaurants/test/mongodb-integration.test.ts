@@ -49,7 +49,7 @@ import {
   MongoKitchenBoard,
   MongoRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
-import { mongoUri } from "./support/mongodb.ts";
+import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 
 // Runs against a MongoDB replica set (transactions), for example
 // the testcontainer of the global setup (test/support/global-containers.ts).
@@ -95,7 +95,7 @@ describe("MongoDB storage", () => {
   const restaurantsOf = () => {
     const collection = createRestaurantCollection(mongo.db, unitOfWork);
     return {
-      repository: new MongoRestaurantRepository(collection),
+      repository: new MongoRestaurantRepository(collection, noKitchenChanges),
       catalog: new MongoRestaurantCatalog(collection),
       memberships: new MongoRestaurantMemberships(collection),
     };
@@ -104,7 +104,10 @@ describe("MongoDB storage", () => {
   const ordersOf = () => {
     const collection = createRestaurantOrderCollection(mongo.db, unitOfWork);
     return {
-      repository: new MongoRestaurantOrderRepository(collection),
+      repository: new MongoRestaurantOrderRepository(
+        collection,
+        noKitchenChanges,
+      ),
       board: new MongoKitchenBoard(collection),
     };
   };

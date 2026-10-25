@@ -123,6 +123,22 @@
       "rpc": "LookupOrderById",
       "request": "LookupOrderByIdRequest",
       "response": "LookupOrderByIdResponse"
+    },
+    {
+      "typeName": "Kitchen",
+      "kind": "entity",
+      "key": "restaurantId",
+      "rpc": "LookupKitchenByRestaurantId",
+      "request": "LookupKitchenByRestaurantIdRequest",
+      "response": "LookupKitchenByRestaurantIdResponse"
+    },
+    {
+      "typeName": "Courier",
+      "kind": "entity",
+      "key": "id",
+      "rpc": "LookupCourierById",
+      "request": "LookupCourierByIdRequest",
+      "response": "LookupCourierByIdResponse"
     }
   ],
   "typeFieldMappings": [
@@ -593,6 +609,10 @@
       "type": "Kitchen",
       "fieldMappings": [
         {
+          "original": "restaurantId",
+          "mapped": "restaurant_id"
+        },
+        {
           "original": "restaurant",
           "mapped": "restaurant"
         },
@@ -689,6 +709,10 @@
     {
       "type": "Courier",
       "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
         {
           "original": "availability",
           "mapped": "availability"

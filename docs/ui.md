@@ -72,7 +72,7 @@ Feature активного заказа владеет presentation mapping `bac
 
 Публичный контракт — `Order.status` (`OrderStatus`: `RECEIVED`, `CONFIRMED`, `PREPARING`, `READY_FOR_PICKUP`, `PICKED_UP`, `DELIVERED`, `CANCELLED`, `FAILED`), `Order.endReason` для неуспешного завершения и `milestones`. BFF вычисляет `OrderStatus` из состояния заказа и Fulfillment Facts `orders`; назначение курьера — milestone `COURIER_ASSIGNED`, а не статус. UI сопоставляет каждое значение enum с сообщением, icon и шагом прогресса и не показывает внутренние коды.
 
-Обновления экрана заказа — GraphQL subscription `orderChanged` по SSE ([ADR 36](adr/0036-graphql-subscriptions-via-cosmo-streams.md)): `order(id)` загружает заказ, подписка присылает его после каждого изменения и закрывается на финальном статусе. При каждом (пере)подключении потока клиент перезапрашивает активные query, поэтому изменения между запросом и подпиской не теряются. Polling нет. При ошибке остаётся ручное обновление. Смена статуса объявляется через `aria-live`.
+Обновления экрана заказа — GraphQL subscription `orderChanged` по SSE ([ADR 36](adr/0036-graphql-subscriptions-via-cosmo-streams.md)): `order(id)` загружает заказ, подписка присылает его после каждого изменения и закрывается на финальном статусе. При каждом (пере)подключении потока клиент перезапрашивает активные query, поэтому изменения между запросом и подпиской не теряются. Polling нет ни на одном экране: flow board так же следует за кухней (`kitchenChanged`), курьером (`courierChanged`) и чипами заказов (`orderChanged`). При ошибке остаётся ручное обновление. Смена статуса объявляется через `aria-live`.
 
 Блок отмены показывается, пока не истёк `Order.cancellation.availableUntil`. `cancellation` BFF заполняет только после того, как `orders` начнёт публиковать окно отмены в `GetOrder`; до этого поле `null` и отмена не предлагается. `requestOrderCancellation` получает `requestId`, созданный на попытку и переиспользуемый при ручном retry.
 
@@ -101,6 +101,5 @@ Playwright и Storybook не добавляются пустыми зависи�
 - OIDC/session и token storage contract;
 - server-backed cart и merge/identity semantics после появления customer session;
 - canonical publication public GraphQL schema для CI;
-- перевод flow board (`kitchen`, `courier`) с polling на subscriptions по образцу ADR 36;
 - browser error reporting/OTel SDK и privacy/consent policy;
 - hosting, CSP, immutable asset и runtime-config delivery model.

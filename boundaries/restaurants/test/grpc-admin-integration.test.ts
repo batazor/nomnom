@@ -28,7 +28,7 @@ import {
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { createService } from "./support/grpc.ts";
-import { createTestDatabase } from "./support/mongodb.ts";
+import { createTestDatabase, noKitchenChanges } from "./support/mongodb.ts";
 import {
   FixedClock,
   PICKUP_ADDRESS,
@@ -138,7 +138,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
     const writer = new SpiceDbRelationshipWriter({ client, timeoutMs: 5000 });
     const { db, unitOfWork } = await createTestDatabase();
     const store = createRestaurantCollection(db, unitOfWork);
-    const restaurants = new MongoRestaurantRepository(store);
+    const restaurants = new MongoRestaurantRepository(store, noKitchenChanges);
     const accessControl = new SpiceDbAccessControl({
       client,
       revisions: restaurants,

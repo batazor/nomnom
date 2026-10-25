@@ -11,6 +11,7 @@ use crate::slices::delivery::domains::delivery::{
     DeliveryOfferRepository, DeliveryRepository, OrderId,
 };
 
+use super::outbox::{NOTIFY_CHANGED_COURIERS, notification_metadata};
 use super::rows::{
     COURIER_COLUMNS, DELIVERY_COLUMNS, OFFER_COLUMNS, column, courier_from_row, courier_status,
     delivery_from_row, delivery_state, offer_from_row, offer_state,
@@ -54,12 +55,21 @@ impl CourierRepository for PostgresStore {
         .transpose()
     }
 
+    // Courier writes run without a Unit of Work too (registration,
+    // availability), so each write and its Change Notification (ADR 36) are
+    // one statement.
     fn add(&self, courier: &Courier) -> Result<(), RepositoryError> {
         let version = db_version(courier.version())?;
+        let statement = format!(
+            "WITH changed AS (
+                 INSERT INTO couriers (id, status, authorization_revision, version)
+                 VALUES ($2, $3, $4, $5) ON CONFLICT DO NOTHING RETURNING id
+             ) {NOTIFY_CHANGED_COURIERS}"
+        );
         let inserted = sql!(self, "INSERT", |connection| sqlx::query(
-            "INSERT INTO couriers (id, status, authorization_revision, version)
-             VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING"
+            sqlx::AssertSqlSafe(statement)
         )
+        .bind(notification_metadata())
         .bind(courier.id().as_str())
         .bind(courier_status(courier.status()))
         .bind(
@@ -77,11 +87,17 @@ impl CourierRepository for PostgresStore {
 
     fn save(&self, courier: &Courier) -> Result<(), RepositoryError> {
         let version = db_version(courier.version())?;
+        let statement = format!(
+            "WITH changed AS (
+                 UPDATE couriers SET status = $4, authorization_revision = $5,
+                     version = version + 1
+                 WHERE id = $2 AND version = $3 RETURNING id
+             ) {NOTIFY_CHANGED_COURIERS}"
+        );
         let updated = sql!(self, "UPDATE", |connection| sqlx::query(
-            "UPDATE couriers SET status = $3, authorization_revision = $4,
-                 version = version + 1
-             WHERE id = $1 AND version = $2"
+            sqlx::AssertSqlSafe(statement)
         )
+        .bind(notification_metadata())
         .bind(courier.id().as_str())
         .bind(version)
         .bind(courier_status(courier.status()))
@@ -98,7 +114,6 @@ impl CourierRepository for PostgresStore {
         )
     }
 }
-
 impl DeliveryRepository for PostgresStore {
     fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
         let statement = format!("SELECT {DELIVERY_COLUMNS} FROM deliveries WHERE id = $1");
@@ -157,11 +172,19 @@ impl DeliveryRepository for PostgresStore {
         if inserted.rows_affected() == 0 {
             return Err(RepositoryError::Conflict);
         }
-        Ok(())
+        delivery
+            .courier_id()
+            .map_or(Ok(()), |courier| self.notify_courier(courier.as_str()))
     }
 
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
         let version = db_version(delivery.version())?;
+        // A released delivery leaves the courier it had: notify that one too.
+        let previous: Option<Option<String>> = sql!(self, "SELECT", |connection| {
+            sqlx::query_scalar("SELECT courier_id FROM deliveries WHERE id = $1")
+                .bind(delivery.id().as_str())
+                .fetch_optional(connection)
+        })?;
         let updated = sql!(self, "UPDATE", |connection| sqlx::query(
             "UPDATE deliveries SET courier_id = $3, state = $4, failure_reason = $5,
                  authorization_revision = $6, failure_detail = $7, version = version + 1
@@ -187,7 +210,15 @@ impl DeliveryRepository for PostgresStore {
             updated.rows_affected(),
             "SELECT 1 FROM deliveries WHERE id = $1",
             delivery.id().as_str(),
-        )
+        )?;
+        let current = delivery.courier_id().map(CourierId::as_str);
+        if let Some(courier) = current {
+            self.notify_courier(courier)?;
+        }
+        match previous.flatten() {
+            Some(courier) if Some(courier.as_str()) != current => self.notify_courier(&courier),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -222,7 +253,7 @@ impl DeliveryOfferRepository for PostgresStore {
         if inserted.rows_affected() == 0 {
             return Err(RepositoryError::Conflict);
         }
-        Ok(())
+        self.notify_courier(offer.courier_id().as_str())
     }
 
     fn save(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
@@ -239,7 +270,8 @@ impl DeliveryOfferRepository for PostgresStore {
             updated.rows_affected(),
             "SELECT 1 FROM delivery_offers WHERE id = $1",
             offer.id().as_str(),
-        )
+        )?;
+        self.notify_courier(offer.courier_id().as_str())
     }
 }
 

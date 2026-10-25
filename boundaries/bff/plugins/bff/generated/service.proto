@@ -8,6 +8,16 @@ import "google/protobuf/wrappers.proto";
 // Service definition for BffService
 service BffService {
   /*
+   * Lookup Courier entity by id: Work of the current courier; the entity key lets the Router resolve
+   * courierChanged events (ADR 36)
+   */
+  rpc LookupCourierById(LookupCourierByIdRequest) returns (LookupCourierByIdResponse) {}
+  /*
+   * Lookup Kitchen entity by restaurantId: Active orders of one restaurant for its kitchen staff; the entity key lets the
+   * Router resolve kitchenChanged events (ADR 36)
+   */
+  rpc LookupKitchenByRestaurantId(LookupKitchenByRestaurantIdRequest) returns (LookupKitchenByRestaurantIdResponse) {}
+  /*
    * Lookup Order entity by id: Order of the current customer; the entity key lets the Router resolve
    * subscription events of the events subgraph (ADR 36)
    */
@@ -84,6 +94,74 @@ message LookupOrderByIdResponse {
    *       - null  # User with id 2 not found
    */
   repeated Order result = 1;
+}
+
+// Key message for Kitchen entity lookup
+message LookupKitchenByRestaurantIdRequestKey {
+  // Key field for Kitchen entity lookup.
+  string restaurant_id = 1;
+}
+
+// Request message for Kitchen entity lookup.
+message LookupKitchenByRestaurantIdRequest {
+  /*
+   * List of keys to look up Kitchen entities.
+   * Order matters - each key maps to one entity in LookupKitchenByRestaurantIdResponse.
+   */
+  repeated LookupKitchenByRestaurantIdRequestKey keys = 1;
+}
+
+// Response message for Kitchen entity lookup.
+message LookupKitchenByRestaurantIdResponse {
+  /*
+   * List of Kitchen entities in the same order as the keys in LookupKitchenByRestaurantIdRequest.
+   * Always return the same number of entities as keys. Use null for entities that cannot be found.
+   * 
+   * Example:
+   *   LookupUserByIdRequest:
+   *     keys:
+   *       - id: 1
+   *       - id: 2
+   *   LookupUserByIdResponse:
+   *     result:
+   *       - id: 1 # User with id 1 found
+   *       - null  # User with id 2 not found
+   */
+  repeated Kitchen result = 1;
+}
+
+// Key message for Courier entity lookup
+message LookupCourierByIdRequestKey {
+  // Key field for Courier entity lookup.
+  string id = 1;
+}
+
+// Request message for Courier entity lookup.
+message LookupCourierByIdRequest {
+  /*
+   * List of keys to look up Courier entities.
+   * Order matters - each key maps to one entity in LookupCourierByIdResponse.
+   */
+  repeated LookupCourierByIdRequestKey keys = 1;
+}
+
+// Response message for Courier entity lookup.
+message LookupCourierByIdResponse {
+  /*
+   * List of Courier entities in the same order as the keys in LookupCourierByIdRequest.
+   * Always return the same number of entities as keys. Use null for entities that cannot be found.
+   * 
+   * Example:
+   *   LookupUserByIdRequest:
+   *     keys:
+   *       - id: 1
+   *       - id: 2
+   *   LookupUserByIdResponse:
+   *     result:
+   *       - id: 1 # User with id 1 found
+   *       - null  # User with id 2 not found
+   */
+  repeated Courier result = 1;
 }
 
 // Request message for bffInfo operation: Metadata for the client BFF.
@@ -278,6 +356,37 @@ message Order {
   OrderCancellationAvailability cancellation = 10;
 }
 
+/*
+ * Active orders of one restaurant for its kitchen staff; the entity key lets the
+ * Router resolve kitchenChanged events (ADR 36)
+ */
+message Kitchen {
+  // Restaurant the kitchen belongs to; menu is null
+  Restaurant restaurant = 1;
+  /*
+   * Orders in RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY: RECEIVED by ascending
+   * receivedAt, then the kitchen queue order, then the rest by ascending receivedAt
+   */
+  repeated KitchenOrder orders = 2;
+  // Identifier of the restaurant the kitchen belongs to
+  string restaurant_id = 3;
+}
+
+/*
+ * Work of the current courier; the entity key lets the Router resolve
+ * courierChanged events (ADR 36)
+ */
+message Courier {
+  // Current availability
+  CourierAvailability availability = 1;
+  // Pending delivery offers, empty unless AVAILABLE
+  repeated DeliveryOffer offers = 2;
+  // Delivery in progress, null if none
+  CourierDelivery current_delivery = 3;
+  // Courier identifier, the subject of the current user
+  string id = 4;
+}
+
 message BffInfo {
   // Service name
   string name = 1;
@@ -311,27 +420,6 @@ message OrderConnection {
   repeated OrderEdge edges = 1;
   // Pagination state
   PageInfo page_info = 2;
-}
-
-// Active orders of one restaurant for its kitchen staff
-message Kitchen {
-  // Restaurant the kitchen belongs to; menu is null
-  Restaurant restaurant = 1;
-  /*
-   * Orders in RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY: RECEIVED by ascending
-   * receivedAt, then the kitchen queue order, then the rest by ascending receivedAt
-   */
-  repeated KitchenOrder orders = 2;
-}
-
-// Work of the current courier
-message Courier {
-  // Current availability
-  CourierAvailability availability = 1;
-  // Pending delivery offers, empty unless AVAILABLE
-  repeated DeliveryOffer offers = 2;
-  // Delivery in progress, null if none
-  CourierDelivery current_delivery = 3;
 }
 
 message PlaceOrderInput {

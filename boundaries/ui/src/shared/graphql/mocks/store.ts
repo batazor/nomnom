@@ -14,15 +14,13 @@ import {
   orderTotal,
   restaurantFixtures,
 } from "./fixtures";
-import { createFulfillment } from "./fulfillment";
+import { createFulfillment, mockCourierId } from "./fulfillment";
 import { createChangeFeed } from "./order-changes";
 
 type Clock = () => Date;
 
 // order-live moves one status per step while someone follows it.
 export const liveStepMs = 4_000;
-
-const finalStatuses = new Set(["DELIVERED", "CANCELLED", "FAILED"]);
 
 type Connection<T> = {
   edges: { cursor: string; node: T }[];
@@ -298,11 +296,22 @@ export function createMockStore({
           if (!order) throw bffError("NotFound", "order not found");
           return { orderChanged: order };
         },
-        {
-          isLast: ({ orderChanged }) => finalStatuses.has(orderChanged.status),
-          onClose: id === liveOrderId ? followLive() : undefined,
-        },
+        id === liveOrderId ? followLive() : undefined,
       ),
+    // Like the Router (ADR 36): the board after each change, an error for a
+    // kitchen the user may not see or another courier's id.
+    kitchenChanged: ({ restaurantId }: { restaurantId: string }) =>
+      changes.subscribe(() => {
+        const kitchen = fulfillment.kitchen(restaurantId);
+        if (!kitchen) throw bffError("NotFound", "kitchen not found");
+        return { kitchenChanged: kitchen };
+      }),
+    courierChanged: ({ id }: { id: string }) => {
+      if (id !== mockCourierId) throw bffError("NotFound", "courier not found");
+      return changes.subscribe(() => ({
+        courierChanged: fulfillment.courier(),
+      }));
+    },
     // Like ListOwnedRestaurants: open and closed restaurants of the mock user.
     myRestaurants: (args: PageArgs) =>
       paginate(

@@ -37,6 +37,7 @@ import {
   type RestaurantOrderSnapshot,
   RestaurantOrderState,
 } from "../../domains/restaurantorder/restaurantorder.ts";
+import type { KitchenChangeNotifier } from "../integration/kitchen-changes.ts";
 import { RESTAURANT_ORDERS_COLLECTION } from "./collection-spec.ts";
 
 export {
@@ -109,9 +110,15 @@ export class MongoRestaurantOrderRepository
   implements RestaurantOrderRepository
 {
   readonly #collection: VersionedCollection<RestaurantOrderDocument>;
+  readonly #kitchenChanged: KitchenChangeNotifier;
 
-  constructor(collection: VersionedCollection<RestaurantOrderDocument>) {
+  /** `kitchenChanged` runs in the same Unit of Work as every save (ADR 36). */
+  constructor(
+    collection: VersionedCollection<RestaurantOrderDocument>,
+    kitchenChanged: KitchenChangeNotifier,
+  ) {
     this.#collection = collection;
+    this.#kitchenChanged = kitchenChanged;
   }
 
   async get(id: string): Promise<RestaurantOrder | undefined> {
@@ -124,23 +131,29 @@ export class MongoRestaurantOrderRepository
 
   async save(order: RestaurantOrder): Promise<number> {
     const snapshot = order.toSnapshot();
-    return this.#collection.save(order.id, order.version, {
-      schemaVersion: RESTAURANT_ORDER_SCHEMA_VERSION,
-      orderId: snapshot.orderId,
+    return this.#kitchenChanged({
+      type: "RestaurantOrder",
+      id: order.id,
       restaurantId: snapshot.restaurantId,
-      items: snapshot.items.map((item) => ({
-        menuItemId: item.menuItemId,
-        quantity: item.quantity,
-        options: [...item.options],
-      })),
-      state: snapshot.state,
-      timeline: { ...snapshot.timeline },
-      rejectionReason: snapshot.rejectionReason,
-      failureReason: snapshot.failureReason,
-      cancellation:
-        snapshot.cancellation === undefined
-          ? undefined
-          : { ...snapshot.cancellation },
+      save: () =>
+        this.#collection.save(order.id, order.version, {
+          schemaVersion: RESTAURANT_ORDER_SCHEMA_VERSION,
+          orderId: snapshot.orderId,
+          restaurantId: snapshot.restaurantId,
+          items: snapshot.items.map((item) => ({
+            menuItemId: item.menuItemId,
+            quantity: item.quantity,
+            options: [...item.options],
+          })),
+          state: snapshot.state,
+          timeline: { ...snapshot.timeline },
+          rejectionReason: snapshot.rejectionReason,
+          failureReason: snapshot.failureReason,
+          cancellation:
+            snapshot.cancellation === undefined
+              ? undefined
+              : { ...snapshot.cancellation },
+        }),
     });
   }
 

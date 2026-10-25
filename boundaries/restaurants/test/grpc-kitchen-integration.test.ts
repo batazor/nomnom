@@ -57,7 +57,7 @@ import {
   type RestaurantsServiceUnderTest,
 } from "./support/grpc.ts";
 import { TestKitchenAccessControl } from "./support/kitchen.ts";
-import { mongoUri } from "./support/mongodb.ts";
+import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 
 // Kitchen command RPCs composed as in cmd/restaurants/main.ts (MongoDB Unit of
 // Work, MongoOutbox with the Integration Event mapper) against a replica set:
@@ -88,12 +88,14 @@ describe("kitchen command RPCs over MongoDB", () => {
     });
     const restaurants = new MongoRestaurantRepository(
       createRestaurantCollection(mongo.db, unitOfWork),
+      noKitchenChanges,
     );
     const menus = new MongoMenuRepository(
       createMenuCollection(mongo.db, unitOfWork),
     );
     const restaurantOrders = new MongoRestaurantOrderRepository(
       createRestaurantOrderCollection(mongo.db, unitOfWork),
+      noKitchenChanges,
     );
     const board = new MongoKitchenBoard(
       createRestaurantOrderCollection(mongo.db, unitOfWork),

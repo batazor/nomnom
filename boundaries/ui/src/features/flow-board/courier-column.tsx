@@ -1,10 +1,11 @@
 import { AnimatePresence, m } from "motion/react";
 import { useState } from "react";
-import { useClient, useMutation, useQuery } from "urql";
+import { useClient, useMutation, useQuery, useSubscription } from "urql";
 
 import {
   AcceptDeliveryOfferDocument,
   ApplyCourierDeliveryActionDocument,
+  BoardCourierChangedDocument,
   BoardCourierDocument,
   type CourierAvailability,
   type CourierProblemCode,
@@ -14,7 +15,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { Button, Illustration } from "../../shared/ui";
 import { useDropTarget } from "./board-dnd";
-import { useBoardRefresh, usePolling } from "./use-polling";
+import { useLatest } from "./use-latest";
 
 const availabilityLabel: Record<CourierAvailability, MessageKey> = {
   AVAILABLE: "board.courier.AVAILABLE",
@@ -41,23 +42,28 @@ export function CourierColumn({
   onSelectOrder: (orderId: string) => void;
 }) {
   const { t } = useI18n();
-  const [{ data, error }, reexecute] = useQuery({
+  const [{ data, error }] = useQuery({
     query: BoardCourierDocument,
   });
-  usePolling(() => reexecute({ requestPolicy: "network-only" }));
+  // Courier.id is the subject of the user: courierChanged pushes their work.
+  const courierId = data?.courier?.id;
+  const [{ data: pushed }] = useSubscription({
+    query: BoardCourierChangedDocument,
+    variables: { id: courierId ?? "" },
+    pause: !courierId,
+  });
+  const courier = useLatest(data?.courier, pushed?.courierChanged);
   const [availability, setAvailability] = useMutation(
     SetCourierAvailabilityDocument,
   );
   const [accepting, acceptOffer] = useMutation(AcceptDeliveryOfferDocument);
   const [acting, applyAction] = useMutation(ApplyCourierDeliveryActionDocument);
   const [problem, setProblem] = useState<MessageKey | null>(null);
-  const refreshBoard = useBoardRefresh();
 
   function settle(outcome: Outcome) {
     if (outcome.error) setProblem("board.actionFailed");
     else if (outcome.problem) setProblem(problemMessage[outcome.problem]);
     else setProblem(null);
-    refreshBoard();
   }
 
   // A kitchen order dropped here: the courier goes online if needed and takes
@@ -65,7 +71,7 @@ export function CourierColumn({
   const client = useClient();
   async function take(orderId: string) {
     setProblem(null);
-    const known = data?.courier;
+    const known = courier;
     if (!known) return;
     let current = known;
     if (current.availability === "BUSY") {
@@ -90,7 +96,6 @@ export function CourierColumn({
     }
     if (!offer) {
       setProblem("board.dnd.noOffer");
-      refreshBoard();
       return;
     }
     const result = await acceptOffer({ offerId: offer.id });
@@ -109,7 +114,6 @@ export function CourierColumn({
     );
   }
   if (!data) return <p className="board-empty">{t("board.loading")}</p>;
-  const courier = data.courier;
   if (!courier) {
     return <p className="board-empty">{t("board.courier.notRegistered")}</p>;
   }
@@ -266,7 +270,7 @@ export function CourierColumn({
 }
 
 // A ring that empties until the offer expires. The remaining time is taken
-// once per offer, so polling does not restart it.
+// once per offer, so a courierChanged update does not restart it.
 function OfferCountdown({ expiresAt }: { expiresAt: string }) {
   const [seconds] = useState(() =>
     Math.max(0, (Date.parse(expiresAt) - Date.now()) / 1000),

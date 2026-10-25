@@ -409,9 +409,14 @@ type KitchenOrder {
 }
 
 """
-Active orders of one restaurant for its kitchen staff
+Active orders of one restaurant for its kitchen staff; the entity key lets the
+Router resolve kitchenChanged events (ADR 36)
 """
-type Kitchen {
+type Kitchen @key(fields: "restaurantId") {
+  """
+  Identifier of the restaurant the kitchen belongs to
+  """
+  restaurantId: ID!
   """
   Restaurant the kitchen belongs to; menu is null
   """
@@ -574,9 +579,14 @@ type CourierDelivery {
 }
 
 """
-Work of the current courier
+Work of the current courier; the entity key lets the Router resolve
+courierChanged events (ADR 36)
 """
-type Courier {
+type Courier @key(fields: "id") {
+  """
+  Courier identifier, the subject of the current user
+  """
+  id: ID!
   """
   Current availability
   """

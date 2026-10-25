@@ -39,7 +39,26 @@ func (s *BffService) QueryKitchen(ctx context.Context, request *service.QueryKit
 	if err != nil {
 		return nil, internalError("kitchen", err)
 	}
+	message.RestaurantId = request.GetRestaurantId()
 	return &service.QueryKitchenResponse{Kitchen: message}, nil
+}
+
+// LookupKitchenByRestaurantId resolves kitchenChanged events (ADR 36) with
+// the subscriber's access token: restaurants checks the kitchen right, a
+// kitchen the user may not see or a missing one is NOT_FOUND.
+func (s *BffService) LookupKitchenByRestaurantId(ctx context.Context, request *service.LookupKitchenByRestaurantIdRequest) (*service.LookupKitchenByRestaurantIdResponse, error) {
+	kitchens := make([]*service.Kitchen, 0, len(request.GetKeys()))
+	for _, key := range request.GetKeys() {
+		response, err := s.QueryKitchen(ctx, &service.QueryKitchenRequest{RestaurantId: key.GetRestaurantId()})
+		if err != nil {
+			return nil, err
+		}
+		if response.GetKitchen() == nil {
+			return nil, status.Error(codes.NotFound, "kitchen not found")
+		}
+		kitchens = append(kitchens, response.GetKitchen())
+	}
+	return &service.LookupKitchenByRestaurantIdResponse{Result: kitchens}, nil
 }
 
 // MutationApplyKitchenAction runs a kitchen command on behalf of the verified

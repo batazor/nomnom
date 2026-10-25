@@ -63,6 +63,9 @@ const stageOrder: KitchenOrderStage[] = [
   "READY",
 ];
 
+// Courier.id of the mock user, the entity key of courierChanged (ADR 36).
+export const mockCourierId = "courier-demo";
+
 export function createFulfillment({
   clock,
   orders,
@@ -138,6 +141,7 @@ export function createFulfillment({
           a.receivedAt.localeCompare(b.receivedAt),
       );
     return {
+      restaurantId,
       restaurant: { ...found, menu: null },
       orders: active.map(kitchenView),
     };
@@ -203,6 +207,7 @@ export function createFulfillment({
       clock().getTime() + offerLifetimeMs,
     ).toISOString();
     return {
+      id: mockCourierId,
       availability,
       offers:
         availability === "AVAILABLE"

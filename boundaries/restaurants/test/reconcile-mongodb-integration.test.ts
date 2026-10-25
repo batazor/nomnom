@@ -22,7 +22,7 @@ import {
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
-import { mongoUri } from "./support/mongodb.ts";
+import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 import { FixedClock, owner, startOfDay } from "./support/restaurants.ts";
 
 // Revoke Staff in flight against MongoDB and SpiceDB (AC-700): needs the MongoDB
@@ -136,7 +136,10 @@ describe("reconciliation against MongoDB and SpiceDB", () => {
       mongo.db,
       new MongoUnitOfWork(mongo.client),
     );
-    const restaurants = new GatedRestaurantRepository(collection);
+    const restaurants = new GatedRestaurantRepository(
+      collection,
+      noKitchenChanges,
+    );
     const writer = new SpiceDbRelationshipWriter({
       client: spicedb,
       timeoutMs: 5000,

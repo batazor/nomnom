@@ -19,7 +19,11 @@ import {
   MongoRestaurantMemberships,
   MongoRestaurantRepository,
 } from "../../slices/restaurant/infrastructure/mongodb/restaurants.ts";
-import { createTestDatabase, RecordedOutbox } from "./mongodb.ts";
+import {
+  createTestDatabase,
+  noKitchenChanges,
+  RecordedOutbox,
+} from "./mongodb.ts";
 
 export const operator: Subject = { type: "user", id: "operator" };
 export const owner: Subject = { type: "user", id: "owner" };
@@ -51,7 +55,7 @@ export const createRestaurantWorld = async (
     infrastructure.db,
     infrastructure.unitOfWork,
   );
-  const restaurants = new MongoRestaurantRepository(store);
+  const restaurants = new MongoRestaurantRepository(store, noKitchenChanges);
   const catalog = new MongoRestaurantCatalog(store);
   const memberships = new MongoRestaurantMemberships(store);
   const authorization = new TestRestaurantAuthorization().allowRegistration(

@@ -1,20 +1,33 @@
+# Kitchen board: the query loads it, kitchenChanged pushes it after every
+# change (ADR 36).
+fragment KitchenBoardView on Kitchen {
+  restaurantId
+  restaurant {
+    id
+    name
+    acceptingOrders
+  }
+  orders {
+    id
+    orderId
+    stage
+    items {
+      name
+      quantity
+    }
+    receivedAt
+  }
+}
+
 query BoardKitchen($restaurantId: ID!) {
   kitchen(restaurantId: $restaurantId) {
-    restaurant {
-      id
-      name
-      acceptingOrders
-    }
-    orders {
-      id
-      orderId
-      stage
-      items {
-        name
-        quantity
-      }
-      receivedAt
-    }
+    ...KitchenBoardView
+  }
+}
+
+subscription BoardKitchenChanged($restaurantId: ID!) {
+  kitchenChanged(restaurantId: $restaurantId) {
+    ...KitchenBoardView
   }
 }
 
@@ -46,46 +59,44 @@ mutation ApplyKitchenAction($input: KitchenActionInput!) {
   }
 }
 
+# Work of the courier: the query loads it, courierChanged pushes it after
+# every change (ADR 36); mutations answer with the same fields.
+fragment CourierWork on Courier {
+  id
+  availability
+  offers {
+    id
+    deliveryId
+    orderId
+    pickupAddress
+    dropoffAddress
+    expiresAt
+  }
+  currentDelivery {
+    id
+    orderId
+    stage
+    pickupAddress
+    dropoffAddress
+  }
+}
+
 query BoardCourier {
   courier {
-    availability
-    offers {
-      id
-      deliveryId
-      orderId
-      pickupAddress
-      dropoffAddress
-      expiresAt
-    }
-    currentDelivery {
-      id
-      orderId
-      stage
-      pickupAddress
-      dropoffAddress
-    }
+    ...CourierWork
+  }
+}
+
+subscription BoardCourierChanged($id: ID!) {
+  courierChanged(id: $id) {
+    ...CourierWork
   }
 }
 
 mutation SetCourierAvailability($availability: CourierAvailability!) {
   setCourierAvailability(availability: $availability) {
     courier {
-      availability
-      offers {
-        id
-        deliveryId
-        orderId
-        pickupAddress
-        dropoffAddress
-        expiresAt
-      }
-      currentDelivery {
-        id
-        orderId
-        stage
-        pickupAddress
-        dropoffAddress
-      }
+      ...CourierWork
     }
     problem
   }
@@ -94,22 +105,7 @@ mutation SetCourierAvailability($availability: CourierAvailability!) {
 mutation AcceptDeliveryOffer($offerId: ID!) {
   acceptDeliveryOffer(offerId: $offerId) {
     courier {
-      availability
-      offers {
-        id
-        deliveryId
-        orderId
-        pickupAddress
-        dropoffAddress
-        expiresAt
-      }
-      currentDelivery {
-        id
-        orderId
-        stage
-        pickupAddress
-        dropoffAddress
-      }
+      ...CourierWork
     }
     problem
   }
@@ -121,40 +117,37 @@ mutation ApplyCourierDeliveryAction(
 ) {
   applyCourierDeliveryAction(deliveryId: $deliveryId, action: $action) {
     courier {
-      availability
-      offers {
-        id
-        deliveryId
-        orderId
-        pickupAddress
-        dropoffAddress
-        expiresAt
-      }
-      currentDelivery {
-        id
-        orderId
-        stage
-        pickupAddress
-        dropoffAddress
-      }
+      ...CourierWork
     }
     problem
   }
 }
 
+# Order chip of the board: the query loads it, orderChanged pushes it until a
+# final status (ADR 36).
+fragment BoardOrderView on Order {
+  id
+  status
+  endReason
+  restaurant {
+    id
+    name
+  }
+  total {
+    amount
+    currency
+  }
+  placedAt
+}
+
 query BoardOrderStatus($id: ID!) {
   order(id: $id) {
-    id
-    status
-    endReason
-    restaurant {
-      id
-      name
-    }
-    total {
-      amount
-      currency
-    }
-    placedAt
+    ...BoardOrderView
+  }
+}
+
+subscription BoardOrderChanged($id: ID!) {
+  orderChanged(id: $id) {
+    ...BoardOrderView
   }
 }

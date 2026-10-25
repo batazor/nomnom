@@ -21,6 +21,7 @@ import {
   restaurantFixtures,
 } from "./fixtures";
 import { publicSchema } from "./schema";
+import { mockCourierId } from "./fulfillment";
 import { createMockStore } from "./store";
 
 const documents = {
@@ -66,6 +67,9 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
     action: "CONFIRM_PICKUP",
   },
   BoardOrderStatus: { id: "order-preparing" },
+  BoardOrderChanged: { id: "order-preparing" },
+  BoardKitchenChanged: { restaurantId: kitchenEight.id },
+  BoardCourierChanged: { id: mockCourierId },
   PlaceOrder: {
     input: {
       restaurantId: kitchenEight.id,

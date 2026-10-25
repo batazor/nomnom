@@ -78,11 +78,33 @@ export const createRestaurantCollection = (
     unitOfWork,
   });
 
+/**
+ * Runs the save of a Restaurant with what has to commit together with it;
+ * returns the committed version.
+ */
+export type RestaurantSaved = (
+  write: Readonly<{
+    type: string;
+    id: string;
+    restaurantId: string;
+    save: () => Promise<number>;
+  }>,
+) => Promise<number>;
+
 export class MongoRestaurantRepository implements RestaurantRepository {
   readonly #collection: VersionedCollection<RestaurantDocument>;
+  readonly #saved: RestaurantSaved;
 
-  constructor(collection: VersionedCollection<RestaurantDocument>) {
+  /**
+   * `saved` runs in the same Unit of Work after every save: the kitchen board
+   * shows the restaurant, so DI wires its Change Notification (ADR 36).
+   */
+  constructor(
+    collection: VersionedCollection<RestaurantDocument>,
+    saved: RestaurantSaved,
+  ) {
     this.#collection = collection;
+    this.#saved = saved;
   }
 
   async get(id: string): Promise<Restaurant | undefined> {
@@ -93,11 +115,17 @@ export class MongoRestaurantRepository implements RestaurantRepository {
   }
 
   async save(restaurant: Restaurant): Promise<number> {
-    return this.#collection.save(
-      restaurant.id,
-      restaurant.version,
-      toData(restaurant),
-    );
+    return this.#saved({
+      type: "Restaurant",
+      id: restaurant.id,
+      restaurantId: restaurant.id,
+      save: () =>
+        this.#collection.save(
+          restaurant.id,
+          restaurant.version,
+          toData(restaurant),
+        ),
+    });
   }
 
   /** Revision reader of the SpiceDB adapter (stored ZedToken, FR-447). */

@@ -15,16 +15,10 @@ export function createChangeFeed() {
 
     // An explicit iterator instead of an async generator: return() of a
     // generator suspended on await waits for the next change, so an
-    // unsubscribed stream would keep its listener. Unlike the Router, the
-    // stream completes after a value for which isLast holds: the client then
-    // has no open response to abort, and Node fetch under MSW fails on an
-    // abort of a streamed response.
+    // unsubscribed stream would keep its listener.
     subscribe<T>(
       read: () => T,
-      {
-        isLast = () => false,
-        onClose = () => {},
-      }: { isLast?: (value: T) => boolean; onClose?: () => void } = {},
+      onClose: () => void = () => {},
     ): AsyncIterableIterator<T> {
       let last = JSON.stringify(read());
       let wake: (() => void) | undefined;
@@ -47,7 +41,6 @@ export function createChangeFeed() {
             const current = JSON.stringify(value);
             if (current !== last) {
               last = current;
-              if (isLast(value)) close();
               return { value, done: false };
             }
             await new Promise<void>((resolve) => {

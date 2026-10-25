@@ -69,6 +69,10 @@ import {
   type RestaurantOrderCradle,
   registerRestaurantOrder,
 } from "../slices/restaurantorder/di/registrations.ts";
+import {
+  type KitchenChangeNotifier,
+  kitchenChangeNotifier,
+} from "../slices/restaurantorder/infrastructure/integration/kitchen-changes.ts";
 import { RESTAURANT_ORDER_AGGREGATE_TYPE } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import {
   ObservedMongoUnitOfWork,
@@ -113,6 +117,7 @@ export interface InfrastructureCradle {
    */
   readonly outboxEventMapper: OutboxEventMapper;
   readonly outbox: Outbox;
+  readonly kitchenChanges: KitchenChangeNotifier;
   readonly spicedb: SpiceDbClient;
   readonly spicedbAccessControl: SpiceDbAccessControl;
   readonly kitchenAccessControl: KitchenAccess;
@@ -194,6 +199,15 @@ const infrastructureRegistrations = (
         }),
         domainMetrics,
       ),
+  ).singleton(),
+  // ADR 36: Change Notifications of the kitchen board, in the Outbox of the
+  // same Unit of Work as the Restaurant or Restaurant Order write.
+  kitchenChanges: asFunction(({ db, unitOfWork, clock }: RestaurantsCradle) =>
+    kitchenChangeNotifier(
+      unitOfWork,
+      new MongoOutbox(db, unitOfWork, { metadata: currentTraceMetadata }),
+      () => clock.now(),
+    ),
   ).singleton(),
   // SpiceDB (ADR 18): one client for checks and writes; errors and timeouts
   // fail closed as UNAVAILABLE.

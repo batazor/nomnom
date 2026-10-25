@@ -12,7 +12,7 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
 
 ## Context
 
-Экран заказа обновлялся опросом `order(id)` раз в 10 с, flow board — раз в 3 с. Каждый
+Экран заказа обновлялся опросом `order(id)` раз в 10 с, flow board (заказы, кухня, курьер) — раз в 3 с. Каждый
 открытый экран нагружал BFF и `orders` без изменений. Задержка равнялась интервалу опроса.
 Изменения заказа и так проходят через Kafka (ADR 13, ADR 25), но до клиента не доходили.
 
@@ -48,6 +48,17 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
   данных заказа, envelope ADR 25 не нужен. Через `ProcessStore` проходят все изменения заказа:
   размещение, Fulfillment Facts, отмена, завершение. Поэтому уведомление не теряется и не
   обгоняет commit (ADR 13).
+- **Kitchen и Courier — по тому же образцу.** `restaurants` при каждой записи Restaurant Order
+  и Restaurant кладёт `{"__typename":"Kitchen","restaurantId":…}` в
+  `restaurants.v1.kitchen-changes`. Notifier сам открывает Unit of Work вокруг записи или
+  присоединяется к активному: часть use cases сохраняет агрегат без UoW. `delivery` кладёт
+  `{"__typename":"Courier","id":…}` в `delivery.v1.courier-changes` при каждой записи курьера,
+  оффера и доставки, затронувшей курьера, включая прежнего курьера переназначенной доставки.
+  Запись курьера и уведомление — один SQL-оператор (CTE): регистрация и смена доступности идут
+  без UoW. `Kitchen @key(fields: "restaurantId")` и `Courier @key(fields: "id")` резолвят
+  `LookupKitchenByRestaurantId` (права кухни проверяет `restaurants`) и `LookupCourierById`
+  (ключ должен совпадать с subject токена, иначе `NOT_FOUND`). `Courier.id` — subject
+  пользователя, его отдаёт query `courier`.
 - **Event-driven subgraph.** `boundaries/bff/events/schema.graphql` объявляет
   `orderChanged(id: ID!): Order!` с `@edfs__kafkaSubscribe(topics: ["orders.v1.order-changes"])`
   и `@openfed__subscriptionFilter` по `id`. Сервера у subgraph нет: топик читает сам Router
@@ -64,8 +75,10 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
   в режиме distinct connections через `subscriptionExchange` urql.
 - **Ничего не теряется.** Router отправляет только изменения после подписки. Поэтому клиент
   перезапрашивает активные query при каждом (пере)подключении потока: изменение между query и
-  подпиской или во время разрыва попадает в ответ query. Polling не используется. Подписка
-  закрывается, когда заказ достиг финального статуса.
+  подпиской или во время разрыва попадает в ответ query. Подписка заказа закрывается, когда он
+  достиг финального статуса.
+- **Polling в UI запрещён целиком.** Ни экран заказа, ни flow board не опрашивают BFF по
+  таймеру. Таймеры остаются только для продления токенов к моменту истечения.
 - **Без брокера Router не стартует.** `skip_unavailable_providers: false` (default), Helm требует
   `kafka.brokers`.
 
@@ -83,7 +96,7 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
 - В kind BFF получает egress к Kafka (`manifests/netpol/app-infrastructure.yaml`).
 - Клиентская схема теперь — композиция subgraphs (`boundaries/bff/client-schema.graphql`,
   генерируется `npm run compose`). Codegen и моки UI читают её, а не схему plugin.
-- Flow board (`kitchen`, `courier`) пока на polling. Его перевод — те же уведомления от
-  `restaurants` и `delivery` по этому образцу.
+- Моки UI выполняют подписки внутри процесса (`mocks/subscriptions.ts`) на том же mock store:
+  MSW в Node не умеет держать и прерывать потоковые ответы fetch.
 - Переконфигурация Router разрывает активные подписки. `graphql-sse` переподключается
   бесконечно, после переподключения query перезапрашиваются.

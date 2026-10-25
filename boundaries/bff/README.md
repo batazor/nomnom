@@ -158,6 +158,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 
 Решение — [ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md). Подписки обслуживает сам Cosmo Router (Cosmo Streams): у gRPC plugin нет streaming.
 
+- `kitchenChanged(restaurantId)` (`restaurants.v1.kitchen-changes`, `LookupKitchenByRestaurantId`, права кухни проверяет `restaurants`) и `courierChanged(id)` (`delivery.v1.courier-changes`, `LookupCourierById`: только курьер с этим subject) устроены так же; `Kitchen.restaurantId` и `Courier.id` — ключи сущностей.
 - `orderChanged(id)` объявлен в event-driven subgraph [`events/schema.graphql`](events/schema.graphql) (`@edfs__kafkaSubscribe`, фильтр по `id`). Router читает `orders.v1.order-changes` (`events.providers.kafka`, `BFF__KAFKA_BROKERS`, Helm `kafka.brokers` обязателен).
 - Событие — только ключ `{"__typename":"Order","id":…}`. Данные Router получает через `LookupOrderById` plugin (`Order @key(fields: "id")`) с `Authorization` подписчика: тот же сценарий, что `order(id)`. Чужой или отсутствующий заказ — error-событие `NOT_FOUND`.
 - Клиенты подписываются по SSE (`POST /graphql`, `Accept: text/event-stream`). Первое событие приходит только после изменения, поэтому текущее состояние берётся query.
@@ -215,7 +216,7 @@ BFF проверяет клиентский GraphQL-запрос и access token
 - BFF может выполнять coarse-grained authorization для endpoint и раннего отказа, но authoritative check прав на доменное действие, принадлежности resource и tenant-изоляции остаётся у bounded context;
 - доменные данные получаются только через gRPC API владельцев;
 - BFF не читает базы данных bounded contexts;
-- BFF не публикует Kafka-сообщения и не потребляет Integration Events; Router читает только топик уведомлений `orders.v1.order-changes` для subscriptions ([ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md));
+- BFF не публикует Kafka-сообщения и не потребляет Integration Events; Router читает только топики уведомлений `orders.v1.order-changes`, `restaurants.v1.kitchen-changes` и `delivery.v1.courier-changes` для subscriptions ([ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md));
 - BFF не запускает и не управляет Temporal workflow напрямую;
 - агрегация не создаёт общую транзакцию или атомарный снимок нескольких сервисов.
 

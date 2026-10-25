@@ -47,7 +47,33 @@ func (s *BffService) QueryCourier(ctx context.Context, _ *service.QueryCourierRe
 	if err != nil {
 		return nil, internalError("courier", err)
 	}
+	message.Id = courierID
 	return &service.QueryCourierResponse{Courier: message}, nil
+}
+
+// LookupCourierById resolves courierChanged events (ADR 36). A courier sees
+// only their own work: a key other than the subject of the access token is
+// NOT_FOUND, as is a user who is not a courier.
+func (s *BffService) LookupCourierById(ctx context.Context, request *service.LookupCourierByIdRequest) (*service.LookupCourierByIdResponse, error) {
+	ctx, courierID, err := s.requireCourier(ctx)
+	if err != nil {
+		return nil, err
+	}
+	couriers := make([]*service.Courier, 0, len(request.GetKeys()))
+	for _, key := range request.GetKeys() {
+		if key.GetId() != courierID {
+			return nil, status.Error(codes.NotFound, "courier not found")
+		}
+		response, err := s.QueryCourier(ctx, &service.QueryCourierRequest{})
+		if err != nil {
+			return nil, err
+		}
+		if response.GetCourier() == nil {
+			return nil, status.Error(codes.NotFound, "courier not found")
+		}
+		couriers = append(couriers, response.GetCourier())
+	}
+	return &service.LookupCourierByIdResponse{Result: couriers}, nil
 }
 
 // MutationSetCourierAvailability accepts AVAILABLE or UNAVAILABLE only: BUSY is
@@ -62,7 +88,7 @@ func (s *BffService) MutationSetCourierAvailability(ctx context.Context, request
 		return nil, err
 	}
 	result, err := s.courier.setAvailability.Handle(ctx, courierID, availability)
-	payload, err := courierPayload("setCourierAvailability", result, err)
+	payload, err := courierPayload("setCourierAvailability", courierID, result, err)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +104,7 @@ func (s *BffService) MutationAcceptDeliveryOffer(ctx context.Context, request *s
 		return nil, err
 	}
 	result, err := s.courier.acceptOffer.Handle(ctx, courierID, request.GetOfferId())
-	payload, err := courierPayload("acceptDeliveryOffer", result, err)
+	payload, err := courierPayload("acceptDeliveryOffer", courierID, result, err)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +124,7 @@ func (s *BffService) MutationApplyCourierDeliveryAction(ctx context.Context, req
 		return nil, err
 	}
 	result, err := s.courier.applyAction.Handle(ctx, courierID, request.GetDeliveryId(), action)
-	payload, err := courierPayload("applyCourierDeliveryAction", result, err)
+	payload, err := courierPayload("applyCourierDeliveryAction", courierID, result, err)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +132,8 @@ func (s *BffService) MutationApplyCourierDeliveryAction(ctx context.Context, req
 }
 
 // courierPayload translates the refusals of delivery that the schema has no
-// problem code for into GraphQL errors.
-func courierPayload(operation string, result applications.CommandResult, err error) (*service.CourierPayload, error) {
+// problem code for into GraphQL errors; the courier carries its entity key.
+func courierPayload(operation, courierID string, result applications.CommandResult, err error) (*service.CourierPayload, error) {
 	switch {
 	case errors.Is(err, applications.ErrNotCourier):
 		return nil, status.Error(codes.PermissionDenied, "user is not a registered courier")
@@ -124,5 +150,6 @@ func courierPayload(operation string, result applications.CommandResult, err err
 	if err != nil {
 		return nil, internalError(operation, err)
 	}
+	payload.Courier.Id = courierID
 	return payload, nil
 }

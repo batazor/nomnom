@@ -2,9 +2,9 @@
 // MVP adapters of the open Acceptance decisions, the Outbox mapper and the
 // handlers exposed through transport. Kitchen commands save the Restaurant
 // Order and its published facts to the Outbox in one MongoDB transaction.
+
 import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Db } from "mongodb";
-
 import type { Clock } from "../../../pkg/application/clock.ts";
 import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
 import type { Outbox } from "../../../pkg/application/outbox.ts";
@@ -45,6 +45,7 @@ import {
   FixedPreparationTimeEstimator,
   UnconstrainedAcceptanceConditions,
 } from "../infrastructure/acceptance/mvp.ts";
+import type { KitchenChangeNotifier } from "../infrastructure/integration/kitchen-changes.ts";
 import { restaurantOrderEventMapper } from "../infrastructure/integration/restaurant-order-events.ts";
 import { FifoKitchenQueueOrdering } from "../infrastructure/kitchen-queue/mvp.ts";
 import {
@@ -72,6 +73,8 @@ export interface RestaurantOrderDependencies {
   readonly db: Db;
   readonly unitOfWork: MongoUnitOfWork;
   readonly outbox: Outbox;
+  /** ADR 36: Change Notification of every Restaurant Order write. */
+  readonly kitchenChanges: KitchenChangeNotifier;
   readonly clock: Clock;
   readonly ids: IdGenerator;
   readonly kitchenAccessControl: KitchenAccess;
@@ -135,9 +138,10 @@ export const registerRestaurantOrder = (
   const registrations: Registrations<RestaurantOrderCradle> = {
     restaurantOrderOutboxEventMapper: asValue(restaurantOrderEventMapper),
     restaurantOrders: asFunction(
-      ({ db, unitOfWork }: Cradle) =>
+      ({ db, unitOfWork, kitchenChanges }: Cradle) =>
         new MongoRestaurantOrderRepository(
           createRestaurantOrderCollection(db, unitOfWork),
+          kitchenChanges,
         ),
     ).singleton(),
     restaurantExistence: asFunction(

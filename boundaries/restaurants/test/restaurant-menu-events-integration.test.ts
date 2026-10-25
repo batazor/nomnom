@@ -53,7 +53,7 @@ import {
 } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import { kafkaBrokers } from "./support/global-containers.ts";
 import { TestMenuAccessControl } from "./support/menus.ts";
-import { mongoUri } from "./support/mongodb.ts";
+import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 
 // Open Restaurant and Set Menu Item Availability → Outbox → restaurants-relay
 // → Kafka against real infrastructure, for example
@@ -132,6 +132,7 @@ describe("Restaurant and Menu Integration Events reach Kafka", () => {
     const clock = { now: () => now };
     const restaurants = new MongoRestaurantRepository(
       createRestaurantCollection(mongo.db, unitOfWork),
+      noKitchenChanges,
     );
     const menus = new MongoMenuRepository(
       createMenuCollection(mongo.db, unitOfWork),

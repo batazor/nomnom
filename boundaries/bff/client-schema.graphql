@@ -241,8 +241,13 @@ type KitchenOrder {
   receivedAt: String!
 }
 
-"""Active orders of one restaurant for its kitchen staff"""
+"""
+Active orders of one restaurant for its kitchen staff; the entity key lets the
+Router resolve kitchenChanged events (ADR 36)
+"""
 type Kitchen {
+  """Identifier of the restaurant the kitchen belongs to"""
+  restaurantId: ID!
   """Restaurant the kitchen belongs to; menu is null"""
   restaurant: Restaurant!
   """
@@ -338,8 +343,13 @@ type CourierDelivery {
   dropoffAddress: String!
 }
 
-"""Work of the current courier"""
+"""
+Work of the current courier; the entity key lets the Router resolve
+courierChanged events (ADR 36)
+"""
 type Courier {
+  """Courier identifier, the subject of the current user"""
+  id: ID!
   """Current availability"""
   availability: CourierAvailability!
   """Pending delivery offers, empty unless AVAILABLE"""
@@ -531,4 +541,16 @@ type Subscription {
   missing order yields an error event instead of data.
   """
   orderChanged(id: ID!): Order!
+  """
+  Kitchen board of a restaurant after each change of its orders or of the
+  restaurant itself. Nothing is sent until a change: query kitchen first. A
+  kitchen the user may not see yields an error event instead of data.
+  """
+  kitchenChanged(restaurantId: ID!): Kitchen!
+  """
+  Work of the current courier after each change of their availability, offers
+  or deliveries; id is Courier.id from the courier query. Another courier's id
+  yields an error event instead of data.
+  """
+  courierChanged(id: ID!): Courier!
 }

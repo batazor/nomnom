@@ -12,8 +12,36 @@ type Subscription {
   orderChanged(id: ID!): Order!
     @edfs__kafkaSubscribe(topics: ["orders.v1.order-changes"], providerId: "default")
     @openfed__subscriptionFilter(condition: { IN: { fieldPath: "id", values: ["{{ args.id }}"] } })
+
+  """
+  Kitchen board of a restaurant after each change of its orders or of the
+  restaurant itself. Nothing is sent until a change: query kitchen first. A
+  kitchen the user may not see yields an error event instead of data.
+  """
+  kitchenChanged(restaurantId: ID!): Kitchen!
+    @edfs__kafkaSubscribe(topics: ["restaurants.v1.kitchen-changes"], providerId: "default")
+    @openfed__subscriptionFilter(
+      condition: { IN: { fieldPath: "restaurantId", values: ["{{ args.restaurantId }}"] } }
+    )
+
+  """
+  Work of the current courier after each change of their availability, offers
+  or deliveries; id is Courier.id from the courier query. Another courier's id
+  yields an error event instead of data.
+  """
+  courierChanged(id: ID!): Courier!
+    @edfs__kafkaSubscribe(topics: ["delivery.v1.courier-changes"], providerId: "default")
+    @openfed__subscriptionFilter(condition: { IN: { fieldPath: "id", values: ["{{ args.id }}"] } })
 }
 
 type Order @key(fields: "id", resolvable: false) {
+  id: ID! @external
+}
+
+type Kitchen @key(fields: "restaurantId", resolvable: false) {
+  restaurantId: ID! @external
+}
+
+type Courier @key(fields: "id", resolvable: false) {
   id: ID! @external
 }

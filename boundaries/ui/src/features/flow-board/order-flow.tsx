@@ -1,14 +1,15 @@
-import { useEffect } from "react";
-import { useQuery } from "urql";
+import { useEffect, useState } from "react";
+import { useQuery, useSubscription } from "urql";
 
 import {
+  BoardOrderChangedDocument,
   BoardOrderStatusDocument,
   type OrderStatus,
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { Button } from "../../shared/ui";
-import { usePolling } from "./use-polling";
+import { useLatest } from "./use-latest";
 
 // Steps of a successful order and the column whose action leads to each.
 const flowSteps: readonly {
@@ -49,16 +50,23 @@ const finalStatuses = new Set<OrderStatus>([
 // The order, undefined while it loads, null when BFF does not know it (any
 // more): mock orders live only as long as the page.
 function useBoardOrder(orderId: string) {
-  const [{ data }, reexecute] = useQuery({
+  const [{ data }] = useQuery({
     query: BoardOrderStatusDocument,
     variables: { id: orderId },
   });
-  const order = data?.order;
-  usePolling(
-    () => reexecute({ requestPolicy: "network-only" }),
-    order !== null && (!order || !finalStatuses.has(order.status)),
-  );
-  return order;
+  const loaded = data === undefined ? undefined : data.order;
+  // Final as soon as the query or an event says so: then the stream closes.
+  const [final, setFinal] = useState(false);
+  const [{ data: pushed }] = useSubscription({
+    query: BoardOrderChangedDocument,
+    variables: { id: orderId },
+    pause: !loaded || final,
+  });
+  const order = useLatest(loaded, pushed?.orderChanged);
+  useEffect(() => {
+    if (order && finalStatuses.has(order.status)) setFinal(true);
+  }, [order]);
+  return data === undefined ? undefined : order;
 }
 
 // Orders placed from the board as a strip of chips; the chosen one is

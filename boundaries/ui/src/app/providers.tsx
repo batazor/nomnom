@@ -3,6 +3,7 @@ import { LazyMotion, MotionConfig } from "motion/react";
 import { type ReactNode, useMemo } from "react";
 
 import type { RuntimeConfig } from "../shared/config/runtime-config";
+import type { SubscriptionTransport } from "../shared/graphql/client";
 import { SignInProvider } from "../shared/auth/sign-in";
 import { I18nProvider } from "../shared/i18n/i18n";
 import {
@@ -11,6 +12,23 @@ import {
   RoleSessionProvider,
 } from "../shared/session/roles";
 import { reportGraphqlError } from "../shared/telemetry/faro";
+
+// Mocks answer subscriptions in process; the module loads only with mocks.
+const mockSubscriptions: SubscriptionTransport = (request, sink, connected) => {
+  let unsubscribe: (() => void) | undefined;
+  let stopped = false;
+  import("../shared/graphql/mocks/subscriptions")
+    .then((mocks) => {
+      if (!stopped) {
+        unsubscribe = mocks.mockSubscriptions(request, sink, connected);
+      }
+    })
+    .catch(sink.error);
+  return () => {
+    stopped = true;
+    unsubscribe?.();
+  };
+};
 
 const loadMotionFeatures = () =>
   import("./motion-features").then((module) => module.default);
@@ -27,6 +45,7 @@ export function AppProviders({
   const settings = useMemo(
     () => ({
       url: config.publicGraphqlUrl,
+      subscriptions: config.enableMocks ? mockSubscriptions : undefined,
       reportError(report: Parameters<typeof reportGraphqlError>[1]) {
         if (import.meta.env.DEV) {
           console.error("GraphQL request failed", report);
@@ -34,7 +53,7 @@ export function AppProviders({
         reportGraphqlError(faro, report);
       },
     }),
-    [config.publicGraphqlUrl, faro],
+    [config.publicGraphqlUrl, config.enableMocks, faro],
   );
 
   return (

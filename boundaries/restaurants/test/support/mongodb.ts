@@ -120,3 +120,8 @@ export class RecordedOutbox extends MongoOutbox {
     return (await this.records()).map((record) => record.event.type);
   }
 }
+
+/** Kitchen Change Notifier of tests that do not check ADR 36 notifications. */
+export const noKitchenChanges = (
+  write: Readonly<{ save: () => Promise<number> }>,
+): Promise<number> => write.save();

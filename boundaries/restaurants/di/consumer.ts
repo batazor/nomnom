@@ -31,10 +31,12 @@ import {
 } from "../pkg/infrastructure/messaging/processor.ts";
 import type { MongoDbConnection } from "../pkg/infrastructure/mongodb/client.ts";
 import { MongoInbox } from "../pkg/infrastructure/mongodb/inbox.ts";
+import { MongoOutbox } from "../pkg/infrastructure/mongodb/outbox.ts";
 import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import type { MessagePublisher } from "../pkg/infrastructure/outbox/relay.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
+import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
 import type { RestaurantRepository } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
@@ -47,6 +49,10 @@ import {
   type RestaurantExistence,
 } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
 import type { RestaurantOrderRepository } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import {
+  type KitchenChangeNotifier,
+  kitchenChangeNotifier,
+} from "../slices/restaurantorder/infrastructure/integration/kitchen-changes.ts";
 import {
   createOrderPlacedHandler,
   ORDER_EVENTS_TOPIC,
@@ -98,6 +104,7 @@ export interface ConsumerCradle {
   readonly fulfillmentAccess: FulfillmentCoordinatorAccess;
   readonly receiveOrderRequest: ReceiveOrderRequestPort;
   readonly inbox: Inbox;
+  readonly kitchenChanges: KitchenChangeNotifier;
   readonly consumerMetrics: ConsumerMetrics;
   readonly orderPlaced: EventHandler;
   readonly messageProcessor: MessageProcessor;
@@ -128,10 +135,20 @@ export const createConsumerContainer = (
       ({ mongoClient, domainMetrics }: ConsumerCradle) =>
         new ObservedMongoUnitOfWork(mongoClient, domainMetrics),
     ).singleton(),
+    // ADR 36: every Restaurant Order the consumer writes changes the kitchen
+    // board, so its Change Notification goes to the same Outbox transaction.
+    kitchenChanges: asFunction(({ db, unitOfWork, clock }: ConsumerCradle) =>
+      kitchenChangeNotifier(
+        unitOfWork,
+        new MongoOutbox(db, unitOfWork, { metadata: currentTraceMetadata }),
+        () => clock.now(),
+      ),
+    ).singleton(),
     restaurants: asFunction(
-      ({ db, unitOfWork }: ConsumerCradle) =>
+      ({ db, unitOfWork, kitchenChanges }: ConsumerCradle) =>
         new MongoRestaurantRepository(
           createRestaurantCollection(db, unitOfWork),
+          kitchenChanges,
         ),
     ).singleton(),
     restaurantExistence: asFunction(
@@ -139,9 +156,10 @@ export const createConsumerContainer = (
         new RepositoryRestaurantExistence(restaurants),
     ).singleton(),
     restaurantOrders: asFunction(
-      ({ db, unitOfWork }: ConsumerCradle) =>
+      ({ db, unitOfWork, kitchenChanges }: ConsumerCradle) =>
         new MongoRestaurantOrderRepository(
           createRestaurantOrderCollection(db, unitOfWork),
+          kitchenChanges,
         ),
     ).singleton(),
     fulfillmentAccess: asFunction(

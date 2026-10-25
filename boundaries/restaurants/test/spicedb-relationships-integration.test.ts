@@ -23,7 +23,7 @@ import {
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
-import { createTestDatabase } from "./support/mongodb.ts";
+import { createTestDatabase, noKitchenChanges } from "./support/mongodb.ts";
 import {
   FixedClock,
   PICKUP_ADDRESS,
@@ -106,7 +106,7 @@ describe("SpiceDB restaurant relationships", () => {
   const world = async (scope: string) => {
     const { db, unitOfWork } = await createTestDatabase();
     const store = createRestaurantCollection(db, unitOfWork);
-    const restaurants = new MongoRestaurantRepository(store);
+    const restaurants = new MongoRestaurantRepository(store, noKitchenChanges);
     const writer = new SpiceDbRelationshipWriter({
       client: spicedb(),
       timeoutMs: 5000,

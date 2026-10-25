@@ -12,6 +12,7 @@ import { useSignedInToken } from "../auth/sign-in";
 import {
   createGraphqlClient,
   type GraphqlErrorReport,
+  type SubscriptionTransport,
 } from "../graphql/client";
 
 // Users of the flow board: each column calls BFF as its own user.
@@ -162,6 +163,7 @@ export function useCanActAs(role: Role): boolean {
 type ClientSettings = Readonly<{
   url: string;
   reportError?: (report: GraphqlErrorReport) => void;
+  subscriptions?: SubscriptionTransport;
 }>;
 
 const ClientSettingsContext = createContext<ClientSettings | null>(null);
@@ -203,6 +205,7 @@ export function AsRole({
       createGraphqlClient({
         url: settings.url,
         reportError: settings.reportError,
+        subscriptions: settings.subscriptions,
         getAccessToken: () => token,
       }),
     [settings, token],

@@ -53,7 +53,7 @@ import {
   MongoRestaurantRepository,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { TestMenuAccessControl } from "./support/menus.ts";
-import { mongoUri } from "./support/mongodb.ts";
+import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 
 // Open Restaurant and Set Menu Item Availability over HTTP/2 (createGrpcServer
 // as in cmd/restaurants) with the MongoDB Unit of Work and MongoOutbox of the
@@ -101,6 +101,7 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
     });
     const restaurants = new MongoRestaurantRepository(
       createRestaurantCollection(mongo.db, unitOfWork),
+      noKitchenChanges,
     );
     const menus = new MongoMenuRepository(
       createMenuCollection(mongo.db, unitOfWork),

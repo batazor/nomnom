@@ -440,14 +440,16 @@
     "Kitchen": {
       "fields": {
         "restaurant": 1,
-        "orders": 2
+        "orders": 2,
+        "restaurantId": 3
       }
     },
     "Courier": {
       "fields": {
         "availability": 1,
         "offers": 2,
-        "currentDelivery": 3
+        "currentDelivery": 3,
+        "id": 4
       }
     },
     "KitchenActionInput": {
@@ -488,10 +490,10 @@
       "fields": {
         "id": 1,
         "deliveryId": 2,
+        "orderId": 6,
         "pickupAddress": 3,
         "dropoffAddress": 4,
-        "expiresAt": 5,
-        "orderId": 6
+        "expiresAt": 5
       }
     },
     "CourierDelivery": {
@@ -514,6 +516,36 @@
       }
     },
     "LookupOrderByIdResponse": {
+      "fields": {
+        "result": 1
+      }
+    },
+    "LookupKitchenByRestaurantIdRequestKey": {
+      "fields": {
+        "restaurant_id": 1
+      }
+    },
+    "LookupKitchenByRestaurantIdRequest": {
+      "fields": {
+        "keys": 1
+      }
+    },
+    "LookupKitchenByRestaurantIdResponse": {
+      "fields": {
+        "result": 1
+      }
+    },
+    "LookupCourierByIdRequestKey": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "LookupCourierByIdRequest": {
+      "fields": {
+        "keys": 1
+      }
+    },
+    "LookupCourierByIdResponse": {
       "fields": {
         "result": 1
       }

@@ -37,6 +37,7 @@ import {
   MongoRestaurantMemberships,
   MongoRestaurantRepository,
   type RestaurantDocument,
+  type RestaurantSaved,
 } from "../infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../infrastructure/reconcile/reconcile.ts";
 
@@ -47,6 +48,8 @@ export interface RestaurantDependencies {
   readonly clock: Clock;
   readonly ids: IdGenerator;
   readonly outbox: Outbox;
+  /** ADR 36: the kitchen board shows the restaurant, so every save notifies it. */
+  readonly kitchenChanges: RestaurantSaved;
   readonly restaurantAccessControl: RestaurantAccessControl;
   readonly ownerRelationships: OwnerRelationshipWriter;
   readonly staffRelationships: StaffRelationshipWriter;
@@ -95,8 +98,8 @@ export const registerRestaurant = (
       createRestaurantCollection(db, unitOfWork),
     ).singleton(),
     restaurants: asFunction(
-      ({ restaurantCollection }: Cradle) =>
-        new MongoRestaurantRepository(restaurantCollection),
+      ({ restaurantCollection, kitchenChanges }: Cradle) =>
+        new MongoRestaurantRepository(restaurantCollection, kitchenChanges),
     ).singleton(),
     restaurantMemberships: asFunction(
       ({ restaurantCollection }: Cradle) =>

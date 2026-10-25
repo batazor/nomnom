@@ -362,6 +362,8 @@ Consumers интеграционных событий `delivery` использ�
 
 Topic `delivery.v1.delivery-events`, контракт `infrastructure/grpc/nomnom/delivery/v1/events.proto` ([ADR 25](../../docs/adr/0025-integration-event-publication.md), [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md)).
 
+Каждая запись курьера, оффера и доставки, затронувшей курьера, кладёт в тот же Outbox Courier Change Notification — JSON `{"__typename":"Courier","id":…}` в `delivery.v1.courier-changes`. Это не Integration Event: его читает только Cosmo Router BFF для subscription `courierChanged` ([ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md)). Запись курьера и уведомление — один SQL-оператор, поэтому они атомарны и без Unit of Work.
+
 | Domain Event | Integration Event (`event_type`) |
 | --- | --- |
 | `CourierAssignedToDelivery` | `nomnom.delivery.v1.CourierAssignedToDelivery` |

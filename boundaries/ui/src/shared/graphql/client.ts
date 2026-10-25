@@ -1,3 +1,4 @@
+import type { ExecutionResult } from "graphql";
 import { createClient as createSseClient } from "graphql-sse";
 import {
   type Client,
@@ -16,8 +17,26 @@ export type GraphqlErrorReport = Readonly<{
   kind: "business" | "transport";
 }>;
 
+// Delivers the results of one subscription to sink and calls connected when
+// its stream is open; returns the unsubscribe. Default: SSE to the Router.
+export type SubscriptionTransport = (
+  request: Readonly<{
+    query: string;
+    variables?: Record<string, unknown>;
+    operationName?: string;
+  }>,
+  sink: Readonly<{
+    next: (result: ExecutionResult) => void;
+    error: (error: unknown) => void;
+    complete: () => void;
+  }>,
+  connected: () => void,
+) => () => void;
+
 type ClientOptions = Readonly<{
   url: string;
+  // Mocks execute subscriptions in process instead of over SSE.
+  subscriptions?: SubscriptionTransport;
   getTraceparent?: () => string | undefined;
   // Access token of the user BFF acts for; without it only public reads work.
   getAccessToken?: () => string | undefined;
@@ -29,6 +48,7 @@ export function createGraphqlClient({
   getTraceparent,
   getAccessToken,
   reportError,
+  subscriptions,
 }: ClientOptions) {
   function headers(): Record<string, string> {
     const result: Record<string, string> = {};
@@ -57,12 +77,17 @@ export function createGraphqlClient({
 
   // One SSE request per subscription (distinct connections mode): the
   // Router verifies Authorization like any other request, no WebSocket state.
-  const sse = createSseClient({
-    url,
-    headers,
-    retryAttempts: Number.POSITIVE_INFINITY,
-    on: { connected: refetchActiveQueries },
-  });
+  const transport =
+    subscriptions ??
+    ((): SubscriptionTransport => {
+      const sse = createSseClient({
+        url,
+        headers,
+        retryAttempts: Number.POSITIVE_INFINITY,
+        on: { connected: refetchActiveQueries },
+      });
+      return (request, sink) => sse.subscribe(request, sink);
+    })();
 
   client = createClient({
     url,
@@ -90,9 +115,10 @@ export function createGraphqlClient({
         forwardSubscription(request) {
           return {
             subscribe: (sink) => ({
-              unsubscribe: sse.subscribe(
+              unsubscribe: transport(
                 { ...request, query: request.query ?? "" },
                 sink,
+                refetchActiveQueries,
               ),
             }),
           };

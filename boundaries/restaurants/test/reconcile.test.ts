@@ -14,7 +14,7 @@ import {
   RESTAURANT_SCHEMA_VERSION,
 } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
-import { createTestDatabase } from "./support/mongodb.ts";
+import { createTestDatabase, noKitchenChanges } from "./support/mongodb.ts";
 import { FakeRelationshipsClient } from "./support/relationships.ts";
 import { FixedClock, owner } from "./support/restaurants.ts";
 
@@ -264,7 +264,7 @@ class GatedRestaurantRepository extends MongoRestaurantRepository {
   readonly #committed: Promise<void>;
 
   constructor(store: RestaurantStore) {
-    super(store);
+    super(store, noKitchenChanges);
     this.saving = new Promise((resolve) => {
       this.#saving = resolve;
     });
@@ -383,7 +383,7 @@ test("AC-710 a re-assign and a second revoke between passes restart the grace", 
   await new AssignStaffHandler({
     accessControl,
     staffRelationships: writer,
-    restaurants: new MongoRestaurantRepository(store),
+    restaurants: new MongoRestaurantRepository(store, noKitchenChanges),
   }).execute({ subject: owner, restaurantId: "r-1", userId: "bob" });
   const second = revokeInFlight();
   await second.restaurants.saving;

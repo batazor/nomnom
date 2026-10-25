@@ -218,6 +218,37 @@ fn courier_round_trip_with_optimistic_versions() {
     );
 }
 
+/// ADR 36: every courier write, inside or outside a Unit of Work, stores the
+/// Courier entity key for the Router; a conflicting write stores nothing.
+#[test]
+fn courier_writes_notify_the_courier_entity() {
+    let store = store();
+    let id = unique("courier");
+    let courier = Courier::new(CourierId::new(&id));
+    CourierRepository::add(&store, &courier).expect("add");
+    assert_eq!(
+        CourierRepository::add(&store, &courier),
+        Err(RepositoryError::Conflict)
+    );
+    let available = Courier::restore(CourierId::new(&id), CourierStatus::Available)
+        .with_version(courier.version());
+    CourierRepository::save(&store, &available).expect("save");
+    assert_eq!(
+        CourierRepository::save(&store, &available),
+        Err(RepositoryError::ConcurrentModification)
+    );
+
+    let rows = outbox_rows(&id);
+    assert_eq!(rows.len(), 2, "one notification per committed write");
+    for (_, event_type, _, payload, _) in rows {
+        assert_eq!(event_type, "CourierChanged");
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&payload).expect("json"),
+            serde_json::json!({ "__typename": "Courier", "id": id })
+        );
+    }
+}
+
 #[test]
 fn delivery_round_trip_keeps_revision_and_order_uniqueness() {
     let store = store();

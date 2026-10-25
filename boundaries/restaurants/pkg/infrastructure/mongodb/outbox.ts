@@ -4,6 +4,8 @@ import { Binary, type Collection, type Db } from "mongodb";
 
 import type {
   AggregateRef,
+  ChangeNotification,
+  ChangeNotifications,
   Outbox,
   PublishableEvent,
 } from "../../application/outbox.ts";
@@ -107,7 +109,7 @@ export const outboxEventId = (
  * commit or abort together with the aggregate. Events the mapper skips are
  * not written. A duplicate `eventId` aborts the transaction.
  */
-export class MongoOutbox implements Outbox {
+export class MongoOutbox implements Outbox, ChangeNotifications {
   readonly #collection: Collection<OutboxDocument>;
   readonly #counters: Collection<{ _id: string; value: number }>;
   readonly #unitOfWork: MongoUnitOfWork;
@@ -134,14 +136,51 @@ export class MongoOutbox implements Outbox {
     aggregate: AggregateRef,
     events: readonly PublishableEvent[],
   ): Promise<void> {
-    const session = this.#unitOfWork.session;
-    if (session === undefined) {
+    if (this.#unitOfWork.session === undefined) {
       throw new MongoOutboxOutsideUnitOfWorkError();
     }
     const mapped = events.flatMap((event) => {
       const integration = this.#mapper(aggregate, event);
-      return integration === undefined ? [] : [{ event, integration }];
+      return integration === undefined
+        ? []
+        : [{ occurredAt: event.occurredAt, integration }];
     });
+    await this.#insert(aggregate, mapped);
+  }
+
+  /**
+   * Change Notification (ADR 36) next to the change itself: a JSON entity key
+   * for the subscriptions of the BFF Router, not an Integration Event.
+   */
+  async notify(
+    aggregate: AggregateRef,
+    notification: ChangeNotification,
+  ): Promise<void> {
+    await this.#insert(aggregate, [
+      {
+        occurredAt: notification.occurredAt,
+        integration: {
+          eventType: notification.type,
+          topic: notification.topic,
+          payload: new TextEncoder().encode(
+            JSON.stringify(notification.entity),
+          ),
+        },
+      },
+    ]);
+  }
+
+  async #insert(
+    aggregate: AggregateRef,
+    mapped: readonly {
+      occurredAt: Date;
+      integration: OutboxIntegrationEvent;
+    }[],
+  ): Promise<void> {
+    const session = this.#unitOfWork.session;
+    if (session === undefined) {
+      throw new MongoOutboxOutsideUnitOfWorkError();
+    }
     if (mapped.length === 0) return;
     const counter = await this.#counters.findOneAndUpdate(
       { _id: SEQ_COUNTER_ID },
@@ -152,7 +191,7 @@ export class MongoOutbox implements Outbox {
     const first = last - mapped.length + 1;
     const metadata = this.#metadata();
     await this.#collection.insertMany(
-      mapped.map(({ event, integration }, index) => {
+      mapped.map(({ occurredAt, integration }, index) => {
         const eventId = outboxEventId(aggregate, integration.eventType);
         return {
           _id: eventId,
@@ -163,7 +202,7 @@ export class MongoOutbox implements Outbox {
           aggregateType: aggregate.type,
           aggregateId: aggregate.id,
           aggregateVersion: aggregate.version,
-          occurredAt: event.occurredAt,
+          occurredAt,
           topic: integration.topic,
           payload: new Binary(integration.payload),
           metadata,

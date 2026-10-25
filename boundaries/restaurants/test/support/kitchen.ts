@@ -38,6 +38,7 @@ import {
   RepositoryRestaurantExistence,
 } from "../../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import { createMenuWorld } from "./menus.ts";
+import { noKitchenChanges } from "./mongodb.ts";
 import {
   createInfrastructure,
   type Infrastructure,
@@ -66,7 +67,10 @@ export const createKitchenWorld = async (
     infrastructure.db,
     infrastructure.unitOfWork,
   );
-  const restaurantOrders = new MongoRestaurantOrderRepository(store);
+  const restaurantOrders = new MongoRestaurantOrderRepository(
+    store,
+    noKitchenChanges,
+  );
   const board = new MongoKitchenBoard(store);
   const accessControl = new TestKitchenAccessControl();
   const conditions = new StaticAcceptanceConditions();

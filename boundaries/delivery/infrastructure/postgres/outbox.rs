@@ -72,6 +72,52 @@ fn with_trace_context(metadata: serde_json::Value) -> serde_json::Value {
     serde_json::Value::Object(metadata)
 }
 
+/// Kafka topic of Courier Change Notifications (ADR 36): the BFF Router turns
+/// them into `courierChanged` subscription events. Not an Integration Event:
+/// no bounded context consumes it.
+pub const COURIER_CHANGES_TOPIC: &str = "delivery.v1.courier-changes";
+
+/// SQL tail that writes the Change Notification of every courier id a CTE
+/// `changed (id)` returns: a write and its notification are one statement,
+/// atomic with or without a Unit of Work. `$1` is the row metadata.
+pub(super) const NOTIFY_CHANGED_COURIERS: &str = "
+    INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
+        aggregate_version, topic, payload, metadata)
+    SELECT gen_random_uuid(), 'CourierChanged', 'Courier', id, 0,
+        'delivery.v1.courier-changes',
+        convert_to(json_build_object('__typename', 'Courier', 'id', id)::text, 'UTF8'),
+        $1::jsonb
+    FROM changed";
+
+/// Row metadata of a Change Notification: the current `traceparent`.
+pub(super) fn notification_metadata() -> String {
+    with_trace_context(serde_json::json!({})).to_string()
+}
+
+impl PostgresStore {
+    /// Writes the Change Notification of `Courier(courier_id)` next to the
+    /// change: only the GraphQL entity key, the Router re-reads the courier
+    /// view with the subscriber's rights. Inside a Unit of Work it commits
+    /// with the change. The key of every row is unique, so `event_id` is a
+    /// UUIDv7 rather than the aggregate-version UUIDv5 of Integration Events.
+    pub(super) fn notify_courier(&self, courier_id: &str) -> Result<(), RepositoryError> {
+        let payload = serde_json::json!({ "__typename": "Courier", "id": courier_id }).to_string();
+        let metadata = notification_metadata();
+        sql!(self, "INSERT", |connection| sqlx::query(
+            "INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
+                 aggregate_version, topic, payload, metadata)
+             VALUES ($1::uuid, 'CourierChanged', 'Courier', $2, 0, $3, $4, $5::jsonb)"
+        )
+        .bind(Uuid::now_v7().to_string())
+        .bind(courier_id)
+        .bind(COURIER_CHANGES_TOPIC)
+        .bind(payload.into_bytes())
+        .bind(&metadata)
+        .execute(connection))
+        .map(drop)
+    }
+}
+
 impl DeliveryOutbox for PostgresStore {
     /// Inside a Unit of Work the row commits or rolls back with the aggregate;
     /// `aggregate_version` is the version the same transaction just wrote.
