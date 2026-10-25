@@ -54,17 +54,21 @@ func TestWatermillBuiltinMetricsUseConsumerSubsystem(t *testing.T) {
 	h.publish(t, event(t, "event-1", wrapperspb.String("ok")))
 	h.publish(t, event(t, "event-2", wrapperspb.String("bad")))
 
-	families, err := registry.Gather()
-	require.NoError(t, err)
-	names := map[string]bool{}
-	for _, f := range families {
-		names[f.GetName()] = true
-	}
-	for _, want := range []string{
-		"watermill_consumer_subscriber_messages_received_total",
-		"watermill_consumer_handler_execution_time_seconds",
-		"watermill_consumer_publish_time_seconds",
-	} {
-		assert.True(t, names[want], "%s not in %v", want, names)
-	}
+	// Watermill увеличивает subscriber_messages_received_total в горутине после
+	// Ack, то есть уже после возврата publish: ждём появления всех метрик.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		families, err := registry.Gather()
+		require.NoError(c, err)
+		names := map[string]bool{}
+		for _, f := range families {
+			names[f.GetName()] = true
+		}
+		for _, want := range []string{
+			"watermill_consumer_subscriber_messages_received_total",
+			"watermill_consumer_handler_execution_time_seconds",
+			"watermill_consumer_publish_time_seconds",
+		} {
+			assert.True(c, names[want], "%s not in %v", want, names)
+		}
+	}, 5*time.Second, 10*time.Millisecond)
 }
