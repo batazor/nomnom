@@ -330,7 +330,7 @@ Kubernetes/NetworkPolicy and E2E scenarios run in kind.
 ## Открытые вопросы
 
 - definitions, relations and permissions after domain SDD use cases are agreed;
-- identity provider and how the browser obtains the access token (user subject propagation is decided by ADR 32);
+- production identity provider (kind uses Dex with authorization code + PKCE, ADR 35; user subject propagation is decided by ADR 32);
 - exact local field, serialization and gRPC metadata key for ZedToken;
 - SpiceDB datastore, deployment topology, backups and HA;
 - reconciliation ownership, schedule, batching, repair policy and drift SLO;
