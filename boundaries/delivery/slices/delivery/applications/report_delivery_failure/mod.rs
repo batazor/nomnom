@@ -4,7 +4,8 @@
 //! outside `delivery`.
 
 use crate::pkg::application::{Subject, UnitOfWork};
-use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter,
 };
@@ -12,7 +13,7 @@ use crate::slices::delivery::domains::delivery::{
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
-use super::{courier_id, delivery_id, load_courier, load_delivery};
+use super::{courier_id, delivery_id, load_delivery};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Reporter {
@@ -39,7 +40,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub unit_of_work: &'a U,
     pub deliveries: &'a dyn DeliveryRepository,
-    pub couriers: &'a dyn CourierRepository,
+    pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
 }
 
@@ -76,11 +77,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
             let released_courier_id = delivery.courier_id().cloned().ok_or_else(|| {
                 DeliveryApplicationError::Internal("failed delivery had no courier".to_owned())
             })?;
-            let mut courier = load_courier(self.couriers, &released_courier_id)?;
-            courier.release()?;
+            self.couriers.release(&released_courier_id)?;
 
             self.deliveries.save(&delivery)?;
-            self.couriers.save(&courier)?;
             publish(self.outbox, delivery.pull_events())?;
             Ok(Output {
                 delivery_id: delivery_id.clone(),

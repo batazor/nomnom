@@ -39,7 +39,7 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input { order_id }`, `Output { delivery_id, released_courier_id, offer }`.
-- **Порты:** `DeliveryAuthorization` (`ReplanDelivery` над `Order(order_id)`, далее проверки вложенных handlers над `Delivery(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierRepository`, `DeliveryOfferRepository`, `DeliveryOutbox`, `CourierLocator`, `IdGenerator`, `Clock`, `AssignmentPolicy`.
+- **Порты:** `DeliveryAuthorization` (`ReplanDelivery` над `Order(order_id)`, далее проверки вложенных handlers над `Delivery(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `DeliveryOutbox`, `CourierLocator`, `IdGenerator`, `Clock`, `AssignmentPolicy`.
 - **Транзакции:** шаги не атомарны между собой: Reassign Courier выполняется в своей UoW, Find Courier только читает, Offer Delivery идемпотентен по открытому offer той же пары.
 - **Ошибки:** после Pickup или в финальном состоянии — `DeliveryPrecondition` (`FAILED_PRECONDITION`); неизвестный `order_id` — `DeliveryForOrderNotFound`.
 - **Допущение:** курьеры, уже получавшие offer этой доставки, повторно не выбираются (правило Find Courier); поэтому повтор Replan может вернуть пустой `offered_courier_id`.

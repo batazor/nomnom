@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::pkg::application::{AuthorizationError, RelationshipWriteError, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
+use crate::slices::courier::applications::assignment::CourierAssignmentError;
 use crate::slices::courier::domains::courier::{CourierError, CourierId};
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryOfferError, DeliveryOfferId, DeliveryValidationError,
@@ -144,6 +145,16 @@ impl From<TransitionError> for DeliveryApplicationError {
 impl From<CourierError> for DeliveryApplicationError {
     fn from(error: CourierError) -> Self {
         Self::CourierPrecondition(error)
+    }
+}
+
+impl From<CourierAssignmentError> for DeliveryApplicationError {
+    fn from(error: CourierAssignmentError) -> Self {
+        match error {
+            CourierAssignmentError::CourierNotFound(id) => Self::CourierNotFound(id),
+            CourierAssignmentError::Precondition(error) => Self::CourierPrecondition(error),
+            CourierAssignmentError::Repository(error) => error.into(),
+        }
     }
 }
 

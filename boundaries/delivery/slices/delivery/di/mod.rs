@@ -8,10 +8,14 @@ use std::sync::Arc;
 use shaku::{Component, HasComponent, Interface, module};
 
 use crate::pkg::application::{Clock, IdGenerator, ScopedUnitOfWork, Subject, TransactionScope};
-use crate::slices::courier::domains::courier::CourierRepository;
+use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
+use crate::slices::delivery::applications::get_courier_current_delivery::{
+    self, CourierCurrentDeliveryReadModel,
+};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     self, PendingDeliveryOffersReadModel,
 };
@@ -30,11 +34,15 @@ use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, Delive
 /// Unit of Work и репозитории должны работать с одним хранилищем.
 pub trait DeliveryPorts: Interface {
     fn authorization(&self) -> &dyn DeliveryAuthorization;
+    /// Право курьера на Get Courier Current Delivery проверяет слайс `courier`.
+    fn courier_authorization(&self) -> &dyn CourierAuthorization;
     fn transactions(&self) -> &dyn TransactionScope;
     fn deliveries(&self) -> &dyn DeliveryRepository;
     fn offers(&self) -> &dyn DeliveryOfferRepository;
     fn pending_offers(&self) -> &dyn PendingDeliveryOffersReadModel;
-    fn couriers(&self) -> &dyn CourierRepository;
+    fn current_deliveries(&self) -> &dyn CourierCurrentDeliveryReadModel;
+    /// Занятость курьера: порт слайса `courier` в той же Unit of Work.
+    fn courier_assignment(&self) -> &dyn CourierAssignment;
     fn outbox(&self) -> &dyn DeliveryOutbox;
     fn locator(&self) -> &dyn CourierLocator;
     fn clock(&self) -> &dyn Clock;
@@ -77,6 +85,12 @@ pub trait DeliveryUseCases: Interface {
         subject: &Subject,
         input: list_available_delivery_offers::Input,
     ) -> Result<list_available_delivery_offers::Output, DeliveryApplicationError>;
+
+    fn get_courier_current_delivery(
+        &self,
+        subject: &Subject,
+        input: get_courier_current_delivery::Input,
+    ) -> Result<get_courier_current_delivery::Output, DeliveryApplicationError>;
 
     fn accept_delivery_offer(
         &self,
@@ -164,7 +178,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
         find_courier::Handler {
             authorization: self.ports.authorization(),
             deliveries: self.ports.deliveries(),
-            couriers: self.ports.couriers(),
+            couriers: self.ports.courier_assignment(),
             offers: self.ports.offers(),
             locator: self.ports.locator(),
             policy: self.settings.assignment_policy(),
@@ -180,7 +194,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
         offer_delivery::Handler {
             authorization: self.ports.authorization(),
             deliveries: self.ports.deliveries(),
-            couriers: self.ports.couriers(),
+            couriers: self.ports.courier_assignment(),
             offers: self.ports.offers(),
             ids: self.ports.ids(),
             clock: self.ports.clock(),
@@ -202,6 +216,19 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
         .execute(subject, input)
     }
 
+    fn get_courier_current_delivery(
+        &self,
+        subject: &Subject,
+        input: get_courier_current_delivery::Input,
+    ) -> Result<get_courier_current_delivery::Output, DeliveryApplicationError> {
+        get_courier_current_delivery::Handler {
+            authorization: self.ports.courier_authorization(),
+            couriers: self.ports.courier_assignment(),
+            current_deliveries: self.ports.current_deliveries(),
+        }
+        .execute(subject, input)
+    }
+
     fn accept_delivery_offer(
         &self,
         subject: &Subject,
@@ -212,7 +239,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             unit_of_work: &self.unit_of_work(),
             offers: self.ports.offers(),
             deliveries: self.ports.deliveries(),
-            couriers: self.ports.couriers(),
+            couriers: self.ports.courier_assignment(),
             outbox: self.ports.outbox(),
             locator: self.ports.locator(),
             clock: self.ports.clock(),
@@ -244,7 +271,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.deliveries(),
-            couriers: self.ports.couriers(),
+            couriers: self.ports.courier_assignment(),
             outbox: self.ports.outbox(),
             relationships: self.ports.relationships(),
         }
@@ -274,7 +301,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.deliveries(),
-            couriers: self.ports.couriers(),
+            couriers: self.ports.courier_assignment(),
             outbox: self.ports.outbox(),
         }
         .execute(subject, input)
@@ -289,7 +316,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.deliveries(),
-            couriers: self.ports.couriers(),
+            couriers: self.ports.courier_assignment(),
             outbox: self.ports.outbox(),
         }
         .execute(subject, input)
@@ -304,7 +331,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.deliveries(),
-            couriers: self.ports.couriers(),
+            couriers: self.ports.courier_assignment(),
             outbox: self.ports.outbox(),
             relationships: self.ports.relationships(),
         }
@@ -320,7 +347,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.deliveries(),
-            couriers: self.ports.couriers(),
+            couriers: self.ports.courier_assignment(),
             offers: self.ports.offers(),
             outbox: self.ports.outbox(),
             locator: self.ports.locator(),

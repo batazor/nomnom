@@ -9,14 +9,14 @@
 
 ## Границы
 
-- **Владелец:** `delivery/slices/courier`.
-- **Домен:** `domains/courier`.
-- **Взаимодействие:** Читает query model и проверяет принадлежность курьеру.
+- **Владелец:** `delivery/slices/delivery`.
+- **Домен:** `domains/delivery`.
+- **Взаимодействие:** Читает query model `Delivery`; право курьера проверяет порт `CourierAuthorization` слайса `courier`, регистрацию курьера — порт `CourierAssignment`.
 
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-304.
-- **Порты:** `CourierAuthorization` (`ViewCourierCurrentDelivery` над `Courier(id)`), `CourierRepository`, `CourierCurrentDeliveryReadModel`.
+- **Порты:** `CourierAuthorization` (`ViewCourierCurrentDelivery` над `Courier(id)`), `CourierAssignment` (`ensure_registered`), `CourierCurrentDeliveryReadModel`.
 - **Транзакция:** Query без UoW; активной считается `assigned` или `pickedUp` доставка курьера.
 
 ## Acceptance

@@ -17,13 +17,13 @@ use delivery::infrastructure::reconcile::ReconciliationStore;
 use delivery::pkg::application::{UnitOfWork, UnitOfWorkError};
 use delivery::pkg::config::DatabaseConfig;
 use delivery::pkg::persistence::{AuthorizationRevision, RepositoryError};
-use delivery::slices::courier::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use delivery::slices::courier::applications::update_courier_location::{
     CourierLocationStore, CourierPosition,
 };
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierRepository, CourierStatus, Location,
 };
+use delivery::slices::delivery::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use delivery::slices::delivery::applications::list_available_delivery_offers::PendingDeliveryOffersReadModel;
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use delivery::slices::delivery::domains::delivery::{

@@ -6,7 +6,8 @@
 //! inside `delivery`; this use case only composes the existing handlers.
 
 use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork};
-use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferRepository, DeliveryRepository,
 };
@@ -37,7 +38,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub unit_of_work: &'a U,
     pub deliveries: &'a dyn DeliveryRepository,
-    pub couriers: &'a dyn CourierRepository,
+    pub couriers: &'a dyn CourierAssignment,
     pub offers: &'a dyn DeliveryOfferRepository,
     pub outbox: &'a dyn DeliveryOutbox,
     pub locator: &'a dyn CourierLocator,
