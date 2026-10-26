@@ -5,7 +5,6 @@ query BrowseRestaurants($first: Int!, $after: String) {
       node {
         id
         name
-        address
         acceptingOrders
         menu {
           items {

@@ -4,7 +4,6 @@ mutation OpenRestaurant($restaurantId: ID!) {
     restaurant {
       id
       name
-      address
       acceptingOrders
     }
   }
@@ -16,7 +15,6 @@ mutation CloseRestaurant($restaurantId: ID!) {
     restaurant {
       id
       name
-      address
       acceptingOrders
     }
   }

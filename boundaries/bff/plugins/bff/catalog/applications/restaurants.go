@@ -26,10 +26,9 @@ type Money struct {
 
 // Restaurant is the public restaurant data of restaurants.
 type Restaurant struct {
-	ID      string
-	Name    string
-	Address string
-	IsOpen  bool
+	ID     string
+	Name   string
+	IsOpen bool
 }
 
 type MenuItem struct {

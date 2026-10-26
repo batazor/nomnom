@@ -4,24 +4,6 @@ fn normalize(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Address(String);
-
-impl Address {
-    pub fn new(value: &str) -> Result<Self, DeliveryValidationError> {
-        let normalized = normalize(value);
-        if normalized.is_empty() {
-            return Err(DeliveryValidationError::EmptyAddress);
-        }
-        Ok(Self(normalized))
-    }
-
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 /// Moment the courier expects to reach a step of the Delivery (FR-610), in
 /// epoch seconds. Named by the courier; a newly named one is after the
 /// current time.
@@ -220,17 +202,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn address_and_cancellation_reason_are_normalized() {
-        assert_eq!(
-            Address::new("  Main   street\t1 ")
-                .expect("valid address")
-                .as_str(),
-            "Main street 1"
-        );
-        assert_eq!(
-            Address::new(" \n ").expect_err("empty address"),
-            DeliveryValidationError::EmptyAddress
-        );
+    fn cancellation_reason_is_normalized() {
         assert_eq!(
             DeliveryCancellationReason::new(" order   cancelled ")
                 .expect("reason")

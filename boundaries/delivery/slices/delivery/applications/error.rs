@@ -38,8 +38,6 @@ pub enum DeliveryApplicationError {
     DeliveryForOrderNotFound(OrderId),
     CourierNotFound(CourierId),
     DeliveryOfferNotFound(DeliveryOfferId),
-    /// A delivery with different data already exists for the same order.
-    DeliveryAlreadyExists(DeliveryId),
     /// The current `Delivery` state or assignment forbids the operation.
     DeliveryPrecondition(DeliveryError),
     /// The current `Courier` state forbids the operation.
@@ -69,9 +67,6 @@ impl Display for DeliveryApplicationError {
             Self::CourierNotFound(id) => write!(formatter, "courier {} not found", id.as_str()),
             Self::DeliveryOfferNotFound(id) => {
                 write!(formatter, "delivery offer {} not found", id.as_str())
-            }
-            Self::DeliveryAlreadyExists(id) => {
-                write!(formatter, "delivery {} already exists", id.as_str())
             }
             Self::DeliveryPrecondition(error) => {
                 write!(formatter, "delivery precondition failed: {error}")

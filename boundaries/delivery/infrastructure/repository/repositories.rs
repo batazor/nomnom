@@ -128,7 +128,7 @@ impl DeliveryRepository for Store {
     fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
-            "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,
+            "SELECT id, order_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
                  expected_pickup_at, expected_delivered_at
              FROM deliveries WHERE id = $1",
@@ -142,7 +142,7 @@ impl DeliveryRepository for Store {
     fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
-            "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,
+            "SELECT id, order_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
                  expected_pickup_at, expected_delivered_at
              FROM deliveries WHERE order_id = $1",
@@ -158,15 +158,14 @@ impl DeliveryRepository for Store {
         // ON CONFLICT DO NOTHING keeps the transaction usable after a
         // duplicate id or order id.
         let inserted = sql!(self, "INSERT", |connection| sqlx::query!(
-            "INSERT INTO deliveries (id, order_id, courier_id, pickup_address,
+            "INSERT INTO deliveries (id, order_id, courier_id,
                  state, failure_reason, authorization_revision, version,
                  created_at, failure_detail, expected_pickup_at, expected_delivered_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              ON CONFLICT DO NOTHING",
             delivery.id().as_str(),
             delivery.order_id().as_str(),
             delivery.courier_id().map(CourierId::as_str),
-            delivery.pickup_address().as_str(),
             delivery_state(delivery.state()),
             delivery.failure_reason().map(DeliveryFailureReason::as_str),
             delivery

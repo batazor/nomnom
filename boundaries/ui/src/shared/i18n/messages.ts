@@ -273,7 +273,6 @@ export const messages = {
     "board.courier.accept": "Взять заказ",
     "board.courier.waiting": "Ждём предложений.",
     "board.courier.offline": "Выйдите на линию, чтобы получать заказы.",
-    "board.courier.from": "Откуда",
     "board.courier.problem.OFFER_NOT_AVAILABLE": "Предложение уже недоступно.",
     "board.courier.problem.DELIVERY_STAGE_CONFLICT":
       "Заказ ещё не готов к этому шагу.",
@@ -561,7 +560,6 @@ export const messages = {
     "board.courier.accept": "Take the order",
     "board.courier.waiting": "Waiting for offers.",
     "board.courier.offline": "Go online to receive orders.",
-    "board.courier.from": "From",
     "board.courier.problem.OFFER_NOT_AVAILABLE":
       "The offer is no longer available.",
     "board.courier.problem.DELIVERY_STAGE_CONFLICT":

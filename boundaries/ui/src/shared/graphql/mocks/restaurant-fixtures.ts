@@ -25,7 +25,6 @@ export type MockMenuItem = {
 export type MockRestaurant = {
   id: string;
   name: string;
-  address: string;
   acceptingOrders: boolean;
   menu: { items: MockMenuItem[] } | null;
 };
@@ -78,7 +77,6 @@ export function fromMinor(minor: number): MockMoney {
 export const kitchenEight: MockRestaurant = {
   id: "restaurant-kitchen-8",
   name: "Кухня №8",
-  address: "ул. Садовая, 8",
   acceptingOrders: true,
   menu: {
     items: [
@@ -117,7 +115,6 @@ export const kitchenEight: MockRestaurant = {
 export const nightBakery: MockRestaurant = {
   id: "restaurant-night-bakery",
   name: "Ночная пекарня",
-  address: "пр. Мира, 31",
   acceptingOrders: false,
   menu: {
     items: [
@@ -147,7 +144,6 @@ const moreRestaurants: MockRestaurant[] = [
   {
     id: "restaurant-north-dumplings",
     name: "Пельменная «Север»",
-    address: "ул. Полярная, 3",
     acceptingOrders: true,
     menu: {
       items: [
@@ -164,7 +160,6 @@ const moreRestaurants: MockRestaurant[] = [
   {
     id: "restaurant-georgian-yard",
     name: "Грузинский дворик",
-    address: "пер. Тбилисский, 5",
     acceptingOrders: true,
     menu: {
       items: [
@@ -176,7 +171,6 @@ const moreRestaurants: MockRestaurant[] = [
   {
     id: "restaurant-sora-ramen",
     name: "Рамен-бар Сора",
-    address: "ул. Восточная, 17",
     acceptingOrders: true,
     menu: {
       items: [item("menu-shoyu", "Сёю рамен", "640.00", "Курица, яйцо, нори")],
@@ -185,7 +179,6 @@ const moreRestaurants: MockRestaurant[] = [
   {
     id: "restaurant-green-bowl",
     name: "Овощи и злаки",
-    address: "Зелёный бульвар, 9",
     acceptingOrders: true,
     menu: {
       items: [item("menu-buddha-bowl", "Боул с киноа", "480.50")],
@@ -194,7 +187,6 @@ const moreRestaurants: MockRestaurant[] = [
   {
     id: "restaurant-bridge-pizza",
     name: "Пицца у моста",
-    address: "наб. Речная, 21",
     acceptingOrders: true,
     menu: {
       items: [item("menu-margherita", "Маргарита", "560.00")],
@@ -203,7 +195,6 @@ const moreRestaurants: MockRestaurant[] = [
   {
     id: "restaurant-corner-coffee",
     name: "Кофейня на углу",
-    address: "ул. Садовая, 1",
     acceptingOrders: true,
     menu: null,
   },

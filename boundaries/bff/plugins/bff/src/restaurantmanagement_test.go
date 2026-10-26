@@ -32,7 +32,7 @@ func (f *fakeOpening) Handle(ctx context.Context, restaurantID string) (applicat
 	return f.result, f.err
 }
 
-var nightBakery = applications.Restaurant{ID: "restaurant-night-bakery", Name: "Ночная пекарня", Address: "ул. Лесная, 12"}
+var nightBakery = applications.Restaurant{ID: "restaurant-night-bakery", Name: "Ночная пекарня"}
 
 func managementService(t *testing.T, open, closer *fakeOpening) (*BffService, context.Context) {
 	t.Helper()
@@ -61,7 +61,6 @@ func TestOpenRestaurantRunsOnBehalfOfTheUser(t *testing.T) {
 	assert.True(t, payload.GetChanged())
 	assert.Equal(t, nightBakery.ID, payload.GetRestaurant().GetId())
 	assert.Equal(t, "Ночная пекарня", payload.GetRestaurant().GetName())
-	assert.Equal(t, "ул. Лесная, 12", payload.GetRestaurant().GetAddress())
 	assert.True(t, payload.GetRestaurant().GetAcceptingOrders())
 	assert.Nil(t, payload.GetRestaurant().GetMenu())
 }

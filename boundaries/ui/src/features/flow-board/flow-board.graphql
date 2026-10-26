@@ -70,14 +70,12 @@ fragment CourierWork on Courier {
     id
     deliveryId
     orderId
-    pickupAddress
     expiresAt
   }
   currentDelivery {
     id
     orderId
     stage
-    pickupAddress
   }
 }
 

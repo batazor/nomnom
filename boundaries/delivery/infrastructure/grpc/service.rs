@@ -107,7 +107,6 @@ impl DeliveryService for DeliveryGrpcService {
             order_id: view.order_id.as_str().to_owned(),
             courier_id: output.courier_id.as_str().to_owned(),
             state: delivery_state(view.state) as i32,
-            pickup_address: view.pickup_address.as_str().to_owned(),
         });
         Ok(Response::new(GetCourierCurrentDeliveryResponse {
             delivery,
@@ -127,7 +126,6 @@ impl DeliveryService for DeliveryGrpcService {
                 &subject,
                 create_delivery::Input {
                     order_id: request.order_id,
-                    pickup_address: request.pickup_address,
                 },
             )
             .map_err(delivery_transport_error)?;
@@ -282,7 +280,6 @@ impl DeliveryService for DeliveryGrpcService {
                     offer_id: offer.offer_id.as_str().to_owned(),
                     delivery_id: offer.delivery_id.as_str().to_owned(),
                     order_id: offer.order_id.as_str().to_owned(),
-                    pickup_address: offer.pickup_address.as_str().to_owned(),
                     expires_at_epoch_seconds: offer.expires_at_epoch_seconds,
                 })
                 .collect(),

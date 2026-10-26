@@ -40,7 +40,7 @@ use delivery::slices::delivery::applications::{
     report_delivery_failure,
 };
 use delivery::slices::delivery::domains::delivery::{
-    Address, Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
+    Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository, OrderId,
 };
 
@@ -170,7 +170,6 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -
         &Delivery::new(
             DeliveryId::new(delivery.as_str()),
             OrderId::new(order.as_str()),
-            Address::new("Restaurant street 1").expect("pickup"),
         ),
     )
     .expect("seed delivery");

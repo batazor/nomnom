@@ -185,7 +185,6 @@ describe("refresh by Integration Events (ADR 40)", () => {
       restaurantId: id,
       name: "Pho",
       isOpen: true,
-      address: "1 St",
     });
     const catalog = new CachedRestaurantCatalog(world.source, options());
     const page = { includeClosed: false, after: undefined, limit: 1000 };
@@ -202,7 +201,6 @@ describe("refresh by Integration Events (ADR 40)", () => {
       restaurantId: id,
       name: "Pho",
       isOpen: false,
-      address: "1 St",
     });
     const handler = new CacheRefreshHandler({
       refreshes: restaurantCacheRefreshes(catalog),
@@ -242,7 +240,6 @@ describe("refresh by Integration Events (ADR 40)", () => {
       restaurantId: id,
       name: "Pho",
       isOpen: true,
-      address: "",
     });
     let staleReadDone = false;
     const catalog: CachedRestaurantCatalog = new CachedRestaurantCatalog(
@@ -258,7 +255,6 @@ describe("refresh by Integration Events (ADR 40)", () => {
               restaurantId: id,
               name: "Pho",
               isOpen: false,
-              address: "",
             });
             await catalog.refresh(id);
           }

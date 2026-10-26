@@ -88,9 +88,8 @@ func openingResult(restaurant *restaurantsv1.Restaurant, changed bool) applicati
 
 func restaurantOf(restaurant *restaurantsv1.Restaurant) applications.Restaurant {
 	return applications.Restaurant{
-		ID:      restaurant.GetRestaurantId(),
-		Name:    restaurant.GetName(),
-		Address: restaurant.GetAddress(),
-		IsOpen:  restaurant.GetIsOpen(),
+		ID:     restaurant.GetRestaurantId(),
+		Name:   restaurant.GetName(),
+		IsOpen: restaurant.GetIsOpen(),
 	}
 }

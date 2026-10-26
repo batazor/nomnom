@@ -38,8 +38,6 @@ type Restaurant {
   id: ID!
   """Display name"""
   name: String!
-  """Human-readable address"""
-  address: String!
   """Whether the restaurant accepts new orders now"""
   acceptingOrders: Boolean!
   """Current menu, null if the restaurant has not published one"""
@@ -335,8 +333,6 @@ type DeliveryOffer {
   deliveryId: ID!
   """Customer order the delivery is for"""
   orderId: ID!
-  """Where to pick the order up"""
-  pickupAddress: String!
   """Moment in RFC 3339 after which the offer cannot be accepted"""
   expiresAt: String!
 }
@@ -357,8 +353,6 @@ type CourierDelivery {
   orderId: ID!
   """Current stage"""
   stage: CourierDeliveryStage!
-  """Where to pick the order up"""
-  pickupAddress: String!
 }
 
 """

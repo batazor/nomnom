@@ -163,36 +163,19 @@ func (r *Restaurants) CancelOrder(ctx context.Context, request neighbours.Restau
 	return nil
 }
 
-// Delivery implements neighbours.Delivery; the pickup address is the address
-// of the restaurant read from restaurants.
+// Delivery implements neighbours.Delivery.
 type Delivery struct {
-	client      deliveryv1.DeliveryServiceClient
-	restaurants restaurantsv1.RestaurantsServiceClient
+	client deliveryv1.DeliveryServiceClient
 }
 
 func NewDelivery(conn grpc.ClientConnInterface) *Delivery {
-	return &Delivery{
-		client:      deliveryv1.NewDeliveryServiceClient(conn),
-		restaurants: restaurantsv1.NewRestaurantsServiceClient(conn),
-	}
+	return &Delivery{client: deliveryv1.NewDeliveryServiceClient(conn)}
 }
 
 var _ neighbours.Delivery = (*Delivery)(nil)
 
 func (d *Delivery) Create(ctx context.Context, request neighbours.DeliveryRequest) error {
-	restaurant, err := d.restaurants.GetRestaurant(ctx, &restaurantsv1.GetRestaurantRequest{RestaurantId: request.RestaurantID})
-	if err != nil {
-		return mapError("restaurants.GetRestaurant", err)
-	}
-	pickup := restaurant.GetRestaurant().GetAddress()
-	if pickup == "" {
-		return fmt.Errorf("restaurant %s: %w", request.RestaurantID,
-			application.InvalidInput("pickup_address", "restaurant has no address"))
-	}
-	_, err = d.client.CreateDelivery(ctx, &deliveryv1.CreateDeliveryRequest{
-		OrderId:       request.OrderID,
-		PickupAddress: pickup,
-	})
+	_, err := d.client.CreateDelivery(ctx, &deliveryv1.CreateDeliveryRequest{OrderId: request.OrderID})
 	return mapError("delivery.CreateDelivery", err)
 }
 

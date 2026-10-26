@@ -107,7 +107,6 @@ describe("Restaurant and Menu Integration Events are written to the Outbox", () 
         id: restaurantId,
         name: "Pho House",
         ownerId: owner.id,
-        address: "1 Pho Street",
         registeredAt: now,
       }),
     );

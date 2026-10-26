@@ -32,10 +32,10 @@
 
 | Term | Definition | Owner (bounded context) | Related terms | Not the same as | Where used | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Customer | Пользователь, который оформляет `Order` и получает его по указанному адресу. | `orders` для связи; identity — общий contract | Order, Subject | Courier, Restaurant | Orders model/README, authorization | Межконтекстно передаётся ID, а не модель. |
+| Customer | Пользователь, который оформляет `Order` и получает его. | `orders` для связи; identity — общий contract | Order, Subject | Courier, Restaurant | Orders model/README, authorization | Межконтекстно передаётся ID, а не модель. |
 | Restaurant | Участник, который предлагает Menu и готовит принятые Restaurant Order. | `restaurants` | Menu, Restaurant Order | `orders.Order` | Restaurants glossary/README; future proto/GraphQL | Соседи используют контрактные данные/ID. |
 | Courier | Исполнитель, доступный для Delivery или занятый ею. | `delivery` | Delivery, Assignment | Customer, driver | Delivery glossary/domain | Authorization relation не создаёт общую модель. |
-| Order | Зафиксированное намерение Customer получить выбранные Order Item одного Restaurant по адресу. | `orders` | Order Item, Fulfillment | Restaurant Order, Delivery, Payment | Orders glossary/domain/SDD | Неквалифицированный `Order` означает aggregate `orders`. |
+| Order | Зафиксированное намерение Customer получить выбранные Order Item одного Restaurant. | `orders` | Order Item, Fulfillment | Restaurant Order, Delivery, Payment | Orders glossary/domain/SDD | Неквалифицированный `Order` означает aggregate `orders`. |
 | Restaurant Order | Локальное представление заказа для решения Restaurant и Preparation. | `restaurants` | Acceptance, Preparation | `orders.Order` | Канонический термин; future proto/events | Текущий `Kitchen Order` — legacy. |
 | Delivery | Перемещение заказа от Restaurant к Customer назначенным Courier. | `delivery` | Assignment, Pickup, Delivery Completion | Order, shipment | Delivery glossary/domain | Связь с Order — через contract ID. |
 | Payment | Денежная операция на сумму, связанная с одним Order. | `payments` | Authorization, Capture, Refund | Order, произвольная transaction | Payments glossary/domain | Не решает lifecycle Order. |

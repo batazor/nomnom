@@ -32,7 +32,7 @@ use delivery::slices::delivery::applications::list_available_delivery_offers::Pe
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use delivery::slices::delivery::domains::delivery::{
-    Address, Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
+    Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
     DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DomainEvent, ExpectedTime,
     FailureReporter, OfferState, OrderId, State,
 };
@@ -73,11 +73,7 @@ fn unique(prefix: &str) -> String {
 }
 
 fn new_delivery(id: &str) -> Delivery {
-    Delivery::new(
-        DeliveryId::new(id),
-        OrderId::new(unique("order")),
-        Address::new("Restaurant street 1").expect("pickup"),
-    )
+    Delivery::new(DeliveryId::new(id), OrderId::new(unique("order")))
 }
 
 fn assigned(delivery: &Delivery, courier: &str) -> Delivery {
@@ -85,7 +81,6 @@ fn assigned(delivery: &Delivery, courier: &str) -> Delivery {
         delivery.id().clone(),
         delivery.order_id().clone(),
         Some(CourierId::new(courier)),
-        delivery.pickup_address().clone(),
         State::Assigned,
         None,
     )
@@ -452,7 +447,6 @@ fn delivery_round_trip_keeps_revision_and_order_uniqueness() {
     let same_order = Delivery::new(
         DeliveryId::new(unique("delivery")),
         delivery.order_id().clone(),
-        delivery.pickup_address().clone(),
     );
     assert_eq!(
         DeliveryRepository::add(&store, &same_order),

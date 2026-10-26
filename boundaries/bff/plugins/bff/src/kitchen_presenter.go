@@ -32,7 +32,6 @@ func kitchenMessage(view applications.KitchenView) (*service.Kitchen, error) {
 		Restaurant: &service.Restaurant{
 			Id:              view.Restaurant.ID,
 			Name:            view.Restaurant.Name,
-			Address:         view.Restaurant.Address,
 			AcceptingOrders: view.Restaurant.IsOpen,
 		},
 		Orders: make([]*service.KitchenOrder, 0, len(view.Orders)),

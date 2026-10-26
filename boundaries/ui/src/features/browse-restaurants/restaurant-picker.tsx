@@ -86,9 +86,6 @@ export function RestaurantPicker({
               <m.span className="catalog-name" layout="position">
                 {restaurant.name}
               </m.span>
-              <m.span className="catalog-address" layout="position">
-                {restaurant.address}
-              </m.span>
             </m.button>
           </li>
         ))}

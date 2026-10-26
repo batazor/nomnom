@@ -338,7 +338,9 @@ describe("fulfillment eta", () => {
     expect(cooking).toHaveAttribute("aria-valuemax", "100");
     expect(cooking).toHaveAttribute(
       "aria-valuetext",
-      expect.stringMatching(new RegExp(`^Осталось ~10${nb}мин, к${nb}${time}$`)),
+      expect.stringMatching(
+        new RegExp(`^Осталось ~10${nb}мин, к${nb}${time}$`),
+      ),
     );
     expect(cooking).toHaveAttribute("aria-valuenow", "50");
     expect(screen.getByText(`~10 мин`)).toBeVisible();
@@ -366,9 +368,7 @@ describe("fulfillment eta", () => {
       name: "Доставка",
     });
     expect(screen.getByText("3:00")).toBeVisible();
-    expect(
-      header(new RegExp(`^Привезём к ${time} · 3:00$`)),
-    ).toBeVisible();
+    expect(header(new RegExp(`^Привезём к ${time} · 3:00$`))).toBeVisible();
     const valueText = delivery.getAttribute("aria-valuetext");
     expect(valueText).toMatch(/^Осталось ~3\u00a0мин/);
     const loaded = requests.value;
@@ -422,9 +422,7 @@ describe("fulfillment eta", () => {
       "data-state",
       "overdue",
     );
-    const late = header(
-      new RegExp(`^Задерживается · ожидали к ${time}$`),
-    );
+    const late = header(new RegExp(`^Задерживается · ожидали к ${time}$`));
     expect(late).toHaveAttribute("data-state", "overdue");
 
     await act(() => vi.advanceTimersByTimeAsync(60_000));
@@ -441,9 +439,7 @@ describe("fulfillment eta", () => {
     expect(currentStep()).toContainElement(delivery);
     expect(delivery.getAttribute("aria-valuetext")).toMatch(/^Осталось ~10/);
     expect(screen.getAllByRole("progressbar")).toHaveLength(1);
-    expect(
-      header(new RegExp(`^Привезём к ${time} · ~10 мин$`)),
-    ).toBeVisible();
+    expect(header(new RegExp(`^Привезём к ${time} · ~10 мин$`))).toBeVisible();
   });
 
   it.each(["order-received", "order-delivered", "order-cancelled"])(

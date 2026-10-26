@@ -35,7 +35,7 @@ func (s *restaurantsServer) ListRestaurants(ctx context.Context, request *restau
 	s.seenMD, _ = metadata.FromIncomingContext(ctx)
 	s.listed = request
 	return &restaurantsv1.ListRestaurantsResponse{
-		Restaurants:   []*restaurantsv1.Restaurant{{RestaurantId: "restaurant-1", Name: "Pho Bar", Address: "ул. Садовая, 8", IsOpen: true}},
+		Restaurants:   []*restaurantsv1.Restaurant{{RestaurantId: "restaurant-1", Name: "Pho Bar", IsOpen: true}},
 		NextPageToken: "restaurant-1",
 	}, nil
 }
@@ -92,7 +92,7 @@ func TestListAsksForOpenRestaurantsWithoutUser(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, applications.Page{
-		Restaurants: []applications.Restaurant{{ID: "restaurant-1", Name: "Pho Bar", Address: "ул. Садовая, 8", IsOpen: true}},
+		Restaurants: []applications.Restaurant{{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true}},
 		NextCursor:  "restaurant-1",
 	}, page)
 	assert.Equal(t, int32(1), server.listed.GetPageSize())

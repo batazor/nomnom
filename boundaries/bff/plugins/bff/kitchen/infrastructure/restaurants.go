@@ -124,10 +124,9 @@ func (r *Restaurants) Restaurant(ctx context.Context, restaurantID string) (appl
 	}
 	restaurant := response.GetRestaurant()
 	return applications.Restaurant{
-		ID:      restaurant.GetRestaurantId(),
-		Name:    restaurant.GetName(),
-		Address: restaurant.GetAddress(),
-		IsOpen:  restaurant.GetIsOpen(),
+		ID:     restaurant.GetRestaurantId(),
+		Name:   restaurant.GetName(),
+		IsOpen: restaurant.GetIsOpen(),
 	}, nil
 }
 

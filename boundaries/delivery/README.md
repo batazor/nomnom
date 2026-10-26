@@ -29,7 +29,7 @@ Rust.
 | **Register Courier** | Оператор платформы | Создать курьера в системе доставки | Создан `Courier` с исходным состоянием доступности | Authoritative authorization в `delivery` |
 | **Set Courier Availability** | Курьер или авторизованный диспетчер | Изменить доступность курьера для новых назначений | `Courier` отмечен available или unavailable; позиция курьера не изменена | Не совмещается с location update |
 | **Update Courier Location** | Курьерское приложение | Обновить последнюю известную позицию курьера | Сохранена актуальная доступная `delivery` позиция курьера | Частота, точность и retention определяются отдельно |
-| **Create Delivery** | Fulfillment process `orders` | Запросить доставку оформленного заказа | Создана идемпотентная `Delivery` с pickup-адресом ресторана и данными контекста | Вызывается Temporal Activity через API `delivery`; поиск курьера не запускает — его начинает Dispatch Deliveries |
+| **Create Delivery** | Fulfillment process `orders` | Запросить доставку оформленного заказа | Создана идемпотентная `Delivery` для заказа | Вызывается Temporal Activity через API `delivery`; поиск курьера не запускает — его начинает Dispatch Deliveries |
 | **Find Courier** | Процесс назначения `delivery` | Подобрать подходящего доступного курьера | Выбран кандидат или зафиксировано отсутствие кандидата; алгоритм остаётся внутри `delivery` | Может запускаться запросом orchestration, но выбор выполняет `delivery` |
 | **Offer Delivery** | Процесс назначения `delivery` | Предложить конкретному курьеру принять доставку | Создано актуальное ограниченное по времени `Delivery Offer` и `DeliveryOffered` в Outbox; `Courier Assignment` ещё не создан | Учитывает результат Find Courier |
 | **Accept Delivery Offer** | Курьер | Принять актуальное предложение | Ровно один актуальный offer успешно превращён в `Courier Assignment`; курьер и доставка зарезервированы | Конкурентное принятие защищается доменным инвариантом и атомарной записью; публикует бизнес-факт через Outbox |
@@ -79,9 +79,8 @@ Accept Delivery Offer, Reassign Courier, Confirm Delivery, Report Delivery Failu
 | Ошибка `delivery` | gRPC code | `ErrorInfo.reason` |
 | --- | --- | --- |
 | `Courier` или `Delivery` не найдены | `NOT_FOUND` | `RESOURCE_NOT_FOUND` |
-| Некорректный адрес или запрос доставки | `INVALID_ARGUMENT` | `INVALID_DELIVERY` |
+| Некорректный запрос доставки | `INVALID_ARGUMENT` | `INVALID_DELIVERY` |
 | Курьер занят или переход состояния запрещён | `FAILED_PRECONDITION` | `DELIVERY_PRECONDITION_FAILED` |
-| `Delivery` уже существует | `ALREADY_EXISTS` | `DELIVERY_ALREADY_EXISTS` |
 | Нет прав на операцию | `PERMISSION_DENIED` | — |
 | Неожиданная внутренняя ошибка | `INTERNAL` | `INTERNAL_ERROR` |
 | Внешняя зависимость недоступна или исход commit неизвестен | `UNAVAILABLE` | `DEPENDENCY_UNAVAILABLE` |
@@ -90,8 +89,8 @@ RPC сервиса `DeliveryService`:
 
 | RPC | Use case | Ответ |
 | --- | --- | --- |
-| `GetCourierCurrentDelivery` | Get Courier Current Delivery | `courier_status` и `Delivery` (`ASSIGNED`/`PICKED_UP` с `pickup_address`) или пусто; незарегистрированный курьер — `NOT_FOUND` |
-| `CreateDelivery` | Create Delivery (`order_id`, `pickup_address`) | `delivery_id`, `created = false` для идентичного повтора; другой адрес — `ALREADY_EXISTS` |
+| `GetCourierCurrentDelivery` | Get Courier Current Delivery | `courier_status` и `Delivery` (`ASSIGNED`/`PICKED_UP`) или пусто; незарегистрированный курьер — `NOT_FOUND` |
+| `CreateDelivery` | Create Delivery (`order_id`) | `delivery_id`, `created = false` для повтора по тому же заказу |
 | `ReplanDelivery` | Replan Delivery (`order_id`) | `delivery_id`, `offered_courier_id` (пусто без кандидата); после Pickup — `FAILED_PRECONDITION` |
 | `CancelDelivery` | Cancel Delivery (`order_id`, `reason`) | `cancelled = true` (включая повтор) или `cancelled = false` + `rejection_reason` (`already_picked_up`, `already_closed`) — бизнес-результат, не gRPC-ошибка |
 | `RegisterCourier` | Register Courier (`courier_id` = user id курьера) | `courier_id`, `status`; повтор — `ALREADY_EXISTS` |
@@ -293,7 +292,7 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test store
 | Тип | Минимальные поля | Назначение |
 | --- | --- | --- |
 | `Courier` — aggregate root | `id`, `status` | Хранит доступность курьера для назначения |
-| `Delivery` — aggregate root | `id`, `orderId`, `courierId`, `pickupAddress`, `status`, `failureReason`, `expectedPickupAt`, `expectedDeliveredAt` | Управляет назначением курьера и выполнением доставки |
+| `Delivery` — aggregate root | `id`, `orderId`, `courierId`, `status`, `failureReason`, `expectedPickupAt`, `expectedDeliveredAt` | Управляет назначением курьера и выполнением доставки |
 | `DeliveryOffer` — aggregate root | `id`, `deliveryId`, `courierId`, `offeredAt`, `expiresAt`, `state` | Ограниченное по времени предложение одному курьеру |
 
 Состояния `Courier`: `available`, `busy`, `unavailable` (вне линии, не получает новых назначений). Состояния `Delivery`: `waiting`, `assigned`, `pickedUp`, `delivered`, `failed`, `cancelled`. В `DeliveryState` контракта `nomnom.delivery.v1` значения для `cancelled` пока нет: отменённая доставка не бывает текущей доставкой курьера. Состояния `DeliveryOffer`: `pending`, `accepted`, `rejected`, `withdrawn`, `expired`. Pending offer после `expiresAt` уже закрыт для принятия и отклонения; переход `Expire` (только из `pending` и только при `now > expiresAt`) сохраняет это как `expired`. Повторный `Expire` — `AlreadyApplied`, `Expire` из других состояний и `Accept`/`Reject`/`Withdraw` из `expired` — `Invalid`.
@@ -318,7 +317,6 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 
 | VO | Значение и инварианты |
 | --- | --- |
-| `Address` | Непустая нормализованная строка; на первом этапе без геокодирования и отдельных полей адреса |
 | `DeliveryFailureReason` | Код закрытого каталога `DeliveryFailureCode` — `customer_unreachable`, `address_not_found`, `no_access`, `customer_refused`, `order_damaged`, `courier_incident`, `other` — и необязательное пояснение (`detail`): пробелы нормализуются, не длиннее 500 символов. Неизвестный или пустой код — ошибка валидации, а не `other`. Строки, записанные до каталога свободным текстом, читаются как `other` с прежним текстом в `detail`. Retryability кодов не классифицируется |
 | `ExpectedTime` | Срок, названный курьером (FR-610), целые epoch seconds: `expectedPickupAt` — при Accept Delivery Offer, `expectedDeliveredAt` — при Confirm Pickup. Новый срок строго позже текущего времени (injected `Clock`), иначе `ExpectedTimeNotInFuture` → `INVALID_ARGUMENT`; дробная секунда `Timestamp` округляется вверх. Не назван — пусто, а не подстановка. Срок Pickup принадлежит Courier Assignment: Reassignment и отмена его сбрасывают, новое назначение несёт свой. Хранится в nullable `deliveries.expected_pickup_at`/`expected_delivered_at` (миграция `0007`) |
 | `Location` | Широта в [-90, 90] и долгота в [-180, 180], конечные значения; последняя позиция курьера хранится вне aggregate |
@@ -433,7 +431,7 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test outbox_tracing
 - `Store` (`infrastructure/repository`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox по контракту ADR 37 (retention при записи), встроенные миграции при старте процесса;
 - публикация Integration Events: mapper `DeliveryIntegrationEvents` (4 события `events.proto`), публикует коннектор Debezium `delivery-outbox` (CDC, ADR 37, Helm `cdc.*`);
 - `UuidIdGenerator` (`infrastructure/ids.rs`): UUIDv7-идентификаторы `Delivery` и offer, уникальные между перезапусками и репликами (FR-541);
-- `StoredCourierLocator` (`infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Pickup не геокодируется, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;
+- `StoredCourierLocator` (`infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Delivery не хранит место pickup, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;
 - тестовые адаптеры не-storage портов в `infrastructure/memory` (статическая authorization, запись relationships, управляемые clock и id generator, статический locator) — только для тестов; хранилище в тестах — PostgreSQL (testcontainers, `TestStore`).
 
 Не реализованы: Kafka consumers и Inbox, расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы все use cases, кроме Find Courier, Offer Delivery и Reassign Courier (шаги процесса назначения) и фоновых Expire Delivery Offers и Dispatch Deliveries.

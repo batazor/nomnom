@@ -392,14 +392,10 @@ fn courier_reconciler_reads_registered_couriers() {
 fn delivery_reconciler_stores_revision_of_restored_assignment() {
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::delivery::domains::delivery::{
-        Address, Delivery, DeliveryId, DeliveryRepository, OrderId,
+        Delivery, DeliveryId, DeliveryRepository, OrderId,
     };
     let store = Arc::new(TestStore::new());
-    let mut delivery = Delivery::new(
-        DeliveryId::new("delivery-1"),
-        OrderId::new("order-1"),
-        Address::new("Restaurant street 1").expect("pickup"),
-    );
+    let mut delivery = Delivery::new(DeliveryId::new("delivery-1"), OrderId::new("order-1"));
     delivery
         .assign(CourierId::new("courier-1"), None)
         .expect("assign");
@@ -453,16 +449,12 @@ fn delivery_reconciler_stores_revision_of_restored_assignment() {
 fn closed_delivery_relationship_is_stale_and_never_restored() {
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::delivery::domains::delivery::{
-        Address, Delivery, DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter,
-        OrderId,
+        Delivery, DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter, OrderId,
     };
     let store = Arc::new(TestStore::new());
     let delivery = |id: &str, courier: &str| {
-        let mut delivery = Delivery::new(
-            DeliveryId::new(id),
-            OrderId::new(format!("order-of-{id}")),
-            Address::new("Restaurant street 1").expect("pickup"),
-        );
+        let mut delivery =
+            Delivery::new(DeliveryId::new(id), OrderId::new(format!("order-of-{id}")));
         delivery
             .assign(CourierId::new(courier), None)
             .expect("assign");

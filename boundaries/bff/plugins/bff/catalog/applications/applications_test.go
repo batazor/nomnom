@@ -32,7 +32,7 @@ func (f *fakeRestaurants) Menu(context.Context, string) ([]MenuItem, error) {
 }
 
 var (
-	pho   = Restaurant{ID: "restaurant-1", Name: "Pho Bar", Address: "ул. Садовая, 8", IsOpen: true}
+	pho   = Restaurant{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true}
 	ramen = Restaurant{ID: "restaurant-2", Name: "Ramen Bar", IsOpen: true}
 )
 

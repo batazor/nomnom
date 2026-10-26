@@ -1,11 +1,7 @@
 use super::*;
 
 fn delivery() -> Delivery {
-    Delivery::new(
-        DeliveryId::new("delivery-1"),
-        OrderId::new("order-1"),
-        Address::new(" Restaurant  street 1 ").expect("pickup address"),
-    )
+    Delivery::new(DeliveryId::new("delivery-1"), OrderId::new("order-1"))
 }
 
 fn assigned(courier: &str) -> Delivery {
@@ -252,7 +248,6 @@ fn restore_validates_courier_and_failure_reason() {
             DeliveryId::new("delivery-1"),
             OrderId::new("order-1"),
             courier.map(CourierId::new),
-            Address::new("a").expect("address"),
             state,
             reason,
         )
@@ -290,7 +285,6 @@ fn active_courier_exists_only_while_assigned_or_picked_up() {
             DeliveryId::new("delivery-1"),
             OrderId::new("order-1"),
             courier_id,
-            Address::new("a").expect("address"),
             state,
             reason,
         )

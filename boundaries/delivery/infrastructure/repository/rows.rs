@@ -4,8 +4,8 @@
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierStatus};
 use crate::slices::delivery::domains::delivery::{
-    Address, CompoundState, Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer,
-    DeliveryOfferId, ExpectedTime, OfferState, OrderId, State,
+    CompoundState, Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer, DeliveryOfferId,
+    ExpectedTime, OfferState, OrderId, State,
 };
 
 use super::{corrupt, domain_version};
@@ -80,10 +80,6 @@ pub(super) fn parse_offer_state(value: &str) -> Result<OfferState, RepositoryErr
     }
 }
 
-pub(super) fn address(value: &str) -> Result<Address, RepositoryError> {
-    Address::new(value).map_err(|error| corrupt("address", error))
-}
-
 /// Row of `couriers` as `sqlx::query_as!` reads it.
 pub(super) struct CourierRow {
     pub(super) id: String,
@@ -104,7 +100,6 @@ pub(super) struct DeliveryRow {
     pub(super) id: String,
     pub(super) order_id: String,
     pub(super) courier_id: Option<String>,
-    pub(super) pickup_address: String,
     pub(super) state: String,
     pub(super) failure_reason: Option<String>,
     pub(super) failure_detail: Option<String>,
@@ -125,7 +120,6 @@ pub(super) fn delivery_from_row(row: DeliveryRow) -> Result<Delivery, Repository
         DeliveryId::new(row.id),
         OrderId::new(row.order_id),
         row.courier_id.map(CourierId::new),
-        address(&row.pickup_address)?,
         parse_delivery_state(&row.state)?,
         failure_reason,
     )

@@ -97,7 +97,6 @@ test("internal Restaurant and Menu facts are not published", () => {
   for (const type of [
     "RestaurantRegistered",
     "RestaurantRenamed",
-    "RestaurantAddressChanged",
     "toString",
     "constructor",
   ]) {

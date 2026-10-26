@@ -130,7 +130,7 @@ pub fn select_candidate(
 
     let mut eligible = Vec::new();
     let mut rejections = Vec::new();
-    for candidate in locator.candidates_near(delivery.pickup_address())? {
+    for candidate in locator.candidates()? {
         match evaluate(&candidate, &offered, couriers, policy)? {
             Some(reason) => rejections.push(CandidateRejection {
                 courier_id: candidate.courier_id,

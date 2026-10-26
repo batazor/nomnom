@@ -319,7 +319,9 @@ message ListActiveRestaurantOrdersResponse {
 message RegisterRestaurantRequest {
   string name = 1;
   string owner_id = 2;
-  string address = 3;
+  // The pickup address is dropped from the project.
+  reserved 3;
+  reserved "address";
 }
 
 message RegisterRestaurantResponse {

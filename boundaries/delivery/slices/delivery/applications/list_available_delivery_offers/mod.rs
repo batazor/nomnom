@@ -4,7 +4,7 @@
 use crate::pkg::application::{Clock, Subject};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::CourierId;
-use crate::slices::delivery::domains::delivery::{Address, DeliveryId, DeliveryOfferId, OrderId};
+use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId};
 
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::courier_id;
@@ -16,7 +16,6 @@ pub struct AvailableDeliveryOfferView {
     pub offer_id: DeliveryOfferId,
     pub delivery_id: DeliveryId,
     pub order_id: OrderId,
-    pub pickup_address: Address,
     pub expires_at_epoch_seconds: i64,
 }
 
@@ -111,7 +110,6 @@ mod tests {
                 offer_id: DeliveryOfferId::new("offer-1"),
                 delivery_id: DeliveryId::new("delivery-1"),
                 order_id: OrderId::new("order-of-delivery-1"),
-                pickup_address: Address::new("Restaurant street 1").expect("pickup"),
                 expires_at_epoch_seconds: NOW + OFFER_TTL,
             }]
         );

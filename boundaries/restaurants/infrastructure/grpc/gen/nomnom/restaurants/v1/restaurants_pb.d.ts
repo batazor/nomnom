@@ -28,13 +28,6 @@ export declare type Restaurant = Message<"nomnom.restaurants.v1.Restaurant"> & {
    * @generated from field: bool is_open = 3;
    */
   isOpen: boolean;
-
-  /**
-   * Pickup address of Restaurant Orders; delivery uses it as the pickup point.
-   *
-   * @generated from field: string address = 4;
-   */
-  address: string;
 };
 
 /**

@@ -19,7 +19,7 @@
 ### Requirement: restaurants принимает и отменяет заказ ресторана
 **ID:** FR-428
 
-`restaurants` SHALL предоставлять `ReceiveOrderRequest` и `CancelRestaurantOrder`, идемпотентные по `order_id`, и возвращать `address` ресторана в `GetRestaurant`. Отказ отмены по стадии MUST возвращаться `rejection_reason`.
+`restaurants` SHALL предоставлять `ReceiveOrderRequest` и `CancelRestaurantOrder`, идемпотентные по `order_id`. Отказ отмены по стадии MUST возвращаться `rejection_reason`.
 
 #### Scenario: Отмена готового заказа
 **ID:** AC-454

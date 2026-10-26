@@ -2,9 +2,8 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use crate::slices::courier::domains::courier::CourierId;
-use crate::slices::delivery::domains::delivery::Address;
 
-/// Out-of-state snapshot of a courier relative to a pickup address. Geometry,
+/// Out-of-state snapshot of a courier for assignment decisions. Geometry,
 /// zones and the way distances are computed belong to the adapter.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CourierCandidate {
@@ -31,13 +30,9 @@ impl Error for LocatorError {}
 
 /// Supplies courier candidates and snapshots for assignment decisions.
 pub trait CourierLocator {
-    /// Couriers worth considering for a pickup; state is not filtered here.
-    fn candidates_near(&self, pickup: &Address) -> Result<Vec<CourierCandidate>, LocatorError>;
+    /// Couriers worth considering for a delivery; state is not filtered here.
+    fn candidates(&self) -> Result<Vec<CourierCandidate>, LocatorError>;
 
     /// Snapshot of one courier, or `None` when its position is unknown.
-    fn snapshot(
-        &self,
-        courier_id: &CourierId,
-        pickup: &Address,
-    ) -> Result<Option<CourierCandidate>, LocatorError>;
+    fn snapshot(&self, courier_id: &CourierId) -> Result<Option<CourierCandidate>, LocatorError>;
 }

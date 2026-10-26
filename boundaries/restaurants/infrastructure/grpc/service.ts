@@ -225,12 +225,10 @@ export const createRestaurantsService = (
         );
         requireField("name", request.name);
         requireField("owner_id", request.ownerId);
-        requireField("address", request.address);
         const result = await dependencies.registerRestaurant.execute({
           subject,
           name: request.name,
           ownerId: request.ownerId,
-          address: request.address,
         });
         return create(RegisterRestaurantResponseSchema, {
           restaurant: toRestaurantMessage(result),

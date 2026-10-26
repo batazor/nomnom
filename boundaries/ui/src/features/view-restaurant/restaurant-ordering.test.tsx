@@ -66,7 +66,6 @@ describe("view restaurant", () => {
     expect(
       await screen.findByRole("heading", { level: 3, name: "Кухня №8" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("ул. Садовая, 8")).toBeVisible();
     expect(
       screen.getByRole("heading", { level: 5, name: "Том ям с креветками" }),
     ).toBeVisible();

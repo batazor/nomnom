@@ -50,10 +50,6 @@ type Restaurant {
   """
   name: String!
   """
-  Human-readable address
-  """
-  address: String!
-  """
   Whether the restaurant accepts new orders now
   """
   acceptingOrders: Boolean!
@@ -545,10 +541,6 @@ type DeliveryOffer {
   """
   orderId: ID!
   """
-  Where to pick the order up
-  """
-  pickupAddress: String!
-  """
   Moment in RFC 3339 after which the offer cannot be accepted
   """
   expiresAt: String!
@@ -584,10 +576,6 @@ type CourierDelivery {
   Current stage
   """
   stage: CourierDeliveryStage!
-  """
-  Where to pick the order up
-  """
-  pickupAddress: String!
 }
 
 """

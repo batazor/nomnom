@@ -882,11 +882,6 @@ export declare type RegisterRestaurantRequest = Message<"nomnom.restaurants.v1.R
    * @generated from field: string owner_id = 2;
    */
   ownerId: string;
-
-  /**
-   * @generated from field: string address = 3;
-   */
-  address: string;
 };
 
 /**

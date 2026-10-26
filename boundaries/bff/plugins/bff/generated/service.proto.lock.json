@@ -169,10 +169,12 @@
       "fields": {
         "id": 1,
         "name": 2,
-        "address": 3,
         "acceptingOrders": 4,
         "menu": 5
-      }
+      },
+      "reservedNumbers": [
+        3
+      ]
     },
     "Order": {
       "fields": {
@@ -502,22 +504,22 @@
         "id": 1,
         "deliveryId": 2,
         "orderId": 6,
-        "pickupAddress": 3,
         "expiresAt": 5
       },
       "reservedNumbers": [
-        4
+        4,
+        3
       ]
     },
     "CourierDelivery": {
       "fields": {
         "id": 1,
         "orderId": 2,
-        "stage": 3,
-        "pickupAddress": 4
+        "stage": 3
       },
       "reservedNumbers": [
-        5
+        5,
+        4
       ]
     },
     "LookupOrderByIdRequestKey": {

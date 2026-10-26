@@ -40,11 +40,10 @@ func courierMessage(view applications.CourierView) (*service.Courier, error) {
 	}
 	for _, offer := range view.Offers {
 		message.Offers = append(message.Offers, &service.DeliveryOffer{
-			Id:            offer.ID,
-			DeliveryId:    offer.DeliveryID,
-			OrderId:       offer.OrderID,
-			PickupAddress: offer.PickupAddress,
-			ExpiresAt:     timestamp(offer.ExpiresAt),
+			Id:         offer.ID,
+			DeliveryId: offer.DeliveryID,
+			OrderId:    offer.OrderID,
+			ExpiresAt:  timestamp(offer.ExpiresAt),
 		})
 	}
 	if delivery := view.CurrentDelivery; delivery != nil {
@@ -53,10 +52,9 @@ func courierMessage(view applications.CourierView) (*service.Courier, error) {
 			return nil, err
 		}
 		message.CurrentDelivery = &service.CourierDelivery{
-			Id:            delivery.ID,
-			OrderId:       delivery.OrderID,
-			Stage:         stage,
-			PickupAddress: delivery.PickupAddress,
+			Id:      delivery.ID,
+			OrderId: delivery.OrderID,
+			Stage:   stage,
 		}
 	}
 	return message, nil

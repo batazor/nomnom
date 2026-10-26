@@ -6,7 +6,7 @@
 use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::delivery::domains::delivery::{
-    Address, Delivery, DeliveryId, DeliveryRepository, OrderId,
+    Delivery, DeliveryId, DeliveryRepository, OrderId,
 };
 
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
@@ -17,13 +17,12 @@ use super::outbox::{DeliveryOutbox, publish};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
     pub order_id: String,
-    pub pickup_address: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Output {
     pub delivery_id: DeliveryId,
-    /// `false` when an identical earlier request already created it.
+    /// `false` when an earlier request for the order already created it.
     pub created: bool,
 }
 
@@ -37,7 +36,7 @@ pub struct Handler<'a, U: UnitOfWork> {
 }
 
 /// Failure of the insert transaction; a uniqueness conflict is a lost race
-/// against a concurrent identical request, resolved after the rollback.
+/// against a concurrent request for the order, resolved after the rollback.
 enum InsertError {
     Conflict,
     Failed(DeliveryApplicationError),
@@ -65,7 +64,6 @@ impl<U: UnitOfWork> Handler<'_, U> {
         input: Input,
     ) -> Result<Output, DeliveryApplicationError> {
         let order_id = order_id(&input.order_id)?;
-        let pickup_address = Address::new(&input.pickup_address)?;
         self.authorization.check(
             subject,
             DeliveryPermission::CreateDelivery,
@@ -73,12 +71,11 @@ impl<U: UnitOfWork> Handler<'_, U> {
         )?;
 
         if let Some(existing) = self.deliveries.find_by_order(&order_id)? {
-            return replay(&existing, &pickup_address);
+            return Ok(replay(&existing));
         }
         let mut delivery = Delivery::create(
             DeliveryId::new(self.ids.next_id()),
             order_id.clone(),
-            pickup_address.clone(),
             self.clock.now_epoch_seconds(),
         );
         let delivery_id = delivery.id().clone();
@@ -94,13 +91,13 @@ impl<U: UnitOfWork> Handler<'_, U> {
             }),
             Err(InsertError::Conflict) => {
                 let existing = self.concurrent_delivery(&order_id)?;
-                replay(&existing, &pickup_address)
+                Ok(replay(&existing))
             }
             Err(InsertError::Failed(error)) => Err(error),
         }
     }
 
-    /// Resolves a lost insert race against a concurrent identical request.
+    /// Resolves a lost insert race against a concurrent request for the order.
     fn concurrent_delivery(
         &self,
         order_id: &OrderId,
@@ -113,19 +110,11 @@ impl<U: UnitOfWork> Handler<'_, U> {
     }
 }
 
-fn replay(
-    existing: &Delivery,
-    pickup_address: &Address,
-) -> Result<Output, DeliveryApplicationError> {
-    if existing.pickup_address() == pickup_address {
-        Ok(Output {
-            delivery_id: existing.id().clone(),
-            created: false,
-        })
-    } else {
-        Err(DeliveryApplicationError::DeliveryAlreadyExists(
-            existing.id().clone(),
-        ))
+/// A repeat for the same order replays the existing Delivery.
+fn replay(existing: &Delivery) -> Output {
+    Output {
+        delivery_id: existing.id().clone(),
+        created: false,
     }
 }
 
@@ -134,15 +123,13 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::infrastructure::repository::test_support::TestStore;
-    use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{NOW, World, service};
-    use crate::slices::delivery::domains::delivery::{DeliveryValidationError, DomainEvent, State};
+    use crate::slices::delivery::domains::delivery::{DomainEvent, State};
 
-    fn input(pickup: &str) -> Input {
+    fn input() -> Input {
         Input {
             order_id: "order-1".to_owned(),
-            pickup_address: pickup.to_owned(),
         }
     }
 
@@ -163,7 +150,7 @@ mod tests {
         let world = World::new();
 
         let output = handler(&world)
-            .execute(&service(), input(" Restaurant   street 1 "))
+            .execute(&service(), input())
             .expect("delivery created");
 
         assert_eq!(
@@ -177,7 +164,6 @@ mod tests {
         assert_eq!(delivery.state(), State::Waiting);
         assert_eq!(delivery.courier_id(), None);
         assert_eq!(delivery.order_id(), &OrderId::new("order-1"));
-        assert_eq!(delivery.pickup_address().as_str(), "Restaurant street 1");
         assert_eq!(delivery.created_at_epoch_seconds(), Some(NOW));
         assert_eq!(
             world.store.outbox_messages(),
@@ -194,12 +180,10 @@ mod tests {
     #[test]
     fn identical_repeat_returns_existing_delivery() {
         let world = World::new();
-        handler(&world)
-            .execute(&service(), input("Restaurant street 1"))
-            .expect("first");
+        handler(&world).execute(&service(), input()).expect("first");
 
         let repeat = handler(&world)
-            .execute(&service(), input("Restaurant  street 1"))
+            .execute(&service(), input())
             .expect("repeat");
 
         assert_eq!(
@@ -219,47 +203,11 @@ mod tests {
         assert_eq!(world.store.outbox_messages().len(), 1);
     }
 
-    /// AC-315
-    #[test]
-    fn conflicting_repeat_is_already_exists() {
-        let world = World::new();
-        handler(&world)
-            .execute(&service(), input("Restaurant street 1"))
-            .expect("first");
-
-        assert_eq!(
-            handler(&world).execute(&service(), input("Other street 9")),
-            Err(DeliveryApplicationError::DeliveryAlreadyExists(
-                DeliveryId::new("generated-1")
-            ))
-        );
-        assert_eq!(
-            world.delivery("generated-1").pickup_address().as_str(),
-            "Restaurant street 1"
-        );
-    }
-
-    /// AC-316
-    #[test]
-    fn empty_address_is_invalid() {
-        let world = World::new();
-        assert_eq!(
-            handler(&world).execute(&service(), input("  ")),
-            Err(DeliveryApplicationError::InvalidRequest(
-                InvalidDeliveryRequest::Validation(DeliveryValidationError::EmptyAddress)
-            ))
-        );
-        assert_eq!(
-            DeliveryRepository::find_by_order(&world.store, &OrderId::new("order-1")),
-            Ok(None)
-        );
-    }
-
     #[test]
     fn denied_subject_creates_nothing() {
         let world = World::with_authorization(StaticAuthorization::deny_all());
         assert_eq!(
-            handler(&world).execute(&service(), input("Restaurant street 1")),
+            handler(&world).execute(&service(), input()),
             Err(DeliveryApplicationError::PermissionDenied)
         );
         assert_eq!(

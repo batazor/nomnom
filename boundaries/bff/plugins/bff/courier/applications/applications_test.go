@@ -50,7 +50,7 @@ func (f *fakeCouriers) ConfirmDelivery(_ context.Context, courierID, deliveryID 
 	return f.command(courierID + " delivery " + deliveryID)
 }
 
-var offer = Offer{ID: "offer-1", DeliveryID: "delivery-1", PickupAddress: "ул. Садовая, 8", ExpiresAt: expiresAt}
+var offer = Offer{ID: "offer-1", DeliveryID: "delivery-1", ExpiresAt: expiresAt}
 
 func TestAvailableCourierSeesOffers(t *testing.T) {
 	couriers := &fakeCouriers{state: CourierState{Availability: AvailabilityAvailable}, offers: []Offer{offer}}
@@ -62,7 +62,7 @@ func TestAvailableCourierSeesOffers(t *testing.T) {
 }
 
 func TestBusyOrUnavailableCourierHasNoOffers(t *testing.T) {
-	delivery := &Delivery{ID: "delivery-1", OrderID: "order-1", Stage: StageAssigned, PickupAddress: "a"}
+	delivery := &Delivery{ID: "delivery-1", OrderID: "order-1", Stage: StageAssigned}
 	for _, state := range []CourierState{
 		{Availability: AvailabilityBusy, CurrentDelivery: delivery},
 		{Availability: AvailabilityUnavailable},

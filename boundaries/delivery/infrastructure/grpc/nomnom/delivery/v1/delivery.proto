@@ -17,10 +17,9 @@ message Delivery {
   string order_id = 2;
   string courier_id = 3;
   DeliveryState state = 4;
-  // Set by GetCourierCurrentDelivery for the courier's own active Delivery.
-  string pickup_address = 5;
-  reserved 6;
-  reserved "dropoff_address";
+  // Pickup and dropoff addresses are dropped from the project.
+  reserved 5, 6;
+  reserved "pickup_address", "dropoff_address";
 }
 
 enum CourierStatus {
@@ -41,9 +40,9 @@ enum CourierAvailability {
 message DeliveryOffer {
   string offer_id = 1;
   string delivery_id = 2;
-  string pickup_address = 3;
-  reserved 4;
-  reserved "dropoff_address";
+  // Pickup and dropoff addresses are dropped from the project.
+  reserved 3, 4;
+  reserved "pickup_address", "dropoff_address";
   int64 expires_at_epoch_seconds = 5;
   string order_id = 6;
 }

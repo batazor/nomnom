@@ -1,8 +1,8 @@
 use super::fsm::{ensure_allowed, transition};
 use super::{
-    Address, CompoundState, DeliveryCancellationReason, DeliveryError, DeliveryFailureReason,
-    DeliveryId, DeliveryValidationError, DomainEvent, ExpectedTime, OrderId, State,
-    TransitionError, TransitionResult, Trigger,
+    CompoundState, DeliveryCancellationReason, DeliveryError, DeliveryFailureReason, DeliveryId,
+    DeliveryValidationError, DomainEvent, ExpectedTime, OrderId, State, TransitionError,
+    TransitionResult, Trigger,
 };
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::domains::courier::CourierId;
@@ -21,7 +21,6 @@ pub struct Delivery {
     id: DeliveryId,
     order_id: OrderId,
     courier_id: Option<CourierId>,
-    pickup_address: Address,
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
     /// Pickup time named by the courier of the current Courier Assignment;
@@ -40,12 +39,11 @@ pub struct Delivery {
 
 impl Delivery {
     #[must_use]
-    pub fn new(id: DeliveryId, order_id: OrderId, pickup_address: Address) -> Self {
+    pub fn new(id: DeliveryId, order_id: OrderId) -> Self {
         Self {
             id,
             order_id,
             courier_id: None,
-            pickup_address,
             state: State::Waiting,
             failure_reason: None,
             expected_pickup_at: None,
@@ -60,14 +58,8 @@ impl Delivery {
     /// Creates a waiting Delivery at `created_at_epoch_seconds` and records
     /// [`DomainEvent::DeliveryCreated`].
     #[must_use]
-    pub fn create(
-        id: DeliveryId,
-        order_id: OrderId,
-        pickup_address: Address,
-        created_at_epoch_seconds: i64,
-    ) -> Self {
-        let mut delivery =
-            Self::new(id, order_id, pickup_address).with_created_at(Some(created_at_epoch_seconds));
+    pub fn create(id: DeliveryId, order_id: OrderId, created_at_epoch_seconds: i64) -> Self {
+        let mut delivery = Self::new(id, order_id).with_created_at(Some(created_at_epoch_seconds));
         delivery.events.push(DomainEvent::DeliveryCreated {
             delivery_id: delivery.id.clone(),
             order_id: delivery.order_id.clone(),
@@ -80,7 +72,6 @@ impl Delivery {
         id: DeliveryId,
         order_id: OrderId,
         courier_id: Option<CourierId>,
-        pickup_address: Address,
         state: State,
         failure_reason: Option<DeliveryFailureReason>,
     ) -> Result<Self, DeliveryValidationError> {
@@ -103,7 +94,6 @@ impl Delivery {
             id,
             order_id,
             courier_id,
-            pickup_address,
             state,
             failure_reason,
             expected_pickup_at: None,
@@ -351,11 +341,6 @@ impl Delivery {
     #[must_use]
     pub fn order_id(&self) -> &OrderId {
         &self.order_id
-    }
-
-    #[must_use]
-    pub fn pickup_address(&self) -> &Address {
-        &self.pickup_address
     }
 
     #[must_use]

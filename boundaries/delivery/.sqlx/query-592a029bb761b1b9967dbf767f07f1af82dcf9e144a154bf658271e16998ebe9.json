@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, order_id, pickup_address, state FROM deliveries\n             WHERE courier_id = $1 AND state = ANY($2)\n             ORDER BY id LIMIT 1",
+  "query": "SELECT o.id, o.delivery_id, d.order_id, o.expires_at\n             FROM delivery_offers o JOIN deliveries d ON d.id = o.delivery_id\n             WHERE o.courier_id = $1 AND o.state = 'pending'\n             ORDER BY o.position",
   "describe": {
     "columns": [
       {
@@ -9,13 +9,24 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "deliveries",
+            "table": "delivery_offers",
             "name": "id"
           }
         }
       },
       {
         "ordinal": 1,
+        "name": "delivery_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "delivery_offers",
+            "name": "delivery_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "order_id",
         "type_info": "Text",
         "origin": {
@@ -26,32 +37,20 @@
         }
       },
       {
-        "ordinal": 2,
-        "name": "pickup_address",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "deliveries",
-            "name": "pickup_address"
-          }
-        }
-      },
-      {
         "ordinal": 3,
-        "name": "state",
-        "type_info": "Text",
+        "name": "expires_at",
+        "type_info": "Int8",
         "origin": {
           "Table": {
-            "table": "deliveries",
-            "name": "state"
+            "table": "delivery_offers",
+            "name": "expires_at"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "TextArray"
+        "Text"
       ]
     },
     "nullable": [
@@ -61,5 +60,5 @@
       false
     ]
   },
-  "hash": "09f6f0d87c7b1e79b976189bc6df5f8149df3004d3789ce4357dba2e3085c403"
+  "hash": "592a029bb761b1b9967dbf767f07f1af82dcf9e144a154bf658271e16998ebe9"
 }

@@ -36,7 +36,7 @@ func (f *fakeGetRestaurant) Handle(context.Context, string) (applications.Restau
 	return f.view, f.err
 }
 
-var phoBar = applications.Restaurant{ID: "restaurant-1", Name: "Pho Bar", Address: "ул. Садовая, 8", IsOpen: true}
+var phoBar = applications.Restaurant{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true}
 
 // Catalog resolvers need no BFF identity in the service and no access token.
 func catalogService(list *fakeListRestaurants, get *fakeGetRestaurant) *BffService {
@@ -95,7 +95,6 @@ func TestQueryRestaurantMapsTheMenu(t *testing.T) {
 
 	require.NoError(t, err)
 	restaurant := response.GetRestaurant()
-	assert.Equal(t, "ул. Садовая, 8", restaurant.GetAddress())
 	items := restaurant.GetMenu().GetItems()
 	require.Len(t, items, 2)
 	assert.Equal(t, "6 шт.", items[0].GetDescription().GetValue())

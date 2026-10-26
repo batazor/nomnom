@@ -14,7 +14,6 @@ const register = () =>
     id: "r-1",
     name: "  Pho Bar ",
     ownerId: "u-owner",
-    address: " 1 Pho Street ",
     registeredAt: at,
   });
 
@@ -22,7 +21,6 @@ test("registered restaurant is closed, named and records its registration", () =
   const restaurant = register();
 
   assert.equal(restaurant.name, "Pho Bar");
-  assert.equal(restaurant.address, "1 Pho Street");
   assert.equal(restaurant.isOpen, false);
   assert.equal(restaurant.version, 0);
   assert.deepEqual(
@@ -39,7 +37,6 @@ test("restaurant name and owner must not be blank", () => {
         id: "r-1",
         name: "   ",
         ownerId: "u-owner",
-        address: "1 Pho Street",
         registeredAt: at,
       }),
     (error: unknown) =>
@@ -52,7 +49,6 @@ test("restaurant name and owner must not be blank", () => {
         id: "r-1",
         name: "Pho",
         ownerId: " ",
-        address: "1 Pho Street",
         registeredAt: at,
       }),
     (error: unknown) =>
@@ -60,41 +56,6 @@ test("restaurant name and owner must not be blank", () => {
       error.reason === InvalidRestaurantReason.EmptyOwner,
   );
   assert.throws(() => register().rename("", at), InvalidRestaurantError);
-});
-
-test("restaurant address must not be blank", () => {
-  assert.throws(
-    () =>
-      Restaurant.register({
-        id: "r-1",
-        name: "Pho",
-        ownerId: "u-owner",
-        address: "  ",
-        registeredAt: at,
-      }),
-    (error: unknown) =>
-      error instanceof InvalidRestaurantError &&
-      error.reason === InvalidRestaurantReason.EmptyAddress,
-  );
-  assert.throws(
-    () => register().changeAddress(" ", at),
-    (error: unknown) =>
-      error instanceof InvalidRestaurantError &&
-      error.reason === InvalidRestaurantReason.EmptyAddress,
-  );
-});
-
-test("change address to the current address is a no-op", () => {
-  const restaurant = register();
-  restaurant.pullEvents();
-
-  assert.equal(restaurant.changeAddress("1 Pho Street", at), false);
-  assert.equal(restaurant.changeAddress(" 2 Ramen Lane ", at), true);
-  assert.equal(restaurant.address, "2 Ramen Lane");
-  assert.deepEqual(
-    restaurant.pullEvents().map((event) => event.type),
-    ["RestaurantAddressChanged"],
-  );
 });
 
 test("open and close change the opening once and repeat as no-op", () => {
@@ -124,16 +85,6 @@ test("rename to the current name is a no-op", () => {
     restaurant.pullEvents().map((event) => event.type),
     ["RestaurantRenamed"],
   );
-});
-
-test("restore of a restaurant stored without an address yields an empty address", () => {
-  const restaurant = Restaurant.restore(
-    { id: "r-1", name: "Pho", ownerId: "u-1", isOpen: true },
-    3,
-  );
-
-  assert.equal(restaurant.address, "");
-  assert.equal(restaurant.toSnapshot().address, "");
 });
 
 test("FR-447 authorization revision is technical snapshot state; old snapshots load without it", () => {

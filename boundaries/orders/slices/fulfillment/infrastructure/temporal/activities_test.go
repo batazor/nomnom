@@ -129,7 +129,6 @@ func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
 	}}, neighbours.restaurants)
 	assert.Equal(t, []ports.DeliveryRequest{{
 		OrderID:        orderID,
-		RestaurantID:   "restaurant-1",
 		IdempotencyKey: step.IdempotencyKey,
 	}}, neighbours.deliveries)
 }

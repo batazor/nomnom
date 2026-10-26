@@ -59,12 +59,7 @@ func (f *fakePayments) RefundPayment(context.Context, *paymentsv1.RefundPaymentR
 type fakeRestaurants struct {
 	restaurantsv1.UnimplementedRestaurantsServiceServer
 	received  []*restaurantsv1.ReceiveOrderRequestRequest
-	address   string
 	cancelled bool
-}
-
-func (f *fakeRestaurants) GetRestaurant(_ context.Context, r *restaurantsv1.GetRestaurantRequest) (*restaurantsv1.GetRestaurantResponse, error) {
-	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), Address: f.address}}, nil
 }
 
 func (f *fakeRestaurants) ReceiveOrderRequest(_ context.Context, r *restaurantsv1.ReceiveOrderRequestRequest) (*restaurantsv1.ReceiveOrderRequestResponse, error) {
@@ -110,7 +105,7 @@ func serve(t *testing.T) *fakes {
 	t.Helper()
 	f := &fakes{
 		payments:    &fakePayments{status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED},
-		restaurants: &fakeRestaurants{address: "Kitchen street 1", cancelled: true},
+		restaurants: &fakeRestaurants{cancelled: true},
 		delivery:    &fakeDelivery{},
 	}
 	listener := bufconn.Listen(1 << 20)
@@ -222,27 +217,15 @@ func TestRestaurantsRequestAndCancel(t *testing.T) {
 	assert.Equal(t, int32(2), f.restaurants.received[0].GetItems()[0].GetQuantity())
 }
 
-func TestDeliveryCreateUsesRestaurantAddress(t *testing.T) {
+func TestDeliveryCreateSendsTheOrder(t *testing.T) {
 	f := serve(t)
 	d := grpcclient.NewDelivery(f.conn)
 
-	require.NoError(t, d.Create(context.Background(), neighbours.DeliveryRequest{
-		OrderID: "order-1", RestaurantID: "restaurant-1",
-	}))
+	require.NoError(t, d.Create(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
 	require.NoError(t, d.Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
 
 	require.Len(t, f.delivery.created, 1)
-	assert.Equal(t, "Kitchen street 1", f.delivery.created[0].GetPickupAddress())
-}
-
-func TestDeliveryCreateWithoutRestaurantAddressIsPermanent(t *testing.T) {
-	f := serve(t)
-	f.restaurants.address = ""
-
-	err := grpcclient.NewDelivery(f.conn).Create(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1", RestaurantID: "r"})
-
-	require.ErrorIs(t, err, application.ErrInvalidInput)
-	assert.Empty(t, f.delivery.created)
+	assert.Equal(t, "order-1", f.delivery.created[0].GetOrderId())
 }
 
 func TestDeliveryReplanPreconditionIsSkipped(t *testing.T) {

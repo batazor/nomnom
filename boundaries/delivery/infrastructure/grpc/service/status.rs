@@ -17,9 +17,6 @@ pub(super) fn delivery_transport_error(error: DeliveryApplicationError) -> Statu
         | DeliveryApplicationError::DeliveryOfferNotFound(_) => {
             Status::not_found(error.to_string())
         }
-        DeliveryApplicationError::DeliveryAlreadyExists(_) => {
-            Status::already_exists(error.to_string())
-        }
         DeliveryApplicationError::DeliveryPrecondition(_)
         | DeliveryApplicationError::CourierPrecondition(_)
         | DeliveryApplicationError::OfferPrecondition(_)

@@ -37,7 +37,6 @@ func managedRestaurantMessage(restaurant applications.Restaurant) *service.Resta
 	return &service.Restaurant{
 		Id:              restaurant.ID,
 		Name:            restaurant.Name,
-		Address:         restaurant.Address,
 		AcceptingOrders: restaurant.IsOpen,
 	}
 }

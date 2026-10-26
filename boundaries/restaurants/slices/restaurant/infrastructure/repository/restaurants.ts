@@ -29,14 +29,13 @@ export const RESTAURANT_SCHEMA_VERSION = 1;
  * One document per Restaurant aggregate: profile, staff (bounded by the
  * restaurant team) and the ZedToken of its last relationship write. Menus and
  * Restaurant Orders are separate collections referencing `restaurantId`.
- * `address` and `staff` may be absent in documents written before they
- * existed (see {@link StoredRestaurantSnapshot}).
+ * `staff` may be absent in documents written before it existed (see
+ * {@link StoredRestaurantSnapshot}).
  */
 export type RestaurantDocument = VersionedDocument & {
   name: string;
   ownerId: string;
   isOpen: boolean;
-  address?: string;
   staff?: string[];
   authorizationRevision?: string;
 };
@@ -48,7 +47,6 @@ const toSnapshot = (
   name: document.name,
   ownerId: document.ownerId,
   isOpen: document.isOpen,
-  address: document.address,
   staff: document.staff,
   authorizationRevision: document.authorizationRevision,
 });
@@ -60,7 +58,6 @@ const toData = (restaurant: Restaurant) => {
     name: snapshot.name,
     ownerId: snapshot.ownerId,
     isOpen: snapshot.isOpen,
-    address: snapshot.address,
     staff: [...snapshot.staff],
     authorizationRevision: snapshot.authorizationRevision,
   };
@@ -212,7 +209,6 @@ const toView = (document: RestaurantDocument): RestaurantView => ({
   restaurantId: document._id,
   name: document.name,
   isOpen: document.isOpen,
-  address: document.address ?? "",
 });
 
 /** Query model over the restaurant documents, ordered by restaurant id. */

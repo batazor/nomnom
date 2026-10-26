@@ -30,7 +30,7 @@ use delivery::slices::delivery::applications::error::DeliveryApplicationError;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::domains::delivery::{
-    Address, Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
+    Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository, OfferState, OrderId, State,
 };
 use delivery::slices::delivery::infrastructure::DeliveryIntegrationEvents;
@@ -69,11 +69,7 @@ fn seed(store: &Store) -> Seed {
     CourierRepository::add(store, &Courier::new(seed.courier_id.clone())).expect("courier");
     DeliveryRepository::add(
         store,
-        &Delivery::new(
-            seed.delivery_id.clone(),
-            OrderId::new(unique("order")),
-            Address::new("Restaurant street 1").expect("pickup"),
-        ),
+        &Delivery::new(seed.delivery_id.clone(), OrderId::new(unique("order"))),
     )
     .expect("delivery");
     let offer = DeliveryOffer::new(
@@ -224,7 +220,6 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
     let delivery = Delivery::new(
         DeliveryId::new(unique("delivery")),
         OrderId::new(unique("order")),
-        Address::new("Restaurant street 1").expect("pickup"),
     )
     .with_created_at(Some(created_at));
     DeliveryRepository::add(&*store, &delivery).expect("delivery");

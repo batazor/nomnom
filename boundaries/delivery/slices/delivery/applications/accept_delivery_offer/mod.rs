@@ -80,10 +80,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
             return Ok(output(&offer, true));
         }
         // Values from outside the transaction are gathered before it starts.
-        let delivery = load_delivery(self.deliveries, offer.delivery_id())?;
         let snapshot = self
             .locator
-            .snapshot(&courier_id, delivery.pickup_address())?
+            .snapshot(&courier_id)?
             .ok_or_else(|| DeliveryApplicationError::CourierPositionUnknown(courier_id.clone()))?;
         let conditions = OfferAcceptanceConditions {
             now_epoch_seconds: self.clock.now_epoch_seconds(),

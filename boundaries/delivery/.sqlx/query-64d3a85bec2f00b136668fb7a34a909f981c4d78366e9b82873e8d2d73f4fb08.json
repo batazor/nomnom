@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at,\n                 expected_pickup_at, expected_delivered_at\n             FROM deliveries WHERE order_id = $1",
+  "query": "SELECT id, order_id, courier_id, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at,\n                 expected_pickup_at, expected_delivered_at\n             FROM deliveries WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -38,17 +38,6 @@
       },
       {
         "ordinal": 3,
-        "name": "pickup_address",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "deliveries",
-            "name": "pickup_address"
-          }
-        }
-      },
-      {
-        "ordinal": 4,
         "name": "state",
         "type_info": "Text",
         "origin": {
@@ -59,7 +48,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "failure_reason",
         "type_info": "Text",
         "origin": {
@@ -70,7 +59,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "failure_detail",
         "type_info": "Text",
         "origin": {
@@ -81,7 +70,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "authorization_revision",
         "type_info": "Text",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "version",
         "type_info": "Int8",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Int8",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "expected_pickup_at",
         "type_info": "Int8",
         "origin": {
@@ -125,7 +114,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "expected_delivered_at",
         "type_info": "Int8",
         "origin": {
@@ -146,7 +135,6 @@
       false,
       true,
       false,
-      false,
       true,
       true,
       true,
@@ -156,5 +144,5 @@
       true
     ]
   },
-  "hash": "e6096624a9353f3a83442b379fa37b1fccef9e5d41f47ef228b7fd392204e4c3"
+  "hash": "64d3a85bec2f00b136668fb7a34a909f981c4d78366e9b82873e8d2d73f4fb08"
 }

@@ -2108,7 +2108,6 @@ type RegisterRestaurantRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	OwnerId       string                 `protobuf:"bytes,2,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
-	Address       string                 `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2153,13 +2152,6 @@ func (x *RegisterRestaurantRequest) GetName() string {
 func (x *RegisterRestaurantRequest) GetOwnerId() string {
 	if x != nil {
 		return x.OwnerId
-	}
-	return ""
-}
-
-func (x *RegisterRestaurantRequest) GetAddress() string {
-	if x != nil {
-		return x.Address
 	}
 	return ""
 }
@@ -3480,11 +3472,10 @@ const file_nomnom_restaurants_v1_service_proto_rawDesc = "" +
 	"\vaccepted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"acceptedAt\"j\n" +
 	"\"ListActiveRestaurantOrdersResponse\x12D\n" +
-	"\x06orders\x18\x01 \x03(\v2,.nomnom.restaurants.v1.ActiveRestaurantOrderR\x06orders\"d\n" +
+	"\x06orders\x18\x01 \x03(\v2,.nomnom.restaurants.v1.ActiveRestaurantOrderR\x06orders\"Y\n" +
 	"\x19RegisterRestaurantRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
-	"\bowner_id\x18\x02 \x01(\tR\aownerId\x12\x18\n" +
-	"\aaddress\x18\x03 \x01(\tR\aaddress\"y\n" +
+	"\bowner_id\x18\x02 \x01(\tR\aownerIdJ\x04\b\x03\x10\x04R\aaddress\"y\n" +
 	"\x1aRegisterRestaurantResponse\x12A\n" +
 	"\n" +
 	"restaurant\x18\x01 \x01(\v2!.nomnom.restaurants.v1.RestaurantR\n" +

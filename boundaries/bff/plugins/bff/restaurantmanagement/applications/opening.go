@@ -20,10 +20,9 @@ var (
 
 // Restaurant is the restaurant after an opening command.
 type Restaurant struct {
-	ID      string
-	Name    string
-	Address string
-	IsOpen  bool
+	ID     string
+	Name   string
+	IsOpen bool
 }
 
 // OpeningResult is the restaurant after the command; Changed is false when

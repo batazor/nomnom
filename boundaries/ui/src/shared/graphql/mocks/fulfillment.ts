@@ -29,7 +29,6 @@ type Delivery = {
   orderId: string;
   offerId: string;
   stage: "SEARCHING" | "ASSIGNED" | "PICKED_UP" | "COMPLETED";
-  pickupAddress: string;
 };
 
 type KitchenActionInput = {
@@ -173,7 +172,6 @@ export function createFulfillment({
       orderId: order.orderId,
       offerId: `offer-${order.orderId}`,
       stage: "SEARCHING",
-      pickupAddress: restaurant(order.restaurantId)?.address ?? "",
     });
   }
 
@@ -236,7 +234,6 @@ export function createFulfillment({
                 id: delivery.offerId,
                 deliveryId: delivery.id,
                 orderId: delivery.orderId,
-                pickupAddress: delivery.pickupAddress,
                 expiresAt,
               }))
           : [],
@@ -245,7 +242,6 @@ export function createFulfillment({
             id: current.id,
             orderId: current.orderId,
             stage: current.stage,
-            pickupAddress: current.pickupAddress,
           }
         : null,
     };

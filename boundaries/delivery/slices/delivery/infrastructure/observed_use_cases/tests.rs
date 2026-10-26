@@ -14,10 +14,6 @@ fn expected_refusals_are_rejected_and_failures_are_errors() {
             Failure::Rejected("not_found"),
         ),
         (
-            DeliveryApplicationError::DeliveryAlreadyExists(DeliveryId::new("delivery-1")),
-            Failure::Rejected("already_exists"),
-        ),
-        (
             DeliveryApplicationError::ConcurrentModification,
             Failure::Error("concurrent_modification"),
         ),

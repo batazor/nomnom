@@ -14,17 +14,12 @@ import {
 } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { UpdateRestaurantHandler } from "../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
-import {
-  InvalidRestaurantError,
-  InvalidRestaurantReason,
-} from "../slices/restaurant/domains/restaurant/restaurant.ts";
-import { RESTAURANT_SCHEMA_VERSION } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
+import { InvalidRestaurantError } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   createInfrastructure,
   createRestaurantWorld,
   operator,
   owner,
-  PICKUP_ADDRESS,
   stranger,
 } from "./support/restaurants.ts";
 
@@ -53,14 +48,12 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
     subject: operator,
     name: "Pho Bar",
     ownerId: owner.id,
-    address: PICKUP_ADDRESS,
   });
 
   assert.deepEqual(result, {
     restaurantId: "restaurant-1",
     name: "Pho Bar",
     isOpen: false,
-    address: PICKUP_ADDRESS,
     version: 1,
   });
   assert.deepEqual(calls, ["touch:restaurant-1"]);
@@ -82,7 +75,6 @@ test("register restaurant requires the registration permission", async () => {
       subject: stranger,
       name: "Pho",
       ownerId: owner.id,
-      address: PICKUP_ADDRESS,
     }),
     PermissionDeniedError,
   );
@@ -98,29 +90,10 @@ test("AC-203 register restaurant rejects a blank name", async () => {
       subject: operator,
       name: "  ",
       ownerId: owner.id,
-      address: PICKUP_ADDRESS,
     }),
     InvalidRestaurantError,
   );
   assert.deepEqual(await world.store.find({}), []);
-});
-
-test("FR-428 register restaurant requires a pickup address", async () => {
-  const world = await createRestaurantWorld();
-
-  await assert.rejects(
-    world.register.execute({
-      subject: operator,
-      name: "Pho",
-      ownerId: owner.id,
-      address: "  ",
-    }),
-    (error: unknown) =>
-      error instanceof InvalidRestaurantError &&
-      error.reason === InvalidRestaurantReason.EmptyAddress,
-  );
-  assert.deepEqual(await world.store.find({}), []);
-  assert.deepEqual(world.authorization.owners, []);
 });
 
 test("AC-204 restaurant is not stored when the owner relationship write fails", async () => {
@@ -142,7 +115,6 @@ test("AC-204 restaurant is not stored when the owner relationship write fails", 
       subject: operator,
       name: "Pho",
       ownerId: owner.id,
-      address: PICKUP_ADDRESS,
     }),
     /spicedb unavailable/,
   );
@@ -174,49 +146,11 @@ test("AC-205 update restaurant renames without touching the opening", async () =
     restaurantId,
     name: "Ramen Bar",
     isOpen: true,
-    address: PICKUP_ADDRESS,
     version: 3,
     changed: true,
   });
   assert.equal(unchanged.changed, false);
   assert.equal(unchanged.version, 3);
-  assert.equal((await world.outbox.records()).length, outboxBefore);
-});
-
-test("FR-428 update restaurant changes the pickup address", async () => {
-  const world = await createRestaurantWorld();
-  const restaurantId = await world.givenRestaurant("Pho Bar");
-  const update = new UpdateRestaurantHandler({
-    accessControl: world.authorization,
-    restaurants: world.restaurants,
-    clock: world.clock,
-  });
-  const outboxBefore = (await world.outbox.records()).length;
-
-  const result = await update.execute({
-    subject: owner,
-    restaurantId,
-    name: "Pho Bar",
-    address: " 2 Ramen Lane ",
-  });
-  const unchanged = await update.execute({
-    subject: owner,
-    restaurantId,
-    name: "Pho Bar",
-    address: "2 Ramen Lane",
-  });
-
-  assert.equal(result.changed, true);
-  assert.equal(result.address, "2 Ramen Lane");
-  assert.equal(unchanged.changed, false);
-  assert.equal(
-    (await world.restaurants.get(restaurantId))?.address,
-    "2 Ramen Lane",
-  );
-  await assert.rejects(
-    update.execute({ subject: owner, restaurantId, name: "Pho", address: "" }),
-    InvalidRestaurantError,
-  );
   assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
@@ -357,22 +291,7 @@ test("AC-211 get restaurant returns the public representation", async () => {
     restaurantId,
     name: "Pho Bar",
     isOpen: true,
-    address: PICKUP_ADDRESS,
   });
-});
-
-test("get restaurant stored before addresses were required returns an empty address", async () => {
-  const world = await createRestaurantWorld();
-  await world.store.save("legacy", 0, {
-    schemaVersion: RESTAURANT_SCHEMA_VERSION,
-    name: "Old Pho",
-    ownerId: owner.id,
-    isOpen: true,
-  });
-  const get = new GetRestaurantHandler({ reader: world.catalog });
-
-  assert.equal((await get.execute({ restaurantId: "legacy" })).address, "");
-  assert.equal((await world.restaurants.get("legacy"))?.address, "");
 });
 
 test("AC-212 get unknown restaurant is not found", async () => {
@@ -435,7 +354,6 @@ test("list owned restaurants returns open and closed restaurants of the owner on
     subject: operator,
     name: "Foreign",
     ownerId: stranger.id,
-    address: PICKUP_ADDRESS,
   });
   const list = new ListOwnedRestaurantsHandler({ reader: world.catalog });
 

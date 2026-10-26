@@ -149,7 +149,6 @@ describe("manage restaurant", () => {
                   __typename: "Restaurant",
                   id: kitchen,
                   name: "Кухня №8",
-                  address: "ул. Садовая, 8",
                   acceptingOrders: false,
                 },
               },

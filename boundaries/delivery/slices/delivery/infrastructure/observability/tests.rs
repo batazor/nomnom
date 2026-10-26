@@ -11,7 +11,7 @@ use crate::pkg::application::{ScopedUnitOfWork, Subject};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::create_delivery;
 use crate::slices::delivery::domains::delivery::{
-    Address, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
+    DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
 };
 
 const NOW: i64 = 10_000;
@@ -256,11 +256,7 @@ fn committed_events_are_counted_by_metric() {
 
 /// A waiting Delivery stored outside any Unit of Work.
 fn stored_delivery(store: &TestStore) -> Delivery {
-    let delivery = Delivery::new(
-        delivery_id(),
-        OrderId::new("order-1"),
-        Address::new("Pickup street 1").expect("pickup"),
-    );
+    let delivery = Delivery::new(delivery_id(), OrderId::new("order-1"));
     DeliveryRepository::add(store, &delivery).expect("add");
     delivery
 }
@@ -451,7 +447,6 @@ fn idempotent_repeat_is_recorded_once() {
     };
     let input = || create_delivery::Input {
         order_id: "order-1".to_owned(),
-        pickup_address: "Pickup street 1".to_owned(),
     };
     let subject = Subject::Service("fulfillment".to_owned());
 

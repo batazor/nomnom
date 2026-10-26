@@ -245,7 +245,6 @@ describe("composed processes against MongoDB", () => {
         id: "r-composed",
         name: "Pho House",
         ownerId: "owner",
-        address: "1 Pho Street",
         registeredAt: new Date(Date.UTC(2026, 9, 25, 9)),
       });
       await container.cradle.restaurants.save(restaurant);

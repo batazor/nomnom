@@ -37,7 +37,7 @@ func (f *fakeBoard) Apply(_ context.Context, restaurantID, kitchenOrderID string
 type fakeCatalog struct{}
 
 func (fakeCatalog) Restaurant(_ context.Context, id string) (Restaurant, error) {
-	return Restaurant{ID: id, Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true}, nil
+	return Restaurant{ID: id, Name: "Кухня №8", IsOpen: true}, nil
 }
 
 func (fakeCatalog) MenuItemNames(context.Context, string) (map[string]string, error) {

@@ -84,9 +84,8 @@ func (r *Restaurants) Menu(ctx context.Context, restaurantID string) ([]applicat
 
 func restaurantOf(restaurant *restaurantsv1.Restaurant) applications.Restaurant {
 	return applications.Restaurant{
-		ID:      restaurant.GetRestaurantId(),
-		Name:    restaurant.GetName(),
-		Address: restaurant.GetAddress(),
-		IsOpen:  restaurant.GetIsOpen(),
+		ID:     restaurant.GetRestaurantId(),
+		Name:   restaurant.GetName(),
+		IsOpen: restaurant.GetIsOpen(),
 	}
 }

@@ -10,7 +10,7 @@ use crate::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
-use crate::slices::delivery::domains::delivery::{Address, DeliveryId, OrderId, State};
+use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId, State};
 
 use super::courier_id;
 use super::error::DeliveryApplicationError;
@@ -20,7 +20,6 @@ use super::error::DeliveryApplicationError;
 pub struct CurrentDeliveryView {
     pub delivery_id: DeliveryId,
     pub order_id: OrderId,
-    pub pickup_address: Address,
     pub state: State,
 }
 
@@ -93,11 +92,7 @@ mod tests {
     }
 
     fn delivery(id: &str, order: &str) -> Delivery {
-        Delivery::new(
-            DeliveryId::new(id),
-            OrderId::new(order),
-            Address::new("Restaurant street 1").expect("pickup"),
-        )
+        Delivery::new(DeliveryId::new(id), OrderId::new(order))
     }
 
     fn store_with_courier() -> TestStore {
@@ -135,7 +130,6 @@ mod tests {
             Some(CurrentDeliveryView {
                 delivery_id: DeliveryId::new("delivery-1"),
                 order_id: OrderId::new("order-1"),
-                pickup_address: Address::new("Restaurant street 1").expect("pickup"),
                 state: State::Assigned,
             })
         );

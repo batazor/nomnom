@@ -31,7 +31,7 @@ func (f *fakeOrders) RequestCancellation(_ context.Context, request Cancellation
 type fakeCatalog struct{ names map[string]string }
 
 func (fakeCatalog) Restaurant(_ context.Context, id string) (Restaurant, error) {
-	return Restaurant{ID: id, Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true}, nil
+	return Restaurant{ID: id, Name: "Кухня №8", IsOpen: true}, nil
 }
 
 func (f fakeCatalog) MenuItemNames(context.Context, string) (map[string]string, error) {

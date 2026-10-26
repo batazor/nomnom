@@ -10,7 +10,6 @@
   "restaurants": [
     {
       "name": "Пельменная «Сибирь»",
-      "address": "Torstraße 112, 10119 Berlin",
       "items": [
         {"name": "Пельмени сибирские", "description": "Говядина и свинина, сметана", "price": "11.90"},
         {"name": "Вареники с картошкой", "description": "Жареный лук, сметана", "price": "9.50"},
@@ -22,7 +21,6 @@
     },
     {
       "name": "Чайхана «Самарканд»",
-      "address": "Rosenthaler Straße 40, 10178 Berlin",
       "items": [
         {"name": "Плов ферганский", "description": "Баранина, жёлтая морковь, нут", "price": "13.50"},
         {"name": "Лагман", "description": "Тянутая лапша, говядина, овощи", "price": "12.40"},
@@ -35,7 +33,6 @@
     },
     {
       "name": "Блинная «Теремок у моста»",
-      "address": "Oranienburger Straße 23, 10178 Berlin",
       "items": [
         {"name": "Блин с ветчиной и сыром", "description": "", "price": "7.40"},
         {"name": "Блин с грибами и сметаной", "description": "", "price": "7.90"},

@@ -76,7 +76,7 @@ type restaurantsServer struct {
 func (s *restaurantsServer) GetRestaurant(ctx context.Context, request *restaurantsv1.GetRestaurantRequest) (*restaurantsv1.GetRestaurantResponse, error) {
 	s.seenMD, _ = metadata.FromIncomingContext(ctx)
 	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{
-		RestaurantId: request.GetRestaurantId(), Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true,
+		RestaurantId: request.GetRestaurantId(), Name: "Кухня №8", IsOpen: true,
 	}}, nil
 }
 
@@ -198,7 +198,7 @@ func TestCatalogIsPublicAndToleratesMissingMenu(t *testing.T) {
 
 	restaurant, err := catalog.Restaurant(customerContext(), "restaurant-1")
 	require.NoError(t, err)
-	assert.Equal(t, applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true}, restaurant)
+	assert.Equal(t, applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, restaurant)
 	assert.Equal(t, []string{"Bearer token-nomnom.restaurants"}, server.seenMD.Get("authorization"))
 	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata), "public read carries no user")
 

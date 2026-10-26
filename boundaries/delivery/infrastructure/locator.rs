@@ -2,8 +2,7 @@
 //! с последней сохранённой позицией из `CourierLocationStore`. Правило выбора
 //! кандидата (`find_courier::select_candidate`) не меняется.
 //!
-//! Адрес pickup пока не геокодируется (`Address` — строка), поэтому
-//! расстояние и зона неизвестны: курьер с известной позицией считается в зоне
+//! Delivery не хранит место pickup, поэтому расстояние и зона неизвестны: курьер с известной позицией считается в зоне
 //! на расстоянии 0, и выбор среди равных решает id курьера. Статический
 //! локатор `infrastructure::memory` — только для тестов.
 
@@ -17,7 +16,6 @@ use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::courier_locator::{
     CourierCandidate, CourierLocator, LocatorError,
 };
-use crate::slices::delivery::domains::delivery::Address;
 
 /// Роль хранилища, которую читает [`StoredCourierLocator`].
 pub trait CourierPositions: CourierLocationStore + Send + Sync {
@@ -38,7 +36,7 @@ impl StoredCourierLocator {
 }
 
 impl CourierLocator for StoredCourierLocator {
-    fn candidates_near(&self, _pickup: &Address) -> Result<Vec<CourierCandidate>, LocatorError> {
+    fn candidates(&self) -> Result<Vec<CourierCandidate>, LocatorError> {
         Ok(self
             .positions
             .available_positions()
@@ -48,11 +46,7 @@ impl CourierLocator for StoredCourierLocator {
             .collect())
     }
 
-    fn snapshot(
-        &self,
-        courier_id: &CourierId,
-        _pickup: &Address,
-    ) -> Result<Option<CourierCandidate>, LocatorError> {
+    fn snapshot(&self, courier_id: &CourierId) -> Result<Option<CourierCandidate>, LocatorError> {
         Ok(self
             .positions
             .latest(courier_id)
@@ -61,7 +55,7 @@ impl CourierLocator for StoredCourierLocator {
     }
 }
 
-/// Без геокодирования pickup расстояние и зона неизвестны; занятость курьера
+/// Без места pickup расстояние и зона неизвестны; занятость курьера
 /// проверяет `CourierAssignment`, поэтому активных назначений 0.
 fn candidate(courier_id: CourierId) -> CourierCandidate {
     CourierCandidate {
@@ -83,10 +77,6 @@ mod tests {
     use crate::slices::courier::domains::courier::{
         Courier, CourierRepository, CourierStatus, Location,
     };
-
-    fn pickup() -> Address {
-        Address::new("Restaurant street 1").expect("pickup")
-    }
 
     fn courier(store: &TestStore, id: &str, status: CourierStatus, positioned: bool) {
         CourierRepository::add(store, &Courier::restore(CourierId::new(id), status))
@@ -112,7 +102,7 @@ mod tests {
         courier(&store, "unpositioned", CourierStatus::Available, false);
         let locator = StoredCourierLocator::new(store);
 
-        let candidates = locator.candidates_near(&pickup()).expect("candidates");
+        let candidates = locator.candidates().expect("candidates");
 
         assert_eq!(
             candidates,
@@ -122,13 +112,10 @@ mod tests {
             ]
         );
         assert_eq!(
-            locator.snapshot(&CourierId::new("courier-1"), &pickup()),
+            locator.snapshot(&CourierId::new("courier-1")),
             Ok(Some(candidate(CourierId::new("courier-1"))))
         );
-        assert_eq!(
-            locator.snapshot(&CourierId::new("unpositioned"), &pickup()),
-            Ok(None)
-        );
+        assert_eq!(locator.snapshot(&CourierId::new("unpositioned")), Ok(None));
     }
 
     #[test]
@@ -138,7 +125,7 @@ mod tests {
         let locator = StoredCourierLocator::new(store);
 
         assert!(matches!(
-            locator.candidates_near(&pickup()),
+            locator.candidates(),
             Err(LocatorError::Unavailable(_))
         ));
     }

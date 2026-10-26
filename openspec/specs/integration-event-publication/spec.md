@@ -36,7 +36,7 @@ Mapper Domain Event → Integration Event SHALL находиться в `infrast
 #### Scenario: Внутренние факты restaurants вне allowlist не публикуются
 **ID:** AC-603
 
-- **WHEN** транзакция `restaurants` записывает `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled`, `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged`, или `MenuCreated` (внутренние события `Restaurant` и `Menu` без контракта; `RestaurantOpened`, `RestaurantClosed`, `MenuItemAdded`, `MenuItemUpdated` и `MenuItemAvailabilityChanged` публикуются по FR-560, FR-561 и FR-613)
+- **WHEN** транзакция `restaurants` записывает `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled`, `RestaurantRegistered`, `RestaurantRenamed` или `MenuCreated` (внутренние события `Restaurant` и `Menu` без контракта; `RestaurantOpened`, `RestaurantClosed`, `MenuItemAdded`, `MenuItemUpdated` и `MenuItemAvailabilityChanged` публикуются по FR-560, FR-561 и FR-613)
 - **THEN** коллекция `outbox` не пополняется для этих событий
 
 #### Scenario: Новый Domain Event delivery требует решения о публикации

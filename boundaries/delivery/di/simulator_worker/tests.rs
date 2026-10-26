@@ -499,7 +499,6 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
             &operator(),
             create_delivery::Input {
                 order_id: "order-1".to_owned(),
-                pickup_address: "Pickup street 1".to_owned(),
             },
         )
         .expect("delivery created");

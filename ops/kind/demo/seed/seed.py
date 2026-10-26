@@ -87,7 +87,7 @@ def seed_restaurant(driver: Driver, seed: dict, spec: dict, existing: dict) -> d
     restaurant = existing.get(spec["name"])
     if restaurant is None:
         restaurant = driver.call("nomnom.restaurants", seed["operator"], RESTAURANTS + "RegisterRestaurant",
-                                 {"name": spec["name"], "ownerId": owner, "address": spec["address"]})["restaurant"]
+                                 {"name": spec["name"], "ownerId": owner})["restaurant"]
         print(f"registered {spec['name']} ({restaurant['restaurantId']})")
     restaurant_id = restaurant["restaurantId"]
     driver.call("nomnom.restaurants", owner, RESTAURANTS + "AssignStaff",

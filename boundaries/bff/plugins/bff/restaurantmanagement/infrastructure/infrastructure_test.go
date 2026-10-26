@@ -35,7 +35,7 @@ type restaurantsServer struct {
 }
 
 func (s *restaurantsServer) restaurant() *restaurantsv1.Restaurant {
-	return &restaurantsv1.Restaurant{RestaurantId: s.got, Name: "Ночная пекарня", Address: "ул. Садовая, 8", IsOpen: s.open}
+	return &restaurantsv1.Restaurant{RestaurantId: s.got, Name: "Ночная пекарня", IsOpen: s.open}
 }
 
 func (s *restaurantsServer) OpenRestaurant(ctx context.Context, request *restaurantsv1.OpenRestaurantRequest) (*restaurantsv1.OpenRestaurantResponse, error) {
@@ -67,7 +67,7 @@ func (s *restaurantsServer) ListOwnedRestaurants(ctx context.Context, request *r
 		return nil, s.err
 	}
 	return &restaurantsv1.ListOwnedRestaurantsResponse{
-		Restaurants:   []*restaurantsv1.Restaurant{{RestaurantId: "restaurant-2", Name: "Пельменная", Address: "ул. Садовая, 9"}},
+		Restaurants:   []*restaurantsv1.Restaurant{{RestaurantId: "restaurant-2", Name: "Пельменная"}},
 		NextPageToken: "restaurant-2",
 	}, nil
 }
@@ -108,7 +108,7 @@ func TestOpenAndCloseCarryServiceTokenAndUserAssertion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "restaurant-1", server.got)
 	assert.Equal(t, applications.OpeningResult{
-		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Ночная пекарня", Address: "ул. Садовая, 8", IsOpen: true},
+		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Ночная пекарня", IsOpen: true},
 		Changed:    true,
 	}, opened)
 	assert.Equal(t, []string{"Bearer token-nomnom.restaurants"}, server.seenMD.Get("authorization"))
@@ -156,7 +156,7 @@ func TestListOwnedCarriesUserAssertion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "restaurant-1", server.got)
 	assert.Equal(t, applications.OwnedPage{
-		Restaurants: []applications.Restaurant{{ID: "restaurant-2", Name: "Пельменная", Address: "ул. Садовая, 9"}},
+		Restaurants: []applications.Restaurant{{ID: "restaurant-2", Name: "Пельменная"}},
 		NextCursor:  "restaurant-2",
 	}, page)
 	assert.Len(t, server.seenMD.Get(identity.AssertionMetadata), 1)

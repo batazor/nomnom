@@ -258,7 +258,7 @@ Topic и партиционирование новой версии опреде
 
 | Domain Event | Маппинг | Integration Event `nomnom.restaurants.v1.*` | Topic | Consumer |
 | --- | --- | --- | --- | --- |
-| `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged` | 1 → 0 | — | — | — |
+| `RestaurantRegistered`, `RestaurantRenamed` | 1 → 0 | — | — | — |
 | `RestaurantOpened` | 1 → 1 | `RestaurantOpened` (`restaurant_id`) | `restaurants.v1.restaurant-events` | `restaurants-consumer` (кеш каталога, ADR 40) |
 | `RestaurantClosed` | 1 → 1 | `RestaurantClosed` (`restaurant_id`) | `restaurants.v1.restaurant-events` | `restaurants-consumer` (кеш каталога, ADR 40) |
 | `MenuCreated` | 1 → 0 | — | — | — |

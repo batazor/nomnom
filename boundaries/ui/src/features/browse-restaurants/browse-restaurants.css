@@ -87,14 +87,6 @@
   overflow-wrap: break-word;
 }
 
-.catalog-address {
-  overflow: hidden;
-  color: var(--color-muted);
-  font-size: var(--font-size-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .catalog-more-error {
   margin: 0;
   color: var(--color-danger);

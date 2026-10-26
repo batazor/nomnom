@@ -109,7 +109,6 @@ describe("kitchen command RPCs over MongoDB", () => {
       id: restaurantId,
       name: "Pho House",
       ownerId: "owner",
-      address: "1 Pho Street",
       registeredAt: clock.now(),
     });
     restaurant.open(clock.now());

@@ -71,7 +71,7 @@ var received = applications.OrderView{
 
 func TestKitchenShowsTheBoardOnBehalfOfTheUser(t *testing.T) {
 	get := &fakeGetKitchen{view: applications.KitchenView{
-		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true},
+		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
 		Orders:     []applications.OrderView{preparing, received},
 	}}
 	svc, ctx := kitchenService(t, get, &fakeKitchenAction{})

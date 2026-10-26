@@ -5,7 +5,7 @@
 - **Тип:** Command.
 - **Actor:** Fulfillment process `orders`.
 - **Намерение:** Запросить доставку оформленного заказа.
-- **Результат:** Идемпотентно создана `Delivery` с pickup-адресом ресторана и данными контекста.
+- **Результат:** Идемпотентно создана `Delivery` для заказа.
 
 ## Границы
 
@@ -24,7 +24,7 @@ sequenceDiagram
     participant Store as Unit of Work
     Workflow->>API: запросить доставку
     API->>App: идемпотентная команда
-    App->>Delivery: создать из pickup address
+    App->>Delivery: создать для order_id
     App->>Store: сохранить Delivery
     Store-->>App: commit
     App-->>Workflow: delivery_id
@@ -34,7 +34,7 @@ sequenceDiagram
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-306.
 - **Порты:** `DeliveryAuthorization` (`CreateDelivery` над `Platform`), `DeliveryRepository`, `IdGenerator`.
-- **Транзакция:** Без UoW: ключ идемпотентности — `OrderId` (уникальность в репозитории); совпадающий повтор возвращает существующую `Delivery`, конфликтующий — `DeliveryAlreadyExists`.
+- **Транзакция:** Без UoW: ключ идемпотентности — `OrderId` (уникальность в репозитории); повтор для того же заказа возвращает существующую `Delivery` (`created = false`).
 - **Допущение:** Find Courier здесь не запускается: поиск курьера начинает следующий проход Dispatch Deliveries (FR-582).
 
 ## Acceptance

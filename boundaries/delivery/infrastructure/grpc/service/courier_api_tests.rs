@@ -234,7 +234,6 @@ impl Api {
             .client
             .create_delivery(as_orders_worker(CreateDeliveryRequest {
                 order_id: order.to_owned(),
-                pickup_address: "Restaurant street 1".to_owned(),
             }))
             .await
             .expect("created")
@@ -318,7 +317,6 @@ async fn courier_accepts_picks_up_and_completes_the_delivery() {
     assert_eq!(offers.len(), 1);
     assert_eq!(offers[0].delivery_id, delivery_id);
     assert_eq!(offers[0].order_id, "order-1");
-    assert_eq!(offers[0].pickup_address, "Restaurant street 1");
     let accepted = api.accept("courier-1", offers[0].offer_id.clone()).await;
     assert_eq!(
         accepted,
@@ -348,7 +346,6 @@ async fn courier_accepts_picks_up_and_completes_the_delivery() {
                 order_id: "order-1".to_owned(),
                 courier_id: "courier-1".to_owned(),
                 state: DeliveryState::Assigned as i32,
-                pickup_address: "Restaurant street 1".to_owned(),
             }),
             courier_status: CourierStatus::Busy as i32,
         }

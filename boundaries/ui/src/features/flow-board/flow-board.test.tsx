@@ -145,7 +145,7 @@ describe("flow board", () => {
     const offers = await within(courier).findByRole("list", {
       name: "Предложения",
     });
-    // Offers carry only the pickup address; the placed order's offer is the newest.
+    // The placed order's offer is the newest.
     const offer = within(offers).getAllByRole("article").at(-1);
     if (!offer) throw new Error("No offer for the placed order");
     await user.click(

@@ -62,10 +62,9 @@ func (d *Delivery) State(ctx context.Context, courierID string) (applications.Co
 			return applications.CourierState{}, fmt.Errorf("current delivery %s in unexpected state %s", delivery.GetDeliveryId(), delivery.GetState())
 		}
 		state.CurrentDelivery = &applications.Delivery{
-			ID:            delivery.GetDeliveryId(),
-			OrderID:       delivery.GetOrderId(),
-			Stage:         stage,
-			PickupAddress: delivery.GetPickupAddress(),
+			ID:      delivery.GetDeliveryId(),
+			OrderID: delivery.GetOrderId(),
+			Stage:   stage,
 		}
 	}
 	return state, nil
@@ -79,11 +78,10 @@ func (d *Delivery) Offers(ctx context.Context, courierID string) ([]applications
 	offers := make([]applications.Offer, 0, len(response.GetOffers()))
 	for _, offer := range response.GetOffers() {
 		offers = append(offers, applications.Offer{
-			ID:            offer.GetOfferId(),
-			DeliveryID:    offer.GetDeliveryId(),
-			OrderID:       offer.GetOrderId(),
-			PickupAddress: offer.GetPickupAddress(),
-			ExpiresAt:     time.Unix(offer.GetExpiresAtEpochSeconds(), 0).UTC(),
+			ID:         offer.GetOfferId(),
+			DeliveryID: offer.GetDeliveryId(),
+			OrderID:    offer.GetOrderId(),
+			ExpiresAt:  time.Unix(offer.GetExpiresAtEpochSeconds(), 0).UTC(),
 		})
 	}
 	return offers, nil

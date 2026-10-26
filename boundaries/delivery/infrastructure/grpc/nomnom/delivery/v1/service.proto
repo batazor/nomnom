@@ -7,7 +7,7 @@ import "nomnom/delivery/v1/delivery.proto";
 
 service DeliveryService {
   // Courier view of its work: current status and the assigned or picked up
-  // Delivery with its addresses. Requires courier#act; an unregistered courier
+  // Delivery. Requires courier#act; an unregistered courier
   // is NOT_FOUND.
   rpc GetCourierCurrentDelivery(GetCourierCurrentDeliveryRequest) returns (GetCourierCurrentDeliveryResponse);
 
@@ -48,9 +48,9 @@ message GetCourierCurrentDeliveryResponse {
 
 message CreateDeliveryRequest {
   string order_id = 1;
-  string pickup_address = 2;
-  reserved 3;
-  reserved "dropoff_address";
+  // Pickup and dropoff addresses are dropped from the project.
+  reserved 2, 3;
+  reserved "pickup_address", "dropoff_address";
 }
 
 message CreateDeliveryResponse {

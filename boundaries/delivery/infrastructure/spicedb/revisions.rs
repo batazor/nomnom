@@ -52,7 +52,7 @@ mod tests {
     use super::*;
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::Courier;
-    use crate::slices::delivery::domains::delivery::{Address, Delivery, OrderId};
+    use crate::slices::delivery::domains::delivery::{Delivery, OrderId};
 
     #[test]
     fn reads_revisions_stored_with_courier_and_delivery() {
@@ -60,11 +60,7 @@ mod tests {
         let mut courier = Courier::new(CourierId::new("courier-1"));
         courier.record_authorization_revision(AuthorizationRevision::new("zed-c"));
         CourierRepository::add(&*store, &courier).expect("courier");
-        let mut delivery = Delivery::new(
-            DeliveryId::new("delivery-1"),
-            OrderId::new("order-1"),
-            Address::new("Restaurant street 1").expect("pickup"),
-        );
+        let mut delivery = Delivery::new(DeliveryId::new("delivery-1"), OrderId::new("order-1"));
         delivery.record_authorization_revision(AuthorizationRevision::new("zed-d"));
         DeliveryRepository::add(&*store, &delivery).expect("delivery");
         let revisions = RepositoryRevisions(Arc::clone(&store));

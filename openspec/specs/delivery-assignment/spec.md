@@ -19,7 +19,7 @@
 ### Requirement: Идемпотентный Create Delivery
 **ID:** FR-306
 
-Fulfillment process SHALL создавать `Delivery` в состоянии waiting из `Order ID` и pickup-адреса ресторана. Ключ идемпотентности — `Order ID`: повтор с теми же данными MUST возвращать уже созданную `Delivery`, повтор с другим адресом MUST отклоняться как already exists. Создание MUST NOT запускать поиск курьера.
+Fulfillment process SHALL создавать `Delivery` в состоянии waiting из `Order ID`. Ключ идемпотентности — `Order ID`: повтор MUST возвращать уже созданную `Delivery`. Создание MUST NOT запускать поиск курьера. Адресов у `Delivery` нет: ни адреса доставки, ни pickup-адреса ресторана.
 
 #### Scenario: Первый запрос доставки
 **ID:** AC-313
@@ -30,31 +30,19 @@ Fulfillment process SHALL создавать `Delivery` в состоянии wa
 #### Scenario: Повтор того же запроса
 **ID:** AC-314
 
-- **WHEN** запрос доставки для того же `Order` с теми же адресами повторяется
+- **WHEN** запрос доставки для того же `Order` повторяется
 - **THEN** возвращён идентификатор ранее созданной `Delivery` и вторая `Delivery` не создаётся
-
-#### Scenario: Конфликтующий повтор
-**ID:** AC-315
-
-- **WHEN** для `Order` с существующей `Delivery` приходит запрос с другими адресами
-- **THEN** сценарий отклоняется как already exists и существующая `Delivery` не меняется
-
-#### Scenario: Пустой адрес
-**ID:** AC-316
-
-- **WHEN** pickup-адрес пуст после нормализации пробелов
-- **THEN** сценарий отклоняется как некорректный запрос и `Delivery` не создаётся
 
 ### Requirement: Find Courier
 **ID:** FR-307
 
-Процесс назначения SHALL выбирать для waiting `Delivery` ближайшего к pickup кандидата среди available курьеров, удовлетворяющих `CourierEligibleForDelivery`, и ещё не получавших offer этой доставки. Отсутствие кандидата MUST возвращаться явным результатом с причинами отклонения кандидатов. Find Courier MUST NOT создавать offer или Assignment.
+Процесс назначения SHALL выбирать для waiting `Delivery` ближайшего кандидата среди available курьеров (расстояние считает локатор курьеров), удовлетворяющих `CourierEligibleForDelivery`, и ещё не получавших offer этой доставки. Отсутствие кандидата MUST возвращаться явным результатом с причинами отклонения кандидатов. Find Courier MUST NOT создавать offer или Assignment.
 
 #### Scenario: Выбран ближайший подходящий курьер
 **ID:** AC-317
 
 - **WHEN** для waiting `Delivery` есть несколько available подходящих курьеров
-- **THEN** выбран курьер с наименьшим расстоянием до pickup, а состояние `Delivery` и курьеров не меняется
+- **THEN** выбран курьер с наименьшим расстоянием по данным локатора, а состояние `Delivery` и курьеров не меняется
 
 #### Scenario: Подходящих курьеров нет
 **ID:** AC-318
@@ -174,13 +162,13 @@ Fulfillment process SHALL создавать `Delivery` в состоянии wa
 ### Requirement: List Available Delivery Offers
 **ID:** FR-313
 
-Курьер SHALL получать список своих pending непросроченных `Delivery Offer` с адресами доставки и моментом истечения. Query MUST NOT менять состояние и MUST NOT включать accepted, rejected, withdrawn, просроченные offers и offers других курьеров.
+Курьер SHALL получать список своих pending непросроченных `Delivery Offer` с `Order ID` и моментом истечения. Query MUST NOT менять состояние и MUST NOT включать accepted, rejected, withdrawn, просроченные offers и offers других курьеров.
 
 #### Scenario: Список актуальных offers
 **ID:** AC-333
 
 - **WHEN** курьер с pending непросроченным offer запрашивает доступные offers
-- **THEN** возвращён этот offer с pickup-адресом и моментом истечения
+- **THEN** возвращён этот offer с `Order ID` и моментом истечения
 
 #### Scenario: Закрытые и чужие offers не видны
 **ID:** AC-334

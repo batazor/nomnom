@@ -141,11 +141,7 @@ const scenarios: readonly ScenarioSpec[] = [
     id: "order-short",
     status: "PICKED_UP",
     placedMinutesAgo: 30,
-    milestones: [
-      ...preparing,
-      ["READY_FOR_PICKUP", 18],
-      ["PICKED_UP", 20],
-    ],
+    milestones: [...preparing, ["READY_FOR_PICKUP", 18], ["PICKED_UP", 20]],
     deadlines: { ready: 18, pickup: 20, delivered: 33 },
   },
   {

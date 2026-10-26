@@ -115,7 +115,7 @@ func (s *restaurantsServer) GetRestaurant(ctx context.Context, r *restaurantsv1.
 	if err := s.record(ctx, "GetRestaurant"); err != nil {
 		return nil, err
 	}
-	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true}}, nil
+	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), Name: "Кухня №8", IsOpen: true}}, nil
 }
 
 func (s *restaurantsServer) GetMenu(ctx context.Context, _ *restaurantsv1.GetMenuRequest) (*restaurantsv1.GetMenuResponse, error) {
@@ -174,7 +174,7 @@ func TestBoardCarriesTheUserAndPublicReadsDoNot(t *testing.T) {
 	assert.Equal(t, []string{"ro-2", "ro-3"}, queue)
 	restaurant, err := restaurants.Restaurant(cookContext(), "restaurant-1")
 	require.NoError(t, err)
-	assert.Equal(t, applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true}, restaurant)
+	assert.Equal(t, applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, restaurant)
 	names, err := restaurants.MenuItemNames(cookContext(), "restaurant-1")
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"menu-pho": "Фо бо"}, names)

@@ -6,8 +6,7 @@ import { type Money, useMoney } from "./money";
 
 // The cart in short, stuck to the bottom of the menu while the full cart is
 // out of view: the total and the order button, so ordering needs no scroll
-// down. The total opens the full cart; the button sends the checkout form,
-// which itself asks for a missing address.
+// down. The total opens the full cart; the button sends the checkout form.
 export function CartBar({
   count,
   subtotal,

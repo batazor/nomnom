@@ -50,10 +50,9 @@ const (
 
 // Restaurant is the public data of the restaurant the kitchen belongs to.
 type Restaurant struct {
-	ID      string
-	Name    string
-	Address string
-	IsOpen  bool
+	ID     string
+	Name   string
+	IsOpen bool
 }
 
 // ActiveOrderLine is a line of an active order as restaurants keeps it.

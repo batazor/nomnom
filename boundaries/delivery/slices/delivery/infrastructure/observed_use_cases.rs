@@ -5,7 +5,7 @@
 //! closed set of `error.type`:
 //!
 //! - `rejected`: `permission_denied`, `invalid_argument`, `not_found`,
-//!   `already_exists`, `failed_precondition`;
+//!   `failed_precondition`;
 //! - `error`: `concurrent_modification`, `unavailable`, `transaction`,
 //!   `internal`.
 //!
@@ -54,7 +54,6 @@ pub fn classify(error: &DeliveryApplicationError) -> Failure {
         | DeliveryApplicationError::DeliveryForOrderNotFound(_)
         | DeliveryApplicationError::CourierNotFound(_)
         | DeliveryApplicationError::DeliveryOfferNotFound(_) => Failure::Rejected("not_found"),
-        DeliveryApplicationError::DeliveryAlreadyExists(_) => Failure::Rejected("already_exists"),
         DeliveryApplicationError::DeliveryPrecondition(_)
         | DeliveryApplicationError::CourierPrecondition(_)
         | DeliveryApplicationError::OfferPrecondition(_)

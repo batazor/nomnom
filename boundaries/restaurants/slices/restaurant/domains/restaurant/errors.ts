@@ -1,7 +1,6 @@
 export const InvalidRestaurantReason = {
   EmptyName: "empty_name",
   EmptyOwner: "empty_owner",
-  EmptyAddress: "empty_address",
   EmptyStaff: "empty_staff",
 } as const;
 

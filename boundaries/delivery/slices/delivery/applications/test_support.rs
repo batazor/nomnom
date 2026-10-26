@@ -11,7 +11,7 @@ use crate::slices::courier::domains::courier::{
     Courier, CourierId, CourierRepository, CourierStatus,
 };
 use crate::slices::delivery::domains::delivery::{
-    Address, Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
+    Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository, OfferState, OrderId, State,
 };
 
@@ -131,11 +131,7 @@ impl World {
 }
 
 pub fn new_delivery(id: &str) -> Delivery {
-    Delivery::new(
-        DeliveryId::new(id),
-        OrderId::new(format!("order-of-{id}")),
-        Address::new("Restaurant street 1").expect("pickup"),
-    )
+    Delivery::new(DeliveryId::new(id), OrderId::new(format!("order-of-{id}")))
 }
 
 pub fn subject(id: &str) -> Subject {

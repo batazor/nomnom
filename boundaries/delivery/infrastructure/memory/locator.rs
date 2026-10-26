@@ -5,9 +5,8 @@ use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::courier_locator::{
     CourierCandidate, CourierLocator, LocatorError,
 };
-use crate::slices::delivery::domains::delivery::Address;
 
-/// Courier locator returning preconfigured snapshots for every pickup.
+/// Courier locator returning preconfigured snapshots for every delivery.
 #[derive(Debug, Default)]
 pub struct StaticCourierLocator {
     candidates: Mutex<Vec<CourierCandidate>>,
@@ -34,7 +33,7 @@ impl StaticCourierLocator {
         self.unavailable.store(unavailable, Ordering::SeqCst);
     }
 
-    fn candidates(&self) -> Result<Vec<CourierCandidate>, LocatorError> {
+    fn configured(&self) -> Result<Vec<CourierCandidate>, LocatorError> {
         if self.unavailable.load(Ordering::SeqCst) {
             return Err(LocatorError::Unavailable("locator offline".to_owned()));
         }
@@ -47,17 +46,13 @@ impl StaticCourierLocator {
 }
 
 impl CourierLocator for StaticCourierLocator {
-    fn candidates_near(&self, _pickup: &Address) -> Result<Vec<CourierCandidate>, LocatorError> {
-        self.candidates()
+    fn candidates(&self) -> Result<Vec<CourierCandidate>, LocatorError> {
+        self.configured()
     }
 
-    fn snapshot(
-        &self,
-        courier_id: &CourierId,
-        _pickup: &Address,
-    ) -> Result<Option<CourierCandidate>, LocatorError> {
+    fn snapshot(&self, courier_id: &CourierId) -> Result<Option<CourierCandidate>, LocatorError> {
         Ok(self
-            .candidates()?
+            .configured()?
             .into_iter()
             .find(|candidate| &candidate.courier_id == courier_id))
     }

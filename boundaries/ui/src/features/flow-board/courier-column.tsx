@@ -177,7 +177,6 @@ export function CourierColumn({
               )}
             </span>
           </button>
-          <Route from={delivery.pickupAddress} />
           <div className="board-card-actions">
             <Button
               isPending={acting.fetching}
@@ -223,7 +222,6 @@ export function CourierColumn({
                     </span>
                     <OfferCountdown expiresAt={offer.expiresAt} />
                   </div>
-                  <Route from={offer.pickupAddress} />
                   <div className="board-card-actions">
                     <Button
                       isPending={accepting.fetching}
@@ -297,17 +295,5 @@ function OfferCountdown({ expiresAt }: { expiresAt: string }) {
         transition={{ duration: seconds, ease: "linear" }}
       />
     </svg>
-  );
-}
-
-function Route({ from }: { from: string }) {
-  const { t } = useI18n();
-  return (
-    <dl className="board-route">
-      <div>
-        <dt>{t("board.courier.from")}</dt>
-        <dd>{from}</dd>
-      </div>
-    </dl>
   );
 }

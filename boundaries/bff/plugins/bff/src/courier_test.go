@@ -75,7 +75,6 @@ var busyCourier = applications.CourierView{
 	Offers:       []applications.Offer{},
 	CurrentDelivery: &applications.Delivery{
 		ID: "delivery-1", OrderID: "order-1", Stage: applications.StagePickedUp,
-		PickupAddress: "ул. Садовая, 8",
 	},
 }
 
@@ -83,7 +82,7 @@ func TestCourierIsTheVerifiedUser(t *testing.T) {
 	fake := &fakeCourierScenarios{view: applications.CourierView{
 		Availability: applications.AvailabilityAvailable,
 		Offers: []applications.Offer{{
-			ID: "offer-1", DeliveryID: "delivery-1", OrderID: "order-1", PickupAddress: "a",
+			ID: "offer-1", DeliveryID: "delivery-1", OrderID: "order-1",
 			ExpiresAt: time.Date(2026, 10, 25, 12, 5, 0, 0, time.UTC),
 		}},
 	}}

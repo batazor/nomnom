@@ -22,8 +22,8 @@ use crate::slices::delivery::domains::delivery::{
 };
 
 use super::rows::{
-    DeliveryRow, active_assignment_states, address, courier_status, delivery_from_row,
-    delivery_state, offer_state, parse_delivery_state,
+    DeliveryRow, active_assignment_states, courier_status, delivery_from_row, delivery_state,
+    offer_state, parse_delivery_state,
 };
 use super::{Store, corrupt, domain_version, limit, storage_error};
 
@@ -33,7 +33,7 @@ impl CourierCurrentDeliveryReadModel for Store {
         courier_id: &CourierId,
     ) -> Result<Option<CurrentDeliveryView>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query!(
-            "SELECT id, order_id, pickup_address, state FROM deliveries
+            "SELECT id, order_id, state FROM deliveries
              WHERE courier_id = $1 AND state = ANY($2)
              ORDER BY id LIMIT 1",
             courier_id.as_str(),
@@ -44,7 +44,6 @@ impl CourierCurrentDeliveryReadModel for Store {
             Ok(CurrentDeliveryView {
                 delivery_id: DeliveryId::new(row.id),
                 order_id: OrderId::new(row.order_id),
-                pickup_address: address(&row.pickup_address)?,
                 state: parse_delivery_state(&row.state)?,
             })
         })
@@ -63,7 +62,7 @@ impl WaitingDeliveries for Store {
         let (created_at, id) = after.map_or((i64::MIN, ""), DeliveryPosition::key);
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
-            "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,
+            "SELECT id, order_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
                  expected_pickup_at, expected_delivered_at
              FROM deliveries
@@ -126,8 +125,8 @@ impl PendingDeliveryOffersReadModel for Store {
         &self,
         courier_id: &CourierId,
     ) -> Result<Vec<AvailableDeliveryOfferView>, RepositoryError> {
-        sql!(self, "SELECT", |connection| sqlx::query!(
-            "SELECT o.id, o.delivery_id, d.order_id, d.pickup_address, o.expires_at
+        Ok(sql!(self, "SELECT", |connection| sqlx::query!(
+            "SELECT o.id, o.delivery_id, d.order_id, o.expires_at
              FROM delivery_offers o JOIN deliveries d ON d.id = o.delivery_id
              WHERE o.courier_id = $1 AND o.state = 'pending'
              ORDER BY o.position",
@@ -135,16 +134,13 @@ impl PendingDeliveryOffersReadModel for Store {
         )
         .fetch_all(connection))?
         .into_iter()
-        .map(|row| {
-            Ok(AvailableDeliveryOfferView {
-                offer_id: DeliveryOfferId::new(row.id),
-                delivery_id: DeliveryId::new(row.delivery_id),
-                order_id: OrderId::new(row.order_id),
-                pickup_address: address(&row.pickup_address)?,
-                expires_at_epoch_seconds: row.expires_at,
-            })
+        .map(|row| AvailableDeliveryOfferView {
+            offer_id: DeliveryOfferId::new(row.id),
+            delivery_id: DeliveryId::new(row.delivery_id),
+            order_id: OrderId::new(row.order_id),
+            expires_at_epoch_seconds: row.expires_at,
         })
-        .collect()
+        .collect())
     }
 }
 

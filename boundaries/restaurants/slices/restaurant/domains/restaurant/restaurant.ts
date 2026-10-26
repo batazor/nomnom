@@ -4,7 +4,6 @@ import type { RestaurantEvent } from "./events.ts";
 export * from "./acceptance.ts";
 export * from "./errors.ts";
 export type {
-  RestaurantAddressChanged,
   RestaurantClosed,
   RestaurantEvent,
   RestaurantOpened,
@@ -17,8 +16,6 @@ export type RestaurantSnapshot = Readonly<{
   name: string;
   ownerId: string;
   isOpen: boolean;
-  /** Pickup address of Restaurant Orders; empty only for legacy restaurants. */
-  address: string;
   /** User ids of the restaurant staff, sorted; source of `restaurant#staff`. */
   staff: readonly string[];
   /**
@@ -29,30 +26,17 @@ export type RestaurantSnapshot = Readonly<{
 }>;
 
 /**
- * Persisted form of {@link RestaurantSnapshot}. Restaurants stored before the
- * address became required have none and are restored with an empty address;
- * restaurants stored before staff existed are restored without staff;
- * snapshots without an authorization revision are restored without one.
+ * Persisted form of {@link RestaurantSnapshot}. Restaurants stored before
+ * staff existed are restored without staff; snapshots without an
+ * authorization revision are restored without one.
  */
-export type StoredRestaurantSnapshot = Omit<
-  RestaurantSnapshot,
-  "address" | "staff"
-> &
-  Readonly<{ address?: string; staff?: readonly string[] }>;
+export type StoredRestaurantSnapshot = Omit<RestaurantSnapshot, "staff"> &
+  Readonly<{ staff?: readonly string[] }>;
 
 const restaurantName = (name: string): string => {
   const normalized = name.trim();
   if (normalized.length === 0) {
     throw new InvalidRestaurantError(InvalidRestaurantReason.EmptyName);
-  }
-  return normalized;
-};
-
-/** Pickup address: a non-empty trimmed string. */
-const restaurantAddress = (address: string): string => {
-  const normalized = address.trim();
-  if (normalized.length === 0) {
-    throw new InvalidRestaurantError(InvalidRestaurantReason.EmptyAddress);
   }
   return normalized;
 };
@@ -76,7 +60,6 @@ export class Restaurant {
   readonly #version: number;
   #name: string;
   #isOpen: boolean;
-  #address: string;
   readonly #staff: Set<string>;
   #authorizationRevision: string | undefined;
   #events: RestaurantEvent[] = [];
@@ -86,7 +69,6 @@ export class Restaurant {
     this.#name = snapshot.name;
     this.#ownerId = snapshot.ownerId;
     this.#isOpen = snapshot.isOpen;
-    this.#address = snapshot.address ?? "";
     this.#staff = new Set(snapshot.staff ?? []);
     this.#authorizationRevision = snapshot.authorizationRevision;
     this.#version = version;
@@ -96,7 +78,6 @@ export class Restaurant {
     id: string;
     name: string;
     ownerId: string;
-    address: string;
     registeredAt: Date;
   }): Restaurant {
     const ownerId = input.ownerId.trim();
@@ -109,7 +90,6 @@ export class Restaurant {
         name: restaurantName(input.name),
         ownerId,
         isOpen: false,
-        address: restaurantAddress(input.address),
         staff: [],
       },
       0,
@@ -119,7 +99,6 @@ export class Restaurant {
       restaurantId: restaurant.#id,
       name: restaurant.#name,
       ownerId,
-      address: restaurant.#address,
       occurredAt: input.registeredAt,
     });
     return restaurant;
@@ -146,11 +125,6 @@ export class Restaurant {
 
   get isOpen(): boolean {
     return this.#isOpen;
-  }
-
-  /** Pickup address; empty for a restaurant registered before it was required. */
-  get address(): string {
-    return this.#address;
   }
 
   /** User ids of the staff, sorted. */
@@ -191,22 +165,6 @@ export class Restaurant {
       restaurantId: this.#id,
       name: normalized,
       occurredAt: renamedAt,
-    });
-    return true;
-  }
-
-  /** Returns `false` when the address is already current. */
-  changeAddress(address: string, changedAt: Date): boolean {
-    const normalized = restaurantAddress(address);
-    if (normalized === this.#address) {
-      return false;
-    }
-    this.#address = normalized;
-    this.#events.push({
-      type: "RestaurantAddressChanged",
-      restaurantId: this.#id,
-      address: normalized,
-      occurredAt: changedAt,
     });
     return true;
   }
@@ -266,7 +224,6 @@ export class Restaurant {
       name: this.#name,
       ownerId: this.#ownerId,
       isOpen: this.#isOpen,
-      address: this.#address,
       staff: this.staff,
       ...(this.#authorizationRevision === undefined
         ? {}

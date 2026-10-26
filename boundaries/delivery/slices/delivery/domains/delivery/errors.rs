@@ -32,7 +32,6 @@ impl From<TransitionError> for DeliveryError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeliveryValidationError {
-    EmptyAddress,
     EmptyFailureReason,
     /// The failure reason code is not in the Delivery Failure Reason catalog.
     UnknownFailureReason(String),
@@ -54,7 +53,6 @@ pub enum DeliveryValidationError {
 impl Display for DeliveryValidationError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EmptyAddress => formatter.write_str("address must not be empty"),
             Self::EmptyFailureReason => {
                 formatter.write_str("delivery failure reason must not be empty")
             }

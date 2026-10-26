@@ -61,7 +61,6 @@ type Restaurants interface {
 
 type DeliveryRequest struct {
 	OrderID        string
-	RestaurantID   string
 	IdempotencyKey string
 }
 
@@ -98,11 +97,10 @@ func NewRestaurantOrderRequest(current *order.Order, idempotencyKey string) Rest
 	}
 }
 
-// NewDeliveryRequest carries the pickup restaurant.
+// NewDeliveryRequest addresses the delivery of the Order under the step key.
 func NewDeliveryRequest(current *order.Order, idempotencyKey string) DeliveryRequest {
 	return DeliveryRequest{
 		OrderID:        string(current.ID()),
-		RestaurantID:   string(current.RestaurantID()),
 		IdempotencyKey: idempotencyKey,
 	}
 }

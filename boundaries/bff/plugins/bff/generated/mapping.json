@@ -395,10 +395,6 @@
           "mapped": "name"
         },
         {
-          "original": "address",
-          "mapped": "address"
-        },
-        {
           "original": "acceptingOrders",
           "mapped": "accepting_orders"
         },
@@ -712,10 +708,6 @@
           "mapped": "order_id"
         },
         {
-          "original": "pickupAddress",
-          "mapped": "pickup_address"
-        },
-        {
           "original": "expiresAt",
           "mapped": "expires_at"
         }
@@ -735,10 +727,6 @@
         {
           "original": "stage",
           "mapped": "stage"
-        },
-        {
-          "original": "pickupAddress",
-          "mapped": "pickup_address"
         }
       ]
     },

@@ -31,7 +31,6 @@ import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { createService } from "./support/grpc.ts";
 import {
   FixedClock,
-  PICKUP_ADDRESS,
   SequentialIdGenerator,
   startOfDay,
 } from "./support/restaurants.ts";
@@ -214,7 +213,6 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
-          address: PICKUP_ADDRESS,
         }),
         context,
       );
@@ -228,7 +226,6 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
 
     const restaurantId = response.restaurant?.restaurantId ?? "";
     assert.ok(restaurantId.startsWith(run));
-    assert.equal(response.restaurant?.address, PICKUP_ADDRESS);
     assert.equal(response.version, 1n);
     assert.equal(await can("manage", restaurantId, owner.id), true);
     assert.equal(await can("manage", restaurantId, stranger.id), false);
@@ -284,7 +281,6 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
           create(RegisterRestaurantRequestSchema, {
             name: "Pho",
             ownerId: stranger.id,
-            address: PICKUP_ADDRESS,
           }),
           context,
         ),

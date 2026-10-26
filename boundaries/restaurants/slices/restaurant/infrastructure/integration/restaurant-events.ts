@@ -1,10 +1,9 @@
 // Mapper Domain Event → Integration Event of the Restaurant slice (ADR 25,
 // ADR 31). Only opening facts have a contract in
 // nomnom/restaurants/v1/events.proto (stream restaurants.v1.restaurant-events,
-// key = restaurant id). RestaurantRegistered, RestaurantRenamed and
-// RestaurantAddressChanged stay internal: no spec requires them outside the
-// context, and staff changes are not Domain Events at all (SpiceDB
-// relationships).
+// key = restaurant id). RestaurantRegistered and RestaurantRenamed stay
+// internal: no spec requires them outside the context, and staff changes are
+// not Domain Events at all (SpiceDB relationships).
 import {
   RestaurantClosedSchema,
   RestaurantOpenedSchema,

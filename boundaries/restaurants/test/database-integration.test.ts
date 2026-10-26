@@ -446,7 +446,6 @@ describe("MongoDB storage", () => {
       id: "r-1",
       name: "Pho House",
       ownerId: "owner",
-      address: "1 Pho Street",
       registeredAt: now,
     });
     restaurant.assignStaff("cook");
@@ -468,7 +467,6 @@ describe("MongoDB storage", () => {
       id: "r-1",
       name: "Copy",
       ownerId: "owner",
-      address: "x",
       registeredAt: now,
     });
     await assert.rejects(repository.save(duplicate), ConcurrencyConflictError);

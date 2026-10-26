@@ -40,7 +40,6 @@ func restaurantMessage(restaurant applications.Restaurant) *service.Restaurant {
 	return &service.Restaurant{
 		Id:              restaurant.ID,
 		Name:            restaurant.Name,
-		Address:         restaurant.Address,
 		AcceptingOrders: restaurant.IsOpen,
 	}
 }

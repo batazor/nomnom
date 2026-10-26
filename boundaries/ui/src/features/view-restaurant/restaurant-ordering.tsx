@@ -137,7 +137,6 @@ function RestaurantView({
         <m.h3 id="restaurant-title" layout="position">
           {restaurant.name}
         </m.h3>
-        <m.p layout="position">{restaurant.address}</m.p>
         {restaurant.acceptingOrders ? null : (
           <p className="restaurant-closed" role="status">
             {t("restaurant.closed")}

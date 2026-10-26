@@ -30,10 +30,9 @@ func (c *Catalog) Restaurant(ctx context.Context, restaurantID string) (applicat
 	}
 	restaurant := response.GetRestaurant()
 	return applications.Restaurant{
-		ID:      restaurant.GetRestaurantId(),
-		Name:    restaurant.GetName(),
-		Address: restaurant.GetAddress(),
-		IsOpen:  restaurant.GetIsOpen(),
+		ID:     restaurant.GetRestaurantId(),
+		Name:   restaurant.GetName(),
+		IsOpen: restaurant.GetIsOpen(),
 	}, nil
 }
 

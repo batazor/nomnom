@@ -148,7 +148,6 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
         id: restaurantId,
         name: "Pho House",
         ownerId: "owner",
-        address: "1 Pho Street",
         registeredAt: new Date(),
       }),
     );

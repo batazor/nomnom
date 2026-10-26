@@ -470,7 +470,6 @@ mod tests {
                 &operator(),
                 create_delivery::Input {
                     order_id: order.to_owned(),
-                    pickup_address: "Pickup street 1".to_owned(),
                 },
             )
             .expect("delivery created")

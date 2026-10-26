@@ -16,7 +16,6 @@ import {
 import {
   createRestaurantWorld,
   owner,
-  PICKUP_ADDRESS,
   startOfDay,
   stranger,
 } from "./support/restaurants.ts";
@@ -233,7 +232,6 @@ test("staff is part of the snapshot; legacy snapshots restore without staff", ()
     id: "r-1",
     name: "Pho",
     ownerId: owner.id,
-    address: PICKUP_ADDRESS,
     registeredAt: startOfDay,
   });
   assert.equal(restaurant.assignStaff("b"), true);

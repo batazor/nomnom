@@ -13,8 +13,6 @@ export type UpdateRestaurant = Readonly<{
   subject: Subject;
   restaurantId: string;
   name: string;
-  /** New pickup address; omitted keeps the current one. */
-  address?: string;
 }>;
 
 /** Changes the basic restaurant data; no business fact is published. */
@@ -45,12 +43,7 @@ export class UpdateRestaurantHandler {
       this.#restaurants,
       command.restaurantId,
     );
-    const now = this.#clock.now();
-    const renamed = restaurant.rename(command.name, now);
-    const relocated =
-      command.address !== undefined &&
-      restaurant.changeAddress(command.address, now);
-    if (!renamed && !relocated) {
+    if (!restaurant.rename(command.name, this.#clock.now())) {
       return {
         ...toRestaurantView(restaurant),
         version: restaurant.version,

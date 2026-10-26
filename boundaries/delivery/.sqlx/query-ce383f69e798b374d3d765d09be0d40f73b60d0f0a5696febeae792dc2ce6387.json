@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, order_id, courier_id, pickup_address, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at,\n                 expected_pickup_at, expected_delivered_at\n             FROM deliveries\n             WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)\n               AND NOT EXISTS (SELECT 1 FROM delivery_offers o\n                               WHERE o.delivery_id = deliveries.id AND o.state = $4)\n             ORDER BY COALESCE(created_at, 0), id LIMIT $5",
+  "query": "SELECT id, order_id, courier_id, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at,\n                 expected_pickup_at, expected_delivered_at\n             FROM deliveries\n             WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)\n               AND NOT EXISTS (SELECT 1 FROM delivery_offers o\n                               WHERE o.delivery_id = deliveries.id AND o.state = $4)\n             ORDER BY COALESCE(created_at, 0), id LIMIT $5",
   "describe": {
     "columns": [
       {
@@ -38,17 +38,6 @@
       },
       {
         "ordinal": 3,
-        "name": "pickup_address",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "deliveries",
-            "name": "pickup_address"
-          }
-        }
-      },
-      {
-        "ordinal": 4,
         "name": "state",
         "type_info": "Text",
         "origin": {
@@ -59,7 +48,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "failure_reason",
         "type_info": "Text",
         "origin": {
@@ -70,7 +59,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "failure_detail",
         "type_info": "Text",
         "origin": {
@@ -81,7 +70,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "authorization_revision",
         "type_info": "Text",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "version",
         "type_info": "Int8",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Int8",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "expected_pickup_at",
         "type_info": "Int8",
         "origin": {
@@ -125,7 +114,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "expected_delivered_at",
         "type_info": "Int8",
         "origin": {
@@ -150,7 +139,6 @@
       false,
       true,
       false,
-      false,
       true,
       true,
       true,
@@ -160,5 +148,5 @@
       true
     ]
   },
-  "hash": "c6935805e44ecb3164b6e383338aad20fb20e54466be38900f888fb1a7d711ac"
+  "hash": "ce383f69e798b374d3d765d09be0d40f73b60d0f0a5696febeae792dc2ce6387"
 }

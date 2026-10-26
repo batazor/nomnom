@@ -8,8 +8,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	courierapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/applications"
+	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	kitchenapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 )
 

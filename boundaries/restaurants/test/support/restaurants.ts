@@ -29,8 +29,6 @@ export const operator: Subject = { type: "user", id: "operator" };
 export const owner: Subject = { type: "user", id: "owner" };
 export const stranger: Subject = { type: "user", id: "stranger" };
 
-export const PICKUP_ADDRESS = "1 Pho Street, Hanoi";
-
 export const startOfDay = new Date(Date.UTC(2026, 9, 25, 9));
 
 /**
@@ -96,7 +94,6 @@ export const createRestaurantWorld = async (
       subject: operator,
       name,
       ownerId: owner.id,
-      address: PICKUP_ADDRESS,
     });
     if (state.open) {
       await open.execute({ subject: owner, restaurantId });

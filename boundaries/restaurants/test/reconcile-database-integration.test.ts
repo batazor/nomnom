@@ -150,7 +150,6 @@ describe("reconciliation against MongoDB and SpiceDB", () => {
       id: restaurantId,
       name: "Pho",
       ownerId: owner.id,
-      address: "1 Pho Street",
       registeredAt: startOfDay,
     });
     restaurant.assignStaff(cook);

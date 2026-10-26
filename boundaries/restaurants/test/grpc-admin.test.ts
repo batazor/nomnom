@@ -15,7 +15,6 @@ import {
   createRestaurantWorld,
   operator,
   owner,
-  PICKUP_ADDRESS,
   stranger,
 } from "./support/restaurants.ts";
 
@@ -72,7 +71,6 @@ const createWorld = async () => {
       create(RegisterRestaurantRequestSchema, {
         name: "Pho",
         ownerId: owner.id,
-        address: PICKUP_ADDRESS,
       }),
       context,
     );
@@ -86,14 +84,13 @@ const staffRequest = (restaurantId: string, userId = cook) => ({
   userId,
 });
 
-test("FR-446 RegisterRestaurant returns the restaurant with address and version", async () => {
+test("FR-446 RegisterRestaurant returns the restaurant and version", async () => {
   const { world, as } = await createWorld();
 
   const response = await as(operator).registerRestaurant(
     create(RegisterRestaurantRequestSchema, {
       name: "Pho",
       ownerId: owner.id,
-      address: PICKUP_ADDRESS,
     }),
     context,
   );
@@ -101,7 +98,6 @@ test("FR-446 RegisterRestaurant returns the restaurant with address and version"
   assert.notEqual(response.restaurant?.restaurantId, "");
   assert.equal(response.restaurant?.name, "Pho");
   assert.equal(response.restaurant?.isOpen, false);
-  assert.equal(response.restaurant?.address, PICKUP_ADDRESS);
   assert.equal(response.version, 1n);
   assert.deepEqual(world.authorization.owners, [
     { restaurantId: response.restaurant?.restaurantId, ownerId: owner.id },
@@ -117,7 +113,6 @@ test("RegisterRestaurant without platform#register_restaurant is PERMISSION_DENI
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
-          address: PICKUP_ADDRESS,
         }),
         context,
       ),
@@ -130,9 +125,8 @@ test("RegisterRestaurant with missing fields is INVALID_ARGUMENT", async () => {
   const { world, as } = await createWorld();
 
   for (const request of [
-    { name: " ", ownerId: owner.id, address: PICKUP_ADDRESS },
-    { name: "Pho", ownerId: "", address: PICKUP_ADDRESS },
-    { name: "Pho", ownerId: owner.id, address: "" },
+    { name: " ", ownerId: owner.id },
+    { name: "Pho", ownerId: "" },
   ]) {
     await assert.rejects(
       async () =>
@@ -324,7 +318,6 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
-          address: PICKUP_ADDRESS,
         }),
         context,
       ),
@@ -379,7 +372,6 @@ test("admin RPCs are UNAUTHENTICATED for an unverified caller", async () => {
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
-          address: PICKUP_ADDRESS,
         }),
         context,
       ),

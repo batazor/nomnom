@@ -24,7 +24,6 @@ import {
   resolverOf,
 } from "./support/grpc.ts";
 import { ordersService } from "./support/kitchen.ts";
-import { PICKUP_ADDRESS } from "./support/restaurants.ts";
 
 const receiveRequest = (
   restaurantId: string,
@@ -37,7 +36,7 @@ const receiveRequest = (
     items: [{ menuItemId, quantity: 2 }],
   });
 
-test("GetRestaurant maps the application view with the pickup address", async () => {
+test("GetRestaurant maps the application view", async () => {
   const { world, service } = await createWorld();
   const { restaurantId } = await world.givenKitchen("Pho Bar");
 
@@ -49,7 +48,6 @@ test("GetRestaurant maps the application view with the pickup address", async ()
   assert.equal(response.restaurant?.restaurantId, restaurantId);
   assert.equal(response.restaurant?.name, "Pho Bar");
   assert.equal(response.restaurant?.isOpen, true);
-  assert.equal(response.restaurant?.address, PICKUP_ADDRESS);
 });
 
 test("FR-493 GetMenu returns the public menu with prices and availability", async () => {

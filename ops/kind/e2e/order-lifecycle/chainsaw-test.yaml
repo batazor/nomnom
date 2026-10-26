@@ -114,7 +114,7 @@ spec:
             - {name: subject, value: $s.operator}
             - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant}
             - name: request
-              value: '{name: ("Kind e2e " + $s.run), ownerId: $s.owner, address: ("Kind e2e pickup " + $s.run)}'
+              value: '{name: ("Kind e2e " + $s.run), ownerId: $s.owner}'
             - {name: save, value: '{restaurant_id: .restaurant.restaurantId}'}
     - name: operator registers courier
       use:

@@ -122,7 +122,6 @@ func (x *GetCourierCurrentDeliveryResponse) GetCourierStatus() CourierStatus {
 type CreateDeliveryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	PickupAddress string                 `protobuf:"bytes,2,opt,name=pickup_address,json=pickupAddress,proto3" json:"pickup_address,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -160,13 +159,6 @@ func (*CreateDeliveryRequest) Descriptor() ([]byte, []int) {
 func (x *CreateDeliveryRequest) GetOrderId() string {
 	if x != nil {
 		return x.OrderId
-	}
-	return ""
-}
-
-func (x *CreateDeliveryRequest) GetPickupAddress() string {
-	if x != nil {
-		return x.PickupAddress
 	}
 	return ""
 }
@@ -1668,10 +1660,9 @@ const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"courier_id\x18\x01 \x01(\tR\tcourierId\"\xa7\x01\n" +
 	"!GetCourierCurrentDeliveryResponse\x128\n" +
 	"\bdelivery\x18\x01 \x01(\v2\x1c.nomnom.delivery.v1.DeliveryR\bdelivery\x12H\n" +
-	"\x0ecourier_status\x18\x02 \x01(\x0e2!.nomnom.delivery.v1.CourierStatusR\rcourierStatus\"p\n" +
+	"\x0ecourier_status\x18\x02 \x01(\x0e2!.nomnom.delivery.v1.CourierStatusR\rcourierStatus\"_\n" +
 	"\x15CreateDeliveryRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\x12%\n" +
-	"\x0epickup_address\x18\x02 \x01(\tR\rpickupAddressJ\x04\b\x03\x10\x04R\x0fdropoff_address\"S\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderIdJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\x0epickup_addressR\x0fdropoff_address\"S\n" +
 	"\x16CreateDeliveryResponse\x12\x1f\n" +
 	"\vdelivery_id\x18\x01 \x01(\tR\n" +
 	"deliveryId\x12\x18\n" +

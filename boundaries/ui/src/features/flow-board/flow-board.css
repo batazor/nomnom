@@ -412,27 +412,6 @@ button.board-card-head {
   background: var(--color-primary);
 }
 
-.board-route {
-  display: grid;
-  gap: var(--space-1);
-  margin: 0;
-  font-size: var(--font-size-sm);
-}
-
-.board-route div {
-  display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
-}
-
-.board-route dt {
-  color: var(--color-muted);
-}
-
-.board-route dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
 @property --step-filled {
   syntax: "<percentage>";
   inherits: false;

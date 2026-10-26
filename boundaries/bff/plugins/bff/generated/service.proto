@@ -450,12 +450,11 @@ message RestaurantConnection {
 
 // Restaurant as shown to a customer
 message Restaurant {
+  reserved 3;
   // Restaurant identifier
   string id = 1;
   // Display name
   string name = 2;
-  // Human-readable address
-  string address = 3;
   // Whether the restaurant accepts new orders now
   bool accepting_orders = 4;
   // Current menu, null if the restaurant has not published one
@@ -755,13 +754,11 @@ enum CourierAvailability {
 
 // Delivery offered to the courier, valid until expiresAt
 message DeliveryOffer {
-  reserved 4;
+  reserved 3 to 4;
   // Offer identifier
   string id = 1;
   // Delivery the offer is for
   string delivery_id = 2;
-  // Where to pick the order up
-  string pickup_address = 3;
   // Moment in RFC 3339 after which the offer cannot be accepted
   string expires_at = 5;
   // Customer order the delivery is for
@@ -779,15 +776,13 @@ enum CourierDeliveryStage {
 
 // Delivery the courier is currently carrying out
 message CourierDelivery {
-  reserved 5;
+  reserved 4 to 5;
   // Delivery identifier
   string id = 1;
   // Customer order identifier
   string order_id = 2;
   // Current stage
   CourierDeliveryStage stage = 3;
-  // Where to pick the order up
-  string pickup_address = 4;
 }
 
 // Command of the courier over the current delivery

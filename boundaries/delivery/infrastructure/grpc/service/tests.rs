@@ -123,7 +123,6 @@ async fn start_with_courier(courier: &str) -> Running {
 fn create_request(order: &str) -> CreateDeliveryRequest {
     CreateDeliveryRequest {
         order_id: order.to_owned(),
-        pickup_address: "Restaurant street 1".to_owned(),
     }
 }
 
@@ -199,15 +198,6 @@ async fn create_delivery_is_idempotent_by_order_id() {
     assert!(!repeat.created);
     assert_eq!(repeat.delivery_id, first.delivery_id);
 
-    let conflict = running
-        .client
-        .create_delivery(CreateDeliveryRequest {
-            pickup_address: "Other street 9".to_owned(),
-            ..create_request("order-1")
-        })
-        .await
-        .expect_err("different data");
-    assert_eq!(conflict.code(), tonic::Code::AlreadyExists);
     let invalid = running
         .client
         .create_delivery(create_request(" "))

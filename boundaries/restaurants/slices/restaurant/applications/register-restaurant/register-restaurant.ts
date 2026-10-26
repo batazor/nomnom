@@ -16,8 +16,6 @@ export type RegisterRestaurant = Readonly<{
   subject: Subject;
   name: string;
   ownerId: string;
-  /** Pickup address of Restaurant Orders; required. */
-  address: string;
 }>;
 
 export type RegisterRestaurantResult = RestaurantView &
@@ -55,7 +53,6 @@ export class RegisterRestaurantHandler {
       id: this.#ids.next(),
       name: command.name,
       ownerId: command.ownerId,
-      address: command.address,
       registeredAt: this.#clock.now(),
     });
     const revision = await this.#ownerRelationships.touchOwner({
