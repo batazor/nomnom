@@ -59,6 +59,11 @@ spec:
               value: /etc/nomnom/cdc
             - name: HEAP_OPTS
               value: -Xms128m -Xmx384m
+            # glibc по умолчанию держит до 8 malloc-арен на CPU: без CPU limit JVM видит все ядра
+            # узла, и ~110 потоков (JIT, GC, коннекторы) набирали >100 арен — ~200MB RSS вне heap,
+            # из-за чего pod уходил в OOMKilled на старте. Две арены на процесс достаточно для JVM.
+            - name: MALLOC_ARENA_MAX
+              value: "2"
           ports:
             - name: http
               containerPort: 8083

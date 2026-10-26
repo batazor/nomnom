@@ -29,4 +29,4 @@
 ## 5. Документация и проверка
 
 - [x] 5.1 README `bff`, `controlplane`, `ui`, `ops/kind` (доступ к API через публичный gateway вместо port-forward `svc/bff`), `tests/performance`; GLOSSARY control plane (Router Cell, маршрут Market вместо Placement Map).
-- [ ] 5.2 Проверки каждого сервиса, `openspec validate route-cells-at-public-gateway --strict`, прогон в kind.
+- [x] 5.2 Проверки каждого сервиса, `openspec validate route-cells-at-public-gateway --strict`, прогон в kind.
