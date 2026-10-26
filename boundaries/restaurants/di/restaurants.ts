@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { Http2Server } from "node:http2";
 
 import { type AwilixContainer, aliasTo, asFunction, asValue } from "awilix";
+import type { Valkey } from "iovalkey";
 import type { Db, MongoClient } from "mongodb";
 
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
@@ -32,6 +33,7 @@ import type {
   ServerConfig,
   SimulatorConfig,
   SpiceDbEnabledConfig,
+  ValkeyEnabledConfig,
 } from "../pkg/config/config.ts";
 import {
   createProcessContainer,
@@ -44,6 +46,7 @@ import {
 } from "../pkg/infrastructure/mongodb/outbox.ts";
 import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
+import { CacheMetrics } from "../pkg/infrastructure/valkey/read-cache.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
@@ -98,6 +101,9 @@ export type RestaurantsResources = Readonly<{
   kitchen: KitchenConfig;
   simulator: SimulatorConfig;
   mongo: MongoDbConnection;
+  valkeyConfig: ValkeyEnabledConfig;
+  /** Opened by cmd/restaurants; reads bypass the cache while it is down. */
+  valkey: Valkey;
   subjects: SubjectResolver;
   logger: Logger;
 }>;
@@ -111,6 +117,9 @@ export interface InfrastructureCradle {
   readonly simulatorConfig: SimulatorConfig;
   readonly mongoClient: MongoClient;
   readonly db: Db;
+  readonly valkeyConfig: ValkeyEnabledConfig;
+  readonly valkey: Valkey;
+  readonly cacheMetrics: CacheMetrics;
   readonly clock: Clock;
   readonly ids: IdGenerator;
   /** Random number in `[0, 1)` of the Demo Simulator. */
@@ -181,6 +190,9 @@ const infrastructureRegistrations = (
   simulatorConfig: asValue(resources.simulator),
   mongoClient: asValue(resources.mongo.client),
   db: asValue(resources.mongo.db),
+  valkeyConfig: asValue(resources.valkeyConfig),
+  valkey: asValue(resources.valkey),
+  cacheMetrics: asFunction(() => new CacheMetrics()).singleton(),
   clock: asValue<Clock>({ now: () => new Date() }),
   ids: asValue<IdGenerator>({ next: () => randomUUID() }),
   random: asValue(Math.random),

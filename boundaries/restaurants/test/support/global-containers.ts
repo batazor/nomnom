@@ -15,6 +15,7 @@ import {
 const MONGODB_IMAGE = "mongo:8.3.13";
 const KAFKA_IMAGE = "apache/kafka:4.4.0";
 const SPICEDB_IMAGE = "authzed/spicedb:v1.57.0";
+const VALKEY_IMAGE = "valkey/valkey:9.1.2-alpine3.24";
 
 /** Preshared key of the test SpiceDB (same as `make spicedb-dev`). */
 export const SPICEDB_PRESHARED_KEY = "devkey";
@@ -90,23 +91,34 @@ async function startSpiceDb(): Promise<StartedTestContainer> {
     .start();
 }
 
+/** Valkey of the catalog read cache (ADR 40) without persistence, as in kind. */
+async function startValkey(): Promise<StartedTestContainer> {
+  return new GenericContainer(VALKEY_IMAGE)
+    .withCommand(["valkey-server", "--save", "", "--appendonly", "no"])
+    .withExposedPorts(6379)
+    .withWaitStrategy(Wait.forLogMessage(/Ready to accept connections/))
+    .start();
+}
+
 /**
  * Global setup of `npm test`: one MongoDB replica set (transactions), one
- * KRaft Kafka broker and one SpiceDB for the whole run. Test files inherit
+ * KRaft Kafka broker, one SpiceDB and one Valkey for the whole run. Test files inherit
  * their addresses through the environment and read them with the accessors
  * below; each test world isolates itself by database, topic and ids.
  */
 export async function globalSetup(): Promise<void> {
   const kafkaPort = await freePort();
-  const [mongo, kafka, spicedb] = await Promise.all([
+  const [mongo, kafka, spicedb, valkey] = await Promise.all([
     startMongo(),
     startKafka(kafkaPort),
     startSpiceDb(),
+    startValkey(),
   ]);
-  started.push(mongo, kafka, spicedb);
+  started.push(mongo, kafka, spicedb, valkey);
   process.env.MONGODB_URI = `${mongo.getConnectionString()}/?directConnection=true`;
   process.env.KAFKA_BROKERS = `localhost:${kafkaPort}`;
   process.env.SPICEDB_ENDPOINT = `${spicedb.getHost()}:${spicedb.getMappedPort(50051)}`;
+  process.env.VALKEY_URL = `redis://${valkey.getHost()}:${valkey.getMappedPort(6379)}`;
 }
 
 export async function globalTeardown(): Promise<void> {
@@ -129,3 +141,6 @@ export const kafkaBrokers = (): string[] =>
 
 /** gRPC endpoint of the SpiceDB testcontainer. */
 export const spiceDbEndpoint = (): string => required("SPICEDB_ENDPOINT");
+
+/** `redis://` URL of the Valkey testcontainer. */
+export const valkeyUrl = (): string => required("VALKEY_URL");

@@ -66,7 +66,7 @@ spec:
         - protocol: TCP
           port: 50051
 ---
-# restaurants: своя MongoDB, Kafka.
+# restaurants: своя MongoDB, свой Valkey (кеш чтения каталога, ADR 40), Kafka.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -87,6 +87,17 @@ spec:
       ports:
         - protocol: TCP
           port: 27017
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: valkey
+              app.kubernetes.io/instance: restaurants
+      ports:
+        - protocol: TCP
+          port: 6379
     - to:
         - namespaceSelector:
             matchLabels:

@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 127; пар «метрика × сервис» со статусом «есть»: 140.
+Метрик в инвентаре: 129; пар «метрика × сервис» со статусом «есть»: 140.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -98,6 +98,17 @@ Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver в `r
 | `db_client_connection_create_time_seconds` | `db.client.connection.create_time` | histogram | `db_client_connection_pool_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | Установка соединения с handshake и auth. `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. `orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/postgres/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/postgres/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/postgres/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`. |
 | `db_client_connection_use_time_seconds` | `db.client.connection.use_time` | histogram | `db_client_connection_pool_name` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | От checkout до возврата соединения в пул. `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. `orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/postgres/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/postgres/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/postgres/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`. |
 | `nomnom_db_client_connection_pool_clears_total` | MongoDB CMAP `connectionPoolCleared` | counter | `db_client_connection_pool_name` | `restaurants`: ожидается | В semconv нет: драйвер пометил сервер недоступным и закрыл соединения его пула (failover, сетевой сбой). `restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`. |
+
+<a id="cache"></a>
+
+## Read cache (Valkey)
+
+ADR 40: cache-aside с TTL для GetRestaurant, GetMenu и ListRestaurants `restaurants` (`pkg/infrastructure/valkey`), без инвалидации. Ключи и restaurant id не labels. `bypass` — Valkey недоступен, чтение из MongoDB.
+
+| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
+| --- | --- | --- | --- | --- | --- |
+| `nomnom_cache_lookups_total` | `nomnom.cache.lookups` | counter | `nomnom_cache_name`, `nomnom_cache_result` | `restaurants`: ожидается | hit ratio = hit / (hit + miss); доля bypass — время без Valkey. |
+| `nomnom_cache_errors_total` | `nomnom.cache.errors` | counter | `nomnom_cache_name`, `nomnom_cache_operation` | `restaurants`: ожидается | — |
 
 <a id="watermill"></a>
 

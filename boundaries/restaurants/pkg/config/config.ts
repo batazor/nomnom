@@ -1,4 +1,5 @@
 import { loadEnvFile } from "node:process";
+import { loadValkeyConfig, type ValkeyConfig } from "./cache.ts";
 import {
   type KafkaConfig,
   loadKafkaConfig,
@@ -30,6 +31,7 @@ import {
   type ReconcilerConfig,
 } from "./workers.ts";
 
+export * from "./cache.ts";
 export * from "./connections.ts";
 export * from "./env.ts";
 export * from "./identity.ts";
@@ -60,6 +62,7 @@ export interface AppConfig {
   readonly identity: IdentityConfig;
   readonly spicedb: SpiceDbConfig;
   readonly mongodb: MongoDbConfig;
+  readonly valkey: ValkeyConfig;
   readonly reconciler: ReconcilerConfig;
   readonly kitchen: KitchenConfig;
   readonly kafka: KafkaConfig;
@@ -105,6 +108,7 @@ export function loadConfig(
     identity: loadIdentityConfig(environment),
     spicedb: loadSpiceDbConfig(environment),
     mongodb: loadMongoDbConfig(environment, options.process),
+    valkey: loadValkeyConfig(environment),
     reconciler: loadReconcilerConfig(environment),
     kitchen: loadKitchenConfig(environment),
     kafka: loadKafkaConfig(environment),

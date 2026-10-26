@@ -1,0 +1,26 @@
+# Метрики раздела cache инвентаря ops/grafana/inventory (ADR 40). Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.cache.lookups
+    type: metric
+    metric_name: nomnom.cache.lookups
+    stability: development
+    brief: "Cached reads by result: hit, miss (read from the source and stored) or bypass (Valkey unavailable)."
+    instrument: counter
+    unit: "{lookup}"
+    attributes:
+      - ref: nomnom.cache.name
+        requirement_level: required
+      - ref: nomnom.cache.result
+        requirement_level: required
+  - id: metric.nomnom.cache.errors
+    type: metric
+    metric_name: nomnom.cache.errors
+    stability: development
+    brief: "Failed Valkey commands of the read cache by operation."
+    instrument: counter
+    unit: "{error}"
+    attributes:
+      - ref: nomnom.cache.name
+        requirement_level: required
+      - ref: nomnom.cache.operation
+        requirement_level: required

@@ -90,7 +90,9 @@ make kind-down
 - Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) и identity ставит chart
   [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, PostgreSQL `orders`,
-  `payments`, `delivery` и MongoDB `restaurants` в `nomnom-data` (`emptyDir`). Secret DSN
+  `payments`, `delivery`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
+  [ADR 40](../../docs/adr/0040-application-caching-policy.md): без persistence, ACL-пользователь
+  `restaurants` с ключами `restaurants:*`, URL — Secret `restaurants-valkey`) в `nomnom-data` (`emptyDir`). Secret DSN
   кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`). Миграции
   каждый процесс применяет сам при старте ([ADR 38](../../docs/adr/0038-schema-migrations-at-process-startup.md)).
 

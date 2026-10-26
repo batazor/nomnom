@@ -2,6 +2,7 @@
 // the Outbox mapper of the Restaurant aggregate, handlers exposed through
 // transport and the relationship reconciler.
 import { type AwilixContainer, asFunction, asValue } from "awilix";
+import type { Valkey } from "iovalkey";
 import type { Db } from "mongodb";
 
 import type { RelationshipsClient } from "../../../infrastructure/spicedb/client.ts";
@@ -11,11 +12,13 @@ import type { Outbox } from "../../../pkg/application/outbox.ts";
 import type {
   ReconcilerConfig,
   SpiceDbEnabledConfig,
+  ValkeyEnabledConfig,
 } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/mongodb/outbox.ts";
 import type { MongoUnitOfWork } from "../../../pkg/infrastructure/mongodb/unit-of-work.ts";
 import type { VersionedCollection } from "../../../pkg/infrastructure/mongodb/versioned-collection.ts";
+import type { CacheMetrics } from "../../../pkg/infrastructure/valkey/read-cache.ts";
 import type { Logger } from "../../../pkg/telemetry/logger.ts";
 import type {
   OwnerRelationshipWriter,
@@ -30,6 +33,7 @@ import { ListRestaurantsHandler } from "../applications/list-restaurants/list-re
 import { OpenRestaurantHandler } from "../applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
+import { CachedRestaurantCatalog } from "../infrastructure/cache/restaurants.ts";
 import { restaurantEventMapper } from "../infrastructure/integration/restaurant-events.ts";
 import {
   createRestaurantCollection,
@@ -50,6 +54,10 @@ export interface RestaurantDependencies {
   readonly outbox: Outbox;
   /** ADR 36: the kitchen board shows the restaurant, so every save notifies it. */
   readonly kitchenChanges: RestaurantSaved;
+  /** ADR 40: Get Restaurant and List Restaurants are cached for `valkeyConfig.ttlMs`. */
+  readonly valkey: Valkey;
+  readonly valkeyConfig: ValkeyEnabledConfig;
+  readonly cacheMetrics: CacheMetrics;
   readonly restaurantAccessControl: RestaurantAccessControl;
   readonly ownerRelationships: OwnerRelationshipWriter;
   readonly staffRelationships: StaffRelationshipWriter;
@@ -76,6 +84,8 @@ export interface RestaurantCradle {
   readonly restaurants: MongoRestaurantRepository;
   readonly restaurantMemberships: MongoRestaurantMemberships;
   readonly restaurantCatalog: MongoRestaurantCatalog;
+  /** Get Restaurant and List Restaurants through the Valkey read cache (ADR 40). */
+  readonly cachedRestaurantCatalog: CachedRestaurantCatalog;
   readonly getRestaurant: GetRestaurantHandler;
   readonly listRestaurants: ListRestaurantsHandler;
   readonly listOwnedRestaurants: ListOwnedRestaurantsHandler;
@@ -109,13 +119,21 @@ export const registerRestaurant = (
       ({ restaurantCollection }: Cradle) =>
         new MongoRestaurantCatalog(restaurantCollection),
     ).singleton(),
+    cachedRestaurantCatalog: asFunction(
+      ({ restaurantCatalog, valkey, valkeyConfig, cacheMetrics }: Cradle) =>
+        new CachedRestaurantCatalog(restaurantCatalog, {
+          client: valkey,
+          ttlMs: valkeyConfig.ttlMs,
+          metrics: cacheMetrics,
+        }),
+    ).singleton(),
     getRestaurant: asFunction(
-      ({ restaurantCatalog }: Cradle) =>
-        new GetRestaurantHandler({ reader: restaurantCatalog }),
+      ({ cachedRestaurantCatalog }: Cradle) =>
+        new GetRestaurantHandler({ reader: cachedRestaurantCatalog }),
     ).singleton(),
     listRestaurants: asFunction(
-      ({ restaurantCatalog }: Cradle) =>
-        new ListRestaurantsHandler({ reader: restaurantCatalog }),
+      ({ cachedRestaurantCatalog }: Cradle) =>
+        new ListRestaurantsHandler({ reader: cachedRestaurantCatalog }),
     ).singleton(),
     listOwnedRestaurants: asFunction(
       ({ restaurantCatalog }: Cradle) =>

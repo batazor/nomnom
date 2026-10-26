@@ -1,0 +1,132 @@
+# Valkey restaurants тестового окружения (ADR 40): кеш чтения каталога, без persistence —
+# данные не переживают пересоздание Pod, после рестарта кеш заполняется заново из MongoDB.
+# default-пользователь выключен; ACL-пользователь restaurants видит только ключи restaurants:*.
+# Пароль — Secret valkey-restaurants (nomnom-data), URL приложения — Secret restaurants-valkey
+# (nomnom-restaurants); значения сохраняются между deploy.
+{{- $password := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "valkey-restaurants" "key" "password" "length" 48) }}
+{{- $host := "valkey-restaurants.nomnom-data.svc.cluster.local:6379" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: valkey-restaurants
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  password: {{ $password | b64enc }}
+  # INFO — ready check клиента, CLIENT SETNAME — имя соединения процесса.
+  users.acl: {{ printf "user default off\nuser restaurants on >%s ~restaurants:* resetchannels +@all -@admin -@dangerous +info +client|setname\n" $password | b64enc }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: restaurants-valkey
+  namespace: nomnom-restaurants
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  url: {{ printf "redis://restaurants:%s@%s" $password $host | b64enc }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey-restaurants
+  namespace: nomnom-data
+  labels:
+    app.kubernetes.io/name: valkey
+    app.kubernetes.io/instance: restaurants
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: valkey
+      app.kubernetes.io/instance: restaurants
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: valkey
+        app.kubernetes.io/instance: restaurants
+      annotations:
+        # Новый ACL применяется перезапуском: aclfile читается при старте.
+        checksum/acl: {{ $password | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: valkey
+          image: {{ .Values.images.valkey }}
+          # Кеш: без RDB и AOF; при нехватке памяти вытесняются давно не читанные ключи.
+          args:
+            - valkey-server
+            - --aclfile
+            - /etc/valkey/users.acl
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --maxmemory
+            - 64mb
+            - --maxmemory-policy
+            - allkeys-lru
+          ports:
+            - name: valkey
+              containerPort: 6379
+          # default выключен: проверка без пароля — TCP.
+          readinessProbe:
+            tcpSocket:
+              port: valkey
+          livenessProbe:
+            tcpSocket:
+              port: valkey
+          resources:
+            requests:
+              memory: 16Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: acl
+              mountPath: /etc/valkey
+              readOnly: true
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: acl
+          secret:
+            secretName: valkey-restaurants
+            items:
+              - key: users.acl
+                path: users.acl
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey-restaurants
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: valkey
+    app.kubernetes.io/instance: restaurants
+  ports:
+    - name: valkey
+      port: 6379
+      targetPort: valkey

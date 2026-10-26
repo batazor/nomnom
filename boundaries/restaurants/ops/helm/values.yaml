@@ -244,6 +244,21 @@ mongodb:
     # Одновременно устанавливаемые соединения: сглаживает шторм подключений после рестарта.
     maxConnecting: 2
 
+# Кеш чтения каталога (ADR 40, локальный ADR 3): GetRestaurant, GetMenu и ListRestaurants в Valkey
+# с TTL, без инвалидации. Нужен только API (release restaurants). Пока urlSecret.name пуст,
+# VALKEY__* не задаются и restaurants не стартует (VALKEY__URL обязателен). Недоступный Valkey
+# процесс не останавливает: чтения идут в MongoDB мимо кеша.
+valkey:
+  urlSecret:
+    # Существующий Secret с URL ACL-пользователя restaurants (ключи restaurants:*), например
+    # redis://restaurants:<password>@valkey-restaurants.nomnom-data.svc.cluster.local:6379
+    name: ""
+    key: "url"
+  # Deadline одной команды; истёк — чтение из MongoDB.
+  commandTimeout: "50ms"
+  # TTL записи: изменение каталога видно не позже чем через это время.
+  ttl: "1m"
+
 # ADR 37: Outbox restaurants доставляет Debezium (Kafka Connect) из change streams MongoDB.
 # Включается в одном release контекста (API): hook Job регистрирует коннектор
 # cdc.connector.name в cdc.connectUrl.

@@ -23,6 +23,7 @@ import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { rejectingSubjects } from "./support/grpc.ts";
 import { mongoUri } from "./support/mongodb.ts";
+import { offlineValkey, testValkeyConfig } from "./support/valkey.ts";
 
 const simulatorEnvironment = {
   SIMULATOR__INTERVAL: "5s",
@@ -54,6 +55,8 @@ const resourcesOf = (
     kitchen: config.kitchen,
     simulator: loadSimulatorConfig(simulatorEnvironment),
     mongo,
+    valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
+    valkey: offlineValkey(),
     subjects: rejectingSubjects,
     logger: silentLogger,
   };

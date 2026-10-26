@@ -6,6 +6,8 @@ images:
   spicedb: authzed/spicedb:v1.57.0@sha256:a170d372c9f6b921bb6849064df6ca3566dd5b174882c1a2c4300c2ae1d60efd
   postgres: postgres:18.6-alpine3.24@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
   mongodb: mongo:8.3.13@sha256:0e900a3364da37b76d642b73b0bba56bd4c6c509ab470cf700436fd866bee3ff
+  # ADR 40: кеш чтения каталога restaurants.
+  valkey: valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
   # Job публикации JWKS: только stdlib Python, Kubernetes API вызывается напрямую.
   python: python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
   # ADR 35: OIDC provider входа в браузере. Не последний релиз: v2.46.1 зависает на первом

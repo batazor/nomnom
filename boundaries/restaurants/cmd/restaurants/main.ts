@@ -11,6 +11,7 @@ import {
   loadSimulatorConfig,
 } from "../../pkg/config/config.ts";
 import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
+import { connectValkey } from "../../pkg/infrastructure/valkey/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";
@@ -41,6 +42,13 @@ if (!config.spicedb.enabled) {
     "SPICEDB__ENDPOINT is required: restaurants checks permissions in SpiceDB",
   );
 }
+// Valkey (ADR 40, local ADR 3) caches Get Restaurant and Get Menu. The URL is
+// required; an unreachable Valkey only makes reads bypass the cache.
+if (!config.valkey.enabled) {
+  throw new Error(
+    "VALKEY__URL is required: restaurants caches catalog reads in Valkey",
+  );
+}
 // Telemetry starts before the application (docs/cloud-native-runtime.md):
 // OTLP metrics and traces are exported only with OTEL_EXPORTER_OTLP_*.
 const telemetry = startTelemetry(SERVICE_NAME);
@@ -54,6 +62,10 @@ const subjects = await createSubjectResolver(
   { audit: identityLog.info },
 );
 const mongo = await connectMongoDb(config.mongodb);
+const valkey = connectValkey(config.valkey, {
+  connectionName: SERVICE_NAME,
+  logger: logger.child({ operation: "valkey" }),
+});
 const container = createRestaurantsContainer({
   server: config.server,
   spicedb: config.spicedb,
@@ -61,6 +73,8 @@ const container = createRestaurantsContainer({
   kitchen: config.kitchen,
   simulator,
   mongo,
+  valkeyConfig: config.valkey,
+  valkey: valkey.client,
   subjects,
   logger,
 });
@@ -86,6 +100,7 @@ try {
   // The container closes the SpiceDB client before MongoDB disconnects;
   // telemetry is flushed last, within its own deadline.
   await container.dispose();
+  await valkey.close();
   await mongo.close();
   await telemetry.shutdown(config.shutdown.telemetryFlushTimeoutMs);
 }

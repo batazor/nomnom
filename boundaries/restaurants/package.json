@@ -43,6 +43,7 @@
     "@opentelemetry/sdk-trace": "3.0.0",
     "awilix": "13.0.5",
     "decimal.js": "^10.6.0",
+    "iovalkey": "0.4.0",
     "jose": "6.2.13",
     "migrate-mongo": "14.0.7",
     "mongodb": "7.7.0",

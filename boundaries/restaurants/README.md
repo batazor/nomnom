@@ -308,7 +308,7 @@ MongoDB предлагается как основное логическое х
 
 Решение имеет статус Proposed в [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); коллекции, границы документов, validators, индексы, эволюция схемы и атомарность конкретизированы в локальном [ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md).
 
-Реализация: официальный драйвер `mongodb` без ODM. Общие части — `pkg/infrastructure/mongodb` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекция `outbox` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) в контракте CDC [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет; `cmd/restaurants` подключает mapper процесса, который по `aggregate_type` выбирает mappers слайсов `restaurant`, `menu` и `restaurantorder`), `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts` — запуск [migrate-mongo](https://github.com/seppevs/migrate-mongo) и шаг `ensureCollection`), адаптеры слайсов — `slices/<slice>/infrastructure/mongodb`, миграции — `infrastructure/mongodb/migrations/`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `simulator`, `outbox`, `inbox`, `migrations_changelog`, `migrations_lock`. Транзакции требуют replica set.
+Реализация: официальный драйвер `mongodb` без ODM. Общие части — `pkg/infrastructure/mongodb` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекция `outbox` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) в контракте CDC [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет; `cmd/restaurants` подключает mapper процесса, который по `aggregate_type` выбирает mappers слайсов `restaurant`, `menu` и `restaurantorder`), `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts` — запуск [migrate-mongo](https://github.com/seppevs/migrate-mongo) по наборам миграций и шаг `ensureCollection`, `migrations/` — миграции набора `pkg`), адаптеры слайсов — `slices/<slice>/infrastructure/mongodb`, миграции слайса — `slices/<slice>/infrastructure/mongodb/migrations/`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `simulator`, `outbox`, `inbox`, `migrations_changelog_<набор>`, `migrations_lock`. Транзакции требуют replica set.
 
 | Переменная | Значение | По умолчанию |
 | --- | --- | --- |
@@ -323,7 +323,13 @@ MongoDB предлагается как основное логическое х
 
 Connection pool — один `MongoClient` на процесс (`pkg/infrastructure/mongodb/client.ts`); драйвер держит пул на каждый сервер replica set, лимиты действуют на пул одного сервера и перекрывают одноимённые параметры URI. Default `MAX_POOL_SIZE` выбирает процесс (`loadConfig(env, { process })`); значение вне диапазона или нулевой таймаут (у драйвера 0 означает «без ограничения») останавливает старт. Метрики пула — CMAP events драйвера (`pool-metrics.ts`) по semconv `db.client.connection.*` (`count` по `state` idle | used, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`) с `db.client.connection.pool.name` = `<host:port>/<database>`, плюс `nomnom.db.client.connection.pool.clears` ([инвентарь](../../docs/observability/metric-inventory.md#db)); панели и alert rules пула — row Dependencies overview ([ops/grafana](ops/grafana/README.md)).
 
-Миграции встроены в приложение и выполняются библиотекой migrate-mongo ([ADR 39](../../docs/adr/0039-data-access-without-orm.md)): `restaurants` и `restaurants-consumer` при старте, до обслуживания, вызывают `migrateRestaurantsDatabase` своим `MongoClient` — применяются по порядку ещё не записанные в `migrations_changelog` файлы `infrastructure/mongodb/migrations/<NNNN>-<владелец>-<изменение>.ts` (владелец — слайс или `pkg`, чью коллекцию меняет файл), либо процесс пишет `nothing to migrate` и продолжает. Ошибка миграции останавливает процесс. Одновременный старт процессов сериализует lock migrate-mongo в `migrations_lock` (атомарный за счёт unique index, занятый lock ждётся, lock упавшего процесса удаляет TTL); миграции идемпотентны и применимы к базе прежнего мигратора ([локальный ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md#эволюция-схемы)). Изменение validator или индексов — новый файл миграции, применённые файлы не редактируются; отдельного шага migrate нет.
+Миграции встроены в приложение и выполняются библиотекой migrate-mongo ([ADR 39](../../docs/adr/0039-data-access-without-orm.md)): `restaurants` и `restaurants-consumer` при старте, до обслуживания, вызывают `migrateRestaurantsDatabase` своим `MongoClient`. Каждый слайс владеет своими миграциями: набор — каталог `<NNNN>-<изменение>.ts` (нумерация с 0001 в каждом наборе) со своим changelog `migrations_changelog_<набор>`; общие коллекции (Outbox, Inbox) и чистки всего сервиса — набор `pkg` в `pkg/infrastructure/mongodb/migrations/`. Наборы применяются в порядке списка `RESTAURANTS_MIGRATION_SETS` (`infrastructure/mongodb/migrate.ts`): `pkg`, `restaurant`, `menu`, `restaurantorder`, `simulator`; внутри набора — ещё не записанные в его changelog файлы по порядку имён. На актуальной базе процесс пишет `nothing to migrate` и продолжает. Ошибка миграции останавливает процесс. Одновременный старт процессов сериализует lock migrate-mongo в `migrations_lock`, захватываемый на каждый набор (атомарный за счёт unique index, занятый lock ждётся, lock упавшего процесса удаляет TTL); миграции идемпотентны и применимы к базе прежнего мигратора ([локальный ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md#эволюция-схемы)). Изменение validator или индексов — новый файл в наборе слайса-владельца, применённые файлы не редактируются; новый слайс с коллекциями добавляет свой набор в `RESTAURANTS_MIGRATION_SETS`; отдельного шага migrate нет.
+
+## Кеш чтения каталога: Valkey
+
+`GetRestaurant`, `GetMenu` и `ListRestaurants` читаются через cache-aside в Valkey с TTL ([ADR 40](../../docs/adr/0040-application-caching-policy.md), [локальный ADR 3](docs/adr/0003-catalog-read-cache-in-valkey.md)): ключи `restaurants:restaurant:<id>`, `restaurants:menu:<restaurantId>` и `restaurants:list:<open|all>:<limit>:<after>`, промах читает MongoDB и кладёт результат на `CACHE__TTL`. Записи кеш не инвалидируют: каталог меняется редко, изменение видно не позже чем через TTL. Общие части — `pkg/infrastructure/valkey` (клиент iovalkey и `ReadCache`), адаптеры слайсов — `slices/<slice>/infrastructure/cache`.
+
+`VALKEY__URL` (`redis://` ACL-пользователя `restaurants`, из Secret) обязателен для `restaurants`; `VALKEY__COMMAND_TIMEOUT` (50ms) и `CACHE__TTL` (1m) — с defaults. Недоступный Valkey процесс не останавливает: чтения идут в MongoDB (`nomnom.cache.lookups{nomnom_cache_result="bypass"}`). `restaurants-consumer` кеш не использует.
 
 ## Событийная интеграция
 
@@ -426,12 +432,14 @@ Change [`add-restaurants-order-placed-consumer`](../../openspec/changes/add-rest
 
 Требуется Node.js 22.6 или новее с поддержкой запуска TypeScript через type stripping.
 
-Нужны MongoDB replica set и SpiceDB. Локальный single-node replica set:
+Нужны MongoDB replica set, SpiceDB и Valkey. Локальный single-node replica set и Valkey:
 
 ```bash
 docker run -d --name restaurants-mongo -p 27017:27017 mongo:8 --replSet rs0
 docker exec restaurants-mongo mongosh --quiet --eval 'rs.initiate()'
 export MONGODB__URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true'
+docker run -d --name restaurants-valkey -p 6379:6379 valkey/valkey:9.1
+export VALKEY__URL='redis://localhost:6379'
 npm start  # мигрирует базу при старте
 # OrderPlaced → Restaurant Order (отдельный процесс, нужен Kafka):
 KAFKA__BROKERS=localhost:9092 npm run consumer

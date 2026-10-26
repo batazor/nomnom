@@ -143,6 +143,44 @@ Usage: {{ include "restaurants.mongodbEnv" (dict "context" $ "pool" .Values.mong
 {{- end }}
 
 {{/*
+Valkey (ADR 40, локальный ADR 3): кеш чтения каталога. Без urlSecret.name ничего не задаётся,
+и restaurants не стартует (VALKEY__URL обязателен); restaurants-consumer кеш не использует.
+*/}}
+{{- define "restaurants.valkeyEnv" -}}
+{{- with .Values.valkey }}
+{{- if .urlSecret.name }}
+- name: VALKEY__URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .urlSecret.name | quote }}
+      key: {{ .urlSecret.key | quote }}
+- name: VALKEY__COMMAND_TIMEOUT
+  value: {{ .commandTimeout | quote }}
+- name: CACHE__TTL
+  value: {{ .ttl | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Valkey: ключ Secret и длительности в формате приложения (pkg/config/cache.ts).
+*/}}
+{{- define "restaurants.validateValkey" -}}
+{{- with .Values.valkey -}}
+{{- if .urlSecret.name -}}
+{{- if not .urlSecret.key -}}
+{{- fail "valkey.urlSecret.key is required when valkey.urlSecret.name is set" -}}
+{{- end -}}
+{{- range $name, $value := dict "commandTimeout" .commandTimeout "ttl" .ttl -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m|h)$" (toString $value)) -}}
+{{- fail (printf "valkey.%s must be a positive duration like 50ms, 5s or 5m, got %q" $name (toString $value)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 MongoDB: имя базы, timeout и лимиты пула в формате приложения (pkg/config/connections.ts).
 */}}
 {{- define "restaurants.validateMongoDb" -}}

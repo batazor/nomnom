@@ -180,7 +180,7 @@ deploy:
         # Skaffold применяет rawYaml после helm, поэтому всё, что charts читают при старте,
         # создаётся здесь (ADR 34): namespaces и chart ../bootstrap — локальный CA и ключ BFF
         # (cert-manager), SpiceDB с bootstrap и preshared key (ADR 18), PostgreSQL orders,
-        # payments, delivery и MongoDB restaurants со случайными паролями, сохраняемыми между
+        # payments, delivery, MongoDB и Valkey restaurants со случайными паролями, сохраняемыми между
         # deploy (ADR 8, ADR 31), JWKS кластера, BFF и тестового identity provider (ADR 27,
         # ADR 32). --wait ждёт readiness хранилищ, затем hook Jobs инициализируют replica set
         # MongoDB и публикуют JWKS. --take-ownership принимает ресурсы, созданные до chart.

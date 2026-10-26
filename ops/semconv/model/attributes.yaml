@@ -20,6 +20,21 @@ groups:
         stability: development
         brief: "Authorization result."
         examples: ["allowed", "denied"]
+      - id: nomnom.cache.name
+        type: string
+        stability: development
+        brief: "Read cache of a context (ADR 40)."
+        examples: ["menu", "restaurant", "restaurant_list"]
+      - id: nomnom.cache.operation
+        type: string
+        stability: development
+        brief: "Valkey operation of the read cache that failed."
+        examples: ["get", "set"]
+      - id: nomnom.cache.result
+        type: string
+        stability: development
+        brief: "Result of a cached read: hit, miss or bypass (Valkey unavailable)."
+        examples: ["hit", "bypass"]
       - id: nomnom.compensation.step
         type: string
         stability: development

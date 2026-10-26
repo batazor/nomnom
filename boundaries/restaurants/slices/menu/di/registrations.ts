@@ -2,14 +2,17 @@
 // ports, the Outbox mapper of the Menu aggregate, the public Get Menu query
 // and the menu management commands served by gRPC.
 import { type AwilixContainer, asFunction, asValue } from "awilix";
+import type { Valkey } from "iovalkey";
 import type { Db } from "mongodb";
 
 import type { Clock } from "../../../pkg/application/clock.ts";
 import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
 import type { Outbox } from "../../../pkg/application/outbox.ts";
+import type { ValkeyEnabledConfig } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/mongodb/outbox.ts";
 import type { MongoUnitOfWork } from "../../../pkg/infrastructure/mongodb/unit-of-work.ts";
+import type { CacheMetrics } from "../../../pkg/infrastructure/valkey/read-cache.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { MenuAccessControl } from "../applications/access-control.ts";
 import { AddMenuItemHandler } from "../applications/add-menu-item/add-menu-item.ts";
@@ -18,6 +21,7 @@ import { GetMenuHandler } from "../applications/get-menu/get-menu.ts";
 import { SetMenuItemAvailabilityHandler } from "../applications/set-menu-item-availability/set-menu-item-availability.ts";
 import { UpdateMenuItemHandler } from "../applications/update-menu-item/update-menu-item.ts";
 import type { MenuRepository } from "../domains/menu/menu.ts";
+import { CachedMenuReader } from "../infrastructure/cache/menus.ts";
 import { menuEventMapper } from "../infrastructure/integration/menu-events.ts";
 import {
   createMenuCollection,
@@ -35,6 +39,10 @@ export interface MenuDependencies {
   readonly menuAccessControl: MenuAccessControl;
   /** Create Menu requires an existing restaurant (FR-211). */
   readonly restaurants: RestaurantRepository;
+  /** ADR 40: Get Menu is cached in Valkey for `valkeyConfig.ttlMs`. */
+  readonly valkey: Valkey;
+  readonly valkeyConfig: ValkeyEnabledConfig;
+  readonly cacheMetrics: CacheMetrics;
 }
 
 /** What the slice provides to the process and to other slices. */
@@ -62,9 +70,22 @@ export const registerMenu = (
         new MongoMenuRepository(createMenuCollection(db, unitOfWork)),
     ).singleton(),
     getMenu: asFunction(
-      ({ db, unitOfWork }: MenuDependencies) =>
+      ({
+        db,
+        unitOfWork,
+        valkey,
+        valkeyConfig,
+        cacheMetrics,
+      }: MenuDependencies) =>
         new GetMenuHandler({
-          reader: new MongoMenuReader(createMenuCollection(db, unitOfWork)),
+          reader: new CachedMenuReader(
+            new MongoMenuReader(createMenuCollection(db, unitOfWork)),
+            {
+              client: valkey,
+              ttlMs: valkeyConfig.ttlMs,
+              metrics: cacheMetrics,
+            },
+          ),
         }),
     ).singleton(),
     createMenu: asFunction(

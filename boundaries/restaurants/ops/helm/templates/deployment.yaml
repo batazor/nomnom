@@ -28,6 +28,7 @@ spec:
       {{- include "restaurants.validateIdentity" . }}
       {{- include "restaurants.validateSpiceDb" . }}
       {{- include "restaurants.validateMongoDb" . }}
+      {{- include "restaurants.validateValkey" . }}
       {{- include "restaurants.validateTelemetry" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
@@ -115,6 +116,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- include "restaurants.mongodbEnv" (dict "context" . "pool" .Values.mongodb.pool) | trim | nindent 12 }}
+            {{- include "restaurants.valkeyEnv" . | trim | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
