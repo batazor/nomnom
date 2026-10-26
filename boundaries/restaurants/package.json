@@ -12,7 +12,7 @@
     "start": "node cmd/restaurants/main.ts",
     "consumer": "node cmd/restaurants-consumer/main.ts",
     "typecheck": "tsc --project tsconfig.test.json",
-    "architecture": "node --test test/architecture.test.ts",
+    "architecture": "depcruise cmd di infrastructure pkg slices",
     "test": "node --test --test-global-setup=test/support/global-containers.ts test/*.test.ts"
   },
   "engines": {
@@ -20,9 +20,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
+    "@swc/core": "1.16.20",
     "@testcontainers/mongodb": "12.2.1",
     "@types/migrate-mongo": "14.0.0",
     "@types/node": "26.6.5",
+    "dependency-cruiser": "18.7.0",
     "testcontainers": "12.2.1",
     "typescript": "7.0.2"
   },

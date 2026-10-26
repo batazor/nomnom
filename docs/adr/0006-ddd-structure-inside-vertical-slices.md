@@ -152,13 +152,13 @@ Mapping пишется явным кодом рядом с adapter'ом или u
 
 | Контекст | Проверка | Запуск |
 | --- | --- | --- |
-| `orders` (Go) | `architecture_test.go`: граф пакетов `go list`; `domains` — только stdlib, `decimal` и домены; `vo` не импортирует свой агрегат; `applications` — только домены, use cases, `pkg/application`, `pkg/telemetry`; `pkg` не знает слайсов и процессов; `infrastructure` не импортирует `di` и `cmd`; generated code — только в adapters, composition root и пакете-владельце | `go test ./...`, `make check` |
-| `restaurants` (TypeScript) | `test/architecture.test.ts`: те же правила по import-спецификаторам исходников; `domains` — только `decimal.js`, Node built-ins и домены; `applications` — домены, use cases и `pkg/application` | `npm run architecture`, `npm run check`, `npm test` |
+| `orders` (Go) | depguard в `.golangci.yml`: `domains` — только stdlib, `decimal` и домены; `vo` — только stdlib и `decimal`; `applications` — только домены, use cases, `pkg/application`, `pkg/telemetry`; `pkg` не знает слайсов и процессов; `infrastructure` не импортирует `di` и `cmd`; generated code — только в adapters, composition root и пакете-владельце | `make lint`, `make check` |
+| `restaurants` (TypeScript) | dependency-cruiser в `.dependency-cruiser.cjs` (парсер swc: у TypeScript 7 нет compiler API): те же правила; `domains` — только `decimal.js`, Node built-ins и домены; `applications` — домены, use cases и `pkg/application`; неразрешённый импорт — ошибка, чтобы зависимость не выпала из проверки | `npm run architecture`, `npm run check` |
 | `payments` (Python) | import-linter в `pyproject.toml`: слои процесса и слайса, запрет фреймворков и драйверов в `slices` и `pkg.application` | `make imports`, `make check` |
 | `delivery` (Rust) | `tests/slice_boundaries.rs`: направление `delivery → courier` между слайсами | `cargo test`, `make check` |
 | `ui` | `scripts/check-boundaries.mjs`: браузерный код вызывает только публичный GraphQL API | `npm run lint` |
 
-Проверяются прямые импорты production-кода; test-support пакеты и тесты исключены. Allowlist внешних зависимостей слоя расширяется явно в проверке, когда у домена или use case появляется новая допустимая библиотека.
+Проверяются прямые импорты production-кода; тесты и test-support пакеты исключены. Allowlist слоя расширяется явно в конфиге, когда у домена или use case появляется новая допустимая библиотека. depguard сравнивает пакеты по префиксу пути, поэтому новый слайс `orders` дописывает свои `domains`, `applications` и `di` в правила.
 
 ## Consequences
 

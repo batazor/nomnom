@@ -1,0 +1,78 @@
+// Layer import rules of ADR 6: `npm run architecture`. TypeScript 7 has no
+// compiler API for dependency-cruiser, so sources are parsed by swc.
+/** @type {import("dependency-cruiser").IConfiguration} */
+module.exports = {
+  forbidden: [
+    {
+      name: "domains-depend-on-domains",
+      comment: "Domains depend only on domains, decimal.js and Node built-ins.",
+      severity: "error",
+      from: { path: "^slices/[^/]+/domains/" },
+      to: {
+        dependencyTypesNot: ["core"],
+        pathNot: "^(slices/[^/]+/domains/|node_modules/decimal\\.js/)",
+      },
+    },
+    {
+      name: "value-objects-without-aggregate",
+      comment: "Value objects do not import their aggregate.",
+      severity: "error",
+      from: { path: "^slices/[^/]+/domains/([^/]+)/vo/" },
+      to: {
+        path: "^slices/[^/]+/domains/$1/",
+        pathNot: "^slices/[^/]+/domains/$1/vo/",
+      },
+    },
+    {
+      name: "applications-without-adapters",
+      comment:
+        "Use cases depend only on domains, use cases and pkg/application.",
+      severity: "error",
+      from: { path: "^slices/[^/]+/applications/" },
+      to: {
+        dependencyTypesNot: ["core"],
+        pathNot: "^(slices/[^/]+/(domains|applications)/|pkg/application/)",
+      },
+    },
+    {
+      name: "shared-packages-without-slices",
+      comment: "Shared packages do not import slices or processes.",
+      severity: "error",
+      from: { path: "^pkg/" },
+      to: { path: "^(slices|infrastructure|di|cmd)/" },
+    },
+    {
+      name: "infrastructure-without-composition-root",
+      comment: "Adapters do not import the composition root.",
+      severity: "error",
+      from: { path: "^(infrastructure|slices/[^/]+/infrastructure)/" },
+      to: { path: "^(di|cmd|pkg/di|slices/[^/]+/di)/" },
+    },
+    {
+      name: "generated-code-in-adapters",
+      comment:
+        "Generated code is imported only by adapters and the composition root (ADR 7).",
+      severity: "error",
+      from: {
+        pathNot:
+          "^(infrastructure|slices/[^/]+/infrastructure|di|slices/[^/]+/di|cmd)/",
+      },
+      to: { path: "/gen/" },
+    },
+    {
+      name: "resolvable-imports",
+      comment: "An unresolved import would hide a dependency from the rules.",
+      severity: "error",
+      from: {},
+      to: { couldNotResolve: true },
+    },
+  ],
+  options: {
+    parser: "swc",
+    doNotFollow: { path: "node_modules" },
+    enhancedResolveOptions: {
+      exportsFields: ["exports"],
+      conditionNames: ["import", "types", "node", "default"],
+    },
+  },
+};

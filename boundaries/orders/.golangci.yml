@@ -5,6 +5,87 @@ run:
 
 linters:
   default: standard
+  enable:
+    - depguard
+  settings:
+    # Направление импортов слоёв ADR 6. Пакеты сравниваются по префиксу пути,
+    # поэтому новый слайс дописывает сюда свои domains, applications и di.
+    # Тесты и test-support пакеты (ordertest, repositorytest) не проверяются.
+    depguard:
+      rules:
+        domains:
+          list-mode: strict
+          files:
+            - "**/slices/*/domains/**"
+            - "!$test"
+            - "!**/ordertest/**"
+          allow:
+            - $gostd
+            - github.com/shopspring/decimal
+            - nomnom/orders/slices/order/domains
+            - nomnom/orders/slices/fulfillment/domains
+        value-objects:
+          list-mode: strict
+          files:
+            - "**/slices/*/domains/*/vo/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - github.com/shopspring/decimal
+        applications:
+          list-mode: strict
+          files:
+            - "**/slices/*/applications/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - nomnom/orders/pkg/application
+            - nomnom/orders/pkg/telemetry
+            - nomnom/orders/slices/order/domains
+            - nomnom/orders/slices/fulfillment/domains
+            - nomnom/orders/slices/order/applications
+            - nomnom/orders/slices/fulfillment/applications
+            - nomnom/orders/slices/simulator/applications
+        shared-packages:
+          files:
+            - "**/orders/pkg/**"
+            - "!$test"
+          deny:
+            - pkg: nomnom/orders/slices
+              desc: pkg не знает о слайсах
+            - pkg: nomnom/orders/infrastructure
+              desc: pkg не зависит от adapters процесса
+            - pkg: nomnom/orders/di
+              desc: pkg не зависит от composition root
+            - pkg: nomnom/orders/cmd
+              desc: pkg не зависит от процессов
+        infrastructure:
+          files:
+            - "**/orders/infrastructure/**"
+            - "**/slices/*/infrastructure/**"
+            - "!$test"
+            - "!**/repositorytest/**"
+          deny:
+            - pkg: nomnom/orders/di
+              desc: adapters не зависят от composition root
+            - pkg: nomnom/orders/slices/order/di
+              desc: adapters не зависят от composition root
+            - pkg: nomnom/orders/slices/fulfillment/di
+              desc: adapters не зависят от composition root
+            - pkg: nomnom/orders/slices/simulator/di
+              desc: adapters не зависят от composition root
+            - pkg: nomnom/orders/cmd
+              desc: adapters не зависят от процессов
+        generated-code:
+          files:
+            - "**/orders/pkg/**"
+            - "!**/orders/pkg/gateway/**"
+            - "!$test"
+          deny:
+            - pkg: nomnom/orders/pkg/gateway/gen
+              desc: generated code импортируют только adapters и composition root (ADR 7)
+            - pkg: nomnom/orders/infrastructure/grpc/gen
+              desc: generated code импортируют только adapters и composition root (ADR 7)
 
 formatters:
   enable:
