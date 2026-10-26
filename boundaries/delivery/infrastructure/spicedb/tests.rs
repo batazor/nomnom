@@ -183,7 +183,7 @@ fn spicedb_error_fails_closed_as_unavailable() {
         CourierAuthorization::check(
             &authorization,
             &worker(),
-            CourierPermission::RegisterCourier,
+            CourierPermission::ManageCouriers,
             &CourierResource::Platform,
         ),
         Err(AuthorizationError::Unavailable(_))

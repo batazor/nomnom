@@ -360,9 +360,18 @@ fn object_id_grammar() {
 
 #[test]
 fn courier_reconciler_reads_registered_couriers() {
-    use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository};
+    use crate::slices::courier::domains::courier::{
+        Courier, CourierId, CourierName, CourierRepository,
+    };
     let store = Arc::new(TestStore::new());
-    CourierRepository::add(&*store, &Courier::new(CourierId::new("courier-1"))).expect("add");
+    CourierRepository::add(
+        &*store,
+        &Courier::new(
+            CourierId::new("courier-1"),
+            CourierName::new("Timur").expect("courier name"),
+        ),
+    )
+    .expect("add");
     let graph = Arc::new(FakeGraph::with([courier_self("courier-ghost")]));
     let mut reconciler = Reconciler::couriers(
         Arc::clone(&graph) as Arc<dyn RelationshipGraph>,

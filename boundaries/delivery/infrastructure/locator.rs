@@ -75,12 +75,19 @@ mod tests {
     use super::*;
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::{
-        Courier, CourierRepository, CourierStatus, Location,
+        Courier, CourierName, CourierRepository, CourierStatus, Location,
     };
 
     fn courier(store: &TestStore, id: &str, status: CourierStatus, positioned: bool) {
-        CourierRepository::add(store, &Courier::restore(CourierId::new(id), status))
-            .expect("courier");
+        CourierRepository::add(
+            store,
+            &Courier::restore(
+                CourierId::new(id),
+                CourierName::new("Timur").expect("courier name"),
+                status,
+            ),
+        )
+        .expect("courier");
         if positioned {
             store
                 .record(&CourierPosition {

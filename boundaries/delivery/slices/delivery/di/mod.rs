@@ -18,6 +18,7 @@ use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDelive
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     self, CourierCurrentDeliveryReadModel,
 };
+use crate::slices::delivery::applications::get_courier_pool::{self, CourierPoolReadModel};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     self, PendingDeliveryOffersReadModel,
 };
@@ -63,12 +64,20 @@ impl<T> TransactionalStore for T where
 
 /// Read models запросов слайса.
 pub trait DeliveryReadModels:
-    PendingDeliveryOffersReadModel + CourierCurrentDeliveryReadModel + Send + Sync
+    PendingDeliveryOffersReadModel
+    + CourierCurrentDeliveryReadModel
+    + CourierPoolReadModel
+    + Send
+    + Sync
 {
 }
 
 impl<T> DeliveryReadModels for T where
-    T: PendingDeliveryOffersReadModel + CourierCurrentDeliveryReadModel + Send + Sync
+    T: PendingDeliveryOffersReadModel
+        + CourierCurrentDeliveryReadModel
+        + CourierPoolReadModel
+        + Send
+        + Sync
 {
 }
 
@@ -133,6 +142,11 @@ pub trait DeliveryUseCases: Interface {
         subject: &Subject,
         input: get_courier_current_delivery::Input,
     ) -> Result<get_courier_current_delivery::Output, DeliveryApplicationError>;
+
+    fn get_courier_pool(
+        &self,
+        subject: &Subject,
+    ) -> Result<get_courier_pool::Output, DeliveryApplicationError>;
 
     fn accept_delivery_offer(
         &self,
@@ -288,6 +302,18 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             current_deliveries: self.ports.read_models(),
         }
         .execute(subject, input)
+    }
+
+    fn get_courier_pool(
+        &self,
+        subject: &Subject,
+    ) -> Result<get_courier_pool::Output, DeliveryApplicationError> {
+        get_courier_pool::Handler {
+            authorization: self.ports.courier_authorization(),
+            pool: self.ports.read_models(),
+            clock: self.ports.clock(),
+        }
+        .execute(subject)
     }
 
     fn accept_delivery_offer(

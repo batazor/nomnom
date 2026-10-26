@@ -99,7 +99,7 @@ fn authorization(couriers: &[&str], orders: &[&str]) -> StaticAuthorization {
     let authorization = StaticAuthorization::grants_only();
     authorization.grant_courier(
         Subject::User(OPERATOR.to_owned()),
-        CourierPermission::RegisterCourier,
+        CourierPermission::ManageCouriers,
         CourierResource::Platform,
     );
     let worker = Subject::Service(ORDERS_WORKER.to_owned());
@@ -197,6 +197,7 @@ impl Api {
                 OPERATOR,
                 RegisterCourierRequest {
                     courier_id: courier.to_owned(),
+                    name: "Timur".to_owned(),
                 },
             ))
             .await
@@ -506,6 +507,7 @@ async fn operator_registers_a_courier_for_the_user() {
             OPERATOR,
             RegisterCourierRequest {
                 courier_id: "user-7".to_owned(),
+                name: "Timur".to_owned(),
             },
         ))
         .await
@@ -517,6 +519,7 @@ async fn operator_registers_a_courier_for_the_user() {
         RegisterCourierResponse {
             courier_id: "user-7".to_owned(),
             status: CourierStatus::Available as i32,
+            name: "Timur".to_owned(),
         }
     );
     // courier:user-7#self@user:user-7 grants courier#act to the user.
@@ -530,6 +533,7 @@ async fn operator_registers_a_courier_for_the_user() {
             OPERATOR,
             RegisterCourierRequest {
                 courier_id: "user-7".to_owned(),
+                name: "Timur".to_owned(),
             },
         ))
         .await
@@ -549,6 +553,7 @@ async fn non_operator_cannot_register_a_courier() {
             "user-7",
             RegisterCourierRequest {
                 courier_id: "user-7".to_owned(),
+                name: "Timur".to_owned(),
             },
         ))
         .await

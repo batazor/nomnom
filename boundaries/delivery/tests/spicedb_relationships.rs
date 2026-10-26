@@ -29,7 +29,9 @@ use delivery::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };
 use delivery::slices::courier::applications::register_courier;
-use delivery::slices::courier::domains::courier::{Courier, CourierId, CourierRepository};
+use delivery::slices::courier::domains::courier::{
+    Courier, CourierId, CourierName, CourierRepository,
+};
 use delivery::slices::delivery::applications::authorization::{
     DeliveryAuthorization, DeliveryPermission, DeliveryResource,
 };
@@ -163,8 +165,14 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -
     let delivery = unique(&format!("{tag}-delivery"));
     let order = unique(&format!("{tag}-order"));
     let offer = unique("offer");
-    CourierRepository::add(&*store, &Courier::new(CourierId::new(courier.as_str())))
-        .expect("seed courier");
+    CourierRepository::add(
+        &*store,
+        &Courier::new(
+            CourierId::new(courier.as_str()),
+            CourierName::new("Timur").expect("courier name"),
+        ),
+    )
+    .expect("seed courier");
     DeliveryRepository::add(
         &*store,
         &Delivery::new(
@@ -244,6 +252,7 @@ fn registered_courier_acts_for_itself() {
         &user("operator-1"),
         register_courier::Input {
             courier_id: courier.clone(),
+            name: "Timur".to_owned(),
         },
     )
     .expect("courier registered");

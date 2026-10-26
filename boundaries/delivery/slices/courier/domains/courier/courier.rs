@@ -3,6 +3,8 @@ use std::fmt::{Display, Formatter};
 
 use crate::pkg::persistence::AuthorizationRevision;
 
+use super::CourierName;
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct CourierId(String);
 
@@ -39,6 +41,11 @@ pub enum CourierError {
     Busy,
     /// The courier holds no assignment that could be released.
     NotBusy,
+    /// The courier is on line (available or busy) and cannot retire.
+    OnLine,
+    /// The courier left the Courier Pool and takes no work any more.
+    Retired,
+    AlreadyRetired,
 }
 
 impl Display for CourierError {
@@ -50,6 +57,9 @@ impl Display for CourierError {
             Self::Unavailable => formatter.write_str("courier is unavailable"),
             Self::Busy => formatter.write_str("courier is busy with a delivery"),
             Self::NotBusy => formatter.write_str("courier has no assignment to release"),
+            Self::OnLine => formatter.write_str("courier is on line"),
+            Self::Retired => formatter.write_str("courier is retired"),
+            Self::AlreadyRetired => formatter.write_str("courier is already retired"),
         }
     }
 }
@@ -59,7 +69,11 @@ impl Error for CourierError {}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Courier {
     id: CourierId,
+    name: CourierName,
     status: CourierStatus,
+    /// Set once the courier left the Courier Pool; the courier stays
+    /// unavailable for good.
+    retired_at_epoch_seconds: Option<i64>,
     /// Technical field: revision of the last `courier:<id>#self` write.
     authorization_revision: Option<AuthorizationRevision>,
     /// Technical field: optimistic concurrency version of the stored snapshot.
@@ -68,10 +82,12 @@ pub struct Courier {
 
 impl Courier {
     #[must_use]
-    pub fn new(id: CourierId) -> Self {
+    pub fn new(id: CourierId, name: CourierName) -> Self {
         Self {
             id,
+            name,
             status: CourierStatus::Available,
+            retired_at_epoch_seconds: None,
             authorization_revision: None,
             version: 0,
         }
@@ -80,13 +96,22 @@ impl Courier {
     /// Restores a courier from a snapshot; old snapshots carry no
     /// authorization revision (see [`Self::with_authorization_revision`]).
     #[must_use]
-    pub fn restore(id: CourierId, status: CourierStatus) -> Self {
+    pub fn restore(id: CourierId, name: CourierName, status: CourierStatus) -> Self {
         Self {
             id,
+            name,
             status,
+            retired_at_epoch_seconds: None,
             authorization_revision: None,
             version: 0,
         }
+    }
+
+    /// Snapshot field `retired_at`: the moment the courier left the pool.
+    #[must_use]
+    pub fn with_retired_at(mut self, retired_at_epoch_seconds: Option<i64>) -> Self {
+        self.retired_at_epoch_seconds = retired_at_epoch_seconds;
+        self
     }
 
     /// Snapshot field `version` (optimistic concurrency): the stored version
@@ -148,6 +173,9 @@ impl Courier {
 
     /// Returns an unavailable courier to the pool of new assignments.
     pub fn mark_available(&mut self) -> Result<(), CourierError> {
+        if self.is_retired() {
+            return Err(CourierError::Retired);
+        }
         match self.status {
             CourierStatus::Unavailable => {
                 self.status = CourierStatus::Available;
@@ -170,9 +198,38 @@ impl Courier {
         }
     }
 
+    /// Leaves the Courier Pool for good; only off line (FR-619).
+    pub fn retire(&mut self, at_epoch_seconds: i64) -> Result<(), CourierError> {
+        if self.is_retired() {
+            return Err(CourierError::AlreadyRetired);
+        }
+        match self.status {
+            CourierStatus::Unavailable => {
+                self.retired_at_epoch_seconds = Some(at_epoch_seconds);
+                Ok(())
+            }
+            CourierStatus::Available | CourierStatus::Busy => Err(CourierError::OnLine),
+        }
+    }
+
     #[must_use]
     pub fn id(&self) -> &CourierId {
         &self.id
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &CourierName {
+        &self.name
+    }
+
+    #[must_use]
+    pub const fn retired_at_epoch_seconds(&self) -> Option<i64> {
+        self.retired_at_epoch_seconds
+    }
+
+    #[must_use]
+    pub const fn is_retired(&self) -> bool {
+        self.retired_at_epoch_seconds.is_some()
     }
 
     #[must_use]
@@ -185,9 +242,13 @@ impl Courier {
 mod tests {
     use super::*;
 
+    fn name() -> CourierName {
+        CourierName::new("Timur").expect("courier name")
+    }
+
     #[test]
     fn courier_availability_changes_strictly() {
-        let mut courier = Courier::new(CourierId::new("courier-1"));
+        let mut courier = Courier::new(CourierId::new("courier-1"), name());
 
         courier.mark_busy().expect("available courier becomes busy");
         assert_eq!(courier.status(), CourierStatus::Busy);
@@ -200,7 +261,7 @@ mod tests {
 
     #[test]
     fn courier_goes_off_and_on_shift_strictly() {
-        let mut courier = Courier::new(CourierId::new("courier-1"));
+        let mut courier = Courier::new(CourierId::new("courier-1"), name());
 
         assert_eq!(
             courier.mark_available(),
@@ -226,11 +287,31 @@ mod tests {
 
     #[test]
     fn busy_courier_availability_cannot_change() {
-        let mut courier = Courier::restore(CourierId::new("courier-1"), CourierStatus::Busy);
+        let mut courier =
+            Courier::restore(CourierId::new("courier-1"), name(), CourierStatus::Busy);
 
         assert_eq!(courier.mark_unavailable(), Err(CourierError::Busy));
         assert_eq!(courier.mark_available(), Err(CourierError::Busy));
         assert_eq!(courier.ensure_available(), Err(CourierError::AlreadyBusy));
         assert_eq!(courier.status(), CourierStatus::Busy);
+    }
+
+    /// AC-788, AC-789
+    #[test]
+    fn only_a_courier_off_line_retires_for_good() {
+        let mut courier = Courier::new(CourierId::new("courier-1"), name());
+
+        assert_eq!(courier.retire(10), Err(CourierError::OnLine));
+        courier.mark_busy().expect("assigned");
+        assert_eq!(courier.retire(10), Err(CourierError::OnLine));
+        courier.release().expect("released");
+        courier.mark_unavailable().expect("off line");
+        courier.retire(10).expect("retired");
+
+        assert!(courier.is_retired());
+        assert_eq!(courier.retired_at_epoch_seconds(), Some(10));
+        assert_eq!(courier.retire(20), Err(CourierError::AlreadyRetired));
+        assert_eq!(courier.mark_available(), Err(CourierError::Retired));
+        assert_eq!(courier.ensure_available(), Err(CourierError::Unavailable));
     }
 }

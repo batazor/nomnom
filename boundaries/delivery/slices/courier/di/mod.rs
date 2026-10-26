@@ -11,7 +11,9 @@ use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::{self, CourierLocationStore};
-use crate::slices::courier::applications::{register_courier, set_courier_availability};
+use crate::slices::courier::applications::{
+    register_courier, retire_courier, set_courier_availability,
+};
 use crate::slices::courier::domains::courier::CourierRepository;
 
 /// Внешние порты слайса. Порты не требуют `Send + Sync`, поэтому shaku
@@ -39,6 +41,12 @@ pub trait CourierUseCases: Interface {
         subject: &Subject,
         input: set_courier_availability::Input,
     ) -> Result<set_courier_availability::Output, CourierApplicationError>;
+
+    fn retire_courier(
+        &self,
+        subject: &Subject,
+        input: retire_courier::Input,
+    ) -> Result<retire_courier::Output, CourierApplicationError>;
 
     fn update_courier_location(
         &self,
@@ -76,6 +84,19 @@ impl CourierUseCases for CourierUseCasesImpl {
         set_courier_availability::Handler {
             authorization: self.ports.authorization(),
             couriers: self.ports.couriers(),
+        }
+        .execute(subject, input)
+    }
+
+    fn retire_courier(
+        &self,
+        subject: &Subject,
+        input: retire_courier::Input,
+    ) -> Result<retire_courier::Output, CourierApplicationError> {
+        retire_courier::Handler {
+            authorization: self.ports.authorization(),
+            couriers: self.ports.couriers(),
+            clock: self.ports.clock(),
         }
         .execute(subject, input)
     }

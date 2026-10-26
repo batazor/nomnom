@@ -498,6 +498,7 @@ mod tests {
                 &operator(),
                 register_courier::Input {
                     courier_id: "courier-1".to_owned(),
+                    name: "Timur".to_owned(),
                 },
             )
             .expect("courier registered");
@@ -551,6 +552,7 @@ mod tests {
                 &operator(),
                 register_courier::Input {
                     courier_id: "courier-1".to_owned(),
+                    name: "Timur".to_owned(),
                 },
             )
             .expect("courier registered");

@@ -464,12 +464,18 @@ spec:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
             method: GetCourierCurrentDelivery
+        # Courier Pool диспетчера (platform#manage_couriers): линия и загрузка курьеров.
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: GetCourierPool
       backendRefs:
         - name: delivery
           namespace: nomnom-delivery
           port: 8083
 ---
-# Администрирование курьеров: регистрация оператором платформы (platform#register_courier).
+# Courier Pool (platform#manage_couriers: оператор или диспетчер): регистрация и выбытие
+# курьеров; их вызывает BFF (flow-board), в kind — Job demo-seed и fixture e2e-driver.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -485,6 +491,10 @@ spec:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
             method: RegisterCourier
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: RetireCourier
       backendRefs:
         - name: delivery
           namespace: nomnom-delivery

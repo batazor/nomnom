@@ -78,7 +78,7 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::infrastructure::repository::test_support::TestStore;
-    use crate::slices::courier::domains::courier::{Courier, CourierRepository};
+    use crate::slices::courier::domains::courier::{Courier, CourierName, CourierRepository};
     use crate::slices::delivery::domains::delivery::{Delivery, DeliveryRepository};
 
     fn subject() -> Subject {
@@ -99,7 +99,11 @@ mod tests {
         let store = TestStore::new();
         CourierRepository::add(
             &store,
-            &Courier::restore(CourierId::new("courier-1"), CourierStatus::Busy),
+            &Courier::restore(
+                CourierId::new("courier-1"),
+                CourierName::new("Timur").expect("courier name"),
+                CourierStatus::Busy,
+            ),
         )
         .expect("seed courier");
         store

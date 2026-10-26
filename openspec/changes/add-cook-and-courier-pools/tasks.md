@@ -13,15 +13,15 @@
 
 ## 3. delivery
 
-- [ ] 3.1 `Courier.name`, Register Courier с именем, миграция `couriers` (`FR-301`, `AC-302`, `AC-787`).
-- [ ] 3.2 Retire Courier, Get Courier Pool, `manage_couriers` для Set Courier Availability, Change Notification пула (`FR-619`–`FR-621`, `AC-788`–`AC-792`).
+- [x] 3.1 `Courier.name`, Register Courier с именем, миграция `couriers` (`FR-301`, `AC-302`, `AC-787`).
+- [x] 3.2 Retire Courier, Get Courier Pool, `manage_couriers` для Set Courier Availability, Change Notification пула, удаление `register_courier`, seed курьеров с именами и позициями, имя курьера e2e (`FR-619`–`FR-621`, `AC-788`–`AC-792`).
 
 ## 4. BFF и UI
 
-- [ ] 4.1 BFF: перегенерировать клиентов, `cookPool`, `courierPool`, `courierPoolChanged`, mutations, имена (`FR-622`, `FR-623`, `FR-625`, `FR-626`, `AC-793`–`AC-795`, `AC-799`).
+- [ ] 4.1 BFF: перегенерировать клиентов, `cookPool`, `courierPool`, `courierPoolChanged`, mutations, имена; read имени курьера для покупателя заказа в `delivery` (`FR-622`, `FR-623`, `FR-625`, `FR-626`, `AC-793`–`AC-795`, `AC-799`).
 - [ ] 4.2 UI: пулы в колонках flow-board, имена на карточках и в отслеживании, моки, тесты (`FR-624`, `FR-627`, `AC-796`–`AC-798`, `AC-800`).
 
 ## 5. Demo и проверка
 
-- [ ] 5.1 `seed.json` и `seed.py`: повара каждого ресторана (сделано в 2.2 вместе с наймом повара в e2e order-lifecycle), курьеры с именами и позициями, имя demo-курьера.
+- [x] 5.1 `seed.json` и `seed.py`: повара каждого ресторана (2.2), курьеры с именами и позициями (3.2).
 - [ ] 5.2 Проверки каждого сервиса, `openspec validate add-cook-and-courier-pools --strict`, прогон в kind.

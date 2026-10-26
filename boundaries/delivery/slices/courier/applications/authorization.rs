@@ -4,7 +4,9 @@ use crate::slices::courier::domains::courier::CourierId;
 /// Permissions checked by the `courier` slice use cases.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CourierPermission {
-    RegisterCourier,
+    /// Courier Pool of the platform: register, retire and read couriers, and
+    /// change the line of any courier (operator or dispatcher, FR-620).
+    ManageCouriers,
     SetCourierAvailability,
     UpdateCourierLocation,
     ViewCourierCurrentDelivery,
@@ -13,7 +15,7 @@ pub enum CourierPermission {
 /// Resource of a courier permission check.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CourierResource {
-    /// Platform-wide operations such as registering a new courier.
+    /// Platform-wide operations such as managing the Courier Pool.
     Platform,
     /// Operations on behalf of, or about, a concrete courier.
     Courier(CourierId),

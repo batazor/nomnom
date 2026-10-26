@@ -2,7 +2,7 @@
 //! domain mapping of [`super::Store`].
 
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
-use crate::slices::courier::domains::courier::{Courier, CourierId, CourierStatus};
+use crate::slices::courier::domains::courier::{Courier, CourierId, CourierName, CourierStatus};
 use crate::slices::delivery::domains::delivery::{
     CompoundState, Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer, DeliveryOfferId,
     ExpectedTime, OfferState, OrderId, State,
@@ -16,6 +16,10 @@ pub(super) fn courier_status(status: CourierStatus) -> &'static str {
         CourierStatus::Busy => "busy",
         CourierStatus::Unavailable => "unavailable",
     }
+}
+
+pub(super) fn courier_name(value: &str) -> Result<CourierName, RepositoryError> {
+    CourierName::new(value).map_err(|error| corrupt("courier name", error))
 }
 
 pub(super) fn parse_courier_status(value: &str) -> Result<CourierStatus, RepositoryError> {
@@ -83,16 +87,21 @@ pub(super) fn parse_offer_state(value: &str) -> Result<OfferState, RepositoryErr
 /// Row of `couriers` as `sqlx::query_as!` reads it.
 pub(super) struct CourierRow {
     pub(super) id: String,
+    pub(super) name: String,
     pub(super) status: String,
+    pub(super) retired_at: Option<i64>,
     pub(super) authorization_revision: Option<String>,
     pub(super) version: i64,
 }
 
 pub(super) fn courier_from_row(row: CourierRow) -> Result<Courier, RepositoryError> {
     let status = parse_courier_status(&row.status)?;
-    Ok(Courier::restore(CourierId::new(row.id), status)
-        .with_authorization_revision(row.authorization_revision.map(AuthorizationRevision::new))
-        .with_version(domain_version(row.version)?))
+    Ok(
+        Courier::restore(CourierId::new(row.id), courier_name(&row.name)?, status)
+            .with_retired_at(row.retired_at)
+            .with_authorization_revision(row.authorization_revision.map(AuthorizationRevision::new))
+            .with_version(domain_version(row.version)?),
+    )
 }
 
 /// Row of `deliveries` as `sqlx::query_as!` reads it.

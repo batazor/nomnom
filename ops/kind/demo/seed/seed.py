@@ -133,11 +133,13 @@ def seed_cooks(driver: Driver, owner: str, restaurant_id: str, names: list) -> N
             print(f"  cook {name} is on line")
 
 
-def seed_courier(driver: Driver, seed: dict) -> None:
-    courier = seed["courier"]
+def seed_courier(driver: Driver, seed: dict, courier: dict) -> None:
+    """Courier Pool (FR-301): курьер с именем и позицией на линии. Первый — demo-пользователь,
+    остальные действуют только через Simulator."""
     try:
-        driver.call("nomnom.delivery", seed["operator"], DELIVERY + "RegisterCourier", {"courierId": courier["id"]})
-        print(f"registered courier {courier['id']}")
+        driver.call("nomnom.delivery", seed["operator"], DELIVERY + "RegisterCourier",
+                    {"courierId": courier["id"], "name": courier["name"]})
+        print(f"registered courier {courier['name']} ({courier['id']})")
     except CallError as error:
         if error.code != ALREADY_EXISTS:
             raise
@@ -160,8 +162,9 @@ def main() -> None:
     driver = Driver(key_file, os.environ["ASSERTION_KEY_ID"])
     existing = owned_restaurants(driver, seed["owner"])
     restaurants = [seed_restaurant(driver, seed, spec, existing) for spec in seed["restaurants"]]
-    seed_courier(driver, seed)
-    print(f"demo seed: {len(restaurants)} restaurants, courier {seed['courier']['id']}")
+    for courier in seed["couriers"]:
+        seed_courier(driver, seed, courier)
+    print(f"demo seed: {len(restaurants)} restaurants, {len(seed['couriers'])} couriers")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,9 @@ use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDelive
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
+use crate::slices::delivery::applications::get_courier_pool::{
+    CourierPoolReadModel, PoolCourierView,
+};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
@@ -337,6 +340,19 @@ impl PendingDeliveryOffersReadModel for TestStore {
         courier_id: &CourierId,
     ) -> Result<Vec<AvailableDeliveryOfferView>, RepositoryError> {
         self.available()?.pending_offers_for(courier_id)
+    }
+}
+
+impl CourierPoolReadModel for TestStore {
+    fn pool_couriers(
+        &self,
+        now_epoch_seconds: i64,
+    ) -> Result<Vec<PoolCourierView>, RepositoryError> {
+        self.available()?.pool_couriers(now_epoch_seconds)
+    }
+
+    fn waiting_deliveries(&self) -> Result<u64, RepositoryError> {
+        self.available()?.waiting_deliveries()
     }
 }
 

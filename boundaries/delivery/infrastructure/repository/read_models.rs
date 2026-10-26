@@ -13,6 +13,9 @@ use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDelive
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
+use crate::slices::delivery::applications::get_courier_pool::{
+    CourierPoolReadModel, PoolCourierView,
+};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
@@ -22,8 +25,8 @@ use crate::slices::delivery::domains::delivery::{
 };
 
 use super::rows::{
-    DeliveryRow, active_assignment_states, courier_status, delivery_from_row, delivery_state,
-    offer_state, parse_delivery_state,
+    DeliveryRow, active_assignment_states, courier_name, courier_status, delivery_from_row,
+    delivery_state, offer_state, parse_courier_status, parse_delivery_state,
 };
 use super::{Store, corrupt, domain_version, limit, storage_error};
 
@@ -48,6 +51,49 @@ impl CourierCurrentDeliveryReadModel for Store {
             })
         })
         .transpose()
+    }
+}
+
+impl CourierPoolReadModel for Store {
+    fn pool_couriers(
+        &self,
+        now_epoch_seconds: i64,
+    ) -> Result<Vec<PoolCourierView>, RepositoryError> {
+        sql!(self, "SELECT", |connection| sqlx::query!(
+            r#"SELECT c.id, c.name, c.status,
+                 (SELECT o.id FROM delivery_offers o
+                  WHERE o.courier_id = c.id AND o.state = $1 AND o.expires_at > $2
+                  ORDER BY o.position LIMIT 1) AS "pending_offer_id?",
+                 (SELECT d.id FROM deliveries d
+                  WHERE d.courier_id = c.id AND d.state = ANY($3)
+                  ORDER BY d.id LIMIT 1) AS "active_delivery_id?"
+             FROM couriers c WHERE c.retired_at IS NULL
+             ORDER BY c.name, c.id"#,
+            offer_state(OfferState::Pending),
+            now_epoch_seconds,
+            &active_assignment_states()[..] as &[&str]
+        )
+        .fetch_all(connection))?
+        .into_iter()
+        .map(|row| {
+            Ok(PoolCourierView {
+                courier_id: CourierId::new(row.id),
+                name: courier_name(&row.name)?,
+                status: parse_courier_status(&row.status)?,
+                pending_offer_id: row.pending_offer_id.map(DeliveryOfferId::new),
+                active_delivery_id: row.active_delivery_id.map(DeliveryId::new),
+            })
+        })
+        .collect()
+    }
+
+    fn waiting_deliveries(&self) -> Result<u64, RepositoryError> {
+        let count = sql!(self, "SELECT", |connection| sqlx::query_scalar!(
+            r#"SELECT count(*) AS "count!" FROM deliveries WHERE state = $1"#,
+            delivery_state(State::Waiting)
+        )
+        .fetch_one(connection))?;
+        u64::try_from(count).map_err(|error| corrupt("waiting deliveries count", error))
     }
 }
 

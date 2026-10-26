@@ -267,6 +267,9 @@ pub struct RegisterCourierRequest {
     /// User id of the courier: that user gets courier#act on courier:<courier_id>.
     #[prost(string, tag="1")]
     pub courier_id: ::prost::alloc::string::String,
+    /// Shown on the flow board and to the customer of the courier's order.
+    #[prost(string, tag="2")]
+    pub name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RegisterCourierResponse {
@@ -274,6 +277,57 @@ pub struct RegisterCourierResponse {
     pub courier_id: ::prost::alloc::string::String,
     #[prost(enumeration="CourierStatus", tag="2")]
     pub status: i32,
+    #[prost(string, tag="3")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RetireCourierRequest {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RetireCourierResponse {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    /// false when the courier had already retired.
+    #[prost(bool, tag="2")]
+    pub changed: bool,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetCourierPoolRequest {
+}
+/// Courier of the Courier Pool.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PoolCourier {
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(enumeration="CourierStatus", tag="3")]
+    pub status: i32,
+    /// Pending, not yet expired Delivery Offer; empty without one.
+    #[prost(string, tag="4")]
+    pub pending_offer_id: ::prost::alloc::string::String,
+    /// Assigned or picked up Delivery; empty without one.
+    #[prost(string, tag="5")]
+    pub active_delivery_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetCourierPoolResponse {
+    /// Couriers that are not retired.
+    #[prost(int64, tag="1")]
+    pub size: i64,
+    /// Available and busy couriers.
+    #[prost(int64, tag="2")]
+    pub on_line: i64,
+    #[prost(int64, tag="3")]
+    pub busy: i64,
+    /// Deliveries waiting for a courier: the backlog of the pool.
+    #[prost(int64, tag="4")]
+    pub waiting: i64,
+    /// By name, then by id.
+    #[prost(message, repeated, tag="5")]
+    pub couriers: ::prost::alloc::vec::Vec<PoolCourier>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateCourierLocationRequest {

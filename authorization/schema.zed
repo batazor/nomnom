@@ -32,7 +32,6 @@ definition platform {
 	/** delivery: create, find courier, offer, reassign, replan, cancel. */
 	permission coordinate_delivery = fulfillment
 	permission register_restaurant = operator
-	permission register_courier = operator
 	/** delivery: Courier Pool — register, retire, read, line of any courier. */
 	permission manage_couriers = operator + dispatcher
 	/** delivery: dispatcher actions on any delivery (Report Delivery Failure). */

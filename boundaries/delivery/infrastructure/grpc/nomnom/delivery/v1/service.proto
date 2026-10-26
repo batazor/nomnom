@@ -16,11 +16,22 @@ service DeliveryService {
   rpc ReplanDelivery(ReplanDeliveryRequest) returns (ReplanDeliveryResponse);
   rpc CancelDelivery(CancelDeliveryRequest) returns (CancelDeliveryResponse);
 
-  // Courier administration by a platform operator (platform register_courier).
+  // Courier Pool of the platform (FR-301, FR-619, FR-621): all require
+  // platform#manage_couriers (operator or dispatcher). RegisterCourier needs a
+  // name of 1..64 characters after trim (INVALID_ARGUMENT otherwise); a known
+  // id, retired or not, is ALREADY_EXISTS. RetireCourier takes a courier off
+  // line out of the pool for good: available or busy is FAILED_PRECONDITION,
+  // a repeat succeeds with changed = false. GetCourierPool returns the load
+  // and every courier that is not retired. Every courier, offer and Delivery
+  // write pushes courierPoolChanged (ADR 36).
   rpc RegisterCourier(RegisterCourierRequest) returns (RegisterCourierResponse);
+  rpc RetireCourier(RetireCourierRequest) returns (RetireCourierResponse);
+  rpc GetCourierPool(GetCourierPoolRequest) returns (GetCourierPoolResponse);
 
   // Courier RPCs: the subject needs courier#act on courier_id; the domain
   // rejects actions on a delivery or offer of another courier.
+  // SetCourierAvailability is also allowed with platform#manage_couriers
+  // (FR-620); a retired courier cannot become available (FAILED_PRECONDITION).
   rpc UpdateCourierLocation(UpdateCourierLocationRequest) returns (UpdateCourierLocationResponse);
   rpc SetCourierAvailability(SetCourierAvailabilityRequest) returns (SetCourierAvailabilityResponse);
   rpc ListAvailableDeliveryOffers(ListAvailableDeliveryOffersRequest) returns (ListAvailableDeliveryOffersResponse);
@@ -85,11 +96,49 @@ message CancelDeliveryResponse {
 message RegisterCourierRequest {
   // User id of the courier: that user gets courier#act on courier:<courier_id>.
   string courier_id = 1;
+  // Shown on the flow board and to the customer of the courier's order.
+  string name = 2;
 }
 
 message RegisterCourierResponse {
   string courier_id = 1;
   CourierStatus status = 2;
+  string name = 3;
+}
+
+message RetireCourierRequest {
+  string courier_id = 1;
+}
+
+message RetireCourierResponse {
+  string courier_id = 1;
+  // false when the courier had already retired.
+  bool changed = 2;
+}
+
+message GetCourierPoolRequest {}
+
+// Courier of the Courier Pool.
+message PoolCourier {
+  string courier_id = 1;
+  string name = 2;
+  CourierStatus status = 3;
+  // Pending, not yet expired Delivery Offer; empty without one.
+  string pending_offer_id = 4;
+  // Assigned or picked up Delivery; empty without one.
+  string active_delivery_id = 5;
+}
+
+message GetCourierPoolResponse {
+  // Couriers that are not retired.
+  int64 size = 1;
+  // Available and busy couriers.
+  int64 on_line = 2;
+  int64 busy = 3;
+  // Deliveries waiting for a courier: the backlog of the pool.
+  int64 waiting = 4;
+  // By name, then by id.
+  repeated PoolCourier couriers = 5;
 }
 
 message UpdateCourierLocationRequest {

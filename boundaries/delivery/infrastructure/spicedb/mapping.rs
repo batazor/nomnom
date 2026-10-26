@@ -81,10 +81,10 @@ pub fn courier_check(
     resource: &CourierResource,
 ) -> Option<PermissionCheck> {
     match (permission, resource) {
-        (CourierPermission::RegisterCourier, CourierResource::Platform) => {
-            Some(PermissionCheck::platform("register_courier", subject))
+        (CourierPermission::ManageCouriers, CourierResource::Platform) => {
+            Some(PermissionCheck::platform("manage_couriers", subject))
         }
-        (CourierPermission::RegisterCourier, CourierResource::Courier(_))
+        (CourierPermission::ManageCouriers, CourierResource::Courier(_))
         | (_, CourierResource::Platform) => None,
         (_, CourierResource::Courier(id)) => {
             Some(PermissionCheck::new("courier", id.as_str(), "act", subject))
@@ -195,14 +195,14 @@ mod tests {
     }
 
     #[test]
-    fn register_courier_on_platform_checks_platform_capability() {
+    fn manage_couriers_on_platform_checks_platform_capability() {
         assert_eq!(
             rendered(courier_check(
                 &user(),
-                CourierPermission::RegisterCourier,
+                CourierPermission::ManageCouriers,
                 &CourierResource::Platform
             )),
-            Some("platform:nomnom#register_courier@user:user-1".to_owned())
+            Some("platform:nomnom#manage_couriers@user:user-1".to_owned())
         );
     }
 
@@ -230,7 +230,7 @@ mod tests {
         assert_eq!(
             courier_check(
                 &user(),
-                CourierPermission::RegisterCourier,
+                CourierPermission::ManageCouriers,
                 &CourierResource::Courier(CourierId::new("courier-1"))
             ),
             None

@@ -11,6 +11,7 @@ pub mod error;
 pub mod expire_delivery_offers;
 pub mod find_courier;
 pub mod get_courier_current_delivery;
+pub mod get_courier_pool;
 pub mod list_available_delivery_offers;
 pub mod offer_delivery;
 pub mod offers_of_delivery;

@@ -19,7 +19,7 @@ use delivery::infrastructure::repository::Store;
 use delivery::pkg::application::Subject;
 use delivery::pkg::persistence::RepositoryError;
 use delivery::slices::courier::domains::courier::{
-    Courier, CourierId, CourierRepository, CourierStatus,
+    Courier, CourierId, CourierName, CourierRepository, CourierStatus,
 };
 use delivery::slices::delivery::applications::accept_delivery_offer::{Handler, Input};
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
@@ -66,7 +66,14 @@ fn seed(store: &Store) -> Seed {
         offer_id: DeliveryOfferId::new(unique("offer")),
         courier_id: CourierId::new(unique("courier")),
     };
-    CourierRepository::add(store, &Courier::new(seed.courier_id.clone())).expect("courier");
+    CourierRepository::add(
+        store,
+        &Courier::new(
+            seed.courier_id.clone(),
+            CourierName::new("Timur").expect("courier name"),
+        ),
+    )
+    .expect("courier");
     DeliveryRepository::add(
         store,
         &Delivery::new(seed.delivery_id.clone(), OrderId::new(unique("order"))),
@@ -209,7 +216,14 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
     let store = store();
     let store = Arc::new(store);
     let courier_id = CourierId::new(unique("courier"));
-    CourierRepository::add(&*store, &Courier::new(courier_id.clone())).expect("courier");
+    CourierRepository::add(
+        &*store,
+        &Courier::new(
+            courier_id.clone(),
+            CourierName::new("Timur").expect("courier name"),
+        ),
+    )
+    .expect("courier");
     // A creation time far in the past, unique per run, puts this delivery
     // first in the batch after `start`.
     let nanos = SystemTime::now()

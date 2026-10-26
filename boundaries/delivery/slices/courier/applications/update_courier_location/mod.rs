@@ -80,7 +80,9 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::{ManualClock, StaticAuthorization};
     use crate::infrastructure::repository::test_support::TestStore;
-    use crate::slices::courier::domains::courier::{Courier, CourierStatus, LocationError};
+    use crate::slices::courier::domains::courier::{
+        Courier, CourierName, CourierStatus, LocationError,
+    };
 
     fn subject() -> Subject {
         Subject::User("courier-1".to_owned())
@@ -99,6 +101,7 @@ mod tests {
         store
             .add(&Courier::restore(
                 CourierId::new("courier-1"),
+                CourierName::new("Timur").expect("courier name"),
                 CourierStatus::Unavailable,
             ))
             .expect("seed courier");

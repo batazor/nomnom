@@ -226,8 +226,8 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `restaurants-v1-administration` | `RegisterRestaurant`, `AssignStaff`, `RevokeStaff` | `commands` |
 | `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
 | `delivery-v1-courier` | `UpdateCourierLocation`, `SetCourierAvailability`, `AcceptDeliveryOffer`, `RejectDeliveryOffer`, `ConfirmPickup`, `ConfirmDelivery`, `ReportDeliveryFailure` | `commands` |
-| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery` | `reads` |
-| `delivery-v1-administration` | `RegisterCourier` | `commands` |
+| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool` | `reads` |
+| `delivery-v1-administration` | `RegisterCourier`, `RetireCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
 
 `reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и

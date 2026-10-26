@@ -480,6 +480,7 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
             &operator(),
             register_courier::Input {
                 courier_id: "courier-1".to_owned(),
+                name: "Timur".to_owned(),
             },
         )
         .expect("courier registered");

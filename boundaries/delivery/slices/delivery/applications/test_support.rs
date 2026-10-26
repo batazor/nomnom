@@ -8,7 +8,7 @@ use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::application::{RelationshipWriteError, Subject};
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{
-    Courier, CourierId, CourierRepository, CourierStatus,
+    Courier, CourierId, CourierName, CourierRepository, CourierStatus,
 };
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
@@ -55,8 +55,15 @@ impl World {
     }
 
     pub fn courier(&self, id: &str, status: CourierStatus) {
-        CourierRepository::add(&self.store, &Courier::restore(CourierId::new(id), status))
-            .expect("seed courier");
+        CourierRepository::add(
+            &self.store,
+            &Courier::restore(
+                CourierId::new(id),
+                CourierName::new("Timur").expect("courier name"),
+                status,
+            ),
+        )
+        .expect("seed courier");
     }
 
     pub fn waiting_delivery(&self, id: &str) -> Delivery {

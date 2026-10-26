@@ -1,27 +1,30 @@
-//! Register Courier: a platform operator creates a `Courier` that is
-//! available for new assignments. Before the courier is persisted,
+//! Register Courier: an operator or dispatcher of the Courier Pool creates a
+//! named `Courier` that is available for new assignments (FR-301). Before the courier is persisted,
 //! `courier:<id>#self@user:<id>` is written to the authorization graph; a
 //! failed write aborts the registration (fail closed).
 
 use crate::pkg::application::Subject;
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{
-    Courier, CourierId, CourierRepository, CourierStatus,
+    Courier, CourierId, CourierName, CourierRepository, CourierStatus,
 };
 
 use super::authorization::{CourierAuthorization, CourierPermission, CourierResource};
 use super::courier_id;
-use super::error::CourierApplicationError;
+use super::error::{CourierApplicationError, InvalidCourierRequest};
 use super::relationships::CourierRelationshipWriter;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Input {
     pub courier_id: String,
+    /// Shown on the flow board and to the customer of the courier's order.
+    pub name: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Output {
     pub courier_id: CourierId,
+    pub name: CourierName,
     pub status: CourierStatus,
 }
 
@@ -38,9 +41,12 @@ impl Handler<'_> {
         input: Input,
     ) -> Result<Output, CourierApplicationError> {
         let courier_id = courier_id(&input.courier_id)?;
+        let name = CourierName::new(&input.name).map_err(|error| {
+            CourierApplicationError::InvalidRequest(InvalidCourierRequest::Name(error))
+        })?;
         self.authorization.check(
             subject,
-            CourierPermission::RegisterCourier,
+            CourierPermission::ManageCouriers,
             &CourierResource::Platform,
         )?;
 
@@ -51,12 +57,13 @@ impl Handler<'_> {
         }
         // A repeated registration was rejected above and writes nothing.
         let revision = self.relationships.register_courier(&courier_id)?;
-        let mut courier = Courier::new(courier_id);
+        let mut courier = Courier::new(courier_id, name);
         // FR-447: checks of the courier are at least as fresh as this write.
         courier.record_authorization_revision(revision);
         match self.couriers.add(&courier) {
             Ok(()) => Ok(Output {
                 courier_id: courier.id().clone(),
+                name: courier.name().clone(),
                 status: courier.status(),
             }),
             Err(RepositoryError::Conflict) => Err(
@@ -76,7 +83,7 @@ mod tests {
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::pkg::application::RelationshipWriteError;
     use crate::pkg::persistence::AuthorizationRevision;
-    use crate::slices::courier::applications::error::InvalidCourierRequest;
+    use crate::slices::courier::domains::courier::CourierNameError;
 
     fn operator() -> Subject {
         Subject::User("operator-1".to_owned())
@@ -85,7 +92,12 @@ mod tests {
     fn input(courier_id: &str) -> Input {
         Input {
             courier_id: courier_id.to_owned(),
+            name: " Timur ".to_owned(),
         }
+    }
+
+    fn timur() -> CourierName {
+        CourierName::new("Timur").expect("courier name")
     }
 
     /// AC-302
@@ -105,15 +117,16 @@ mod tests {
             .expect("courier registered");
 
         assert_eq!(output.courier_id, CourierId::new("courier-1"));
+        assert_eq!(output.name, timur());
         assert_eq!(output.status, CourierStatus::Available);
-        let mut expected = Courier::new(CourierId::new("courier-1"));
+        let mut expected = Courier::new(CourierId::new("courier-1"), timur());
         expected.record_authorization_revision(RecordingRelationships::revision(1));
         assert_eq!(store.get(&CourierId::new("courier-1")), Ok(Some(expected)));
         assert_eq!(
             authorization.courier_checks(),
             vec![(
                 operator(),
-                CourierPermission::RegisterCourier,
+                CourierPermission::ManageCouriers,
                 CourierResource::Platform
             )]
         );
@@ -193,7 +206,7 @@ mod tests {
     #[test]
     fn repeated_registration_is_rejected_without_changes() {
         let store = TestStore::new();
-        let existing = Courier::restore(CourierId::new("courier-1"), CourierStatus::Busy);
+        let existing = Courier::restore(CourierId::new("courier-1"), timur(), CourierStatus::Busy);
         store.add(&existing).expect("seed courier");
         let authorization = StaticAuthorization::allow_all();
         let relationships = RecordingRelationships::new();
@@ -258,6 +271,33 @@ mod tests {
                 InvalidCourierRequest::EmptyCourierId
             ))
         );
+    }
+
+    /// AC-787
+    #[test]
+    fn courier_without_a_name_is_not_registered() {
+        let store = TestStore::new();
+        let authorization = StaticAuthorization::allow_all();
+        let relationships = RecordingRelationships::new();
+        let handler = Handler {
+            authorization: &authorization,
+            couriers: &store,
+            relationships: &relationships,
+        };
+        assert_eq!(
+            handler.execute(
+                &operator(),
+                Input {
+                    courier_id: "courier-1".to_owned(),
+                    name: "  ".to_owned(),
+                }
+            ),
+            Err(CourierApplicationError::InvalidRequest(
+                InvalidCourierRequest::Name(CourierNameError::Empty)
+            ))
+        );
+        assert_eq!(store.get(&CourierId::new("courier-1")), Ok(None));
+        assert!(relationships.writes().is_empty());
     }
 
     #[test]

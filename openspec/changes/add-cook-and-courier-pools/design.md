@@ -53,10 +53,10 @@ Acceptance от линии не зависит: заказ принимаетс�
 
 - `Courier.name` — обязательный, с теми же правилами, что у Cook; задаётся в Register Courier. Пустое имя — `InvalidArgument`.
 - Retire Courier: Courier `unavailable` → `retired_at`; `available` или `busy` — отказ `CourierOnLine`. Выбывший Courier не получает офферов (locator берёт только невыбывших) и не меняет доступность.
-- Set Courier Availability — как прежде; кроме `courier#act` его разрешает `platform#manage_couriers = operator + dispatcher`. Register Courier и Retire Courier тоже требуют `platform#manage_couriers`; `register_courier` заменяется им.
-- Get Courier Pool — `platform#manage_couriers`: Pool Load (backlog — Delivery в `Waiting`) и Courier с именем, доступностью, pending offer и активной Delivery.
-- Изменения Courier и Delivery публикуют Change Notification пула, на которой строится `courierPoolChanged`.
-- Миграция `couriers`: `name text NOT NULL` без default, `retired_at timestamptz`; хранилище kind пересоздаётся.
+- Set Courier Availability — как прежде; кроме `courier#act` его разрешает `platform#manage_couriers = operator + dispatcher`: use case сначала проверяет право курьера, при отказе — право диспетчера, поэтому связей курьера с платформой в SpiceDB не нужно. Register Courier и Retire Courier тоже требуют `platform#manage_couriers`; `register_courier` удалён.
+- Get Courier Pool — `platform#manage_couriers`: Pool Load (backlog — Delivery в `Waiting`) и Courier с именем, доступностью, pending offer и активной Delivery. Query читает offers и доставки, поэтому живёт в слайсе `delivery` (зависимость только `delivery → courier`, FR-486), как Get Courier Current Delivery.
+- Каждая запись курьера, оффера и Delivery пишет в Outbox Change Notification `{"__typename":"CourierPool","id":"nomnom"}` в топик `delivery.v1.courier-pool-changes`, на которой строится `courierPoolChanged`; у курьера — в том же SQL-операторе, что и `CourierChanged`.
+- Миграция `couriers/0002`: `name TEXT NOT NULL` без default (trim, 1..64), `retired_at BIGINT` — epoch seconds, как остальные времена `delivery`, — и проверка «выбывший — `unavailable`»; хранилище kind пересоздаётся.
 
 Курьеры, добавленные из UI, не связаны с пользователем: BFF выдаёт им UUIDv7 как `courier_id`. Действует за них только Simulator; при выключенном Simulator их офферы истекают и Delivery переходит к следующему кандидату.
 
@@ -70,7 +70,7 @@ Acceptance от линии не зависит: заказ принимаетс�
 
 - `Kitchen.cookPool: CookPool!` (`size`, `onLine`, `busy`, `queued`, `cooks[]` с `id`, `name`, `onLine`, `currentOrder`), mutations `hireCook(restaurantId, name)`, `setCookOnLine(cookId, onLine)`, `retireCook(cookId)`; `KitchenOrder.cook: CookRef` в активных и готовых заказах.
 - `courierPool: CourierPool!` (`size`, `onLine`, `busy`, `waiting`, `couriers[]`), `courierPoolChanged: CourierPool!`, mutations `addCourier(name)`, `setCourierOnLine(courierId, onLine)`, `retireCourier(courierId)`; имя курьера в карточке доставки и в `Order` покупателя.
-- Имена разрешает BFF по id; в Integration Events имена не передаются.
+- Имена разрешает BFF по id; в Integration Events имена не передаются. Имя курьера покупателю `delivery` пока отдаёт только диспетчеру (`GetCourierPool`): для экрана заказа в разделе 4 нужен read, доступный покупателю заказа.
 - Шапка колонки: «Линия N из M · занято B/N» с полосой загрузки, backlog отдельной строкой; при `onLine = 0` и непустой очереди — предупреждение «на линии нет поваров». Список работников: точка статуса, имя, текущая работа, действие. Колонка курьера показывает пул, только если `courierPool` не отвечает `PermissionDenied`; собственная работа курьера-пользователя остаётся как прежде.
 - Покупатель видит имя курьера, имя повара — нет.
 

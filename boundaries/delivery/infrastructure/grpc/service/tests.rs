@@ -96,6 +96,7 @@ async fn start_with_courier(courier: &str) -> Running {
             &Subject::User("operator-1".to_owned()),
             register_courier::Input {
                 courier_id: courier.to_owned(),
+                name: "Timur".to_owned(),
             },
         )
         .expect("courier registered");

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, status, authorization_revision, version FROM couriers WHERE id = $1",
+  "query": "SELECT id, name, status, retired_at, authorization_revision, version\n             FROM couriers WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "couriers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "status",
         "type_info": "Text",
         "origin": {
@@ -26,7 +37,18 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
+        "name": "retired_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "couriers",
+            "name": "retired_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "authorization_revision",
         "type_info": "Text",
         "origin": {
@@ -37,7 +59,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 5,
         "name": "version",
         "type_info": "Int8",
         "origin": {
@@ -56,9 +78,11 @@
     "nullable": [
       false,
       false,
+      false,
+      true,
       true,
       false
     ]
   },
-  "hash": "3a7256c3b78978d1fb42fc7822c7127aa188d9ad39ae46f8275457a55e8a1a2a"
+  "hash": "0e963e83c53a5e9a0e81b4052aec547c0a24400fa0b24abc5366b7f2a261349a"
 }

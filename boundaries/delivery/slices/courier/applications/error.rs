@@ -3,11 +3,14 @@ use std::fmt::{Display, Formatter};
 
 use crate::pkg::application::{AuthorizationError, RelationshipWriteError};
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::domains::courier::{CourierError, CourierId, LocationError};
+use crate::slices::courier::domains::courier::{
+    CourierError, CourierId, CourierNameError, LocationError,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InvalidCourierRequest {
     EmptyCourierId,
+    Name(CourierNameError),
     Location(LocationError),
 }
 
@@ -15,6 +18,7 @@ impl Display for InvalidCourierRequest {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EmptyCourierId => formatter.write_str("courier id must not be empty"),
+            Self::Name(error) => Display::fmt(error, formatter),
             Self::Location(error) => Display::fmt(error, formatter),
         }
     }

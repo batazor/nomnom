@@ -3,9 +3,9 @@
 ## Сценарий
 
 - **Тип:** Command.
-- **Actor:** Оператор платформы.
+- **Actor:** Оператор или диспетчер Courier Pool (`platform#manage_couriers`, FR-620).
 - **Намерение:** Создать курьера в системе доставки.
-- **Результат:** Создан `Courier` с исходным состоянием доступности.
+- **Результат:** Создан `Courier` с именем (`CourierName`: 1–64 символа после trim, FR-301) и исходным состоянием доступности.
 
 ## Границы
 
@@ -16,7 +16,7 @@
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-301.
-- **Порты:** `CourierAuthorization` (`RegisterCourier` над `Platform`), `CourierRepository`.
+- **Порты:** `CourierAuthorization` (`ManageCouriers` над `Platform`), `CourierRepository`.
 - **Транзакция:** Без UoW: одиночная вставка; повтор идентификатора — `CourierAlreadyRegistered`.
 - **Допущение:** Новый `Courier` создаётся `available` (существующее поведение `Courier::new`).
 

@@ -69,6 +69,15 @@ pub(super) fn row_traceparent() -> String {
 /// no bounded context consumes it.
 pub const COURIER_CHANGES_TOPIC: &str = "delivery.v1.courier-changes";
 
+/// Kafka topic of Courier Pool Change Notifications (ADR 36, FR-621): the BFF
+/// Router turns them into `courierPoolChanged`. One entity, the pool of the
+/// platform: every write of a courier, an offer or a Delivery changes its
+/// load.
+pub const COURIER_POOL_CHANGES_TOPIC: &str = "delivery.v1.courier-pool-changes";
+
+/// GraphQL key of the Courier Pool: the platform singleton.
+const COURIER_POOL_ID: &str = "nomnom";
+
 // Retention of the Outbox (ADR 37): every Outbox write statement carries the
 // CTE `expired`, so rows older than an hour go in the transaction of the next
 // write, without a background job; the replication slot keeps the WAL of rows
@@ -97,6 +106,32 @@ impl Store {
             Uuid::now_v7(),
             courier_id,
             COURIER_CHANGES_TOPIC,
+            payload.into_bytes(),
+            row_traceparent()
+        )
+        .execute(connection))
+        .map(drop)
+    }
+}
+
+impl Store {
+    /// Writes the Change Notification of `CourierPool(nomnom)` next to the
+    /// change, like [`Self::notify_courier`].
+    pub(super) fn notify_courier_pool(&self) -> Result<(), RepositoryError> {
+        let payload =
+            serde_json::json!({ "__typename": "CourierPool", "id": COURIER_POOL_ID }).to_string();
+        sql!(self, "INSERT", |connection| sqlx::query!(
+            "WITH expired AS (
+                 DELETE FROM delivery_outbox WHERE event_id IN (
+                     SELECT event_id FROM delivery_outbox
+                     WHERE created_at < now() - interval '1 hour'
+                     FOR UPDATE SKIP LOCKED))
+             INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,
+                 aggregate_version, topic, payload, traceparent)
+             VALUES ($1, 'CourierPoolChanged', 'CourierPool', $2, 0, $3, $4, $5)",
+            Uuid::now_v7(),
+            COURIER_POOL_ID,
+            COURIER_POOL_CHANGES_TOPIC,
             payload.into_bytes(),
             row_traceparent()
         )

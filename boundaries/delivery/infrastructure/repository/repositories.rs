@@ -39,7 +39,8 @@ impl CourierRepository for Store {
     fn get(&self, id: &CourierId) -> Result<Option<Courier>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             CourierRow,
-            "SELECT id, status, authorization_revision, version FROM couriers WHERE id = $1",
+            "SELECT id, name, status, retired_at, authorization_revision, version
+             FROM couriers WHERE id = $1",
             id.as_str()
         )
         .fetch_optional(connection))?
@@ -48,16 +49,17 @@ impl CourierRepository for Store {
     }
 
     // Courier writes run without a Unit of Work too (registration,
-    // availability), so each write and its Change Notification (ADR 36) are
-    // one statement: the CTE `changed` feeds the notification tail of
-    // `outbox::notify_courier`, with the Outbox retention (`$1` is the
-    // `row_traceparent`).
+    // availability, retirement), so each write and its Change Notifications
+    // (ADR 36) are one statement: the CTE `changed` feeds the notification
+    // tail of `outbox::notify_courier` and `outbox::notify_courier_pool`, with
+    // the Outbox retention (`$1` is the `row_traceparent`).
     fn add(&self, courier: &Courier) -> Result<(), RepositoryError> {
         let version = db_version(courier.version())?;
         let inserted = sql!(self, "INSERT", |connection| sqlx::query!(
             "WITH changed AS (
-                 INSERT INTO couriers (id, status, authorization_revision, version)
-                 VALUES ($2, $3, $4, $5) ON CONFLICT DO NOTHING RETURNING id
+                 INSERT INTO couriers (id, name, status, retired_at, authorization_revision,
+                     version)
+                 VALUES ($2, $6, $3, $7, $4, $5) ON CONFLICT DO NOTHING RETURNING id
              ), expired AS (
                  DELETE FROM delivery_outbox WHERE event_id IN (
                      SELECT event_id FROM delivery_outbox
@@ -69,6 +71,13 @@ impl CourierRepository for Store {
                  'delivery.v1.courier-changes',
                  convert_to(json_build_object('__typename', 'Courier', 'id', id)::text, 'UTF8'),
                  $1
+             FROM changed
+             UNION ALL
+             SELECT gen_random_uuid(), 'CourierPoolChanged', 'CourierPool', 'nomnom', 0,
+                 'delivery.v1.courier-pool-changes',
+                 convert_to(json_build_object('__typename', 'CourierPool', 'id', 'nomnom')::text,
+                     'UTF8'),
+                 $1
              FROM changed",
             row_traceparent(),
             courier.id().as_str(),
@@ -76,7 +85,9 @@ impl CourierRepository for Store {
             courier
                 .authorization_revision()
                 .map(AuthorizationRevision::as_str),
-            version
+            version,
+            courier.name().as_str(),
+            courier.retired_at_epoch_seconds()
         )
         .execute(connection))?;
         if inserted.rows_affected() == 0 {
@@ -90,7 +101,7 @@ impl CourierRepository for Store {
         let updated = sql!(self, "UPDATE", |connection| sqlx::query!(
             "WITH changed AS (
                  UPDATE couriers SET status = $4, authorization_revision = $5,
-                     version = version + 1
+                     retired_at = $6, version = version + 1
                  WHERE id = $2 AND version = $3 RETURNING id
              ), expired AS (
                  DELETE FROM delivery_outbox WHERE event_id IN (
@@ -103,6 +114,13 @@ impl CourierRepository for Store {
                  'delivery.v1.courier-changes',
                  convert_to(json_build_object('__typename', 'Courier', 'id', id)::text, 'UTF8'),
                  $1
+             FROM changed
+             UNION ALL
+             SELECT gen_random_uuid(), 'CourierPoolChanged', 'CourierPool', 'nomnom', 0,
+                 'delivery.v1.courier-pool-changes',
+                 convert_to(json_build_object('__typename', 'CourierPool', 'id', 'nomnom')::text,
+                     'UTF8'),
+                 $1
              FROM changed",
             row_traceparent(),
             courier.id().as_str(),
@@ -110,7 +128,8 @@ impl CourierRepository for Store {
             courier_status(courier.status()),
             courier
                 .authorization_revision()
-                .map(AuthorizationRevision::as_str)
+                .map(AuthorizationRevision::as_str),
+            courier.retired_at_epoch_seconds()
         )
         .execute(connection))?;
         optimistic(updated.rows_affected(), || {
@@ -187,6 +206,8 @@ impl DeliveryRepository for Store {
         if inserted.rows_affected() == 0 {
             return Err(RepositoryError::Conflict);
         }
+        // A new Delivery is the backlog of the Courier Pool.
+        self.notify_courier_pool()?;
         delivery
             .courier_id()
             .map_or(Ok(()), |courier| self.notify_courier(courier.as_str()))
@@ -234,6 +255,7 @@ impl DeliveryRepository for Store {
             .fetch_optional(connection))
             .map(|row| row.is_some())
         })?;
+        self.notify_courier_pool()?;
         let current = delivery.courier_id().map(CourierId::as_str);
         if let Some(courier) = current {
             self.notify_courier(courier)?;
@@ -276,6 +298,7 @@ impl DeliveryOfferRepository for Store {
         if inserted.rows_affected() == 0 {
             return Err(RepositoryError::Conflict);
         }
+        self.notify_courier_pool()?;
         self.notify_courier(offer.courier_id().as_str())
     }
 
@@ -297,6 +320,7 @@ impl DeliveryOfferRepository for Store {
             .fetch_optional(connection))
             .map(|row| row.is_some())
         })?;
+        self.notify_courier_pool()?;
         self.notify_courier(offer.courier_id().as_str())
     }
 }

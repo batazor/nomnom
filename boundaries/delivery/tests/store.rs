@@ -21,7 +21,7 @@ use delivery::slices::courier::applications::update_courier_location::{
     CourierLocationStore, CourierPosition,
 };
 use delivery::slices::courier::domains::courier::{
-    Courier, CourierId, CourierRepository, CourierStatus, Location,
+    Courier, CourierId, CourierName, CourierRepository, CourierStatus, Location,
 };
 use delivery::slices::delivery::applications::dispatch_deliveries::{
     DeliveryPosition, WaitingDeliveries,
@@ -276,7 +276,10 @@ fn empty_dsn_fails_fast() {
 fn courier_round_trip_with_optimistic_versions() {
     let store = store();
     let id = unique("courier");
-    let mut courier = Courier::new(CourierId::new(&id));
+    let mut courier = Courier::new(
+        CourierId::new(&id),
+        CourierName::new("Timur").expect("courier name"),
+    );
     courier.record_authorization_revision(AuthorizationRevision::new("zed-1"));
     CourierRepository::add(&store, &courier).expect("add");
     assert_eq!(
@@ -290,9 +293,13 @@ fn courier_round_trip_with_optimistic_versions() {
     assert_eq!(loaded, courier);
     assert_eq!(loaded.version(), 0);
 
-    let busy = Courier::restore(CourierId::new(&id), CourierStatus::Busy)
-        .with_authorization_revision(loaded.authorization_revision().cloned())
-        .with_version(loaded.version());
+    let busy = Courier::restore(
+        CourierId::new(&id),
+        CourierName::new("Timur").expect("courier name"),
+        CourierStatus::Busy,
+    )
+    .with_authorization_revision(loaded.authorization_revision().cloned())
+    .with_version(loaded.version());
     CourierRepository::save(&store, &busy).expect("save");
     let reloaded = CourierRepository::get(&store, courier.id())
         .expect("get")
@@ -310,7 +317,13 @@ fn courier_round_trip_with_optimistic_versions() {
         Err(RepositoryError::ConcurrentModification)
     );
     assert_eq!(
-        CourierRepository::save(&store, &Courier::new(CourierId::new(unique("missing")))),
+        CourierRepository::save(
+            &store,
+            &Courier::new(
+                CourierId::new(unique("missing")),
+                CourierName::new("Timur").expect("courier name")
+            )
+        ),
         Err(RepositoryError::Conflict)
     );
 }
@@ -321,14 +334,21 @@ fn courier_round_trip_with_optimistic_versions() {
 fn courier_writes_notify_the_courier_entity() {
     let store = store();
     let id = unique("courier");
-    let courier = Courier::new(CourierId::new(&id));
+    let courier = Courier::new(
+        CourierId::new(&id),
+        CourierName::new("Timur").expect("courier name"),
+    );
     CourierRepository::add(&store, &courier).expect("add");
     assert_eq!(
         CourierRepository::add(&store, &courier),
         Err(RepositoryError::Conflict)
     );
-    let available = Courier::restore(CourierId::new(&id), CourierStatus::Available)
-        .with_version(courier.version());
+    let available = Courier::restore(
+        CourierId::new(&id),
+        CourierName::new("Timur").expect("courier name"),
+        CourierStatus::Available,
+    )
+    .with_version(courier.version());
     CourierRepository::save(&store, &available).expect("save");
     assert_eq!(
         CourierRepository::save(&store, &available),
@@ -345,6 +365,44 @@ fn courier_writes_notify_the_courier_entity() {
             serde_json::json!({ "__typename": "Courier", "id": id })
         );
     }
+}
+
+/// FR-621: every committed courier write also notifies the Courier Pool of
+/// the platform. Other tests write the same pool key in parallel, so the test
+/// counts at least its own two writes.
+#[test]
+fn courier_writes_notify_the_courier_pool() {
+    let store = store();
+    let before = outbox_rows("nomnom").len();
+    let id = unique("courier");
+    let courier = Courier::new(
+        CourierId::new(&id),
+        CourierName::new("Timur").expect("courier name"),
+    );
+    CourierRepository::add(&store, &courier).expect("add");
+    let mut retired = Courier::restore(
+        CourierId::new(&id),
+        CourierName::new("Timur").expect("courier name"),
+        CourierStatus::Unavailable,
+    )
+    .with_version(courier.version());
+    retired.retire(10).expect("retire");
+    CourierRepository::save(&store, &retired).expect("save");
+
+    let rows = outbox_rows("nomnom");
+    assert!(rows.len() >= before + 2, "one pool notification per write");
+    for (_, event_type, _, payload, _) in rows {
+        assert_eq!(event_type, "CourierPoolChanged");
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&payload).expect("json"),
+            serde_json::json!({ "__typename": "CourierPool", "id": "nomnom" })
+        );
+    }
+    let stored = CourierRepository::get(&store, &CourierId::new(&id))
+        .expect("get")
+        .expect("courier");
+    assert_eq!(stored.name().as_str(), "Timur");
+    assert_eq!(stored.retired_at_epoch_seconds(), Some(10));
 }
 
 /// ADR 37: Debezium builds the Kafka message from the record contract
@@ -415,7 +473,14 @@ fn outbox_writes_delete_rows_older_than_an_hour() {
 
     plant_expired();
     let courier = CourierId::new(unique("courier"));
-    CourierRepository::add(&store, &Courier::new(courier.clone())).expect("courier");
+    CourierRepository::add(
+        &store,
+        &Courier::new(
+            courier.clone(),
+            CourierName::new("Timur").expect("courier name"),
+        ),
+    )
+    .expect("courier");
     assert!(outbox_rows(&expired).is_empty(), "courier CTE write");
 
     plant_expired();
@@ -597,7 +662,14 @@ fn offers_locations_and_reconciliation_reads() {
     let store = store();
     let courier = unique("courier");
     let courier_id = CourierId::new(&courier);
-    CourierRepository::add(&store, &Courier::new(courier_id.clone())).expect("courier");
+    CourierRepository::add(
+        &store,
+        &Courier::new(
+            courier_id.clone(),
+            CourierName::new("Timur").expect("courier name"),
+        ),
+    )
+    .expect("courier");
     let delivery = new_delivery(&unique("delivery"));
     DeliveryRepository::add(&store, &delivery).expect("delivery");
 
@@ -703,7 +775,14 @@ fn reconciliation_reads_only_active_assignments() {
         .expect("delivery");
     let page = store.assignment_page("", 10_000).expect("page");
     assert!(page.contains(&(id.clone(), courier.clone(), stored.version())));
-    CourierRepository::add(&store, &Courier::new(courier_id.clone())).expect("courier");
+    CourierRepository::add(
+        &store,
+        &Courier::new(
+            courier_id.clone(),
+            CourierName::new("Timur").expect("courier name"),
+        ),
+    )
+    .expect("courier");
     let registered = CourierRepository::get(&store, &courier_id)
         .expect("get")
         .expect("courier");
@@ -746,11 +825,22 @@ fn available_positions_are_positions_of_available_couriers() {
     let busy = CourierId::new(unique("busy"));
     CourierRepository::add(
         &store,
-        &Courier::restore(available.clone(), CourierStatus::Available),
+        &Courier::restore(
+            available.clone(),
+            CourierName::new("Timur").expect("courier name"),
+            CourierStatus::Available,
+        ),
     )
     .expect("available courier");
-    CourierRepository::add(&store, &Courier::restore(busy.clone(), CourierStatus::Busy))
-        .expect("busy courier");
+    CourierRepository::add(
+        &store,
+        &Courier::restore(
+            busy.clone(),
+            CourierName::new("Timur").expect("courier name"),
+            CourierStatus::Busy,
+        ),
+    )
+    .expect("busy courier");
     let position = |courier_id: &CourierId| CourierPosition {
         courier_id: courier_id.clone(),
         location: Location::new(52.37, 4.89).expect("location"),
@@ -769,7 +859,11 @@ fn available_positions_are_positions_of_available_couriers() {
 async fn works_inside_a_multi_thread_runtime() {
     let store = store();
     let id = CourierId::new(unique("courier"));
-    CourierRepository::add(&store, &Courier::new(id.clone())).expect("add");
+    CourierRepository::add(
+        &store,
+        &Courier::new(id.clone(), CourierName::new("Timur").expect("courier name")),
+    )
+    .expect("add");
     assert!(CourierRepository::get(&store, &id).expect("get").is_some());
 }
 
@@ -778,7 +872,10 @@ async fn works_inside_a_current_thread_runtime() {
     let store = store();
     let id = CourierId::new(unique("courier"));
     let result: Result<(), TestError> = store.run(|| {
-        CourierRepository::add(&store, &Courier::new(id.clone()))?;
+        CourierRepository::add(
+            &store,
+            &Courier::new(id.clone(), CourierName::new("Timur").expect("courier name")),
+        )?;
         Ok(())
     });
     assert_eq!(result, Ok(()));

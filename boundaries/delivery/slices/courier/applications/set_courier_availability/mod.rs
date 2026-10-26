@@ -1,8 +1,8 @@
-//! Set Courier Availability: a courier or an authorized dispatcher marks the
-//! courier available or unavailable for new assignments. The last known
-//! location is not touched.
+//! Set Courier Availability: a courier or a dispatcher of the Courier Pool
+//! (FR-620) marks the courier available or unavailable for new assignments.
+//! The last known location is not touched; a retired courier stays off line.
 
-use crate::pkg::application::Subject;
+use crate::pkg::application::{AuthorizationError, Subject};
 use crate::slices::courier::domains::courier::{
     CourierError, CourierId, CourierRepository, CourierStatus,
 };
@@ -43,11 +43,20 @@ impl Handler<'_> {
         input: Input,
     ) -> Result<Output, CourierApplicationError> {
         let courier_id = courier_id(&input.courier_id)?;
-        self.authorization.check(
+        // The courier itself (`courier#act`), otherwise a dispatcher.
+        match self.authorization.check(
             subject,
             CourierPermission::SetCourierAvailability,
             &CourierResource::Courier(courier_id.clone()),
-        )?;
+        ) {
+            Ok(()) => {}
+            Err(AuthorizationError::Denied) => self.authorization.check(
+                subject,
+                CourierPermission::ManageCouriers,
+                &CourierResource::Platform,
+            )?,
+            Err(error) => return Err(error.into()),
+        }
 
         let mut courier = self
             .couriers
@@ -81,7 +90,7 @@ mod tests {
     use crate::slices::courier::applications::update_courier_location::{
         CourierLocationStore, CourierPosition,
     };
-    use crate::slices::courier::domains::courier::{Courier, Location};
+    use crate::slices::courier::domains::courier::{Courier, CourierName, Location};
 
     fn courier_subject() -> Subject {
         Subject::User("courier-1".to_owned())
@@ -90,7 +99,11 @@ mod tests {
     fn seeded(status: CourierStatus) -> TestStore {
         let store = TestStore::new();
         store
-            .add(&Courier::restore(CourierId::new("courier-1"), status))
+            .add(&Courier::restore(
+                CourierId::new("courier-1"),
+                CourierName::new("Timur").expect("courier name"),
+                status,
+            ))
             .expect("seed courier");
         store
     }
@@ -223,6 +236,74 @@ mod tests {
             Err(CourierApplicationError::PermissionDenied)
         );
         assert_eq!(status(&store), CourierStatus::Available);
+    }
+
+    /// AC-790: a dispatcher of the Courier Pool puts another courier on line.
+    #[test]
+    fn dispatcher_changes_the_availability_of_any_courier() {
+        let store = seeded(CourierStatus::Unavailable);
+        let dispatcher = Subject::User("dispatcher".to_owned());
+        let authorization = StaticAuthorization::grants_only();
+        authorization.grant_courier(
+            dispatcher.clone(),
+            CourierPermission::ManageCouriers,
+            CourierResource::Platform,
+        );
+        let handler = Handler {
+            authorization: &authorization,
+            couriers: &store,
+        };
+
+        let output = handler
+            .execute(&dispatcher, input(Availability::Available))
+            .expect("dispatcher puts the courier on line");
+
+        assert_eq!(output.status, CourierStatus::Available);
+        assert_eq!(status(&store), CourierStatus::Available);
+        assert_eq!(
+            authorization.courier_checks(),
+            vec![
+                (
+                    dispatcher.clone(),
+                    CourierPermission::SetCourierAvailability,
+                    CourierResource::Courier(CourierId::new("courier-1"))
+                ),
+                (
+                    dispatcher,
+                    CourierPermission::ManageCouriers,
+                    CourierResource::Platform
+                ),
+            ]
+        );
+    }
+
+    /// FR-619: a retired courier does not return to the line.
+    #[test]
+    fn retired_courier_stays_off_line() {
+        let store = TestStore::new();
+        store
+            .add(
+                &Courier::restore(
+                    CourierId::new("courier-1"),
+                    CourierName::new("Timur").expect("courier name"),
+                    CourierStatus::Unavailable,
+                )
+                .with_retired_at(Some(10)),
+            )
+            .expect("seed courier");
+        let authorization = StaticAuthorization::allow_all();
+        let handler = Handler {
+            authorization: &authorization,
+            couriers: &store,
+        };
+
+        assert_eq!(
+            handler.execute(&courier_subject(), input(Availability::Available)),
+            Err(CourierApplicationError::PreconditionFailed(
+                CourierError::Retired
+            ))
+        );
+        assert_eq!(status(&store), CourierStatus::Unavailable);
     }
 
     #[test]

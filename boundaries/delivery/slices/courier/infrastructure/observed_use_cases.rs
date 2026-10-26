@@ -12,12 +12,13 @@ use crate::pkg::application::Subject;
 use crate::pkg::telemetry::usecase::{Failure, UseCase, UseCaseTelemetry};
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::{
-    register_courier, set_courier_availability, update_courier_location,
+    register_courier, retire_courier, set_courier_availability, update_courier_location,
 };
 use crate::slices::courier::di::CourierUseCases;
 
 pub const REGISTER_COURIER: UseCase = UseCase::command("register_courier");
 pub const SET_COURIER_AVAILABILITY: UseCase = UseCase::command("set_courier_availability");
+pub const RETIRE_COURIER: UseCase = UseCase::command("retire_courier");
 pub const UPDATE_COURIER_LOCATION: UseCase = UseCase::command("update_courier_location");
 
 /// `nomnom.outcome` and `error.type` of a failed call.
@@ -71,6 +72,16 @@ impl CourierUseCases for ObservedCourierUseCases {
             .observe(SET_COURIER_AVAILABILITY, classify, || {
                 self.inner.set_courier_availability(subject, input)
             })
+    }
+
+    fn retire_courier(
+        &self,
+        subject: &Subject,
+        input: retire_courier::Input,
+    ) -> Result<retire_courier::Output, CourierApplicationError> {
+        self.telemetry.observe(RETIRE_COURIER, classify, || {
+            self.inner.retire_courier(subject, input)
+        })
     }
 
     fn update_courier_location(

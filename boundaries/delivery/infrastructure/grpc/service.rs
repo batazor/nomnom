@@ -12,7 +12,7 @@ use crate::di::ServiceModule;
 use crate::pkg::application::Subject;
 use crate::pkg::lifecycle::{Worker, wait_for_stop};
 use crate::slices::courier::applications::{
-    register_courier, set_courier_availability, update_courier_location,
+    register_courier, retire_courier, set_courier_availability, update_courier_location,
 };
 use crate::slices::courier::di::CourierUseCases;
 use crate::slices::courier::domains::courier::CourierStatus as DomainCourierStatus;
@@ -32,13 +32,15 @@ use super::v1::{
     CancelDeliveryResponse, ConfirmDeliveryRequest, ConfirmDeliveryResponse, ConfirmPickupRequest,
     ConfirmPickupResponse, CourierAvailability, CourierStatus, CreateDeliveryRequest,
     CreateDeliveryResponse, Delivery, DeliveryOffer, DeliveryState,
-    GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse, GetSimulatorRequest,
-    GetSimulatorResponse, ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse,
+    GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse, GetCourierPoolRequest,
+    GetCourierPoolResponse, GetSimulatorRequest, GetSimulatorResponse,
+    ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse, PoolCourier,
     RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
     RejectDeliveryOfferResponse, ReplanDeliveryRequest, ReplanDeliveryResponse,
-    ReportDeliveryFailureRequest, ReportDeliveryFailureResponse, SetCourierAvailabilityRequest,
-    SetCourierAvailabilityResponse, SetSimulatorEnabledRequest, SetSimulatorEnabledResponse,
-    UpdateCourierLocationRequest, UpdateCourierLocationResponse,
+    ReportDeliveryFailureRequest, ReportDeliveryFailureResponse, RetireCourierRequest,
+    RetireCourierResponse, SetCourierAvailabilityRequest, SetCourierAvailabilityResponse,
+    SetSimulatorEnabledRequest, SetSimulatorEnabledResponse, UpdateCourierLocationRequest,
+    UpdateCourierLocationResponse,
 };
 
 mod status;
@@ -187,14 +189,73 @@ impl DeliveryService for DeliveryGrpcService {
         request: Request<RegisterCourierRequest>,
     ) -> Result<Response<RegisterCourierResponse>, Status> {
         let subject = self.subjects.resolve(request.metadata())?;
-        let courier_id = request.into_inner().courier_id;
+        let request = request.into_inner();
         let output = self
             .couriers()
-            .register_courier(&subject, register_courier::Input { courier_id })
+            .register_courier(
+                &subject,
+                register_courier::Input {
+                    courier_id: request.courier_id,
+                    name: request.name,
+                },
+            )
             .map_err(courier_transport_error)?;
         Ok(Response::new(RegisterCourierResponse {
             courier_id: output.courier_id.as_str().to_owned(),
             status: courier_status(output.status) as i32,
+            name: output.name.as_str().to_owned(),
+        }))
+    }
+
+    async fn retire_courier(
+        &self,
+        request: Request<RetireCourierRequest>,
+    ) -> Result<Response<RetireCourierResponse>, Status> {
+        let subject = self.subjects.resolve(request.metadata())?;
+        let courier_id = request.into_inner().courier_id;
+        let output = self
+            .couriers()
+            .retire_courier(&subject, retire_courier::Input { courier_id })
+            .map_err(courier_transport_error)?;
+        Ok(Response::new(RetireCourierResponse {
+            courier_id: output.courier_id.as_str().to_owned(),
+            changed: output.changed,
+        }))
+    }
+
+    async fn get_courier_pool(
+        &self,
+        request: Request<GetCourierPoolRequest>,
+    ) -> Result<Response<GetCourierPoolResponse>, Status> {
+        let subject = self.subjects.resolve(request.metadata())?;
+        let pool = self
+            .deliveries()
+            .get_courier_pool(&subject)
+            .map_err(delivery_transport_error)?;
+        let count =
+            |value: u64| i64::try_from(value).map_err(|_| Status::internal("internal error"));
+        Ok(Response::new(GetCourierPoolResponse {
+            size: count(pool.size)?,
+            on_line: count(pool.on_line)?,
+            busy: count(pool.busy)?,
+            waiting: count(pool.waiting)?,
+            couriers: pool
+                .couriers
+                .into_iter()
+                .map(|courier| PoolCourier {
+                    courier_id: courier.courier_id.as_str().to_owned(),
+                    name: courier.name.as_str().to_owned(),
+                    status: courier_status(courier.status) as i32,
+                    pending_offer_id: courier
+                        .pending_offer_id
+                        .map(|id| id.as_str().to_owned())
+                        .unwrap_or_default(),
+                    active_delivery_id: courier
+                        .active_delivery_id
+                        .map(|id| id.as_str().to_owned())
+                        .unwrap_or_default(),
+                })
+                .collect(),
         }))
     }
 

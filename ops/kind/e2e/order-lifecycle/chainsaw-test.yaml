@@ -124,7 +124,7 @@ spec:
             - {name: audience, value: nomnom.delivery}
             - {name: subject, value: $s.operator}
             - {name: method, value: nomnom.delivery.v1.DeliveryService/RegisterCourier}
-            - {name: request, value: '{courierId: $s.courier}'}
+            - {name: request, value: '{courierId: $s.courier, name: "Kind e2e courier"}'}
 
     # 2. Владелец: персонал, меню, открытие.
     - name: owner assigns staff

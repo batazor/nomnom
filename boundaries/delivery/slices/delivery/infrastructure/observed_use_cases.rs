@@ -20,8 +20,8 @@ use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
     dispatch_deliveries, expire_delivery_offers, find_courier, get_courier_current_delivery,
-    list_available_delivery_offers, offer_delivery, reassign_courier, reject_delivery_offer,
-    replan_delivery, report_delivery_failure,
+    get_courier_pool, list_available_delivery_offers, offer_delivery, reassign_courier,
+    reject_delivery_offer, replan_delivery, report_delivery_failure,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 
@@ -33,6 +33,7 @@ pub const OFFER_DELIVERY: UseCase = UseCase::command("offer_delivery");
 pub const LIST_AVAILABLE_DELIVERY_OFFERS: UseCase =
     UseCase::query("list_available_delivery_offers");
 pub const GET_COURIER_CURRENT_DELIVERY: UseCase = UseCase::query("get_courier_current_delivery");
+pub const GET_COURIER_POOL: UseCase = UseCase::query("get_courier_pool");
 pub const ACCEPT_DELIVERY_OFFER: UseCase = UseCase::command("accept_delivery_offer");
 pub const REJECT_DELIVERY_OFFER: UseCase = UseCase::command("reject_delivery_offer");
 pub const REASSIGN_COURIER: UseCase = UseCase::command("reassign_courier");
@@ -149,6 +150,13 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         self.observe(GET_COURIER_CURRENT_DELIVERY, || {
             self.inner.get_courier_current_delivery(subject, input)
         })
+    }
+
+    fn get_courier_pool(
+        &self,
+        subject: &Subject,
+    ) -> Result<get_courier_pool::Output, DeliveryApplicationError> {
+        self.observe(GET_COURIER_POOL, || self.inner.get_courier_pool(subject))
     }
 
     fn accept_delivery_offer(

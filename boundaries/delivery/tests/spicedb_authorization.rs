@@ -93,7 +93,7 @@ fn orders_worker_cannot_register_courier() {
         CourierAuthorization::check(
             &authorization,
             &service("orders-worker"),
-            CourierPermission::RegisterCourier,
+            CourierPermission::ManageCouriers,
             &CourierResource::Platform,
         ),
         Err(AuthorizationError::Denied)
