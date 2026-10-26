@@ -320,3 +320,55 @@ stateDiagram-v2
 ### Вне-state условия
 
 Capacity кухни, окно отмены во время Preparation и доля потраченных ресурсов — не строки таблицы, а Specifications ([Specification Pattern](specification-pattern.md)). `RestaurantAcceptingOrders` и `MenuItemAvailable` уже существуют; `RestaurantOrderCancellable` — кандидат. Kitchen Queue и её порядок не являются State `RestaurantOrder`: при ручной перестановке порядок становится данными отдельного aggregate, а не новым state.
+
+## Payment
+
+Statechart aggregate `Payment` в `payments`; реализация — `boundaries/payments/slices/payment/domains/payment/fsm.py`. Инварианты и use cases описаны в [README payments](../boundaries/payments/README.md); здесь — только модель переходов. Состояния `Payment Operation` (`pending → succeeded | declined`) — отдельная таблица entity и в эту FSM не входят.
+
+Compound states:
+
+| Compound state | Входит | Смысл |
+| --- | --- | --- |
+| `uncaptured` | `pending`, `authorized` | Деньги ещё не списаны; платёж может завершиться неудачей (`fail`) |
+| `closed` | `refunded`, `failed` | Terminal states |
+
+`captured` — leaf верхнего уровня: деньги списаны, возможен только Refund.
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: CreatePayment
+    state uncaptured {
+        pending --> authorized: authorize [provider_reference]
+        authorized --> pending: cancel_authorization
+    }
+    state closed {
+        refunded
+        failed
+    }
+    authorized --> captured: capture
+    captured --> refunded: refund
+    uncaptured --> failed: fail
+    closed --> [*]
+```
+
+| source | trigger | guard | target | failure |
+| --- | --- | --- | --- | --- |
+| `pending` | `authorize` | Provider Reference не пустой | `authorized` | `GuardFailed{provider_reference_required}` |
+| `authorized` | `cancel_authorization` | — | `pending` | — |
+| `authorized` | `capture` | — | `captured` | — |
+| `captured` | `refund` | — | `refunded` | — |
+| `uncaptured` | `fail` | — | `failed` | — |
+
+Строгие повторы с явным `AlreadyInState`:
+
+| from_state | trigger | Исход |
+| --- | --- | --- |
+| `pending` | `cancel_authorization` | `AlreadyInState{pending}` |
+| `authorized` | `authorize` | `AlreadyInState{authorized}` |
+| `captured` | `capture` | `AlreadyInState{captured}` |
+| `refunded` | `refund` | `AlreadyInState{refunded}` |
+| `failed` | `fail` | `AlreadyInState{failed}` |
+
+Все остальные пары `state × trigger` дают `InvalidTransition`. В том числе `captured × fail` — после Capture платёж не становится `failed`, отрицательный исход оформляется Refund; `captured × cancel_authorization` — списанную сумму возвращает Refund, а не Cancel Authorization.
+
+Требование Provider Reference при восстановлении (`authorized`, `captured`, `refunded`) — инвариант данных aggregate, а не compound state: набор пересекает `uncaptured` и `closed`.

@@ -19,6 +19,12 @@ from .fsm import (
 from .ids import OrderId, PaymentId
 from .vo.money import Money
 
+# Leaf states reached only through a successful Authorization. A data invariant, not a
+# compound state: it cuts across ``uncaptured`` and ``closed``.
+_STATES_WITH_PROVIDER_REFERENCE = frozenset(
+    {PaymentState.AUTHORIZED, PaymentState.CAPTURED, PaymentState.REFUNDED}
+)
+
 
 class Payment:
     """Aggregate of a monetary operation for one Order.
@@ -54,11 +60,9 @@ class Payment:
         Raises:
             ValueError: An authorized, captured or refunded state has no Provider Reference.
         """
-        if state in {
-            PaymentState.AUTHORIZED,
-            PaymentState.CAPTURED,
-            PaymentState.REFUNDED,
-        } and (provider_reference is None or not provider_reference.strip()):
+        if state in _STATES_WITH_PROVIDER_REFERENCE and (
+            provider_reference is None or not provider_reference.strip()
+        ):
             raise ValueError("successful payment state requires a provider reference")
         payment = cls(payment_id, order_id, amount)
         payment._state = state
