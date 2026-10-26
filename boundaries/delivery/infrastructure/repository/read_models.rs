@@ -22,8 +22,8 @@ use crate::slices::delivery::domains::delivery::{
 };
 
 use super::rows::{
-    DeliveryRow, address, courier_status, delivery_from_row, delivery_state, offer_state,
-    parse_delivery_state,
+    DeliveryRow, active_assignment_states, address, courier_status, delivery_from_row,
+    delivery_state, offer_state, parse_delivery_state,
 };
 use super::{PostgresStore, corrupt, domain_version, limit, storage_error};
 
@@ -34,9 +34,10 @@ impl CourierCurrentDeliveryReadModel for PostgresStore {
     ) -> Result<Option<CurrentDeliveryView>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query!(
             "SELECT id, order_id, pickup_address, state FROM deliveries
-             WHERE courier_id = $1 AND state IN ('assigned', 'picked_up')
+             WHERE courier_id = $1 AND state = ANY($2)
              ORDER BY id LIMIT 1",
-            courier_id.as_str()
+            courier_id.as_str(),
+            &active_assignment_states()[..] as &[&str]
         )
         .fetch_optional(connection))?
         .map(|row| {
@@ -262,14 +263,4 @@ impl ReconciliationStore for PostgresStore {
         .execute(connection))?;
         Ok(updated.rows_affected() > 0)
     }
-}
-
-/// Stored states of an active assignment: `delivery#courier` exists only for
-/// them (FR-444); the set comes from the domain. Bound as `&[&str]` (the
-/// macros check `TEXT[]` against `&[String]`).
-fn active_assignment_states() -> Vec<&'static str> {
-    State::WITH_ACTIVE_ASSIGNMENT
-        .iter()
-        .map(|state| delivery_state(*state))
-        .collect()
 }

@@ -18,43 +18,127 @@ const ALL_TRIGGERS: [Trigger; 6] = [
     Trigger::Cancel,
 ];
 
+#[derive(Clone, Copy, Debug)]
+enum Expected {
+    To(State),
+    Invalid,
+    Repeat,
+}
+
+/// Expected outcome of every leaf `state × trigger` pair, written
+/// independently of the table and the hierarchy.
+const EXPECTED: [(State, [Expected; 6]); 6] = {
+    use Expected::{Invalid as I, Repeat as R, To};
+    // Assign, Unassign, Pickup, Complete, Fail, Cancel
+    [
+        (
+            State::Waiting,
+            [To(State::Assigned), I, I, I, I, To(State::Cancelled)],
+        ),
+        (
+            State::Assigned,
+            [
+                R,
+                To(State::Waiting),
+                To(State::PickedUp),
+                I,
+                To(State::Failed),
+                To(State::Cancelled),
+            ],
+        ),
+        (
+            State::PickedUp,
+            [I, I, R, To(State::Delivered), To(State::Failed), I],
+        ),
+        (State::Delivered, [I, I, I, R, I, I]),
+        (State::Failed, [I, I, I, I, R, I]),
+        (State::Cancelled, [I, I, I, I, I, R]),
+    ]
+};
+
 #[test]
-fn transition_table_is_complete() {
-    for state in ALL_STATES {
-        for trigger in ALL_TRIGGERS {
-            assert!(
-                TRANSITION_TABLE
-                    .iter()
-                    .any(|rule| rule.from == state && rule.trigger == trigger),
-                "missing outcome for {state:?} x {trigger:?}"
+fn every_state_trigger_pair_has_the_expected_explicit_outcome() {
+    let courier = CourierId::new("courier-1");
+    assert_eq!(
+        EXPECTED.map(|(state, _)| state),
+        ALL_STATES,
+        "matrix covers every leaf state"
+    );
+    for (from, outcomes) in EXPECTED {
+        for (trigger, expected) in ALL_TRIGGERS.into_iter().zip(outcomes) {
+            let want = match expected {
+                Expected::To(to) => Ok(TransitionResult { from, trigger, to }),
+                Expected::Invalid => Err(TransitionError::InvalidTransition { from, trigger }),
+                Expected::Repeat => Err(TransitionError::AlreadyInState { state: from }),
+            };
+            assert_eq!(
+                transition(from, trigger, Some(&courier)),
+                want,
+                "{from:?} x {trigger:?}"
             );
         }
     }
-    assert_eq!(
-        TRANSITION_TABLE.len(),
-        ALL_STATES.len() * ALL_TRIGGERS.len()
-    );
 }
 
 #[test]
-fn allowed_transitions_follow_the_table() {
-    let courier = CourierId::new("courier-1");
-    let cases = [
-        (State::Waiting, Trigger::Assign, State::Assigned),
-        (State::Assigned, Trigger::Unassign, State::Waiting),
-        (State::Assigned, Trigger::Pickup, State::PickedUp),
-        (State::Assigned, Trigger::Fail, State::Failed),
-        (State::PickedUp, Trigger::Complete, State::Delivered),
-        (State::PickedUp, Trigger::Fail, State::Failed),
-        (State::Waiting, Trigger::Cancel, State::Cancelled),
-        (State::Assigned, Trigger::Cancel, State::Cancelled),
-    ];
-    for (from, trigger, to) in cases {
-        assert_eq!(
-            transition(from, trigger, Some(&courier)),
-            Ok(TransitionResult { from, trigger, to })
+fn hierarchy_is_acyclic_and_every_compound_state_has_children() {
+    let nodes = ALL_STATES
+        .map(Node::Leaf)
+        .into_iter()
+        .chain(CompoundState::ALL.map(Node::Compound));
+    for node in nodes {
+        let mut seen = vec![node];
+        let mut current = node;
+        while let Some(compound) = parent(current) {
+            current = Node::Compound(compound);
+            assert!(!seen.contains(&current), "cycle through {node:?}");
+            seen.push(current);
+        }
+    }
+    for compound in CompoundState::ALL {
+        assert!(
+            State::leaves_of(compound).next().is_some(),
+            "{compound:?} has no children"
         );
     }
+}
+
+#[test]
+fn table_declares_each_node_trigger_once_and_repeats_only_on_leaves() {
+    for (index, rule) in TRANSITIONS.iter().enumerate() {
+        assert!(
+            TRANSITIONS[index + 1..]
+                .iter()
+                .all(|other| other.source != rule.source || other.trigger != rule.trigger),
+            "{:?} x {:?} declared twice",
+            rule.source,
+            rule.trigger
+        );
+    }
+    for (index, (state, trigger)) in REPEATS.iter().enumerate() {
+        assert!(!REPEATS[index + 1..].contains(&(*state, *trigger)));
+        assert!(
+            TRANSITIONS
+                .iter()
+                .all(|rule| rule.source != Node::Leaf(*state) || rule.trigger != *trigger),
+            "{state:?} x {trigger:?} is both a repeat and a transition"
+        );
+    }
+}
+
+#[test]
+fn compound_states_group_the_expected_leaf_states() {
+    assert_eq!(
+        State::leaves_of(CompoundState::ActiveAssignment).collect::<Vec<_>>(),
+        [State::Assigned, State::PickedUp]
+    );
+    assert_eq!(
+        State::leaves_of(CompoundState::Closed).collect::<Vec<_>>(),
+        [State::Delivered, State::Failed, State::Cancelled]
+    );
+    assert!(State::PickedUp.is_in(CompoundState::ActiveAssignment));
+    assert!(!State::Waiting.is_in(CompoundState::ActiveAssignment));
+    assert!(State::Waiting.is_in(State::Waiting));
 }
 
 #[test]
@@ -84,41 +168,12 @@ fn terminal_states_are_the_states_without_an_allowed_trigger() {
         terminal,
         vec![State::Delivered, State::Failed, State::Cancelled]
     );
-}
-
-#[test]
-fn terminal_states_reject_every_other_trigger() {
-    for (state, repeated) in [
-        (State::Delivered, Trigger::Complete),
-        (State::Failed, Trigger::Fail),
-        (State::Cancelled, Trigger::Cancel),
-    ] {
-        for trigger in ALL_TRIGGERS {
-            let expected = if trigger == repeated {
-                TransitionError::AlreadyInState { state }
-            } else {
-                TransitionError::InvalidTransition {
-                    from: state,
-                    trigger,
-                }
-            };
-            assert_eq!(
-                transition(state, trigger, Some(&CourierId::new("courier-1"))),
-                Err(expected)
-            );
-        }
-    }
-}
-
-#[test]
-fn cancellation_is_rejected_after_pickup() {
-    for state in [State::PickedUp, State::Delivered, State::Failed] {
-        assert_eq!(
-            transition(state, Trigger::Cancel, Some(&CourierId::new("courier-1"))),
-            Err(TransitionError::InvalidTransition {
-                from: state,
-                trigger: Trigger::Cancel,
-            })
+    for state in terminal {
+        assert!(
+            ALL_TRIGGERS
+                .into_iter()
+                .all(|trigger| ensure_allowed(state, trigger).is_err()),
+            "{state:?}"
         );
     }
 }

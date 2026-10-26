@@ -320,3 +320,60 @@ stateDiagram-v2
 ### Вне-state условия
 
 Capacity кухни, окно отмены во время Preparation и доля потраченных ресурсов — не строки таблицы, а Specifications ([Specification Pattern](specification-pattern.md)). `RestaurantAcceptingOrders` и `MenuItemAvailable` уже существуют; `RestaurantOrderCancellable` — кандидат. Kitchen Queue и её порядок не являются State `RestaurantOrder`: при ручной перестановке порядок становится данными отдельного aggregate, а не новым state.
+
+## Delivery
+
+Statechart aggregate `Delivery` в `delivery`; реализация — `boundaries/delivery/slices/delivery/domains/delivery/fsm.rs`. Use cases описаны в [delivery README](../boundaries/delivery/README.md); здесь — только модель переходов.
+
+Compound states:
+
+| Compound state | Входит | Смысл |
+| --- | --- | --- |
+| `ActiveAssignment` | `Assigned`, `PickedUp` | Active Courier Assignment: courier действует по Delivery и видит её order (FR-444); возможна Delivery Failure |
+| `Closed` | `Delivered`, `Failed`, `Cancelled` | Terminal states |
+
+`Waiting` — узел верхнего уровня: Courier ещё не закреплён.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Waiting
+    Waiting --> Assigned: Assign [courier]
+    state ActiveAssignment {
+        Assigned --> PickedUp: Pickup
+    }
+    state Closed {
+        Delivered
+        Failed
+        Cancelled
+    }
+    Assigned --> Waiting: Unassign
+    PickedUp --> Delivered: Complete
+    ActiveAssignment --> Failed: Fail
+    Waiting --> Cancelled: Cancel
+    Assigned --> Cancelled: Cancel
+    Closed --> [*]
+```
+
+| source | trigger | guard | target | failure |
+| --- | --- | --- | --- | --- |
+| `Waiting` | `Assign` | Передан `courier_id` | `Assigned` | `GuardFailed{courier_id_required}` |
+| `Waiting` | `Cancel` | — | `Cancelled` | — |
+| `Assigned` | `Unassign` | — | `Waiting` | — |
+| `Assigned` | `Pickup` | — | `PickedUp` | — |
+| `Assigned` | `Cancel` | — | `Cancelled` | — |
+| `PickedUp` | `Complete` | — | `Delivered` | — |
+| `ActiveAssignment` | `Fail` | — | `Failed` | — |
+
+`Cancel` объявлен на `Waiting` и `Assigned`, а не на compound state: Delivery Cancellation возможна только до Pickup и пересекает границу Active Courier Assignment, а у узла один родитель. Ни `Waiting`, ни `Assigned` отдельно не образуют термина, ради которого стоило бы вводить группу.
+
+Строгие повторы с явным `AlreadyInState`:
+
+| from_state | trigger | Исход |
+| --- | --- | --- |
+| `Assigned` | `Assign` | `AlreadyInState{Assigned}` |
+| `PickedUp` | `Pickup` | `AlreadyInState{PickedUp}` |
+| `Delivered` | `Complete` | `AlreadyInState{Delivered}` |
+| `Failed` | `Fail` | `AlreadyInState{Failed}` |
+| `Cancelled` | `Cancel` | `AlreadyInState{Cancelled}` |
+
+Все остальные пары `state × trigger` дают `InvalidTransition`. В том числе `PickedUp × Cancel` — Cancel Delivery сопоставляет его с бизнес-отказом `AlreadyPickedUp`, а `InvalidTransition` из `Closed` — с `AlreadyClosed`. Хранилище выбирает Delivery с активным назначением по `State::leaves_of(CompoundState::ActiveAssignment)`, loaded aggregate — по `state.is_in(CompoundState::ActiveAssignment)`.
