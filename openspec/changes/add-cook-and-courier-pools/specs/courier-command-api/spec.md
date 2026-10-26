@@ -5,7 +5,7 @@
 ### Requirement: Регистрация курьера — действие оператора
 **ID:** FR-581
 
-`RegisterCourier` MUST требовать `platform:nomnom#manage_couriers` (relation `operator` или `dispatcher`), принимать `courier_id` и `name` и выполнять `TOUCH courier#self` нового курьера до сохранения.
+`RegisterCourier` MUST требовать `platform:nomnom#manage_couriers` (relation `operator` или `dispatcher`), принимать `courier_id`, `name` и `market_id` и выполнять `TOUCH courier#self` нового курьера до сохранения.
 
 #### Scenario: Регистрация оператором
 **ID:** AC-732

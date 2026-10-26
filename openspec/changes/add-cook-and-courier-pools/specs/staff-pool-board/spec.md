@@ -27,13 +27,13 @@ BFF SHALL предоставлять mutations `hireCook(restaurantId, name)`, `
 ### Requirement: Courier Pool в BFF
 **ID:** FR-623
 
-BFF SHALL отдавать query `courierPool` (`size`, `onLine`, `busy`, `waiting`, список курьеров), subscription `courierPoolChanged` и mutations `addCourier(name)`, `setCourierOnLine(courierId, onLine)`, `retireCourier(courierId)`. `addCourier` SHALL регистрировать курьера с новым UUIDv7 как `courier_id`.
+BFF SHALL отдавать query `courierPool` Market запроса (заголовок `X-Nomnom-Market`; `id` пула — `market_id`, `size`, `onLine`, `busy`, `waiting`, список курьеров), subscription `courierPoolChanged(marketId)`, отдающую только пул этого Market, и mutations `addCourier(name)`, `setCourierOnLine(courierId, onLine)`, `retireCourier(courierId)`. `addCourier` SHALL регистрировать курьера в Market запроса с новым UUIDv7 как `courier_id`.
 
 #### Scenario: Диспетчер добавляет курьера
 **ID:** AC-794
 
-- **WHEN** диспетчер вызывает `addCourier("Анна")`
-- **THEN** в `courierPool` есть available курьер «Анна», подписчики `courierPoolChanged` получают пул с ней
+- **WHEN** диспетчер Market `berlin` вызывает `addCourier("Анна")`
+- **THEN** в `courierPool` Market `berlin` есть available курьер «Анна», подписчики `courierPoolChanged(marketId: "berlin")` получают пул с ней, а подписчики другого Market — нет
 
 ### Requirement: Имена исполнителей в BFF
 **ID:** FR-626

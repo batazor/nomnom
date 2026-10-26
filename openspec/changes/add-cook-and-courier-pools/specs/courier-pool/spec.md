@@ -39,11 +39,11 @@ Register Courier, Retire Courier и Get Courier Pool MUST требовать `pl
 ### Requirement: Get Courier Pool
 **ID:** FR-621
 
-`delivery` SHALL предоставлять query Get Courier Pool и RPC `GetCourierPool()`: `size` — невыбывшие курьеры, `on_line` — available и busy, `busy`, `waiting` — Delivery в `Waiting`, и список курьеров с именем, доступностью, pending offer и активной Delivery. Query MUST NOT менять состояние. Изменение курьера, оффера или Delivery SHALL публиковать Change Notification Courier Pool.
+`delivery` SHALL предоставлять RPC `GetCourierPool(market_id)` без изменения состояния: `size` — невыбывшие курьеры Market, `on_line` — available и busy, `busy`, `waiting` — его Delivery в `Waiting`, и курьеры с именем, доступностью, pending offer и активной Delivery. Пустой `market_id` MUST быть `INVALID_ARGUMENT`. Изменение курьера, оффера или Delivery SHALL публиковать Change Notification пула его Market.
 
 #### Scenario: Загрузка курьеров
 **ID:** AC-792
 
-- **GIVEN** в пуле 6 курьеров, 4 на линии, 3 busy, 2 Delivery ждут курьера
-- **WHEN** диспетчер вызывает `GetCourierPool`
+- **GIVEN** в пуле Market `berlin` 6 курьеров, 4 на линии, 3 busy, 2 Delivery ждут курьера
+- **WHEN** диспетчер вызывает `GetCourierPool(market_id: "berlin")`
 - **THEN** ответ `size = 6`, `on_line = 4`, `busy = 3`, `waiting = 2` и шесть курьеров с именами
