@@ -22,6 +22,7 @@
 | Query | `Get<X>` или `List<X>` | `GetOrder`, `ListCustomerOrders` |
 | Domain / Integration Event | Past tense `<Aggregate><Fact>`; owner — publisher | `OrderPlaced`, `RestaurantOrderAccepted` |
 | FSM State | Существительное/причастие в `UPPER_SNAKE_CASE` или PascalCase по языку | `PREPARING`, `Cancelled` |
+| Compound State | Как FSM State; называет общее для группы states, а не перечисляет их | `IN_KITCHEN`, `CLOSED` |
 | Trigger | Глагол | `Cancel`, `Accept` |
 | Specification | Eligibility-форма | `PaymentRefundable`, `CourierEligibleForDelivery` |
 
@@ -79,6 +80,10 @@
 | Preparation Delay | Сообщение кухни, что Restaurant Order будет готов позже; результат — изменённый Expected Ready At. | `restaurants` | Expected Ready At, PreparationDelayed | Delivery delay, technical retry | [Kitchen](kitchen.md#preparation-delay) | Причины домену не обязательны. |
 | Expected Ready At | Ожидаемое кухней время готовности Restaurant Order. | `restaurants` | Preparation Delay, timeline | Courier ETA, Order ETA для Customer | [Kitchen](kitchen.md#timeline) | Способ расчёта не согласован. |
 | Ready for Pickup | Terminal State `READY` Restaurant Order после Assembly: заказ можно передать Courier. | `restaurants` | Assembly, Pickup | Order Completion, Pickup | README/testing/[Kitchen](kitchen.md) | Event `RestaurantOrderReady`; короткая форма `Ready` допустима для State. |
+| Open Restaurant Order | Compound State `OPEN`: `RECEIVED`, `ACCEPTED` и `IN_KITCHEN`. Работа кухни над Restaurant Order не завершена, заказ можно отменить. | `restaurants` | Cancel Restaurant Order, Closed Restaurant Order | `orders.Order` до Completion | [FSM](fsm.md#kitchen--preparation), `fsm.ts` | Не сохраняется и не публикуется. |
+| In Kitchen | Compound State `IN_KITCHEN`: `QUEUED` и `ACTIVE_PREPARATION`. Restaurant Order занял место в Kitchen Queue и имеет Expected Ready At; допустима Preparation Delay. | `restaurants` | Kitchen Queue, Preparation Delay | Kitchen Order (роль), Kitchen Station | [FSM](fsm.md#kitchen--preparation), `fsm.ts` | `ACCEPTED` не входит: место в очереди ещё не занято. |
+| Active Preparation | Compound State `ACTIVE_PREPARATION`: `PREPARING` и `ASSEMBLED`. Ресурсы кухни уже тратятся; возможна Preparation Failure, Cancel — по политике отмены во время Preparation. | `restaurants` | Preparation, Assembly, List Active Preparations | Preparation как период целиком | [FSM](fsm.md#kitchen--preparation), `fsm.ts`, kitchen board | Фильтр read model — `leavesOf(ACTIVE_PREPARATION)`. |
+| Closed Restaurant Order | Compound State `CLOSED`: Terminal States `READY`, `REJECTED`, `CANCELLED`, `FAILED`. | `restaurants` | Terminal State, Ready for Pickup | Order Completion | [FSM](fsm.md#kitchen--preparation), `fsm.ts` | Заменяет ручной список terminal states. |
 
 ## Delivery
 
@@ -159,6 +164,9 @@
 | Transition | Чистое `State × Trigger × inputs → next State или typed error`. | Aggregate owner | State, Trigger, Guard | Workflow step | FSM/ADR 21 | Table — source of truth. |
 | Guard | Чистая проверка входа Transition без I/O/hidden time. | Aggregate owner | Transition, Specification | Authorization/repository lookup | FSM/domain | Reusable policy может стать Specification. |
 | Terminal State | State без дальнейших изменяющих business transitions. | Aggregate owner | Completion, Cancellation | Process shutdown | FSM/README | Повтор может дать `AlreadyInState`. |
+| Leaf State | State, в котором aggregate находится; aggregate всегда ровно в одном Leaf State. | Aggregate owner | Compound State | Compound State | FSM/ADR 21 | Только Leaf State сохраняется, публикуется и попадает в метрики. |
+| Compound State | Именованная группа Leaf или Compound States; Transition, объявленная на ней, действует во всех вложенных states, ближайшая объявленная побеждает. | Aggregate owner | Leaf State, Transition | Workflow Stage, UI Status, ручной список states | [FSM](fsm.md#statecharts-иерархия-состояний)/ADR 21 | Не сохраняется и не передаётся наружу; имя — термин контекста. |
+| Targetless Transition | Transition с target `stay`: aggregate остаётся в текущем Leaf State и меняет только свои данные. | Aggregate owner | Transition | `AlreadyInState` | FSM/ADR 21 | `ReportDelay`, `RecordFact`. |
 
 ## Application Layer
 

@@ -251,10 +251,11 @@ stateDiagram-v2
     OPEN --> CANCELLED: Cancel
     ACTIVE_PREPARATION --> CANCELLED: Cancel [policy]
     ACTIVE_PREPARATION --> FAILED: ReportFailure
+    IN_KITCHEN --> IN_KITCHEN: ReportDelay (stay)
     CLOSED --> [*]
 ```
 
-`IN_KITCHEN × ReportDelay` — targetless (`stay`) и на диаграмме не показан. `READY` — успешное завершение работы кухни. После `READY` Pickup принадлежит `delivery`; нужен ли `restaurants` собственный state передачи заказа — открытый вопрос.
+`IN_KITCHEN × ReportDelay` — targetless (`stay`): заказ остаётся в своём leaf state. `READY` — успешное завершение работы кухни. После `READY` Pickup принадлежит `delivery`; нужен ли `restaurants` собственный state передачи заказа — открытый вопрос.
 
 | source | trigger | guard | target | failure |
 | --- | --- | --- | --- | --- |
