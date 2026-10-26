@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 129; пар «метрика × сервис» со статусом «есть»: 140.
+Метрик в инвентаре: 130; пар «метрика × сервис» со статусом «есть»: 140.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -103,12 +103,13 @@ Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver в `r
 
 ## Read cache (Valkey)
 
-ADR 40: cache-aside с TTL для GetRestaurant, GetMenu и ListRestaurants `restaurants` (`pkg/infrastructure/valkey`), без инвалидации. Ключи и restaurant id не labels. `bypass` — Valkey недоступен, чтение из MongoDB.
+ADR 40: cache-aside GetRestaurant, GetMenu и ListRestaurants `restaurants` (`pkg/infrastructure/valkey`); `restaurants-consumer` обновляет ключи по событиям открытия, закрытия и доступности блюда, остальное — TTL. Ключи и restaurant id не labels. `bypass` — Valkey недоступен, чтение из MongoDB.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `nomnom_cache_lookups_total` | `nomnom.cache.lookups` | counter | `nomnom_cache_name`, `nomnom_cache_result` | `restaurants`: ожидается | hit ratio = hit / (hit + miss); доля bypass — время без Valkey. |
 | `nomnom_cache_errors_total` | `nomnom.cache.errors` | counter | `nomnom_cache_name`, `nomnom_cache_operation` | `restaurants`: ожидается | — |
+| `nomnom_cache_refreshes_total` | `nomnom.cache.refreshes` | counter | `nomnom_cache_name` | `restaurants`: ожидается | Пишет `restaurants-consumer` по RestaurantOpened/Closed и MenuItemAvailabilityChanged. |
 
 <a id="watermill"></a>
 

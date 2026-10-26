@@ -24,3 +24,13 @@ groups:
         requirement_level: required
       - ref: nomnom.cache.operation
         requirement_level: required
+  - id: metric.nomnom.cache.refreshes
+    type: metric
+    metric_name: nomnom.cache.refreshes
+    stability: development
+    brief: "Keys refreshed or generations started by Integration Events of the change."
+    instrument: counter
+    unit: "{refresh}"
+    attributes:
+      - ref: nomnom.cache.name
+        requirement_level: required

@@ -87,3 +87,5 @@ export const VALKEY_COMMAND_TIMEOUT_ENV = "VALKEY__COMMAND_TIMEOUT";
 export const DEFAULT_VALKEY_COMMAND_TIMEOUT = "50ms";
 export const CACHE_TTL_ENV = "CACHE__TTL";
 export const DEFAULT_CACHE_TTL = "1m";
+export const CACHE_REFRESH_GROUP_ENV = "CACHE__REFRESH_GROUP";
+export const DEFAULT_CACHE_REFRESH_GROUP = "restaurants-cache";

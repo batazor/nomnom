@@ -13,8 +13,11 @@ command: ["/usr/bin/tini", "--", "node", "dist/cmd/restaurants-consumer/main.js"
 # KAFKA__CLIENT_ID — client id consumer и producer dead letters. Группа restaurants читает
 # стрим с начала: Restaurant Order создаётся и для заказов, оформленных до первого запуска;
 # повтор истории идемпотентен через Inbox.
+# CACHE__REFRESH_GROUP — группа обновления кеша каталога (ADR 40): читает restaurant-events и
+# menu-events с конца стрима.
 env:
   KAFKA__CLIENT_ID: restaurants-consumer
+  CACHE__REFRESH_GROUP: restaurants-cache
   KAFKA__CONSUMER_GROUP: restaurants
   KAFKA__INITIAL_OFFSET: oldest
 

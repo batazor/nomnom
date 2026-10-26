@@ -21,34 +21,44 @@ Order и так читает каталог до своей транзакции
 
 ### Что кешируется
 
-| Чтение | Ключ Valkey |
-| --- | --- |
-| `GetRestaurant` (`RestaurantView`) | `restaurants:restaurant:<restaurantId>` |
-| `GetMenu` (`MenuView`) | `restaurants:menu:<restaurantId>` |
-| `ListRestaurants` (страница) | `restaurants:list:<open\|all>:<limit>:<after>` |
+| Чтение | Ключ Valkey | Обновляется сразу по |
+| --- | --- | --- |
+| `GetRestaurant` (`RestaurantView`) | `restaurants:restaurant:<restaurantId>` | `RestaurantOpened`, `RestaurantClosed` |
+| `GetMenu` (`MenuView`) | `restaurants:menu:<restaurantId>` | `MenuItemAvailabilityChanged` |
+| `ListRestaurants` (страница) | `restaurants:list:<поколение>:<open\|all>:<limit>:<after>` | `RestaurantOpened`, `RestaurantClosed` (новое поколение) |
 
 `ListOwnedRestaurants`, кухонные чтения и команды кеш не используют. Отсутствующий ресторан или
 меню (`NOT_FOUND`) не кешируется.
 
-### Только TTL, без инвалидации
+### Заполнение и обновление по событиям
 
-`pkg/infrastructure/valkey/read-cache.ts`: промах читает MongoDB и кладёт JSON результата с
-`CACHE__TTL` (1m), не задерживая ответ (запись не ожидается). Записи каталога кеш не трогают:
-изменение — открытие, закрытие, цена, доступность блюда, новый ресторан — видно не позже чем
-через TTL. Этого достаточно для данных, которые меняются раз в часы, и не требует ни записей
-Outbox, ни consumer'а инвалидации.
+`pkg/infrastructure/valkey/read-cache.ts`: промах читает MongoDB и кладёт JSON результата
+`SET NX` с `CACHE__TTL` (1m), не задерживая ответ.
 
-Чем это оплачено:
+Открытие, закрытие и доступность блюда пользователь должен видеть сразу, поэтому кеш
+обновляется по Integration Events, которые `restaurants` уже публикует через Outbox и Debezium:
+`RestaurantOpened`/`RestaurantClosed` (`restaurants.v1.restaurant-events`) и
+`MenuItemAvailabilityChanged` (`restaurants.v1.menu-events`). `restaurants-consumer` читает их
+своей consumer group `CACHE__REFRESH_GROUP` (`restaurants-cache`, новая группа начинает с конца
+стрима; `pkg/infrastructure/valkey/refresh.ts`), перечитывает ресторан или меню из MongoDB уже
+после commit и перезаписывает ключ обычным `SET` с TTL. Для ресторана ещё увеличивается
+поколение страниц списка (`INCR restaurants:list:generation:pages`): страницу, где ресторан
+лежит, по одному ключу не найти, а страницы старого поколения больше не читаются и истекают по
+TTL.
 
-- закрытый ресторан до TTL виден открытым: Place Order может принять заказ, ресторан его
-  отклонит штатным Reject;
-- новая цена попадает в заказ до TTL позже;
-- после открытия или закрытия kitchen board (subscription `kitchenChanged`) и витрина до TTL
-  показывают прежнее `isOpen`; результат самой команды Open/Close Restaurant приходит из команды,
-  а не из кеша.
+Гонка «чтение началось до изменения» безопасна без версий:
 
-Если окно станет неприемлемым, сначала уменьшается `CACHE__TTL`; инвалидация через CDC (ADR 40)
-вводится отдельным решением.
+- чтение успело записать старое значение раньше обновления — обновление его перезаписывает;
+- обновление записало раньше — `SET NX` старого чтения не срабатывает;
+- страницу старого чтения пишет старое поколение, которое уже никто не читает.
+
+Обновление перечитывает текущий документ, поэтому повторы at-least-once и события подряд
+(закрыли и сразу открыли) безопасны без Inbox. Пока Valkey недоступен, обработка повторяется с
+backoff и offset не коммитится: после восстановления все обновления применяются.
+
+Изменения без Integration Event — цена, название и описание блюда, переименование ресторана,
+новый ресторан — видны не позже TTL. Если это окно станет неприемлемым, нужен контракт события
+для такого изменения, а не меньший TTL.
 
 ### Valkey и отказ
 
@@ -56,17 +66,19 @@ Outbox, ни consumer'а инвалидации.
   (`+@all -@admin -@dangerous +info +client|setname`), без persistence, `allkeys-lru`.
 - Клиент — [iovalkey](https://github.com/valkey-io/iovalkey) (форк ioredis организации Valkey):
   чистый JS, `commandTimeout`, без offline queue и без повторов команды.
-- `VALKEY__URL` обязателен: пустой — `restaurants` не стартует. `restaurants-consumer` кеш не
-  использует. Недоступный Valkey процесс не останавливает: пока соединение не `ready`, чтения
+- `VALKEY__URL` обязателен: пустой — `restaurants` и `restaurants-consumer` не стартуют.
+  Недоступный Valkey процесс не останавливает: пока соединение не `ready`, чтения
   сразу идут в MongoDB (`bypass`), команда ограничена `VALKEY__COMMAND_TIMEOUT` (50ms), клиент
   переподключается сам. Readiness от Valkey не зависит.
-- Метрики `nomnom.cache.lookups` (`hit`/`miss`/`bypass`) и `nomnom.cache.errors` (`get`/`set`)
-  по `nomnom.cache.name` (`restaurant`, `menu`, `restaurant_list`), без ключей и id.
+- Метрики `nomnom.cache.lookups` (`hit`/`miss`/`bypass`), `nomnom.cache.errors`
+  (`get`/`set`/`refresh`) и `nomnom.cache.refreshes` по `nomnom.cache.name` (`restaurant`, `menu`, `restaurant_list`), без ключей и id.
 
 ## Consequences
 
-- Повторные чтения каталога в пределах TTL не обращаются к MongoDB.
-- Каталог устаревает до `CACHE__TTL` после изменения; это видно пользователю, как описано выше.
+- Повторные чтения каталога не обращаются к MongoDB.
+- Открытие, закрытие ресторана и доступность блюда видны в кеше через отставание CDC (alert
+  `cdc-lag`) плюс обработку consumer'а; остальные изменения — до `CACHE__TTL`.
+- `restaurants-consumer` зависит от Valkey: без него обновления ждут, offsets стоят.
 - Отказ Valkey — рост латентности и нагрузки на MongoDB, не ошибки RPC; доля `bypass` видна в
   метриках.
 - В kind Valkey ставит chart `ops/kind/bootstrap` (`emptyDir`), URL — Secret `restaurants-valkey`.

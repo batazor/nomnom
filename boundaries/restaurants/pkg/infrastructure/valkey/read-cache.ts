@@ -1,18 +1,21 @@
-// Cache-aside over Valkey with TTL only (ADR 40, local ADR 3): the catalog
-// changes rarely, so an entry lives `ttlMs` and is not invalidated on writes;
-// a change becomes visible at most `ttlMs` later. Reads never fail on Valkey:
-// a disconnected client, a timeout or an error reads from the source
-// (bypass).
+// Cache-aside over Valkey (ADR 40, local ADR 3). A miss stores the source
+// value with SET NX for `ttlMs`; an Integration Event of the change refreshes
+// the key with plain SET from the source read after the commit. A read that
+// started before the change cannot put the old value back: its NX store
+// loses to the refresh, or the refresh overwrites it. Changes without an
+// event become visible within the TTL. Reads never fail on Valkey: a
+// disconnected client, a timeout or an error reads from the source (bypass).
 import { type Meter, metrics } from "@opentelemetry/api";
 import type { Valkey } from "iovalkey";
 
 export type CacheLookupResult = "hit" | "miss" | "bypass";
-export type CacheOperation = "get" | "set";
+export type CacheOperation = "get" | "set" | "refresh";
 
 /** Metrics of docs/observability/metric-inventory.md#cache, without keys. */
 export class CacheMetrics {
   readonly #lookups;
   readonly #errors;
+  readonly #refreshes;
 
   constructor(meter: Meter = metrics.getMeter("restaurants")) {
     this.#lookups = meter.createCounter("nomnom.cache.lookups", {
@@ -23,6 +26,11 @@ export class CacheMetrics {
     this.#errors = meter.createCounter("nomnom.cache.errors", {
       description: "Failed Valkey commands of the cache by operation.",
       unit: "{error}",
+    });
+    this.#refreshes = meter.createCounter("nomnom.cache.refreshes", {
+      description:
+        "Keys refreshed or generations started by Integration Events of the change.",
+      unit: "{refresh}",
     });
   }
 
@@ -38,6 +46,10 @@ export class CacheMetrics {
       "nomnom.cache.name": cache,
       "nomnom.cache.operation": operation,
     });
+  }
+
+  refreshed(cache: string): void {
+    this.#refreshes.add(1, { "nomnom.cache.name": cache });
   }
 }
 
@@ -73,7 +85,7 @@ export class ReadCache<T> {
     load: () => Promise<R>,
   ): Promise<T | R> {
     const fullKey = this.#prefix + key;
-    if (this.#client.status !== "ready") {
+    if (!this.#available) {
       this.#metrics.lookup(this.#name, "bypass");
       return load();
     }
@@ -92,11 +104,81 @@ export class ReadCache<T> {
     this.#metrics.lookup(this.#name, "miss");
     const loaded = await load();
     if (loaded !== undefined) {
-      // Not awaited: the reply does not wait for the write.
+      // Not awaited: the reply does not wait for the write. NX: a refresh
+      // that already wrote a newer value wins.
       this.#client
-        .set(fullKey, JSON.stringify(loaded), "PX", this.#ttlMs)
+        .set(fullKey, JSON.stringify(loaded), "PX", this.#ttlMs, "NX")
         .catch(() => this.#metrics.error(this.#name, "set"));
     }
     return loaded;
+  }
+
+  /**
+   * Overwrites the key with the current source value, or removes it when the
+   * source has none. A Valkey failure is thrown to the caller.
+   */
+  async refresh(key: string, value: T | undefined): Promise<void> {
+    const fullKey = this.#prefix + key;
+    try {
+      if (value === undefined) {
+        await this.#client.del(fullKey);
+      } else {
+        await this.#client.set(
+          fullKey,
+          JSON.stringify(value),
+          "PX",
+          this.#ttlMs,
+        );
+      }
+    } catch (error) {
+      this.#metrics.error(this.#name, "refresh");
+      throw error;
+    }
+    this.#metrics.refreshed(this.#name);
+  }
+
+  /**
+   * Read within the current generation of `scope`: entries that cannot be
+   * refreshed one by one (pages of a list) are dropped together by
+   * {@link nextGeneration}. A store of an old generation is never read again.
+   */
+  async readInGeneration<R extends T | undefined>(
+    scope: string,
+    key: string,
+    load: () => Promise<R>,
+  ): Promise<T | R> {
+    if (!this.#available) {
+      this.#metrics.lookup(this.#name, "bypass");
+      return load();
+    }
+    let generation: string | null;
+    try {
+      generation = await this.#client.get(this.#generationKey(scope));
+    } catch {
+      this.#metrics.error(this.#name, "get");
+      this.#metrics.lookup(this.#name, "bypass");
+      return load();
+    }
+    // INCR counts an absent generation as 0, so does the reader.
+    return this.read(`${generation === null ? "0" : generation}:${key}`, load);
+  }
+
+  /** Starts a new generation of `scope`; a Valkey failure is thrown. */
+  async nextGeneration(scope: string): Promise<void> {
+    try {
+      await this.#client.incr(this.#generationKey(scope));
+    } catch (error) {
+      this.#metrics.error(this.#name, "refresh");
+      throw error;
+    }
+    this.#metrics.refreshed(this.#name);
+  }
+
+  get #available(): boolean {
+    return this.#client.status === "ready";
+  }
+
+  #generationKey(scope: string): string {
+    return `${this.#prefix}generation:${scope}`;
   }
 }

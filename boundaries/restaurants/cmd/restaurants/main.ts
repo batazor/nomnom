@@ -4,13 +4,13 @@
 // asynchronously acquired resources and the shutdown order.
 import { createRestaurantsContainer } from "../../di/restaurants.ts";
 import { createSubjectResolver } from "../../infrastructure/grpc/subject.ts";
-import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/migrate.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
 import {
   loadConfig,
   loadLocalEnv,
   loadSimulatorConfig,
 } from "../../pkg/config/config.ts";
-import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
+import { connectMongoDb } from "../../pkg/infrastructure/repository/client.ts";
 import { connectValkey } from "../../pkg/infrastructure/valkey/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";

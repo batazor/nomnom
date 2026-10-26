@@ -39,13 +39,13 @@ import {
   createProcessContainer,
   type Registrations,
 } from "../pkg/di/container.ts";
-import type { MongoDbConnection } from "../pkg/infrastructure/mongodb/client.ts";
+import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
+import type { MongoDbConnection } from "../pkg/infrastructure/repository/client.ts";
 import {
   MongoOutbox,
   type OutboxEventMapper,
-} from "../pkg/infrastructure/mongodb/outbox.ts";
-import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
-import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
+} from "../pkg/infrastructure/repository/outbox.ts";
+import type { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { CacheMetrics } from "../pkg/infrastructure/valkey/read-cache.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";

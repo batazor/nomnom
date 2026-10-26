@@ -8,6 +8,7 @@ export const testValkeyConfig = (url: string): ValkeyEnabledConfig => ({
   url,
   commandTimeoutMs: 200,
   ttlMs: 60_000,
+  refreshGroup: "restaurants-cache-test",
 });
 
 /** A client that is never connected: building the graph opens no socket. */

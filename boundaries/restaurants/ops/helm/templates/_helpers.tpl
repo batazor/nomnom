@@ -144,7 +144,7 @@ Usage: {{ include "restaurants.mongodbEnv" (dict "context" $ "pool" .Values.mong
 
 {{/*
 Valkey (ADR 40, локальный ADR 3): кеш чтения каталога. Без urlSecret.name ничего не задаётся,
-и restaurants не стартует (VALKEY__URL обязателен); restaurants-consumer кеш не использует.
+и процессы restaurants и restaurants-consumer не стартуют (VALKEY__URL обязателен).
 */}}
 {{- define "restaurants.valkeyEnv" -}}
 {{- with .Values.valkey }}

@@ -6,7 +6,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import kafka from "@confluentinc/kafka-javascript";
 import { createConsumerContainer } from "../di/consumer.ts";
 import { OrderPlacedSchema } from "../infrastructure/grpc/gen/nomnom/orders/v1/events_pb.js";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import { loadConfig } from "../pkg/config/config.ts";
 import {
   createConsumerClient,
@@ -16,17 +16,18 @@ import { KafkaPublisher } from "../pkg/infrastructure/kafka/publisher.ts";
 import {
   connectMongoDb,
   type MongoDbConnection,
-} from "../pkg/infrastructure/mongodb/client.ts";
+} from "../pkg/infrastructure/repository/client.ts";
 import {
   INBOX_COLLECTION,
   type InboxDocument,
-} from "../pkg/infrastructure/mongodb/inbox.ts";
+} from "../pkg/infrastructure/repository/inbox.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { ORDER_PLACED_EVENT_TYPE } from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
 import { kafkaBrokers } from "./support/global-containers.ts";
 import { mongoUri } from "./support/mongodb.ts";
+import { offlineValkey, testValkeyConfig } from "./support/valkey.ts";
 
 // OrderPlaced → Kafka → restaurants-consumer → Inbox + Restaurant Order in
 // MongoDB against real infrastructure: MongoDB and Kafka are the testcontainers
@@ -130,6 +131,15 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
         groupId,
         fromBeginning: true,
       }),
+      // Only the order-events group runs here; cache refresh has its own test.
+      cacheRefreshConsumer: {
+        connect: async () => {},
+        subscribe: async () => {},
+        run: async () => {},
+        disconnect: async () => {},
+      },
+      valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
+      valkey: offlineValkey(),
       deadLetters: publisher,
       logger: silentLogger,
     });
