@@ -4,8 +4,8 @@
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierStatus};
 use crate::slices::delivery::domains::delivery::{
-    Address, Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    ExpectedTime, OfferState, OrderId, State,
+    Address, CompoundState, Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer,
+    DeliveryOfferId, ExpectedTime, OfferState, OrderId, State,
 };
 
 use super::{corrupt, domain_version};
@@ -36,6 +36,15 @@ pub(super) fn delivery_state(state: State) -> &'static str {
         State::Failed => "failed",
         State::Cancelled => "cancelled",
     }
+}
+
+/// Stored states of an active Courier Assignment: `delivery#courier` exists
+/// only for them (FR-444); the set is the leaves of the domain compound state.
+/// Bound as `&[&str]` (the macros check `TEXT[]` against `&[String]`).
+pub(super) fn active_assignment_states() -> Vec<&'static str> {
+    State::leaves_of(CompoundState::ActiveAssignment)
+        .map(delivery_state)
+        .collect()
 }
 
 pub(super) fn parse_delivery_state(value: &str) -> Result<State, RepositoryError> {

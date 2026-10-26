@@ -11,7 +11,8 @@ use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
-    DeliveryCancellationReason, DeliveryId, DeliveryRepository, OrderId, State, TransitionError,
+    CompoundState, DeliveryCancellationReason, DeliveryId, DeliveryRepository, OrderId, State,
+    TransitionError,
 };
 
 use super::assignment::release_assignment;
@@ -127,10 +128,11 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 from: State::PickedUp,
                 ..
             }) => Outcome::Rejected(CancellationRejection::AlreadyPickedUp),
-            Err(TransitionError::InvalidTransition {
-                from: State::Delivered | State::Failed,
-                ..
-            }) => Outcome::Rejected(CancellationRejection::AlreadyClosed),
+            Err(TransitionError::InvalidTransition { from, .. })
+                if from.is_in(CompoundState::Closed) =>
+            {
+                Outcome::Rejected(CancellationRejection::AlreadyClosed)
+            }
             Err(error) => return Err(error.into()),
         };
         Ok(Output {

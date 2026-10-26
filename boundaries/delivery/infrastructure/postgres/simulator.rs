@@ -9,7 +9,7 @@ use crate::slices::simulator::applications::work::{
 };
 use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
-use super::rows::{delivery_state, offer_state, parse_delivery_state};
+use super::rows::{active_assignment_states, offer_state, parse_delivery_state};
 use super::{PostgresStore, corrupt, storage_error};
 
 impl SimulatorStateRepository for PostgresStore {
@@ -52,15 +52,11 @@ impl SimulatorWork for PostgresStore {
     }
 
     fn active_deliveries(&self) -> Result<Vec<ActiveDeliveryWork>, RepositoryError> {
-        let states = [
-            delivery_state(State::Assigned),
-            delivery_state(State::PickedUp),
-        ];
         // `courier_id IS NOT NULL` narrows the nullable column: `courier_id!`.
         sql!(self, "SELECT", |connection| sqlx::query!(
             r#"SELECT id, courier_id AS "courier_id!", state FROM deliveries
              WHERE state = ANY($1) AND courier_id IS NOT NULL ORDER BY id"#,
-            &states[..] as &[&str]
+            &active_assignment_states()[..] as &[&str]
         )
         .fetch_all(connection))?
         .into_iter()

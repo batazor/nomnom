@@ -1,8 +1,8 @@
 use super::fsm::{ensure_allowed, transition};
 use super::{
-    Address, DeliveryCancellationReason, DeliveryError, DeliveryFailureReason, DeliveryId,
-    DeliveryValidationError, DomainEvent, ExpectedTime, OrderId, State, TransitionError,
-    TransitionResult, Trigger,
+    Address, CompoundState, DeliveryCancellationReason, DeliveryError, DeliveryFailureReason,
+    DeliveryId, DeliveryValidationError, DomainEvent, ExpectedTime, OrderId, State,
+    TransitionError, TransitionResult, Trigger,
 };
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::domains::courier::CourierId;
@@ -340,7 +340,7 @@ impl Delivery {
     pub fn active_courier(&self) -> Option<&CourierId> {
         self.courier_id
             .as_ref()
-            .filter(|_| self.state.has_active_assignment())
+            .filter(|_| self.is_active_assignment())
     }
 
     #[must_use]
@@ -365,8 +365,8 @@ impl Delivery {
 
     /// Whether the delivery holds an active Courier Assignment.
     #[must_use]
-    pub const fn is_active_assignment(&self) -> bool {
-        matches!(self.state, State::Assigned | State::PickedUp)
+    pub fn is_active_assignment(&self) -> bool {
+        self.state.is_in(CompoundState::ActiveAssignment)
     }
 }
 

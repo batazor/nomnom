@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, order_id, pickup_address, state FROM deliveries\n             WHERE courier_id = $1 AND state IN ('assigned', 'picked_up')\n             ORDER BY id LIMIT 1",
+  "query": "SELECT id, order_id, pickup_address, state FROM deliveries\n             WHERE courier_id = $1 AND state = ANY($2)\n             ORDER BY id LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -50,7 +50,8 @@
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Text",
+        "TextArray"
       ]
     },
     "nullable": [
@@ -60,5 +61,5 @@
       false
     ]
   },
-  "hash": "858d5e5222fc3adccefc2159ede24210ad6b1a15ce71d2fb329c67bbfc6a3a65"
+  "hash": "09f6f0d87c7b1e79b976189bc6df5f8149df3004d3789ce4357dba2e3085c403"
 }
