@@ -1,12 +1,7 @@
 import { LayoutGroup, m } from "motion/react";
 import { type ReactNode, useCallback, useState } from "react";
-import type { CourierPoolViewFragment } from "../../shared/graphql/generated/graphql";
 import { useClient, useQuery } from "urql";
-import {
-  boardUser,
-  SignInButton,
-  useSignInAvailable,
-} from "../../shared/auth/sign-in";
+import type { CourierPoolViewFragment } from "../../shared/graphql/generated/graphql";
 import {
   BoardOrderStatusDocument,
   ViewRestaurantDocument,
@@ -16,8 +11,8 @@ import type { MessageKey } from "../../shared/i18n/messages";
 import { AsRole, useCanAct } from "../../shared/session/roles";
 import { Button, ExpandedCard, HelpTip, Illustration } from "../../shared/ui";
 import { RestaurantPicker } from "../browse-restaurants";
-import { OrderDetails } from "../view-order";
 import { checkoutFormId } from "../place-order";
+import { OrderDetails } from "../view-order";
 import { RestaurantOrdering } from "../view-restaurant";
 import { BoardDragProvider, useDragSource, useDropTarget } from "./board-dnd";
 import { useBoardOrders } from "./board-orders";
@@ -50,7 +45,6 @@ export function FlowBoard() {
 
 function Board() {
   const { t } = useI18n();
-  const signInAvailable = useSignInAvailable();
   const canAct = useCanAct();
   const orders = useBoardOrders();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -111,13 +105,6 @@ function Board() {
   return (
     <div className="board">
       <h1 className="sr-only">{t("board.title")}</h1>
-
-      {/* Mocks need no sign-in; against BFF the board acts as one user. */}
-      {signInAvailable ? (
-        <div className="board-sign-in">
-          <SignInButton role={boardUser} roleLabel={t("auth.role.demo")} />
-        </div>
-      ) : null}
 
       <LayoutGroup>
         <m.section

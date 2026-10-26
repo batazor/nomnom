@@ -1,4 +1,3 @@
-.board-sign-in,
 .sign-in {
   display: flex;
   flex-wrap: wrap;
@@ -13,4 +12,107 @@
 .sign-in-error {
   color: var(--color-danger);
   font-size: 0.8125rem;
+}
+
+.account-avatar {
+  display: inline-grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: box-shadow var(--motion-fast) ease;
+}
+
+.account-avatar[data-hover],
+.account-avatar[data-open] {
+  box-shadow: 0 0 0 3px var(--color-border);
+}
+
+.account-avatar[data-focus] {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.account-avatar[data-static] {
+  cursor: default;
+}
+
+.account-menu-items {
+  z-index: 50;
+  min-width: 15rem;
+  max-width: min(20rem, calc(100vw - 2rem));
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+  outline: none;
+  /* Headless UI anchors the panel; the gap keeps it off the avatar. */
+  --anchor-gap: var(--space-2);
+}
+
+.account-menu-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.account-menu-who {
+  display: grid;
+  min-width: 0;
+  gap: 0.125rem;
+}
+
+.account-menu-user {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-role {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+.account-menu-separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--color-border);
+}
+
+.account-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--color-foreground);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+.account-menu-item svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-muted);
+}
+
+.account-menu-item[data-focus] {
+  background: var(--color-surface-muted);
 }

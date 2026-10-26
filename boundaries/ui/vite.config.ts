@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+import { Agent } from "node:https";
 import { dirname, resolve } from "node:path";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import type { Plugin } from "vite";
+import type { Plugin, ProxyOptions } from "vite";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 
@@ -80,6 +82,35 @@ function securityHeaders(mode: string): Plugin {
   };
 }
 
+// Dev server only: /api forwards to the public gateway of kind, so the browser
+// stays on its own http origin and never sees the local CA. The proxy itself
+// verifies the gateway against that CA (make kind-local-ca). Docker publishes
+// the gateway on 127.0.0.1 only, while Node resolves *.localhost to ::1: the
+// proxy dials the address and sends the gateway hostname as SNI and Host.
+function kindApiProxy(): Record<string, ProxyOptions> {
+  const target = process.env.NOMNOM_API_PROXY_TARGET;
+  if (!target) return {};
+
+  const gateway = new URL(target);
+  const caPath = process.env.NOMNOM_API_PROXY_CA;
+  if (!caPath) {
+    throw new Error("NOMNOM_API_PROXY_CA is required with NOMNOM_API_PROXY_TARGET");
+  }
+
+  return {
+    "/api": {
+      target: `${gateway.protocol}//127.0.0.1:${gateway.port}`,
+      rewrite: (path) => path.replace(/^\/api/, ""),
+      headers: { host: gateway.host },
+      agent: new Agent({
+        // Relative to the repository root, where make kind-local-ca writes it.
+        ca: readFileSync(resolve(import.meta.dirname, "../..", caPath)),
+        servername: gateway.hostname,
+      }),
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss(), securityHeaders(mode)],
   resolve: {
@@ -88,6 +119,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 4173,
     fs: { allow: [import.meta.dirname, dirname(publicSchemaPath)] },
+    proxy: kindApiProxy(),
   },
   test: {
     environment: "jsdom",

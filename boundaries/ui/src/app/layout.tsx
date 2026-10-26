@@ -2,6 +2,7 @@ import { Link, Outlet } from "react-router-dom";
 
 import { MarketSwitcher, WhenMarketChosen } from "../features/choose-market";
 import { SimulatorToggle } from "../features/demo-simulator";
+import { AccountMenu, boardUser } from "../shared/auth/sign-in";
 import { useI18n } from "../shared/i18n/i18n";
 
 export function AppLayout() {
@@ -24,6 +25,8 @@ export function AppLayout() {
           <WhenMarketChosen>
             <SimulatorToggle />
           </WhenMarketChosen>
+          {/* Mocks need no sign-in; against BFF the board acts as one user. */}
+          <AccountMenu role={boardUser} roleLabel={t("auth.role.demo")} />
         </div>
       </header>
       <div className="app-sheet">

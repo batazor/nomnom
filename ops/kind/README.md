@@ -367,11 +367,13 @@ charts, и Job ждёт его повторами; законченный Job у
 забирали бы предложения курьера e2e. Тест проверяет изоляцию шагом «only the run courier is on
 line in the run market» (GetCourierPool Market прогона) до оформления заказа.
 
-Вход в UI — только через Dex (`customer-ui-kind-login` в `.claude/launch.json`, порт 4180); API —
-публичный gateway `https://api.nomnom.localhost:18085` (браузер должен доверять корню
-`make kind-local-ca`):
+Вход в UI — только через Dex (`customer-ui-kind-login` в `.claude/launch.json`, порт 4180). API —
+публичный gateway `https://api.nomnom.localhost:18085`, но браузер ходит в него через proxy
+dev-сервера Vite: `http://localhost:4180/api` (`NOMNOM_API_PROXY_TARGET`). Корень локального CA
+проверяет proxy (`NOMNOM_API_PROXY_CA`), в системное хранилище его добавлять не нужно:
 
 ```bash
+make kind-local-ca
 kubectl -n nomnom-data port-forward svc/dex 5556
 ```
 

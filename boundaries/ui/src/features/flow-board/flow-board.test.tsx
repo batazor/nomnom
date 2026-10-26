@@ -556,13 +556,13 @@ describe("cook and courier pools", () => {
     expect(within(couriers).getByText(/Линия 1 из 3/)).toBeVisible();
     expect(within(couriers).getByText(/Ждут курьера: \d+/)).toBeVisible();
 
-    await user.type(within(couriers).getByLabelText("Имя курьера"), "Сергей");
+    // No name to type: the board makes one up ("Анна К.") on adding.
     await user.click(
       within(couriers).getByRole("button", { name: "Добавить курьера" }),
     );
 
-    expect(await within(couriers).findByText("Сергей")).toBeVisible();
     expect(await within(couriers).findByText(/Линия 2 из 4/)).toBeVisible();
+    expect(within(couriers).getByText(/^[А-ЯЁ][а-яё]+ [А-Я]\.$/)).toBeVisible();
   });
 
   it("AC-798 hides the Courier Pool from a user who is no dispatcher", async () => {

@@ -1,4 +1,11 @@
 import {
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuItems,
+  MenuSeparator,
+} from "@headlessui/react";
+import {
   createContext,
   type ReactNode,
   useContext,
@@ -167,11 +174,6 @@ export function SignInProvider({
 // The board signs in one demo user, who acts as every role on it.
 export const boardUser = "demo";
 
-// Whether users can sign in through the identity provider.
-export function useSignInAvailable(): boolean {
-  return useContext(SignInContext).config !== undefined;
-}
-
 // Access token of the user signed in as role, while it is valid.
 export function useSignedInToken(role: string): string | undefined {
   const { signIns } = useContext(SignInContext);
@@ -179,8 +181,19 @@ export function useSignedInToken(role: string): string | undefined {
   return login && login.expiresAt > Date.now() ? login.accessToken : undefined;
 }
 
-// Sign in or out as role; nothing when login is not configured.
-export function SignInButton({
+// Initials of a user for the avatar: the first letters of the dotted parts
+// of the email name ("anna.ivanova@…" → "AI"), else its first letter.
+function initials(user: string): string {
+  const name = user.split("@")[0];
+  const parts = name.split(/[._-]+/).filter(Boolean);
+  const letters =
+    parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : name.slice(0, 1);
+  return letters.toUpperCase();
+}
+
+// The account in the top bar: a sign-in button, or the avatar of the signed-in
+// user with a menu to sign out; nothing when login is not configured.
+export function AccountMenu({
   role,
   roleLabel,
 }: {
@@ -194,15 +207,51 @@ export function SignInButton({
   if (!config) return null;
   const login = signIns[role];
   if (login) {
+    const letters = initials(login.user);
     return (
-      <span className="sign-in">
-        <span className="sign-in-user">
-          {t("auth.signedInAs", { role: roleLabel, user: login.user })}
-        </span>
-        <Button onClick={() => remove(role)} variant="secondary">
-          {t("auth.signOut")}
-        </Button>
-      </span>
+      <Menu as="div" className="account-menu">
+        <MenuButton
+          aria-label={t("auth.account", { user: login.user })}
+          className="account-avatar"
+        >
+          {letters}
+        </MenuButton>
+        <MenuItems anchor="bottom end" className="account-menu-items">
+          <div className="account-menu-header">
+            <span aria-hidden="true" className="account-avatar" data-static>
+              {letters}
+            </span>
+            <span className="account-menu-who">
+              <span className="account-menu-user">{login.user}</span>
+              <span className="account-menu-role">{roleLabel}</span>
+            </span>
+          </div>
+          <MenuSeparator className="account-menu-separator" />
+          <MenuItem>
+            <button
+              className="account-menu-item"
+              onClick={() => remove(role)}
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                fill="none"
+                focusable="false"
+                viewBox="0 0 16 16"
+              >
+                <path
+                  d="M6.5 2.75H4.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5H6.5M10.5 5.25 13.25 8l-2.75 2.75M13 8H6.25"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.25"
+                />
+              </svg>
+              {t("auth.signOut")}
+            </button>
+          </MenuItem>
+        </MenuItems>
+      </Menu>
     );
   }
 

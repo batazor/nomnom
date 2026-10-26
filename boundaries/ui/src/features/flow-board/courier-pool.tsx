@@ -18,12 +18,9 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import {
-  PoolAddForm,
-  PoolLoad,
-  type PoolMember,
-  PoolMembers,
-} from "./pool-panel";
+import { Button } from "../../shared/ui";
+import { newCourierName } from "./courier-names";
+import { PoolLoad, type PoolMember, PoolMembers } from "./pool-panel";
 import { useLatest } from "./use-latest";
 
 // Courier Pool of the platform on the flow board (FR-623, FR-627): one source
@@ -106,9 +103,9 @@ type Outcome = Readonly<{
 
 // Courier Pool in the courier column header: the line, the load and the
 // deliveries waiting for a courier, the couriers with their line actions and
-// adding one by name. Hidden for users who are no dispatcher (AC-798).
+// adding one under a made-up name. Hidden for users who are no dispatcher (AC-798).
 export function CourierPoolPanel() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const pool = useCourierPool();
   const [adding, add] = useMutation(AddCourierDocument);
   const [lining, setOnLine] = useMutation(SetCourierOnLineDocument);
@@ -176,18 +173,24 @@ export function CourierPoolPanel() {
         }}
         pending={lining.fetching || retiring.fetching}
       />
-      <PoolAddForm
-        label={t("board.couriers.name")}
-        onAdd={async (name) => {
+      <Button
+        isPending={adding.fetching}
+        onClick={async () => {
+          const name = newCourierName(
+            locale,
+            pool.couriers.map((courier) => courier.name),
+          );
           const result = await add({ name });
-          return settle({
+          settle({
             error: result.error,
             problem: result.data?.addCourier.problem,
           });
         }}
-        pending={adding.fetching}
-        submit={t("board.couriers.add")}
-      />
+        size="sm"
+        variant="outline"
+      >
+        {t("board.couriers.add")}
+      </Button>
       {problem ? (
         <p className="board-error" role="alert">
           {t(problem)}
