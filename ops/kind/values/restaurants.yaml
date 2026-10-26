@@ -15,6 +15,8 @@ env:
   SIMULATOR__INTERVAL: 5s
   SIMULATOR__MIN_DELAY: 30s
   SIMULATOR__MAX_DELAY: 2m
+  # Демо идёт в темпе Simulator (минуты, не десятки минут): начальный expected_ready_at.
+  KITCHEN__PREPARATION_TIME: 1m
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.

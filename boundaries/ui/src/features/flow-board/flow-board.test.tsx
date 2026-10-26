@@ -48,6 +48,7 @@ afterEach(() => {
   mockServer.resetHandlers();
   mockStore.reset();
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 afterAll(() => mockServer.close());
 
@@ -484,21 +485,39 @@ describe("cook and courier pools", () => {
     expect(within(members).getByText("не на линии")).toBeVisible();
   });
 
-  it("hires a cook off line and puts them on line", async () => {
+  it("hires a cook off line under a made-up name and puts them on line", async () => {
     const user = userEvent.setup();
+    // The first made-up name: «Анна А.».
+    vi.spyOn(Math, "random").mockReturnValue(0);
     renderBoard();
     const cooks = await openKitchen(user);
 
-    await user.type(within(cooks).getByLabelText("Имя повара"), "Тимур");
     await user.click(
       within(cooks).getByRole("button", { name: "Добавить повара" }),
     );
     await user.click(
-      await within(cooks).findByRole("button", { name: "На линию: Тимур" }),
+      await within(cooks).findByRole("button", { name: "На линию: Анна А." }),
     );
 
     expect(await within(cooks).findByText(/Линия 6 из 7/)).toBeVisible();
-    expect(within(cooks).getByLabelText("Имя повара")).toHaveValue("");
+  });
+
+  it("removes an idle cook, off line first", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    const cooks = await openKitchen(user);
+    const members = within(cooks).getByRole("list", {
+      name: "Повара ресторана",
+    });
+    const before = within(members).getAllByRole("listitem").length;
+
+    await user.click(
+      within(cooks).getByRole("button", { name: "Убрать повара" }),
+    );
+
+    await waitFor(() =>
+      expect(within(members).getAllByRole("listitem")).toHaveLength(before - 1),
+    );
   });
 
   it("AC-797 warns when no cook is on line and orders wait", async () => {
@@ -556,13 +575,14 @@ describe("cook and courier pools", () => {
     expect(within(couriers).getByText(/Линия 1 из 3/)).toBeVisible();
     expect(within(couriers).getByText(/Ждут курьера: \d+/)).toBeVisible();
 
-    // No name to type: the board makes one up ("Анна К.") on adding.
+    // No name to type: the board makes one up, here «Анна А.».
+    vi.spyOn(Math, "random").mockReturnValue(0);
     await user.click(
       within(couriers).getByRole("button", { name: "Добавить курьера" }),
     );
 
     expect(await within(couriers).findByText(/Линия 2 из 4/)).toBeVisible();
-    expect(within(couriers).getByText(/^[А-ЯЁ][а-яё]+ [А-Я]\.$/)).toBeVisible();
+    expect(within(couriers).getByText("Анна А.")).toBeVisible();
   });
 
   it("AC-798 hides the Courier Pool from a user who is no dispatcher", async () => {

@@ -7,7 +7,8 @@
 # ресторан и курьера через fixture e2e-driver.
 #
 # Demo-пользователь (owner, staff и курьер demo-стенда, ops/kind/demo) — диспетчер Courier Pool
-# (FR-620): управляет курьерами из flow-board, но не платформой.
+# (FR-620) и оператор платформы: доска входит одним пользователем, а переключатель демо Simulator
+# (FR-607) в шапке видит только оператор.
 #
 # Тот же оператор при входе через Dex (operator@nomnom.test): sub Dex — base64url(protobuf{userID,
 # "local"}), ADR 35.
@@ -15,3 +16,4 @@ relationships: |-
   platform:nomnom#operator@user:kind-operator
   platform:nomnom#operator@user:Cg1raW5kLW9wZXJhdG9yEgVsb2NhbA
   platform:nomnom#dispatcher@user:ChFub21ub20tZGVtby1vd25lchIFbG9jYWw
+  platform:nomnom#operator@user:ChFub21ub20tZGVtby1vd25lchIFbG9jYWw

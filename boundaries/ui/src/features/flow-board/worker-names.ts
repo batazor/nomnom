@@ -1,9 +1,9 @@
 import type { SupportedLocale } from "../../shared/config/runtime-config";
 
-// Names of couriers added on the board, made up when the courier is added: a
+// Names of cooks and couriers added on the board, made up when one is added: a
 // first name and the initial of a last name ("Анна К."). A name already in the
 // pool is skipped while another is free; the pool may repeat names only once
-// all of them are taken, since couriers are told apart by id.
+// all of them are taken, since workers are told apart by id.
 const firstNames: Record<SupportedLocale, readonly string[]> = {
   ru: [
     "Анна",
@@ -56,7 +56,7 @@ const lastInitials: Record<SupportedLocale, string> = {
   en: "ABCDEFGHJKLMNPRSTVWY",
 };
 
-export function newCourierName(
+export function newWorkerName(
   locale: SupportedLocale,
   taken: readonly string[],
   random: () => number = Math.random,

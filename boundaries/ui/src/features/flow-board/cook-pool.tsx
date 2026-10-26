@@ -11,11 +11,13 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import {
-  PoolAddForm,
   PoolLoad,
   type PoolMember,
   PoolMembers,
+  PoolSize,
+  removableMember,
 } from "./pool-panel";
+import { newWorkerName } from "./worker-names";
 
 const problemMessage: Record<CookPoolProblemCode, MessageKey> = {
   COOK_NAME_INVALID: "board.cooks.problem.COOK_NAME_INVALID",
@@ -30,7 +32,7 @@ type Outcome = Readonly<{
 }>;
 
 // Cook Pool of the kitchen in its column header (FR-624): the line, the load
-// and the queue, the cooks with their line actions and hiring by name. The
+// and the queue, the cooks with their line action, − and + for the pool. The
 // pool comes with kitchenChanged, so the panel only sends commands.
 export function CookPoolPanel({
   restaurantId,
@@ -42,7 +44,7 @@ export function CookPoolPanel({
   // Receipt time of each kitchen order, to say which one a cook prepares.
   orderTimes: ReadonlyMap<string, string>;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [hiring, hire] = useMutation(HireCookDocument);
   const [lining, setOnLine] = useMutation(SetCookOnLineDocument);
   const [retiring, retire] = useMutation(RetireCookDocument);
@@ -78,6 +80,27 @@ export function CookPoolPanel({
     };
   });
 
+  async function takeOff(cookId: string, onLine: boolean): Promise<boolean> {
+    const result = await setOnLine({ restaurantId, cookId, onLine });
+    return settle({
+      error: result.error,
+      problem: result.data?.setCookOnLine.problem,
+    });
+  }
+
+  // − takes the cook off the line first: only an off-line cook leaves.
+  async function remove(member: PoolMember) {
+    if (member.onLine && !(await takeOff(member.id, false))) return;
+    const result = await retire({ restaurantId, cookId: member.id });
+    settle({
+      error: result.error,
+      problem: result.data?.retireCook.problem,
+    });
+  }
+
+  const removable = removableMember(members);
+  const pending = hiring.fetching || lining.fetching || retiring.fetching;
+
   return (
     <section aria-label={t("board.cooks.title")} className="board-pool">
       <PoolLoad
@@ -91,41 +114,34 @@ export function CookPoolPanel({
         warning={
           pool.onLine === 0 && pool.queued > 0 ? t("board.cooks.noLine") : null
         }
+        actions={
+          <PoolSize
+            addLabel={t("board.cooks.hire")}
+            canRemove={removable !== undefined}
+            onAdd={async () => {
+              const name = newWorkerName(
+                locale,
+                pool.cooks.map((cook) => cook.name),
+              );
+              const result = await hire({ restaurantId, name });
+              settle({
+                error: result.error,
+                problem: result.data?.hireCook.problem,
+              });
+            }}
+            onRemove={() => {
+              if (removable) void remove(removable);
+            }}
+            pending={pending}
+            removeLabel={t("board.cooks.retireOne")}
+          />
+        }
       />
       <PoolMembers
         label={t("board.cooks.members")}
         members={members}
-        onLine={async (member, onLine) => {
-          const result = await setOnLine({
-            restaurantId,
-            cookId: member.id,
-            onLine,
-          });
-          settle({
-            error: result.error,
-            problem: result.data?.setCookOnLine.problem,
-          });
-        }}
-        onRetire={async (member) => {
-          const result = await retire({ restaurantId, cookId: member.id });
-          settle({
-            error: result.error,
-            problem: result.data?.retireCook.problem,
-          });
-        }}
-        pending={lining.fetching || retiring.fetching}
-      />
-      <PoolAddForm
-        label={t("board.cooks.name")}
-        onAdd={async (name) => {
-          const result = await hire({ restaurantId, name });
-          return settle({
-            error: result.error,
-            problem: result.data?.hireCook.problem,
-          });
-        }}
-        pending={hiring.fetching}
-        submit={t("board.cooks.hire")}
+        onLine={(member, onLine) => void takeOff(member.id, onLine)}
+        pending={pending}
       />
       {problem ? (
         <p className="board-error" role="alert">

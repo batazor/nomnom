@@ -268,10 +268,8 @@ export const messages = {
     "board.pool.offLine": "не на линии",
     "board.pool.putOn": "На линию",
     "board.pool.takeOff": "Снять",
-    "board.pool.retire": "Убрать",
     "board.pool.putOnNamed": "На линию: {name}",
     "board.pool.takeOffNamed": "Снять с линии: {name}",
-    "board.pool.retireNamed": "Убрать из пула: {name}",
     "board.cooks.title": "Повара",
     "board.cooks.members": "Повара ресторана",
     "board.cooks.queued": "В очереди: {count}",
@@ -279,7 +277,7 @@ export const messages = {
     "board.cooks.cooking": "готовит заказ от {time}",
     "board.cooks.cookingOrder": "готовит заказ",
     "board.cooks.free": "свободен",
-    "board.cooks.name": "Имя повара",
+    "board.cooks.retireOne": "Убрать повара",
     "board.cooks.hire": "Добавить повара",
     "board.cooks.problem.COOK_NAME_INVALID":
       "Имя повара — от 1 до 64 символов.",
@@ -295,6 +293,7 @@ export const messages = {
     "board.couriers.offered": "получил предложение",
     "board.couriers.free": "свободен",
     "board.couriers.add": "Добавить курьера",
+    "board.couriers.retireOne": "Убрать курьера",
     "board.couriers.problem.COURIER_NAME_INVALID":
       "Имя курьера — от 1 до 64 символов.",
     "board.couriers.problem.COURIER_STATUS_CONFLICT":
@@ -335,7 +334,7 @@ export const messages = {
     "board.courier.problem.DELIVERY_STAGE_CONFLICT":
       "Заказ ещё не готов к этому шагу.",
     "board.dnd.courierBusy": "Курьер уже везёт другой заказ.",
-    "board.dnd.noOffer": "Для этого заказа пока нет предложения курьеру.",
+    "board.dnd.noOffer": "Этот заказ вам пока не предложен.",
   },
   en: {
     "app.brand": "nomnom",
@@ -613,10 +612,8 @@ export const messages = {
     "board.pool.offLine": "off line",
     "board.pool.putOn": "Put on line",
     "board.pool.takeOff": "Take off",
-    "board.pool.retire": "Remove",
     "board.pool.putOnNamed": "Put on line: {name}",
     "board.pool.takeOffNamed": "Take off line: {name}",
-    "board.pool.retireNamed": "Remove from the pool: {name}",
     "board.cooks.title": "Cooks",
     "board.cooks.members": "Cooks of the restaurant",
     "board.cooks.queued": "In the queue: {count}",
@@ -624,7 +621,7 @@ export const messages = {
     "board.cooks.cooking": "cooking the order from {time}",
     "board.cooks.cookingOrder": "cooking an order",
     "board.cooks.free": "free",
-    "board.cooks.name": "Cook name",
+    "board.cooks.retireOne": "Remove a cook",
     "board.cooks.hire": "Add a cook",
     "board.cooks.problem.COOK_NAME_INVALID":
       "A cook name has 1 to 64 characters.",
@@ -642,6 +639,7 @@ export const messages = {
     "board.couriers.offered": "has an offer",
     "board.couriers.free": "free",
     "board.couriers.add": "Add a courier",
+    "board.couriers.retireOne": "Remove a courier",
     "board.couriers.problem.COURIER_NAME_INVALID":
       "A courier name has 1 to 64 characters.",
     "board.couriers.problem.COURIER_STATUS_CONFLICT":
@@ -683,7 +681,7 @@ export const messages = {
     "board.courier.problem.DELIVERY_STAGE_CONFLICT":
       "The order is not ready for this step yet.",
     "board.dnd.courierBusy": "The courier is already on another delivery.",
-    "board.dnd.noOffer": "There is no courier offer for this order yet.",
+    "board.dnd.noOffer": "This order has not been offered to you yet.",
   },
 } as const;
 

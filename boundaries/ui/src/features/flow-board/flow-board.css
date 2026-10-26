@@ -586,13 +586,6 @@ button.board-card-head {
   gap: var(--space-1);
 }
 
-.board-pool-add {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-2);
-  align-items: end;
-}
-
 .board-card-people {
   display: flex;
   flex-wrap: wrap;
@@ -600,4 +593,17 @@ button.board-card-head {
   margin: 0;
   color: var(--color-muted);
   font-size: var(--font-size-sm);
+}
+
+.board-pool-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.board-pool-size {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-1);
 }

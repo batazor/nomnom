@@ -18,10 +18,15 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
-import { Button } from "../../shared/ui";
-import { newCourierName } from "./courier-names";
-import { PoolLoad, type PoolMember, PoolMembers } from "./pool-panel";
+import {
+  PoolLoad,
+  type PoolMember,
+  PoolMembers,
+  PoolSize,
+  removableMember,
+} from "./pool-panel";
 import { useLatest } from "./use-latest";
+import { newWorkerName } from "./worker-names";
 
 // Courier Pool of the platform on the flow board (FR-623, FR-627): one source
 // reads it — courierPool, then courierPoolChanged (ADR 36, no polling) — and
@@ -103,7 +108,7 @@ type Outcome = Readonly<{
 
 // Courier Pool in the courier column header: the line, the load and the
 // deliveries waiting for a courier, the couriers with their line actions and
-// adding one under a made-up name. Hidden for users who are no dispatcher (AC-798).
+// − and + for the pool. Hidden for users who are no dispatcher (AC-798).
 export function CourierPoolPanel() {
   const { t, locale } = useI18n();
   const pool = useCourierPool();
@@ -140,6 +145,28 @@ export function CourierPoolPanel() {
           : t("board.pool.offLine"),
   }));
 
+  async function setLine(courierId: string, onLine: boolean): Promise<boolean> {
+    const result = await setOnLine({ courierId, onLine });
+    return settle({
+      error: result.error,
+      problem: result.data?.setCourierOnLine.problem,
+    });
+  }
+
+  // − takes the courier off the line first: only an off-line courier leaves.
+  async function remove(member: PoolMember) {
+    if (member.onLine && !(await setLine(member.id, false))) return;
+    const result = await retire({ courierId: member.id });
+    settle({
+      error: result.error,
+      problem: result.data?.retireCourier.problem,
+    });
+  }
+
+  const couriers = pool.couriers;
+  const removable = removableMember(members);
+  const pending = adding.fetching || lining.fetching || retiring.fetching;
+
   return (
     <section aria-label={t("board.couriers.title")} className="board-pool">
       <PoolLoad
@@ -153,44 +180,35 @@ export function CourierPoolPanel() {
             ? t("board.couriers.noLine")
             : null
         }
+        actions={
+          <PoolSize
+            addLabel={t("board.couriers.add")}
+            canRemove={removable !== undefined}
+            onAdd={async () => {
+              const name = newWorkerName(
+                locale,
+                couriers.map((courier) => courier.name),
+              );
+              const result = await add({ name });
+              settle({
+                error: result.error,
+                problem: result.data?.addCourier.problem,
+              });
+            }}
+            onRemove={() => {
+              if (removable) void remove(removable);
+            }}
+            pending={pending}
+            removeLabel={t("board.couriers.retireOne")}
+          />
+        }
       />
       <PoolMembers
         label={t("board.couriers.members")}
         members={members}
-        onLine={async (member, onLine) => {
-          const result = await setOnLine({ courierId: member.id, onLine });
-          settle({
-            error: result.error,
-            problem: result.data?.setCourierOnLine.problem,
-          });
-        }}
-        onRetire={async (member) => {
-          const result = await retire({ courierId: member.id });
-          settle({
-            error: result.error,
-            problem: result.data?.retireCourier.problem,
-          });
-        }}
-        pending={lining.fetching || retiring.fetching}
+        onLine={(member, onLine) => void setLine(member.id, onLine)}
+        pending={pending}
       />
-      <Button
-        isPending={adding.fetching}
-        onClick={async () => {
-          const name = newCourierName(
-            locale,
-            pool.couriers.map((courier) => courier.name),
-          );
-          const result = await add({ name });
-          settle({
-            error: result.error,
-            problem: result.data?.addCourier.problem,
-          });
-        }}
-        size="sm"
-        variant="outline"
-      >
-        {t("board.couriers.add")}
-      </Button>
       {problem ? (
         <p className="board-error" role="alert">
           {t(problem)}
