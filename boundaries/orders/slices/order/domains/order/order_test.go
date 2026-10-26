@@ -11,16 +11,6 @@ import (
 	"nomnom/orders/slices/order/domains/order/vo"
 )
 
-func TestTransitionTableIsComplete(t *testing.T) {
-	for _, state := range allStates {
-		for _, trigger := range allTriggers {
-			_, ok := transitionTable[transitionKey{from: state, trigger: trigger}]
-			assert.True(t, ok, "missing outcome for state=%s trigger=%s", state, trigger)
-		}
-	}
-	assert.Len(t, transitionTable, len(allStates)*len(allTriggers))
-}
-
 func TestOrderLifecycleUsesStrictTypedOutcomes(t *testing.T) {
 	order := newTestOrder(t)
 

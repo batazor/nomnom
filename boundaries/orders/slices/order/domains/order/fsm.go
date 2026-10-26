@@ -1,4 +1,6 @@
-// Package order contains the canonical Order aggregate and state machine for the order slice.
+// Package order contains the canonical Order aggregate and state machine for the
+// order slice. The state machine is a hierarchy of States and CompoundStates;
+// see docs/fsm.md#order and ADR 21.
 package order
 
 import (
@@ -17,15 +19,61 @@ const (
 
 var allStates = [...]State{StatePlaced, StateConfirmed, StateCancelled, StateCompleted}
 
-// IsFinal reports whether the state is a terminal outcome of the Order lifecycle.
-func (s State) IsFinal() bool { return s == StateCancelled || s == StateCompleted }
+// CompoundState is a named group of States in the Ubiquitous Language. It is
+// never persisted or published: an Order is always in exactly one State.
+type CompoundState string
 
-// AcceptsCancellation reports whether the transition table lets an Order in
-// this State be cancelled; CheckCancellation reads the same row.
-func (s State) AcceptsCancellation() bool {
-	definition, ok := transitionTable[transitionKey{from: s, trigger: TriggerCancel}]
-	return ok && definition.outcome == transitionAllowed
+const (
+	// CompoundOpen is an Open Order: Fulfillment is not finished, the Order
+	// can be cancelled and records Fulfillment Facts.
+	CompoundOpen CompoundState = "open"
+	// CompoundClosed is a Closed Order: a final outcome of the lifecycle.
+	CompoundClosed CompoundState = "closed"
+)
+
+var allCompoundStates = [...]CompoundState{CompoundOpen, CompoundClosed}
+
+// node is a State or a CompoundState of the hierarchy.
+type node string
+
+// topLevel marks a node without a parent.
+const topLevel node = ""
+
+// parent of every node of the hierarchy.
+var parent = map[node]node{
+	node(CompoundOpen):   topLevel,
+	node(CompoundClosed): topLevel,
+	node(StatePlaced):    node(CompoundOpen),
+	node(StateConfirmed): node(CompoundOpen),
+	node(StateCancelled): node(CompoundClosed),
+	node(StateCompleted): node(CompoundClosed),
 }
+
+// lineage is the state followed by its ancestors up to the top level.
+func lineage(state State) []node {
+	var nodes []node
+	for current := node(state); current != topLevel; current = parent[current] {
+		nodes = append(nodes, current)
+	}
+	return nodes
+}
+
+// isIn reports whether the state lies inside the compound state.
+func isIn(state State, compound CompoundState) bool {
+	for _, candidate := range lineage(state) {
+		if candidate == node(compound) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsFinal reports whether the state is a terminal outcome of the Order lifecycle.
+func (s State) IsFinal() bool { return isIn(s, CompoundClosed) }
+
+// AcceptsCancellation reports whether an Order in this State can be cancelled:
+// TriggerCancel is declared on CompoundOpen, CheckCancellation resolves it.
+func (s State) AcceptsCancellation() bool { return isIn(s, CompoundOpen) }
 
 type Trigger string
 
@@ -74,25 +122,28 @@ func (e AlreadyInState) Error() string {
 	return fmt.Sprintf("order is already in state %q", e.State)
 }
 
-type transitionKey struct {
-	from    State
-	trigger Trigger
-}
-
-type transitionOutcome uint8
-
-const (
-	transitionAllowed transitionOutcome = iota
-	transitionInvalid
-	transitionAlreadyApplied
-)
-
 type guard func(TransitionInput) error
 
-type transitionDefinition struct {
-	outcome transitionOutcome
-	to      State
+// target is a State or stay: a targetless transition keeps the current State.
+type target struct {
+	state State
+	stay  bool
+}
+
+func to(state State) target { return target{state: state} }
+
+var stay = target{stay: true}
+
+type transitionRow struct {
+	source  node
+	trigger Trigger
+	target  target
 	guard   guard
+}
+
+type repeatRow struct {
+	state   State
+	trigger Trigger
 }
 
 func requestedAtIsPresent(input TransitionInput) error {
@@ -109,38 +160,47 @@ func occurredAtIsPresent(input TransitionInput) error {
 	return nil
 }
 
-// transitionTable is the single source of truth for every State x Trigger pair.
-var transitionTable = map[transitionKey]transitionDefinition{
-	{StatePlaced, TriggerConfirm}:       {outcome: transitionAllowed, to: StateConfirmed},
-	{StatePlaced, TriggerCancel}:        {outcome: transitionAllowed, to: StateCancelled, guard: requestedAtIsPresent},
-	{StatePlaced, TriggerComplete}:      {outcome: transitionInvalid},
-	{StatePlaced, TriggerRecordFact}:    {outcome: transitionAllowed, to: StatePlaced, guard: occurredAtIsPresent},
-	{StateConfirmed, TriggerConfirm}:    {outcome: transitionAlreadyApplied, to: StateConfirmed},
-	{StateConfirmed, TriggerCancel}:     {outcome: transitionAllowed, to: StateCancelled, guard: requestedAtIsPresent},
-	{StateConfirmed, TriggerComplete}:   {outcome: transitionAllowed, to: StateCompleted, guard: occurredAtIsPresent},
-	{StateConfirmed, TriggerRecordFact}: {outcome: transitionAllowed, to: StateConfirmed, guard: occurredAtIsPresent},
-	{StateCancelled, TriggerConfirm}:    {outcome: transitionInvalid},
-	{StateCancelled, TriggerCancel}:     {outcome: transitionAlreadyApplied, to: StateCancelled},
-	{StateCancelled, TriggerComplete}:   {outcome: transitionInvalid},
-	{StateCancelled, TriggerRecordFact}: {outcome: transitionInvalid},
-	{StateCompleted, TriggerConfirm}:    {outcome: transitionInvalid},
-	{StateCompleted, TriggerCancel}:     {outcome: transitionInvalid},
-	{StateCompleted, TriggerComplete}:   {outcome: transitionAlreadyApplied, to: StateCompleted},
-	{StateCompleted, TriggerRecordFact}: {outcome: transitionInvalid},
+// transitions is the single source of truth for allowed transitions; a row
+// on a CompoundState applies to every State inside it.
+var transitions = []transitionRow{
+	{source: node(StatePlaced), trigger: TriggerConfirm, target: to(StateConfirmed)},
+	{source: node(StateConfirmed), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
+	{source: node(CompoundOpen), trigger: TriggerCancel, target: to(StateCancelled), guard: requestedAtIsPresent},
+	{source: node(CompoundOpen), trigger: TriggerRecordFact, target: stay, guard: occurredAtIsPresent},
 }
 
+// repeats are strict repeats of an applied transition with an explicit
+// AlreadyInState outcome; they are declared on States only.
+var repeats = []repeatRow{
+	{state: StateConfirmed, trigger: TriggerConfirm},
+	{state: StateCancelled, trigger: TriggerCancel},
+	{state: StateCompleted, trigger: TriggerComplete},
+}
+
+// transition resolves the trigger innermost-first: the closest declaration on
+// the state or one of its ancestors wins; none is an InvalidTransition.
 func transition(from State, trigger Trigger, input TransitionInput) (TransitionResult, error) {
-	definition, ok := transitionTable[transitionKey{from: from, trigger: trigger}]
-	if !ok || definition.outcome == transitionInvalid {
-		return TransitionResult{}, InvalidTransition{From: from, Trigger: trigger}
-	}
-	if definition.outcome == transitionAlreadyApplied {
-		return TransitionResult{}, AlreadyInState{State: from}
-	}
-	if definition.guard != nil {
-		if err := definition.guard(input); err != nil {
-			return TransitionResult{}, err
+	for _, current := range lineage(from) {
+		for _, row := range transitions {
+			if row.source != current || row.trigger != trigger {
+				continue
+			}
+			if row.guard != nil {
+				if err := row.guard(input); err != nil {
+					return TransitionResult{}, err
+				}
+			}
+			next := row.target.state
+			if row.target.stay {
+				next = from
+			}
+			return TransitionResult{From: from, Trigger: trigger, To: next}, nil
+		}
+		for _, repeat := range repeats {
+			if node(repeat.state) == current && repeat.trigger == trigger {
+				return TransitionResult{}, AlreadyInState{State: from}
+			}
 		}
 	}
-	return TransitionResult{From: from, Trigger: trigger, To: definition.to}, nil
+	return TransitionResult{}, InvalidTransition{From: from, Trigger: trigger}
 }
