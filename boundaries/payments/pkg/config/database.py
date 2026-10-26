@@ -8,13 +8,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .duration import _duration
 
-DATABASE_URL_ENV = "DATABASE__URL"
+DATABASE_URI_ENV = "DATABASE__URI"
 DATABASE_MAX_CONNS_ENV = "DATABASE__MAX_CONNS"
 DATABASE_MIN_CONNS_ENV = "DATABASE__MIN_CONNS"
 DATABASE_MAX_CONN_LIFETIME_ENV = "DATABASE__MAX_CONN_LIFETIME"
 DATABASE_MAX_CONN_IDLE_TIME_ENV = "DATABASE__MAX_CONN_IDLE_TIME"
 DATABASE_CONNECT_TIMEOUT_ENV = "DATABASE__CONNECT_TIMEOUT"
 DATABASE_ACQUIRE_TIMEOUT_ENV = "DATABASE__ACQUIRE_TIMEOUT"
+
+# Префиксы connection URI libpq; key=value и другие схемы не принимаются.
+DATABASE_URI_SCHEMES = ("postgresql://", "postgres://")
 
 # Значения по умолчанию рассчитаны на API-процесс за пулером в session mode; Helm задаёт
 # max_conns под конкурентность каждого процесса.
@@ -32,15 +35,17 @@ MAX_DATABASE_MIN_CONNS = 1
 class Config(BaseSettings):
     """Connection to the payments PostgreSQL database (ADR 8, local ADR 1).
 
-    The DSN is required: an empty value stops the process at startup. In the cluster it
-    comes from a Secret and is never stored in values. Pool limits are validated at
+    The connection URI is required and must be a PostgreSQL connection URI
+    (``postgresql://`` or ``postgres://``); an empty value, the libpq ``key=value`` form or
+    another scheme stops the process at startup. In the cluster it comes from a Secret and
+    is never stored in values. Pool limits are validated at
     startup as well: every pooled connection pins a server connection of the
     session-mode pooler.
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    url: str = Field(default="", validation_alias=DATABASE_URL_ENV, repr=False)
+    uri: str = Field(default="", validation_alias=DATABASE_URI_ENV, repr=False)
     max_conns: int = Field(
         default=DEFAULT_DATABASE_MAX_CONNS, ge=1, validation_alias=DATABASE_MAX_CONNS_ENV
     )
@@ -66,12 +71,18 @@ class Config(BaseSettings):
         default=DEFAULT_DATABASE_ACQUIRE_TIMEOUT, validation_alias=DATABASE_ACQUIRE_TIMEOUT_ENV
     )
 
-    @field_validator("url")
+    @field_validator("uri")
     @classmethod
-    def _require_url(cls, value: str) -> str:
+    def _require_uri(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError(f"{DATABASE_URL_ENV} must not be empty")
+            raise ValueError(f"{DATABASE_URI_ENV} must not be empty")
+        if not value.startswith(DATABASE_URI_SCHEMES):
+            raise ValueError(
+                f"{DATABASE_URI_ENV} must be a PostgreSQL connection URI "
+                "(postgresql://user@host:port/dbname); the libpq key=value form and other "
+                "schemes are not accepted"
+            )
         return value
 
     @field_validator(

@@ -379,10 +379,10 @@ _STATES_WITH_REFERENCE = {PaymentState.AUTHORIZED, PaymentState.CAPTURED, Paymen
 
 def unreachable_database() -> Database:
     """Pool that never connects: for composition tests that stop before storage."""
-    return create_database(database.Config(DATABASE__URL=UNREACHABLE_DATABASE_URL))
+    return create_database(database.Config(DATABASE__URI=UNREACHABLE_DATABASE_URI))
 
 
-UNREACHABLE_DATABASE_URL = "postgresql://payments@127.0.0.1:1/x"
+UNREACHABLE_DATABASE_URI = "postgresql://payments@127.0.0.1:1/x"
 
 
 def payments_container(environment: Mapping[str, str] | None = None) -> PaymentsContainer:
@@ -391,7 +391,7 @@ def payments_container(environment: Mapping[str, str] | None = None) -> Payments
     The database is an unreachable pool (closed by ``close_container``) and both workers
     listen on ephemeral loopback ports.
     """
-    env = {"DATABASE__URL": UNREACHABLE_DATABASE_URL, **(environment or {})}
+    env = {"DATABASE__URI": UNREACHABLE_DATABASE_URI, **(environment or {})}
     with patch.dict(os.environ, env, clear=True):
         settings = load_settings()
     container = PaymentsContainer()

@@ -198,14 +198,14 @@ helm template payments ops/helm \
 
 ## PostgreSQL
 
-Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). DSN передаётся из внешнего Secret `database.urlSecret.name`/`key` (env `DATABASE__URL`); без него переменная не задаётся и процесс не стартует. Процесс сам применяет недостающие forward-only SQL-миграции при старте, до открытия портов, библиотекой yoyo-migrations под одним session advisory lock PostgreSQL — сначала набор общих таблиц `messaging`, затем наборы slices ([README](../README.md#статус-реализации)): реплики не мешают друг другу, при ошибке миграции процесс завершается с кодом 1. Отдельного шага или init container нет.
+Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). Connection URI PostgreSQL (`postgresql://` или `postgres://`; форма libpq `key=value` не принимается) передаётся из внешнего Secret `database.uriSecret.name`/`key` (env `DATABASE__URI`); без него переменная не задаётся и процесс не стартует. Процесс сам применяет недостающие forward-only SQL-миграции при старте, до открытия портов, библиотекой yoyo-migrations под одним session advisory lock PostgreSQL — сначала набор общих таблиц `messaging`, затем наборы slices ([README](../README.md#статус-реализации)): реплики не мешают друг другу, при ошибке миграции процесс завершается с кодом 1. Отдельного шага или init container нет.
 
 Пулер перед базой — только session mode; replicas × maxConns должна помещаться в `pool_size` пулера ([README](../README.md#пулер-postgresql)). Длительности — `<int>(ms|s|m)`, chart отклоняет другой формат и `minConns` вне 0–1.
 
 | Значение | По умолчанию | Назначение |
 | --- | --- | --- |
-| `database.urlSecret.name` | `""` | Secret с DSN; создаётся развёртыванием, не chart. |
-| `database.urlSecret.key` | `dsn` | Ключ в Secret. |
+| `database.uriSecret.name` | `""` | Secret с connection URI; создаётся развёртыванием, не chart. |
+| `database.uriSecret.key` | `dsn` | Ключ в Secret. |
 | `database.maxConns` | `10` | Размер пула процесса (`DATABASE__MAX_CONNS`). Миграции при старте идут на отдельном соединении до открытия пула. |
 | `database.minConns` | `1` | Минимум соединений пула, 0 или 1 (`DATABASE__MIN_CONNS`). |
 | `database.maxConnLifetime` | `30m` | Lifetime соединения (`DATABASE__MAX_CONN_LIFETIME`), jitter 0–5% добавляет psycopg_pool. |
@@ -217,7 +217,7 @@ helm template payments ops/helm \
 
 ```bash
 helm upgrade --install payments ops/helm \
-  --set database.urlSecret.name=payments-postgres
+  --set database.uriSecret.name=payments-postgres
 ```
 
 ## CDC Outbox

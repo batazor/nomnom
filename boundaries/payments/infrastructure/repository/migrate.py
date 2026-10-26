@@ -86,9 +86,9 @@ def migrate(settings: database.Config, sets: Sequence[MigrationSet]) -> list[str
 
     Returns ``<storage_id>/<migration>`` of the applied migrations.
     """
-    # Параметры libpq DSN (URI или key=value) передаются в psycopg.connect как есть.
+    # Параметры connection URI передаются в psycopg.connect как есть; options дополняется ниже.
     params = conninfo_to_dict(
-        settings.url, connect_timeout=connect_timeout_seconds(settings.connect_timeout)
+        settings.uri, connect_timeout=connect_timeout_seconds(settings.connect_timeout)
     )
     # The lock is taken before yoyo creates its tables: concurrent CREATE TABLE IF NOT
     # EXISTS of several replicas collide in the catalog.

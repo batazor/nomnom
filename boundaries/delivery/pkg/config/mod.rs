@@ -106,7 +106,7 @@ pub const MAX_OFFERS_DISPATCH_BATCH: u32 = 1000;
 
 /// PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста): ключ, переменная, значение по умолчанию.
 const DATABASE_SETTINGS: [(&str, &str, &str); 6] = [
-    ("database.url", DATABASE_URL_ENV, ""),
+    ("database.uri", DATABASE_URI_ENV, ""),
     (
         "database.max_conns",
         DATABASE_MAX_CONNS_ENV,
@@ -121,7 +121,7 @@ const DATABASE_SETTINGS: [(&str, &str, &str); 6] = [
         "5s",
     ),
 ];
-pub const DATABASE_URL_ENV: &str = "DATABASE__URL";
+pub const DATABASE_URI_ENV: &str = "DATABASE__URI";
 pub const DATABASE_MAX_CONNS_ENV: &str = "DATABASE__MAX_CONNS";
 pub const DATABASE_MIN_CONNS_ENV: &str = "DATABASE__MIN_CONNS";
 pub const DATABASE_MAX_LIFETIME_ENV: &str = "DATABASE__MAX_LIFETIME";

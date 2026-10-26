@@ -99,18 +99,18 @@ SpiceDB (ADR 18): при заданном endpoint preshared key обязате�
 {{- end -}}
 
 {{/*
-PostgreSQL (ADR 8, ADR 31): URL только из Secret database.urlSecret и лимиты пула
+PostgreSQL (ADR 8, ADR 31): connection URI только из Secret database.uriSecret и лимиты пула
 database.pool. Общий env процесса и init container миграций; dict:
 root — контекст chart, maxConns — размер пула этого контейнера.
 */}}
 {{- define "delivery.databaseEnv" -}}
 {{- with .root.Values.database }}
-{{- if .urlSecret.name }}
-- name: DATABASE__URL
+{{- if .uriSecret.name }}
+- name: DATABASE__URI
   valueFrom:
     secretKeyRef:
-      name: {{ .urlSecret.name | quote }}
-      key: {{ .urlSecret.key | quote }}
+      name: {{ .uriSecret.name | quote }}
+      key: {{ .uriSecret.key | quote }}
 - name: DATABASE__MAX_CONNS
   value: {{ $.maxConns | quote }}
 - name: DATABASE__MIN_CONNS

@@ -114,15 +114,15 @@ SpiceDB (ADR 18): endpoint, preshared key из Secret и timeout в формат
 {{- end -}}
 
 {{/*
-PostgreSQL env (ADR 8): DSN из внешнего Secret и лимиты пула процесса. Без
-database.urlSecret.name переменные не задаются, и процесс payments не стартует
-(DATABASE__URL обязателен). За пулером в session mode каждое соединение пула держит
+PostgreSQL env (ADR 8): connection URI из внешнего Secret и лимиты пула процесса. Без
+database.uriSecret.name переменные не задаются, и процесс payments не стартует
+(DATABASE__URI обязателен). За пулером в session mode каждое соединение пула держит
 server-соединение, поэтому maxConns задаётся values каждого release.
 Usage: {{ include "payments.databaseEnv" . }}
 */}}
 {{- define "payments.databaseEnv" -}}
 {{- with .Values.database }}
-{{- if .urlSecret.name -}}
+{{- if .uriSecret.name -}}
 {{- if lt (int .maxConns) 1 -}}
 {{- fail (printf "database.maxConns must be positive, got %v" .maxConns) -}}
 {{- end -}}
@@ -134,11 +134,11 @@ Usage: {{ include "payments.databaseEnv" . }}
 {{- fail (printf "database.%s %q must be a positive duration <int>(ms|s|m), e.g. 5s" $key (toString (get $.Values.database $key))) -}}
 {{- end -}}
 {{- end }}
-- name: DATABASE__URL
+- name: DATABASE__URI
   valueFrom:
     secretKeyRef:
-      name: {{ .urlSecret.name | quote }}
-      key: {{ .urlSecret.key | quote }}
+      name: {{ .uriSecret.name | quote }}
+      key: {{ .uriSecret.key | quote }}
 - name: DATABASE__MAX_CONNS
   value: {{ .maxConns | quote }}
 - name: DATABASE__MIN_CONNS

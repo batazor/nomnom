@@ -105,7 +105,7 @@ fn outbox_rows(aggregate_id: &str) -> Vec<OutboxRow> {
         .build()
         .expect("runtime")
         .block_on(async move {
-            let mut connection = <sqlx::PgConnection as sqlx::Connection>::connect(&config.url)
+            let mut connection = <sqlx::PgConnection as sqlx::Connection>::connect(&config.uri)
                 .await
                 .expect("connect");
             sqlx::query_as(
@@ -128,7 +128,7 @@ fn execute(statement: &'static str, parameter: &str) {
         .build()
         .expect("runtime")
         .block_on(async move {
-            let mut connection = <sqlx::PgConnection as sqlx::Connection>::connect(&config.url)
+            let mut connection = <sqlx::PgConnection as sqlx::Connection>::connect(&config.uri)
                 .await
                 .expect("connect");
             sqlx::query(statement)
@@ -249,7 +249,7 @@ fn installed(config: &database::Config) -> Vec<(&'static str, i64, String)> {
             .build()
             .expect("runtime")
             .block_on(async {
-                let pool = sqlx::PgPool::connect(&config.url).await.expect("connect");
+                let pool = sqlx::PgPool::connect(&config.uri).await.expect("connect");
                 let mut installed = Vec::new();
                 for set in &MIGRATION_SETS {
                     let statement = format!(
@@ -274,7 +274,7 @@ fn empty_dsn_fails_fast() {
     let Err(error) = Store::connect(&database::Config::default()) else {
         panic!("an empty DSN must fail");
     };
-    assert!(error.contains("DATABASE__URL"));
+    assert!(error.contains("DATABASE__URI"));
 }
 
 #[test]
@@ -356,7 +356,7 @@ fn courier_writes_notify_the_courier_entity() {
 /// columns only; the publication streams inserts and nothing else.
 #[tokio::test(flavor = "multi_thread")]
 async fn outbox_table_is_the_cdc_record_contract() {
-    let db = sqlx::PgPool::connect(&config().url).await.expect("pool");
+    let db = sqlx::PgPool::connect(&config().uri).await.expect("pool");
     let columns: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT column_name::text, data_type::text, is_nullable::text
          FROM information_schema.columns

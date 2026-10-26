@@ -79,7 +79,7 @@ async fn saturated_pool_times_out_and_is_observed() {
         .build();
     let pool = Arc::new(
         pool_options(&config, config.max_conns)
-            .connect(&config.url)
+            .connect(&config.uri)
             .await
             .expect("pool"),
     );

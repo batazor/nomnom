@@ -1,7 +1,7 @@
 """Session-wide testcontainers: PostgreSQL and SpiceDB, each started once.
 
 Test classes opt in with ``@pytest.mark.usefixtures("database")`` and get ``database``
-(the shared pool) and ``dsn`` as class attributes. Each test isolates its data by
+(the shared pool) and ``uri`` (a ``postgresql://`` connection URI) as class attributes. Each test isolates its data by
 truncating the tables (``PaymentsTestKit`` and the integration ``setUp`` do it).
 ``spicedb`` sets ``spicedb_endpoint`` of a SpiceDB loaded
 with ``authorization/bootstrap.yaml`` (plaintext, preshared key ``SPICEDB_PRESHARED_KEY``).
@@ -27,19 +27,19 @@ AUTHORIZATION_DIR = Path(__file__).resolve().parents[3] / "authorization"
 
 
 @pytest.fixture(scope="session")
-def database_url() -> Iterator[str]:
+def database_uri() -> Iterator[str]:
     with PostgresContainer(
         POSTGRES_IMAGE, username="payments", password="payments", dbname="payments", driver=None
     ) as container:
-        dsn = container.get_connection_url()
-        migrate(config.database.Config(DATABASE__URL=dsn), MIGRATIONS)
-        yield dsn
+        uri = container.get_connection_url()
+        migrate(config.database.Config(DATABASE__URI=uri), MIGRATIONS)
+        yield uri
 
 
 @pytest.fixture(scope="session")
-def session_database(database_url: str) -> Iterator[Database]:
+def session_database(database_uri: str) -> Iterator[Database]:
     database = create_database(
-        config.database.Config(DATABASE__URL=database_url, DATABASE__MAX_CONNS=8)
+        config.database.Config(DATABASE__URI=database_uri, DATABASE__MAX_CONNS=8)
     )
     database.check()
     yield database
@@ -47,8 +47,8 @@ def session_database(database_url: str) -> Iterator[Database]:
 
 
 @pytest.fixture(scope="class")
-def database(request: pytest.FixtureRequest, database_url: str, session_database: Database) -> None:
-    request.cls.dsn = database_url
+def database(request: pytest.FixtureRequest, database_uri: str, session_database: Database) -> None:
+    request.cls.uri = database_uri
     request.cls.database = session_database
 
 

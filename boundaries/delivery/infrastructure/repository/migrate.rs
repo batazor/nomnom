@@ -16,7 +16,7 @@ use std::borrow::Cow;
 
 use sqlx::migrate::{Migrate, Migrator};
 
-use crate::pkg::config::{DATABASE_URL_ENV, database};
+use crate::pkg::config::{DATABASE_URI_ENV, database};
 
 /// Migrations of one set of tables.
 pub struct MigrationSet {
@@ -83,9 +83,9 @@ const LOCK_TIMEOUT: &str = "SET lock_timeout = '5s'";
 /// migrations applied by this run, in the order they were applied.
 pub fn migrate(config: &database::Config) -> Result<Vec<(&'static str, i64)>, String> {
     if !config.enabled() {
-        return Err(format!("{DATABASE_URL_ENV} is required"));
+        return Err(format!("{DATABASE_URI_ENV} is required"));
     }
-    let url = config.url.clone();
+    let uri = config.uri.clone();
     // One connection: the migrator holds a session-level advisory lock on it.
     let options = super::pool_options(config, MIGRATE_MAX_CONNS);
     super::blocking(move || {
@@ -95,7 +95,7 @@ pub fn migrate(config: &database::Config) -> Result<Vec<(&'static str, i64)>, St
             .map_err(|error| format!("migration runtime: {error}"))?;
         runtime.block_on(async move {
             let pool = options
-                .connect(&url)
+                .connect(&uri)
                 .await
                 .map_err(|error| format!("connect database: {error}"))?;
             let mut connection = pool

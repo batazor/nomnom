@@ -5,8 +5,11 @@ use std::time::Duration;
 use config::ConfigError;
 use serde::Deserialize;
 
-/// Хранилище `delivery`. URL обязателен для процесса и миграций: пустое
-/// значение завершает startup (см. `di::store`). URL приходит из Secret.
+use super::DATABASE_URI_ENV;
+
+/// Хранилище `delivery`. URI обязателен для процесса и миграций: пустое
+/// значение или не PostgreSQL connection URI завершает загрузку конфига.
+/// URI приходит из Secret.
 ///
 /// Пул процесса ограничен: размер задаёт Helm (`database.pool.maxConns`, ~10);
 /// миграции при старте берут отдельное соединение (`MIGRATE_MAX_CONNS`).
@@ -15,8 +18,9 @@ use serde::Deserialize;
 #[derive(Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    /// libpq connection string или URL `postgres://user:password@host/db`.
-    pub url: String,
+    /// PostgreSQL connection URI `postgresql://user:password@host/db`
+    /// (или схема `postgres://`); libpq key=value не принимается.
+    pub uri: String,
     /// Максимум соединений пула процесса (1..=[`MAX_MAX_CONNS`]).
     pub max_conns: u32,
     /// Минимум простаивающих соединений (0..=[`MAX_MIN_CONNS`]):
@@ -42,7 +46,7 @@ pub const MAX_MIN_CONNS: u32 = 1;
 impl Default for Config {
     fn default() -> Self {
         Self {
-            url: String::new(),
+            uri: String::new(),
             max_conns: 10,
             min_conns: 0,
             max_lifetime: Duration::from_secs(30 * 60),
@@ -52,14 +56,17 @@ impl Default for Config {
     }
 }
 
-/// URL содержит пароль и не попадает в логи.
+/// Схемы PostgreSQL connection URI.
+const URI_SCHEMES: [&str; 2] = ["postgresql", "postgres"];
+
+/// URI содержит пароль и не попадает в логи.
 impl std::fmt::Debug for Config {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("Config")
             .field(
-                "url",
-                &if self.url.is_empty() {
+                "uri",
+                &if self.uri.is_empty() {
                     ""
                 } else {
                     "<redacted>"
@@ -75,14 +82,28 @@ impl std::fmt::Debug for Config {
 }
 
 impl Config {
-    /// PostgreSQL задан, если задан URL.
+    /// PostgreSQL задан, если задан URI.
     #[must_use]
     pub fn enabled(&self) -> bool {
-        !self.url.trim().is_empty()
+        !self.uri.trim().is_empty()
     }
 
     pub(super) fn validate(&self) -> Result<(), ConfigError> {
         let invalid = |message: String| Err(ConfigError::Message(message));
+        if !self.enabled() {
+            return invalid(format!("{DATABASE_URI_ENV} is required"));
+        }
+        // Значение не попадает в сообщение: URI содержит пароль.
+        match self.uri.split_once("://") {
+            Some((scheme, rest)) if URI_SCHEMES.contains(&scheme) && !rest.is_empty() => {}
+            _ => {
+                return invalid(format!(
+                    "{DATABASE_URI_ENV} must be a PostgreSQL connection URI \
+                     postgresql://user:password@host:port/db (scheme postgresql:// or \
+                     postgres://); libpq key=value connection strings are not accepted"
+                ));
+            }
+        }
         if self.max_conns == 0 || self.max_conns > MAX_MAX_CONNS {
             return invalid(format!(
                 "database max_conns must be between 1 and {MAX_MAX_CONNS}, got {}",

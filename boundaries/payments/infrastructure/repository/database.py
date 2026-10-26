@@ -182,7 +182,7 @@ def create_database(
     pool_metrics = PoolMetrics(POOL_NAME)
     statements = statement_telemetry or StatementTelemetry()
     pool = ConnectionPool(
-        settings.url,
+        settings.uri,
         connection_class=pool_metrics.connection_class(),
         kwargs={
             "connect_timeout": connect_timeout_seconds(settings.connect_timeout),

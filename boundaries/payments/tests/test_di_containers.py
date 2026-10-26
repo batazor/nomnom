@@ -180,31 +180,31 @@ class PaymentsContainerTest(unittest.TestCase):
 class StartupMigrationTest(unittest.TestCase):
     """The database resource applies pending migrations before the process serves."""
 
-    dsn: str
+    uri: str
 
-    def start(self, dsn: str) -> list[str]:
-        resource = ProcessResource(migrated_database, database.Config(DATABASE__URL=dsn))
+    def start(self, uri: str) -> list[str]:
+        resource = ProcessResource(migrated_database, database.Config(DATABASE__URI=uri))
         with self.assertLogs("di.resources", logging.INFO) as logs:
             resource.init()
         resource.shutdown()
         return logs.output
 
     def test_migrated_database_is_left_unchanged(self) -> None:
-        with psycopg.connect(self.dsn) as conn:
+        with psycopg.connect(self.uri) as conn:
             before = _applied(conn)
-        logs = self.start(self.dsn)
+        logs = self.start(self.uri)
         self.assertIn("payments migrations applied: none pending", logs[-1])
-        with psycopg.connect(self.dsn) as conn:
+        with psycopg.connect(self.uri) as conn:
             self.assertEqual(_applied(conn), before)
 
     def test_empty_database_gets_every_migration_shared_tables_first(self) -> None:
-        dsn = self._empty_database()
-        logs = self.start(dsn)
+        uri = self._empty_database()
+        logs = self.start(uri)
         self.assertEqual(
             [migration_set.storage_id for migration_set in MIGRATIONS], ["messaging", "payments"]
         )
         self.assertIn(f"payments migrations applied: {', '.join(_ids())}", logs[-1])
-        with psycopg.connect(dsn) as conn:
+        with psycopg.connect(uri) as conn:
             self.assertEqual(
                 {
                     storage_id: [row[0] for row in rows]
@@ -217,9 +217,9 @@ class StartupMigrationTest(unittest.TestCase):
             )
 
     def test_yoyo_tables_are_named_by_storage_id_only(self) -> None:
-        dsn = self._empty_database()
-        migrate(database.Config(DATABASE__URL=dsn), MIGRATIONS)
-        with psycopg.connect(dsn) as conn:
+        uri = self._empty_database()
+        migrate(database.Config(DATABASE__URI=uri), MIGRATIONS)
+        with psycopg.connect(uri) as conn:
             tables = conn.execute(
                 "SELECT table_name FROM information_schema.tables"
                 " WHERE table_schema = 'public' AND table_name LIKE '\\_yoyo\\_%'"
@@ -247,8 +247,8 @@ class StartupMigrationTest(unittest.TestCase):
             MigrationSet("empty", "pkg").migrations()
 
     def test_replicas_starting_together_apply_migrations_once(self) -> None:
-        dsn = self._empty_database()
-        settings = database.Config(DATABASE__URL=dsn)
+        uri = self._empty_database()
+        settings = database.Config(DATABASE__URI=uri)
         results: list[list[str]] = []
         threads = [
             threading.Thread(target=lambda: results.append(migrate(settings, MIGRATIONS)))
@@ -259,17 +259,17 @@ class StartupMigrationTest(unittest.TestCase):
         for thread in threads:
             thread.join()
         self.assertEqual(sorted(results, key=len), [[], [], [], _ids()])
-        with psycopg.connect(dsn) as conn:
+        with psycopg.connect(uri) as conn:
             count = sum(len(rows) for rows in _applied(conn).values())
         self.assertEqual(count, len(_ids()))
 
     def test_lock_of_a_killed_process_is_released_with_its_connection(self) -> None:
-        dsn = self._empty_database()
-        holder = psycopg.connect(dsn, autocommit=True)
+        uri = self._empty_database()
+        holder = psycopg.connect(uri, autocommit=True)
         holder.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
         results: list[list[str]] = []
         waiting = threading.Thread(
-            target=lambda: results.append(migrate(database.Config(DATABASE__URL=dsn), MIGRATIONS))
+            target=lambda: results.append(migrate(database.Config(DATABASE__URI=uri), MIGRATIONS))
         )
         waiting.start()
         waiting.join(timeout=1)
@@ -279,10 +279,10 @@ class StartupMigrationTest(unittest.TestCase):
         self.assertEqual(results, [_ids()])
 
     def test_migration_gives_up_on_a_locked_table(self) -> None:
-        dsn = self._empty_database()
-        settings = database.Config(DATABASE__URL=dsn)
+        uri = self._empty_database()
+        settings = database.Config(DATABASE__URI=uri)
         migrate(settings, MIGRATIONS)
-        with psycopg.connect(dsn) as traffic:
+        with psycopg.connect(uri) as traffic:
             traffic.execute("SELECT * FROM payments")
             started = time.monotonic()
             with self.assertRaises(psycopg.errors.LockNotAvailable):
@@ -291,13 +291,13 @@ class StartupMigrationTest(unittest.TestCase):
 
     def _empty_database(self) -> str:
         name = f"startup_{uuid.uuid4().hex}"
-        with psycopg.connect(self.dsn, autocommit=True) as admin:
+        with psycopg.connect(self.uri, autocommit=True) as admin:
             admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
         self.addCleanup(self._drop, name)
-        return self.dsn.rsplit("/", 1)[0] + f"/{name}"
+        return self.uri.rsplit("/", 1)[0] + f"/{name}"
 
     def _drop(self, name: str) -> None:
-        with psycopg.connect(self.dsn, autocommit=True) as admin:
+        with psycopg.connect(self.uri, autocommit=True) as admin:
             admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
@@ -378,7 +378,7 @@ class EntrypointResourceOrderTest(unittest.TestCase):
 
     def run_payments(self, container: PaymentsContainer) -> tuple[int, str]:
         stdout = io.StringIO()
-        env = {"DATABASE__URL": "postgresql://payments@127.0.0.1:1/x"}
+        env = {"DATABASE__URI": "postgresql://payments@127.0.0.1:1/x"}
         with (
             patch.dict(os.environ, env, clear=True),
             patch.object(payments_main, "PaymentsContainer", lambda: container),

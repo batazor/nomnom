@@ -94,7 +94,7 @@ class _Ids:
 @pytest.mark.usefixtures("database")
 class RepositoryIntegrationTest(unittest.TestCase):
     database: Database
-    dsn: str
+    uri: str
 
     @override
     def setUp(self) -> None:

@@ -33,6 +33,8 @@ test-spicedb:
 SQLX_PG_IMAGE ?= postgres:18.6-alpine3.24
 SQLX_PG_CONTAINER ?= delivery-sqlx-prepare
 SQLX_PG_PORT ?= 55432
+# DATABASE_URL — имя переменной, которую читают sqlx-cli и макросы sqlx (не конфиг
+# процесса DATABASE__URI), поэтому здесь оно сохраняется.
 SQLX_DATABASE_URL = postgres://postgres:postgres@127.0.0.1:$(SQLX_PG_PORT)/delivery
 # Storage id наборов (id в MIGRATION_SETS) и каталоги их миграций.
 SQLX_MIGRATION_SETS = messaging couriers deliveries simulator

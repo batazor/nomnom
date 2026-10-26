@@ -50,7 +50,7 @@ fn sums(
 
 fn config() -> database::Config {
     database::Config {
-        url: "postgres://u:p@127.0.0.1:1/db".to_owned(),
+        uri: "postgres://u:p@127.0.0.1:1/db".to_owned(),
         max_conns: 3,
         min_conns: 1,
         acquire_timeout: Duration::from_millis(200),
@@ -65,7 +65,7 @@ async fn gauges_report_count_max_and_idle_min_of_the_pool() {
     let pool = Arc::new(
         pool_options(&config, config.max_conns)
             .min_connections(0)
-            .connect_lazy(&config.url)
+            .connect_lazy(&config.uri)
             .expect("lazy pool"),
     );
     let _metrics = PoolMetrics::new(&provider.meter("test"));
@@ -88,7 +88,7 @@ async fn gauges_report_count_max_and_idle_min_of_the_pool() {
     let pool = Arc::new(
         pool_options(&config, 2)
             .min_connections(0)
-            .connect_lazy(&config.url)
+            .connect_lazy(&config.uri)
             .expect("lazy pool"),
     );
     let metrics = PoolMetrics::new(&provider.meter("test"));

@@ -54,7 +54,7 @@ class SummaryTest(unittest.TestCase):
 
 @pytest.mark.usefixtures("database")
 class StatementTelemetryTest(unittest.TestCase):
-    dsn: str
+    uri: str
     database: Database
 
     @override
@@ -68,7 +68,7 @@ class StatementTelemetryTest(unittest.TestCase):
         telemetry = StatementTelemetry(
             self.tracer_provider, MeterProvider(metric_readers=[self.reader])
         )
-        self.observed = create_database(database.Config(DATABASE__URL=self.dsn), telemetry)
+        self.observed = create_database(database.Config(DATABASE__URI=self.uri), telemetry)
         self.addCleanup(self.observed.close)
         self.payments = DatabasePaymentRepository(self.observed)
 

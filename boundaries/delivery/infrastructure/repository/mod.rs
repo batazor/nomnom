@@ -41,7 +41,7 @@ pub use pool::{
 };
 pub use transaction::{TransactionMetrics, UOW_METER_NAME};
 
-use crate::pkg::config::{DATABASE_URL_ENV, database};
+use crate::pkg::config::{DATABASE_URI_ENV, database};
 use crate::pkg::persistence::RepositoryError;
 use transaction::{put_active, take_active};
 
@@ -85,10 +85,10 @@ pub struct Store {
 }
 
 impl Store {
-    /// Opens the pool and checks connectivity. An empty URL fails startup.
+    /// Opens the pool and checks connectivity. An empty URI fails startup.
     pub fn connect(config: &database::Config) -> Result<Self, String> {
         if !config.enabled() {
-            return Err(format!("{DATABASE_URL_ENV} is required"));
+            return Err(format!("{DATABASE_URI_ENV} is required"));
         }
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
@@ -96,10 +96,10 @@ impl Store {
             .enable_all()
             .build()
             .map_err(|error| format!("store runtime: {error}"))?;
-        let url = config.url.clone();
+        let uri = config.uri.clone();
         let metrics = PoolMetrics::global();
         let options = metrics.instrument(pool_options(config, config.max_conns));
-        let pool = blocking(|| runtime.block_on(async move { options.connect(&url).await }));
+        let pool = blocking(|| runtime.block_on(async move { options.connect(&uri).await }));
         let pool = match pool {
             Ok(pool) => pool,
             Err(error) => {

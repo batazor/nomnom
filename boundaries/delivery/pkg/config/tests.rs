@@ -14,7 +14,11 @@ fn loads_port_from_toml() {
             .as_nanos()
     );
     let path = std::env::temp_dir().join(name);
-    fs::write(&path, format!("[server]\nport = 9003\n{SIMULATOR_TOML}")).expect("write config");
+    fs::write(
+        &path,
+        format!("[server]\nport = 9003\n{DATABASE_TOML}{SIMULATOR_TOML}"),
+    )
+    .expect("write config");
 
     let config = load_from(Some(&path)).expect("load config");
     fs::remove_file(path).expect("remove config");
@@ -29,18 +33,26 @@ fn loads_port_from_toml() {
 const SIMULATOR_TOML: &str =
     "\n[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\n";
 
+/// Обязательный URI PostgreSQL тестовых конфигов.
+const DATABASE_TOML: &str = "\n[database]\nuri = \"postgresql://u:p@db:5432/delivery\"\n";
+
 /// Пишет TOML во временный файл с уникальным именем и загружает его; без
-/// своей секции `[simulator]` к нему добавляется [`SIMULATOR_TOML`].
+/// своих секций `[database]` и `[simulator]` к нему добавляются
+/// [`DATABASE_TOML`] и [`SIMULATOR_TOML`].
 fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
     let path = std::env::temp_dir().join(format!(
         "nomnom-delivery-{name}-{}.toml",
         std::process::id()
     ));
-    let contents = if contents.contains("[simulator]") {
-        contents.to_owned()
-    } else {
-        format!("{contents}{SIMULATOR_TOML}")
-    };
+    let mut contents = contents.to_owned();
+    for (section, toml) in [
+        ("[database]", DATABASE_TOML),
+        ("[simulator]", SIMULATOR_TOML),
+    ] {
+        if !contents.contains(section) {
+            contents.push_str(toml);
+        }
+    }
     fs::write(&path, contents).expect("write config");
     let result = load_from(Some(&path));
     fs::remove_file(path).expect("remove config");
@@ -386,11 +398,12 @@ fn database_pool_defaults_and_env_overrides() {
             .get("database")
             .expect("database");
     assert_eq!(defaults, database::Config::default());
-    defaults.validate().expect("defaults are valid");
+    let error = defaults.validate().expect_err("the URI has no default");
+    assert!(error.to_string().contains(DATABASE_URI_ENV), "{error}");
 
     let builder = configure_settings(ConfigLoader::builder(), &DATABASE_SETTINGS, |name| {
         match name {
-            DATABASE_URL_ENV => Some("postgres://u:p@db/delivery"),
+            DATABASE_URI_ENV => Some("postgres://u:p@db/delivery"),
             DATABASE_MAX_CONNS_ENV => Some("2"),
             DATABASE_MIN_CONNS_ENV => Some("1"),
             DATABASE_MAX_LIFETIME_ENV => Some("10m"),
@@ -409,7 +422,7 @@ fn database_pool_defaults_and_env_overrides() {
     assert_eq!(
         database,
         database::Config {
-            url: "postgres://u:p@db/delivery".to_owned(),
+            uri: "postgres://u:p@db/delivery".to_owned(),
             max_conns: 2,
             min_conns: 1,
             max_lifetime: Duration::from_secs(600),
@@ -422,7 +435,10 @@ fn database_pool_defaults_and_env_overrides() {
 
 #[test]
 fn invalid_database_pool_limits_fail_startup() {
-    let valid = database::Config::default();
+    let valid = database::Config {
+        uri: "postgresql://u:p@db/delivery".to_owned(),
+        ..database::Config::default()
+    };
     for (invalid, needle) in [
         (
             database::Config {
@@ -489,10 +505,57 @@ fn invalid_database_pool_limits_fail_startup() {
 fn malformed_database_duration_fails_startup() {
     let error = load_toml(
         "database-duration",
-        "[database]\nacquire_timeout = \"soon\"\n",
+        "[database]\nuri = \"postgresql://u:p@db/delivery\"\nacquire_timeout = \"soon\"\n",
     )
     .expect_err("malformed duration");
     assert!(error.to_string().contains("acquire_timeout"), "{error}");
+}
+
+#[test]
+fn database_uri_accepts_postgresql_and_postgres_schemes() {
+    for uri in [
+        "postgresql://u:p@db:5432/delivery",
+        "postgres://u:p@db/delivery?sslmode=require",
+    ] {
+        let contents = format!("[database]\nuri = \"{uri}\"\n");
+        let config = load_toml("database-uri", &contents).expect(uri);
+        assert_eq!(config.database.uri, uri);
+    }
+}
+
+/// Только PostgreSQL connection URI: пустое значение, libpq key=value и
+/// чужая схема завершают загрузку конфига с ошибкой про DATABASE__URI.
+#[test]
+fn database_uri_rejects_empty_and_non_uri_values() {
+    for (name, uri) in [
+        ("database-uri-empty", ""),
+        ("database-uri-blank", "  "),
+        (
+            "database-uri-key-value",
+            "host=db port=5432 user=u password=p dbname=delivery",
+        ),
+        ("database-uri-no-scheme", "u:p@db:5432/delivery"),
+        ("database-uri-mysql", "mysql://u:p@db/delivery"),
+        ("database-uri-scheme-only", "postgresql://"),
+    ] {
+        let contents = format!("[database]\nuri = \"{uri}\"\n");
+        let error = load_toml(name, &contents).expect_err(name);
+        assert!(
+            error.to_string().contains(DATABASE_URI_ENV),
+            "{name}: {error}"
+        );
+        assert!(!error.to_string().contains("password=p"), "{name}: {error}");
+    }
+}
+
+#[test]
+fn database_url_key_is_unknown() {
+    let error = load_toml(
+        "database-url-key",
+        "[database]\nurl = \"postgresql://u:p@db/delivery\"\n",
+    )
+    .expect_err("database.url is not a key");
+    assert!(error.to_string().contains("url"), "{error}");
 }
 
 #[test]

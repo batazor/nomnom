@@ -200,16 +200,18 @@ spicedb:
     name: ""
     key: "preshared-key"
 
-# PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста). DATABASE__URL берётся из Secret
-# database.urlSecret (secretKeyRef); без него процесс не стартует (fail fast). Secret
-# создаётся развёртыванием (root ops/kind: delivery-postgres, ключ dsn), не этим chart.
+# PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста). DATABASE__URI берётся из Secret
+# database.uriSecret (secretKeyRef); без него процесс не стартует (fail fast). Значение —
+# только PostgreSQL connection URI postgresql:// или postgres://; libpq key=value завершает
+# startup. Secret создаётся развёртыванием (root ops/kind: delivery-postgres, ключ dsn), не
+# этим chart.
 # Миграции встроены в образ: процесс применяет их при старте до открытия портов; advisory
 # lock sqlx сериализует старт реплик, ошибка миграции завершает процесс.
 # pool — лимиты пула одного pod (DATABASE__*); невалидные значения завершают startup.
 # Соединений на сервер: replicas × maxConns. Pooler перед PostgreSQL — только session
 # mode: миграции держат session advisory lock.
 database:
-  urlSecret:
+  uriSecret:
     name: delivery-postgres
     key: dsn
   pool:

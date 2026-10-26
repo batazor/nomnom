@@ -65,10 +65,12 @@ dispatch_interval = "2s"
 dispatch_batch = 100
 
 [database]
-# PostgreSQL delivery (ADR 8, ADR 31, ADR 0001 контекста). Обязательно: пустой url
-# завершает startup процесса (он же применяет миграции). Не храните URL с паролем в файле:
-# задавайте DATABASE__URL из Secret. Переменные: DATABASE__URL, DATABASE__MAX_CONNS.
-url = ""
+# PostgreSQL delivery (ADR 8, ADR 31, ADR 0001 контекста). Обязательно: пустой uri
+# завершает startup процесса (он же применяет миграции). Только PostgreSQL connection URI
+# postgresql://user:password@host:5432/db (или postgres://); libpq key=value не принимается.
+# Не храните URI с паролем в файле: задавайте DATABASE__URI из Secret. Переменные:
+# DATABASE__URI, DATABASE__MAX_CONNS.
+uri = ""
 # Максимум соединений пула процесса.
 max_conns = 10
 

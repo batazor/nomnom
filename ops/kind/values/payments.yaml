@@ -37,7 +37,7 @@ spicedb:
 
 # ADR 8: PostgreSQL payments тестового окружения; Secret payments-postgres создаёт chart ops/kind/bootstrap.
 database:
-  urlSecret:
+  uriSecret:
     name: payments-postgres
 
 # ADR 37: Outbox публикует коннектор Debezium payments-outbox в Kafka Connect nomnom-infra;

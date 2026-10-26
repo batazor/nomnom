@@ -221,11 +221,12 @@ spicedb:
     name: ""
     key: "preshared-key"
 
-# PostgreSQL (ADR 8, локальный ADR 1). DSN берётся из внешнего Secret (env DATABASE__URL) и не
-# хранится в values; без dsnSecret.name переменная не задаётся и процесс не стартует.
+# PostgreSQL (ADR 8, локальный ADR 1). Connection URI (postgresql://…) берётся из внешнего Secret
+# (env DATABASE__URI) и не хранится в values; без uriSecret.name переменная не задаётся и процесс
+# не стартует.
 database:
   # Secret создаётся развёртыванием, не этим chart.
-  urlSecret:
+  uriSecret:
     name: ""
     key: "dsn"
   # Пул процесса (DATABASE__*). За пулером PostgreSQL в session mode каждое соединение

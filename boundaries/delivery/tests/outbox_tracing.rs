@@ -90,7 +90,7 @@ async fn command_with_traceparent_writes_it_to_the_outbox_row() {
         .into_inner();
     assert!(cancelled.cancelled);
 
-    let db = sqlx::PgPool::connect(&config.url).await.expect("pool");
+    let db = sqlx::PgPool::connect(&config.uri).await.expect("pool");
     let traceparents: Vec<String> = sqlx::query_scalar(
         "SELECT traceparent FROM delivery_outbox
          WHERE aggregate_id = $1 AND event_type = 'nomnom.delivery.v1.DeliveryCancelled'",

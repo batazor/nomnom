@@ -51,8 +51,8 @@ ORDERS_WORKER = Subject(SubjectKind.SERVICE, VECTORS["expected_service"])
 VALID_NBF = 1_700_000_000
 VALID_EXP = 4_102_444_800
 
-# DATABASE__URL обязателен: без него load_settings падает.
-REQUIRED_ENV = {"DATABASE__URL": "postgresql://payments@localhost/payments"}
+# DATABASE__URI обязателен: без него load_settings падает.
+REQUIRED_ENV = {"DATABASE__URI": "postgresql://payments@localhost/payments"}
 
 
 class _AbortedError(Exception):

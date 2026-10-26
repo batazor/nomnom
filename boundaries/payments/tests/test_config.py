@@ -7,8 +7,8 @@ from pydantic import ValidationError
 
 from pkg.config import load_settings
 
-# DATABASE__URL обязателен: без него load_settings падает.
-REQUIRED_ENV = {"DATABASE__URL": "postgresql://payments@localhost/payments"}
+# DATABASE__URI обязателен: без него load_settings падает.
+REQUIRED_ENV = {"DATABASE__URI": "postgresql://payments@localhost/payments"}
 
 
 class ConfigTest(unittest.TestCase):
@@ -72,21 +72,47 @@ class ConfigTest(unittest.TestCase):
         ):
             load_settings()
 
-    def test_requires_database_url(self) -> None:
+    def test_requires_database_uri(self) -> None:
         for value in (None, "", "   "):
-            environment = {} if value is None else {"DATABASE__URL": value}
+            environment = {} if value is None else {"DATABASE__URI": value}
             with (
-                self.subTest(url=value),
+                self.subTest(uri=value),
                 patch.dict(os.environ, environment, clear=True),
-                self.assertRaisesRegex(ValidationError, "DATABASE__URL"),
+                self.assertRaisesRegex(ValidationError, "DATABASE__URI"),
             ):
                 load_settings()
+
+    def test_rejects_database_uri_that_is_not_postgresql_uri(self) -> None:
+        for value in (
+            "host=localhost dbname=payments user=payments",
+            "dbname=payments",
+            "mysql://payments@localhost/payments",
+            "postgresql+psycopg://payments@localhost/payments",
+            "localhost:5432/payments",
+        ):
+            with (
+                self.subTest(uri=value),
+                patch.dict(os.environ, {"DATABASE__URI": value}, clear=True),
+                self.assertRaisesRegex(ValidationError, "DATABASE__URI must be a PostgreSQL"),
+            ):
+                load_settings()
+
+    def test_accepts_both_postgresql_uri_schemes(self) -> None:
+        for value in (
+            "postgresql://payments@localhost/payments",
+            "postgres://payments:secret@localhost:5432/payments?sslmode=disable",
+        ):
+            with (
+                self.subTest(uri=value),
+                patch.dict(os.environ, {"DATABASE__URI": value}, clear=True),
+            ):
+                self.assertEqual(load_settings().database.uri, value)
 
     def test_reads_database_settings(self) -> None:
         environment = {**REQUIRED_ENV, "DATABASE__MAX_CONNS": "4"}
         with patch.dict(os.environ, environment, clear=True):
             settings = load_settings().database
-        self.assertEqual(settings.url, REQUIRED_ENV["DATABASE__URL"])
+        self.assertEqual(settings.uri, REQUIRED_ENV["DATABASE__URI"])
         self.assertEqual(settings.max_conns, 4)
         self.assertNotIn("payments@localhost", repr(settings))
 

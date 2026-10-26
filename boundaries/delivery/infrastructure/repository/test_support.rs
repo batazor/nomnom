@@ -91,7 +91,7 @@ fn server() -> &'static str {
 }
 
 fn admin(server: &str, statement: &str) {
-    let url = format!("{server}/postgres");
+    let uri = format!("{server}/postgres");
     let statement = statement.to_owned();
     blocking(move || {
         tokio::runtime::Builder::new_current_thread()
@@ -99,7 +99,7 @@ fn admin(server: &str, statement: &str) {
             .build()
             .expect("admin runtime")
             .block_on(async move {
-                let mut connection = sqlx::PgConnection::connect(&url)
+                let mut connection = sqlx::PgConnection::connect(&uri)
                     .await
                     .expect("admin connection");
                 sqlx::raw_sql(sqlx::AssertSqlSafe(statement))
@@ -114,9 +114,9 @@ fn admin(server: &str, statement: &str) {
 /// Боевой `acquire_timeout` (5s) не переживает сотни параллельных
 /// `CREATE DATABASE ... TEMPLATE` в одном контейнере: первое соединение пула
 /// под такой нагрузкой ждёт дольше.
-fn config(url: String) -> database::Config {
+fn config(uri: String) -> database::Config {
     database::Config {
-        url,
+        uri,
         max_conns: 4,
         acquire_timeout: Duration::from_secs(60),
         ..database::Config::default()

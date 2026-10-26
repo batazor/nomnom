@@ -120,10 +120,11 @@ Secret-ресурсы chart не создаёт.
 
 Хранилище — PostgreSQL ([ADR 31](../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md),
 [ADR 0001 контекста](../docs/adr/0001-postgresql-хранилище-delivery.md)). Контейнер получает
-`DATABASE__URL` из Secret `database.urlSecret` (по умолчанию `delivery-postgres`, ключ `dsn`)
+`DATABASE__URI` из Secret `database.uriSecret` (по умолчанию `delivery-postgres`, ключ `dsn`)
 и `DATABASE__MAX_CONNS` (`database.pool.maxConns`). Secret создаёт развёртывание: в kind —
 chart `ops/kind/bootstrap` вместе с базой `postgres-delivery`. Без Secret процесс завершается
-ошибкой startup (`DATABASE__URL is required`).
+ошибкой startup (`DATABASE__URI is required`). Значение — только PostgreSQL connection URI
+(`postgresql://` или `postgres://`); libpq key=value завершает startup.
 
 Миграции встроены в бинарь (`sqlx::migrate!`), отдельного шага нет: при старте процесс до
 открытия портов применяет ожидающие версии или видит актуальную схему и продолжает. Advisory

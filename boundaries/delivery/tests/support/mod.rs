@@ -82,13 +82,13 @@ pub fn empty_database(name: &str) -> database::Config {
                 pool.close().await;
             });
     });
-    let (base, _) = server.rsplit_once('/').expect("database in url");
+    let (base, _) = server.rsplit_once('/').expect("database in uri");
     pooled(&format!("{base}/{name}"))
 }
 
-fn pooled(url: &str) -> database::Config {
+fn pooled(uri: &str) -> database::Config {
     database::Config {
-        url: url.to_owned(),
+        uri: uri.to_owned(),
         max_conns: 4,
         ..database::Config::default()
     }
@@ -103,13 +103,13 @@ fn start_postgres() -> String {
     let host = container.get_host().expect("container host");
     let port = container.get_host_port_ipv4(5432).expect("container port");
     keep(container);
-    let url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
+    let uri = format!("postgres://postgres:postgres@{host}:{port}/postgres");
     migrate(&database::Config {
-        url: url.clone(),
+        uri: uri.clone(),
         ..database::Config::default()
     })
     .expect("migrate");
-    url
+    uri
 }
 
 /// SpiceDB of the shared container: in-memory datastore bootstrapped with

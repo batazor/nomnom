@@ -62,7 +62,7 @@ pub fn spicedb(config: &SpiceDbConfig) -> Result<SpiceDbClient, SpiceDbConfigErr
 /// Хранилище процесса — PostgreSQL. Сначала применяются встроенные миграции
 /// (`sqlx::migrate!`, advisory lock сериализует старт реплик): актуальная схема —
 /// no-op, иначе ожидающие версии применяются до открытия пула. Пустой
-/// `DATABASE__URL`, недоступная база или ошибка миграции — ошибка startup
+/// `DATABASE__URI`, недоступная база или ошибка миграции — ошибка startup
 /// (fail fast).
 ///
 /// Domain Events с контрактом `nomnom/delivery/v1/events.proto` пишутся в
@@ -383,7 +383,7 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // SpiceDB обязателен: проверки прав, запись relationships и reconciliation.
     let spicedb = spicedb(&config.spicedb)?;
     let graph: Arc<dyn RelationshipGraph> = Arc::new(spicedb.clone());
-    // PostgreSQL обязателен: пустой DATABASE__URL, недоступная база или
+    // PostgreSQL обязателен: пустой DATABASE__URI, недоступная база или
     // ошибка миграции схемы прерывают startup. Revisions записей relationships хранятся с Courier и
     // Delivery; checks читают их из того же хранилища (FR-447).
     // Каждая роль хранилища разрешается отдельно над одним `Store`.

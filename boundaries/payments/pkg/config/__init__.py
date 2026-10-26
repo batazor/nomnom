@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from . import database
 from .database import (
     DATABASE_MAX_CONNS_ENV,
-    DATABASE_URL_ENV,
+    DATABASE_URI_ENV,
     DEFAULT_DATABASE_MAX_CONNS,
 )
 from .duration import parse_duration
@@ -57,7 +57,7 @@ from .spicedb import (
 
 __all__ = [
     "DATABASE_MAX_CONNS_ENV",
-    "DATABASE_URL_ENV",
+    "DATABASE_URI_ENV",
     "DEFAULT_DATABASE_MAX_CONNS",
     "DEFAULT_DRAIN_TIMEOUT",
     "DEFAULT_MANAGEMENT_PORT",
