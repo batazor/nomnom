@@ -351,9 +351,11 @@ restaurants и delivery из своих хранилищ, связи `order` —
 `kubectl -n nomnom-orders exec deploy/orders-consumer -- /orders-admin authz resync` (ADR 18). Job — не Helm hook: internal gateway применяется после
 charts, и Job ждёт его повторами; законченный Job удаляется через 10 минут.
 
-Subjects демо-пользователей начинаются с `nomnom-`, а не с `demo-`: dispatch без геокодирования
-выбирает среди свободных курьеров первого по id, и `demo-courier` забирал бы предложения курьера
-e2e (`kind-e2e-courier-*`).
+Демо-данные живут в Market `berlin`, а каждый прогон e2e `order-lifecycle` создаёт свой Market
+`kind-e2e-<run>`: dispatch `delivery` предлагает доставку только курьерам её Market (ADR 41), а без
+адресов pickup расстояние у всех равно и выбирается меньший id — в общем Market демо-курьеры
+забирали бы предложения курьера e2e. Тест проверяет изоляцию шагом «only the run courier is on
+line in the run market» (GetCourierPool Market прогона) до оформления заказа.
 
 Вход в UI — только через Dex (`customer-ui-kind-login` в `.claude/launch.json`, порт 4180):
 

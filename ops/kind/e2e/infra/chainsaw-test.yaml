@@ -52,8 +52,8 @@ metadata:
 spec:
   description: >
     После применения политик deployments Available, контейнеры не перезапускались и kubelet-пробы
-    (приложения, Envoy Proxy, CoreDNS, Cilium) не проваливались. Момент применения —
-    creationTimestamp политики internal gateway.
+    работающих pods (приложения, Envoy Proxy, CoreDNS, Cilium) не проваливались. Момент
+    применения — creationTimestamp политики internal gateway.
   steps:
     - name: policies applied
       use:
@@ -69,6 +69,11 @@ spec:
           value: (x_k8s_get($client, 'networking.k8s.io/v1', 'NetworkPolicy', 'envoy-gateway-system', 'internal-gateway-default-deny').metadata.creationTimestamp)
         - name: namespaces
           value: [nomnom-orders, nomnom-restaurants, nomnom-delivery, nomnom-payments, nomnom-controlplane, nomnom-bff, envoy-gateway-system, kube-system]
+        # Пробы проверяются у pods, которые работают сейчас. Pod, заменённый выкаткой после
+        # политик, при остановке сам отвечает readiness 503 на время drain (ADR 17, pkg
+        # lifecycle контекстов) — это штатное завершение, а не отказ пробы под политиками.
+        - name: live
+          value: (x_k8s_list($client, 'v1', 'Pod', '').items[?contains($namespaces, metadata.namespace)].metadata.name)
       try:
         # Списки ниже — имена нарушителей: пустой список и есть проверка.
         - assert:
@@ -79,7 +84,7 @@ spec:
               (x_k8s_list($client, 'v1', 'Pod', '').items[?status.containerStatuses[?lastState.terminated && time_after(lastState.terminated.finishedAt, $applied_at)]].metadata.name): []
         - assert:
             resource:
-              (x_k8s_list($client, 'v1', 'Event', '').items[?reason == 'Unhealthy' && time_after(lastTimestamp || eventTime, $applied_at)].involvedObject.name): []
+              (x_k8s_list($client, 'v1', 'Event', '').items[?reason == 'Unhealthy' && involvedObject.kind == 'Pod' && contains($live, involvedObject.name) && time_after(lastTimestamp || eventTime, $applied_at)].involvedObject.name): []
       catch:
         - events:
             namespace: '*'

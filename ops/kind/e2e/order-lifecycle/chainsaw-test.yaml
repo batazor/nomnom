@@ -23,9 +23,11 @@ spec:
       value: (join('-', ['order-lifecycle', $run]))
     - name: courier
       value: (join('-', ['kind-e2e-courier', $run]))
-    # ADR 41: Market прогона — berlin, который chart ops/kind/demo создаёт в control plane.
+    # ADR 41: свой Market на прогон. Dispatch delivery предлагает доставку только курьерам её
+    # Market, поэтому демо-курьеры (chart ops/kind/demo, Market berlin) и курьеры других
+    # прогонов в этот прогон не попадают, как бы ни сортировались их ids.
     - name: market
-      value: berlin
+      value: (join('-', ['kind-e2e', $run]))
   steps:
     - name: prepare run state
       try:
@@ -109,6 +111,18 @@ spec:
                   internal-gateway.envoy-gateway-system.svc.cluster.local:8080 \
                   nomnom.delivery.v1.DeliveryService/SetCourierAvailability 2>&1
               ' "$assertion" "$COURIER" || echo "courier $COURIER stays as is (not registered or not online)"
+
+    # 0. Оператор создаёт Market прогона в cell-1 (его регистрирует chart ops/kind/demo).
+    - name: operator creates run market
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.controlplane}
+            - {name: subject, value: $s.operator}
+            - {name: method, value: nomnom.controlplane.v1.ControlPlaneService/CreateMarket}
+            - name: request
+              value: '{marketId: $s.market, name: ("Kind e2e " + $s.run), currency: "EUR", cellId: "cell-1"}'
 
     # 1. Оператор: ресторан и курьер.
     - name: operator registers restaurant
@@ -212,7 +226,22 @@ spec:
             - {name: subject, value: $s.courier}
             - {name: method, value: nomnom.delivery.v1.DeliveryService/SetCourierAvailability}
             - {name: request, value: '{courierId: $s.courier, availability: "COURIER_AVAILABILITY_AVAILABLE"}'}
+    # Изоляция прогона: на линии в Market прогона только курьер прогона, иначе предложение
+    # доставки могло бы уйти другому курьеру — тест падает здесь, а не таймаутом ожидания оффера.
+    - name: only the run courier is on line in the run market
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.delivery}
+            - {name: subject, value: $s.operator}
+            - {name: method, value: nomnom.delivery.v1.DeliveryService/GetCourierPool}
+            - {name: request, value: '{marketId: $s.market}'}
+            - name: until
+              value: '[.couriers[]? | select(.status == "COURIER_STATUS_AVAILABLE") | .courierId] == [$s.courier]'
     # 4. Покупатель оформляет заказ через BFF; повтор с тем же idempotencyKey идемпотентен.
+    # BFF узнаёт новый Market при обновлении Placement Map (BFF__PLACEMENT_TTL 30 s): до него
+    # запрос отвечает ошибкой и повторяется.
     - name: customer places order
       use:
         template: ../templates/customer-graphql.yaml
@@ -224,7 +253,7 @@ spec:
                  variables: {input: {restaurantId: $s.restaurant_id, items: [{menuItemId: $s.menu_item_id, quantity: 1}],
                  idempotencyKey: $s.run}}}
             - {name: until, value: '.data.placeOrder.order.id != null'}
-            - {name: wait, value: 30}
+            - {name: wait, value: 90}
             - {name: save, value: '{order_id: .data.placeOrder.order.id}'}
 
     # 5. Кухня: новый заказ (RECEIVED) — в ListIncomingOrders после авторизации оплаты и

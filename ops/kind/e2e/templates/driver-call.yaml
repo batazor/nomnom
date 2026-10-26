@@ -6,7 +6,7 @@
 #
 # Состояние прогона — ConfigMap $state теста (ids, выданные сервисами); jq-программы ниже
 # видят его как $s. Bindings:
-#   audience — nomnom.restaurants или nomnom.delivery (token и aud assertion);
+#   audience — nomnom.restaurants, nomnom.delivery или nomnom.controlplane (token и aud assertion);
 #   subject  — jq: user id из состояния, например $s.owner;
 #   method   — <полное имя сервиса>/<метод>;
 #   request  — jq: JSON запроса (по умолчанию {});

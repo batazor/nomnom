@@ -11,14 +11,15 @@ podLabels:
 # ADR 27: projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks публикует Job
 # identity-jwks chart ops/kind/bootstrap). Вызывающие: BFF читает Markets и Placement Map
 # (placementReaders); Job demo-seed (chart ops/kind/demo) регистрирует cell-1 и создаёт berlin
-# от имени оператора kind-operator с user assertion ключом BFF — поэтому он делегат (ADR 32).
+# от имени оператора kind-operator с user assertion ключом BFF — поэтому он делегат (ADR 32);
+# fixture e2e-driver (ops/kind/e2e/chart) так же создаёт Market каждого прогона e2e.
 identity:
   issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  serviceAccounts: nomnom-bff/bff=bff,nomnom-bff/demo-seed=demo-seed
+  serviceAccounts: nomnom-bff/bff=bff,nomnom-bff/demo-seed=demo-seed,nomnom-bff/e2e-driver=e2e-driver
   userJwksConfigMap: bff-jwks
   userIssuer: nomnom-bff
-  userDelegates: bff,demo-seed
+  userDelegates: bff,demo-seed,e2e-driver
   placementReaders: bff
 
 # ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
