@@ -8,9 +8,10 @@ token проходит: публичный каталог доступен бе�
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "bff.fullname" $ }}-router
+  name: {{ include "common.names.fullname" $ }}-router
+  namespace: {{ include "common.names.namespace" $ | quote }}
   labels:
-    {{- include "bff.labels" $ | nindent 4 }}
+    {{- include "bff.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 data:
   authentication.yaml: |
     authentication:

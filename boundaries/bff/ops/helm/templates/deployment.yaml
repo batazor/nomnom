@@ -1,14 +1,15 @@
-apiVersion: apps/v1
+apiVersion: {{ include "common.capabilities.deployment.apiVersion" . }}
 kind: Deployment
 metadata:
-  name: {{ include "bff.fullname" . }}
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
   labels:
-    {{- include "bff.labels" . | nindent 4 }}
+    {{- include "bff.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "bff.selectorLabels" . | nindent 6 }}
+      {{- include "common.labels.matchLabels" . | nindent 6 }}
   template:
     metadata:
       {{- if or .Values.env .Values.podAnnotations .Values.identity.providers }}
@@ -20,14 +21,11 @@ spec:
         checksum/router: {{ include (print $.Template.BasePath "/router-authentication.yaml") . | sha256sum }}
         {{- end }}
         {{- with .Values.podAnnotations }}
-        {{- toYaml . | nindent 8 }}
+        {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
         {{- end }}
       {{- end }}
       labels:
-        {{- include "bff.labels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- include "bff.labels" (dict "customLabels" .Values.podLabels "context" $) | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -37,7 +35,7 @@ spec:
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       {{- with .Values.podSecurityContext }}
       securityContext:
-        {{- toYaml . | nindent 8 }}
+        {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 8 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -45,7 +43,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.securityContext }}
           securityContext:
-            {{- toYaml . | nindent 12 }}
+            {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
           {{- end }}
           ports:
             - name: {{ .Values.service.portName }}
@@ -55,10 +53,10 @@ spec:
           envFrom:
             {{- if .Values.env }}
             - configMapRef:
-                name: {{ include "bff.fullname" . }}
+                name: {{ include "common.names.fullname" . }}
             {{- end }}
             {{- with .Values.envFrom }}
-            {{- toYaml . | nindent 12 }}
+            {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
           {{- end }}
           {{- if not (hasKey .Values.env "BFF__METRICS_OTLP_ENABLED") }}
@@ -100,15 +98,15 @@ spec:
             {{- end }}
             {{- end }}
             {{- with .Values.extraEnv }}
-            {{- toYaml . | nindent 12 }}
+            {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
-          {{- if .Values.livenessProbe.enabled }}
-          livenessProbe:
-            {{- toYaml (omit .Values.livenessProbe "enabled") | nindent 12 }}
+          {{- range $probe := list "livenessProbe" "readinessProbe" }}
+          {{- with get $.Values $probe }}
+          {{- if .enabled }}
+          {{ $probe }}:
+            {{- include "common.tplvalues.render" (dict "value" (omit . "enabled") "context" $) | nindent 12 }}
           {{- end }}
-          {{- if .Values.readinessProbe.enabled }}
-          readinessProbe:
-            {{- toYaml (omit .Values.readinessProbe "enabled") | nindent 12 }}
+          {{- end }}
           {{- end }}
           {{- with .Values.resources }}
           resources:
@@ -128,7 +126,7 @@ spec:
               readOnly: true
             {{- end }}
             {{- with .Values.volumeMounts }}
-            {{- toYaml . | nindent 12 }}
+            {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
           {{- end }}
       {{- if or .Values.volumes .Values.identity.providers }}
@@ -137,7 +135,7 @@ spec:
         {{- if .providers }}
         - name: router-authentication
           configMap:
-            name: {{ include "bff.fullname" $ }}-router
+            name: {{ include "common.names.fullname" $ }}-router
         - name: assertion-key
           secret:
             secretName: {{ required "identity.assertionKeySecret.name is required with identity.providers" .assertionKeySecret.name }}
@@ -157,18 +155,18 @@ spec:
         {{- end }}
         {{- end }}
         {{- with .Values.volumes }}
-        {{- toYaml . | nindent 8 }}
+        {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
         {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
+        {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
       {{- end }}
       {{- with .Values.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
+        {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
       {{- end }}

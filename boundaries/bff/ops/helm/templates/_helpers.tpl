@@ -1,41 +1,7 @@
 {{/*
-Имя chart (по умолчанию совпадает с именем приложения).
+Имена, базовые labels и selector берутся из library chart bitnami/common
+(common.names.*, common.labels.*); здесь только специфика приложения.
 */}}
-{{- define "bff.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{/*
-Полное имя ресурсов: <release>-<chart>, либо только release, если он уже содержит имя chart.
-*/}}
-{{- define "bff.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
-{{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/*
-Значение label helm.sh/chart.
-*/}}
-{{- define "bff.chart" -}}
-{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{/*
-Selector labels. Только стабильные значения: изменение остальных labels не должно
-менять selector Deployment и Service.
-*/}}
-{{- define "bff.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "bff.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
 
 {{/*
 Версия приложения для label app.kubernetes.io/version: appVersion chart, иначе image.tag.
@@ -46,17 +12,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Общие labels (Kubernetes recommended labels).
+Labels ресурса: common.labels.standard плюс component, part-of и version.
+Usage: {{ include "bff.labels" (dict "customLabels" .Values.podLabels "context" $) }}
 */}}
 {{- define "bff.labels" -}}
-helm.sh/chart: {{ include "bff.chart" . }}
-{{ include "bff.selectorLabels" . }}
-{{- with include "bff.appVersion" . }}
-app.kubernetes.io/version: {{ . | quote }}
+{{- $extra := dict "app.kubernetes.io/component" (.context.Values.component | toString) "app.kubernetes.io/part-of" "nomnom" -}}
+{{- with include "bff.appVersion" .context }}
+{{- $_ := set $extra "app.kubernetes.io/version" . -}}
 {{- end }}
-app.kubernetes.io/component: {{ .Values.component | quote }}
-app.kubernetes.io/part-of: nomnom
-app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- $custom := merge (dict) (default (dict) .customLabels) (default (dict) .context.Values.commonLabels) $extra -}}
+{{- include "common.labels.standard" (dict "customLabels" $custom "context" .context) -}}
 {{- end }}
 
 {{/*
@@ -64,19 +29,20 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 */}}
 {{- define "bff.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "bff.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "common.names.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
 
 {{/*
-Полная ссылка на образ. Без image.tag Kubernetes использует tag "latest";
-NOTES.txt предупреждает об этом.
+Полная ссылка на образ через common.images.image. Без image.tag и digest
+common.images.image оставляет висящее ":", поэтому выводится только repository и
+Kubernetes использует tag "latest"; NOTES.txt предупреждает об этом.
 */}}
 {{- define "bff.image" -}}
-{{- if and .Values.image.repository .Values.image.tag }}
-{{- printf "%s:%s" .Values.image.repository .Values.image.tag }}
+{{- if or .Values.image.tag .Values.image.digest }}
+{{- include "common.images.image" (dict "imageRoot" .Values.image "global" .Values.global "chart" .Chart) }}
 {{- else }}
 {{- .Values.image.repository }}
 {{- end }}

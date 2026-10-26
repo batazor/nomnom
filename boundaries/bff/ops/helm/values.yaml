@@ -7,18 +7,29 @@ replicaCount: 1
 
 image:
   # Образ BFF (Cosmo Router + plugin + config.json) собирается boundaries/bff/Dockerfile;
-  # registry задаёт окружение. Пустое значение — Deployment не запустится.
+  # registry задаёт окружение или global.imageRegistry. Пустое значение — Deployment не запустится.
+  registry: ""
   repository: ""
   # Tag образа задаётся окружением. Пустое значение означает "latest" — для реальных
   # окружений всегда задавайте tag явно.
   tag: ""
   # IfNotPresent позволяет использовать образ, загруженный в kind через kind load docker-image.
   pullPolicy: IfNotPresent
+  # Digest имеет приоритет над tag.
+  digest: ""
 
 imagePullSecrets: []
 
 nameOverride: ""
 fullnameOverride: ""
+# Namespace ресурсов; по умолчанию — namespace release (common.names.namespace).
+namespaceOverride: ""
+# Labels, добавляемые ко всем ресурсам chart.
+commonLabels: {}
+
+# Глобальные параметры library chart bitnami/common: global.imageRegistry,
+# global.compatibility.openshift.adaptSecurityContext и т. п.
+global: {}
 
 # Label app.kubernetes.io/component.
 component: router

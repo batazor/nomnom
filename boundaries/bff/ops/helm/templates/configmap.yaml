@@ -6,9 +6,10 @@ Kubernetes Secret через envFrom или extraEnv[].valueFrom и этим cha
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "bff.fullname" . }}
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
   labels:
-    {{- include "bff.labels" . | nindent 4 }}
+    {{- include "bff.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 data:
   {{- range $key, $value := .Values.env }}
   {{ $key }}: {{ $value | toString | quote }}

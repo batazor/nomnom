@@ -30,7 +30,15 @@ chart сейчас не используется. Решение зафикси�
 
 ## Команды
 
-Команды выполняются из каталога приложения (`boundaries/bff`):
+Команды выполняются из каталога приложения (`boundaries/bff`). Chart зависит от library chart
+[`bitnami/common`](https://github.com/bitnami/charts/tree/main/bitnami/common) (имена, labels,
+образ, рендер values, совместимость `securityContext`); версия закреплена в `Chart.yaml` и
+`Chart.lock`, а сам архив скачивается в `ops/helm/charts/` и не коммитится. Skaffold скачивает
+его автоматически, при ручном запуске — сначала:
+
+```bash
+helm dependency build ops/helm
+```
 
 ```bash
 helm lint ops/helm

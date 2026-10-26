@@ -1,12 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "bff.fullname" . }}
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
   labels:
-    {{- include "bff.labels" . | nindent 4 }}
+    {{- include "bff.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
   {{- with .Values.service.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 4 }}
   {{- end }}
 spec:
   type: {{ .Values.service.type }}
@@ -19,4 +20,4 @@ spec:
       appProtocol: {{ . }}
       {{- end }}
   selector:
-    {{- include "bff.selectorLabels" . | nindent 4 }}
+    {{- include "common.labels.matchLabels" . | nindent 4 }}
