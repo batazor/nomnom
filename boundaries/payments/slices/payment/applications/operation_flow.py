@@ -44,6 +44,7 @@ from .ports import (
     PaymentPermissionChecker,
     PaymentProviderGateway,
     PaymentResource,
+    PaymentTransitionObserver,
     PendingOperationQuery,
     ProviderOperationRequest,
     ProviderOperationStatus,
@@ -94,6 +95,7 @@ class PaymentOperationExecutor:
         clock: Clock,
         operation_ids: PaymentOperationIdSource,
         applier: ProviderResultApplier,
+        transitions: PaymentTransitionObserver,
     ) -> None:
         self._uow = uow
         self._payments = payments
@@ -104,6 +106,7 @@ class PaymentOperationExecutor:
         self._clock = clock
         self._operation_ids = operation_ids
         self._applier = applier
+        self._transitions = transitions
 
     def execute(
         self, subject: Subject, payment_id: str, idempotency_key: str, kind: OperationKind
@@ -169,7 +172,10 @@ class PaymentOperationExecutor:
                 return _Reservation(existing, payment.state, payment.provider_reference)
             try:
                 payment.ensure_can(rules_of(kind).trigger)
-            except (InvalidTransitionError, AlreadyInStateError) as error:
+            except InvalidTransitionError as error:
+                self._transitions.rejected(error)
+                raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
+            except AlreadyInStateError as error:
                 raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
             if self._pending.pending_operation_id(payment_id) is not None:
                 raise OperationInProgressError(payment_id)

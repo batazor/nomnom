@@ -8,6 +8,7 @@ import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
+from psycopg import errors
 
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
 from infrastructure.postgres import PostgresDatabase
@@ -85,8 +86,13 @@ class DomainMetricsTest(unittest.TestCase):
             clock=self.kit.clock,
             operation_ids=self.kit.ids,
             applier=ProviderResultApplier(
-                self.kit.payments, self.kit.operations, self.outbox, self.kit.clock
+                self.kit.payments,
+                self.kit.operations,
+                self.outbox,
+                self.kit.clock,
+                self.kit.transitions,
             ),
+            transitions=self.kit.transitions,
         )
 
     def test_commit_records_events(self) -> None:
@@ -141,6 +147,21 @@ class DomainMetricsTest(unittest.TestCase):
             self.uow.run(lambda: self.uow.run(inner))
 
         self.assertEqual(self.counts(), {})
+
+    def test_retried_attempt_counts_once(self) -> None:
+        attempts: list[int] = []
+
+        def work() -> None:
+            attempts.append(len(attempts) + 1)
+            self.outbox.add(AGGREGATE, [AUTHORIZED])
+            if len(attempts) == 1:
+                raise errors.DeadlockDetected("deadlock detected")
+
+        self.uow.run(work)
+
+        # События откатанной попытки не считаются: только попытка, которая закоммитилась.
+        self.assertEqual(attempts, [1, 2])
+        self.assertEqual(self.counts(), {AUTHORIZATIONS: {"authorized": 1}})
 
     def test_unknown_values_create_no_series(self) -> None:
         payment, order = PaymentId("payment-0"), OrderId("order-1")

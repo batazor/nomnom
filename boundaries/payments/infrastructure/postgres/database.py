@@ -4,9 +4,17 @@ The connection of the active Unit of Work is kept in a context variable: every
 repository call made inside ``PostgresUnitOfWork.run`` uses it and joins that local
 transaction. Outside a Unit of Work a call takes its own pooled connection and
 commits on return.
+
+The outer Unit of Work retries its work on a conflict (ADR 20): serialization failure,
+deadlock, another transaction rollback (SQLSTATE class 40) or a version conflict of an
+aggregate loaded inside the transaction. Retries are bounded by ``MAX_ATTEMPTS`` and
+``RETRY_DEADLINE`` with exponential backoff. A failed commit is never retried: its
+result is unknown and is resolved by the idempotency of the operation.
 """
 
+import logging
 import math
+import time
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
@@ -14,13 +22,30 @@ from datetime import timedelta
 from typing import TypeVar
 
 import psycopg
+from opentelemetry import trace
 from psycopg_pool import ConnectionPool
 
 from pkg.config import DatabaseSettings
 
 from .pool_metrics import PoolMetrics
+from .statements import StatementTelemetry
+from .transactions import (
+    REASON,
+    RetryReason,
+    TransactionMetrics,
+    TransactionOutcome,
+    retry_reason,
+)
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
+
+# Попыток одного Unit of Work, включая первую; следующая не начинается после дедлайна
+# от начала первой. Backoff удваивается: 10 ms, 20 ms.
+MAX_ATTEMPTS = 3
+RETRY_DEADLINE = timedelta(seconds=1)
+RETRY_BACKOFF = timedelta(milliseconds=10)
 
 # db.client.connection.pool.name пула процесса.
 POOL_NAME = "payments"
@@ -63,24 +88,91 @@ class PostgresDatabase:
 
 
 class PostgresUnitOfWork:
-    """One local PostgreSQL transaction per use case step; nested calls join it."""
+    """One local PostgreSQL transaction per use case step; nested calls join it.
 
-    def __init__(self, database: PostgresDatabase) -> None:
+    Every attempt of the outer Unit of Work is recorded by ``TransactionMetrics``.
+    """
+
+    def __init__(
+        self,
+        database: PostgresDatabase,
+        transaction_metrics: TransactionMetrics | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         self._database = database
+        self._metrics = transaction_metrics or TransactionMetrics()
+        self._sleep = sleep
 
     def run(self, work: Callable[[], T]) -> T:
-        """Run ``work`` in one transaction: commit on return, roll back and re-raise on error."""
+        """Run ``work`` in one transaction: commit on return, roll back and re-raise on error.
+
+        A conflict rolls the attempt back and runs ``work`` again in a new transaction,
+        so ``work`` must touch only the local storage (``UnitOfWork``).
+        """
         if _active.get() is not None:
             return work()
-        with self._database.borrow() as conn, conn.transaction():
-            token = _active.set(conn)
+        started = time.monotonic()
+        attempt = 1
+        while True:
             try:
-                return work()
+                return self._attempt(work)
+            except _WorkFailedError as failed:
+                error = failed.error
+            reason = retry_reason(error)
+            backoff = RETRY_BACKOFF.total_seconds() * 2 ** (attempt - 1)
+            deadline = started + RETRY_DEADLINE.total_seconds()
+            if reason is None or attempt >= MAX_ATTEMPTS or time.monotonic() + backoff > deadline:
+                raise error
+            self._retried(reason, attempt)
+            self._sleep(backoff)
+            attempt += 1
+
+    def _attempt(self, work: Callable[[], T]) -> T:
+        """One transaction; an exception of ``work`` comes out as ``_WorkFailedError``."""
+        with self._database.borrow() as conn:
+            started = time.perf_counter()
+            outcome = TransactionOutcome.ROLLED_BACK
+            try:
+                with conn.transaction():
+                    token = _active.set(conn)
+                    try:
+                        result = work()
+                    except Exception as error:
+                        raise _WorkFailedError(error) from error
+                    finally:
+                        _active.reset(token)
+                    # Выход из блока выполняет COMMIT: его ошибка — commit_failed.
+                    outcome = TransactionOutcome.COMMIT_FAILED
+                outcome = TransactionOutcome.COMMITTED
+                return result
             finally:
-                _active.reset(token)
+                self._metrics.finished(outcome, time.perf_counter() - started)
+
+    def _retried(self, reason: RetryReason, attempt: int) -> None:
+        self._metrics.retried(reason)
+        trace.get_current_span().add_event(
+            "nomnom.uow.retry", {REASON: reason.value, "nomnom.uow.attempt": attempt + 1}
+        )
+        logger.warning(
+            "unit of work retried after %s (attempt %d of %d)",
+            reason.value,
+            attempt + 1,
+            MAX_ATTEMPTS,
+            extra={"operation": "unit_of_work", "outcome": "retry"},
+        )
 
 
-def create_database(settings: DatabaseSettings) -> PostgresDatabase:
+class _WorkFailedError(Exception):
+    """Carries an exception of the work out of the transaction block, after its rollback."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__(error)
+        self.error = error
+
+
+def create_database(
+    settings: DatabaseSettings, statement_telemetry: StatementTelemetry | None = None
+) -> PostgresDatabase:
     """Create the pool without connecting; ``check`` verifies reachability.
 
     Limits come from ``DatabaseSettings``: behind the session-mode pooler every pooled
@@ -88,10 +180,15 @@ def create_database(settings: DatabaseSettings) -> PostgresDatabase:
     session mode.
     """
     pool_metrics = PoolMetrics(POOL_NAME)
+    statements = statement_telemetry or StatementTelemetry()
     pool = ConnectionPool(
         settings.url,
         connection_class=pool_metrics.connection_class(),
-        kwargs={"connect_timeout": connect_timeout_seconds(settings.connect_timeout)},
+        kwargs={
+            "connect_timeout": connect_timeout_seconds(settings.connect_timeout),
+            # Span и db.client.operation.duration каждого statement.
+            "cursor_factory": statements.cursor_class(),
+        },
         min_size=settings.min_conns,
         max_size=settings.max_conns,
         open=False,

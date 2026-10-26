@@ -15,6 +15,7 @@ import pytest
 from opentelemetry import trace
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
 
+from infrastructure.observability import FsmMetrics
 from infrastructure.postgres import (
     PAYMENT_EVENTS_TOPIC,
     NoPublishedContracts,
@@ -383,7 +384,10 @@ class PostgresIntegrationTest(unittest.TestCase):
             permissions=FakePermissions(),
             clock=_Clock(),
             operation_ids=_Ids(),
-            applier=ProviderResultApplier(self.payments, self.operations, self.outbox, _Clock()),
+            applier=ProviderResultApplier(
+                self.payments, self.operations, self.outbox, _Clock(), FsmMetrics()
+            ),
+            transitions=FsmMetrics(),
         )
         handler = AuthorizePaymentHandler(executor)
         command = AuthorizePaymentInput(

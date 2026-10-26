@@ -3,8 +3,9 @@
 ``setup`` registers the W3C propagator and, per signal, an OTLP gRPC exporter:
 
 * traces — ``TracerProvider`` with a bounded ``BatchSpanProcessor``, only when
-  ``OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set;
-  psycopg is instrumented without bind parameters;
+  ``OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set
+  (PostgreSQL statements are traced by the cursor of the pool,
+  ``infrastructure/postgres/statements.py``);
 * metrics — ``MeterProvider`` with a periodic OTLP reader and the CPython runtime
   metrics, only when ``OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`` or
   ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set.
@@ -199,7 +200,6 @@ def _endpoint(env: Mapping[str, str], names: Sequence[str]) -> str | None:
 
 def _setup_traces(resource: Resource, endpoint: str) -> list[Callable[[], object]]:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
     provider = create_tracer_provider(
@@ -213,16 +213,7 @@ def _setup_traces(resource: Resource, endpoint: str) -> list[Callable[[], object
         ),
     )
     trace.set_tracer_provider(provider)
-    # Спаны запросов PostgreSQL: statement — статический SQL с плейсхолдерами (значения
-    # уходят отдельно, server-side binding psycopg 3), bind parameters не пишутся.
-    instrumentor = PsycopgInstrumentor()
-    instrumentor.instrument(
-        tracer_provider=provider,
-        capture_parameters=False,
-        enable_commenter=False,
-        skip_dep_check=True,
-    )
-    return [instrumentor.uninstrument, provider.shutdown]
+    return [provider.shutdown]
 
 
 def _setup_metrics(resource: Resource, endpoint: str) -> list[Callable[[], object]]:

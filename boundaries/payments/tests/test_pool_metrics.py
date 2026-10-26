@@ -219,7 +219,11 @@ class CreateDatabaseTest(unittest.TestCase):
         self.assertEqual(pool.timeout, 4.0)
         self.assertEqual(pool.max_lifetime, 1800.0)
         self.assertEqual(pool.max_idle, 300.0)
-        self.assertEqual(pool.kwargs, {"connect_timeout": 3})
+        kwargs = pool.kwargs
+        assert isinstance(kwargs, dict)
+        self.assertEqual(set(kwargs), {"connect_timeout", "cursor_factory"})
+        self.assertEqual(kwargs["connect_timeout"], 3)
+        self.assertTrue(issubclass(kwargs["cursor_factory"], psycopg.Cursor))
         self.assertEqual(pool.name, "payments")
         self.assertTrue(issubclass(pool.connection_class, psycopg.Connection))
         self.assertIsNot(pool.connection_class, psycopg.Connection)

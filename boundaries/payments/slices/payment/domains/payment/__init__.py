@@ -12,6 +12,7 @@ from .events import (
     PaymentRefunded,
 )
 from .fsm import (
+    TERMINAL_STATES,
     AlreadyInStateError,
     GuardFailedError,
     InvalidTransitionError,
@@ -56,6 +57,7 @@ from .vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
 __all__ = [
     "OPERATION_KINDS",
+    "TERMINAL_STATES",
     "AlreadyInStateError",
     "CurrencyMismatchError",
     "DuplicateIdempotencyKeyError",

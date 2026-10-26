@@ -2,23 +2,22 @@
 
 A counter changes only at an idempotently confirmed transition: it counts the Domain
 Events written to the Outbox inside a Unit of Work and records them after the outer Unit
-of Work commits. A rollback records nothing, and a replay or an already applied Provider
-result writes no events, so it is not counted twice. The domain layer knows nothing about
-metrics: the decorators below wrap the ``UnitOfWork`` and ``PaymentOutbox`` ports in the
-composition root.
+of Work commits (``committed.CommitScope``). A rollback records nothing, and a replay or
+an already applied Provider result writes no events, so it is not counted twice. The
+domain layer knows nothing about metrics: ``ObservedOutbox`` wraps the ``PaymentOutbox``
+port and ``committed.ObservedUnitOfWork`` the ``UnitOfWork`` port in the composition
+root.
 
 Names, units and attributes are fixed by ``ops/semconv/model/domain.yaml``.
 """
 
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from enum import StrEnum
-from typing import TypeVar
 
 from opentelemetry import metrics
 
-from pkg.application import AggregateRef, UnitOfWork
+from pkg.application import AggregateRef
 from slices.payment.applications.ports import PaymentOutbox
 from slices.payment.domains.payment import (
     OPERATION_KINDS,
@@ -30,7 +29,7 @@ from slices.payment.domains.payment import (
     PaymentRefunded,
 )
 
-T = TypeVar("T")
+from .committed import CommitScope
 
 INSTRUMENTATION = "nomnom.payments.domain"
 _OUTCOME = "nomnom.outcome"
@@ -89,11 +88,6 @@ def classify(event: PaymentDomainEvent) -> tuple[_Counter, Outcome] | None:
             return _SUCCESSES.get(type(event))
 
 
-_collector: ContextVar[list[PaymentDomainEvent] | None] = ContextVar(
-    "payments_domain_metrics_collector", default=None
-)
-
-
 class DomainMetrics:
     """Business counters of Payment Operations.
 
@@ -110,32 +104,21 @@ class DomainMetrics:
             )
             for counter in _Counter
         }
+        self._committed = CommitScope[PaymentDomainEvent](
+            "payments_domain_metrics_collector", self.record
+        )
 
-    @contextmanager
-    def track(self) -> Iterator[None]:
+    def track(self) -> AbstractContextManager[Callable[[], None]]:
         """Collect the events of one Unit of Work and record them if the block succeeds.
 
         A nested block joins the outer collection, so events are recorded once, after
         the outer Unit of Work commits. An exception discards them.
         """
-        if _collector.get() is not None:
-            yield
-            return
-        events: list[PaymentDomainEvent] = []
-        token = _collector.set(events)
-        try:
-            yield
-        finally:
-            _collector.reset(token)
-        self.record(events)
+        return self._committed.track()
 
     def appended(self, events: Sequence[PaymentDomainEvent]) -> None:
         """Note events written to the Outbox; outside a Unit of Work they are already durable."""
-        collected = _collector.get()
-        if collected is None:
-            self.record(events)
-        else:
-            collected.extend(events)
+        self._committed.add(events)
 
     def record(self, events: Sequence[PaymentDomainEvent]) -> None:
         """Add the committed events to their counters; other events are ignored."""
@@ -145,19 +128,6 @@ class DomainMetrics:
                 continue
             counter, outcome = classified
             self._counters[counter].add(1, {_OUTCOME: outcome.value})
-
-
-class ObservedUnitOfWork:
-    """``UnitOfWork`` that records business metrics after the outer transaction commits."""
-
-    def __init__(self, inner: UnitOfWork, metrics: DomainMetrics) -> None:
-        self._inner = inner
-        self._metrics = metrics
-
-    def run(self, work: Callable[[], T]) -> T:
-        """Run ``work`` in the inner Unit of Work; its events count only after a commit."""
-        with self._metrics.track():
-            return self._inner.run(work)
 
 
 class ObservedOutbox:

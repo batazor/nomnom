@@ -1,10 +1,18 @@
+import contextlib
 import os
 import unittest
 from datetime import timedelta
+from typing import override
 from unittest.mock import patch
 
 import grpc
 from authzed.api.v1 import CheckPermissionRequest, CheckPermissionResponse
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import (
+    HistogramDataPoint,
+    InMemoryMetricReader,
+    NumberDataPoint,
+)
 from pydantic import ValidationError
 
 from di.payments import SpiceDBConfigurationError, create_permission_checker
@@ -159,6 +167,78 @@ class DecisionTest(unittest.TestCase):
     def test_rejects_non_positive_timeout(self) -> None:
         with self.assertRaises(ValueError):
             SpiceDBPermissionChecker(FakePermissionsClient(), 0)
+
+
+class AuthorizationMetricsTest(unittest.TestCase):
+    """``nomnom.authz.checks`` and ``nomnom.authz.check.duration`` (ops/semconv authz.yaml)."""
+
+    @override
+    def setUp(self) -> None:
+        self.reader = InMemoryMetricReader()
+        self.provider = MeterProvider(metric_readers=[self.reader])
+
+    def check(self, client: FakePermissionsClient, permission: PaymentPermission) -> None:
+        checker = SpiceDBPermissionChecker(client, 1.0, self.provider)
+        with contextlib.suppress(AuthorizationUnavailableError):
+            checker.is_allowed(WORKER, permission, RESOURCE)
+
+    def points(self) -> dict[str, dict[tuple[str, str, str], float]]:
+        """Metric → (permission, resource type, result) → count."""
+        result: dict[str, dict[tuple[str, str, str], float]] = {}
+        data = self.reader.get_metrics_data()
+        assert data is not None
+        for rm in data.resource_metrics:
+            for sm in rm.scope_metrics:
+                for metric in sm.metrics:
+                    for point in metric.data.data_points:
+                        attributes = dict(point.attributes or {})
+                        key = (
+                            str(attributes["nomnom.authz.permission"]),
+                            str(attributes["nomnom.authz.resource_type"]),
+                            str(attributes["nomnom.authz.result"]),
+                        )
+                        self.assertEqual(len(attributes), 3)
+                        if isinstance(point, HistogramDataPoint):
+                            self.assertEqual(metric.unit, "s")
+                            value = float(point.count)
+                        else:
+                            assert isinstance(point, NumberDataPoint)
+                            value = float(point.value)
+                        result.setdefault(metric.name, {})[key] = value
+        return result
+
+    def test_every_result_is_counted_with_the_spicedb_permission(self) -> None:
+        with self.assertLogs("infrastructure.authorization.spicedb", "WARNING"):
+            self.check(FakePermissionsClient(), PaymentPermission.CAPTURE)
+            self.check(
+                FakePermissionsClient(Permissionship.PERMISSIONSHIP_NO_PERMISSION),
+                PaymentPermission.VIEW,
+            )
+            self.check(
+                FakePermissionsClient(Permissionship.PERMISSIONSHIP_CONDITIONAL_PERMISSION),
+                PaymentPermission.VIEW,
+            )
+            self.check(
+                FakePermissionsClient(error=_RpcFailure(grpc.StatusCode.UNAVAILABLE)),
+                PaymentPermission.REFUND,
+            )
+            self.check(
+                FakePermissionsClient(error=_RpcFailure(grpc.StatusCode.DEADLINE_EXCEEDED)),
+                PaymentPermission.REFUND,
+            )
+            self.check(FakePermissionsClient(error=TimeoutError()), PaymentPermission.VIEW)
+
+        expected = {
+            ("manage_payments", "platform", "allowed"): 1.0,
+            ("view_payments", "platform", "denied"): 2.0,
+            ("manage_payments", "platform", "error"): 1.0,
+            ("manage_payments", "platform", "timeout"): 1.0,
+            ("view_payments", "platform", "timeout"): 1.0,
+        }
+        self.assertEqual(
+            self.points(),
+            {"nomnom.authz.checks": expected, "nomnom.authz.check.duration": expected},
+        )
 
 
 class CompositionTest(unittest.TestCase):
