@@ -7,7 +7,7 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
 ## Модель
 
 - DLQ общий для всех consumer groups стрима. Каждая группа разбирает только свои dead letters — header `consumer_group_poisoned`.
-- Что разобрано, хранит Kafka consumer group `<group>.dlq` (у `orders` — `orders.dlq`): её committed offset на `<stream>.dlq` — первая неразобранная запись. Чужие dead letters группа проходит, не трогая. Lag `<group>.dlq` — верхняя оценка неразобранного backlog группы: в него входят и чужие записи.
+- Что разобрано, хранит Kafka consumer group `<group>.dlq` (у `orders` — `orders.dlq`, у `restaurants` — `restaurants.dlq`): её committed offset на `<stream>.dlq` — первая неразобранная запись. Чужие dead letters группа проходит, не трогая. Lag `<group>.dlq` — верхняя оценка неразобранного backlog группы: в него входят и чужие записи.
 - Записи разбираются по порядку в partition. Чтобы оставить запись в середине, сначала разбирают всё до неё.
 - **Redrive** публикует dead letter обратно в исходный стрим: тот же ключ (`aggregate_id`), payload и envelope headers, без `reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned`, `deserialization_error`, плюс header `redriven_from=<stream>.dlq/<partition>@<offset>`. Событие снова получают все группы стрима. Inbox делает повтор no-op там, где событие уже обработано. Если запись снова падает, она возвращается в DLQ с `redriven_from`.
 - **Discard** помечает записи разобранными без публикации. Каждая запись и причина пишутся WARN-логом `dead letter discarded` — это журнал решения.
@@ -15,7 +15,20 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
 
 ## Процедура
 
-Сигнал — alert `nomnom-orders-kafka-poison` (`nomnom.messaging.poison.messages`) и лог `integration event sent to DLQ` с `error_class` и `detail`.
+Сигнал — alert `nomnom-orders-kafka-poison` (`nomnom.messaging.poison.messages`) и лог `integration event sent to DLQ` с `error_class` и `detail`; у `restaurants-consumer` — та же метрика и WARN-лог `restaurants.order-placed dead-lettered …`.
+
+Команда разбора у каждого контекста своя, контракт один (аргументы, вывод, offset `<group>.dlq`):
+
+| Контекст | Pod | Команда | Стримы |
+| --- | --- | --- | --- |
+| `orders` | `-n nomnom-orders deploy/orders-consumer` | `/orders-admin` | `restaurants.v1.restaurant-order-events`, `delivery.v1.delivery-events` |
+| `restaurants` | `-n nomnom-restaurants deploy/restaurants-consumer` | `node dist/cmd/restaurants-admin/main.js` (в dev-образе `make kind-dev` — `node cmd/restaurants-admin/main.ts`) | `orders.v1.order-events` |
+
+Примеры ниже — для `orders`; для `restaurants` подставляются pod, команда и стрим из таблицы:
+
+```bash
+kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/restaurants-admin/main.js dlq list --stream orders.v1.order-events
+```
 
 1. Посмотреть неразобранные записи группы:
 
@@ -23,7 +36,7 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
    kubectl -n nomnom-orders exec deploy/orders-consumer -- /orders-admin dlq list --stream restaurants.v1.restaurant-order-events
    ```
 
-   Одна строка JSON на запись: `partition`, `offset`, `event_id`, `event_type`, `aggregate_id`, `occurred_at`, `reason`, `redriven_from`.
+   Одна строка JSON на запись в stdout (логи команды `restaurants-admin` идут в stderr): `partition`, `offset`, `event_id`, `event_type`, `aggregate_id`, `occurred_at`, `reason`, `redriven_from`.
 
 2. Классифицировать по `reason`:
 
@@ -57,4 +70,3 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
 
 - Retention `<stream>.dlq` должен быть больше окна разбора. В kind topics создаются при первой публикации с retention брокера. Для production retention DLQ задаётся явно при создании topic.
 - Две команды разбора одной группы одновременно не запускаются: offset `<group>.dlq` не защищён от гонки.
-- `orders-admin dlq` реализован в `orders`. `restaurants` пишет в DLQ по тому же контракту (headers, `<stream>.dlq`), но своей команды разбора пока не имеет.

@@ -545,7 +545,7 @@ Inbox не обязан храниться бесконечно. Retention уч�
 - правила именования `consumer` и процедура его переименования;
 - назначение `handler_version` и процедура осознанной повторной обработки событий новой версией handler;
 - retention Inbox и способ очистки;
-- ~~retry policy, dead-letter topics и ручное восстановление poison messages;~~ — решено [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#восстановление-из-dlq), runbook — [Разбор DLQ](dlq.md); команда разбора есть у `orders`, у `restaurants` — нет;
+- ~~retry policy, dead-letter topics и ручное восстановление poison messages;~~ — решено [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#восстановление-из-dlq), runbook — [Разбор DLQ](dlq.md); команды разбора — `orders-admin dlq` и `restaurants-admin dlq`;
 - имена метрик, buckets гистограмм и источник времени для message age;
 - состав kind-based integration environment для Kafka, PostgreSQL и MongoDB с поддержкой транзакций.
 

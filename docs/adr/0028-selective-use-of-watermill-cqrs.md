@@ -95,7 +95,7 @@ Watermill не превращает business errors в бесконечный tr
 - **Discard** — пометка разобранным без публикации; запись и причина пишутся WARN-логом.
 - Redrive доставляет событие после более новых событий агрегата. Это допустимо, потому что ordering ≠ idempotency: use cases, которым нужен порядок, проверяют `aggregate_version` и признают поздние факты.
 - Записи разбираются по порядку в partition, offset коммитится после каждой: прерванный разбор продолжается с места остановки.
-- Реализация — разовая операторская команда в образе consumer'а (`orders-admin dlq list|redrive|discard`, запуск `kubectl exec` в pod consumer'а с его конфигурацией). Контексты на других языках реализуют тот же контракт своей командой.
+- Реализация — разовая операторская команда в образе consumer'а (`orders-admin dlq list|redrive|discard`, запуск `kubectl exec` в pod consumer'а с его конфигурацией). Контексты на других языках реализуют тот же контракт своей командой: у `restaurants` — `restaurants-admin dlq` (`boundaries/restaurants/cmd/restaurants-admin`).
 
 #### Десериализация
 
