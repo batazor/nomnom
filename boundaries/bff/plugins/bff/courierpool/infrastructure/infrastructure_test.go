@@ -102,7 +102,7 @@ func TestPoolIsReadOnBehalfOfTheDispatcher(t *testing.T) {
 	pool, err := connect(t, server).Pool(dispatcherContext())
 
 	require.NoError(t, err)
-	assert.Equal(t, applications.Pool{Size: 2, OnLine: 2, Busy: 1, Waiting: 3, Couriers: []applications.Courier{
+	assert.Equal(t, applications.Pool{Market: "berlin", Size: 2, OnLine: 2, Busy: 1, Waiting: 3, Couriers: []applications.Courier{
 		{ID: "courier-1", Name: "Анна", Availability: applications.AvailabilityAvailable, OfferedOrderID: "order-2"},
 		{ID: "courier-2", Name: "Тимур", Availability: applications.AvailabilityBusy, CurrentOrderID: "order-1"},
 	}}, pool)

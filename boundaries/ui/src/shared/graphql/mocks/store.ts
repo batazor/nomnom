@@ -340,10 +340,13 @@ export function createMockStore({
         if (!kitchen) throw bffError("NotFound", "kitchen not found");
         return { kitchenChanged: kitchen };
       }),
-    courierPoolChanged: () =>
-      changes.subscribe(() => ({
-        courierPoolChanged: fulfillment.courierPool(),
-      })),
+    courierPoolChanged: ({ marketId }: { marketId: string }) =>
+      changes.subscribe(() => {
+        const pool = fulfillment.courierPool();
+        if (pool.id !== marketId)
+          throw bffError("NotFound", "courier pool not found");
+        return { courierPoolChanged: pool };
+      }),
     courierChanged: ({ id }: { id: string }) => {
       if (id !== mockCourierId) throw bffError("NotFound", "courier not found");
       return changes.subscribe(() => ({

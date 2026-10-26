@@ -44,16 +44,17 @@ func (s *BffService) QueryCourierPool(ctx context.Context, _ *service.QueryCouri
 }
 
 // LookupCourierPoolById resolves courierPoolChanged events (ADR 36) with the
-// subscriber's access token; the pool has one key, the platform.
+// subscriber's access token; the key is the Market of the pool (ADR 41) and
+// must be the Market of the request: the pool of another Market is not found.
 func (s *BffService) LookupCourierPoolById(ctx context.Context, request *service.LookupCourierPoolByIdRequest) (*service.LookupCourierPoolByIdResponse, error) {
 	pools := make([]*service.CourierPool, 0, len(request.GetKeys()))
 	for _, key := range request.GetKeys() {
-		if key.GetId() != applications.PoolID {
-			return nil, status.Error(codes.NotFound, "courier pool not found")
-		}
 		response, err := s.QueryCourierPool(ctx, &service.QueryCourierPoolRequest{})
 		if err != nil {
 			return nil, err
+		}
+		if key.GetId() != response.GetCourierPool().GetId() {
+			return nil, status.Error(codes.NotFound, "courier pool not found")
 		}
 		pools = append(pools, response.GetCourierPool())
 	}

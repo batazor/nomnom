@@ -518,7 +518,8 @@ export function createFulfillment({
       ...couriers.filter((courier) => !courier.retired).map(poolCourierView),
     ].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
     return {
-      id: "nomnom",
+      // The pool id is its Market (ADR 41).
+      id: "berlin",
       size: members.length,
       onLine: members.filter((member) => member.availability !== "UNAVAILABLE")
         .length,

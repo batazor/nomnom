@@ -461,37 +461,39 @@ fn courier_writes_notify_the_courier_entity() {
     }
 }
 
-/// FR-621: every committed courier write also notifies the Courier Pool of
-/// the platform. Other tests write the same pool key in parallel, so the test
-/// counts at least its own two writes.
+/// FR-621, ADR 41: every committed courier write also notifies the Courier
+/// Pool of the courier's Market, keyed by market_id. Only this test writes
+/// the Market `pool-notifications`, but reruns against the same database
+/// keep older rows, so the test counts at least its own two writes.
 #[test]
 fn courier_writes_notify_the_courier_pool() {
+    const MARKET: &str = "pool-notifications";
     let store = store();
-    let before = outbox_rows("nomnom").len();
+    let before = outbox_rows(MARKET).len();
     let id = unique("courier");
     let courier = Courier::new(
         CourierId::new(&id),
         CourierName::new("Timur").expect("courier name"),
-        MarketId::new("berlin").expect("market id"),
+        MarketId::new(MARKET).expect("market id"),
     );
     CourierRepository::add(&store, &courier).expect("add");
     let mut retired = Courier::restore(
         CourierId::new(&id),
         CourierName::new("Timur").expect("courier name"),
-        MarketId::new("berlin").expect("market id"),
+        MarketId::new(MARKET).expect("market id"),
         CourierStatus::Unavailable,
     )
     .with_version(courier.version());
     retired.retire(10).expect("retire");
     CourierRepository::save(&store, &retired).expect("save");
 
-    let rows = outbox_rows("nomnom");
+    let rows = outbox_rows(MARKET);
     assert!(rows.len() >= before + 2, "one pool notification per write");
     for (_, event_type, _, payload, _) in rows {
         assert_eq!(event_type, "CourierPoolChanged");
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&payload).expect("json"),
-            serde_json::json!({ "__typename": "CourierPool", "id": "nomnom" })
+            serde_json::json!({ "__typename": "CourierPool", "id": MARKET })
         );
     }
     let stored = CourierRepository::get(&store, &CourierId::new(&id))

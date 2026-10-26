@@ -84,6 +84,9 @@ plane завершаются `UNAVAILABLE`. Недоступный control plane
   `ListRestaurants`, `ListOwnedRestaurants`, `ListCustomerOrders`, `GetCourierPool`.
 - Курьеру предлагаются и назначаются только Delivery его Market; Place Order и Restaurant Order не
   пересекают границу Market.
+- Courier Pool — у каждого Market свой: `CourierPool.id = market_id`, Change Notification пула несёт
+  ключ Market, а subscription `courierPoolChanged(marketId)` фильтрует по нему
+  ([ADR 36](0036-graphql-subscriptions-via-cosmo-streams.md)).
 - Каждое Integration Event несёт `market_id`. Partition key не меняется: Kafka — своя в каждой Cell,
   порядок по aggregate сохраняется как прежде.
 - Синхронные вызовы между контекстами остаются внутри Cell через её internal gateway

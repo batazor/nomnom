@@ -42,27 +42,29 @@ func courierPoolService(t *testing.T, get *fakeGetCourierPool, change *fakeChang
 	return svc, metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
 }
 
-var pool = applications.Pool{Size: 2, OnLine: 1, Busy: 1, Waiting: 2, Couriers: []applications.Courier{
+var pool = applications.Pool{Market: "berlin", Size: 2, OnLine: 1, Busy: 1, Waiting: 2, Couriers: []applications.Courier{
 	{ID: "courier-1", Name: "Тимур", Availability: applications.AvailabilityBusy, CurrentOrderID: "order-1"},
 	{ID: "courier-2", Name: "Анна", Availability: applications.AvailabilityUnavailable},
 }}
 
-func TestCourierPoolIsTheEntityOfThePlatform(t *testing.T) {
+// ADR 41: the pool is the entity of its Market; the key of another Market is
+// not found.
+func TestCourierPoolIsTheEntityOfItsMarket(t *testing.T) {
 	svc, ctx := courierPoolService(t, &fakeGetCourierPool{pool: pool}, &fakeChangeCourierPool{})
 
 	response, err := svc.QueryCourierPool(ctx, &service.QueryCourierPoolRequest{})
 
 	require.NoError(t, err)
 	message := response.GetCourierPool()
-	assert.Equal(t, "nomnom", message.GetId())
+	assert.Equal(t, "berlin", message.GetId())
 	assert.Equal(t, []int32{2, 1, 1, 2}, []int32{message.GetSize(), message.GetOnLine(), message.GetBusy(), message.GetWaiting()})
 	assert.Equal(t, "order-1", message.GetCouriers()[0].GetCurrentOrderId().GetValue())
 	assert.Nil(t, message.GetCouriers()[1].GetCurrentOrderId())
 
-	lookup, err := svc.LookupCourierPoolById(ctx, &service.LookupCourierPoolByIdRequest{Keys: []*service.LookupCourierPoolByIdRequestKey{{Id: "nomnom"}}})
+	lookup, err := svc.LookupCourierPoolById(ctx, &service.LookupCourierPoolByIdRequest{Keys: []*service.LookupCourierPoolByIdRequestKey{{Id: "berlin"}}})
 	require.NoError(t, err)
 	assert.Len(t, lookup.GetResult(), 1)
-	_, err = svc.LookupCourierPoolById(ctx, &service.LookupCourierPoolByIdRequest{Keys: []*service.LookupCourierPoolByIdRequestKey{{Id: "other"}}})
+	_, err = svc.LookupCourierPoolById(ctx, &service.LookupCourierPoolByIdRequest{Keys: []*service.LookupCourierPoolByIdRequestKey{{Id: "hamburg"}}})
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 

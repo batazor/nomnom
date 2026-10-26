@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH changed AS (\n                 UPDATE couriers SET status = $4, authorization_revision = $5,\n                     retired_at = $6, version = version + 1\n                 WHERE id = $2 AND version = $3 RETURNING id, market_id\n             ), expired AS (\n                 DELETE FROM delivery_outbox WHERE event_id IN (\n                     SELECT event_id FROM delivery_outbox\n                     WHERE created_at < now() - interval '1 hour'\n                     FOR UPDATE SKIP LOCKED))\n             INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,\n                 aggregate_version, topic, payload, traceparent)\n             SELECT gen_random_uuid(), 'CourierChanged', 'Courier', id, 0,\n                 'delivery.v1.courier-changes',\n                 convert_to(json_build_object('__typename', 'Courier', 'id', id)::text, 'UTF8'),\n                 $1\n             FROM changed\n             UNION ALL\n             SELECT gen_random_uuid(), 'CourierPoolChanged', 'CourierPool', market_id, 0,\n                 'delivery.v1.courier-pool-changes',\n                 convert_to(json_build_object('__typename', 'CourierPool', 'id', market_id)::text,\n                     'UTF8'),\n                 $1\n             FROM changed",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aa927aa300703c16109b6551e6e9ed5c4b3176b60771e0379915075229deded6"
+}

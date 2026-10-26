@@ -59,7 +59,7 @@ impl CourierRepository for Store {
             "WITH changed AS (
                  INSERT INTO couriers (id, name, status, retired_at, authorization_revision,
                      version, market_id)
-                 VALUES ($2, $6, $3, $7, $4, $5, $8) ON CONFLICT DO NOTHING RETURNING id
+                 VALUES ($2, $6, $3, $7, $4, $5, $8) ON CONFLICT DO NOTHING RETURNING id, market_id
              ), expired AS (
                  DELETE FROM delivery_outbox WHERE event_id IN (
                      SELECT event_id FROM delivery_outbox
@@ -73,9 +73,9 @@ impl CourierRepository for Store {
                  $1
              FROM changed
              UNION ALL
-             SELECT gen_random_uuid(), 'CourierPoolChanged', 'CourierPool', 'nomnom', 0,
+             SELECT gen_random_uuid(), 'CourierPoolChanged', 'CourierPool', market_id, 0,
                  'delivery.v1.courier-pool-changes',
-                 convert_to(json_build_object('__typename', 'CourierPool', 'id', 'nomnom')::text,
+                 convert_to(json_build_object('__typename', 'CourierPool', 'id', market_id)::text,
                      'UTF8'),
                  $1
              FROM changed",
@@ -103,7 +103,7 @@ impl CourierRepository for Store {
             "WITH changed AS (
                  UPDATE couriers SET status = $4, authorization_revision = $5,
                      retired_at = $6, version = version + 1
-                 WHERE id = $2 AND version = $3 RETURNING id
+                 WHERE id = $2 AND version = $3 RETURNING id, market_id
              ), expired AS (
                  DELETE FROM delivery_outbox WHERE event_id IN (
                      SELECT event_id FROM delivery_outbox
@@ -117,9 +117,9 @@ impl CourierRepository for Store {
                  $1
              FROM changed
              UNION ALL
-             SELECT gen_random_uuid(), 'CourierPoolChanged', 'CourierPool', 'nomnom', 0,
+             SELECT gen_random_uuid(), 'CourierPoolChanged', 'CourierPool', market_id, 0,
                  'delivery.v1.courier-pool-changes',
-                 convert_to(json_build_object('__typename', 'CourierPool', 'id', 'nomnom')::text,
+                 convert_to(json_build_object('__typename', 'CourierPool', 'id', market_id)::text,
                      'UTF8'),
                  $1
              FROM changed",
@@ -209,8 +209,8 @@ impl DeliveryRepository for Store {
         if inserted.rows_affected() == 0 {
             return Err(RepositoryError::Conflict);
         }
-        // A new Delivery is the backlog of the Courier Pool.
-        self.notify_courier_pool()?;
+        // A new Delivery is the backlog of the Courier Pool of its Market.
+        self.notify_courier_pool(delivery.market_id().as_str())?;
         delivery
             .courier_id()
             .map_or(Ok(()), |courier| self.notify_courier(courier.as_str()))
@@ -258,7 +258,7 @@ impl DeliveryRepository for Store {
             .fetch_optional(connection))
             .map(|row| row.is_some())
         })?;
-        self.notify_courier_pool()?;
+        self.notify_courier_pool(delivery.market_id().as_str())?;
         let current = delivery.courier_id().map(CourierId::as_str);
         if let Some(courier) = current {
             self.notify_courier(courier)?;
@@ -301,7 +301,7 @@ impl DeliveryOfferRepository for Store {
         if inserted.rows_affected() == 0 {
             return Err(RepositoryError::Conflict);
         }
-        self.notify_courier_pool()?;
+        self.notify_offer_pool(offer)?;
         self.notify_courier(offer.courier_id().as_str())
     }
 
@@ -323,8 +323,20 @@ impl DeliveryOfferRepository for Store {
             .fetch_optional(connection))
             .map(|row| row.is_some())
         })?;
-        self.notify_courier_pool()?;
+        self.notify_offer_pool(offer)?;
         self.notify_courier(offer.courier_id().as_str())
+    }
+}
+
+impl Store {
+    /// The pool an offer changes is the pool of the Market of its Delivery.
+    fn notify_offer_pool(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
+        let market_id = sql!(self, "SELECT", |connection| sqlx::query_scalar!(
+            "SELECT market_id FROM deliveries WHERE id = $1",
+            offer.delivery_id().as_str()
+        )
+        .fetch_one(connection))?;
+        self.notify_courier_pool(&market_id)
     }
 }
 

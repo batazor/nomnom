@@ -13,7 +13,7 @@ service BffService {
    */
   rpc LookupCourierById(LookupCourierByIdRequest) returns (LookupCourierByIdResponse) {}
   /*
-   * Lookup CourierPool entity by id: Couriers of the platform and the load of the line; the entity key lets the
+   * Lookup CourierPool entity by id: Couriers of a Market and the load of the line; the entity key lets the
    * Router resolve courierPoolChanged events (ADR 36)
    */
   rpc LookupCourierPoolById(LookupCourierPoolByIdRequest) returns (LookupCourierPoolByIdResponse) {}
@@ -611,11 +611,11 @@ message Courier {
 }
 
 /*
- * Couriers of the platform and the load of the line; the entity key lets the
+ * Couriers of a Market and the load of the line; the entity key lets the
  * Router resolve courierPoolChanged events (ADR 36)
  */
 message CourierPool {
-  // Identifier of the pool, the platform
+  // Identifier of the pool: the id of its Market (ADR 41)
   string id = 1;
   // Couriers in the pool
   int32 size = 2;

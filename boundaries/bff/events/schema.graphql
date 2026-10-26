@@ -34,12 +34,14 @@ type Subscription {
     @openfed__subscriptionFilter(condition: { IN: { fieldPath: "id", values: ["{{ args.id }}"] } })
 
   """
-  Courier Pool after each change of a courier, an offer or a delivery; query
-  courierPool first. A user who may not manage couriers gets an error event
-  instead of data.
+  Courier Pool of a Market after each change of its couriers, offers or
+  deliveries; marketId is CourierPool.id, the Market of X-Nomnom-Market (ADR 41).
+  Query courierPool first. A user who may not manage couriers, or a marketId
+  other than the header, gets an error event instead of data.
   """
-  courierPoolChanged: CourierPool!
+  courierPoolChanged(marketId: ID!): CourierPool!
     @edfs__kafkaSubscribe(topics: ["delivery.v1.courier-pool-changes"], providerId: "default")
+    @openfed__subscriptionFilter(condition: { IN: { fieldPath: "id", values: ["{{ args.marketId }}"] } })
 }
 
 type Order @key(fields: "id", resolvable: false) {

@@ -22,7 +22,7 @@ var (
 
 func courierPoolMessage(pool applications.Pool) (*service.CourierPool, error) {
 	message := &service.CourierPool{
-		Id:       applications.PoolID,
+		Id:       pool.Market,
 		Size:     int32(pool.Size),
 		OnLine:   int32(pool.OnLine),
 		Busy:     int32(pool.Busy),

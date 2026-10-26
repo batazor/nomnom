@@ -70,13 +70,10 @@ pub(super) fn row_traceparent() -> String {
 pub const COURIER_CHANGES_TOPIC: &str = "delivery.v1.courier-changes";
 
 /// Kafka topic of Courier Pool Change Notifications (ADR 36, FR-621): the BFF
-/// Router turns them into `courierPoolChanged`. One entity, the pool of the
-/// platform: every write of a courier, an offer or a Delivery changes its
-/// load.
+/// Router turns them into `courierPoolChanged`. One entity per Market, keyed
+/// by `market_id` (ADR 41): every write of a courier, an offer or a Delivery
+/// changes the load of the pool of its Market.
 pub const COURIER_POOL_CHANGES_TOPIC: &str = "delivery.v1.courier-pool-changes";
-
-/// GraphQL key of the Courier Pool: the platform singleton.
-const COURIER_POOL_ID: &str = "nomnom";
 
 // Retention of the Outbox (ADR 37): every Outbox write statement carries the
 // CTE `expired`, so rows older than an hour go in the transaction of the next
@@ -115,11 +112,11 @@ impl Store {
 }
 
 impl Store {
-    /// Writes the Change Notification of `CourierPool(nomnom)` next to the
+    /// Writes the Change Notification of `CourierPool(market_id)` next to the
     /// change, like [`Self::notify_courier`].
-    pub(super) fn notify_courier_pool(&self) -> Result<(), RepositoryError> {
+    pub(super) fn notify_courier_pool(&self, market_id: &str) -> Result<(), RepositoryError> {
         let payload =
-            serde_json::json!({ "__typename": "CourierPool", "id": COURIER_POOL_ID }).to_string();
+            serde_json::json!({ "__typename": "CourierPool", "id": market_id }).to_string();
         sql!(self, "INSERT", |connection| sqlx::query!(
             "WITH expired AS (
                  DELETE FROM delivery_outbox WHERE event_id IN (
@@ -130,7 +127,7 @@ impl Store {
                  aggregate_version, topic, payload, traceparent)
              VALUES ($1, 'CourierPoolChanged', 'CourierPool', $2, 0, $3, $4, $5)",
             Uuid::now_v7(),
-            COURIER_POOL_ID,
+            market_id,
             COURIER_POOL_CHANGES_TOPIC,
             payload.into_bytes(),
             row_traceparent()

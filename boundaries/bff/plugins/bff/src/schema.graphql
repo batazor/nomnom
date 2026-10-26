@@ -777,12 +777,12 @@ type PoolCourier {
 }
 
 """
-Couriers of the platform and the load of the line; the entity key lets the
+Couriers of a Market and the load of the line; the entity key lets the
 Router resolve courierPoolChanged events (ADR 36)
 """
 type CourierPool @key(fields: "id") {
   """
-  Identifier of the pool, the platform
+  Identifier of the pool: the id of its Market (ADR 41)
   """
   id: ID!
   """

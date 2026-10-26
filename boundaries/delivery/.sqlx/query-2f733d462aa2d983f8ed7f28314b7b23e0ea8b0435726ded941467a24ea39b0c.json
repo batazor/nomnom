@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH changed AS (\n                 INSERT INTO couriers (id, name, status, retired_at, authorization_revision,\n                     version, market_id)\n                 VALUES ($2, $6, $3, $7, $4, $5, $8) ON CONFLICT DO NOTHING RETURNING id, market_id\n             ), expired AS (\n                 DELETE FROM delivery_outbox WHERE event_id IN (\n                     SELECT event_id FROM delivery_outbox\n                     WHERE created_at < now() - interval '1 hour'\n                     FOR UPDATE SKIP LOCKED))\n             INSERT INTO delivery_outbox (event_id, event_type, aggregate_type, aggregate_id,\n                 aggregate_version, topic, payload, traceparent)\n             SELECT gen_random_uuid(), 'CourierChanged', 'Courier', id, 0,\n                 'delivery.v1.courier-changes',\n                 convert_to(json_build_object('__typename', 'Courier', 'id', id)::text, 'UTF8'),\n                 $1\n             FROM changed\n             UNION ALL\n             SELECT gen_random_uuid(), 'CourierPoolChanged', 'CourierPool', market_id, 0,\n                 'delivery.v1.courier-pool-changes',\n                 convert_to(json_build_object('__typename', 'CourierPool', 'id', market_id)::text,\n                     'UTF8'),\n                 $1\n             FROM changed",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2f733d462aa2d983f8ed7f28314b7b23e0ea8b0435726ded941467a24ea39b0c"
+}

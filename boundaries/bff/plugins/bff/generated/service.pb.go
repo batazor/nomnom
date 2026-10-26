@@ -4434,14 +4434,14 @@ func (x *Courier) GetId() string {
 	return ""
 }
 
-// Couriers of the platform and the load of the line; the entity key lets the
+// Couriers of a Market and the load of the line; the entity key lets the
 // Router resolve courierPoolChanged events (ADR 36)
 type CourierPool struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Identifier of the pool, the platform
+	// Identifier of the pool: the id of its Market (ADR 41)
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Couriers in the pool
 	Size int32 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`

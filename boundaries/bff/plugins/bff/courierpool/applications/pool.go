@@ -12,9 +12,6 @@ import (
 	"math"
 )
 
-// PoolID is the key of the Courier Pool entity: the platform singleton.
-const PoolID = "nomnom"
-
 var (
 	// ErrNotPermitted is a user who may not manage the Courier Pool.
 	ErrNotPermitted = errors.New("courier pool is not permitted")
@@ -49,8 +46,10 @@ type Courier struct {
 	CurrentOrderID string
 }
 
-// Pool is the line and the load of the couriers of the platform.
+// Pool is the line and the load of the couriers of one Market.
 type Pool struct {
+	// Market is the key of the Courier Pool entity: one pool per Market (ADR 41).
+	Market  string
 	Size    int
 	OnLine  int
 	Busy    int

@@ -60,8 +60,11 @@ export function CourierPoolSource({
 }) {
   const [{ data, error }] = useQuery({ query: BoardCourierPoolDocument });
   const permitted = Boolean(data?.courierPool) && !error;
+  // The pool id is its Market (ADR 41): the subscription follows that pool.
+  const marketId = data?.courierPool.id ?? "";
   const [{ data: pushed }] = useSubscription({
     query: BoardCourierPoolChangedDocument,
+    variables: { marketId },
     pause: !permitted,
   });
   const pool = useLatest(

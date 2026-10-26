@@ -113,8 +113,9 @@ mutation RetireCook($restaurantId: ID!, $cookId: ID!) {
   }
 }
 
-# Courier Pool of the platform for dispatchers: the query loads it,
-# courierPoolChanged pushes it after every change (ADR 36, FR-623).
+# Courier Pool of the Market for dispatchers: the query loads it,
+# courierPoolChanged pushes it after every change (ADR 36, FR-623); the pool id
+# is the Market id (ADR 41).
 fragment CourierPoolView on CourierPool {
   id
   size
@@ -136,8 +137,8 @@ query BoardCourierPool {
   }
 }
 
-subscription BoardCourierPoolChanged {
-  courierPoolChanged {
+subscription BoardCourierPoolChanged($marketId: ID!) {
+  courierPoolChanged(marketId: $marketId) {
     ...CourierPoolView
   }
 }

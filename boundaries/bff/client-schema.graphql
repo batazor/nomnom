@@ -480,11 +480,11 @@ type PoolCourier {
 }
 
 """
-Couriers of the platform and the load of the line; the entity key lets the
+Couriers of a Market and the load of the line; the entity key lets the
 Router resolve courierPoolChanged events (ADR 36)
 """
 type CourierPool {
-  """Identifier of the pool, the platform"""
+  """Identifier of the pool: the id of its Market (ADR 41)"""
   id: ID!
   """Couriers in the pool"""
   size: Int!
@@ -745,9 +745,10 @@ type Subscription {
   """
   courierChanged(id: ID!): Courier!
   """
-  Courier Pool after each change of a courier, an offer or a delivery; query
-  courierPool first. A user who may not manage couriers gets an error event
-  instead of data.
+  Courier Pool of a Market after each change of its couriers, offers or
+  deliveries; marketId is CourierPool.id, the Market of X-Nomnom-Market (ADR 41).
+  Query courierPool first. A user who may not manage couriers, or a marketId
+  other than the header, gets an error event instead of data.
   """
-  courierPoolChanged: CourierPool!
+  courierPoolChanged(marketId: ID!): CourierPool!
 }

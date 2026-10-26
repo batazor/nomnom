@@ -60,7 +60,7 @@ type BffServiceClient interface {
 	// Lookup Courier entity by id: Work of the current courier; the entity key lets the Router resolve
 	// courierChanged events (ADR 36)
 	LookupCourierById(ctx context.Context, in *LookupCourierByIdRequest, opts ...grpc.CallOption) (*LookupCourierByIdResponse, error)
-	// Lookup CourierPool entity by id: Couriers of the platform and the load of the line; the entity key lets the
+	// Lookup CourierPool entity by id: Couriers of a Market and the load of the line; the entity key lets the
 	// Router resolve courierPoolChanged events (ADR 36)
 	LookupCourierPoolById(ctx context.Context, in *LookupCourierPoolByIdRequest, opts ...grpc.CallOption) (*LookupCourierPoolByIdResponse, error)
 	// Lookup Kitchen entity by restaurantId: Active orders of one restaurant for its kitchen staff; the entity key lets the
@@ -446,7 +446,7 @@ type BffServiceServer interface {
 	// Lookup Courier entity by id: Work of the current courier; the entity key lets the Router resolve
 	// courierChanged events (ADR 36)
 	LookupCourierById(context.Context, *LookupCourierByIdRequest) (*LookupCourierByIdResponse, error)
-	// Lookup CourierPool entity by id: Couriers of the platform and the load of the line; the entity key lets the
+	// Lookup CourierPool entity by id: Couriers of a Market and the load of the line; the entity key lets the
 	// Router resolve courierPoolChanged events (ADR 36)
 	LookupCourierPoolById(context.Context, *LookupCourierPoolByIdRequest) (*LookupCourierPoolByIdResponse, error)
 	// Lookup Kitchen entity by restaurantId: Active orders of one restaurant for its kitchen staff; the entity key lets the

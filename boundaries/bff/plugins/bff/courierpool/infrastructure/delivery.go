@@ -60,6 +60,7 @@ func (d *Delivery) Pool(ctx context.Context) (applications.Pool, error) {
 		})
 	}
 	return applications.Pool{
+		Market:   market,
 		Size:     int(response.GetSize()),
 		OnLine:   int(response.GetOnLine()),
 		Busy:     int(response.GetBusy()),
