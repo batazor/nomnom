@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 130; пар «метрика × сервис» со статусом «есть»: 140.
+Метрик в инвентаре: 140; пар «метрика × сервис» со статусом «есть»: 140.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -108,8 +108,8 @@ ADR 40: cache-aside GetRestaurant, GetMenu и ListRestaurants `restaurants` (`pk
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `nomnom_cache_lookups_total` | `nomnom.cache.lookups` | counter | `nomnom_cache_name`, `nomnom_cache_result` | `restaurants`: ожидается | hit ratio = hit / (hit + miss); доля bypass — время без Valkey. |
-| `nomnom_cache_errors_total` | `nomnom.cache.errors` | counter | `nomnom_cache_name`, `nomnom_cache_operation` | `restaurants`: ожидается | — |
-| `nomnom_cache_refreshes_total` | `nomnom.cache.refreshes` | counter | `nomnom_cache_name` | `restaurants`: ожидается | Пишет `restaurants-consumer` по RestaurantOpened/Closed и MenuItemAvailabilityChanged. |
+| `nomnom_cache_errors_total` | `nomnom.cache.errors` | counter | `nomnom_cache_name`, `nomnom_cache_operation` | `restaurants`: ожидается<br>`restaurants-consumer`: ожидается | `get`/`set` — чтение API, `refresh` — обновление по событию в `restaurants-consumer`. |
+| `nomnom_cache_refreshes_total` | `nomnom.cache.refreshes` | counter | `nomnom_cache_name` | `restaurants-consumer`: ожидается | Пишет `restaurants-consumer` по RestaurantOpened/Closed, MenuItemAdded, MenuItemUpdated и MenuItemAvailabilityChanged. |
 
 <a id="watermill"></a>
 
@@ -339,6 +339,25 @@ Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job="infr
 | `pg_stat_database_conflicts` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | — |
 | `pg_stat_database_temp_bytes` | postgres_exporter `stat_database` | counter | `owner`, `datname` | `postgresql`: есть | Запросы, вылезшие за `work_mem`. |
 | `pg_database_size_bytes` | postgres_exporter `database` | gauge | `owner`, `datname` | `postgresql`: есть | — |
+
+<a id="valkey"></a>
+
+## Valkey (сервер)
+
+Alloy `prometheus.exporter.redis` по владельцу (ADR 40), `job="infra/valkey"`, label `owner`; ACL-пользователь `exporter` только с INFO, CONFIG GET и служебными командами, без доступа к ключам. Клиентская сторона — row Cache сервиса. Platform / Overview.
+
+| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
+| --- | --- | --- | --- | --- | --- |
+| `redis_up` | redis_exporter (Alloy v1.21) | gauge | `owner` | `valkey`: ожидается | 0 — экспортер не подключился к Valkey владельца. |
+| `redis_connected_clients` | redis_exporter `INFO clients` | gauge | `owner` | `valkey`: ожидается | — |
+| `redis_memory_used_bytes` | redis_exporter `INFO memory` | gauge | `owner` | `valkey`: ожидается | — |
+| `redis_memory_max_bytes` | redis_exporter `CONFIG GET maxmemory` | gauge | `owner` | `valkey`: ожидается | `maxmemory`; у kind — 64 MiB, `allkeys-lru`. |
+| `redis_commands_processed_total` | redis_exporter `INFO stats` | counter | `owner` | `valkey`: ожидается | — |
+| `redis_keyspace_hits_total` | redis_exporter `INFO stats` | counter | `owner` | `valkey`: ожидается | Попадания по всем GET сервера, включая чтение поколения страниц; hit ratio кеша по чтениям — `nomnom_cache_lookups_total` сервиса. |
+| `redis_keyspace_misses_total` | redis_exporter `INFO stats` | counter | `owner` | `valkey`: ожидается | — |
+| `redis_evicted_keys_total` | redis_exporter `INFO stats` | counter | `owner` | `valkey`: ожидается | Вытеснение по `maxmemory`: кеш мал для рабочего набора. |
+| `redis_expired_keys_total` | redis_exporter `INFO stats` | counter | `owner` | `valkey`: ожидается | — |
+| `redis_db_keys` | redis_exporter `INFO keyspace` | gauge | `owner`, `db` | `valkey`: ожидается | — |
 
 <a id="certificates"></a>
 

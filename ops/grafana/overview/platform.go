@@ -24,7 +24,7 @@ var appNamespaces = []string{"nomnom-orders", "nomnom-payments", "nomnom-deliver
 func PlatformOverview() (Dashboard, error) {
 	g := &generator{opts: Options{Context: "platform", Title: "Platform"}}
 	g.dash = dashboard.NewDashboardBuilder("Platform / Overview").
-		Description("Серверная сторона SpiceDB, PostgreSQL и CDC Outbox (Kafka Connect, Debezium), pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.").
+		Description("Серверная сторона SpiceDB, PostgreSQL, CDC Outbox (Kafka Connect, Debezium) и Valkey, pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.").
 		Tags([]string{"nomnom", "platform", "overview", "generated"}).
 		Editable(false).
 		CursorSync(dashboard.DashboardCursorSyncCrosshair).
@@ -36,12 +36,14 @@ func PlatformOverview() (Dashboard, error) {
 	pods := Scope{Services: inventory.AllServices, Job: jobKubernetes, Matchers: []string{`namespace=~"$namespace"`}}
 	certs := Scope{Services: []string{inventory.CertManager}, Job: jobCertManager}
 	cdc := Scope{Services: []string{inventory.KafkaConnect}, Job: jobKafkaConnect}
+	valkey := Scope{Services: []string{inventory.Valkey}, Job: "infra/valkey", Matchers: []string{`owner=~"$valkey_owner"`}}
 
 	layout := dashboard.Rows()
 	for _, r := range []row{
 		{title: "SpiceDB", scope: spicedb, panels: spicedbPanels(spicedb)},
 		{title: "PostgreSQL", scope: postgres, panels: append(postgresPanels(postgres), slotPanels(postgres)...)},
 		{title: "CDC (Debezium)", scope: cdc, panels: cdcPanels(cdc)},
+		{title: "Valkey", scope: valkey, panels: valkeyPanels(valkey)},
 		{title: "Pods", scope: pods, panels: platformPods(pods)},
 		{title: "Certificates", scope: certs, panels: certificates(certs)},
 	} {
@@ -65,6 +67,7 @@ func (g *generator) platformVariables() []dashboard.VariableKind {
 	return []dashboard.VariableKind{
 		{DatasourceVariableKind: &v},
 		customVariable("owner", "PostgreSQL owner", postgresOwners, true),
+		customVariable("valkey_owner", "Valkey owner", valkeyOwners, true),
 		customVariable("namespace", "Namespace", appNamespaces, true),
 	}
 }

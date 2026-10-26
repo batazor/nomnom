@@ -18,8 +18,8 @@ func Services() []Options {
 		},
 		{
 			Context: "restaurants", Title: "Restaurants", Language: Node,
-			Services: []string{inventory.Restaurants},
-			GRPC:     true, Database: MongoDB, DatabasePool: true,
+			Services: []string{inventory.Restaurants, inventory.RestaurantsConsumer},
+			GRPC:     true, Database: MongoDB, DatabasePool: true, Cache: true,
 			Kafka:      &Kafka{ConsumerGroup: "restaurants", Consumers: []string{inventory.Restaurants}, Connector: "restaurants-outbox"},
 			UnitOfWork: true, Lifecycle: true, Kitchen: true, Authorization: true,
 			Domain: restaurantsDomain,

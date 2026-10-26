@@ -92,7 +92,8 @@ make kind-down
   [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, PostgreSQL `orders`,
   `payments`, `delivery`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
   [ADR 40](../../docs/adr/0040-application-caching-policy.md): без persistence, ACL-пользователь
-  `restaurants` с ключами `restaurants:*`, URL — Secret `restaurants-valkey`) в `nomnom-data` (`emptyDir`). Secret DSN
+  `restaurants` с ключами `restaurants:*`, URL — Secret `restaurants-valkey`; пользователь `exporter`
+  для Alloy — только INFO и CONFIG GET, пароль — Secret `alloy-valkey`) в `nomnom-data` (`emptyDir`). Secret DSN
   кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`). Миграции
   каждый процесс применяет сам при старте ([ADR 38](../../docs/adr/0038-schema-migrations-at-process-startup.md)).
 

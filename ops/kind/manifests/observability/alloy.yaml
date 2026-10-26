@@ -1,7 +1,7 @@
 # Grafana Alloy тестового окружения (ADR 9): приём OTLP метрик приложений и отправка в
 # Grafana Cloud (free tier). Подключается Skaffold profile grafana-cloud через
 # kustomization.yaml рядом: Secret grafana-cloud-otlp генерируется из
-# ops/grafana-cloud/.env.grafana-cloud, Secret alloy-postgres создаёт chart ops/kind/bootstrap.
+# ops/grafana-cloud/.env.grafana-cloud, Secrets alloy-postgres и alloy-valkey создаёт chart ops/kind/bootstrap.
 # Namespace nomnom-observability — manifests/base/namespaces.yaml.
 # Free tier ограничен активными series, поэтому уходят только метрики service.namespace=nomnom
 # и allowlist инфраструктуры (SpiceDB, PostgreSQL, internal gateway, pods nomnom-*),
@@ -368,6 +368,50 @@ data:
       forward_to = [otelcol.receiver.prometheus.infra.receiver]
     }
 
+    // Valkey: по экспортеру на владельца (ADR 40); ACL-пользователь exporter без доступа к
+    // ключам, пароль из Secret alloy-valkey (chart ops/kind/bootstrap).
+    prometheus.exporter.redis "restaurants" {
+      redis_addr     = "valkey-restaurants.nomnom-data.svc.cluster.local:6379"
+      redis_user     = "exporter"
+      redis_password = sys.env("VALKEY_RESTAURANTS_PASSWORD")
+    }
+
+    discovery.relabel "valkey" {
+      targets = prometheus.exporter.redis.restaurants.targets
+      rule {
+        source_labels = ["__meta_component_id"]
+        regex         = "prometheus\\.exporter\\.redis\\.(.+)"
+        target_label  = "owner"
+      }
+      rule {
+        source_labels = ["owner"]
+        target_label  = "instance"
+        replacement   = "valkey-$1"
+      }
+      // Экспортер задаёт свой job (integrations/redis), он важнее job_name scrape.
+      rule {
+        target_label = "job"
+        replacement  = "infra/valkey"
+      }
+    }
+
+    prometheus.scrape "valkey" {
+      targets         = discovery.relabel.valkey.output
+      job_name        = "infra/valkey"
+      scrape_interval = "60s"
+      forward_to      = [prometheus.relabel.valkey.receiver]
+    }
+
+    // Только метрики инвентаря (ops/grafana/inventory, раздел valkey): квота series free tier.
+    prometheus.relabel "valkey" {
+      rule {
+        source_labels = ["__name__"]
+        regex         = "redis_up|redis_connected_clients|redis_memory_(used|max)_bytes|redis_commands_processed_total|redis_keyspace_(hits|misses)_total|redis_(evicted|expired)_keys_total|redis_db_keys"
+        action        = "keep"
+      }
+      forward_to = [otelcol.receiver.prometheus.infra.receiver]
+    }
+
     // Kafka Connect с Debezium (ADR 37): JMX exporter :9404 (ops/kind/kafka-connect/metrics.yaml
     // уже ограничивает MBeans) — состояние коннекторов и задач, поток и отставание Debezium.
     discovery.kubernetes "kafka_connect" {
@@ -714,6 +758,9 @@ spec:
             # POSTGRES_<OWNER>_DSN экспортеров PostgreSQL (chart ops/kind/bootstrap).
             - secretRef:
                 name: alloy-postgres
+            # VALKEY_<OWNER>_PASSWORD экспортеров Valkey (chart ops/kind/bootstrap).
+            - secretRef:
+                name: alloy-valkey
           ports:
             - name: otlp-grpc
               containerPort: 4317

@@ -50,7 +50,9 @@ type Options struct {
 	Database    Database
 	// DatabasePool — пул клиента БД экспортирует полный набор db.client.connection.*
 	// (pool.go): saturation, pending, timeouts, wait/use/create time и alert rules пула.
-	DatabasePool    bool
+	DatabasePool bool
+	// Cache — кеш чтения в Valkey (ADR 40, cache.go): row Cache и alert на долю bypass.
+	Cache           bool
 	PaymentProvider bool
 	Kafka           *Kafka
 	// UseCases — декоратор application handlers (раздел usecase инвентаря).
@@ -161,6 +163,9 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 		{title: "Runtime", scope: main, collapsed: true, panels: g.runtime(main)},
 		{title: "Pods", scope: servicePods(opts), collapsed: true, panels: pods(servicePods(opts))},
 		{title: "Dependencies", scope: main, collapsed: true, panels: g.dependencies(main)},
+	}
+	if opts.Cache {
+		rows = append(rows, row{title: "Cache", scope: main, collapsed: true, panels: cachePanels(main)})
 	}
 	if opts.Kafka != nil {
 		rows = append(rows, row{title: "Kafka", scope: main, collapsed: true, panels: g.kafka(main)})

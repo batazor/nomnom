@@ -60,6 +60,17 @@ Environment и version не фильтруются: у Prometheus-метрик �
 | Lag behind source | live | — |
 | Queue fill | live | — |
 
+### Valkey
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Up | TODO | [`redis_up`](../../../docs/observability/metric-inventory.md#valkey) |
+| Memory used / max | TODO | [`redis_memory_max_bytes`](../../../docs/observability/metric-inventory.md#valkey), [`redis_memory_used_bytes`](../../../docs/observability/metric-inventory.md#valkey) |
+| Evicted and expired keys | TODO | [`redis_evicted_keys_total`](../../../docs/observability/metric-inventory.md#valkey), [`redis_expired_keys_total`](../../../docs/observability/metric-inventory.md#valkey) |
+| Keyspace hit ratio | TODO | [`redis_keyspace_hits_total`](../../../docs/observability/metric-inventory.md#valkey), [`redis_keyspace_misses_total`](../../../docs/observability/metric-inventory.md#valkey) |
+| Commands | TODO | [`redis_commands_processed_total`](../../../docs/observability/metric-inventory.md#valkey) |
+| Clients and keys | TODO | [`redis_connected_clients`](../../../docs/observability/metric-inventory.md#valkey), [`redis_db_keys`](../../../docs/observability/metric-inventory.md#valkey) |
+
 ### Pods
 
 | Панель | Статус | Недостающие метрики |
@@ -79,7 +90,7 @@ Environment и version не фильтруются: у Prometheus-метрик �
 | Time to scheduled renewal | live | — |
 | Ready | live | — |
 
-Живых панелей: 30 из 30. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 30 из 36. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 

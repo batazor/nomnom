@@ -34,6 +34,9 @@ func ServiceAlerts(o Options) (AlertGroup, error) {
 			Summary: "Integration Events ушли в <stream>.dlq: их обработка не повторяется сама.",
 			Value:   Sum("job, messaging_destination_name", sc.Increase("nomnom_messaging_poison_messages_total"))})
 	}
+	if o.Cache {
+		alerts = append(alerts, cacheAlerts(o, sc, dash)...)
+	}
 	if o.Database != "" && o.DatabasePool {
 		alerts = append(alerts, poolAlerts(o, sc, dash)...)
 	}

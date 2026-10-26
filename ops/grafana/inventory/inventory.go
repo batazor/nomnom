@@ -37,12 +37,14 @@ const (
 	OrdersWorker   = "orders-worker"
 	OrdersConsumer = "orders-consumer"
 	Restaurants    = "restaurants"
-	Delivery       = "delivery"
-	Payments       = "payments"
-	BFF            = "bff"
+	// RestaurantsConsumer — Inbox OrderPlaced и обновление кеша каталога (ADR 40).
+	RestaurantsConsumer = "restaurants-consumer"
+	Delivery            = "delivery"
+	Payments            = "payments"
+	BFF                 = "bff"
 )
 
-var AllServices = []string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments, BFF}
+var AllServices = []string{Orders, OrdersWorker, OrdersConsumer, Restaurants, RestaurantsConsumer, Delivery, Payments, BFF}
 
 // Инфраструктурные цели Platform / Overview: собираются Alloy Prometheus scrape, а не OTLP,
 // поэтому job — "infra/<target>", без target_info.
@@ -51,9 +53,11 @@ const (
 	PostgreSQLServer = "postgresql"
 	CertManager      = "cert-manager"
 	KafkaConnect     = "kafka-connect"
+	// Valkey — кеш чтения каталога restaurants (ADR 40).
+	Valkey = "valkey"
 )
 
-var InfraTargets = []string{SpiceDB, PostgreSQLServer, CertManager, KafkaConnect}
+var InfraTargets = []string{SpiceDB, PostgreSQLServer, CertManager, KafkaConnect, Valkey}
 
 // cdcScrape — источник имён и labels метрик CDC: scrape экспортеров на стенде, не Grafana Cloud.
 const cdcScrape = "Имена и labels сняты scrape экспортера на стенде 2026-10-26 (Debezium 3.7.0.Final, JMX exporter 1.7.0, Alloy 1.21.2)."
@@ -136,6 +140,7 @@ var Sections = []Section{
 	{"pods", "Pods (Kubernetes)", "Alloy: cAdvisor kubelet через API server proxy и kube-state-metrics (только pods прикладных неймспейсов), `job=\"infra/kubernetes\"`. Метрики Prometheus, без `target_info`: сервис выбирается `namespace` и префиксом `pod`. Row Pods в overview каждого сервиса и в Platform / Overview."},
 	{"spicedb", "SpiceDB (сервер)", "Alloy scrape `:9090` pod SpiceDB, `job=\"infra/spicedb\"`. Серверная сторона; клиентская — row Authorization сервисов. Platform / Overview."},
 	{"postgresql", "PostgreSQL (сервер)", "Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job=\"infra/postgresql\"`, label `owner`; `stat_database` и размер — только база владельца. Клиентская сторона — row Dependencies сервисов. Platform / Overview."},
+	{"valkey", "Valkey (сервер)", "Alloy `prometheus.exporter.redis` по владельцу (ADR 40), `job=\"infra/valkey\"`, label `owner`; ACL-пользователь `exporter` только с INFO, CONFIG GET и служебными командами, без доступа к ключам. Клиентская сторона — row Cache сервиса. Platform / Overview."},
 	{"certificates", "Certificates (cert-manager)", "Alloy scrape `:9402` controller cert-manager, `job=\"infra/cert-manager\"`: все `Certificate` кластера, `namespace`/`name` — неймспейс и имя ресурса. Row Certificates в Platform / Overview и в overview контекстов, у которых есть свои сертификаты (BFF: `bff-assertion-key`)."},
 }
 
@@ -309,8 +314,20 @@ var Metrics = []Metric{
 
 	// cache (ADR 40)
 	{Name: "nomnom_cache_lookups_total", Section: "cache", Type: Counter, Source: "`nomnom.cache.lookups`", Labels: []string{"nomnom_cache_name", "nomnom_cache_result"}, Status: expected(Restaurants), Note: "hit ratio = hit / (hit + miss); доля bypass — время без Valkey."},
-	{Name: "nomnom_cache_errors_total", Section: "cache", Type: Counter, Source: "`nomnom.cache.errors`", Labels: []string{"nomnom_cache_name", "nomnom_cache_operation"}, Status: expected(Restaurants)},
-	{Name: "nomnom_cache_refreshes_total", Section: "cache", Type: Counter, Source: "`nomnom.cache.refreshes`", Labels: []string{"nomnom_cache_name"}, Status: expected(Restaurants), Note: "Пишет `restaurants-consumer` по RestaurantOpened/Closed и MenuItemAvailabilityChanged."},
+	{Name: "nomnom_cache_errors_total", Section: "cache", Type: Counter, Source: "`nomnom.cache.errors`", Labels: []string{"nomnom_cache_name", "nomnom_cache_operation"}, Status: expected(Restaurants, RestaurantsConsumer), Note: "`get`/`set` — чтение API, `refresh` — обновление по событию в `restaurants-consumer`."},
+	{Name: "nomnom_cache_refreshes_total", Section: "cache", Type: Counter, Source: "`nomnom.cache.refreshes`", Labels: []string{"nomnom_cache_name"}, Status: expected(RestaurantsConsumer), Note: "Пишет `restaurants-consumer` по RestaurantOpened/Closed, MenuItemAdded, MenuItemUpdated и MenuItemAvailabilityChanged."},
+
+	// valkey (Alloy prometheus.exporter.redis, job infra/valkey)
+	{Name: "redis_up", Section: "valkey", Type: Gauge, Source: "redis_exporter (Alloy v1.21)", Labels: []string{"owner"}, Status: expected(Valkey), Note: "0 — экспортер не подключился к Valkey владельца."},
+	{Name: "redis_connected_clients", Section: "valkey", Type: Gauge, Source: "redis_exporter `INFO clients`", Labels: []string{"owner"}, Status: expected(Valkey)},
+	{Name: "redis_memory_used_bytes", Section: "valkey", Type: Gauge, Source: "redis_exporter `INFO memory`", Labels: []string{"owner"}, Status: expected(Valkey)},
+	{Name: "redis_memory_max_bytes", Section: "valkey", Type: Gauge, Source: "redis_exporter `CONFIG GET maxmemory`", Labels: []string{"owner"}, Status: expected(Valkey), Note: "`maxmemory`; у kind — 64 MiB, `allkeys-lru`."},
+	{Name: "redis_commands_processed_total", Section: "valkey", Type: Counter, Source: "redis_exporter `INFO stats`", Labels: []string{"owner"}, Status: expected(Valkey)},
+	{Name: "redis_keyspace_hits_total", Section: "valkey", Type: Counter, Source: "redis_exporter `INFO stats`", Labels: []string{"owner"}, Status: expected(Valkey), Note: "Попадания по всем GET сервера, включая чтение поколения страниц; hit ratio кеша по чтениям — `nomnom_cache_lookups_total` сервиса."},
+	{Name: "redis_keyspace_misses_total", Section: "valkey", Type: Counter, Source: "redis_exporter `INFO stats`", Labels: []string{"owner"}, Status: expected(Valkey)},
+	{Name: "redis_evicted_keys_total", Section: "valkey", Type: Counter, Source: "redis_exporter `INFO stats`", Labels: []string{"owner"}, Status: expected(Valkey), Note: "Вытеснение по `maxmemory`: кеш мал для рабочего набора."},
+	{Name: "redis_expired_keys_total", Section: "valkey", Type: Counter, Source: "redis_exporter `INFO stats`", Labels: []string{"owner"}, Status: expected(Valkey)},
+	{Name: "redis_db_keys", Section: "valkey", Type: Gauge, Source: "redis_exporter `INFO keyspace`", Labels: []string{"owner", "db"}, Status: expected(Valkey)},
 
 	// certificates (Alloy scrape cert-manager controller :9402, job infra/cert-manager)
 	{Name: "certmanager_certificate_not_after_timestamp_seconds", Section: "certificates", Type: Gauge, Source: "cert-manager v1.21 controller", Labels: []string{"namespace", "name", "issuer_name", "issuer_kind"}, Status: verified([]string{CertManager}), Note: "NotAfter выпущенного сертификата, Unix seconds."},

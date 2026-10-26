@@ -127,5 +127,7 @@ HTTP-кеширование, CDN, кеш ответов и persisted operations 
   хранилище.
 - Обновление использует уже существующие Integration Events и конвейер Outbox → Debezium →
   Kafka без кода в командах; цена — consumer group обновления у контекста.
-- Серверные метрики Valkey (память, evictions, соединения), панели кеша в дашбордах и alert на
-  долю `bypass` — следующий шаг, пока их нет.
+- Row Cache overview сервиса (hit ratio, доля bypass, обновления по событиям, ошибки команд),
+  alert `<context>-cache-bypass` (больше половины чтений мимо Valkey 10 минут) и row Valkey в
+  Platform / Overview (`prometheus.exporter.redis` Alloy, ACL-пользователь `exporter` без доступа
+  к ключам) генерирует `ops/grafana`; живыми они станут после подтверждения метрик в Grafana Cloud.

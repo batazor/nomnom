@@ -11,7 +11,7 @@ Overview-dashboard bounded context `restaurants`: один на сервис, о
 | Схема | `dashboard.grafana.app/v2` (Grafana 13) |
 | Доставка | Git Sync, repository [`ops/grafana/git-sync/restaurants.yaml`](../../../../ops/grafana/git-sync/restaurants.yaml) |
 | Генератор | [`ops/grafana`](../../../../ops/grafana/README.md), функция `overview.ServiceOverview` |
-| service.name | `restaurants` |
+| service.name | `restaurants`, `restaurants-consumer` |
 
 JSON — артефакт генератора: правки вносятся в `ops/grafana/overview/services.go` или в инвентарь, затем `make grafana-generate`. CI (`make grafana-check`) падает при расхождении.
 
@@ -33,7 +33,7 @@ JSON — артефакт генератора: правки вносятся в
 | Variable | Источник | Назначение |
 | --- | --- | --- |
 | `environment` | `target_info` → `deployment_environment_name` | Фильтр окружения через join с `target_info`. |
-| `service` | список service.name из генератора (`restaurants`) | `job=~"nomnom/(${service:pipe})"`. |
+| `service` | список service.name из генератора (`restaurants`, `restaurants-consumer`) | `job=~"nomnom/(${service:pipe})"`. |
 | `version` | `target_info` → `service_version` | Сравнение версий во время выкатки. |
 | `service_instance` | `target_info` → `instance` (`service.instance.id`) | Диагностика экземпляра. |
 
@@ -94,6 +94,16 @@ JSON — артефакт генератора: правки вносятся в
 | mongodb: pool wait / use / create p95 | TODO | [`db_client_connection_create_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_use_time_seconds`](../../../../docs/observability/metric-inventory.md#db), [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |
 | mongodb: pool cleared | TODO | [`nomnom_db_client_connection_pool_clears_total`](../../../../docs/observability/metric-inventory.md#db) |
 
+### Cache
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Hit ratio by cache | TODO | [`nomnom_cache_lookups_total`](../../../../docs/observability/metric-inventory.md#cache) |
+| Lookups by result | TODO | [`nomnom_cache_lookups_total`](../../../../docs/observability/metric-inventory.md#cache) |
+| Bypass share | TODO | [`nomnom_cache_lookups_total`](../../../../docs/observability/metric-inventory.md#cache) |
+| Refreshes by events | TODO | [`nomnom_cache_refreshes_total`](../../../../docs/observability/metric-inventory.md#cache) |
+| Valkey command errors | TODO | [`nomnom_cache_errors_total`](../../../../docs/observability/metric-inventory.md#cache) |
+
 ### Kafka
 
 | Панель | Статус | Недостающие метрики |
@@ -151,7 +161,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 24 из 55. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 24 из 60. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 
@@ -162,6 +172,7 @@ Rule group `restaurants` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.
 | Restaurants: gRPC technical errors | critical | активно | — |
 | Restaurants: gRPC p95 latency | warning | активно | — |
 | Restaurants: messages sent to DLQ | warning | ждёт метрик | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Restaurants: cache bypassed | warning | ждёт метрик | [`nomnom_cache_lookups_total`](../../../../docs/observability/metric-inventory.md#cache) |
 | Restaurants: mongodb pool saturated | warning | ждёт метрик | [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
 | Restaurants: mongodb pool checkouts queued | warning | ждёт метрик | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db) |
 | Restaurants: mongodb pool wait p95 | warning | ждёт метрик | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |

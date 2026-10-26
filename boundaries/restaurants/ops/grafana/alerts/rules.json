@@ -12,7 +12,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[5m]))",
+            "expr": "sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[5m]))",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -60,7 +60,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "histogram_quantile(0.95, sum by (job, le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\"}[5m])))",
+            "expr": "histogram_quantile(0.95, sum by (job, le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[5m])))",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -108,7 +108,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "(sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[1h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[1h]))) / 0.005 and (sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[5m]))) / 0.005 > 14.4",
+            "expr": "(sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[1h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[1h]))) / 0.005 and (sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[5m]))) / 0.005 > 14.4",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -156,7 +156,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "(sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[6h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[6h]))) / 0.005 and (sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[30m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[30m]))) / 0.005 > 6",
+            "expr": "(sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[6h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[6h]))) / 0.005 and (sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[30m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[30m]))) / 0.005 > 6",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -204,7 +204,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "(1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\", le=\"0.5\"}[1h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[1h]))) / 0.05 and (1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\", le=\"0.5\"}[5m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[5m]))) / 0.05 > 14.4",
+            "expr": "(1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants|restaurants-consumer)\", le=\"0.5\"}[1h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[1h]))) / 0.05 and (1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants|restaurants-consumer)\", le=\"0.5\"}[5m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[5m]))) / 0.05 > 14.4",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -252,7 +252,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "(1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\", le=\"0.5\"}[6h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[6h]))) / 0.05 and (1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants)\", le=\"0.5\"}[30m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants)\"}[30m]))) / 0.05 > 6",
+            "expr": "(1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants|restaurants-consumer)\", le=\"0.5\"}[6h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[6h]))) / 0.05 and (1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(restaurants|restaurants-consumer)\", le=\"0.5\"}[30m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(restaurants|restaurants-consumer)\"}[30m]))) / 0.05 > 6",
             "instant": true,
             "range": false,
             "refId": "A"

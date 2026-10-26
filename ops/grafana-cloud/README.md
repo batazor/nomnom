@@ -55,6 +55,7 @@ Internal gateway (EnvoyProxy `internal-gateway`, [`gateway.yaml`](../kind/manife
 | --- | --- | --- |
 | SpiceDB | scrape `:9090` pod в `nomnom-authz` | `infra/spicedb` |
 | PostgreSQL | `prometheus.exporter.postgres` на владельца (`orders`, `payments`, `delivery`), DSN из Secret `alloy-postgres` (chart [`ops/kind/bootstrap`](../kind/bootstrap) из тех же паролей, что базы) | `infra/postgresql` |
+| Valkey | `prometheus.exporter.redis` на владельца (`restaurants`), ACL-пользователь `exporter` без доступа к ключам, пароль из Secret `alloy-valkey` (chart [`ops/kind/bootstrap`](../kind/bootstrap)) | `infra/valkey` |
 | Internal gateway | scrape stats Envoy `:19001/stats/prometheus` pod `owning-gateway-name=internal` в `envoy-gateway-system` (NetworkPolicy `internal-gateway-ingress` пускает только Alloy): requests, класс ответа, retries, pending overflow, timeouts, connect failures, latency по clusters GRPCRoute. gRPC-ошибки приходят с HTTP 200 — статус вызова смотрится по метрикам сервисов | `infra/internal-gateway` |
 | Kafka consumer lag | `prometheus.exporter.kafka` к брокеру `kafka.nomnom-infra`, только groups `orders` и `restaurants` (delivery и payments Kafka не читают) и только `kafka_consumergroup_lag` | `infra/kafka` |
 | Pods | cAdvisor kubelet через API server proxy (ClusterRole `nomnom-alloy`: `nodes/proxy`) и kube-state-metrics v2.20.0 в `nomnom-observability` | `infra/kubernetes` |

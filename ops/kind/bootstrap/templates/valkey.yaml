@@ -1,9 +1,12 @@
 # Valkey restaurants тестового окружения (ADR 40): кеш чтения каталога, без persistence —
 # данные не переживают пересоздание Pod, после рестарта кеш заполняется заново из MongoDB.
 # default-пользователь выключен; ACL-пользователь restaurants видит только ключи restaurants:*.
-# Пароль — Secret valkey-restaurants (nomnom-data), URL приложения — Secret restaurants-valkey
-# (nomnom-restaurants); значения сохраняются между deploy.
+# ACL-пользователь exporter (Alloy prometheus.exporter.redis) читает только INFO и CONFIG GET,
+# без доступа к ключам. Пароли — Secret valkey-restaurants (nomnom-data), URL приложения —
+# Secret restaurants-valkey (nomnom-restaurants), пароль экспортера — Secret alloy-valkey
+# (nomnom-observability); значения сохраняются между deploy.
 {{- $password := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "valkey-restaurants" "key" "password" "length" 48) }}
+{{- $exporterPassword := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "valkey-restaurants" "key" "exporter-password" "length" 48) }}
 {{- $host := "valkey-restaurants.nomnom-data.svc.cluster.local:6379" }}
 apiVersion: v1
 kind: Secret
@@ -15,8 +18,9 @@ metadata:
 type: Opaque
 data:
   password: {{ $password | b64enc }}
+  exporter-password: {{ $exporterPassword | b64enc }}
   # INFO — ready check клиента, CLIENT SETNAME — имя соединения процесса.
-  users.acl: {{ printf "user default off\nuser restaurants on >%s ~restaurants:* resetchannels +@all -@admin -@dangerous +info +client|setname\n" $password | b64enc }}
+  users.acl: {{ printf "user default off\nuser restaurants on >%s ~restaurants:* resetchannels +@all -@admin -@dangerous +info +client|setname\nuser exporter on >%s resetchannels -@all +@connection +info +config|get +client|list +slowlog|get +slowlog|len +latency|latest +latency|histogram +memory|stats +select +dbsize\n" $password $exporterPassword | b64enc }}
 ---
 apiVersion: v1
 kind: Secret
@@ -28,6 +32,18 @@ metadata:
 type: Opaque
 data:
   url: {{ printf "redis://restaurants:%s@%s" $password $host | b64enc }}
+---
+# Пароль экспортера Valkey для Alloy (profile grafana-cloud, ADR 9): VALKEY_<OWNER>_PASSWORD.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alloy-valkey
+  namespace: nomnom-observability
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  VALKEY_RESTAURANTS_PASSWORD: {{ $exporterPassword | b64enc }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -53,7 +69,7 @@ spec:
         app.kubernetes.io/instance: restaurants
       annotations:
         # Новый ACL применяется перезапуском: aclfile читается при старте.
-        checksum/acl: {{ $password | sha256sum }}
+        checksum/acl: {{ printf "%s/%s" $password $exporterPassword | sha256sum }}
     spec:
       automountServiceAccountToken: false
       securityContext:
