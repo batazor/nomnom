@@ -51,19 +51,33 @@ spec:
               value: "1"
             - name: STATUS_STORAGE_REPLICATION_FACTOR
               value: "1"
+            # Плагины по манифестам ServiceLoader (KIP-898) вместо сканирования всех классов
+            # classgraph: скан — пик heap на старте выше 256MB.
+            - name: CONNECT_PLUGIN_DISCOVERY
+              value: service_load
             - name: CONNECT_CONFIG_PROVIDERS
               value: dir
             - name: CONNECT_CONFIG_PROVIDERS_DIR_CLASS
               value: org.apache.kafka.common.config.provider.DirectoryConfigProvider
             - name: CONNECT_CONFIG_PROVIDERS_DIR_PARAM_ALLOWED_PATHS
               value: /etc/nomnom/cdc
+            # Живых данных в heap ~70MB (jvm_memory_used_bytes, 2026-10-26); free ratio отдаёт
+            # системе heap, раздутый на старте, после GC.
             - name: HEAP_OPTS
-              value: -Xms128m -Xmx384m
+              value: -Xms64m -Xmx256m -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30
             # glibc по умолчанию держит до 8 malloc-арен на CPU: без CPU limit JVM видит все ядра
             # узла, и ~110 потоков (JIT, GC, коннекторы) набирали >100 арен — ~200MB RSS вне heap,
             # из-за чего pod уходил в OOMKilled на старте. Две арены на процесс достаточно для JVM.
             - name: MALLOC_ARENA_MAX
               value: "2"
+            # Заменяет G1 из kafka-run-class: по числу ядер узла JVM заводит потоки GC и JIT,
+            # а Metaspace и code cache (240MB) ничем не ограничены — RSS вдвое больше heap.
+            # Serial GC и два процессора для эргономики хватает одному воркеру на четыре коннектора.
+            - name: KAFKA_JVM_PERFORMANCE_OPTS
+              value: >-
+                -server -XX:+UseSerialGC -XX:ActiveProcessorCount=2
+                -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=64m
+                -XX:MaxDirectMemorySize=64m -Xss512k -XX:MaxInlineLevel=15
           ports:
             - name: http
               containerPort: 8083
