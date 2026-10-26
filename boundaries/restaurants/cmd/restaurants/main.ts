@@ -30,7 +30,7 @@ const config = loadConfig();
 const simulator = loadSimulatorConfig(process.env);
 // MongoDB (ADR 8, local ADR 1) is required; the process migrates its
 // collections, validators and indexes itself before serving (local ADR 2).
-if (!config.mongodb.enabled) {
+if (!config.database.enabled) {
   throw new Error(
     "MONGODB__URI is required: restaurants stores its data in MongoDB",
   );
@@ -61,7 +61,7 @@ const subjects = await createSubjectResolver(
   identityLog.warn,
   { audit: identityLog.info },
 );
-const database = await connectDatabase(config.mongodb);
+const database = await connectDatabase(config.database);
 const valkey = connectValkey(config.valkey, {
   connectionName: SERVICE_NAME,
   logger: logger.child({ operation: "valkey" }),

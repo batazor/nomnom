@@ -1,5 +1,5 @@
 //! Connection pool of the `delivery` processes: limits from
-//! [`DatabaseConfig`] and OTel semconv database client metrics with
+//! [`database::Config`] and OTel semconv database client metrics with
 //! `db.client.connection.pool.name` (the same names as `orders`, `payments`
 //! and `restaurants`; the process is told apart by `service.name`).
 //!
@@ -29,7 +29,7 @@ use sqlx::Postgres;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};
 
-use crate::pkg::config::DatabaseConfig;
+use crate::pkg::config::database;
 
 /// `db.client.connection.pool.name` of every `delivery` pool.
 pub const POOL_NAME: &str = "delivery";
@@ -59,7 +59,7 @@ tokio::task_local! {
 /// acquire timeout. `max_conns` is the size of this pool; the caller may
 /// lower it (startup migrations).
 #[must_use]
-pub fn pool_options(config: &DatabaseConfig, max_conns: u32) -> PgPoolOptions {
+pub fn pool_options(config: &database::Config, max_conns: u32) -> PgPoolOptions {
     PgPoolOptions::new()
         .max_connections(max_conns)
         .min_connections(config.min_conns.min(max_conns))

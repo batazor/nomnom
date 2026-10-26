@@ -8,14 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 )
 
 func TestApplyPoolLimitsCopiesConfiguredLimits(t *testing.T) {
 	poolConfig, err := pgxpool.ParseConfig("postgres://orders@localhost:5432/orders")
 	require.NoError(t, err)
 
-	applyPoolLimits(poolConfig, config.PostgresConfig{
+	applyPoolLimits(poolConfig, database.Config{
 		MaxConns:              3,
 		MinConns:              1,
 		MaxConnLifetime:       30 * time.Minute,
@@ -39,7 +39,7 @@ func TestApplyPoolLimitsKeepsDriverDefaultsForZeroDurations(t *testing.T) {
 	require.NoError(t, err)
 	lifetime, healthCheck := poolConfig.MaxConnLifetime, poolConfig.HealthCheckPeriod
 
-	applyPoolLimits(poolConfig, config.PostgresConfig{MaxConns: 2})
+	applyPoolLimits(poolConfig, database.Config{MaxConns: 2})
 
 	assert.Equal(t, int32(2), poolConfig.MaxConns)
 	assert.Equal(t, lifetime, poolConfig.MaxConnLifetime)

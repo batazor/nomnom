@@ -42,8 +42,8 @@ test("rejects a management port equal to the server port", () => {
 });
 
 test("MongoDB is disabled without MONGODB__URI", () => {
-  assert.deepEqual(loadConfig({}).mongodb, { enabled: false });
-  assert.deepEqual(loadConfig({ MONGODB__URI: "  " }).mongodb, {
+  assert.deepEqual(loadConfig({}).database, { enabled: false });
+  assert.deepEqual(loadConfig({ MONGODB__URI: "  " }).database, {
     enabled: false,
   });
 });
@@ -51,7 +51,7 @@ test("MongoDB is disabled without MONGODB__URI", () => {
 test("MongoDB config defaults the database and timeout", () => {
   assert.deepEqual(
     loadConfig({ MONGODB__URI: "mongodb://mongo:27017/?replicaSet=rs0" })
-      .mongodb,
+      .database,
     {
       enabled: true,
       uri: "mongodb://mongo:27017/?replicaSet=rs0",
@@ -71,16 +71,16 @@ test("MongoDB config defaults the database and timeout", () => {
 test("MongoDB pool defaults depend on the process", () => {
   const environment = { MONGODB__URI: "mongodb://m" };
   const maxPoolSize = (process?: "api" | "consumer") => {
-    const { mongodb } = loadConfig(environment, { process });
-    assert.ok(mongodb.enabled);
-    return [mongodb.pool.maxPoolSize, mongodb.pool.maxConnecting];
+    const { database } = loadConfig(environment, { process });
+    assert.ok(database.enabled);
+    return [database.pool.maxPoolSize, database.pool.maxConnecting];
   };
   assert.deepEqual(maxPoolSize(), [20, 2]);
   assert.deepEqual(maxPoolSize("consumer"), [5, 2]);
 });
 
 test("MongoDB pool reads MONGODB__* overrides", () => {
-  const { mongodb } = loadConfig({
+  const { database } = loadConfig({
     MONGODB__URI: "mongodb://m",
     MONGODB__MAX_POOL_SIZE: "8",
     MONGODB__MIN_POOL_SIZE: "1",
@@ -88,8 +88,8 @@ test("MongoDB pool reads MONGODB__* overrides", () => {
     MONGODB__WAIT_QUEUE_TIMEOUT: "750ms",
     MONGODB__MAX_CONNECTING: "4",
   });
-  assert.ok(mongodb.enabled);
-  assert.deepEqual(mongodb.pool, {
+  assert.ok(database.enabled);
+  assert.deepEqual(database.pool, {
     maxPoolSize: 8,
     minPoolSize: 1,
     maxIdleTimeMs: 60_000,
@@ -100,7 +100,7 @@ test("MongoDB pool reads MONGODB__* overrides", () => {
   const single = loadConfig({
     MONGODB__URI: "mongodb://m",
     MONGODB__MAX_POOL_SIZE: "1",
-  }).mongodb;
+  }).database;
   assert.ok(single.enabled);
   assert.equal(single.pool.maxConnecting, 1);
 });

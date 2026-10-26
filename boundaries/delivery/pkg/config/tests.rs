@@ -378,14 +378,14 @@ fn rejects_zero_port() {
 
 #[test]
 fn database_pool_defaults_and_env_overrides() {
-    let defaults: DatabaseConfig =
+    let defaults: database::Config =
         configure_settings(ConfigLoader::builder(), &DATABASE_SETTINGS, |_| None)
             .expect("defaults")
             .build()
             .expect("build")
             .get("database")
             .expect("database");
-    assert_eq!(defaults, DatabaseConfig::default());
+    assert_eq!(defaults, database::Config::default());
     defaults.validate().expect("defaults are valid");
 
     let builder = configure_settings(ConfigLoader::builder(), &DATABASE_SETTINGS, |name| {
@@ -401,14 +401,14 @@ fn database_pool_defaults_and_env_overrides() {
         .map(str::to_owned)
     })
     .expect("env");
-    let database: DatabaseConfig = builder
+    let database: database::Config = builder
         .build()
         .expect("build")
         .get("database")
         .expect("database");
     assert_eq!(
         database,
-        DatabaseConfig {
+        database::Config {
             url: "postgres://u:p@db/delivery".to_owned(),
             max_conns: 2,
             min_conns: 1,
@@ -422,31 +422,31 @@ fn database_pool_defaults_and_env_overrides() {
 
 #[test]
 fn invalid_database_pool_limits_fail_startup() {
-    let valid = DatabaseConfig::default();
+    let valid = database::Config::default();
     for (invalid, needle) in [
         (
-            DatabaseConfig {
+            database::Config {
                 max_conns: 0,
                 ..valid.clone()
             },
             "max_conns",
         ),
         (
-            DatabaseConfig {
-                max_conns: MAX_DATABASE_MAX_CONNS + 1,
+            database::Config {
+                max_conns: database::MAX_MAX_CONNS + 1,
                 ..valid.clone()
             },
             "max_conns",
         ),
         (
-            DatabaseConfig {
-                min_conns: MAX_DATABASE_MIN_CONNS + 1,
+            database::Config {
+                min_conns: database::MAX_MIN_CONNS + 1,
                 ..valid.clone()
             },
             "min_conns",
         ),
         (
-            DatabaseConfig {
+            database::Config {
                 max_conns: 1,
                 min_conns: 1,
                 ..valid.clone()
@@ -454,21 +454,21 @@ fn invalid_database_pool_limits_fail_startup() {
             "",
         ),
         (
-            DatabaseConfig {
+            database::Config {
                 acquire_timeout: Duration::ZERO,
                 ..valid.clone()
             },
             "acquire_timeout",
         ),
         (
-            DatabaseConfig {
+            database::Config {
                 max_lifetime: Duration::ZERO,
                 ..valid.clone()
             },
             "max_lifetime",
         ),
         (
-            DatabaseConfig {
+            database::Config {
                 idle_timeout: Duration::from_secs(3600),
                 ..valid.clone()
             },

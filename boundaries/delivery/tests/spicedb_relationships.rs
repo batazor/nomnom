@@ -23,7 +23,7 @@ use delivery::infrastructure::spicedb::{
     delivery_courier,
 };
 use delivery::pkg::application::{AuthorizationError, Subject};
-use delivery::pkg::config::DatabaseConfig;
+use delivery::pkg::config::database;
 use delivery::pkg::persistence::AuthorizationRevision;
 use delivery::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
@@ -156,7 +156,7 @@ fn assigned(client: &SpiceDbClient, tag: &str) -> Assigned {
     assigned_in(client, tag, &support::database())
 }
 
-fn assigned_in(client: &SpiceDbClient, tag: &str, database: &DatabaseConfig) -> Assigned {
+fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -> Assigned {
     let store = Arc::new(Store::connect(database).expect("connect"));
     let writer = SpiceDbRelationships::new(Arc::new(client.clone()));
     let courier = unique(&format!("{tag}-courier"));

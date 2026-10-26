@@ -41,7 +41,7 @@ pub use pool::{
 };
 pub use transaction::{TransactionMetrics, UOW_METER_NAME};
 
-use crate::pkg::config::{DATABASE_URL_ENV, DatabaseConfig};
+use crate::pkg::config::{DATABASE_URL_ENV, database};
 use crate::pkg::persistence::RepositoryError;
 use transaction::{put_active, take_active};
 
@@ -86,7 +86,7 @@ pub struct Store {
 
 impl Store {
     /// Opens the pool and checks connectivity. An empty URL fails startup.
-    pub fn connect(config: &DatabaseConfig) -> Result<Self, String> {
+    pub fn connect(config: &database::Config) -> Result<Self, String> {
         if !config.enabled() {
             return Err(format!("{DATABASE_URL_ENV} is required"));
         }

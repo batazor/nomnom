@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"nomnom/orders/di/schema"
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/slices/order/infrastructure/repository"
 )
 
@@ -14,7 +14,7 @@ import (
 // пропускает, недостающие применяет под advisory lock, так что одновременный
 // старт pods сериализуется. Ошибка миграции останавливает процесс до запуска
 // остального. Pool подключается лениво.
-func NewStore(cfg config.PostgresConfig) (*repository.Store, func(), error) {
+func NewStore(cfg database.Config) (*repository.Store, func(), error) {
 	if err := schema.Migrate(context.Background(), cfg); err != nil {
 		return nil, nil, err
 	}

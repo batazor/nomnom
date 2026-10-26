@@ -11,7 +11,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
 use delivery::infrastructure::repository::migrate;
-use delivery::pkg::config::{DatabaseConfig, SpiceDbConfig};
+use delivery::pkg::config::{SpiceDbConfig, database};
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers_modules::testcontainers::runners::SyncRunner;
@@ -53,19 +53,19 @@ pub fn off_runtime<T: Send>(work: impl FnOnce() -> T + Send) -> T {
 }
 
 /// Migrated database of the shared PostgreSQL container.
-pub fn database() -> DatabaseConfig {
+pub fn database() -> database::Config {
     pooled(DATABASE.get_or_init(|| off_runtime(start_postgres)))
 }
 
 /// Migrated database of a PostgreSQL container of its own, for a test that
 /// scans every row (reconciliation) and must not see parallel tests.
-pub fn own_database() -> DatabaseConfig {
+pub fn own_database() -> database::Config {
     pooled(&off_runtime(start_postgres))
 }
 
 /// New database without schema on the shared PostgreSQL container, for a
 /// test of the startup migrations.
-pub fn empty_database(name: &str) -> DatabaseConfig {
+pub fn empty_database(name: &str) -> database::Config {
     let server = DATABASE.get_or_init(|| off_runtime(start_postgres));
     let statement = format!("CREATE DATABASE {name}");
     off_runtime(|| {
@@ -86,11 +86,11 @@ pub fn empty_database(name: &str) -> DatabaseConfig {
     pooled(&format!("{base}/{name}"))
 }
 
-fn pooled(url: &str) -> DatabaseConfig {
-    DatabaseConfig {
+fn pooled(url: &str) -> database::Config {
+    database::Config {
         url: url.to_owned(),
         max_conns: 4,
-        ..DatabaseConfig::default()
+        ..database::Config::default()
     }
 }
 
@@ -104,9 +104,9 @@ fn start_postgres() -> String {
     let port = container.get_host_port_ipv4(5432).expect("container port");
     keep(container);
     let url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
-    migrate(&DatabaseConfig {
+    migrate(&database::Config {
         url: url.clone(),
-        ..DatabaseConfig::default()
+        ..database::Config::default()
     })
     .expect("migrate");
     url

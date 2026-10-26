@@ -1,3 +1,5 @@
+import type { Process } from "./database.ts";
+
 export const DEFAULT_PORT = 8082;
 export const PORT_ENV = "SERVER__PORT";
 export const DEFAULT_MANAGEMENT_PORT = 9082;
@@ -37,18 +39,12 @@ export const DEFAULT_MONGODB_MAX_CONNECTING = 2;
 /** Upper bound of `MONGODB__MAX_POOL_SIZE` per process (and per server). */
 export const MONGODB_POOL_SIZE_LIMIT = 100;
 /**
- * Processes of restaurants that open a MongoClient; each sizes its own pool
- * to its concurrency.
- */
-export type DatabaseProcess = "api" | "consumer";
-/**
  * Default `maxPoolSize` per process: the API serves concurrent RPCs, the
  * consumer processes one message at a time with its Inbox transaction. The
  * startup migration runs sequentially on the same pool.
  */
-export const DEFAULT_MONGODB_MAX_POOL_SIZE: Readonly<
-  Record<DatabaseProcess, number>
-> = Object.freeze({ api: 20, consumer: 5 });
+export const DEFAULT_MONGODB_MAX_POOL_SIZE: Readonly<Record<Process, number>> =
+  Object.freeze({ api: 20, consumer: 5 });
 export const RECONCILER_INTERVAL_ENV = "RECONCILER__INTERVAL";
 export const DEFAULT_RECONCILER_INTERVAL = "5m";
 export const RECONCILER_GRACE_ENV = "RECONCILER__GRACE";

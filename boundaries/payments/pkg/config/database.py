@@ -29,7 +29,7 @@ DEFAULT_DATABASE_ACQUIRE_TIMEOUT = timedelta(seconds=5)
 MAX_DATABASE_MIN_CONNS = 1
 
 
-class DatabaseSettings(BaseSettings):
+class Config(BaseSettings):
     """Connection to the payments PostgreSQL database (ADR 8, local ADR 1).
 
     The DSN is required: an empty value stops the process at startup. In the cluster it

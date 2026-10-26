@@ -18,7 +18,7 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from di.resources import MIGRATIONS
 from infrastructure.repository import Database, create_database, migrate
-from pkg.config import DatabaseSettings
+from pkg import config
 
 POSTGRES_IMAGE = "postgres:18.6-alpine3.24"
 SPICEDB_IMAGE = "authzed/spicedb:v1.57.0"
@@ -32,13 +32,15 @@ def database_url() -> Iterator[str]:
         POSTGRES_IMAGE, username="payments", password="payments", dbname="payments", driver=None
     ) as container:
         dsn = container.get_connection_url()
-        migrate(DatabaseSettings(DATABASE__URL=dsn), MIGRATIONS)
+        migrate(config.database.Config(DATABASE__URL=dsn), MIGRATIONS)
         yield dsn
 
 
 @pytest.fixture(scope="session")
 def session_database(database_url: str) -> Iterator[Database]:
-    database = create_database(DatabaseSettings(DATABASE__URL=database_url, DATABASE__MAX_CONNS=8))
+    database = create_database(
+        config.database.Config(DATABASE__URL=database_url, DATABASE__MAX_CONNS=8)
+    )
     database.check()
     yield database
     database.close()

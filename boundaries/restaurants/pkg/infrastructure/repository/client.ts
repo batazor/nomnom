@@ -1,11 +1,7 @@
 import type { Meter } from "@opentelemetry/api";
 import { type Db, MongoClient, type MongoClientOptions } from "mongodb";
 
-import {
-  type DatabaseEnabledConfig,
-  type DatabasePoolConfig,
-  loadDatabasePoolConfig,
-} from "../../config/config.ts";
+import { database } from "../../config/config.ts";
 import { DatabaseCommandTelemetry } from "./command-telemetry.ts";
 import { DatabasePoolMetrics } from "./pool-metrics.ts";
 
@@ -16,8 +12,8 @@ export type DatabaseConnection = Readonly<{
 }>;
 
 /** Config without `pool` (tests) gets the defaults of the API process. */
-export type DatabaseConnectConfig = Omit<DatabaseEnabledConfig, "pool"> & {
-  readonly pool?: DatabasePoolConfig;
+export type DatabaseConnectConfig = Omit<database.EnabledConfig, "pool"> & {
+  readonly pool?: database.PoolConfig;
 };
 
 export type DatabaseConnectOptions = Readonly<{
@@ -27,7 +23,7 @@ export type DatabaseConnectOptions = Readonly<{
 
 /** MongoClient options of the pool; they override the same URI options. */
 export function databasePoolOptions(
-  pool: DatabasePoolConfig,
+  pool: database.PoolConfig,
 ): Pick<
   MongoClientOptions,
   | "maxPoolSize"
@@ -60,7 +56,7 @@ export async function connectDatabase(
   config: DatabaseConnectConfig,
   options: DatabaseConnectOptions = {},
 ): Promise<DatabaseConnection> {
-  const pool = config.pool ?? loadDatabasePoolConfig({}, "api");
+  const pool = config.pool ?? database.loadPool({}, "api");
   const client = new MongoClient(config.uri, {
     appName: "restaurants",
     // Optional domain fields are omitted instead of being stored as null.

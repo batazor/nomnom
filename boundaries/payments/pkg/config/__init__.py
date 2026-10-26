@@ -2,11 +2,11 @@
 
 from dataclasses import dataclass
 
+from . import database
 from .database import (
     DATABASE_MAX_CONNS_ENV,
     DATABASE_URL_ENV,
     DEFAULT_DATABASE_MAX_CONNS,
-    DatabaseSettings,
 )
 from .duration import parse_duration
 from .identity import (
@@ -88,7 +88,6 @@ __all__ = [
     "SPICEDB_PRESHARED_KEY_ENV",
     "SPICEDB_TIMEOUT_ENV",
     "TELEMETRY_FLUSH_TIMEOUT_ENV",
-    "DatabaseSettings",
     "IdentitySettings",
     "ManagementSettings",
     "ProviderSettings",
@@ -113,7 +112,7 @@ class Settings:
     identity: IdentitySettings
     spicedb: SpiceDBSettings
     provider: ProviderSettings
-    database: DatabaseSettings
+    database: database.Config
 
 
 def load_settings() -> Settings:
@@ -132,7 +131,7 @@ def load_settings() -> Settings:
         identity=IdentitySettings(),
         spicedb=SpiceDBSettings(),
         provider=ProviderSettings(),
-        database=DatabaseSettings(),
+        database=database.Config(),
     )
     if settings.management.port == settings.server.port:
         raise ValueError(

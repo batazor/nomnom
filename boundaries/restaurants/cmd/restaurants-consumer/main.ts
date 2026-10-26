@@ -36,7 +36,7 @@ const config = loadConfig(process.env, { process: "consumer" });
 // MongoDB and Kafka are required: without them the process does not start.
 // Collections and indexes, the Inbox included, are migrated by the process
 // itself before it consumes (local ADR 2).
-if (!config.mongodb.enabled) {
+if (!config.database.enabled) {
   throw new Error(
     "MONGODB__URI is required: restaurants-consumer writes the Inbox and Restaurant Orders to MongoDB",
   );
@@ -57,7 +57,7 @@ if (!config.valkey.enabled) {
 const valkeyConfig = config.valkey;
 
 const telemetry = startTelemetry(SERVICE_NAME);
-const database = await connectDatabase(config.mongodb);
+const database = await connectDatabase(config.database);
 const valkey = connectValkey(valkeyConfig, {
   connectionName: SERVICE_NAME,
   logger: logger.child({ operation: "valkey" }),

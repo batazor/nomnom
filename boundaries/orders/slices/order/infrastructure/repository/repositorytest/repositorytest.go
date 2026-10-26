@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/di/schema"
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/pkg/testfixture"
 	"nomnom/orders/slices/order/domains/order"
@@ -64,7 +64,7 @@ func start() {
 	if startErr = exec(ctx, "CREATE DATABASE "+pgx.Identifier{template}.Sanitize()); startErr != nil {
 		return
 	}
-	startErr = schema.Migrate(ctx, config.PostgresConfig{DSN: withDatabase(server.DSN, template), MaxConns: maxConns})
+	startErr = schema.Migrate(ctx, database.Config{DSN: withDatabase(server.DSN, template), MaxConns: maxConns})
 }
 
 // exec runs an administrative statement on the server's own database.
@@ -104,18 +104,18 @@ func Open(t testing.TB) *Store {
 	require.NoError(t, startErr, "start postgres")
 	ctx := context.Background()
 
-	database := fmt.Sprintf("%s_%d", template, databases.Add(1))
+	name := fmt.Sprintf("%s_%d", template, databases.Add(1))
 	cloneMu.Lock()
 	err := exec(ctx, fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s",
-		pgx.Identifier{database}.Sanitize(), pgx.Identifier{template}.Sanitize()))
+		pgx.Identifier{name}.Sanitize(), pgx.Identifier{template}.Sanitize()))
 	cloneMu.Unlock()
 	require.NoError(t, err)
 
-	store, err := repository.Open(ctx, config.PostgresConfig{DSN: withDatabase(server.DSN, database), MaxConns: maxConns})
+	store, err := repository.Open(ctx, database.Config{DSN: withDatabase(server.DSN, name), MaxConns: maxConns})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		store.Close()
-		if err := exec(context.Background(), "DROP DATABASE IF EXISTS "+pgx.Identifier{database}.Sanitize()+" WITH (FORCE)"); err != nil {
+		if err := exec(context.Background(), "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)"); err != nil {
 			t.Logf("drop test database: %v", err)
 		}
 	})

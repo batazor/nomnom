@@ -25,7 +25,7 @@ import psycopg
 from opentelemetry import trace
 from psycopg_pool import ConnectionPool
 
-from pkg.config import DatabaseSettings
+from pkg.config import database
 
 from .pool_metrics import PoolMetrics
 from .statements import StatementTelemetry
@@ -171,11 +171,11 @@ class _WorkFailedError(Exception):
 
 
 def create_database(
-    settings: DatabaseSettings, statement_telemetry: StatementTelemetry | None = None
+    settings: database.Config, statement_telemetry: StatementTelemetry | None = None
 ) -> Database:
     """Create the pool without connecting; ``check`` verifies reachability.
 
-    Limits come from ``DatabaseSettings``: behind the session-mode pooler every pooled
+    Limits come from ``database.Config``: behind the session-mode pooler every pooled
     connection pins a server connection, and psycopg's automatic prepared statements need
     session mode.
     """

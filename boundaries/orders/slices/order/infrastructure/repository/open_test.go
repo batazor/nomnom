@@ -6,11 +6,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/slices/order/infrastructure/repository"
 )
 
 func TestOpenRequiresDSN(t *testing.T) {
-	_, err := repository.Open(context.Background(), config.PostgresConfig{})
-	require.ErrorContains(t, err, config.EnvPostgresDSN)
+	_, err := repository.Open(context.Background(), database.Config{})
+	require.ErrorContains(t, err, database.EnvPostgresDSN)
 }

@@ -181,7 +181,7 @@ Valkey: ключ Secret и длительности в формате прило
 {{- end -}}
 
 {{/*
-MongoDB: имя базы, timeout и лимиты пула в формате приложения (pkg/config/connections.ts).
+MongoDB: имя базы, timeout и лимиты пула в формате приложения (pkg/config/database.ts).
 */}}
 {{- define "restaurants.validateMongoDb" -}}
 {{- with .Values.mongodb -}}

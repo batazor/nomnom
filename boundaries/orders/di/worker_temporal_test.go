@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/testfixture"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
@@ -63,7 +64,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	}
 
 	orderID := order.ID("order-" + time.Now().UTC().Format("20060102T150405") + "-" + strconv.FormatInt(time.Now().UnixNano(), 36))
-	pg := config.PostgresConfig{DSN: dsn, MaxConns: 5}
+	pg := database.Config{DSN: dsn, MaxConns: 5}
 	placing, err := repository.Open(ctx, pg)
 	require.NoError(t, err)
 	defer placing.Close()

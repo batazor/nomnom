@@ -1,4 +1,4 @@
-package config
+package database
 
 import (
 	"fmt"
@@ -28,23 +28,23 @@ const (
 
 	// Defaults fit one API process behind a session-mode pooler; Helm sizes
 	// MaxConns per process (worker, consumer, reconciler).
-	DefaultPostgresMaxConns              = 10
-	DefaultPostgresMinConns              = 0
-	DefaultPostgresMaxConnLifetime       = 30 * time.Minute
-	DefaultPostgresMaxConnLifetimeJitter = 5 * time.Minute
-	DefaultPostgresMaxConnIdleTime       = 5 * time.Minute
-	DefaultPostgresConnectTimeout        = 5 * time.Second
-	DefaultPostgresHealthCheckPeriod     = 1 * time.Minute
+	DefaultMaxConns              = 10
+	DefaultMinConns              = 0
+	DefaultMaxConnLifetime       = 30 * time.Minute
+	DefaultMaxConnLifetimeJitter = 5 * time.Minute
+	DefaultMaxConnIdleTime       = 5 * time.Minute
+	DefaultConnectTimeout        = 5 * time.Second
+	DefaultHealthCheckPeriod     = 1 * time.Minute
 
-	// MaxPostgresMinConns keeps idle pooled connections from pinning server
+	// MaxMinConns keeps idle pooled connections from pinning server
 	// connections of the session-mode pooler.
-	MaxPostgresMinConns = 1
+	MaxMinConns = 1
 )
 
-// PostgresConfig locates the orders database (ADR 8) and sizes the process
+// Config locates the orders database (ADR 8) and sizes the process
 // pool. Every orders process requires the DSN; it comes from a Secret, never
 // from a file in Git.
-type PostgresConfig struct {
+type Config struct {
 	DSN                   string        `mapstructure:"dsn"`
 	MaxConns              int32         `mapstructure:"max_conns"`
 	MinConns              int32         `mapstructure:"min_conns"`
@@ -55,16 +55,17 @@ type PostgresConfig struct {
 	HealthCheckPeriod     time.Duration `mapstructure:"health_check_period"`
 }
 
-func configurePostgres(loader *viper.Viper) error {
+// Configure registers the database defaults and binds the POSTGRES__* environment.
+func Configure(loader *viper.Viper) error {
 	for key, value := range map[string]any{
 		configKeyPostgresDSN:                   "",
-		configKeyPostgresMaxConns:              DefaultPostgresMaxConns,
-		configKeyPostgresMinConns:              DefaultPostgresMinConns,
-		configKeyPostgresMaxConnLifetime:       DefaultPostgresMaxConnLifetime,
-		configKeyPostgresMaxConnLifetimeJitter: DefaultPostgresMaxConnLifetimeJitter,
-		configKeyPostgresMaxConnIdleTime:       DefaultPostgresMaxConnIdleTime,
-		configKeyPostgresConnectTimeout:        DefaultPostgresConnectTimeout,
-		configKeyPostgresHealthCheckPeriod:     DefaultPostgresHealthCheckPeriod,
+		configKeyPostgresMaxConns:              DefaultMaxConns,
+		configKeyPostgresMinConns:              DefaultMinConns,
+		configKeyPostgresMaxConnLifetime:       DefaultMaxConnLifetime,
+		configKeyPostgresMaxConnLifetimeJitter: DefaultMaxConnLifetimeJitter,
+		configKeyPostgresMaxConnIdleTime:       DefaultMaxConnIdleTime,
+		configKeyPostgresConnectTimeout:        DefaultConnectTimeout,
+		configKeyPostgresHealthCheckPeriod:     DefaultHealthCheckPeriod,
 	} {
 		loader.SetDefault(key, value)
 	}
@@ -85,12 +86,12 @@ func configurePostgres(loader *viper.Viper) error {
 	return nil
 }
 
-func (cfg PostgresConfig) Validate() error {
+func (cfg Config) Validate() error {
 	if cfg.MaxConns < 1 {
 		return fmt.Errorf("postgres max_conns must be positive, got %d", cfg.MaxConns)
 	}
-	if cfg.MinConns < 0 || cfg.MinConns > MaxPostgresMinConns {
-		return fmt.Errorf("postgres min_conns must be between 0 and %d, got %d", MaxPostgresMinConns, cfg.MinConns)
+	if cfg.MinConns < 0 || cfg.MinConns > MaxMinConns {
+		return fmt.Errorf("postgres min_conns must be between 0 and %d, got %d", MaxMinConns, cfg.MinConns)
 	}
 	if cfg.MinConns > cfg.MaxConns {
 		return fmt.Errorf("postgres min_conns %d must not exceed max_conns %d", cfg.MinConns, cfg.MaxConns)

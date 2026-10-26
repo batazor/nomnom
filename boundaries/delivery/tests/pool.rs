@@ -12,10 +12,10 @@ use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
 use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
 
 use delivery::infrastructure::repository::{PoolMetrics, pool_options};
-use delivery::pkg::config::DatabaseConfig;
+use delivery::pkg::config::database;
 
-fn config() -> DatabaseConfig {
-    DatabaseConfig {
+fn config() -> database::Config {
+    database::Config {
         max_conns: 1,
         acquire_timeout: Duration::from_millis(300),
         ..support::database()

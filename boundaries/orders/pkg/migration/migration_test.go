@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/migration"
 	"nomnom/orders/pkg/testfixture"
 )
@@ -73,7 +73,7 @@ func tableExists(t *testing.T, conn *pgx.Conn, name string) bool {
 // in the given order, and a failed set leaves the sets before it applied.
 func TestApplyKeepsEverySetInItsOwnVersionTable(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.PostgresConfig{DSN: emptyDatabase(t)}
+	cfg := database.Config{DSN: emptyDatabase(t)}
 	shared := set("shared", map[string]string{"1_shared.up.sql": `CREATE TABLE shared (id int);`})
 	slice := map[string]string{
 		"1_a.up.sql": `CREATE TABLE a (id int);`,
@@ -101,7 +101,7 @@ func TestApplyKeepsEverySetInItsOwnVersionTable(t *testing.T) {
 // the version table is named only by the ID of the set.
 func TestApplyRejectsSetsSharingAnID(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.PostgresConfig{DSN: emptyDatabase(t)}
+	cfg := database.Config{DSN: emptyDatabase(t)}
 	a := set("a", map[string]string{"1_a.up.sql": `CREATE TABLE a (id int);`})
 
 	require.ErrorContains(t, migration.Apply(ctx, cfg), "no migration sets")
@@ -124,7 +124,7 @@ func TestApplyRetriesAnIncompleteMigration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			cfg := config.PostgresConfig{DSN: emptyDatabase(t)}
+			cfg := database.Config{DSN: emptyDatabase(t)}
 			files := map[string]string{"1_base.up.sql": `CREATE TABLE base (id int);`}
 			if tc.first == "1_a.up.sql" {
 				files = map[string]string{}
@@ -153,7 +153,7 @@ func TestApplyRetriesAnIncompleteMigration(t *testing.T) {
 // lock_timeout instead of stalling the table, and succeeds on the next start.
 func TestApplyGivesUpOnALockedTable(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.PostgresConfig{DSN: emptyDatabase(t)}
+	cfg := database.Config{DSN: emptyDatabase(t)}
 	files := map[string]string{"1_a.up.sql": `CREATE TABLE a (id int);`}
 	require.NoError(t, migration.Apply(ctx, cfg, set("test", files)))
 

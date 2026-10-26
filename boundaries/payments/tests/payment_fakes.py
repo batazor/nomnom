@@ -36,7 +36,7 @@ from pkg.application import (
     Subject,
     SubjectKind,
 )
-from pkg.config import DatabaseSettings, load_settings
+from pkg.config import database, load_settings
 from slices.payment.applications.operation_flow import (
     PaymentOperationExecutor,
     ProviderResultApplier,
@@ -379,7 +379,7 @@ _STATES_WITH_REFERENCE = {PaymentState.AUTHORIZED, PaymentState.CAPTURED, Paymen
 
 def unreachable_database() -> Database:
     """Pool that never connects: for composition tests that stop before storage."""
-    return create_database(DatabaseSettings(DATABASE__URL=UNREACHABLE_DATABASE_URL))
+    return create_database(database.Config(DATABASE__URL=UNREACHABLE_DATABASE_URL))
 
 
 UNREACHABLE_DATABASE_URL = "postgresql://payments@127.0.0.1:1/x"

@@ -19,7 +19,7 @@ use testcontainers_modules::testcontainers::{Container, ImageExt};
 use crate::infrastructure::locator::CourierPositions;
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::application::{UnitOfWork, UnitOfWorkError};
-use crate::pkg::config::DatabaseConfig;
+use crate::pkg::config::database;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::applications::update_courier_location::{
     CourierLocationStore, CourierPosition,
@@ -114,17 +114,17 @@ fn admin(server: &str, statement: &str) {
 /// Боевой `acquire_timeout` (5s) не переживает сотни параллельных
 /// `CREATE DATABASE ... TEMPLATE` в одном контейнере: первое соединение пула
 /// под такой нагрузкой ждёт дольше.
-fn config(url: String) -> DatabaseConfig {
-    DatabaseConfig {
+fn config(url: String) -> database::Config {
+    database::Config {
         url,
         max_conns: 4,
         acquire_timeout: Duration::from_secs(60),
-        ..DatabaseConfig::default()
+        ..database::Config::default()
     }
 }
 
 /// A new migrated database of the shared container.
-pub(crate) fn fresh_database() -> DatabaseConfig {
+pub(crate) fn fresh_database() -> database::Config {
     let server = server();
     let name = format!(
         "delivery_test_{}_{}",

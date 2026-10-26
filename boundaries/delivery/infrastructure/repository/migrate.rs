@@ -16,7 +16,7 @@ use std::borrow::Cow;
 
 use sqlx::migrate::{Migrate, Migrator};
 
-use crate::pkg::config::{DATABASE_URL_ENV, DatabaseConfig};
+use crate::pkg::config::{DATABASE_URL_ENV, database};
 
 /// Migrations of one set of tables.
 pub struct MigrationSet {
@@ -81,7 +81,7 @@ const LOCK_TIMEOUT: &str = "SET lock_timeout = '5s'";
 
 /// Applies pending migrations of every set; returns `(id, version)` of the
 /// migrations applied by this run, in the order they were applied.
-pub fn migrate(config: &DatabaseConfig) -> Result<Vec<(&'static str, i64)>, String> {
+pub fn migrate(config: &database::Config) -> Result<Vec<(&'static str, i64)>, String> {
     if !config.enabled() {
         return Err(format!("{DATABASE_URL_ENV} is required"));
     }

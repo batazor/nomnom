@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
@@ -20,7 +20,7 @@ import (
 // open opens a store on the database migrated by TestMain.
 func open(t *testing.T) *repository.Store {
 	t.Helper()
-	store, err := repository.Open(context.Background(), config.PostgresConfig{DSN: pg.DSN, MaxConns: 5})
+	store, err := repository.Open(context.Background(), database.Config{DSN: pg.DSN, MaxConns: 5})
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
 	return store

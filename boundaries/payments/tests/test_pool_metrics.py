@@ -18,7 +18,7 @@ from psycopg_pool import ConnectionPool, PoolTimeout
 from infrastructure.repository import create_database
 from infrastructure.repository.database import connect_timeout_seconds
 from infrastructure.repository.pool_metrics import PoolMetrics
-from pkg.config import DatabaseSettings
+from pkg.config import database
 
 
 class FakeConnection:
@@ -200,7 +200,7 @@ class PoolMetricsTest(unittest.TestCase):
 
 class CreateDatabaseTest(unittest.TestCase):
     def test_pool_follows_settings(self) -> None:
-        settings = DatabaseSettings.model_validate(
+        settings = database.Config.model_validate(
             {
                 "DATABASE__URL": "postgresql://payments@127.0.0.1:1/x",
                 "DATABASE__MAX_CONNS": "3",
@@ -211,9 +211,9 @@ class CreateDatabaseTest(unittest.TestCase):
                 "DATABASE__ACQUIRE_TIMEOUT": "4s",
             }
         )
-        database = create_database(settings)
-        self.addCleanup(database.close)
-        pool = database._pool
+        db = create_database(settings)
+        self.addCleanup(db.close)
+        pool = db._pool
 
         self.assertEqual((pool.min_size, pool.max_size), (0, 3))
         self.assertEqual(pool.timeout, 4.0)

@@ -1,15 +1,13 @@
 import { loadEnvFile } from "node:process";
 import { loadValkeyConfig, type ValkeyConfig } from "./cache.ts";
 import {
-  type DatabaseConfig,
   type KafkaConfig,
-  loadDatabaseConfig,
   loadKafkaConfig,
   loadSpiceDbConfig,
   type SpiceDbConfig,
 } from "./connections.ts";
+import * as database from "./database.ts";
 import {
-  type DatabaseProcess,
   DEFAULT_DRAIN_TIMEOUT,
   DEFAULT_MANAGEMENT_PORT,
   DEFAULT_PORT,
@@ -33,6 +31,7 @@ import {
 
 export * from "./cache.ts";
 export * from "./connections.ts";
+export * as database from "./database.ts";
 export * from "./env.ts";
 export * from "./identity.ts";
 export * from "./kitchen.ts";
@@ -61,7 +60,7 @@ export interface AppConfig {
   readonly shutdown: ShutdownConfig;
   readonly identity: IdentityConfig;
   readonly spicedb: SpiceDbConfig;
-  readonly mongodb: DatabaseConfig;
+  readonly database: database.Config;
   readonly valkey: ValkeyConfig;
   readonly reconciler: ReconcilerConfig;
   readonly kitchen: KitchenConfig;
@@ -83,7 +82,7 @@ export function loadLocalEnv(path = ".env"): void {
 
 export type LoadConfigOptions = Readonly<{
   /** Процесс, по которому выбирается default `MONGODB__MAX_POOL_SIZE`. */
-  process?: DatabaseProcess;
+  process?: database.Process;
 }>;
 
 export function loadConfig(
@@ -107,7 +106,7 @@ export function loadConfig(
     shutdown: loadShutdownConfig(environment),
     identity: loadIdentityConfig(environment),
     spicedb: loadSpiceDbConfig(environment),
-    mongodb: loadDatabaseConfig(environment, options.process),
+    database: database.load(environment, options.process),
     valkey: loadValkeyConfig(environment),
     reconciler: loadReconcilerConfig(environment),
     kitchen: loadKitchenConfig(environment),

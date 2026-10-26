@@ -30,7 +30,7 @@ use crate::infrastructure::spicedb::{
     CheckMetrics, RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization,
     SpiceDbClient, SpiceDbConfigError, SpiceDbRelationships,
 };
-use crate::pkg::config::{AppConfig, DatabaseConfig, OffersConfig, SimulatorConfig, SpiceDbConfig};
+use crate::pkg::config::{AppConfig, OffersConfig, SimulatorConfig, SpiceDbConfig, database};
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::delivery::domains::delivery::DeliveryRepository;
@@ -67,7 +67,7 @@ pub fn spicedb(config: &SpiceDbConfig) -> Result<SpiceDbClient, SpiceDbConfigErr
 ///
 /// Domain Events с контрактом `nomnom/delivery/v1/events.proto` пишутся в
 /// Outbox той же транзакцией (ADR 31); публикует их коннектор Debezium (ADR 37).
-pub fn store(config: &DatabaseConfig) -> Result<Store, String> {
+pub fn store(config: &database::Config) -> Result<Store, String> {
     let applied = migrate(config)?;
     if applied.is_empty() {
         tracing::info!(

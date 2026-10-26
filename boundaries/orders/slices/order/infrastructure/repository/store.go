@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 )
 
 // psql builds statements with PostgreSQL $n placeholders.
@@ -33,13 +33,13 @@ type Store struct {
 }
 
 // Open creates the pool; it does not connect until the first query.
-func Open(ctx context.Context, cfg config.PostgresConfig) (*Store, error) {
+func Open(ctx context.Context, cfg database.Config) (*Store, error) {
 	if cfg.DSN == "" {
-		return nil, fmt.Errorf("%s is required: orders keeps its state in PostgreSQL", config.EnvPostgresDSN)
+		return nil, fmt.Errorf("%s is required: orders keeps its state in PostgreSQL", database.EnvPostgresDSN)
 	}
 	poolConfig, err := pgxpool.ParseConfig(cfg.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("parse %s: %w", config.EnvPostgresDSN, err)
+		return nil, fmt.Errorf("parse %s: %w", database.EnvPostgresDSN, err)
 	}
 	applyPoolLimits(poolConfig, cfg)
 	meter := otel.Meter(poolInstrumentation)
@@ -70,7 +70,7 @@ func Open(ctx context.Context, cfg config.PostgresConfig) (*Store, error) {
 // replica counts against the pooler pool_size. The DSN keeps the default
 // prepared-statement cache, which needs session mode. Zero durations (configs
 // built in tests) keep the pgx defaults; Load always sets them.
-func applyPoolLimits(poolConfig *pgxpool.Config, cfg config.PostgresConfig) {
+func applyPoolLimits(poolConfig *pgxpool.Config, cfg database.Config) {
 	poolConfig.MaxConns = cfg.MaxConns
 	poolConfig.MinConns = cfg.MinConns
 	poolConfig.MaxConnLifetimeJitter = cfg.MaxConnLifetimeJitter

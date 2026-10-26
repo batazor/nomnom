@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+
+	"nomnom/orders/pkg/config/database"
 )
 
 type Config struct {
@@ -22,7 +24,7 @@ type Config struct {
 	InternalGateway InternalGatewayConfig `mapstructure:"internal_gateway"`
 	Identity        IdentityConfig        `mapstructure:"identity"`
 	SpiceDB         SpiceDBConfig         `mapstructure:"spicedb"`
-	Postgres        PostgresConfig        `mapstructure:"postgres"`
+	Database        database.Config       `mapstructure:"postgres"`
 	Reconciler      ReconcilerConfig      `mapstructure:"reconciler"`
 	Simulator       SimulatorConfig       `mapstructure:"simulator"`
 }
@@ -64,8 +66,8 @@ func Load() (Config, error) {
 	if err := configureSpiceDB(loader); err != nil {
 		return Config{}, fmt.Errorf("configure spicedb: %w", err)
 	}
-	if err := configurePostgres(loader); err != nil {
-		return Config{}, fmt.Errorf("configure postgres: %w", err)
+	if err := database.Configure(loader); err != nil {
+		return Config{}, fmt.Errorf("configure database: %w", err)
 	}
 	if err := configureReconciler(loader); err != nil {
 		return Config{}, fmt.Errorf("configure reconciler: %w", err)
@@ -119,7 +121,7 @@ func Load() (Config, error) {
 	if err := cfg.SpiceDB.Validate(); err != nil {
 		return Config{}, err
 	}
-	if err := cfg.Postgres.Validate(); err != nil {
+	if err := cfg.Database.Validate(); err != nil {
 		return Config{}, err
 	}
 	if err := cfg.Reconciler.Validate(); err != nil {

@@ -15,7 +15,7 @@ use delivery::infrastructure::repository::{
     MIGRATION_SETS, OutboxMapper, OutboxRecord, Store, event_id, migrate,
 };
 use delivery::pkg::application::{UnitOfWork, UnitOfWorkError};
-use delivery::pkg::config::DatabaseConfig;
+use delivery::pkg::config::database;
 use delivery::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use delivery::slices::courier::applications::update_courier_location::{
     CourierLocationStore, CourierPosition,
@@ -37,7 +37,7 @@ use delivery::slices::delivery::domains::delivery::{
     FailureReporter, OfferState, OrderId, State,
 };
 
-fn config() -> DatabaseConfig {
+fn config() -> database::Config {
     support::database()
 }
 
@@ -242,7 +242,7 @@ fn embedded() -> Vec<(&'static str, i64)> {
 
 /// Applied migrations of every set, in set order, with the time each was
 /// installed.
-fn installed(config: &DatabaseConfig) -> Vec<(&'static str, i64, String)> {
+fn installed(config: &database::Config) -> Vec<(&'static str, i64, String)> {
     support::off_runtime(|| {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -271,7 +271,7 @@ fn installed(config: &DatabaseConfig) -> Vec<(&'static str, i64, String)> {
 
 #[test]
 fn empty_dsn_fails_fast() {
-    let Err(error) = Store::connect(&DatabaseConfig::default()) else {
+    let Err(error) = Store::connect(&database::Config::default()) else {
         panic!("an empty DSN must fail");
     };
     assert!(error.contains("DATABASE__URL"));

@@ -46,7 +46,7 @@ from infrastructure.repository import (
 )
 from infrastructure.repository.migrate import _LOCK_KEY
 from pkg.application import Subject, SubjectKind
-from pkg.config import DatabaseSettings
+from pkg.config import database
 from pkg.lifecycle import HttpWorker, WorkerGroup
 from slices.payment.applications.create_payment import CreatePaymentInput
 from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
@@ -183,7 +183,7 @@ class StartupMigrationTest(unittest.TestCase):
     dsn: str
 
     def start(self, dsn: str) -> list[str]:
-        resource = ProcessResource(migrated_database, DatabaseSettings(DATABASE__URL=dsn))
+        resource = ProcessResource(migrated_database, database.Config(DATABASE__URL=dsn))
         with self.assertLogs("di.resources", logging.INFO) as logs:
             resource.init()
         resource.shutdown()
@@ -218,7 +218,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_yoyo_tables_are_named_by_storage_id_only(self) -> None:
         dsn = self._empty_database()
-        migrate(DatabaseSettings(DATABASE__URL=dsn), MIGRATIONS)
+        migrate(database.Config(DATABASE__URL=dsn), MIGRATIONS)
         with psycopg.connect(dsn) as conn:
             tables = conn.execute(
                 "SELECT table_name FROM information_schema.tables"
@@ -248,7 +248,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_replicas_starting_together_apply_migrations_once(self) -> None:
         dsn = self._empty_database()
-        settings = DatabaseSettings(DATABASE__URL=dsn)
+        settings = database.Config(DATABASE__URL=dsn)
         results: list[list[str]] = []
         threads = [
             threading.Thread(target=lambda: results.append(migrate(settings, MIGRATIONS)))
@@ -269,7 +269,7 @@ class StartupMigrationTest(unittest.TestCase):
         holder.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
         results: list[list[str]] = []
         waiting = threading.Thread(
-            target=lambda: results.append(migrate(DatabaseSettings(DATABASE__URL=dsn), MIGRATIONS))
+            target=lambda: results.append(migrate(database.Config(DATABASE__URL=dsn), MIGRATIONS))
         )
         waiting.start()
         waiting.join(timeout=1)
@@ -280,7 +280,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_migration_gives_up_on_a_locked_table(self) -> None:
         dsn = self._empty_database()
-        settings = DatabaseSettings(DATABASE__URL=dsn)
+        settings = database.Config(DATABASE__URL=dsn)
         migrate(settings, MIGRATIONS)
         with psycopg.connect(dsn) as traffic:
             traffic.execute("SELECT * FROM payments")

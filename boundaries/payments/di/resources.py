@@ -30,10 +30,10 @@ from dependency_injector import providers
 from infrastructure.repository import Database, MigrationSet, create_database, migrate
 from pkg import telemetry
 from pkg.config import (
-    DatabaseSettings,
     ManagementSettings,
     Settings,
     ShutdownSettings,
+    database,
 )
 from pkg.lifecycle import Lifecycle, LifecycleConfig
 
@@ -85,7 +85,7 @@ def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetr
         owner.shutdown(flush_timeout.total_seconds())
 
 
-def migrated_database(settings: DatabaseSettings) -> Iterator[Database]:
+def migrated_database(settings: database.Config) -> Iterator[Database]:
     """The psycopg pool over the migrated schema; any failure stops the process before ports open.
 
     Pending migrations of ``MIGRATIONS`` are applied first, under the session advisory lock

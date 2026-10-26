@@ -48,13 +48,13 @@ fn sums(
     values
 }
 
-fn config() -> DatabaseConfig {
-    DatabaseConfig {
+fn config() -> database::Config {
+    database::Config {
         url: "postgres://u:p@127.0.0.1:1/db".to_owned(),
         max_conns: 3,
         min_conns: 1,
         acquire_timeout: Duration::from_millis(200),
-        ..DatabaseConfig::default()
+        ..database::Config::default()
     }
 }
 

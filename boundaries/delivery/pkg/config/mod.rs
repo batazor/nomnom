@@ -1,3 +1,4 @@
+pub mod database;
 mod infrastructure;
 mod load;
 mod simulator;
@@ -7,10 +8,7 @@ use std::time::Duration;
 use config::ConfigError;
 use serde::Deserialize;
 
-pub use infrastructure::{
-    DatabaseConfig, MAX_DATABASE_MAX_CONNS, MAX_DATABASE_MIN_CONNS, OffersConfig, ReconcilerConfig,
-    SpiceDbConfig,
-};
+pub use infrastructure::{OffersConfig, ReconcilerConfig, SpiceDbConfig};
 pub use load::load;
 #[cfg(test)]
 use load::{
@@ -191,7 +189,7 @@ pub struct AppConfig {
     pub spicedb: SpiceDbConfig,
     pub reconciler: ReconcilerConfig,
     pub offers: OffersConfig,
-    pub database: DatabaseConfig,
+    pub database: database::Config,
     pub simulator: SimulatorConfig,
 }
 

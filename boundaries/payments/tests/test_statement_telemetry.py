@@ -19,7 +19,7 @@ from infrastructure.repository import (
     create_database,
 )
 from infrastructure.repository.statements import Statement, StatementTelemetry, summarize
-from pkg.config import DatabaseSettings
+from pkg.config import database
 from slices.payment.domains.payment import Money, OrderId, Payment, PaymentId
 
 
@@ -68,7 +68,7 @@ class StatementTelemetryTest(unittest.TestCase):
         telemetry = StatementTelemetry(
             self.tracer_provider, MeterProvider(metric_readers=[self.reader])
         )
-        self.observed = create_database(DatabaseSettings(DATABASE__URL=self.dsn), telemetry)
+        self.observed = create_database(database.Config(DATABASE__URL=self.dsn), telemetry)
         self.addCleanup(self.observed.close)
         self.payments = DatabasePaymentRepository(self.observed)
 

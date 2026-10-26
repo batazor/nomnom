@@ -16,14 +16,14 @@ import (
 	"regexp"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database"
+	migratedatabase "github.com/golang-migrate/migrate/v4/database"
 	pgxmigrate "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 )
 
 // maxConns bounds the database/sql pool of one Set: golang-migrate takes its
@@ -67,16 +67,16 @@ func (s Set) versionTable() string {
 // are applied under a session advisory lock of its own connection, so
 // processes starting at once serialize. The lock is taken before lock_timeout
 // applies: the wait for another process must not be cut by it.
-func Apply(ctx context.Context, cfg config.PostgresConfig, sets ...Set) error {
+func Apply(ctx context.Context, cfg database.Config, sets ...Set) error {
 	if cfg.DSN == "" {
-		return fmt.Errorf("%s is required", config.EnvPostgresDSN)
+		return fmt.Errorf("%s is required", database.EnvPostgresDSN)
 	}
 	if err := validate(sets); err != nil {
 		return err
 	}
 	connConfig, err := pgx.ParseConfig(cfg.DSN)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", config.EnvPostgresDSN, err)
+		return fmt.Errorf("parse %s: %w", database.EnvPostgresDSN, err)
 	}
 	if cfg.ConnectTimeout > 0 {
 		connConfig.ConnectTimeout = cfg.ConnectTimeout
@@ -127,7 +127,7 @@ func validate(sets []Set) error {
 
 // applySet runs one Set on a database/sql pool of its own: the driver closes
 // the pool with the migrator.
-func applySet(ctx context.Context, cfg config.PostgresConfig, connConfig *pgx.ConnConfig, set Set) error {
+func applySet(ctx context.Context, cfg database.Config, connConfig *pgx.ConnConfig, set Set) error {
 	db := stdlib.OpenDB(*connConfig)
 	db.SetMaxOpenConns(maxConns)
 	db.SetMaxIdleConns(maxConns)
@@ -186,7 +186,7 @@ func undoIncompleteMigration(ctx context.Context, migrator *migrate.Migrate, fil
 	if err != nil {
 		return fmt.Errorf("migration version: %w", err)
 	}
-	previous := database.NilVersion
+	previous := migratedatabase.NilVersion
 	prev, err := files.Prev(version)
 	switch {
 	case err == nil:

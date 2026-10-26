@@ -5,10 +5,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 )
 
 func TestNewStoreRequiresDSN(t *testing.T) {
-	_, _, err := NewStore(config.PostgresConfig{MaxConns: 1})
-	require.ErrorContains(t, err, config.EnvPostgresDSN)
+	_, _, err := NewStore(database.Config{MaxConns: 1})
+	require.ErrorContains(t, err, database.EnvPostgresDSN)
 }

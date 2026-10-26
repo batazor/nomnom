@@ -28,7 +28,7 @@ from yoyo.backends import get_backend_class
 from yoyo.connections import DatabaseURI
 from yoyo.migrations import MigrationList
 
-from pkg.config import DatabaseSettings
+from pkg.config import database
 
 from .database import connect_timeout_seconds
 
@@ -81,7 +81,7 @@ class MigrationSet:
         return found
 
 
-def migrate(settings: DatabaseSettings, sets: Sequence[MigrationSet]) -> list[str]:
+def migrate(settings: database.Config, sets: Sequence[MigrationSet]) -> list[str]:
     """Apply pending migrations of ``sets`` in order under one lock.
 
     Returns ``<storage_id>/<migration>`` of the applied migrations.

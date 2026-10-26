@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/di/schema"
-	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/testfixture"
 )
 
@@ -45,7 +45,7 @@ func emptyDatabase(t *testing.T) string {
 // apply every set, started together they serialize on the advisory lock, and
 // a later start finds nothing to change.
 func TestMigrateAppliesEverySetOnceAndThenChangesNothing(t *testing.T) {
-	cfg := config.PostgresConfig{DSN: emptyDatabase(t), MaxConns: 2}
+	cfg := database.Config{DSN: emptyDatabase(t), MaxConns: 2}
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
