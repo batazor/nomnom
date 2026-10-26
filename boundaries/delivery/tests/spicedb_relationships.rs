@@ -18,8 +18,9 @@ use delivery::infrastructure::memory::{ManualClock, StaticAuthorization, StaticC
 use delivery::infrastructure::postgres::PostgresStore;
 use delivery::infrastructure::reconcile::Reconciler;
 use delivery::infrastructure::spicedb::{
-    Relationship, RelationshipGraph, RelationshipOperation, RelationshipPage, RepositoryRevisions,
-    SpiceDbAuthorization, SpiceDbClient, SpiceDbRelationships, courier_self, delivery_courier,
+    CheckMetrics, Relationship, RelationshipGraph, RelationshipOperation, RelationshipPage,
+    RepositoryRevisions, SpiceDbAuthorization, SpiceDbClient, SpiceDbRelationships, courier_self,
+    delivery_courier,
 };
 use delivery::pkg::application::{AuthorizationError, Subject};
 use delivery::pkg::config::DatabaseConfig;
@@ -70,7 +71,7 @@ fn user(id: &str) -> Subject {
 /// Адаптер с revisions из `store`: checks ресурсов с revision —
 /// `at_least_as_fresh`, остальные — `minimize_latency`.
 fn adapter(client: &SpiceDbClient, store: &Arc<PostgresStore>) -> SpiceDbAuthorization {
-    SpiceDbAuthorization::new(Box::new(client.clone()))
+    SpiceDbAuthorization::new(Box::new(client.clone()), CheckMetrics::global())
         .with_revisions(Arc::new(RepositoryRevisions(Arc::clone(store))))
 }
 

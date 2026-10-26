@@ -16,6 +16,16 @@ pub enum OfferState {
     Expired,
 }
 
+impl OfferState {
+    /// No trigger of the transition table leaves the state.
+    #[must_use]
+    pub fn is_terminal(self) -> bool {
+        !OFFER_TRANSITION_TABLE
+            .iter()
+            .any(|rule| rule.from == self && matches!(rule.outcome, OfferOutcome::Allowed(_)))
+    }
+}
+
 #[cfg(test)]
 pub(super) const ALL_OFFER_STATES: [OfferState; 5] = [
     OfferState::Pending,
@@ -177,6 +187,24 @@ const fn offer_definition(
         trigger,
         outcome,
     }
+}
+
+/// The allowed transition of the table from `from` to `to`, if exactly one
+/// trigger leads there: how a stored state change reads as a transition.
+#[must_use]
+pub fn applied_offer_transition(from: OfferState, to: OfferState) -> Option<OfferTransitionResult> {
+    let mut allowed = OFFER_TRANSITION_TABLE.iter().filter(|rule| {
+        rule.from == from && matches!(rule.outcome, OfferOutcome::Allowed(target) if target == to)
+    });
+    let rule = allowed.next()?;
+    if allowed.next().is_some() {
+        return None;
+    }
+    Some(OfferTransitionResult {
+        from,
+        trigger: rule.trigger,
+        to,
+    })
 }
 
 pub(super) fn offer_transition(

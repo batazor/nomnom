@@ -18,6 +18,7 @@ use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierU
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
 use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
 use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
+use crate::slices::delivery::infrastructure::transitions::TransitionMetrics;
 
 #[cfg(test)]
 use super::infrastructure::local_authorization;
@@ -81,7 +82,11 @@ pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModul
     let deliveries: Arc<dyn DeliveryUseCases> = module.resolve();
     ServiceModule {
         couriers: ObservedCourierUseCases::new(couriers, Arc::clone(&telemetry)),
-        deliveries: ObservedDeliveryUseCases::new(deliveries, telemetry),
+        deliveries: ObservedDeliveryUseCases::new(
+            deliveries,
+            telemetry,
+            TransitionMetrics::global(),
+        ),
         simulator: simulator.resolve(),
     }
 }

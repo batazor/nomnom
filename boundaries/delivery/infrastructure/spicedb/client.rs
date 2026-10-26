@@ -54,10 +54,27 @@ const REPLY_GRACE: Duration = Duration::from_millis(500);
 /// Решение SpiceDB по одному check; `Err` — решение не получено.
 pub trait PermissionChecker: Send + Sync {
     /// `Ok(true)` только для `PERMISSIONSHIP_HAS_PERMISSION`.
-    fn check(&self, check: &PermissionCheck) -> Result<bool, String>;
+    fn check(&self, check: &PermissionCheck) -> Result<bool, CallFailure>;
 }
 
-type Reply<T> = std_mpsc::SyncSender<Result<T, String>>;
+/// Вызов SpiceDB без ответа.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CallFailure {
+    /// Ответа нет в пределах timeout клиента, включая `DEADLINE_EXCEEDED`.
+    Timeout(String),
+    /// Ошибка транспорта или сервера.
+    Failed(String),
+}
+
+impl fmt::Display for CallFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Timeout(reason) | Self::Failed(reason) => formatter.write_str(reason),
+        }
+    }
+}
+
+type Reply<T> = std_mpsc::SyncSender<Result<T, CallFailure>>;
 
 /// Запрос к потоку клиента и канал ответа.
 enum Job {
@@ -288,7 +305,9 @@ async fn serve(mut client: Client, job: Job, timeout: Duration, call: Call) {
             let _ = reply.send(match outcome {
                 Ok(Ok(response)) => Ok(allowed(response.get_ref())),
                 Ok(Err(status)) => Err(failed("check", &status)),
-                Err(_) => Err(format!("spicedb check timed out after {timeout:?}")),
+                Err(_) => Err(CallFailure::Timeout(format!(
+                    "spicedb check timed out after {timeout:?}"
+                ))),
             });
         }
         Job::Write(request, reply) => {
@@ -300,11 +319,11 @@ async fn serve(mut client: Client, job: Job, timeout: Duration, call: Call) {
             .await;
             telemetry.finish(code_of(&outcome));
             let _ = reply.send(match outcome {
-                Ok(Ok(response)) => written_at(response.get_ref()),
+                Ok(Ok(response)) => written_at(response.get_ref()).map_err(CallFailure::Failed),
                 Ok(Err(status)) => Err(failed("write relationships", &status)),
-                Err(_) => Err(format!(
+                Err(_) => Err(CallFailure::Timeout(format!(
                     "spicedb write relationships timed out after {timeout:?}"
-                )),
+                ))),
             });
         }
         Job::Read(request, reply) => {
@@ -315,9 +334,9 @@ async fn serve(mut client: Client, job: Job, timeout: Duration, call: Call) {
             telemetry.finish(code_of(&outcome));
             let _ = reply.send(match outcome {
                 Ok(result) => result.map_err(|status| failed("read relationships", &status)),
-                Err(_) => Err(format!(
+                Err(_) => Err(CallFailure::Timeout(format!(
                     "spicedb read relationships timed out after {timeout:?}"
-                )),
+                ))),
             });
         }
     }
@@ -335,12 +354,22 @@ fn written_at(response: &WriteRelationshipsResponse) -> Result<AuthorizationRevi
         .ok_or_else(|| "spicedb write relationships returned no written_at".to_owned())
 }
 
-fn failed(operation: &str, status: &tonic::Status) -> String {
-    format!(
+fn failed(operation: &str, status: &tonic::Status) -> CallFailure {
+    let reason = format!(
         "spicedb {operation} failed: {:?}: {}",
         status.code(),
         status.message()
-    )
+    );
+    // The request timeout of the channel (`Endpoint::timeout`) surfaces as
+    // `CANCELLED` with the text of `TimeoutExpired`, without a source.
+    let timed_out = status.code() == tonic::Code::DeadlineExceeded
+        || (status.code() == tonic::Code::Cancelled
+            && status.message() == tonic::TimeoutExpired(()).to_string());
+    if timed_out {
+        CallFailure::Timeout(reason)
+    } else {
+        CallFailure::Failed(reason)
+    }
 }
 
 /// Читает одну страницу stream `ReadRelationships` целиком.
@@ -361,14 +390,18 @@ async fn read_page(
 
 impl SpiceDbClient {
     /// Отправляет запрос в поток клиента и ждёт ответ не дольше timeout.
-    fn call<T>(&self, job: impl FnOnce(Reply<T>) -> Job, operation: &str) -> Result<T, String> {
+    fn call<T>(
+        &self,
+        job: impl FnOnce(Reply<T>) -> Job,
+        operation: &str,
+    ) -> Result<T, CallFailure> {
         let (reply, receiver) = std_mpsc::sync_channel(1);
         self.jobs
             .send(Traced {
                 job: job(reply),
                 parent: Context::current(),
             })
-            .map_err(|_| "spicedb client stopped".to_owned())?;
+            .map_err(|_| CallFailure::Failed("spicedb client stopped".to_owned()))?;
 
         let wait = || receiver.recv_timeout(self.timeout + REPLY_GRACE);
         let received = match Handle::try_current() {
@@ -377,12 +410,17 @@ impl SpiceDbClient {
             }
             _ => wait(),
         };
-        received.map_err(|_| format!("spicedb {operation} timed out after {:?}", self.timeout))?
+        received.map_err(|_| {
+            CallFailure::Timeout(format!(
+                "spicedb {operation} timed out after {:?}",
+                self.timeout
+            ))
+        })?
     }
 }
 
 impl PermissionChecker for SpiceDbClient {
-    fn check(&self, check: &PermissionCheck) -> Result<bool, String> {
+    fn check(&self, check: &PermissionCheck) -> Result<bool, CallFailure> {
         self.call(|reply| Job::Check(request(check), reply), "check")
     }
 }
@@ -397,6 +435,7 @@ impl RelationshipGraph for SpiceDbClient {
             |reply| Job::Write(write_request(operation, relationship), reply),
             "write relationships",
         )
+        .map_err(|failure| failure.to_string())
     }
 
     fn read_page(
@@ -410,6 +449,7 @@ impl RelationshipGraph for SpiceDbClient {
             |reply| Job::Read(read_request(resource_type, relation, cursor, limit), reply),
             "read relationships",
         )
+        .map_err(|failure| failure.to_string())
     }
 }
 

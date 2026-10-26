@@ -10,7 +10,11 @@
 //! revision, сохранённой с ресурсом ([`RevisionReader`], FR-447); без revision
 //! и для `platform:nomnom` — `minimize_latency` (FR-448). Ошибка чтения
 //! revision — authorization unavailable (fail closed).
+//!
+//! Каждое решение по отображённому check, включая отказ из-за непрочитанной
+//! revision, пишет метрики порта авторизации ([`CheckMetrics`]).
 
+mod checks;
 mod client;
 mod mapping;
 mod relationships;
@@ -23,7 +27,10 @@ pub mod v1 {
     include!("gen/authzed/api/v1/authzed.api.v1.rs");
 }
 
-pub use client::{ClientTelemetry, PermissionChecker, SpiceDbClient, SpiceDbConfigError};
+pub use checks::{AUTHZ_METER_NAME, CheckMetrics};
+pub use client::{
+    CallFailure, ClientTelemetry, PermissionChecker, SpiceDbClient, SpiceDbConfigError,
+};
 pub use mapping::{
     CheckConsistency, PermissionCheck, courier_check, delivery_check, simulator_check,
 };
@@ -38,6 +45,9 @@ pub use revisions::{RepositoryRevisions, RevisionReader};
 pub(crate) use relationships::tests::FakeGraph;
 
 use std::sync::Arc;
+use std::time::Instant;
+
+use checks::CheckResult;
 
 use crate::pkg::application::{AuthorizationError, Subject};
 use crate::pkg::config::SpiceDbConfig;
@@ -53,6 +63,7 @@ use crate::slices::simulator::applications::authorization::SimulatorAuthorizatio
 pub struct SpiceDbAuthorization {
     checker: Box<dyn PermissionChecker>,
     revisions: Option<Arc<dyn RevisionReader>>,
+    metrics: CheckMetrics,
 }
 
 impl std::fmt::Debug for SpiceDbAuthorization {
@@ -64,13 +75,15 @@ impl std::fmt::Debug for SpiceDbAuthorization {
 }
 
 impl SpiceDbAuthorization {
-    /// Адаптер поверх произвольного checker — для тестов маппинга и отказов.
-    /// Без [`RevisionReader`] все checks идут с `minimize_latency`.
+    /// Адаптер поверх произвольного checker (в тестах — fake маппинга и
+    /// отказов) с метриками checks. Без [`RevisionReader`] все checks идут с
+    /// `minimize_latency`.
     #[must_use]
-    pub fn new(checker: Box<dyn PermissionChecker>) -> Self {
+    pub fn new(checker: Box<dyn PermissionChecker>, metrics: CheckMetrics) -> Self {
         Self {
             checker,
             revisions: None,
+            metrics,
         }
     }
 
@@ -83,19 +96,37 @@ impl SpiceDbAuthorization {
 
     /// Ошибка — пустой endpoint или невалидная конфигурация.
     pub fn from_config(config: &SpiceDbConfig) -> Result<Self, SpiceDbConfigError> {
-        Ok(Self::new(Box::new(SpiceDbClient::connect(config)?)))
+        Ok(Self::new(
+            Box::new(SpiceDbClient::connect(config)?),
+            CheckMetrics::global(),
+        ))
     }
 
     fn decide(&self, check: Option<PermissionCheck>) -> Result<(), AuthorizationError> {
         let Some(mut check) = check else {
             return Err(AuthorizationError::Denied);
         };
-        check.consistency = self.consistency(&check)?;
-        match self.checker.check(&check) {
-            Ok(true) => Ok(()),
-            Ok(false) => Err(AuthorizationError::Denied),
-            Err(reason) => Err(AuthorizationError::Unavailable(reason)),
-        }
+        let started = Instant::now();
+        // Непрочитанная revision — отказ до SpiceDB (fail closed), `error`.
+        let answer = self.consistency(&check).map(|consistency| {
+            check.consistency = consistency;
+            self.checker.check(&check)
+        });
+        let (result, decision) = match answer {
+            Ok(Ok(true)) => (CheckResult::Allowed, Ok(())),
+            Ok(Ok(false)) => (CheckResult::Denied, Err(AuthorizationError::Denied)),
+            Ok(Err(CallFailure::Timeout(reason))) => (
+                CheckResult::Timeout,
+                Err(AuthorizationError::Unavailable(reason)),
+            ),
+            Ok(Err(CallFailure::Failed(reason))) => (
+                CheckResult::Error,
+                Err(AuthorizationError::Unavailable(reason)),
+            ),
+            Err(error) => (CheckResult::Error, Err(error)),
+        };
+        self.metrics.record(&check, result, started);
+        decision
     }
 }
 

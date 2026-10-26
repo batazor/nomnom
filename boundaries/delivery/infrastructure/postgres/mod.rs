@@ -39,6 +39,7 @@ pub use pool::{
     OPERATION_BUCKETS, ObservedConnection, POOL_METER_NAME, POOL_NAME, POOL_TIME_BUCKETS,
     PoolMetrics, error_type, operation_name, pool_options,
 };
+pub use transaction::{TransactionMetrics, UOW_METER_NAME};
 
 use crate::pkg::config::{DATABASE_URL_ENV, DatabaseConfig};
 use crate::pkg::persistence::RepositoryError;
@@ -75,6 +76,8 @@ pub struct PostgresStore {
     id: usize,
     pool: Option<Arc<PgPool>>,
     metrics: PoolMetrics,
+    /// Unit of Work outcomes and durations (`transaction`).
+    transactions: TransactionMetrics,
     /// Client spans of statements (`pkg/telemetry/db`).
     tracer: opentelemetry::global::BoxedTracer,
     mapper: Arc<dyn OutboxMapper>,
@@ -109,6 +112,7 @@ impl PostgresStore {
         Ok(Self {
             id: NEXT_STORE_ID.fetch_add(1, Ordering::Relaxed),
             metrics,
+            transactions: TransactionMetrics::global(),
             tracer: opentelemetry::global::tracer(crate::pkg::telemetry::db::INSTRUMENTATION),
             pool: Some(pool),
             mapper: Arc::new(NoIntegrationEvents),
@@ -120,6 +124,14 @@ impl PostgresStore {
     #[must_use]
     pub fn with_outbox_mapper(mut self, mapper: Arc<dyn OutboxMapper>) -> Self {
         self.mapper = mapper;
+        self
+    }
+
+    /// Replaces the Unit of Work instruments of the global MeterProvider
+    /// (tests read them from their own provider).
+    #[must_use]
+    pub fn with_transaction_metrics(mut self, metrics: TransactionMetrics) -> Self {
+        self.transactions = metrics;
         self
     }
 

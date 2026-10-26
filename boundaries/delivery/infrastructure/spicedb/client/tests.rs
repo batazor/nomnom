@@ -146,7 +146,10 @@ fn unreachable_endpoint_is_an_error_not_a_decision() {
         consistency: CheckConsistency::MinimizeLatency,
     });
 
-    assert!(outcome.is_err(), "{outcome:?}");
+    assert!(
+        matches!(outcome, Err(CallFailure::Failed(_))),
+        "{outcome:?}"
+    );
 }
 
 #[test]
@@ -166,7 +169,10 @@ fn silent_endpoint_times_out_within_deadline() {
         consistency: CheckConsistency::MinimizeLatency,
     });
 
-    assert!(outcome.is_err(), "{outcome:?}");
+    assert!(
+        matches!(outcome, Err(CallFailure::Timeout(_))),
+        "{outcome:?}"
+    );
     assert!(started.elapsed() < Duration::from_millis(200) + REPLY_GRACE);
 }
 

@@ -41,6 +41,7 @@ use crate::slices::delivery::infrastructure::failure_log::FailureLog;
 use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
 use crate::slices::simulator::applications::authorization::SimulatorAuthorization;
 use crate::slices::simulator::di::{SimulatorDependencies, SimulatorPorts, SimulatorStore};
+use crate::slices::delivery::infrastructure::transitions::TransitionMetrics;
 
 /// Локальные значения политики назначения до появления продуктовых настроек.
 const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
@@ -256,15 +257,20 @@ pub struct LocalDeliveryPorts {
 /// Delivery Failure Reason catalog (the free-text detail is never recorded).
 const DELIVERY_FAILURE_REASONS: &[&str] = &DeliveryFailureCode::CODES;
 
-/// Business metrics and the Delivery Failure log of the process.
+/// Business metrics, FSM transitions and the Delivery Failure log of the
+/// process.
 fn observed_outbox() -> ObservedOutbox {
-    ObservedOutbox::new(DomainMetrics::global(DELIVERY_FAILURE_REASONS))
-        .with_failure_log(FailureLog)
+    ObservedOutbox::new(
+        DomainMetrics::global(DELIVERY_FAILURE_REASONS),
+        TransitionMetrics::global(),
+    )
+    .with_failure_log(FailureLog)
 }
 
-/// [`TransactionalStore`] of the slice whose Unit of Work and Outbox go
-/// through [`ObservedOutbox`]: business metrics are recorded after the
-/// outermost commit. Repositories and courier assignment delegate as is.
+/// [`TransactionalStore`] of the slice whose Unit of Work, Outbox and
+/// aggregate repositories go through [`ObservedOutbox`]: business metrics and
+/// FSM transitions are recorded after the outermost commit. Queries and
+/// courier assignment delegate as is.
 pub struct ObservedStore {
     inner: Arc<dyn TransactionalStore>,
     observed: ObservedOutbox,
@@ -291,33 +297,33 @@ impl DeliveryOutbox for ObservedStore {
 
 impl DeliveryRepository for ObservedStore {
     fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
-        DeliveryRepository::get(&*self.inner, id)
+        self.observed.get_delivery(&*self.inner, id)
     }
 
     fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
-        self.inner.find_by_order(order_id)
+        self.observed.find_delivery_by_order(&*self.inner, order_id)
     }
 
     fn add(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
-        DeliveryRepository::add(&*self.inner, delivery)
+        self.observed.add_delivery(&*self.inner, delivery)
     }
 
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
-        DeliveryRepository::save(&*self.inner, delivery)
+        self.observed.save_delivery(&*self.inner, delivery)
     }
 }
 
 impl DeliveryOfferRepository for ObservedStore {
     fn get(&self, id: &DeliveryOfferId) -> Result<Option<DeliveryOffer>, RepositoryError> {
-        DeliveryOfferRepository::get(&*self.inner, id)
+        self.observed.get_offer(&*self.inner, id)
     }
 
     fn add(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
-        DeliveryOfferRepository::add(&*self.inner, offer)
+        self.observed.add_offer(&*self.inner, offer)
     }
 
     fn save(&self, offer: &DeliveryOffer) -> Result<(), RepositoryError> {
-        DeliveryOfferRepository::save(&*self.inner, offer)
+        self.observed.save_offer(&*self.inner, offer)
     }
 }
 

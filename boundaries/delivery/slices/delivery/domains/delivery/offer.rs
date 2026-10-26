@@ -11,7 +11,7 @@ pub use acceptance::*;
 use transitions::offer_transition;
 #[cfg(test)]
 use transitions::{ALL_OFFER_STATES, ALL_OFFER_TRIGGERS, OFFER_TRANSITION_TABLE};
-pub use transitions::{OfferState, OfferTransitionResult, OfferTrigger};
+pub use transitions::{OfferState, OfferTransitionResult, OfferTrigger, applied_offer_transition};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct DeliveryOfferId(String);
