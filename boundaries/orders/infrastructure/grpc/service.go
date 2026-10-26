@@ -9,11 +9,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
+	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
-	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
@@ -25,14 +25,23 @@ type SimulatorSwitch interface {
 	Set(ctx context.Context, command switchsimulator.SetCommand) (bool, error)
 }
 
+// OrderHandlers are the order use cases the API serves. The composition root
+// fills them from the assembled order slice.
+type OrderHandlers struct {
+	PlaceOrder               application.Handler[placeorder.Input, placeorder.Result]
+	RequestOrderCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
+	GetOrder                 application.Handler[getorder.Query, getorder.OrderView]
+	ListCustomerOrders       application.Handler[listcustomerorders.Query, listcustomerorders.Page]
+}
+
 type Service struct {
 	ordersv1.UnimplementedOrdersServiceServer
-	module    *orderdi.Module
+	module    OrderHandlers
 	simulator SimulatorSwitch
 	subjects  SubjectResolver
 }
 
-func NewService(module *orderdi.Module, simulator SimulatorSwitch, subjects SubjectResolver) *Service {
+func NewService(module OrderHandlers, simulator SimulatorSwitch, subjects SubjectResolver) *Service {
 	return &Service{module: module, simulator: simulator, subjects: subjects}
 }
 

@@ -81,7 +81,13 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 		IDs:        &fake.IDs{},
 		Telemetry:  observability.UseCases(),
 	})
-	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module,
+	handlers := grpcadapter.OrderHandlers{
+		PlaceOrder:               module.PlaceOrder,
+		RequestOrderCancellation: module.RequestOrderCancellation,
+		GetOrder:                 module.GetOrder,
+		ListCustomerOrders:       module.ListCustomerOrders,
+	}
+	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(handlers,
 		switchsimulator.NewHandlers(authorizer, simulatorrepository.NewState(store.Pool())), subjects))
 	go func() {
 		_ = server.Serve(listener)

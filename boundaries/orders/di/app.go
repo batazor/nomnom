@@ -103,6 +103,11 @@ func NewGRPCServer(module *orderdi.Module, simulator *simulatordi.Module, subjec
 	// keep GracefulStop waiting beyond the process drain budget.
 	// otelgrpc пишет в глобальный MeterProvider, который App.Start регистрирует.
 	server := grpc.NewServer(grpc.ConnectionTimeout(2*time.Second), grpc.StatsHandler(otelgrpc.NewServerHandler()))
-	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module, simulator.Switch, subjects))
+	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(grpcadapter.OrderHandlers{
+		PlaceOrder:               module.PlaceOrder,
+		RequestOrderCancellation: module.RequestOrderCancellation,
+		GetOrder:                 module.GetOrder,
+		ListCustomerOrders:       module.ListCustomerOrders,
+	}, simulator.Switch, subjects))
 	return server
 }
