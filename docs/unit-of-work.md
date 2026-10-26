@@ -2,7 +2,7 @@
 
 Документ описывает Unit of Work (UoW) — локальную транзакционную границу application use case внутри bounded context. Решение зафиксировано в [ADR 20](adr/0020-unit-of-work-for-local-transactions.md). Документ дополняет [Inbox ADR](adr/0011-transactional-inbox-and-idempotent-event-processing.md), [Outbox ADR](adr/0013-transactional-outbox-for-integration-event-publishing.md), [DDD-структуру слайсов](adr/0006-ddd-structure-inside-vertical-slices.md), [SpiceDB ADR](adr/0018-spicedb-for-authorization.md) и [документацию событийного взаимодействия](event-driven-architecture.md).
 
-Документ фиксирует правила. Port UoW и его in-memory реализации уже созданы вместе с application-слоем boundaries; production-реализации поверх хранилищ и миграции появятся с соответствующими SDD changes.
+Документ фиксирует правила. Production-реализации есть во всех контекстах: PostgreSQL в `orders`, `payments`, `delivery`, MongoDB в `restaurants`. Каждая пишет метрики `nomnom.uow.*` ([docs/observability.md](observability.md)).
 
 ## Назначение
 
@@ -180,6 +180,8 @@ Retry возможен только потому, что `fn` не имеет si
 Встроенные механизмы драйверов приводятся к этой политике. Например, `withTransaction` MongoDB повторяет callback до 120 секунд; число попыток и время ограничиваются так же, как в PostgreSQL.
 
 Каждый retry логируется и отражается в metrics и traces с причиной (см. [Observability](#observability)).
+
+Состояние по контекстам: `orders` и `payments` повторяют внешний `Do`/`run` до 3 попыток на классе `40` PostgreSQL (`40001`, `40P01`) и конфликте версии; `restaurants` — повторы `withTransaction` драйвера MongoDB (`write_conflict` для кода 112); в `delivery` retry нет — `UnitOfWork::run` принимает `FnOnce`, и `nomnom.uow.retries` не пишется.
 
 ## Repositories и propagation
 
