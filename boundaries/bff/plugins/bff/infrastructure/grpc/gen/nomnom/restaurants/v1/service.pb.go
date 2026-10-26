@@ -1993,7 +1993,10 @@ type ActiveRestaurantOrder struct {
 	RestaurantOrder *RestaurantOrder       `protobuf:"bytes,1,opt,name=restaurant_order,json=restaurantOrder,proto3" json:"restaurant_order,omitempty"`
 	Items           []*RestaurantOrderItem `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
 	// Unset only on orders received before the time was recorded.
-	ReceivedAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
+	ReceivedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
+	// Time of Acceptance; unset before it (RECEIVED). With expected_ready_at it
+	// bounds the cooking progress of the order.
+	AcceptedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=accepted_at,json=acceptedAt,proto3" json:"accepted_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2045,6 +2048,13 @@ func (x *ActiveRestaurantOrder) GetItems() []*RestaurantOrderItem {
 func (x *ActiveRestaurantOrder) GetReceivedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ReceivedAt
+	}
+	return nil
+}
+
+func (x *ActiveRestaurantOrder) GetAcceptedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AcceptedAt
 	}
 	return nil
 }
@@ -3461,12 +3471,14 @@ const file_nomnom_restaurants_v1_service_proto_rawDesc = "" +
 	"\x1aListIncomingOrdersResponse\x12<\n" +
 	"\x06orders\x18\x01 \x03(\v2$.nomnom.restaurants.v1.IncomingOrderR\x06orders\"H\n" +
 	"!ListActiveRestaurantOrdersRequest\x12#\n" +
-	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\"\xe9\x01\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\"\xa6\x02\n" +
 	"\x15ActiveRestaurantOrder\x12Q\n" +
 	"\x10restaurant_order\x18\x01 \x01(\v2&.nomnom.restaurants.v1.RestaurantOrderR\x0frestaurantOrder\x12@\n" +
 	"\x05items\x18\x02 \x03(\v2*.nomnom.restaurants.v1.RestaurantOrderItemR\x05items\x12;\n" +
 	"\vreceived_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"receivedAt\"j\n" +
+	"receivedAt\x12;\n" +
+	"\vaccepted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"acceptedAt\"j\n" +
 	"\"ListActiveRestaurantOrdersResponse\x12D\n" +
 	"\x06orders\x18\x01 \x03(\v2,.nomnom.restaurants.v1.ActiveRestaurantOrderR\x06orders\"d\n" +
 	"\x19RegisterRestaurantRequest\x12\x12\n" +
@@ -3711,74 +3723,75 @@ var file_nomnom_restaurants_v1_service_proto_depIdxs = []int32{
 	14, // 24: nomnom.restaurants.v1.ActiveRestaurantOrder.restaurant_order:type_name -> nomnom.restaurants.v1.RestaurantOrder
 	33, // 25: nomnom.restaurants.v1.ActiveRestaurantOrder.items:type_name -> nomnom.restaurants.v1.RestaurantOrderItem
 	63, // 26: nomnom.restaurants.v1.ActiveRestaurantOrder.received_at:type_name -> google.protobuf.Timestamp
-	37, // 27: nomnom.restaurants.v1.ListActiveRestaurantOrdersResponse.orders:type_name -> nomnom.restaurants.v1.ActiveRestaurantOrder
-	61, // 28: nomnom.restaurants.v1.RegisterRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
-	61, // 29: nomnom.restaurants.v1.OpenRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
-	61, // 30: nomnom.restaurants.v1.CloseRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
-	64, // 31: nomnom.restaurants.v1.AddMenuItemRequest.price:type_name -> nomnom.restaurants.v1.Money
-	62, // 32: nomnom.restaurants.v1.AddMenuItemResponse.menu_item:type_name -> nomnom.restaurants.v1.MenuItem
-	64, // 33: nomnom.restaurants.v1.UpdateMenuItemRequest.price:type_name -> nomnom.restaurants.v1.Money
-	62, // 34: nomnom.restaurants.v1.UpdateMenuItemResponse.menu_item:type_name -> nomnom.restaurants.v1.MenuItem
-	62, // 35: nomnom.restaurants.v1.SetMenuItemAvailabilityResponse.menu_item:type_name -> nomnom.restaurants.v1.MenuItem
-	1,  // 36: nomnom.restaurants.v1.RestaurantsService.GetRestaurant:input_type -> nomnom.restaurants.v1.GetRestaurantRequest
-	3,  // 37: nomnom.restaurants.v1.RestaurantsService.GetMenu:input_type -> nomnom.restaurants.v1.GetMenuRequest
-	5,  // 38: nomnom.restaurants.v1.RestaurantsService.ListRestaurants:input_type -> nomnom.restaurants.v1.ListRestaurantsRequest
-	7,  // 39: nomnom.restaurants.v1.RestaurantsService.ListOwnedRestaurants:input_type -> nomnom.restaurants.v1.ListOwnedRestaurantsRequest
-	10, // 40: nomnom.restaurants.v1.RestaurantsService.ReceiveOrderRequest:input_type -> nomnom.restaurants.v1.ReceiveOrderRequestRequest
-	12, // 41: nomnom.restaurants.v1.RestaurantsService.CancelRestaurantOrder:input_type -> nomnom.restaurants.v1.CancelRestaurantOrderRequest
-	15, // 42: nomnom.restaurants.v1.RestaurantsService.AcceptRestaurantOrder:input_type -> nomnom.restaurants.v1.AcceptRestaurantOrderRequest
-	17, // 43: nomnom.restaurants.v1.RestaurantsService.RejectRestaurantOrder:input_type -> nomnom.restaurants.v1.RejectRestaurantOrderRequest
-	19, // 44: nomnom.restaurants.v1.RestaurantsService.StartPreparation:input_type -> nomnom.restaurants.v1.StartPreparationRequest
-	21, // 45: nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderAssembled:input_type -> nomnom.restaurants.v1.MarkRestaurantOrderAssembledRequest
-	23, // 46: nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderReady:input_type -> nomnom.restaurants.v1.MarkRestaurantOrderReadyRequest
-	25, // 47: nomnom.restaurants.v1.RestaurantsService.ReportPreparationDelay:input_type -> nomnom.restaurants.v1.ReportPreparationDelayRequest
-	27, // 48: nomnom.restaurants.v1.RestaurantsService.ReportPreparationFailure:input_type -> nomnom.restaurants.v1.ReportPreparationFailureRequest
-	29, // 49: nomnom.restaurants.v1.RestaurantsService.GetKitchenQueue:input_type -> nomnom.restaurants.v1.GetKitchenQueueRequest
-	32, // 50: nomnom.restaurants.v1.RestaurantsService.ListIncomingOrders:input_type -> nomnom.restaurants.v1.ListIncomingOrdersRequest
-	36, // 51: nomnom.restaurants.v1.RestaurantsService.ListActiveRestaurantOrders:input_type -> nomnom.restaurants.v1.ListActiveRestaurantOrdersRequest
-	39, // 52: nomnom.restaurants.v1.RestaurantsService.RegisterRestaurant:input_type -> nomnom.restaurants.v1.RegisterRestaurantRequest
-	41, // 53: nomnom.restaurants.v1.RestaurantsService.AssignStaff:input_type -> nomnom.restaurants.v1.AssignStaffRequest
-	43, // 54: nomnom.restaurants.v1.RestaurantsService.RevokeStaff:input_type -> nomnom.restaurants.v1.RevokeStaffRequest
-	45, // 55: nomnom.restaurants.v1.RestaurantsService.OpenRestaurant:input_type -> nomnom.restaurants.v1.OpenRestaurantRequest
-	47, // 56: nomnom.restaurants.v1.RestaurantsService.CloseRestaurant:input_type -> nomnom.restaurants.v1.CloseRestaurantRequest
-	49, // 57: nomnom.restaurants.v1.RestaurantsService.CreateMenu:input_type -> nomnom.restaurants.v1.CreateMenuRequest
-	51, // 58: nomnom.restaurants.v1.RestaurantsService.AddMenuItem:input_type -> nomnom.restaurants.v1.AddMenuItemRequest
-	53, // 59: nomnom.restaurants.v1.RestaurantsService.UpdateMenuItem:input_type -> nomnom.restaurants.v1.UpdateMenuItemRequest
-	55, // 60: nomnom.restaurants.v1.RestaurantsService.SetMenuItemAvailability:input_type -> nomnom.restaurants.v1.SetMenuItemAvailabilityRequest
-	57, // 61: nomnom.restaurants.v1.RestaurantsService.GetSimulator:input_type -> nomnom.restaurants.v1.GetSimulatorRequest
-	59, // 62: nomnom.restaurants.v1.RestaurantsService.SetSimulatorEnabled:input_type -> nomnom.restaurants.v1.SetSimulatorEnabledRequest
-	2,  // 63: nomnom.restaurants.v1.RestaurantsService.GetRestaurant:output_type -> nomnom.restaurants.v1.GetRestaurantResponse
-	4,  // 64: nomnom.restaurants.v1.RestaurantsService.GetMenu:output_type -> nomnom.restaurants.v1.GetMenuResponse
-	6,  // 65: nomnom.restaurants.v1.RestaurantsService.ListRestaurants:output_type -> nomnom.restaurants.v1.ListRestaurantsResponse
-	8,  // 66: nomnom.restaurants.v1.RestaurantsService.ListOwnedRestaurants:output_type -> nomnom.restaurants.v1.ListOwnedRestaurantsResponse
-	11, // 67: nomnom.restaurants.v1.RestaurantsService.ReceiveOrderRequest:output_type -> nomnom.restaurants.v1.ReceiveOrderRequestResponse
-	13, // 68: nomnom.restaurants.v1.RestaurantsService.CancelRestaurantOrder:output_type -> nomnom.restaurants.v1.CancelRestaurantOrderResponse
-	16, // 69: nomnom.restaurants.v1.RestaurantsService.AcceptRestaurantOrder:output_type -> nomnom.restaurants.v1.AcceptRestaurantOrderResponse
-	18, // 70: nomnom.restaurants.v1.RestaurantsService.RejectRestaurantOrder:output_type -> nomnom.restaurants.v1.RejectRestaurantOrderResponse
-	20, // 71: nomnom.restaurants.v1.RestaurantsService.StartPreparation:output_type -> nomnom.restaurants.v1.StartPreparationResponse
-	22, // 72: nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderAssembled:output_type -> nomnom.restaurants.v1.MarkRestaurantOrderAssembledResponse
-	24, // 73: nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderReady:output_type -> nomnom.restaurants.v1.MarkRestaurantOrderReadyResponse
-	26, // 74: nomnom.restaurants.v1.RestaurantsService.ReportPreparationDelay:output_type -> nomnom.restaurants.v1.ReportPreparationDelayResponse
-	28, // 75: nomnom.restaurants.v1.RestaurantsService.ReportPreparationFailure:output_type -> nomnom.restaurants.v1.ReportPreparationFailureResponse
-	31, // 76: nomnom.restaurants.v1.RestaurantsService.GetKitchenQueue:output_type -> nomnom.restaurants.v1.GetKitchenQueueResponse
-	35, // 77: nomnom.restaurants.v1.RestaurantsService.ListIncomingOrders:output_type -> nomnom.restaurants.v1.ListIncomingOrdersResponse
-	38, // 78: nomnom.restaurants.v1.RestaurantsService.ListActiveRestaurantOrders:output_type -> nomnom.restaurants.v1.ListActiveRestaurantOrdersResponse
-	40, // 79: nomnom.restaurants.v1.RestaurantsService.RegisterRestaurant:output_type -> nomnom.restaurants.v1.RegisterRestaurantResponse
-	42, // 80: nomnom.restaurants.v1.RestaurantsService.AssignStaff:output_type -> nomnom.restaurants.v1.AssignStaffResponse
-	44, // 81: nomnom.restaurants.v1.RestaurantsService.RevokeStaff:output_type -> nomnom.restaurants.v1.RevokeStaffResponse
-	46, // 82: nomnom.restaurants.v1.RestaurantsService.OpenRestaurant:output_type -> nomnom.restaurants.v1.OpenRestaurantResponse
-	48, // 83: nomnom.restaurants.v1.RestaurantsService.CloseRestaurant:output_type -> nomnom.restaurants.v1.CloseRestaurantResponse
-	50, // 84: nomnom.restaurants.v1.RestaurantsService.CreateMenu:output_type -> nomnom.restaurants.v1.CreateMenuResponse
-	52, // 85: nomnom.restaurants.v1.RestaurantsService.AddMenuItem:output_type -> nomnom.restaurants.v1.AddMenuItemResponse
-	54, // 86: nomnom.restaurants.v1.RestaurantsService.UpdateMenuItem:output_type -> nomnom.restaurants.v1.UpdateMenuItemResponse
-	56, // 87: nomnom.restaurants.v1.RestaurantsService.SetMenuItemAvailability:output_type -> nomnom.restaurants.v1.SetMenuItemAvailabilityResponse
-	58, // 88: nomnom.restaurants.v1.RestaurantsService.GetSimulator:output_type -> nomnom.restaurants.v1.GetSimulatorResponse
-	60, // 89: nomnom.restaurants.v1.RestaurantsService.SetSimulatorEnabled:output_type -> nomnom.restaurants.v1.SetSimulatorEnabledResponse
-	63, // [63:90] is the sub-list for method output_type
-	36, // [36:63] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	63, // 27: nomnom.restaurants.v1.ActiveRestaurantOrder.accepted_at:type_name -> google.protobuf.Timestamp
+	37, // 28: nomnom.restaurants.v1.ListActiveRestaurantOrdersResponse.orders:type_name -> nomnom.restaurants.v1.ActiveRestaurantOrder
+	61, // 29: nomnom.restaurants.v1.RegisterRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
+	61, // 30: nomnom.restaurants.v1.OpenRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
+	61, // 31: nomnom.restaurants.v1.CloseRestaurantResponse.restaurant:type_name -> nomnom.restaurants.v1.Restaurant
+	64, // 32: nomnom.restaurants.v1.AddMenuItemRequest.price:type_name -> nomnom.restaurants.v1.Money
+	62, // 33: nomnom.restaurants.v1.AddMenuItemResponse.menu_item:type_name -> nomnom.restaurants.v1.MenuItem
+	64, // 34: nomnom.restaurants.v1.UpdateMenuItemRequest.price:type_name -> nomnom.restaurants.v1.Money
+	62, // 35: nomnom.restaurants.v1.UpdateMenuItemResponse.menu_item:type_name -> nomnom.restaurants.v1.MenuItem
+	62, // 36: nomnom.restaurants.v1.SetMenuItemAvailabilityResponse.menu_item:type_name -> nomnom.restaurants.v1.MenuItem
+	1,  // 37: nomnom.restaurants.v1.RestaurantsService.GetRestaurant:input_type -> nomnom.restaurants.v1.GetRestaurantRequest
+	3,  // 38: nomnom.restaurants.v1.RestaurantsService.GetMenu:input_type -> nomnom.restaurants.v1.GetMenuRequest
+	5,  // 39: nomnom.restaurants.v1.RestaurantsService.ListRestaurants:input_type -> nomnom.restaurants.v1.ListRestaurantsRequest
+	7,  // 40: nomnom.restaurants.v1.RestaurantsService.ListOwnedRestaurants:input_type -> nomnom.restaurants.v1.ListOwnedRestaurantsRequest
+	10, // 41: nomnom.restaurants.v1.RestaurantsService.ReceiveOrderRequest:input_type -> nomnom.restaurants.v1.ReceiveOrderRequestRequest
+	12, // 42: nomnom.restaurants.v1.RestaurantsService.CancelRestaurantOrder:input_type -> nomnom.restaurants.v1.CancelRestaurantOrderRequest
+	15, // 43: nomnom.restaurants.v1.RestaurantsService.AcceptRestaurantOrder:input_type -> nomnom.restaurants.v1.AcceptRestaurantOrderRequest
+	17, // 44: nomnom.restaurants.v1.RestaurantsService.RejectRestaurantOrder:input_type -> nomnom.restaurants.v1.RejectRestaurantOrderRequest
+	19, // 45: nomnom.restaurants.v1.RestaurantsService.StartPreparation:input_type -> nomnom.restaurants.v1.StartPreparationRequest
+	21, // 46: nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderAssembled:input_type -> nomnom.restaurants.v1.MarkRestaurantOrderAssembledRequest
+	23, // 47: nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderReady:input_type -> nomnom.restaurants.v1.MarkRestaurantOrderReadyRequest
+	25, // 48: nomnom.restaurants.v1.RestaurantsService.ReportPreparationDelay:input_type -> nomnom.restaurants.v1.ReportPreparationDelayRequest
+	27, // 49: nomnom.restaurants.v1.RestaurantsService.ReportPreparationFailure:input_type -> nomnom.restaurants.v1.ReportPreparationFailureRequest
+	29, // 50: nomnom.restaurants.v1.RestaurantsService.GetKitchenQueue:input_type -> nomnom.restaurants.v1.GetKitchenQueueRequest
+	32, // 51: nomnom.restaurants.v1.RestaurantsService.ListIncomingOrders:input_type -> nomnom.restaurants.v1.ListIncomingOrdersRequest
+	36, // 52: nomnom.restaurants.v1.RestaurantsService.ListActiveRestaurantOrders:input_type -> nomnom.restaurants.v1.ListActiveRestaurantOrdersRequest
+	39, // 53: nomnom.restaurants.v1.RestaurantsService.RegisterRestaurant:input_type -> nomnom.restaurants.v1.RegisterRestaurantRequest
+	41, // 54: nomnom.restaurants.v1.RestaurantsService.AssignStaff:input_type -> nomnom.restaurants.v1.AssignStaffRequest
+	43, // 55: nomnom.restaurants.v1.RestaurantsService.RevokeStaff:input_type -> nomnom.restaurants.v1.RevokeStaffRequest
+	45, // 56: nomnom.restaurants.v1.RestaurantsService.OpenRestaurant:input_type -> nomnom.restaurants.v1.OpenRestaurantRequest
+	47, // 57: nomnom.restaurants.v1.RestaurantsService.CloseRestaurant:input_type -> nomnom.restaurants.v1.CloseRestaurantRequest
+	49, // 58: nomnom.restaurants.v1.RestaurantsService.CreateMenu:input_type -> nomnom.restaurants.v1.CreateMenuRequest
+	51, // 59: nomnom.restaurants.v1.RestaurantsService.AddMenuItem:input_type -> nomnom.restaurants.v1.AddMenuItemRequest
+	53, // 60: nomnom.restaurants.v1.RestaurantsService.UpdateMenuItem:input_type -> nomnom.restaurants.v1.UpdateMenuItemRequest
+	55, // 61: nomnom.restaurants.v1.RestaurantsService.SetMenuItemAvailability:input_type -> nomnom.restaurants.v1.SetMenuItemAvailabilityRequest
+	57, // 62: nomnom.restaurants.v1.RestaurantsService.GetSimulator:input_type -> nomnom.restaurants.v1.GetSimulatorRequest
+	59, // 63: nomnom.restaurants.v1.RestaurantsService.SetSimulatorEnabled:input_type -> nomnom.restaurants.v1.SetSimulatorEnabledRequest
+	2,  // 64: nomnom.restaurants.v1.RestaurantsService.GetRestaurant:output_type -> nomnom.restaurants.v1.GetRestaurantResponse
+	4,  // 65: nomnom.restaurants.v1.RestaurantsService.GetMenu:output_type -> nomnom.restaurants.v1.GetMenuResponse
+	6,  // 66: nomnom.restaurants.v1.RestaurantsService.ListRestaurants:output_type -> nomnom.restaurants.v1.ListRestaurantsResponse
+	8,  // 67: nomnom.restaurants.v1.RestaurantsService.ListOwnedRestaurants:output_type -> nomnom.restaurants.v1.ListOwnedRestaurantsResponse
+	11, // 68: nomnom.restaurants.v1.RestaurantsService.ReceiveOrderRequest:output_type -> nomnom.restaurants.v1.ReceiveOrderRequestResponse
+	13, // 69: nomnom.restaurants.v1.RestaurantsService.CancelRestaurantOrder:output_type -> nomnom.restaurants.v1.CancelRestaurantOrderResponse
+	16, // 70: nomnom.restaurants.v1.RestaurantsService.AcceptRestaurantOrder:output_type -> nomnom.restaurants.v1.AcceptRestaurantOrderResponse
+	18, // 71: nomnom.restaurants.v1.RestaurantsService.RejectRestaurantOrder:output_type -> nomnom.restaurants.v1.RejectRestaurantOrderResponse
+	20, // 72: nomnom.restaurants.v1.RestaurantsService.StartPreparation:output_type -> nomnom.restaurants.v1.StartPreparationResponse
+	22, // 73: nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderAssembled:output_type -> nomnom.restaurants.v1.MarkRestaurantOrderAssembledResponse
+	24, // 74: nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderReady:output_type -> nomnom.restaurants.v1.MarkRestaurantOrderReadyResponse
+	26, // 75: nomnom.restaurants.v1.RestaurantsService.ReportPreparationDelay:output_type -> nomnom.restaurants.v1.ReportPreparationDelayResponse
+	28, // 76: nomnom.restaurants.v1.RestaurantsService.ReportPreparationFailure:output_type -> nomnom.restaurants.v1.ReportPreparationFailureResponse
+	31, // 77: nomnom.restaurants.v1.RestaurantsService.GetKitchenQueue:output_type -> nomnom.restaurants.v1.GetKitchenQueueResponse
+	35, // 78: nomnom.restaurants.v1.RestaurantsService.ListIncomingOrders:output_type -> nomnom.restaurants.v1.ListIncomingOrdersResponse
+	38, // 79: nomnom.restaurants.v1.RestaurantsService.ListActiveRestaurantOrders:output_type -> nomnom.restaurants.v1.ListActiveRestaurantOrdersResponse
+	40, // 80: nomnom.restaurants.v1.RestaurantsService.RegisterRestaurant:output_type -> nomnom.restaurants.v1.RegisterRestaurantResponse
+	42, // 81: nomnom.restaurants.v1.RestaurantsService.AssignStaff:output_type -> nomnom.restaurants.v1.AssignStaffResponse
+	44, // 82: nomnom.restaurants.v1.RestaurantsService.RevokeStaff:output_type -> nomnom.restaurants.v1.RevokeStaffResponse
+	46, // 83: nomnom.restaurants.v1.RestaurantsService.OpenRestaurant:output_type -> nomnom.restaurants.v1.OpenRestaurantResponse
+	48, // 84: nomnom.restaurants.v1.RestaurantsService.CloseRestaurant:output_type -> nomnom.restaurants.v1.CloseRestaurantResponse
+	50, // 85: nomnom.restaurants.v1.RestaurantsService.CreateMenu:output_type -> nomnom.restaurants.v1.CreateMenuResponse
+	52, // 86: nomnom.restaurants.v1.RestaurantsService.AddMenuItem:output_type -> nomnom.restaurants.v1.AddMenuItemResponse
+	54, // 87: nomnom.restaurants.v1.RestaurantsService.UpdateMenuItem:output_type -> nomnom.restaurants.v1.UpdateMenuItemResponse
+	56, // 88: nomnom.restaurants.v1.RestaurantsService.SetMenuItemAvailability:output_type -> nomnom.restaurants.v1.SetMenuItemAvailabilityResponse
+	58, // 89: nomnom.restaurants.v1.RestaurantsService.GetSimulator:output_type -> nomnom.restaurants.v1.GetSimulatorResponse
+	60, // 90: nomnom.restaurants.v1.RestaurantsService.SetSimulatorEnabled:output_type -> nomnom.restaurants.v1.SetSimulatorEnabledResponse
+	64, // [64:91] is the sub-list for method output_type
+	37, // [37:64] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_restaurants_v1_service_proto_init() }

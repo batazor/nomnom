@@ -6,7 +6,7 @@ from typing import override
 import pytest
 from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from pkg.application import PermissionDeniedError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -23,9 +23,9 @@ from slices.payment.applications.ports import PaymentPermission, ProviderOperati
 from slices.payment.domains.payment import OperationKind, OperationState
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class ListPaymentOperationsTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

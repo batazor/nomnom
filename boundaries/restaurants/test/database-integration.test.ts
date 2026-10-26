@@ -18,8 +18,8 @@ import {
   ConcurrencyConflictError,
 } from "../pkg/application/errors.ts";
 import {
-  connectMongoDb,
-  type MongoDbConnection,
+  connectDatabase,
+  type DatabaseConnection,
 } from "../pkg/infrastructure/repository/client.ts";
 import {
   MIGRATIONS_LOCK_COLLECTION,
@@ -29,25 +29,25 @@ import {
 } from "../pkg/infrastructure/repository/migrate.ts";
 import { up as dropOutboxRelay } from "../pkg/infrastructure/repository/migrations/0003-outbox-drop-polling-relay.ts";
 import {
-  MongoOutbox,
+  DatabaseOutbox,
   OUTBOX_COLLECTION,
   type OutboxEventMapper,
   outboxEventId,
 } from "../pkg/infrastructure/repository/outbox.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
   createMenuCollection,
-  MongoMenuReader,
-  MongoMenuRepository,
+  DatabaseMenuReader,
+  DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantCatalog,
-  MongoRestaurantMemberships,
-  MongoRestaurantRepository,
+  DatabaseRestaurantCatalog,
+  DatabaseRestaurantMemberships,
+  DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import {
   DuplicateOrderIdError,
@@ -56,14 +56,14 @@ import {
 } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   createRestaurantOrderCollection,
-  MongoKitchenBoard,
-  MongoRestaurantOrderRepository,
+  DatabaseKitchenBoard,
+  DatabaseRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
-import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
+import { databaseUri, noKitchenChanges } from "./support/database.ts";
 
 // Runs against a MongoDB replica set (transactions), for example
 // the testcontainer of the global setup (test/support/global-containers.ts).
-const uri = mongoUri();
+const uri = databaseUri();
 
 const now = new Date(Date.UTC(2026, 9, 25, 9));
 
@@ -74,14 +74,14 @@ const testMapper: OutboxEventMapper = (_aggregate, event) => ({
 });
 
 describe("startup migration", () => {
-  let mongo: MongoDbConnection;
+  let database: DatabaseConnection;
   /** File names of every set, in the order of RESTAURANTS_MIGRATION_SETS. */
   let files: Map<string, string[]>;
-  /** Every migration as `<set>/<fileName>`, in application order. */
+  /** Every migration as `<id>/<fileName>`, in application order. */
   let migrations: string[];
 
   before(async () => {
-    mongo = await connectMongoDb({
+    database = await connectDatabase({
       enabled: true,
       uri,
       database: "restaurants_test",
@@ -90,7 +90,7 @@ describe("startup migration", () => {
     files = new Map();
     for (const set of RESTAURANTS_MIGRATION_SETS) {
       files.set(
-        set.name,
+        set.id,
         (await readdir(set.dir)).filter((name) => name.endsWith(".ts")).sort(),
       );
     }
@@ -100,11 +100,13 @@ describe("startup migration", () => {
   });
 
   after(async () => {
-    await mongo?.close();
+    await database?.close();
   });
 
   const freshDatabase = (t: { after(fn: () => Promise<void>): void }) => {
-    const db = mongo.client.db(`restaurants_test_${randomUUID().slice(0, 8)}`);
+    const db = database.client.db(
+      `restaurants_test_${randomUUID().slice(0, 8)}`,
+    );
     t.after(async () => {
       await db.dropDatabase();
     });
@@ -139,9 +141,19 @@ describe("startup migration", () => {
     ]) {
       assert.ok(collections.includes(name), name);
     }
-    // One changelog per set.
+    // One changelog per set, named by its storage id only: part of the
+    // schema contract, independent of directory and slice names.
+    for (const name of [
+      "migrations_changelog_messaging",
+      "migrations_changelog_restaurants",
+      "migrations_changelog_menus",
+      "migrations_changelog_restaurant_orders",
+      "migrations_changelog_simulator",
+    ]) {
+      assert.ok(collections.includes(name), name);
+    }
     for (const set of RESTAURANTS_MIGRATION_SETS) {
-      assert.deepEqual(await changelogOf(db, set), files.get(set.name));
+      assert.deepEqual(await changelogOf(db, set), files.get(set.id));
     }
 
     const messages: string[] = [];
@@ -197,9 +209,9 @@ describe("startup migration", () => {
     // Separate processes: migrate-mongo's configuration is process-wide, so
     // runs within one process are queued and never meet at the lock.
     const script = `
-      import { connectMongoDb } from ${JSON.stringify(import.meta.resolve("../pkg/infrastructure/repository/client.ts"))};
+      import { connectDatabase } from ${JSON.stringify(import.meta.resolve("../pkg/infrastructure/repository/client.ts"))};
       import { migrateRestaurantsDatabase } from ${JSON.stringify(import.meta.resolve("../infrastructure/repository/migrate.ts"))};
-      const mongo = await connectMongoDb({
+      const database = await connectDatabase({
         enabled: true,
         uri: process.env.MONGODB_URI,
         database: process.env.MIGRATE_DATABASE,
@@ -207,7 +219,7 @@ describe("startup migration", () => {
       });
       // Exits without closing the client: migrate-mongo creates the lock's
       // TTL index without awaiting it, so a close right after a run rejects.
-      const applied = await migrateRestaurantsDatabase(mongo.db);
+      const applied = await migrateRestaurantsDatabase(database.db);
       process.stdout.write(JSON.stringify(applied), () => process.exit(0));
     `;
     const runs = await Promise.all(
@@ -229,7 +241,7 @@ describe("startup migration", () => {
     for (const set of RESTAURANTS_MIGRATION_SETS) {
       assert.deepEqual(
         [...new Set(await changelogOf(db, set))].sort(),
-        files.get(set.name),
+        files.get(set.id),
       );
     }
     assert.equal(
@@ -248,7 +260,7 @@ describe("startup migration", () => {
 
   test("the lock of a crashed process expires", async (t) => {
     // The TTL monitor removes expired documents every second instead of 60.
-    const admin = mongo.client.db("admin");
+    const admin = database.client.db("admin");
     const { was } = await admin.command({
       setParameter: 1,
       ttlMonitorSleepSecs: 1,
@@ -282,15 +294,15 @@ describe("startup migration", () => {
     );
     const db = freshDatabase(t);
     const failing: MigrationSet = {
-      name: "failing",
+      id: "failing",
       dir: pathToFileURL(`${dir}/`),
     };
-    const [pkg] = RESTAURANTS_MIGRATION_SETS;
-    assert.ok(pkg);
+    const [messaging] = RESTAURANTS_MIGRATION_SETS;
+    assert.ok(messaging);
 
     // The sets after the failed one are not applied.
     await assert.rejects(
-      migrate(db, [failing, pkg]),
+      migrate(db, [failing, messaging]),
       /Could not migrate up 0001-fails.ts: boom/,
     );
     assert.equal(
@@ -298,48 +310,51 @@ describe("startup migration", () => {
       0,
     );
     assert.deepEqual(await changelogOf(db, failing), []);
-    assert.deepEqual(await changelogOf(db, pkg), []);
+    assert.deepEqual(await changelogOf(db, messaging), []);
   });
 });
 
 describe("MongoDB storage", () => {
-  let mongo: MongoDbConnection;
-  let unitOfWork: MongoUnitOfWork;
+  let database: DatabaseConnection;
+  let unitOfWork: DatabaseUnitOfWork;
 
   before(async () => {
-    mongo = await connectMongoDb({
+    database = await connectDatabase({
       enabled: true,
       uri,
       database: `restaurants_test_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,
     });
-    unitOfWork = new MongoUnitOfWork(mongo.client);
-    await migrateRestaurantsDatabase(mongo.db);
+    unitOfWork = new DatabaseUnitOfWork(database.client);
+    await migrateRestaurantsDatabase(database.db);
   });
 
   after(async () => {
-    if (mongo === undefined) return;
-    await mongo.db.dropDatabase();
-    await mongo.close();
+    if (database === undefined) return;
+    await database.db.dropDatabase();
+    await database.close();
   });
 
   const restaurantsOf = () => {
-    const collection = createRestaurantCollection(mongo.db, unitOfWork);
+    const collection = createRestaurantCollection(database.db, unitOfWork);
     return {
-      repository: new MongoRestaurantRepository(collection, noKitchenChanges),
-      catalog: new MongoRestaurantCatalog(collection),
-      memberships: new MongoRestaurantMemberships(collection),
+      repository: new DatabaseRestaurantRepository(
+        collection,
+        noKitchenChanges,
+      ),
+      catalog: new DatabaseRestaurantCatalog(collection),
+      memberships: new DatabaseRestaurantMemberships(collection),
     };
   };
 
   const ordersOf = () => {
-    const collection = createRestaurantOrderCollection(mongo.db, unitOfWork);
+    const collection = createRestaurantOrderCollection(database.db, unitOfWork);
     return {
-      repository: new MongoRestaurantOrderRepository(
+      repository: new DatabaseRestaurantOrderRepository(
         collection,
         noKitchenChanges,
       ),
-      board: new MongoKitchenBoard(collection),
+      board: new DatabaseKitchenBoard(collection),
     };
   };
 
@@ -353,12 +368,12 @@ describe("MongoDB storage", () => {
     });
 
   test("migration is idempotent and creates indexes", async () => {
-    await migrateRestaurantsDatabase(mongo.db);
-    const names = (await mongo.db.collection("menus").indexes()).map(
+    await migrateRestaurantsDatabase(database.db);
+    const names = (await database.db.collection("menus").indexes()).map(
       (index) => index.name,
     );
     assert.ok(names.includes("menus_restaurant_unique"));
-    const collections = (await mongo.db.listCollections().toArray()).map(
+    const collections = (await database.db.listCollections().toArray()).map(
       (collection) => collection.name,
     );
     for (const name of [
@@ -369,7 +384,7 @@ describe("MongoDB storage", () => {
     ]) {
       assert.ok(collections.includes(name), name);
     }
-    const outboxIndexes = await mongo.db
+    const outboxIndexes = await database.db
       .collection(OUTBOX_COLLECTION)
       .indexes();
     assert.deepEqual(outboxIndexes.map((index) => index.name).sort(), [
@@ -385,9 +400,9 @@ describe("MongoDB storage", () => {
   });
 
   test("CDC migration removes what the polling relay left behind", async () => {
-    const outbox = mongo.db.collection(OUTBOX_COLLECTION);
-    await mongo.db.createCollection("outbox_counters");
-    await mongo.db.createCollection("outbox_leases");
+    const outbox = database.db.collection(OUTBOX_COLLECTION);
+    await database.db.createCollection("outbox_counters");
+    await database.db.createCollection("outbox_leases");
     await outbox.createIndex(
       { publishedAt: 1, seq: 1 },
       { name: "outbox_pending_by_seq" },
@@ -399,8 +414,8 @@ describe("MongoDB storage", () => {
     );
 
     // Twice: a crash before the changelog entry is written runs it again.
-    await dropOutboxRelay(mongo.db);
-    await dropOutboxRelay(mongo.db);
+    await dropOutboxRelay(database.db);
+    await dropOutboxRelay(database.db);
 
     assert.equal(await outbox.countDocuments({ _id: relayRecord as never }), 0);
     assert.equal(
@@ -410,7 +425,7 @@ describe("MongoDB storage", () => {
       false,
     );
     const collections = (
-      await mongo.db.listCollections({}, { nameOnly: true }).toArray()
+      await database.db.listCollections({}, { nameOnly: true }).toArray()
     ).map((collection) => collection.name);
     assert.equal(collections.includes("outbox_counters"), false);
     assert.equal(collections.includes("outbox_leases"), false);
@@ -418,7 +433,7 @@ describe("MongoDB storage", () => {
 
   test("validator rejects a malformed restaurant document", async () => {
     await assert.rejects(
-      mongo.db
+      database.db
         .collection<{ _id: string }>("restaurants")
         .insertOne({ _id: "bad", name: 42 } as never),
       (error) => error instanceof MongoServerError && error.code === 121,
@@ -483,8 +498,8 @@ describe("MongoDB storage", () => {
   });
 
   test("one menu per restaurant with embedded items", async () => {
-    const collection = createMenuCollection(mongo.db, unitOfWork);
-    const menus = new MongoMenuRepository(collection);
+    const collection = createMenuCollection(database.db, unitOfWork);
+    const menus = new DatabaseMenuRepository(collection);
     const menu = Menu.create({
       id: "m-1",
       restaurantId: "r-1",
@@ -498,7 +513,9 @@ describe("MongoDB storage", () => {
       addedAt: now,
     });
     assert.equal(await menus.save(menu), 1);
-    const view = await new MongoMenuReader(collection).getByRestaurantId("r-1");
+    const view = await new DatabaseMenuReader(collection).getByRestaurantId(
+      "r-1",
+    );
     assert.equal(view?.items[0]?.price.amount, "4.50");
     assert.equal(view?.items[0]?.description, undefined);
 
@@ -512,7 +529,7 @@ describe("MongoDB storage", () => {
 
   test("unit of work commits the order and its outbox records together", async () => {
     const { repository } = ordersOf();
-    const outbox = new MongoOutbox(mongo.db, unitOfWork, {
+    const outbox = new DatabaseOutbox(database.db, unitOfWork, {
       mapper: testMapper,
       metadata: () => ({ traceparent: "00-abc-def-01" }),
     });
@@ -525,7 +542,7 @@ describe("MongoDB storage", () => {
       );
     });
     assert.equal((await repository.get(order.id))?.version, 1);
-    const records = await mongo.db
+    const records = await database.db
       .collection(OUTBOX_COLLECTION)
       .find({ aggregateId: order.id })
       .toArray();
@@ -561,7 +578,7 @@ describe("MongoDB storage", () => {
   });
 
   test("outbox records carry every field of the CDC contract (ADR 37)", async () => {
-    const outbox = new MongoOutbox(mongo.db, unitOfWork);
+    const outbox = new DatabaseOutbox(database.db, unitOfWork);
     const aggregateId = randomUUID();
     await unitOfWork.run(() =>
       outbox.notify(
@@ -574,7 +591,7 @@ describe("MongoDB storage", () => {
         },
       ),
     );
-    const collection = mongo.db.collection(OUTBOX_COLLECTION);
+    const collection = database.db.collection(OUTBOX_COLLECTION);
     // MongoEventRouter turns these BSON types into the envelope headers; a
     // missing header field stops the connector.
     assert.equal(
@@ -616,7 +633,7 @@ describe("MongoDB storage", () => {
 
   test("default mapper writes no outbox records", async () => {
     const { repository } = ordersOf();
-    const outbox = new MongoOutbox(mongo.db, unitOfWork);
+    const outbox = new DatabaseOutbox(database.db, unitOfWork);
     const order = receive();
     await unitOfWork.run(async () => {
       const version = await repository.save(order);
@@ -626,7 +643,7 @@ describe("MongoDB storage", () => {
       );
     });
     assert.equal(
-      await mongo.db
+      await database.db
         .collection(OUTBOX_COLLECTION)
         .countDocuments({ aggregateId: order.id }),
       0,
@@ -635,7 +652,7 @@ describe("MongoDB storage", () => {
 
   test("unit of work rolls back the order and its outbox records", async () => {
     const { repository } = ordersOf();
-    const outbox = new MongoOutbox(mongo.db, unitOfWork, {
+    const outbox = new DatabaseOutbox(database.db, unitOfWork, {
       mapper: testMapper,
     });
     const order = receive();
@@ -652,7 +669,7 @@ describe("MongoDB storage", () => {
     );
     assert.equal(await repository.get(order.id), undefined);
     assert.equal(
-      await mongo.db
+      await database.db
         .collection(OUTBOX_COLLECTION)
         .countDocuments({ aggregateId: order.id }),
       0,

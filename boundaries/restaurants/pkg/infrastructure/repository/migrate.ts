@@ -11,15 +11,20 @@ import type { Db, Document, IndexDescription } from "mongodb";
  * ones (Outbox, Inbox) and service-wide cleanups.
  */
 export type MigrationSet = Readonly<{
-  /** Owner (`pkg` or the slice name); names the changelog collection. */
-  name: string;
+  /**
+   * Storage id of the set: part of the database schema contract (local
+   * ADR 2), named after the data the set owns, never derived from directory
+   * or slice names and never changed by a code refactoring. It alone names
+   * the changelog collection, so changing it requires a migration.
+   */
+  id: string;
   /** Directory of `<NNNN>-<change>` files, numbered from 0001 per set. */
   dir: URL;
 }>;
 
 /** Applied migrations of a set: one `{ fileName, appliedAt, migrationBlock }` each. */
 export const migrationsChangelogCollection = (set: MigrationSet): string =>
-  `migrations_changelog_${set.name}`;
+  `migrations_changelog_${set.id}`;
 /** migrate-mongo lock of every set: at most one document while a process migrates a set. */
 export const MIGRATIONS_LOCK_COLLECTION = "migrations_lock";
 
@@ -69,7 +74,7 @@ export async function ensureCollection(
       await db.createCollection(schema.name, validation);
     } catch (error) {
       // NamespaceExists: created by a concurrent run after listCollections.
-      if (!(isMongoError(error) && error.code === 48)) throw error;
+      if (!(hasErrorCode(error) && error.code === 48)) throw error;
       await db.command({ collMod: schema.name, ...validation });
     }
   }
@@ -84,7 +89,7 @@ let queue: Promise<void> = Promise.resolve();
 /**
  * Applies the pending migrate-mongo migrations of `sets` in list order, each
  * set in file name order, with the client of the process and returns them as
- * `<set>/<fileName>` (empty when the database already is current). Every
+ * `<id>/<fileName>` (empty when the database already is current). Every
  * process of restaurants runs it at startup before serving; a failed
  * migration rejects and stops at its set.
  *
@@ -140,8 +145,8 @@ async function migrateSets(
       useFileHash: false,
     });
     for (const fileName of await upWaitingForLock(db, log)) {
-      log(`applied migration ${set.name}/${fileName}`);
-      migrated.push(`${set.name}/${fileName}`);
+      log(`applied migration ${set.id}/${fileName}`);
+      migrated.push(`${set.id}/${fileName}`);
     }
   }
   if (migrated.length === 0) {
@@ -172,5 +177,5 @@ const isLockTaken = (error: unknown) =>
     (error.message.startsWith("Could not create a lock:") &&
       error.message.includes("E11000")));
 
-const isMongoError = (error: unknown): error is { code: unknown } =>
+const hasErrorCode = (error: unknown): error is { code: unknown } =>
   typeof error === "object" && error !== null && "code" in error;

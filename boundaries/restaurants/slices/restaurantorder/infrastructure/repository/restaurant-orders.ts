@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import type { MongoUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
@@ -95,7 +95,7 @@ const toSnapshot = (
 
 export const createRestaurantOrderCollection = (
   db: Db,
-  unitOfWork: MongoUnitOfWork,
+  unitOfWork: DatabaseUnitOfWork,
 ): VersionedCollection<RestaurantOrderDocument> =>
   new VersionedCollection<RestaurantOrderDocument>({
     db,
@@ -108,7 +108,7 @@ export const createRestaurantOrderCollection = (
         : undefined,
   });
 
-export class MongoRestaurantOrderRepository
+export class DatabaseRestaurantOrderRepository
   implements RestaurantOrderRepository
 {
   readonly #collection: VersionedCollection<RestaurantOrderDocument>;
@@ -179,7 +179,7 @@ const boardItems = (document: RestaurantOrderDocument) =>
  * Kitchen board read models queried from the restaurant order documents via
  * the `(restaurantId, state, …)` indexes.
  */
-export class MongoKitchenBoard
+export class DatabaseKitchenBoard
   implements
     RestaurantOrderReader,
     IncomingOrdersReader,
@@ -246,6 +246,7 @@ export class MongoKitchenBoard
       state: document.state,
       items: boardItems(document),
       receivedAt: document.timeline.receivedAt,
+      acceptedAt: document.timeline.acceptedAt,
       expectedReadyAt: document.timeline.expectedReadyAt,
       version: document.version,
     }));

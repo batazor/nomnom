@@ -1,6 +1,6 @@
 """Session-wide testcontainers: PostgreSQL and SpiceDB, each started once.
 
-Test classes opt in with ``@pytest.mark.usefixtures("postgres")`` and get ``database``
+Test classes opt in with ``@pytest.mark.usefixtures("database")`` and get ``database``
 (the shared pool) and ``dsn`` as class attributes. Each test isolates its data by
 truncating the tables (``PaymentsTestKit`` and the integration ``setUp`` do it).
 ``spicedb`` sets ``spicedb_endpoint`` of a SpiceDB loaded
@@ -17,7 +17,7 @@ from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from di.resources import MIGRATIONS
-from infrastructure.repository import PostgresDatabase, create_database, migrate
+from infrastructure.repository import Database, create_database, migrate
 from pkg.config import DatabaseSettings
 
 POSTGRES_IMAGE = "postgres:18.6-alpine3.24"
@@ -27,7 +27,7 @@ AUTHORIZATION_DIR = Path(__file__).resolve().parents[3] / "authorization"
 
 
 @pytest.fixture(scope="session")
-def postgres_dsn() -> Iterator[str]:
+def database_url() -> Iterator[str]:
     with PostgresContainer(
         POSTGRES_IMAGE, username="payments", password="payments", dbname="payments", driver=None
     ) as container:
@@ -37,19 +37,17 @@ def postgres_dsn() -> Iterator[str]:
 
 
 @pytest.fixture(scope="session")
-def postgres_database(postgres_dsn: str) -> Iterator[PostgresDatabase]:
-    database = create_database(DatabaseSettings(DATABASE__URL=postgres_dsn, DATABASE__MAX_CONNS=8))
+def session_database(database_url: str) -> Iterator[Database]:
+    database = create_database(DatabaseSettings(DATABASE__URL=database_url, DATABASE__MAX_CONNS=8))
     database.check()
     yield database
     database.close()
 
 
 @pytest.fixture(scope="class")
-def postgres(
-    request: pytest.FixtureRequest, postgres_dsn: str, postgres_database: PostgresDatabase
-) -> None:
-    request.cls.dsn = postgres_dsn
-    request.cls.database = postgres_database
+def database(request: pytest.FixtureRequest, database_url: str, session_database: Database) -> None:
+    request.cls.dsn = database_url
+    request.cls.database = session_database
 
 
 @pytest.fixture(scope="session")

@@ -13,9 +13,9 @@ from opentelemetry.trace import SpanKind, StatusCode
 from psycopg import errors
 
 from infrastructure.repository import (
-    PostgresDatabase,
-    PostgresPaymentRepository,
-    PostgresUnitOfWork,
+    Database,
+    DatabasePaymentRepository,
+    DatabaseUnitOfWork,
     create_database,
 )
 from infrastructure.repository.statements import Statement, StatementTelemetry, summarize
@@ -52,10 +52,10 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(Statement().span_name, "postgresql")
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class StatementTelemetryTest(unittest.TestCase):
     dsn: str
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:
@@ -70,7 +70,7 @@ class StatementTelemetryTest(unittest.TestCase):
         )
         self.observed = create_database(DatabaseSettings(DATABASE__URL=self.dsn), telemetry)
         self.addCleanup(self.observed.close)
-        self.payments = PostgresPaymentRepository(self.observed)
+        self.payments = DatabasePaymentRepository(self.observed)
 
     def durations(self) -> list[dict[str, str]]:
         """Attributes of the ``db.client.operation.duration`` points recorded since setUp."""
@@ -93,7 +93,7 @@ class StatementTelemetryTest(unittest.TestCase):
         payment = Payment(PaymentId("payment-1"), OrderId("order-1"), Money.parse("1", "EUR"))
         tracer = self.tracer_provider.get_tracer("test")
         with tracer.start_as_current_span("usecase create_payment"):
-            PostgresUnitOfWork(self.observed).run(lambda: self.payments.add(payment))
+            DatabaseUnitOfWork(self.observed).run(lambda: self.payments.add(payment))
             self.payments.get(payment.id)
 
         client = [s for s in self.spans.get_finished_spans() if s.kind is SpanKind.CLIENT]

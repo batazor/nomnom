@@ -49,7 +49,8 @@ multi-document транзакции. Пока `mongodb.uriSecret.name` пуст,
 `secretKeyRef` (Secret chart не создаёт), `MONGODB__DATABASE` и `MONGODB__TIMEOUT`. Init container
 миграций нет: каждый процесс при старте сам применяет новые миграции migrate-mongo — коллекции,
 JSON Schema validators, индексы и миграции документов (на актуальной базе — ничего) по наборам:
-`pkg`, затем слайсы, каждый со своим changelog `migrations_changelog_<набор>`, под lock migrate-mongo
+`messaging` (Outbox, Inbox), затем `restaurants`, `menus`, `restaurant_orders`, `simulator`, каждый со своим changelog
+`migrations_changelog_<id>` (`id` — стабильный storage id набора, не зависит от раскладки кода), под lock migrate-mongo
 в коллекции `migrations_lock` (на время каждого набора); ошибка останавливает pod. Время миграции входит в бюджет `startupProbe`.
 Лимиты connection pool задаёт `mongodb.pool` (`maxPoolSize` 20, `minPoolSize` 0, `maxIdleTime`
 `5m`, `waitQueueTimeout` `5s`, `maxConnecting` 2) → `MONGODB__MAX_POOL_SIZE`, `MONGODB__MIN_POOL_SIZE`,

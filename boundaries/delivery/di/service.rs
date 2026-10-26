@@ -17,8 +17,8 @@ use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
 use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
-use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
 use crate::slices::delivery::infrastructure::transitions::TransitionMetrics;
+use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
 
 #[cfg(test)]
 use super::infrastructure::local_authorization;

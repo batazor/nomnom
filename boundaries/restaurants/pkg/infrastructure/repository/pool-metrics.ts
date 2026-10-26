@@ -35,7 +35,7 @@ type PoolState = {
   readonly checkedOut: Map<ConnectionId, number>;
 };
 
-export type MongoPoolMetricsOptions = Readonly<{
+export type DatabasePoolMetricsOptions = Readonly<{
   meter?: Meter;
   /** `db.client.connection.pool.name` of the pool of one server. */
   poolName?: (address: string) => string;
@@ -49,7 +49,7 @@ export type MongoPoolMetricsOptions = Readonly<{
  * `db.client.connection.pool.name`: saturation is per pool, not a sum over
  * the replica set. Monitoring connections are outside the pools.
  */
-export class MongoPoolMetrics {
+export class DatabasePoolMetrics {
   readonly #pools = new Map<string, PoolState>();
   readonly #poolName: (address: string) => string;
   readonly #now: () => number;
@@ -59,7 +59,7 @@ export class MongoPoolMetrics {
   readonly #createTime;
   readonly #useTime;
 
-  constructor(options: MongoPoolMetricsOptions = {}) {
+  constructor(options: DatabasePoolMetricsOptions = {}) {
     const meter = options.meter ?? metrics.getMeter("mongodb");
     this.#poolName = options.poolName ?? ((address) => address);
     this.#now = options.now ?? (() => performance.now());

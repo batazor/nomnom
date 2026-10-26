@@ -306,6 +306,9 @@ message ActiveRestaurantOrder {
   repeated RestaurantOrderItem items = 2;
   // Unset only on orders received before the time was recorded.
   google.protobuf.Timestamp received_at = 3;
+  // Time of Acceptance; unset before it (RECEIVED). With expected_ready_at it
+  // bounds the cooking progress of the order.
+  google.protobuf.Timestamp accepted_at = 4;
 }
 
 message ListActiveRestaurantOrdersResponse {

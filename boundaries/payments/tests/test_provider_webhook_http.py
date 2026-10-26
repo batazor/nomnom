@@ -17,7 +17,7 @@ from infrastructure.provider import (
     create_webhook_handler,
     sign_payload,
 )
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from pkg.lifecycle import HttpWorker, LifecycleError, WorkerGroup
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
@@ -26,9 +26,9 @@ NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 SECRET = "whsec_test"
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class ProviderWebhookHttpTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

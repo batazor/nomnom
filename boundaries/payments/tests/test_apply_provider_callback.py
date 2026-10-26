@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import PaymentsTestKit
 
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from slices.payment.applications.apply_provider_callback import (
     ApplyProviderCallbackHandler,
     ApplyProviderCallbackInput,
@@ -26,9 +26,9 @@ from slices.payment.domains.payment import (
 CAPTURED = ProviderOperationOutcome.succeeded("capture-ref")
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class ApplyProviderCallbackTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

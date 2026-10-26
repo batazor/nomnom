@@ -220,7 +220,7 @@ describe("flow board", () => {
     );
     const panel = await screen.findByRole("dialog");
     expect(
-      await within(panel).findByRole("heading", { name: "Заказ принят" }),
+      await within(panel).findByRole("heading", { name: "Заказ оформлен" }),
     ).toBeVisible();
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

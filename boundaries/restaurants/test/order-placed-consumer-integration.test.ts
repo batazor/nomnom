@@ -14,8 +14,8 @@ import {
 } from "../pkg/infrastructure/kafka/consumer.ts";
 import { KafkaPublisher } from "../pkg/infrastructure/kafka/publisher.ts";
 import {
-  connectMongoDb,
-  type MongoDbConnection,
+  connectDatabase,
+  type DatabaseConnection,
 } from "../pkg/infrastructure/repository/client.ts";
 import {
   INBOX_COLLECTION,
@@ -25,14 +25,14 @@ import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { ORDER_PLACED_EVENT_TYPE } from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
+import { databaseUri } from "./support/database.ts";
 import { kafkaBrokers } from "./support/global-containers.ts";
-import { mongoUri } from "./support/mongodb.ts";
 import { offlineValkey, testValkeyConfig } from "./support/valkey.ts";
 
 // OrderPlaced → Kafka → restaurants-consumer → Inbox + Restaurant Order in
 // MongoDB against real infrastructure: MongoDB and Kafka are the testcontainers
 // of the global setup (test/support/global-containers.ts).
-const uri = mongoUri();
+const uri = databaseUri();
 const brokers = kafkaBrokers();
 
 describe("OrderPlaced consumer with MongoDB and Kafka", () => {
@@ -49,17 +49,17 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
       logLevel: kafka.KafkaJS.logLevel.ERROR,
     },
   });
-  let mongo: MongoDbConnection;
+  let database: DatabaseConnection;
   let publisher: KafkaPublisher;
 
   before(async () => {
-    mongo = await connectMongoDb({
+    database = await connectDatabase({
       enabled: true,
       uri,
       database: `restaurants_consumer_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,
     });
-    await migrateRestaurantsDatabase(mongo.db);
+    await migrateRestaurantsDatabase(database.db);
     const admin = client.admin();
     await admin.connect();
     await admin.createTopics({
@@ -80,9 +80,9 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
       .deleteTopics({ topics: [topic, `${topic}.dlq`] })
       .catch(() => {});
     await admin.disconnect();
-    if (mongo === undefined) return;
-    await mongo.db.dropDatabase();
-    await mongo.close();
+    if (database === undefined) return;
+    await database.db.dropDatabase();
+    await database.close();
   });
 
   const publishOrderPlaced = (
@@ -124,7 +124,7 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
     const groupId = `restaurants-it-${randomUUID()}`;
     const container = createConsumerContainer({
       consumer: { ...loadConfig({}).consumer, groupId },
-      mongo,
+      database,
       kafkaConsumer: createConsumerClient({
         brokers: kafkaConfig.brokers,
         clientId: kafkaConfig.clientId,
@@ -168,8 +168,8 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
     await worker.start();
     const running = worker.run();
     try {
-      const orders = mongo.db.collection("restaurant_orders");
-      const inbox = mongo.db.collection<InboxDocument>(INBOX_COLLECTION);
+      const orders = database.db.collection("restaurant_orders");
+      const inbox = database.db.collection<InboxDocument>(INBOX_COLLECTION);
       const deadline = Date.now() + 30_000;
       while (
         (await inbox.countDocuments({ eventId })) === 0 &&

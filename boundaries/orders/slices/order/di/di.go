@@ -28,18 +28,18 @@ import (
 )
 
 // Provider sets слайса order. Composition root процесса (корневой di) выбирает
-// нужные: инфраструктура — PostgresSet и TelemetrySet, use cases процесса —
+// нужные: инфраструктура — RepositorySet и TelemetrySet, use cases процесса —
 // APISet или ConsumerSet; Activities orders-worker собирает слайс fulfillment
-// (slices/fulfillment/di) поверх PostgresSet и TelemetrySet. Новый порт
+// (slices/fulfillment/di) поверх RepositorySet и TelemetrySet. Новый порт
 // добавляется полем в структуру зависимостей набора и provider'ом; позиционных
 // конструкторов нет.
 var (
-	// PostgresSet — общий PostgreSQL store процесса (ADR 8) во всех ролях портов:
+	// RepositorySet — общий PostgreSQL store процесса (ADR 8) во всех ролях портов:
 	// ProcessStore — PostgreSQL с Outbox из messaging/outbound, Unit of Work и
 	// Outbox под декоратором бизнес-метрик (observability.ObservedStore).
 	// *repository.Store на мигрированной схеме даёт composition root: он применяет
 	// наборы миграций всех слайсов (di/schema).
-	PostgresSet = wire.NewSet(observability.NewDomainMetrics, NewProcessStore,
+	RepositorySet = wire.NewSet(observability.NewDomainMetrics, NewProcessStore,
 		wire.Bind(new(PlacementStore), new(*ProcessStore)),
 		wire.Bind(new(ReadModels), new(*ProcessStore)),
 		wire.Bind(new(InboxStore), new(*ProcessStore)),

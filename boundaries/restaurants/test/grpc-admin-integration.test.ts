@@ -23,12 +23,12 @@ import { RegisterRestaurantHandler } from "../slices/restaurant/applications/reg
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantCatalog,
-  MongoRestaurantRepository,
+  DatabaseRestaurantCatalog,
+  DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
+import { createTestDatabase, noKitchenChanges } from "./support/database.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { createService } from "./support/grpc.ts";
-import { createTestDatabase, noKitchenChanges } from "./support/mongodb.ts";
 import {
   FixedClock,
   PICKUP_ADDRESS,
@@ -138,7 +138,10 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
     const writer = new SpiceDbRelationshipWriter({ client, timeoutMs: 5000 });
     const { db, unitOfWork } = await createTestDatabase();
     const store = createRestaurantCollection(db, unitOfWork);
-    const restaurants = new MongoRestaurantRepository(store, noKitchenChanges);
+    const restaurants = new DatabaseRestaurantRepository(
+      store,
+      noKitchenChanges,
+    );
     const accessControl = new SpiceDbAccessControl({
       client,
       revisions: restaurants,
@@ -162,7 +165,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
     };
     const service = createService({
       getRestaurant: new GetRestaurantHandler({
-        reader: new MongoRestaurantCatalog(store),
+        reader: new DatabaseRestaurantCatalog(store),
       }),
       getMenu: unused,
       listRestaurants: unused,

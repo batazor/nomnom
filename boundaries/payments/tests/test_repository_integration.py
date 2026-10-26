@@ -18,16 +18,16 @@ from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermission
 from infrastructure.observability import FsmMetrics
 from infrastructure.repository import (
     PAYMENT_EVENTS_TOPIC,
+    Database,
+    DatabasePaymentOperationHistory,
+    DatabasePaymentOperationRepository,
+    DatabasePaymentOutbox,
+    DatabasePaymentRepository,
+    DatabasePendingOperationQuery,
+    DatabaseProviderMessageInbox,
+    DatabaseUnitOfWork,
     NoPublishedContracts,
     OutboxMessage,
-    PostgresDatabase,
-    PostgresPaymentOperationHistory,
-    PostgresPaymentOperationRepository,
-    PostgresPaymentOutbox,
-    PostgresPaymentRepository,
-    PostgresPendingOperationQuery,
-    PostgresProviderMessageInbox,
-    PostgresUnitOfWork,
     outbox_event_id,
 )
 from pkg.application import AggregateRef, ConcurrencyConflictError
@@ -91,22 +91,22 @@ class _Ids:
         return OperationId(f"operation-{self.count}")
 
 
-@pytest.mark.usefixtures("postgres")
-class PostgresIntegrationTest(unittest.TestCase):
-    database: PostgresDatabase
+@pytest.mark.usefixtures("database")
+class RepositoryIntegrationTest(unittest.TestCase):
+    database: Database
     dsn: str
 
     @override
     def setUp(self) -> None:
         with self.database.connection() as conn:
             conn.execute("TRUNCATE payments, payment_operations, payments_outbox, inbox")
-        self.uow = PostgresUnitOfWork(self.database)
-        self.payments = PostgresPaymentRepository(self.database)
-        self.operations = PostgresPaymentOperationRepository(self.database)
-        self.pending = PostgresPendingOperationQuery(self.database)
-        self.history = PostgresPaymentOperationHistory(self.database)
-        self.outbox = PostgresPaymentOutbox(self.database, _AuthorizedOnly())
-        self.inbox = PostgresProviderMessageInbox(self.database)
+        self.uow = DatabaseUnitOfWork(self.database)
+        self.payments = DatabasePaymentRepository(self.database)
+        self.operations = DatabasePaymentOperationRepository(self.database)
+        self.pending = DatabasePendingOperationQuery(self.database)
+        self.history = DatabasePaymentOperationHistory(self.database)
+        self.outbox = DatabasePaymentOutbox(self.database, _AuthorizedOnly())
+        self.inbox = DatabaseProviderMessageInbox(self.database)
 
     def _payment(self, payment_id: str = "payment-1", order_id: str = "order-1") -> Payment:
         payment = Payment(PaymentId(payment_id), OrderId(order_id), AMOUNT)
@@ -260,7 +260,7 @@ class PostgresIntegrationTest(unittest.TestCase):
     def test_default_mapper_writes_nothing(self) -> None:
         payment = self._payment()
         payment.authorize("auth-ref")
-        outbox = PostgresPaymentOutbox(self.database, NoPublishedContracts())
+        outbox = DatabasePaymentOutbox(self.database, NoPublishedContracts())
         self.uow.run(
             lambda: outbox.add(AggregateRef("Payment", payment.id, 2), payment.pull_events())
         )
@@ -372,7 +372,7 @@ class PostgresIntegrationTest(unittest.TestCase):
         self.assertTrue(self.inbox.register("message-1"))
         self.assertFalse(self.inbox.register("message-1"))
 
-    def test_authorize_use_case_over_postgres(self) -> None:
+    def test_authorize_use_case_over_the_database(self) -> None:
         payment = self._payment()
         provider = FakePaymentProvider()
         executor = PaymentOperationExecutor(

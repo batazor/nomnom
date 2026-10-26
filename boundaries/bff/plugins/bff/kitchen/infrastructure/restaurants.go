@@ -8,10 +8,12 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
@@ -61,10 +63,12 @@ func (r *Restaurants) ActiveOrders(ctx context.Context, restaurantID string) ([]
 			lines = append(lines, applications.ActiveOrderLine{MenuItemID: item.GetMenuItemId(), Quantity: int(item.GetQuantity())})
 		}
 		active := applications.ActiveOrder{
-			ID:      order.GetRestaurantOrder().GetRestaurantOrderId(),
-			OrderID: order.GetRestaurantOrder().GetOrderId(),
-			Stage:   stage,
-			Lines:   lines,
+			ID:              order.GetRestaurantOrder().GetRestaurantOrderId(),
+			OrderID:         order.GetRestaurantOrder().GetOrderId(),
+			Stage:           stage,
+			Lines:           lines,
+			AcceptedAt:      moment(order.GetAcceptedAt()),
+			ExpectedReadyAt: moment(order.GetRestaurantOrder().GetExpectedReadyAt()),
 		}
 		if order.GetReceivedAt() != nil {
 			active.ReceivedAt = order.GetReceivedAt().AsTime()
@@ -169,4 +173,14 @@ func commandError(operation string, err error) error {
 		return fmt.Errorf("%w: %s", applications.ErrInvalidCommand, status.Convert(err).Message())
 	}
 	return fmt.Errorf("%s: %w", operation, err)
+}
+
+// moment reads an optional moment: an unset Timestamp is one that has not
+// happened yet (before Acceptance).
+func moment(value *timestamppb.Timestamp) *time.Time {
+	if value == nil {
+		return nil
+	}
+	t := value.AsTime()
+	return &t
 }

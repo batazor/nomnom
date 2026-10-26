@@ -82,7 +82,7 @@ class ConfigTest(unittest.TestCase):
             ):
                 load_settings()
 
-    def test_reads_postgres_settings(self) -> None:
+    def test_reads_database_settings(self) -> None:
         environment = {**REQUIRED_ENV, "DATABASE__MAX_CONNS": "4"}
         with patch.dict(os.environ, environment, clear=True):
             settings = load_settings().database

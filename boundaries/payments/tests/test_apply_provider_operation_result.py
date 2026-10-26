@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from slices.payment.applications.apply_provider_operation_result import (
     ApplyProviderOperationResultHandler,
     ApplyProviderOperationResultInput,
@@ -28,9 +28,9 @@ from slices.payment.domains.payment import (
 )
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class ApplyProviderOperationResultTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

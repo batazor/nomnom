@@ -2,7 +2,7 @@ import type { Collection, Db, Document, Filter, FindOptions } from "mongodb";
 import { MongoServerError } from "mongodb";
 
 import { ConcurrencyConflictError } from "../../application/errors.ts";
-import type { MongoUnitOfWork } from "./unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "./unit-of-work.ts";
 
 /** Technical fields every aggregate document carries next to its data. */
 export type VersionedDocument = Document & {
@@ -21,20 +21,20 @@ export type DuplicateKeyMapper<D> = (
 
 /**
  * Aggregate collection with optimistic concurrency on `version`. Every
- * operation joins the transaction of the active {@link MongoUnitOfWork};
+ * operation joins the transaction of the active {@link DatabaseUnitOfWork};
  * outside it, single-document writes are atomic on their own.
  */
 export class VersionedCollection<D extends VersionedDocument> {
   readonly collection: Collection<D>;
   readonly #aggregateType: string;
-  readonly #unitOfWork: MongoUnitOfWork;
+  readonly #unitOfWork: DatabaseUnitOfWork;
   readonly #duplicateKey: DuplicateKeyMapper<D>;
 
   constructor(options: {
     db: Db;
     name: string;
     aggregateType: string;
-    unitOfWork: MongoUnitOfWork;
+    unitOfWork: DatabaseUnitOfWork;
     duplicateKey?: DuplicateKeyMapper<D>;
   }) {
     this.collection = options.db.collection<D>(options.name);

@@ -1,5 +1,5 @@
 //! Rows of the compile-time checked queries (`sqlx::query_as!`) and row ↔
-//! domain mapping of [`super::PostgresStore`].
+//! domain mapping of [`super::Store`].
 
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierStatus};

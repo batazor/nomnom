@@ -125,6 +125,7 @@ export const toActiveRestaurantOrderMessage = (
       options: [...item.options],
     })),
     receivedAt: optionalTimestamp(order.receivedAt),
+    acceptedAt: optionalTimestamp(order.acceptedAt),
   });
 
 export const toStaffMessage = (result: StaffChangeResult) => ({

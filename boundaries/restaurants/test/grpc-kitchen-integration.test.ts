@@ -7,24 +7,24 @@ import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaura
 import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import {
-  connectMongoDb,
-  type MongoDbConnection,
+  connectDatabase,
+  type DatabaseConnection,
 } from "../pkg/infrastructure/repository/client.ts";
 import {
-  MongoOutbox,
+  DatabaseOutbox,
   OUTBOX_COLLECTION,
 } from "../pkg/infrastructure/repository/outbox.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
   createMenuCollection,
-  MongoMenuRepository,
+  DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantRepository,
+  DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { AcceptOrderHandler } from "../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
@@ -45,60 +45,60 @@ import { restaurantOrderEventMapper } from "../slices/restaurantorder/infrastruc
 import { FifoKitchenQueueOrdering } from "../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
 import {
   createRestaurantOrderCollection,
-  MongoKitchenBoard,
-  MongoRestaurantOrderRepository,
+  DatabaseKitchenBoard,
+  DatabaseRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,
 } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
+import { databaseUri, noKitchenChanges } from "./support/database.ts";
 import {
   createService,
   type RestaurantsServiceUnderTest,
 } from "./support/grpc.ts";
 import { TestKitchenAccessControl } from "./support/kitchen.ts";
-import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 
 // Kitchen command RPCs composed as in cmd/restaurants/main.ts (MongoDB Unit of
-// Work, MongoOutbox with the Integration Event mapper) against a replica set:
+// Work, DatabaseOutbox with the Integration Event mapper) against a replica set:
 // MongoDB is the testcontainer of the global setup (test/support/global-containers.ts).
-const uri = mongoUri();
+const uri = databaseUri();
 
 const context = undefined as never;
 const cook: Subject = { type: "user", id: "cook" };
 const ordersService: Subject = { type: "service", id: "orders-worker" };
 
 describe("kitchen command RPCs over MongoDB", () => {
-  let mongo: MongoDbConnection;
+  let database: DatabaseConnection;
   let service: RestaurantsServiceUnderTest;
   let receive: ReceiveOrderRequestHandler;
   const restaurantId = `r-${randomUUID()}`;
 
   before(async () => {
-    mongo = await connectMongoDb({
+    database = await connectDatabase({
       enabled: true,
       uri,
       database: `restaurants_kitchen_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,
     });
-    await migrateRestaurantsDatabase(mongo.db);
-    const unitOfWork = new MongoUnitOfWork(mongo.client);
-    const outbox = new MongoOutbox(mongo.db, unitOfWork, {
+    await migrateRestaurantsDatabase(database.db);
+    const unitOfWork = new DatabaseUnitOfWork(database.client);
+    const outbox = new DatabaseOutbox(database.db, unitOfWork, {
       mapper: restaurantOrderEventMapper,
     });
-    const restaurants = new MongoRestaurantRepository(
-      createRestaurantCollection(mongo.db, unitOfWork),
+    const restaurants = new DatabaseRestaurantRepository(
+      createRestaurantCollection(database.db, unitOfWork),
       noKitchenChanges,
     );
-    const menus = new MongoMenuRepository(
-      createMenuCollection(mongo.db, unitOfWork),
+    const menus = new DatabaseMenuRepository(
+      createMenuCollection(database.db, unitOfWork),
     );
-    const restaurantOrders = new MongoRestaurantOrderRepository(
-      createRestaurantOrderCollection(mongo.db, unitOfWork),
+    const restaurantOrders = new DatabaseRestaurantOrderRepository(
+      createRestaurantOrderCollection(database.db, unitOfWork),
       noKitchenChanges,
     );
-    const board = new MongoKitchenBoard(
-      createRestaurantOrderCollection(mongo.db, unitOfWork),
+    const board = new DatabaseKitchenBoard(
+      createRestaurantOrderCollection(database.db, unitOfWork),
     );
     const clock = { now: () => new Date() };
     const accessControl = new TestKitchenAccessControl();
@@ -205,9 +205,9 @@ describe("kitchen command RPCs over MongoDB", () => {
   });
 
   after(async () => {
-    if (mongo === undefined) return;
-    await mongo.db.dropDatabase();
-    await mongo.close();
+    if (database === undefined) return;
+    await database.db.dropDatabase();
+    await database.close();
   });
 
   const received = async (orderId: string) => {
@@ -225,7 +225,7 @@ describe("kitchen command RPCs over MongoDB", () => {
 
   const outboxEventTypes = async (aggregateId: string) =>
     (
-      await mongo.db
+      await database.db
         .collection(OUTBOX_COLLECTION)
         .find({ aggregateId })
         .sort({ aggregateVersion: 1 })
@@ -342,8 +342,15 @@ describe("kitchen command RPCs over MongoDB", () => {
     const [first] = active;
     assert.equal(first?.restaurantOrder?.orderId, "order-active-queued");
     assert.equal(first?.restaurantOrder?.restaurantId, restaurantId);
-    assert.ok(first?.restaurantOrder?.expectedReadyAt !== undefined);
+    const expectedReadyAt = first?.restaurantOrder?.expectedReadyAt;
+    assert.ok(expectedReadyAt !== undefined);
     assert.ok(first?.receivedAt !== undefined);
+    assert.ok(first.acceptedAt !== undefined);
+    assert.ok(
+      timestampDate(expectedReadyAt).getTime() >
+        timestampDate(first.acceptedAt).getTime(),
+    );
+    assert.equal(active.at(-1)?.acceptedAt, undefined);
     assert.deepEqual(
       first?.items.map((item) => [item.menuItemId, item.quantity]),
       [["pho", 1]],

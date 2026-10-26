@@ -16,7 +16,7 @@ import type {
 } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
-import type { MongoUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
 import type { VersionedCollection } from "../../../pkg/infrastructure/repository/versioned-collection.ts";
 import type { CacheMetrics } from "../../../pkg/infrastructure/valkey/read-cache.ts";
 import type { Logger } from "../../../pkg/telemetry/logger.ts";
@@ -38,9 +38,9 @@ import { restaurantEventMapper } from "../infrastructure/integration/restaurant-
 import { RelationshipReconciler } from "../infrastructure/reconcile/reconcile.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantCatalog,
-  MongoRestaurantMemberships,
-  MongoRestaurantRepository,
+  DatabaseRestaurantCatalog,
+  DatabaseRestaurantMemberships,
+  DatabaseRestaurantRepository,
   type RestaurantDocument,
   type RestaurantSaved,
 } from "../infrastructure/repository/restaurants.ts";
@@ -48,7 +48,7 @@ import {
 /** Application-scope dependencies the slice takes from the process. */
 export interface RestaurantDependencies {
   readonly db: Db;
-  readonly unitOfWork: MongoUnitOfWork;
+  readonly unitOfWork: DatabaseUnitOfWork;
   readonly clock: Clock;
   readonly ids: IdGenerator;
   readonly outbox: Outbox;
@@ -81,9 +81,9 @@ export interface RestaurantCradle {
    * Also the stored revisions of `restaurant:<id>` read by the SpiceDB
    * access control (FR-447), hence the concrete type.
    */
-  readonly restaurants: MongoRestaurantRepository;
-  readonly restaurantMemberships: MongoRestaurantMemberships;
-  readonly restaurantCatalog: MongoRestaurantCatalog;
+  readonly restaurants: DatabaseRestaurantRepository;
+  readonly restaurantMemberships: DatabaseRestaurantMemberships;
+  readonly restaurantCatalog: DatabaseRestaurantCatalog;
   /** Get Restaurant and List Restaurants through the Valkey read cache (ADR 40). */
   readonly cachedRestaurantCatalog: CachedRestaurantCatalog;
   readonly getRestaurant: GetRestaurantHandler;
@@ -109,15 +109,15 @@ export const registerRestaurant = (
     ).singleton(),
     restaurants: asFunction(
       ({ restaurantCollection, kitchenChanges }: Cradle) =>
-        new MongoRestaurantRepository(restaurantCollection, kitchenChanges),
+        new DatabaseRestaurantRepository(restaurantCollection, kitchenChanges),
     ).singleton(),
     restaurantMemberships: asFunction(
       ({ restaurantCollection }: Cradle) =>
-        new MongoRestaurantMemberships(restaurantCollection),
+        new DatabaseRestaurantMemberships(restaurantCollection),
     ).singleton(),
     restaurantCatalog: asFunction(
       ({ restaurantCollection }: Cradle) =>
-        new MongoRestaurantCatalog(restaurantCollection),
+        new DatabaseRestaurantCatalog(restaurantCollection),
     ).singleton(),
     cachedRestaurantCatalog: asFunction(
       ({ restaurantCatalog, valkey, valkeyConfig, cacheMetrics }: Cradle) =>

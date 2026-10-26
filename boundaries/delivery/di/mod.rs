@@ -5,7 +5,7 @@
 //! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы;
 //! - [`server`] — `cmd/delivery`: gRPC, reconciliation, истечение Delivery
 //!   Offers, Dispatch Deliveries и демо Simulator ([`server::ServerModule`]); схему PostgreSQL
-//!   процесс мигрирует сам при старте ([`server::postgres`]).
+//!   процесс мигрирует сам при старте ([`server::store`]).
 //!
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
 //! PostgreSQL (`infrastructure::repository`, ADR 0001 контекста), идентификаторы —
@@ -30,7 +30,7 @@ pub use infrastructure::{
 };
 pub use offer_expiry_worker::{ExpireOffers, ExpirySchedule, OfferExpiryWorker};
 pub use reconciling_worker::ReconcilingWorker;
-pub use server::{postgres, spicedb, spicedb_authorization};
+pub use server::{spicedb, spicedb_authorization, store};
 pub use service::{ServiceModule, build_over};
 pub use simulator_worker::{
     CourierActions, Randomness, Simulator, SimulatorSchedule, SimulatorWorker, SystemRandomness,

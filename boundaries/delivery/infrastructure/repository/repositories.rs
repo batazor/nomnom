@@ -1,4 +1,4 @@
-//! Repositories and the courier location store of [`PostgresStore`] with
+//! Repositories and the courier location store of [`Store`] with
 //! optimistic concurrency by `version`.
 
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
@@ -16,7 +16,7 @@ use super::rows::{
     CourierRow, DeliveryRow, OfferRow, courier_from_row, courier_status, delivery_from_row,
     delivery_state, offer_from_row, offer_state,
 };
-use super::{PostgresStore, corrupt, db_version, storage_error};
+use super::{Store, corrupt, db_version, storage_error};
 
 /// Maps zero updated rows: a missing id is a [`RepositoryError::Conflict`]
 /// (port contract), an existing id a lost optimistic concurrency race.
@@ -35,7 +35,7 @@ fn optimistic(
     })
 }
 
-impl CourierRepository for PostgresStore {
+impl CourierRepository for Store {
     fn get(&self, id: &CourierId) -> Result<Option<Courier>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             CourierRow,
@@ -124,7 +124,7 @@ impl CourierRepository for PostgresStore {
     }
 }
 
-impl DeliveryRepository for PostgresStore {
+impl DeliveryRepository for Store {
     fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
@@ -246,7 +246,7 @@ impl DeliveryRepository for PostgresStore {
     }
 }
 
-impl DeliveryOfferRepository for PostgresStore {
+impl DeliveryOfferRepository for Store {
     fn get(&self, id: &DeliveryOfferId) -> Result<Option<DeliveryOffer>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             OfferRow,
@@ -302,7 +302,7 @@ impl DeliveryOfferRepository for PostgresStore {
     }
 }
 
-impl CourierLocationStore for PostgresStore {
+impl CourierLocationStore for Store {
     fn record(&self, position: &CourierPosition) -> Result<(), RepositoryError> {
         sql!(self, "INSERT", |connection| sqlx::query!(
             "INSERT INTO courier_positions (courier_id, latitude, longitude, recorded_at)

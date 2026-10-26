@@ -2,32 +2,32 @@ import type { Meter } from "@opentelemetry/api";
 import { type Db, MongoClient, type MongoClientOptions } from "mongodb";
 
 import {
-  loadMongoDbPoolConfig,
-  type MongoDbEnabledConfig,
-  type MongoDbPoolConfig,
+  type DatabaseEnabledConfig,
+  type DatabasePoolConfig,
+  loadDatabasePoolConfig,
 } from "../../config/config.ts";
-import { MongoCommandTelemetry } from "./command-telemetry.ts";
-import { MongoPoolMetrics } from "./pool-metrics.ts";
+import { DatabaseCommandTelemetry } from "./command-telemetry.ts";
+import { DatabasePoolMetrics } from "./pool-metrics.ts";
 
-export type MongoDbConnection = Readonly<{
+export type DatabaseConnection = Readonly<{
   client: MongoClient;
   db: Db;
   close(): Promise<void>;
 }>;
 
 /** Config without `pool` (tests) gets the defaults of the API process. */
-export type MongoDbConnectConfig = Omit<MongoDbEnabledConfig, "pool"> & {
-  readonly pool?: MongoDbPoolConfig;
+export type DatabaseConnectConfig = Omit<DatabaseEnabledConfig, "pool"> & {
+  readonly pool?: DatabasePoolConfig;
 };
 
-export type MongoDbConnectOptions = Readonly<{
+export type DatabaseConnectOptions = Readonly<{
   /** Meter of the pool metrics; the global MeterProvider by default. */
   meter?: Meter;
 }>;
 
 /** MongoClient options of the pool; they override the same URI options. */
-export function mongoPoolOptions(
-  pool: MongoDbPoolConfig,
+export function databasePoolOptions(
+  pool: DatabasePoolConfig,
 ): Pick<
   MongoClientOptions,
   | "maxPoolSize"
@@ -46,7 +46,7 @@ export function mongoPoolOptions(
 }
 
 /** `db.client.connection.pool.name`: server address and database (semconv). */
-export const mongoPoolName = (address: string, database: string) =>
+export const databasePoolName = (address: string, database: string) =>
   `${address}/${database}`;
 
 /**
@@ -56,11 +56,11 @@ export const mongoPoolName = (address: string, database: string) =>
  * metrics, command monitoring events the client spans and
  * db.client.operation.duration (command-telemetry.ts).
  */
-export async function connectMongoDb(
-  config: MongoDbConnectConfig,
-  options: MongoDbConnectOptions = {},
-): Promise<MongoDbConnection> {
-  const pool = config.pool ?? loadMongoDbPoolConfig({}, "api");
+export async function connectDatabase(
+  config: DatabaseConnectConfig,
+  options: DatabaseConnectOptions = {},
+): Promise<DatabaseConnection> {
+  const pool = config.pool ?? loadDatabasePoolConfig({}, "api");
   const client = new MongoClient(config.uri, {
     appName: "restaurants",
     // Optional domain fields are omitted instead of being stored as null.
@@ -68,14 +68,14 @@ export async function connectMongoDb(
     serverSelectionTimeoutMS: config.timeoutMs,
     // Command events for spans and operation metrics; their payload is not read.
     monitorCommands: true,
-    ...mongoPoolOptions(pool),
+    ...databasePoolOptions(pool),
   });
-  new MongoCommandTelemetry(
+  new DatabaseCommandTelemetry(
     options.meter === undefined ? {} : { meter: options.meter },
   ).instrument(client);
-  new MongoPoolMetrics({
+  new DatabasePoolMetrics({
     ...(options.meter === undefined ? {} : { meter: options.meter }),
-    poolName: (address) => mongoPoolName(address, config.database),
+    poolName: (address) => databasePoolName(address, config.database),
   }).instrument(client);
   await client.connect();
   const db = client.db(config.database);

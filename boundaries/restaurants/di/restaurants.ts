@@ -2,7 +2,7 @@
 // shared clients, the slice modules and the gRPC worker. Every registration
 // lives in the application scope: handlers are stateless over shared clients,
 // and the per-operation resource — the MongoDB session of a transaction — is
-// owned by `MongoUnitOfWork.run` for exactly one use case.
+// owned by `DatabaseUnitOfWork.run` for exactly one use case.
 //
 // Resources acquired asynchronously (MongoDB connection, subject resolver)
 // are connected and released by cmd/restaurants and registered as values;
@@ -41,12 +41,12 @@ import {
   type Registrations,
 } from "../pkg/di/container.ts";
 import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
-import type { MongoDbConnection } from "../pkg/infrastructure/repository/client.ts";
+import type { DatabaseConnection } from "../pkg/infrastructure/repository/client.ts";
 import {
-  MongoOutbox,
+  DatabaseOutbox,
   type OutboxEventMapper,
 } from "../pkg/infrastructure/repository/outbox.ts";
-import type { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { CacheMetrics } from "../pkg/infrastructure/valkey/read-cache.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
@@ -80,7 +80,7 @@ import {
 } from "../slices/restaurantorder/infrastructure/integration/kitchen-changes.ts";
 import { RESTAURANT_ORDER_AGGREGATE_TYPE } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import {
-  ObservedMongoUnitOfWork,
+  ObservedDatabaseUnitOfWork,
   ObservedOutbox,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
@@ -101,7 +101,7 @@ export type RestaurantsResources = Readonly<{
   reconciler: ReconcilerConfig;
   kitchen: KitchenConfig;
   simulator: SimulatorConfig;
-  mongo: MongoDbConnection;
+  database: DatabaseConnection;
   valkeyConfig: ValkeyEnabledConfig;
   /** Opened by cmd/restaurants; reads bypass the cache while it is down. */
   valkey: Valkey;
@@ -116,7 +116,7 @@ export interface InfrastructureCradle {
   readonly reconcilerConfig: ReconcilerConfig;
   readonly kitchenConfig: KitchenConfig;
   readonly simulatorConfig: SimulatorConfig;
-  readonly mongoClient: MongoClient;
+  readonly databaseClient: MongoClient;
   readonly db: Db;
   readonly valkeyConfig: ValkeyEnabledConfig;
   readonly valkey: Valkey;
@@ -130,7 +130,7 @@ export interface InfrastructureCradle {
   /** Span and duration of every use case listed in di/usecases.ts. */
   readonly useCaseTelemetry: UseCaseTelemetry;
   readonly domainMetrics: RestaurantOrderDomainMetrics;
-  readonly unitOfWork: MongoUnitOfWork;
+  readonly unitOfWork: DatabaseUnitOfWork;
   /**
    * Outbox mapper of the process: dispatches by `aggregate_type` to the
    * allowlist of the owning slice; each aggregate has its own topic.
@@ -189,8 +189,8 @@ const infrastructureRegistrations = (
   reconcilerConfig: asValue(resources.reconciler),
   kitchenConfig: asValue(resources.kitchen),
   simulatorConfig: asValue(resources.simulator),
-  mongoClient: asValue(resources.mongo.client),
-  db: asValue(resources.mongo.db),
+  databaseClient: asValue(resources.database.client),
+  db: asValue(resources.database.db),
   valkeyConfig: asValue(resources.valkeyConfig),
   valkey: asValue(resources.valkey),
   cacheMetrics: asFunction(() => new CacheMetrics()).singleton(),
@@ -205,8 +205,8 @@ const infrastructureRegistrations = (
     () => new RestaurantOrderDomainMetrics(),
   ).singleton(),
   unitOfWork: asFunction(
-    ({ mongoClient, domainMetrics }: RestaurantsCradle) =>
-      new ObservedMongoUnitOfWork(mongoClient, domainMetrics),
+    ({ databaseClient, domainMetrics }: RestaurantsCradle) =>
+      new ObservedDatabaseUnitOfWork(databaseClient, domainMetrics),
   ).singleton(),
   outboxEventMapper: asFunction(
     ({
@@ -223,7 +223,7 @@ const infrastructureRegistrations = (
   outbox: asFunction(
     ({ db, unitOfWork, outboxEventMapper, domainMetrics }: RestaurantsCradle) =>
       new ObservedOutbox(
-        new MongoOutbox(db, unitOfWork, {
+        new DatabaseOutbox(db, unitOfWork, {
           mapper: outboxEventMapper,
           metadata: currentTraceMetadata,
         }),
@@ -235,7 +235,7 @@ const infrastructureRegistrations = (
   kitchenChanges: asFunction(({ db, unitOfWork, clock }: RestaurantsCradle) =>
     kitchenChangeNotifier(
       unitOfWork,
-      new MongoOutbox(db, unitOfWork, { metadata: currentTraceMetadata }),
+      new DatabaseOutbox(db, unitOfWork, { metadata: currentTraceMetadata }),
       () => clock.now(),
     ),
   ).singleton(),

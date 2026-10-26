@@ -16,7 +16,7 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from pkg.application import Subject, SubjectKind
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler
@@ -52,9 +52,9 @@ def _code(error: grpc.RpcError) -> grpc.StatusCode:
     return cast(grpc.StatusCode, cast(grpc.Call, error).code())
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class PaymentsGrpcServiceTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

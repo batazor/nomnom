@@ -9,22 +9,22 @@ import type {
   PublishableEvent,
 } from "../../pkg/application/outbox.ts";
 import {
-  connectMongoDb,
-  type MongoDbConnection,
+  connectDatabase,
+  type DatabaseConnection,
 } from "../../pkg/infrastructure/repository/client.ts";
 import {
-  MongoOutbox,
+  DatabaseOutbox,
   OUTBOX_COLLECTION,
   type OutboxDocument,
   type OutboxEventMapper,
 } from "../../pkg/infrastructure/repository/outbox.ts";
-import { MongoUnitOfWork } from "../../pkg/infrastructure/repository/unit-of-work.ts";
+import { DatabaseUnitOfWork } from "../../pkg/infrastructure/repository/unit-of-work.ts";
 
 /**
  * MONGODB_URI comes from the global setup of `npm test`
  * (test/support/global-containers.ts): a replica set in a testcontainer.
  */
-export const mongoUri = (): string => {
+export const databaseUri = (): string => {
   const uri = process.env.MONGODB_URI?.trim() ?? "";
   if (uri === "") {
     throw new Error(
@@ -34,21 +34,21 @@ export const mongoUri = (): string => {
   return uri;
 };
 
-let connection: Promise<MongoDbConnection> | undefined;
+let connection: Promise<DatabaseConnection> | undefined;
 const databases: Db[] = [];
 
 after(async () => {
   if (connection === undefined) return;
-  const mongo = await connection;
+  const database = await connection;
   for (const db of databases) await db.dropDatabase();
-  await mongo.close();
+  await database.close();
 });
 
 /** One client per test process; databases isolate the test worlds. */
-const sharedConnection = (): Promise<MongoDbConnection> => {
-  connection ??= connectMongoDb({
+const sharedConnection = (): Promise<DatabaseConnection> => {
+  connection ??= connectDatabase({
     enabled: true,
-    uri: mongoUri(),
+    uri: databaseUri(),
     database: "restaurants_test",
     timeoutMs: 10_000,
   });
@@ -56,26 +56,26 @@ const sharedConnection = (): Promise<MongoDbConnection> => {
 };
 
 export type TestDatabase = Readonly<{
-  mongo: MongoDbConnection;
+  database: DatabaseConnection;
   db: Db;
-  unitOfWork: MongoUnitOfWork;
+  unitOfWork: DatabaseUnitOfWork;
 }>;
 
 /**
  * Fresh migrated database with a unique name, dropped after the test file.
- * `mongo.db` is this database, so code taking a connection uses it too.
+ * `database.db` is this database, so code taking a connection uses it too.
  */
 export const createTestDatabase = async (): Promise<TestDatabase> => {
   const shared = await sharedConnection();
   const db = shared.client.db(`restaurants_test_${randomUUID().slice(0, 12)}`);
   databases.push(db);
   await migrateRestaurantsDatabase(db);
-  const mongo: MongoDbConnection = {
+  const database: DatabaseConnection = {
     client: shared.client,
     db,
     close: async () => {},
   };
-  return { mongo, db, unitOfWork: new MongoUnitOfWork(shared.client) };
+  return { database, db, unitOfWork: new DatabaseUnitOfWork(shared.client) };
 };
 
 export type RecordedOutboxRecord = Readonly<{
@@ -94,10 +94,10 @@ const recordingMapper: OutboxEventMapper = (aggregate, event) => ({
  * MongoDB Outbox of the test worlds: every Domain Event is written in the
  * transaction of the Unit of Work and read back in `seq` order.
  */
-export class RecordedOutbox extends MongoOutbox {
+export class RecordedOutbox extends DatabaseOutbox {
   readonly #db: Db;
 
-  constructor(db: Db, unitOfWork: MongoUnitOfWork) {
+  constructor(db: Db, unitOfWork: DatabaseUnitOfWork) {
     super(db, unitOfWork, { mapper: recordingMapper });
     this.#db = db;
   }

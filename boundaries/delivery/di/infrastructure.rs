@@ -39,9 +39,9 @@ use crate::slices::delivery::domains::delivery::{
 };
 use crate::slices::delivery::infrastructure::failure_log::FailureLog;
 use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
+use crate::slices::delivery::infrastructure::transitions::TransitionMetrics;
 use crate::slices::simulator::applications::authorization::SimulatorAuthorization;
 use crate::slices::simulator::di::{SimulatorDependencies, SimulatorPorts, SimulatorStore};
-use crate::slices::delivery::infrastructure::transitions::TransitionMetrics;
 
 /// Локальные значения политики назначения до появления продуктовых настроек.
 const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
@@ -57,7 +57,7 @@ pub trait CourierStore: CourierRepository + CourierLocationStore + Send + Sync {
 impl<T: CourierRepository + CourierLocationStore + Send + Sync> CourierStore for T {}
 
 /// Роли хранилища процесса над одним адаптером
-/// ([`PostgresStore`](crate::infrastructure::repository::PostgresStore); в
+/// ([`Store`](crate::infrastructure::repository::Store); в
 /// тестах — он же за тестовыми хуками `TestStore`), поэтому Unit of Work охватывает записи обоих слайсов и Outbox.
 /// Каждый потребитель получает только свою роль; reconciliation и revisions
 /// авторизации composition root разрешает над тем же `Arc` отдельно.

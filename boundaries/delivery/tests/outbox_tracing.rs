@@ -45,7 +45,7 @@ fn traced<T>(message: T) -> tonic::Request<T> {
 #[tokio::test(flavor = "multi_thread")]
 async fn command_with_traceparent_writes_it_to_the_outbox_row() {
     let config = support::database();
-    let store = Arc::new(di::postgres(&config).expect("store"));
+    let store = Arc::new(di::store(&config).expect("store"));
     let module = Arc::new(di::build_over(
         di::ProcessStores::over(&store),
         Box::new(StaticAuthorization::allow_all()),

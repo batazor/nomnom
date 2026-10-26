@@ -13,11 +13,11 @@ import {
   MessageProcessor,
 } from "../pkg/infrastructure/messaging/processor.ts";
 import {
+  DatabaseInbox,
   INBOX_COLLECTION,
   type InboxDocument,
-  MongoInbox,
 } from "../pkg/infrastructure/repository/inbox.ts";
-import { createTestDatabase } from "./support/mongodb.ts";
+import { createTestDatabase } from "./support/database.ts";
 
 const TOPIC = "orders.v1.order-events";
 const EVENT_TYPE = "nomnom.orders.v1.OrderPlaced";
@@ -79,7 +79,7 @@ const scripted = (
 
 const setup = async (handler: EventHandler, maxRetries = 2) => {
   const { db, unitOfWork } = await createTestDatabase();
-  const inbox = new MongoInbox(db, unitOfWork);
+  const inbox = new DatabaseInbox(db, unitOfWork);
   const inboxRecords = () =>
     db.collection<InboxDocument>(INBOX_COLLECTION).find({}).toArray();
   const deadLetters: IntegrationMessage[] = [];
@@ -272,7 +272,7 @@ test("a failed dead letter publish rejects, so the message is not lost", async (
     consumer: "restaurants.order-placed",
     group: "restaurants",
     handlers: [handler],
-    inbox: new MongoInbox(db, unitOfWork),
+    inbox: new DatabaseInbox(db, unitOfWork),
     deadLetters: {
       publish: async () => {
         throw new Error("broker down");

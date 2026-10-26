@@ -49,7 +49,7 @@ type InFlight = {
   readonly attributes: Record<string, string | number>;
 };
 
-export type MongoCommandTelemetryOptions = Readonly<{
+export type DatabaseCommandTelemetryOptions = Readonly<{
   meter?: Meter;
   now?: () => number;
 }>;
@@ -69,12 +69,12 @@ function peer(address: string): { address: string; port?: number } {
  * Attach with {@link instrument} to a MongoClient created with
  * `monitorCommands: true`.
  */
-export class MongoCommandTelemetry {
+export class DatabaseCommandTelemetry {
   readonly #inFlight = new Map<string, InFlight>();
   readonly #duration: Histogram;
   readonly #now: () => number;
 
-  constructor(options: MongoCommandTelemetryOptions = {}) {
+  constructor(options: DatabaseCommandTelemetryOptions = {}) {
     const meter =
       options.meter ?? metrics.getMeter("nomnom.restaurants.mongodb");
     this.#now = options.now ?? (() => performance.now());

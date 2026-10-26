@@ -1,4 +1,4 @@
-//! Transactional Outbox of [`PostgresStore`] (ADR 13, ADR 31): the Domain
+//! Transactional Outbox of [`Store`] (ADR 13, ADR 31): the Domain
 //! Event → Integration Event mapper and the stable `event_id`. Debezium
 //! publishes the inserted rows from the WAL (ADR 37): a row carries every
 //! field of the Kafka message, and each Outbox write deletes rows older than
@@ -10,7 +10,7 @@ use crate::pkg::persistence::RepositoryError;
 use crate::pkg::telemetry::current_traceparent;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 
-use super::{PostgresStore, storage_error};
+use super::{Store, storage_error};
 
 /// Kafka topic of `delivery` Integration Events (ADR 31).
 pub const OUTBOX_TOPIC: &str = "delivery.v1.delivery-events";
@@ -77,7 +77,7 @@ pub const COURIER_CHANGES_TOPIC: &str = "delivery.v1.courier-changes";
 // deletes. `sqlx::query!` takes only a string literal, so each statement
 // (here and the courier writes of `repositories`) spells the CTE out.
 
-impl PostgresStore {
+impl Store {
     /// Writes the Change Notification of `Courier(courier_id)` next to the
     /// change: only the GraphQL entity key, the Router re-reads the courier
     /// view with the subscriber's rights. Inside a Unit of Work it commits
@@ -105,7 +105,7 @@ impl PostgresStore {
     }
 }
 
-impl DeliveryOutbox for PostgresStore {
+impl DeliveryOutbox for Store {
     /// Inside a Unit of Work the row commits or rolls back with the aggregate;
     /// `aggregate_version` is the version the same transaction just wrote.
     /// Events the mapper does not publish are not written.

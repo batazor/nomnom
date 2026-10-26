@@ -9,20 +9,20 @@ import {
 } from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import {
-  connectMongoDb,
-  type MongoDbConnection,
+  connectDatabase,
+  type DatabaseConnection,
 } from "../pkg/infrastructure/repository/client.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantMemberships,
-  MongoRestaurantRepository,
+  DatabaseRestaurantMemberships,
+  DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
+import { databaseUri, noKitchenChanges } from "./support/database.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
-import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 import { FixedClock, owner, startOfDay } from "./support/restaurants.ts";
 
 // Revoke Staff in flight against MongoDB and SpiceDB (AC-700): needs the MongoDB
@@ -33,7 +33,7 @@ const endpoint = spiceDbEndpoint();
 const GRACE = 60_000;
 
 /** MongoDB repository whose save waits for `commit()`. */
-class GatedRestaurantRepository extends MongoRestaurantRepository {
+class GatedRestaurantRepository extends DatabaseRestaurantRepository {
   saving: Promise<void> = Promise.resolve();
   #saving: () => void = () => {};
   #commit: () => void = () => {};
@@ -61,17 +61,17 @@ class GatedRestaurantRepository extends MongoRestaurantRepository {
 
 describe("reconciliation against MongoDB and SpiceDB", () => {
   const run = `it-${randomUUID()}-`;
-  let mongo: MongoDbConnection;
+  let database: DatabaseConnection;
   let spicedb: SpiceDbClient;
 
   before(async () => {
-    mongo = await connectMongoDb({
+    database = await connectDatabase({
       enabled: true,
-      uri: mongoUri(),
+      uri: databaseUri(),
       database: `restaurants_test_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,
     });
-    await migrateRestaurantsDatabase(mongo.db);
+    await migrateRestaurantsDatabase(database.db);
     spicedb = createSpiceDbClient({
       enabled: true,
       endpoint,
@@ -105,9 +105,9 @@ describe("reconciliation against MongoDB and SpiceDB", () => {
         spicedb.close();
       }
     }
-    if (mongo !== undefined) {
-      await mongo.db.dropDatabase();
-      await mongo.close();
+    if (database !== undefined) {
+      await database.db.dropDatabase();
+      await database.close();
     }
   });
 
@@ -133,8 +133,8 @@ describe("reconciliation against MongoDB and SpiceDB", () => {
 
   test("AC-700 a revoke in flight is not restored by a pass between its DELETE and its save", async () => {
     const collection = createRestaurantCollection(
-      mongo.db,
-      new MongoUnitOfWork(mongo.client),
+      database.db,
+      new DatabaseUnitOfWork(database.client),
     );
     const restaurants = new GatedRestaurantRepository(
       collection,
@@ -161,7 +161,7 @@ describe("reconciliation against MongoDB and SpiceDB", () => {
     const clock = new FixedClock(startOfDay);
     const reconciler = new RelationshipReconciler({
       client: spicedb,
-      restaurants: new MongoRestaurantMemberships(collection),
+      restaurants: new DatabaseRestaurantMemberships(collection),
       graceMs: GRACE,
       pageSize: 2,
       timeoutMs: 5000,

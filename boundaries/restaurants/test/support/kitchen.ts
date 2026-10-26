@@ -30,15 +30,15 @@ import type { CancellationPolicy } from "../../slices/restaurantorder/domains/re
 import { FifoKitchenQueueOrdering } from "../../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
 import {
   createRestaurantOrderCollection,
-  MongoKitchenBoard,
-  MongoRestaurantOrderRepository,
+  DatabaseKitchenBoard,
+  DatabaseRestaurantOrderRepository,
 } from "../../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,
 } from "../../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
+import { noKitchenChanges } from "./database.ts";
 import { createMenuWorld } from "./menus.ts";
-import { noKitchenChanges } from "./mongodb.ts";
 import {
   createInfrastructure,
   type Infrastructure,
@@ -67,11 +67,11 @@ export const createKitchenWorld = async (
     infrastructure.db,
     infrastructure.unitOfWork,
   );
-  const restaurantOrders = new MongoRestaurantOrderRepository(
+  const restaurantOrders = new DatabaseRestaurantOrderRepository(
     store,
     noKitchenChanges,
   );
-  const board = new MongoKitchenBoard(store);
+  const board = new DatabaseKitchenBoard(store);
   const accessControl = new TestKitchenAccessControl();
   const conditions = new StaticAcceptanceConditions();
   const outbox = options.outbox ?? infrastructure.outbox;

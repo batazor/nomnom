@@ -25,7 +25,7 @@ use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver}
 use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
-use crate::infrastructure::repository::{PostgresStore, migrate};
+use crate::infrastructure::repository::{Store, migrate};
 use crate::infrastructure::spicedb::{
     CheckMetrics, RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization,
     SpiceDbClient, SpiceDbConfigError, SpiceDbRelationships,
@@ -67,7 +67,7 @@ pub fn spicedb(config: &SpiceDbConfig) -> Result<SpiceDbClient, SpiceDbConfigErr
 ///
 /// Domain Events с контрактом `nomnom/delivery/v1/events.proto` пишутся в
 /// Outbox той же транзакцией (ADR 31); публикует их коннектор Debezium (ADR 37).
-pub fn postgres(config: &DatabaseConfig) -> Result<PostgresStore, String> {
+pub fn store(config: &DatabaseConfig) -> Result<Store, String> {
     let applied = migrate(config)?;
     if applied.is_empty() {
         tracing::info!(
@@ -78,7 +78,7 @@ pub fn postgres(config: &DatabaseConfig) -> Result<PostgresStore, String> {
     } else {
         tracing::info!(operation = "migrate", outcome = "success", applied = ?applied, "migrations applied");
     }
-    PostgresStore::connect(config)
+    Store::connect(config)
         .map(|store| store.with_outbox_mapper(Arc::new(DeliveryIntegrationEvents)))
 }
 
@@ -386,8 +386,8 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // PostgreSQL обязателен: пустой DATABASE__URL, недоступная база или
     // ошибка миграции схемы прерывают startup. Revisions записей relationships хранятся с Courier и
     // Delivery; checks читают их из того же хранилища (FR-447).
-    // Каждая роль хранилища разрешается отдельно над одним `PostgresStore`.
-    let store = Arc::new(postgres(&config.database)?);
+    // Каждая роль хранилища разрешается отдельно над одним `Store`.
+    let store = Arc::new(store(&config.database)?);
     let (ids, locator) = assignment_adapters(Arc::clone(&store) as _);
     let infrastructure = infrastructure(
         ProcessStores::over(&store),

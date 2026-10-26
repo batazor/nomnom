@@ -207,6 +207,65 @@ export declare type RestaurantClosed = Message<"nomnom.restaurants.v1.Restaurant
 export declare const RestaurantClosedSchema: GenMessage<RestaurantClosed>;
 
 /**
+ * В меню добавлен Menu Item (Add Menu Item). Состав и цену соседи читают через
+ * GetMenu: событие несёт только ключи.
+ *
+ * @generated from message nomnom.restaurants.v1.MenuItemAdded
+ */
+export declare type MenuItemAdded = Message<"nomnom.restaurants.v1.MenuItemAdded"> & {
+  /**
+   * @generated from field: string menu_id = 1;
+   */
+  menuId: string;
+
+  /**
+   * @generated from field: string restaurant_id = 2;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string menu_item_id = 3;
+   */
+  menuItemId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.MenuItemAdded.
+ * Use `create(MenuItemAddedSchema)` to create a new message.
+ */
+export declare const MenuItemAddedSchema: GenMessage<MenuItemAdded>;
+
+/**
+ * Изменились название, описание или цена Menu Item (Update Menu Item). Новые
+ * значения соседи читают через GetMenu; заказ хранит снимок цены на момент
+ * Place Order, поэтому уже оформленные заказы не меняются.
+ *
+ * @generated from message nomnom.restaurants.v1.MenuItemUpdated
+ */
+export declare type MenuItemUpdated = Message<"nomnom.restaurants.v1.MenuItemUpdated"> & {
+  /**
+   * @generated from field: string menu_id = 1;
+   */
+  menuId: string;
+
+  /**
+   * @generated from field: string restaurant_id = 2;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string menu_item_id = 3;
+   */
+  menuItemId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.MenuItemUpdated.
+ * Use `create(MenuItemUpdatedSchema)` to create a new message.
+ */
+export declare const MenuItemUpdatedSchema: GenMessage<MenuItemUpdated>;
+
+/**
  * Изменилась доступность Menu Item (Set Menu Item Availability или Update Menu
  * Item с новой доступностью); available — новое значение.
  *

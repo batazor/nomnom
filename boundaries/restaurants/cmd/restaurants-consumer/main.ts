@@ -20,7 +20,7 @@ import {
   createConsumerClient,
 } from "../../pkg/infrastructure/kafka/consumer.ts";
 import { KafkaPublisher } from "../../pkg/infrastructure/kafka/publisher.ts";
-import { connectMongoDb } from "../../pkg/infrastructure/repository/client.ts";
+import { connectDatabase } from "../../pkg/infrastructure/repository/client.ts";
 import { connectValkey } from "../../pkg/infrastructure/valkey/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
@@ -57,7 +57,7 @@ if (!config.valkey.enabled) {
 const valkeyConfig = config.valkey;
 
 const telemetry = startTelemetry(SERVICE_NAME);
-const mongo = await connectMongoDb(config.mongodb);
+const database = await connectDatabase(config.mongodb);
 const valkey = connectValkey(valkeyConfig, {
   connectionName: SERVICE_NAME,
   logger: logger.child({ operation: "valkey" }),
@@ -70,7 +70,7 @@ try {
   // Nothing to change on an already current database; a failed migration
   // stops the process before it consumes.
   await migrateRestaurantsDatabase(
-    mongo.db,
+    database.db,
     logger.child({ operation: "migrate" }).info,
   );
   deadLetters = await KafkaPublisher.connect(config.kafka, {
@@ -92,7 +92,7 @@ try {
   });
   container = createConsumerContainer({
     consumer: config.consumer,
-    mongo,
+    database,
     kafkaConsumer,
     cacheRefreshConsumer,
     valkeyConfig,
@@ -118,6 +118,6 @@ try {
   await container?.dispose();
   await valkey.close();
   await deadLetters?.close();
-  await mongo.close();
+  await database.close();
   await telemetry.shutdown(config.shutdown.telemetryFlushTimeoutMs);
 }

@@ -15,15 +15,15 @@ import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/
 import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantCatalog,
-  MongoRestaurantMemberships,
-  MongoRestaurantRepository,
+  DatabaseRestaurantCatalog,
+  DatabaseRestaurantMemberships,
+  DatabaseRestaurantRepository,
 } from "../../slices/restaurant/infrastructure/repository/restaurants.ts";
 import {
   createTestDatabase,
   noKitchenChanges,
   RecordedOutbox,
-} from "./mongodb.ts";
+} from "./database.ts";
 
 export const operator: Subject = { type: "user", id: "operator" };
 export const owner: Subject = { type: "user", id: "owner" };
@@ -38,10 +38,10 @@ export const startOfDay = new Date(Date.UTC(2026, 9, 25, 9));
  * MongoDB database with its Unit of Work and recording Outbox.
  */
 export const createInfrastructure = async () => {
-  const { mongo, db, unitOfWork } = await createTestDatabase();
+  const { database, db, unitOfWork } = await createTestDatabase();
   const outbox = new RecordedOutbox(db, unitOfWork);
   const clock = new FixedClock(startOfDay);
-  return { mongo, db, unitOfWork, outbox, clock };
+  return { database, db, unitOfWork, outbox, clock };
 };
 
 export type Infrastructure = Awaited<ReturnType<typeof createInfrastructure>>;
@@ -55,9 +55,9 @@ export const createRestaurantWorld = async (
     infrastructure.db,
     infrastructure.unitOfWork,
   );
-  const restaurants = new MongoRestaurantRepository(store, noKitchenChanges);
-  const catalog = new MongoRestaurantCatalog(store);
-  const memberships = new MongoRestaurantMemberships(store);
+  const restaurants = new DatabaseRestaurantRepository(store, noKitchenChanges);
+  const catalog = new DatabaseRestaurantCatalog(store);
+  const memberships = new DatabaseRestaurantMemberships(store);
   const authorization = new TestRestaurantAuthorization().allowRegistration(
     operator,
   );

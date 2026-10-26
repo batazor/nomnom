@@ -10,7 +10,8 @@ import "google/protobuf/timestamp.proto";
 // aggregate, чтобы порядок по aggregate_id сохранялся:
 //   restaurants.v1.restaurant-order-events — Kitchen Order (RestaurantOrder);
 //   restaurants.v1.restaurant-events       — Restaurant (RestaurantOpened, RestaurantClosed);
-//   restaurants.v1.menu-events             — Menu (MenuItemAvailabilityChanged).
+//   restaurants.v1.menu-events             — Menu (MenuItemAdded, MenuItemUpdated,
+//                                            MenuItemAvailabilityChanged).
 
 // --- restaurants.v1.restaurant-order-events (aggregate_id — Kitchen Order) ---
 
@@ -72,6 +73,23 @@ message RestaurantClosed {
 }
 
 // --- restaurants.v1.menu-events (aggregate_type Menu, aggregate_id — menu_id) ---
+
+// В меню добавлен Menu Item (Add Menu Item). Состав и цену соседи читают через
+// GetMenu: событие несёт только ключи.
+message MenuItemAdded {
+  string menu_id = 1;
+  string restaurant_id = 2;
+  string menu_item_id = 3;
+}
+
+// Изменились название, описание или цена Menu Item (Update Menu Item). Новые
+// значения соседи читают через GetMenu; заказ хранит снимок цены на момент
+// Place Order, поэтому уже оформленные заказы не меняются.
+message MenuItemUpdated {
+  string menu_id = 1;
+  string restaurant_id = 2;
+  string menu_item_id = 3;
+}
 
 // Изменилась доступность Menu Item (Set Menu Item Availability или Update Menu
 // Item с новой доступностью); available — новое значение.

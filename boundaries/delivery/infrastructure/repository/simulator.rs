@@ -1,4 +1,4 @@
-//! Simulator switch and the Simulator work read model of [`PostgresStore`]
+//! Simulator switch and the Simulator work read model of [`Store`]
 //! (FR-604, FR-605).
 
 use crate::pkg::persistence::RepositoryError;
@@ -10,9 +10,9 @@ use crate::slices::simulator::applications::work::{
 use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
 use super::rows::{active_assignment_states, offer_state, parse_delivery_state};
-use super::{PostgresStore, corrupt, storage_error};
+use super::{Store, corrupt, storage_error};
 
-impl SimulatorStateRepository for PostgresStore {
+impl SimulatorStateRepository for Store {
     fn enabled(&self) -> Result<bool, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_scalar!(
             "SELECT enabled FROM simulator"
@@ -32,7 +32,7 @@ impl SimulatorStateRepository for PostgresStore {
     }
 }
 
-impl SimulatorWork for PostgresStore {
+impl SimulatorWork for Store {
     fn pending_offers(&self) -> Result<Vec<PendingOfferWork>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query!(
             "SELECT id, courier_id, expires_at FROM delivery_offers

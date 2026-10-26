@@ -45,11 +45,16 @@ func (fakeCatalog) MenuItemNames(context.Context, string) (map[string]string, er
 }
 
 func active(id string, stage Stage, minutes int) ActiveOrder {
-	return ActiveOrder{
+	order := ActiveOrder{
 		ID: id, OrderID: "order-" + id, Stage: stage,
 		Lines:      []ActiveOrderLine{{MenuItemID: "menu-pho", Quantity: 2}, {MenuItemID: "menu-gone", Quantity: 1}},
 		ReceivedAt: at(minutes),
 	}
+	if stage != StageReceived {
+		accepted, ready := at(minutes+1), at(minutes+16)
+		order.AcceptedAt, order.ExpectedReadyAt = &accepted, &ready
+	}
+	return order
 }
 
 func ids(orders []OrderView) []string {
@@ -83,6 +88,12 @@ func TestKitchenOrdersFollowTheBoardOrder(t *testing.T) {
 	assert.Equal(t, []ItemView{{Name: "Фо бо", Quantity: 2}, {Name: "", Quantity: 1}}, view.Orders[0].Items, "an item gone from the menu has no name")
 	assert.Equal(t, at(2), view.Orders[0].ReceivedAt)
 	assert.Equal(t, "order-received-1", view.Orders[0].OrderID)
+	assert.Nil(t, view.Orders[0].AcceptedAt, "RECEIVED is not accepted yet")
+	assert.Nil(t, view.Orders[0].ExpectedReadyAt)
+	require.NotNil(t, view.Orders[2].AcceptedAt)
+	require.NotNil(t, view.Orders[2].ExpectedReadyAt)
+	assert.Equal(t, at(5), *view.Orders[2].AcceptedAt)
+	assert.Equal(t, at(20), *view.Orders[2].ExpectedReadyAt)
 }
 
 func TestKitchenActionReadsTheOrderBack(t *testing.T) {

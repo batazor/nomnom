@@ -27,7 +27,7 @@ from typing import Any
 
 from dependency_injector import providers
 
-from infrastructure.repository import MigrationSet, PostgresDatabase, create_database, migrate
+from infrastructure.repository import Database, MigrationSet, create_database, migrate
 from pkg import telemetry
 from pkg.config import (
     DatabaseSettings,
@@ -48,12 +48,14 @@ class ProcessResource[T](providers.Resource[T]):
     """Process-wide client or pool, owned for the lifetime of the workers."""
 
 
-# Migration sets of the process in the order they are applied: the shared tables of
-# ``infrastructure`` (Outbox, Inbox) first, then every slice its own tables. A set lives
-# next to the repository code of its tables. A new slice adds its set here.
+# Migration sets of the process in the order they are applied: the shared tables
+# (Outbox, Inbox) first, then every slice its own tables. A set lives next to the
+# repository code of its tables. The first argument is the storage id of the set: a schema
+# contract naming its yoyo tables, never derived from the package and never changed by
+# moving code; changing it requires a migration. A new slice adds its set here.
 MIGRATIONS = (
-    MigrationSet("infrastructure", "infrastructure.repository"),
-    MigrationSet("payment", "slices.payment.infrastructure.repository"),
+    MigrationSet("messaging", "infrastructure.repository"),
+    MigrationSet("payments", "slices.payment.infrastructure.repository"),
 )
 
 # ``Configuration.provider`` is the provider's own attribute, so the section is renamed.
@@ -83,7 +85,7 @@ def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetr
         owner.shutdown(flush_timeout.total_seconds())
 
 
-def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
+def migrated_database(settings: DatabaseSettings) -> Iterator[Database]:
     """The psycopg pool over the migrated schema; any failure stops the process before ports open.
 
     Pending migrations of ``MIGRATIONS`` are applied first, under the session advisory lock

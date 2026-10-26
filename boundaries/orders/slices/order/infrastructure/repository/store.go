@@ -144,6 +144,6 @@ func transaction(ctx context.Context) (pgx.Tx, bool) {
 }
 
 func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+	var dbErr *pgconn.PgError
+	return errors.As(err, &dbErr) && dbErr.Code == "23505"
 }

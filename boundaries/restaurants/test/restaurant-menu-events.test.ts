@@ -28,8 +28,8 @@ import {
   RESTAURANT_ORDER_EVENTS_TOPIC,
   restaurantOrderEventMapper,
 } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
+import type { RecordedOutboxRecord } from "./support/database.ts";
 import { createMenuWorld } from "./support/menus.ts";
-import type { RecordedOutboxRecord } from "./support/mongodb.ts";
 import { owner } from "./support/restaurants.ts";
 
 const at = new Date("2026-10-25T09:00:00.000Z");

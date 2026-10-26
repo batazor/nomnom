@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  type DatabaseProcess,
   DEFAULT_KAFKA_CLIENT_ID,
   DEFAULT_MONGODB_DATABASE,
   DEFAULT_MONGODB_MAX_CONNECTING,
@@ -20,7 +21,6 @@ import {
   MONGODB_TIMEOUT_ENV,
   MONGODB_URI_ENV,
   MONGODB_WAIT_QUEUE_TIMEOUT_ENV,
-  type MongoDbProcess,
   SPICEDB_ENDPOINT_ENV,
   SPICEDB_INSECURE_ENV,
   SPICEDB_PRESHARED_KEY_ENV,
@@ -48,21 +48,21 @@ export type SpiceDbEnabledConfig = Readonly<{
 export type SpiceDbConfig = Readonly<{ enabled: false }> | SpiceDbEnabledConfig;
 
 /** Подключение к MongoDB (ADR 8, локальный ADR 1), когда задан `MONGODB__URI`. */
-export type MongoDbEnabledConfig = Readonly<{
+export type DatabaseEnabledConfig = Readonly<{
   enabled: true;
   /** Connection string replica set; приходит из Secret, не из values. */
   uri: string;
   database: string;
   /** Server selection timeout: недоступная MongoDB останавливает старт. */
   timeoutMs: number;
-  pool: MongoDbPoolConfig;
+  pool: DatabasePoolConfig;
 }>;
 
 /**
  * Connection pool MongoClient процесса (CMAP). Драйвер держит отдельный пул на
  * каждый сервер replica set, поэтому лимиты действуют на пул одного сервера.
  */
-export type MongoDbPoolConfig = Readonly<{
+export type DatabasePoolConfig = Readonly<{
   /** Соединений в пуле (in use + idle), `maxPoolSize`. */
   maxPoolSize: number;
   /** Прогретые соединения, `minPoolSize`; 0 — пул растёт по требованию. */
@@ -79,7 +79,9 @@ export type MongoDbPoolConfig = Readonly<{
  * `enabled: false` при пустом `MONGODB__URI`; процессы `restaurants` и
  * `restaurants-consumer` в этом случае не стартуют.
  */
-export type MongoDbConfig = Readonly<{ enabled: false }> | MongoDbEnabledConfig;
+export type DatabaseConfig =
+  | Readonly<{ enabled: false }>
+  | DatabaseEnabledConfig;
 
 /**
  * Kafka брокеры consumer (ADR 28). `enabled: false` при пустом
@@ -120,10 +122,10 @@ export function loadSpiceDbConfig(
 
 const MONGODB_DATABASE_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 
-export function loadMongoDbConfig(
+export function loadDatabaseConfig(
   environment: Record<string, string | undefined>,
-  process: MongoDbProcess = "api",
-): MongoDbConfig {
+  process: DatabaseProcess = "api",
+): DatabaseConfig {
   const uri = environment[MONGODB_URI_ENV]?.trim() ?? "";
   if (uri === "") {
     return Object.freeze({ enabled: false });
@@ -148,7 +150,7 @@ export function loadMongoDbConfig(
     uri,
     database,
     timeoutMs,
-    pool: loadMongoDbPoolConfig(environment, process),
+    pool: loadDatabasePoolConfig(environment, process),
   });
 }
 
@@ -156,10 +158,10 @@ export function loadMongoDbConfig(
  * Лимиты пула с defaults процесса; значение вне диапазона останавливает старт.
  * 0 у таймаутов драйвер трактует как «без ограничения», поэтому он запрещён.
  */
-export function loadMongoDbPoolConfig(
+export function loadDatabasePoolConfig(
   environment: Record<string, string | undefined>,
-  process: MongoDbProcess = "api",
-): MongoDbPoolConfig {
+  process: DatabaseProcess = "api",
+): DatabasePoolConfig {
   const value = (name: string) => environment[name]?.trim() || undefined;
   const integer = (name: string, min: number, max: number, fallback: number) =>
     parseSetting(

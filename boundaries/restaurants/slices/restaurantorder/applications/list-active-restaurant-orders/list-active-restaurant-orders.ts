@@ -15,6 +15,8 @@ export type ActiveRestaurantOrder = Readonly<{
   items: readonly KitchenBoardItem[];
   /** Unset on orders received before the timeline recorded it. */
   receivedAt: Date | undefined;
+  /** Time of Acceptance; unset before it (`RECEIVED`). */
+  acceptedAt: Date | undefined;
   /** Unset until Acceptance; includes reported Preparation Delays. */
   expectedReadyAt: Date | undefined;
   /** Version of the Restaurant Order the entry was read at. */

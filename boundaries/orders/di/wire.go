@@ -31,12 +31,12 @@ var (
 	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
 	// spiceDBSet — клиент SpiceDB процесса orders-reconciler.
 	spiceDBSet = wire.NewSet(NewSpiceDBClient)
-	// postgresSet — store процесса на схеме, мигрированной наборами di/schema,
+	// storeSet — store процесса на схеме, мигрированной наборами di/schema,
 	// в ролях портов слайса order.
-	postgresSet = wire.NewSet(NewPostgresStore, orderdi.PostgresSet)
+	storeSet = wire.NewSet(NewStore, orderdi.RepositorySet)
 	// workerStoreSet — store процесса слайса order, в том числе в роли хранилища
 	// Activities fulfillment.
-	workerStoreSet = wire.NewSet(postgresSet, wire.Bind(new(fulfillmentdi.Store), new(*orderdi.ProcessStore)))
+	workerStoreSet = wire.NewSet(storeSet, wire.Bind(new(fulfillmentdi.Store), new(*orderdi.ProcessStore)))
 )
 
 // Injectors процессов orders: каждый cmd/* вызывает свой и передаёт результат
@@ -44,7 +44,7 @@ var (
 // `make generate`.
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
-	wire.Build(configSet, postgresSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, simulatordi.APISet, NewSimulatorRunner, temporalAPISet, grpcSet, NewApp)
+	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, simulatordi.APISet, NewSimulatorRunner, temporalAPISet, grpcSet, NewApp)
 	return nil, nil, nil
 }
 
@@ -54,11 +54,11 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 }
 
 func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
-	wire.Build(configSet, postgresSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.ConsumerSet, NewKafkaConsumer)
+	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.ConsumerSet, NewKafkaConsumer)
 	return nil, nil, nil
 }
 
 func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), error) {
-	wire.Build(configSet, postgresSet, spiceDBSet, NewRelationshipReconciler)
+	wire.Build(configSet, storeSet, spiceDBSet, NewRelationshipReconciler)
 	return nil, nil, nil
 }

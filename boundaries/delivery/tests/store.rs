@@ -12,7 +12,7 @@ use delivery::di;
 use delivery::infrastructure::locator::CourierPositions;
 use delivery::infrastructure::reconcile::ReconciliationStore;
 use delivery::infrastructure::repository::{
-    MIGRATION_SETS, OutboxMapper, OutboxRecord, PostgresStore, event_id, migrate,
+    MIGRATION_SETS, OutboxMapper, OutboxRecord, Store, event_id, migrate,
 };
 use delivery::pkg::application::{UnitOfWork, UnitOfWorkError};
 use delivery::pkg::config::DatabaseConfig;
@@ -42,8 +42,8 @@ fn config() -> DatabaseConfig {
 }
 
 /// Store over the migrated test database.
-fn store() -> PostgresStore {
-    PostgresStore::connect(&config())
+fn store() -> Store {
+    Store::connect(&config())
         .expect("connect")
         .with_outbox_mapper(Arc::new(TestMapper))
 }
@@ -158,7 +158,7 @@ impl From<RepositoryError> for TestError {
     }
 }
 
-/// Startup of the process (`di::postgres`) applies every embedded migration
+/// Startup of the process (`di::store`) applies every embedded migration
 /// of every set to an empty database and leaves a migrated one as it is.
 #[test]
 fn startup_migrates_an_empty_database_and_skips_a_migrated_one() {
@@ -168,19 +168,37 @@ fn startup_migrates_an_empty_database_and_skips_a_migrated_one() {
         .as_nanos();
     let config = support::empty_database(&format!("startup_{nanos}"));
 
-    di::postgres(&config).expect("startup on an empty database");
+    di::store(&config).expect("startup on an empty database");
     let first = installed(&config);
     assert_eq!(
         first
             .iter()
-            .map(|(owner, version, _)| (*owner, *version))
+            .map(|(id, version, _)| (*id, *version))
             .collect::<Vec<_>>(),
         embedded()
     );
 
-    di::postgres(&config).expect("startup on a migrated database");
+    di::store(&config).expect("startup on a migrated database");
     assert_eq!(installed(&config), first);
     assert_eq!(migrate(&config).expect("no pending"), Vec::new());
+}
+
+/// Storage ids of the migration sets and their history tables are part of
+/// the schema contract: a code refactoring must not change them.
+#[test]
+fn migration_sets_keep_their_storage_ids() {
+    assert_eq!(
+        MIGRATION_SETS
+            .iter()
+            .map(|set| (set.id, set.migrator.table_name.as_ref()))
+            .collect::<Vec<_>>(),
+        [
+            ("messaging", "_sqlx_migrations_messaging"),
+            ("couriers", "_sqlx_migrations_couriers"),
+            ("deliveries", "_sqlx_migrations_deliveries"),
+            ("simulator", "_sqlx_migrations_simulator"),
+        ]
+    );
 }
 
 /// Replicas starting together serialize on the advisory lock: one applies
@@ -210,14 +228,14 @@ fn replicas_starting_together_apply_migrations_once() {
     assert_eq!(applied, vec![vec![], vec![], vec![], embedded()]);
 }
 
-/// Embedded migrations as `(owner, version)`, sets in their order.
+/// Embedded migrations as `(id, version)`, sets in their order.
 fn embedded() -> Vec<(&'static str, i64)> {
     MIGRATION_SETS
         .iter()
         .flat_map(|set| {
             set.migrator
                 .iter()
-                .map(|migration| (set.owner, migration.version))
+                .map(|migration| (set.id, migration.version))
         })
         .collect()
 }
@@ -243,10 +261,7 @@ fn installed(config: &DatabaseConfig) -> Vec<(&'static str, i64, String)> {
                         .fetch_all(&pool)
                         .await
                         .expect("applied migrations");
-                    installed.extend(
-                        rows.into_iter()
-                            .map(|(version, at)| (set.owner, version, at)),
-                    );
+                    installed.extend(rows.into_iter().map(|(version, at)| (set.id, version, at)));
                 }
                 pool.close().await;
                 installed
@@ -256,7 +271,7 @@ fn installed(config: &DatabaseConfig) -> Vec<(&'static str, i64, String)> {
 
 #[test]
 fn empty_dsn_fails_fast() {
-    let Err(error) = PostgresStore::connect(&DatabaseConfig::default()) else {
+    let Err(error) = Store::connect(&DatabaseConfig::default()) else {
         panic!("an empty DSN must fail");
     };
     assert!(error.contains("DATABASE__URL"));
@@ -781,7 +796,7 @@ fn expired_pending_offers_are_listed_by_deadline_and_stored_as_expired() {
     // The query scans every pending offer: other tests of the shared database
     // add offers with past deadlines (see waiting_deliveries_*), so a LIMIT 1
     // batch could return theirs.
-    let store = PostgresStore::connect(&support::own_database())
+    let store = Store::connect(&support::own_database())
         .expect("connect")
         .with_outbox_mapper(Arc::new(TestMapper));
     let courier_id = CourierId::new(unique("courier"));

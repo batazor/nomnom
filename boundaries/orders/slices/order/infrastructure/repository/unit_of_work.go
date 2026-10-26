@@ -143,15 +143,15 @@ func (s *Store) attempt(ctx context.Context, fn func(ctx context.Context) error)
 // retryReason classifies an error of a rolled-back attempt; false — the error
 // is not a conflict and the attempt is final.
 func retryReason(err error) (string, bool) {
-	var pgErr *pgconn.PgError
+	var dbErr *pgconn.PgError
 	switch {
 	case err == nil:
 		return "", false
-	case errors.As(err, &pgErr) && pgErr.Code == sqlstateSerializationFailure:
+	case errors.As(err, &dbErr) && dbErr.Code == sqlstateSerializationFailure:
 		return reasonSerialization, true
-	case errors.As(err, &pgErr) && pgErr.Code == sqlstateDeadlockDetected:
+	case errors.As(err, &dbErr) && dbErr.Code == sqlstateDeadlockDetected:
 		return reasonDeadlock, true
-	case errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, sqlstateTransactionRollback):
+	case errors.As(err, &dbErr) && strings.HasPrefix(dbErr.Code, sqlstateTransactionRollback):
 		return reasonOther, true
 	case errors.Is(err, application.ErrConcurrencyConflict):
 		return reasonWriteConflict, true

@@ -51,9 +51,9 @@ import {
   type EachMessage,
   KafkaConsumerWorker,
 } from "../pkg/infrastructure/kafka/consumer.ts";
-import { MongoCommandTelemetry } from "../pkg/infrastructure/repository/command-telemetry.ts";
+import { DatabaseCommandTelemetry } from "../pkg/infrastructure/repository/command-telemetry.ts";
 import {
-  MongoUnitOfWork,
+  DatabaseUnitOfWork,
   UOW_DURATION_BUCKETS,
 } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { createLogger, REDACTED } from "../pkg/telemetry/logger.ts";
@@ -72,7 +72,7 @@ import {
   USECASE_DURATION_BUCKETS,
   UseCaseTelemetry,
 } from "../pkg/telemetry/usecase.ts";
-import { createTestDatabase } from "./support/mongodb.ts";
+import { createTestDatabase } from "./support/database.ts";
 import {
   createInfrastructure,
   createRestaurantWorld,
@@ -475,7 +475,7 @@ test("the grpc-js client (SpiceDB) propagates the trace and records rpc.client.c
 test("MongoDB commands become client spans and db.client.operation.duration without payload", async () => {
   const { exporter, telemetry, collect } = startTestTelemetry("restaurants");
   try {
-    const mongo = new MongoCommandTelemetry();
+    const database = new DatabaseCommandTelemetry();
     const base = {
       databaseName: "restaurants",
       address: "mongodb-0:27017",
@@ -485,27 +485,27 @@ test("MongoDB commands become client spans and db.client.operation.duration with
       "usecase get_restaurant",
       { parent: ROOT_CONTEXT, kind: SpanKind.INTERNAL },
       async () => {
-        mongo.started({
+        database.started({
           ...base,
           requestId: 1,
           commandName: "find",
           command: { find: "restaurants", filter: { owner: "secret@x" } },
         } as never);
-        mongo.succeeded({ requestId: 1, connectionId: 3 } as never);
-        mongo.started({
+        database.succeeded({ requestId: 1, connectionId: 3 } as never);
+        database.started({
           ...base,
           requestId: 2,
           commandName: "insert",
           command: { insert: "outbox", documents: [{ payload: "x" }] },
         } as never);
-        mongo.failed({
+        database.failed({
           requestId: 2,
           connectionId: 3,
           failure: Object.assign(new Error("dup"), {
             codeName: "DuplicateKey",
           }),
         } as never);
-        mongo.started({
+        database.started({
           ...base,
           requestId: 3,
           commandName: "hello",
@@ -555,9 +555,9 @@ test("MongoDB commands become client spans and db.client.operation.duration with
 test("MongoDB commands outside a trace record the metric but open no root span", async () => {
   const { exporter, telemetry, collect } = startTestTelemetry("restaurants");
   try {
-    const mongo = new MongoCommandTelemetry();
+    const database = new DatabaseCommandTelemetry();
     // The reconciler loop runs outside any trace.
-    mongo.started(
+    database.started(
       {
         databaseName: "restaurants",
         address: "mongodb-0:27017",
@@ -568,7 +568,7 @@ test("MongoDB commands outside a trace record the metric but open no root span",
       } as never,
       ROOT_CONTEXT,
     );
-    mongo.succeeded({ requestId: 7, connectionId: 1 } as never);
+    database.succeeded({ requestId: 7, connectionId: 1 } as never);
     assert.equal(exporter.getFinishedSpans().length, 0);
     const labels = pointsOf(
       await collect(),
@@ -710,8 +710,8 @@ test("logs are one JSON line with the service identity and trace_id only inside 
 test("Unit of Work transactions, duration and driver retries by outcome and reason", async () => {
   const { telemetry, collect } = startTestTelemetry("restaurants");
   try {
-    const { mongo, db } = await createTestDatabase();
-    const unitOfWork = new MongoUnitOfWork(mongo.client);
+    const { database, db } = await createTestDatabase();
+    const unitOfWork = new DatabaseUnitOfWork(database.client);
     const notes = db.collection<{ _id: string }>("uow_notes");
     const note = (id: string) =>
       notes.insertOne({ _id: id }, { session: unitOfWork.session });

@@ -1,4 +1,4 @@
-//! Unit of Work of [`PostgresStore`]: the connection of the running
+//! Unit of Work of [`Store`]: the connection of the running
 //! transaction lives in a thread-local slot keyed by the store.
 //!
 //! Metrics (uow section of the inventory ops/grafana/inventory; registry
@@ -25,7 +25,7 @@ use opentelemetry::metrics::{Counter, Histogram, Meter};
 use crate::pkg::application::{UnitOfWork, UnitOfWorkError};
 use crate::pkg::telemetry::SECONDS_BUCKETS;
 
-use super::{Connection, PostgresStore};
+use super::{Connection, Store};
 
 /// Instrumentation scope of the Unit of Work metrics.
 pub const UOW_METER_NAME: &str = "nomnom.delivery.uow";
@@ -108,7 +108,7 @@ pub(super) fn put_active(store: usize, connection: Connection) {
 /// Guard of a running transaction: a panic inside the work drops the
 /// connection (closed, rolled back by the server) instead of leaking it.
 struct ActiveTransaction<'a> {
-    store: &'a PostgresStore,
+    store: &'a Store,
     started: Instant,
     finished: bool,
 }
@@ -127,7 +127,7 @@ impl Drop for ActiveTransaction<'_> {
     }
 }
 
-impl PostgresStore {
+impl Store {
     /// Runs a transaction control statement and records its duration.
     fn control(
         &self,
@@ -147,7 +147,7 @@ impl PostgresStore {
     }
 }
 
-impl UnitOfWork for PostgresStore {
+impl UnitOfWork for Store {
     fn run<T, E, F>(&self, work: F) -> Result<T, E>
     where
         F: FnOnce() -> Result<T, E>,

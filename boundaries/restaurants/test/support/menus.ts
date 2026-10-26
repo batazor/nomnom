@@ -8,8 +8,8 @@ import { SetMenuItemAvailabilityHandler } from "../../slices/menu/applications/s
 import { UpdateMenuItemHandler } from "../../slices/menu/applications/update-menu-item/update-menu-item.ts";
 import {
   createMenuCollection,
-  MongoMenuReader,
-  MongoMenuRepository,
+  DatabaseMenuReader,
+  DatabaseMenuRepository,
 } from "../../slices/menu/infrastructure/repository/menus.ts";
 import {
   createInfrastructure,
@@ -29,8 +29,8 @@ export const createMenuWorld = async (
     infrastructure.db,
     infrastructure.unitOfWork,
   );
-  const menus = new MongoMenuRepository(store);
-  const reader = new MongoMenuReader(store);
+  const menus = new DatabaseMenuRepository(store);
+  const reader = new DatabaseMenuReader(store);
   const accessControl = new TestMenuAccessControl();
   const ids = new SequentialIdGenerator("menu");
   const outbox = options.outbox ?? infrastructure.outbox;

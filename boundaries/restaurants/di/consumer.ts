@@ -2,7 +2,7 @@
 // of the Kafka consumer of Integration Events (ADR 11, ADR 28). Every
 // registration lives in the application scope: handlers are stateless over
 // shared clients, and the resource of one message — the MongoDB session of
-// its Inbox transaction — is owned by `MongoUnitOfWork.run` (async context)
+// its Inbox transaction — is owned by `DatabaseUnitOfWork.run` (async context)
 // for exactly that message. The MongoDB connection, the dead letter producer
 // and the not yet connected Kafka consumer client are acquired and released
 // by cmd/restaurants-consumer.
@@ -34,10 +34,10 @@ import {
   type Inbox,
   MessageProcessor,
 } from "../pkg/infrastructure/messaging/processor.ts";
-import type { MongoDbConnection } from "../pkg/infrastructure/repository/client.ts";
-import { MongoInbox } from "../pkg/infrastructure/repository/inbox.ts";
-import { MongoOutbox } from "../pkg/infrastructure/repository/outbox.ts";
-import type { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseConnection } from "../pkg/infrastructure/repository/client.ts";
+import { DatabaseInbox } from "../pkg/infrastructure/repository/inbox.ts";
+import { DatabaseOutbox } from "../pkg/infrastructure/repository/outbox.ts";
+import type { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { CacheMetrics } from "../pkg/infrastructure/valkey/read-cache.ts";
 import { CacheRefreshHandler } from "../pkg/infrastructure/valkey/refresh.ts";
 import { ParallelWorkers, type Worker } from "../pkg/lifecycle/lifecycle.ts";
@@ -51,7 +51,7 @@ import {
 import { MENU_EVENTS_TOPIC } from "../slices/menu/infrastructure/integration/menu-events.ts";
 import {
   createMenuCollection,
-  MongoMenuReader,
+  DatabaseMenuReader,
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import type { RestaurantRepository } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
@@ -61,8 +61,8 @@ import {
 import { RESTAURANT_EVENTS_TOPIC } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantCatalog,
-  MongoRestaurantRepository,
+  DatabaseRestaurantCatalog,
+  DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import type { FulfillmentCoordinatorAccess } from "../slices/restaurantorder/applications/access-control.ts";
 import {
@@ -81,7 +81,7 @@ import {
   OrdersEventSourceAccessControl,
 } from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
 import {
-  ObservedMongoUnitOfWork,
+  ObservedDatabaseUnitOfWork,
   ObservedRestaurantOrderRepository,
   observeReceiveOrderRequest,
   type ReceiveOrderRequestPort,
@@ -89,7 +89,7 @@ import {
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
 import {
   createRestaurantOrderCollection,
-  MongoRestaurantOrderRepository,
+  DatabaseRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import { RepositoryRestaurantExistence } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import { CONSUMER_USE_CASES, instrumentUseCases } from "./usecases.ts";
@@ -97,7 +97,7 @@ import { CONSUMER_USE_CASES, instrumentUseCases } from "./usecases.ts";
 /** Configuration and resources the composition root hands to the container. */
 export type ConsumerResources = Readonly<{
   consumer: ConsumerConfig;
-  mongo: MongoDbConnection;
+  database: DatabaseConnection;
   /** Not yet connected; the worker connects and disconnects it. */
   kafkaConsumer: ConsumerClient;
   /** Consumer of the cache refresh group, not yet connected either. */
@@ -112,7 +112,7 @@ export type ConsumerResources = Readonly<{
 
 export interface ConsumerCradle {
   readonly consumerConfig: ConsumerConfig;
-  readonly mongoClient: MongoClient;
+  readonly databaseClient: MongoClient;
   readonly db: Db;
   readonly kafkaConsumer: ConsumerClient;
   readonly cacheRefreshConsumer: ConsumerClient;
@@ -129,7 +129,7 @@ export interface ConsumerCradle {
   readonly clock: Clock;
   readonly ids: IdGenerator;
   readonly domainMetrics: RestaurantOrderDomainMetrics;
-  readonly unitOfWork: MongoUnitOfWork;
+  readonly unitOfWork: DatabaseUnitOfWork;
   readonly restaurants: RestaurantRepository;
   readonly restaurantExistence: RestaurantExistence;
   readonly restaurantOrders: RestaurantOrderRepository;
@@ -155,8 +155,8 @@ export const createConsumerContainer = (
   const container = createProcessContainer<ConsumerCradle>();
   const registrations: Registrations<ConsumerCradle> = {
     consumerConfig: asValue(resources.consumer),
-    mongoClient: asValue(resources.mongo.client),
-    db: asValue(resources.mongo.db),
+    databaseClient: asValue(resources.database.client),
+    db: asValue(resources.database.db),
     kafkaConsumer: asValue(resources.kafkaConsumer),
     cacheRefreshConsumer: asValue(resources.cacheRefreshConsumer),
     valkeyConfig: asValue(resources.valkeyConfig),
@@ -173,21 +173,21 @@ export const createConsumerContainer = (
       () => new RestaurantOrderDomainMetrics(),
     ).singleton(),
     unitOfWork: asFunction(
-      ({ mongoClient, domainMetrics }: ConsumerCradle) =>
-        new ObservedMongoUnitOfWork(mongoClient, domainMetrics),
+      ({ databaseClient, domainMetrics }: ConsumerCradle) =>
+        new ObservedDatabaseUnitOfWork(databaseClient, domainMetrics),
     ).singleton(),
     // ADR 36: every Restaurant Order the consumer writes changes the kitchen
     // board, so its Change Notification goes to the same Outbox transaction.
     kitchenChanges: asFunction(({ db, unitOfWork, clock }: ConsumerCradle) =>
       kitchenChangeNotifier(
         unitOfWork,
-        new MongoOutbox(db, unitOfWork, { metadata: currentTraceMetadata }),
+        new DatabaseOutbox(db, unitOfWork, { metadata: currentTraceMetadata }),
         () => clock.now(),
       ),
     ).singleton(),
     restaurants: asFunction(
       ({ db, unitOfWork, kitchenChanges }: ConsumerCradle) =>
-        new MongoRestaurantRepository(
+        new DatabaseRestaurantRepository(
           createRestaurantCollection(db, unitOfWork),
           kitchenChanges,
         ),
@@ -199,7 +199,7 @@ export const createConsumerContainer = (
     restaurantOrders: asFunction(
       ({ db, unitOfWork, kitchenChanges, domainMetrics }: ConsumerCradle) =>
         new ObservedRestaurantOrderRepository(
-          new MongoRestaurantOrderRepository(
+          new DatabaseRestaurantOrderRepository(
             createRestaurantOrderCollection(db, unitOfWork),
             kitchenChanges,
           ),
@@ -231,7 +231,7 @@ export const createConsumerContainer = (
     ).singleton(),
     inbox: asFunction(
       ({ db, unitOfWork, clock }: ConsumerCradle) =>
-        new MongoInbox(db, unitOfWork, () => clock.now()),
+        new DatabaseInbox(db, unitOfWork, () => clock.now()),
     ).singleton(),
     consumerMetrics: asFunction(() => new OtelConsumerMetrics()).singleton(),
     orderPlaced: asFunction(({ receiveOrderRequest }: ConsumerCradle) =>
@@ -286,7 +286,7 @@ export const createConsumerContainer = (
           refreshes: {
             ...restaurantCacheRefreshes(
               new CachedRestaurantCatalog(
-                new MongoRestaurantCatalog(
+                new DatabaseRestaurantCatalog(
                   createRestaurantCollection(db, unitOfWork),
                 ),
                 cache,
@@ -294,7 +294,7 @@ export const createConsumerContainer = (
             ),
             ...menuCacheRefreshes(
               new CachedMenuReader(
-                new MongoMenuReader(createMenuCollection(db, unitOfWork)),
+                new DatabaseMenuReader(createMenuCollection(db, unitOfWork)),
                 cache,
               ),
             ),

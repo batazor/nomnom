@@ -17,15 +17,15 @@ import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate
 import type { Subject } from "../pkg/application/subject.ts";
 import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
 import {
-  connectMongoDb,
-  type MongoDbConnection,
+  connectDatabase,
+  type DatabaseConnection,
 } from "../pkg/infrastructure/repository/client.ts";
 import {
-  MongoOutbox,
+  DatabaseOutbox,
   OUTBOX_COLLECTION,
   type OutboxDocument,
 } from "../pkg/infrastructure/repository/outbox.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { startTracing, type Tracing } from "../pkg/telemetry/tracing.ts";
 import { SetMenuItemAvailabilityHandler } from "../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
@@ -38,7 +38,7 @@ import {
 } from "../slices/menu/infrastructure/integration/menu-events.ts";
 import {
   createMenuCollection,
-  MongoMenuRepository,
+  DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import { CloseRestaurantHandler } from "../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
 import { OpenRestaurantHandler } from "../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
@@ -50,23 +50,23 @@ import {
 } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantRepository,
+  DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
+import { databaseUri, noKitchenChanges } from "./support/database.ts";
 import { TestMenuAccessControl } from "./support/menus.ts";
-import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 
 // Open Restaurant and Set Menu Item Availability over HTTP/2 (createGrpcServer
-// as in cmd/restaurants) with the MongoDB Unit of Work and MongoOutbox of the
+// as in cmd/restaurants) with the MongoDB Unit of Work and DatabaseOutbox of the
 // process (Integration Event mapper, trace metadata) against a replica set:
 // MongoDB is the testcontainer of the global setup (test/support/global-containers.ts).
-const uri = mongoUri();
+const uri = databaseUri();
 
 const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
 const TRACEPARENT = `00-${TRACE_ID}-b7ad6b7169203331-01`;
 const manager: Subject = { type: "user", id: "owner" };
 
 describe("restaurant and menu command RPCs over MongoDB", () => {
-  let mongo: MongoDbConnection;
+  let database: DatabaseConnection;
   let tracing: Tracing;
   let worker: GrpcWorker;
   let running: Promise<void>;
@@ -84,27 +84,27 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
         ],
       },
     );
-    mongo = await connectMongoDb({
+    database = await connectDatabase({
       enabled: true,
       uri,
       database: `restaurants_commands_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,
     });
-    await migrateRestaurantsDatabase(mongo.db);
-    const unitOfWork = new MongoUnitOfWork(mongo.client);
-    const outbox = new MongoOutbox(mongo.db, unitOfWork, {
+    await migrateRestaurantsDatabase(database.db);
+    const unitOfWork = new DatabaseUnitOfWork(database.client);
+    const outbox = new DatabaseOutbox(database.db, unitOfWork, {
       mapper: outboxEventMapperByAggregate({
         [RESTAURANT_AGGREGATE_TYPE]: restaurantEventMapper,
         [MENU_AGGREGATE_TYPE]: menuEventMapper,
       }),
       metadata: currentTraceMetadata,
     });
-    const restaurants = new MongoRestaurantRepository(
-      createRestaurantCollection(mongo.db, unitOfWork),
+    const restaurants = new DatabaseRestaurantRepository(
+      createRestaurantCollection(database.db, unitOfWork),
       noKitchenChanges,
     );
-    const menus = new MongoMenuRepository(
-      createMenuCollection(mongo.db, unitOfWork),
+    const menus = new DatabaseMenuRepository(
+      createMenuCollection(database.db, unitOfWork),
     );
     const clock = { now: () => new Date() };
     await restaurants.save(
@@ -198,15 +198,15 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
       await worker.shutdown(AbortSignal.timeout(2000));
       await running;
     }
-    if (mongo !== undefined) {
-      await mongo.db.dropDatabase();
-      await mongo.close();
+    if (database !== undefined) {
+      await database.db.dropDatabase();
+      await database.close();
     }
     await tracing?.shutdown();
   });
 
   const outboxRecords = (aggregateId: string) =>
-    mongo.db
+    database.db
       .collection<OutboxDocument>(OUTBOX_COLLECTION)
       .find({ aggregateId })
       .sort({ aggregateVersion: 1 })

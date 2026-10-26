@@ -9,7 +9,7 @@ import type {
   Outbox,
   PublishableEvent,
 } from "../../application/outbox.ts";
-import type { MongoUnitOfWork } from "./unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "./unit-of-work.ts";
 
 export const OUTBOX_COLLECTION = "outbox";
 export const OUTBOX_SCHEMA_VERSION = 2;
@@ -68,12 +68,12 @@ export type OutboxDocument = {
 /** Trace context of the operation that writes the records. */
 export type OutboxTraceContext = { traceparent?: string };
 
-export class MongoOutboxOutsideUnitOfWorkError extends Error {
+export class DatabaseOutboxOutsideUnitOfWorkError extends Error {
   readonly code = "outbox_outside_unit_of_work";
 
   constructor() {
     super("outbox records can only be added inside an active unit of work");
-    this.name = "MongoOutboxOutsideUnitOfWorkError";
+    this.name = "DatabaseOutboxOutsideUnitOfWorkError";
   }
 }
 
@@ -101,20 +101,20 @@ export const outboxEventId = (
 
 /**
  * Transactional Outbox in the same database: records are written with the
- * session of the active {@link MongoUnitOfWork}, so they commit or abort
+ * session of the active {@link DatabaseUnitOfWork}, so they commit or abort
  * together with the aggregate; Debezium publishes them from the change stream
  * in commit order (ADR 37). Events the mapper skips are not written. A
  * duplicate `eventId` aborts the transaction.
  */
-export class MongoOutbox implements Outbox, ChangeNotifications {
+export class DatabaseOutbox implements Outbox, ChangeNotifications {
   readonly #collection: Collection<OutboxDocument>;
-  readonly #unitOfWork: MongoUnitOfWork;
+  readonly #unitOfWork: DatabaseUnitOfWork;
   readonly #mapper: OutboxEventMapper;
   readonly #traceContext: () => OutboxTraceContext;
 
   constructor(
     db: Db,
-    unitOfWork: MongoUnitOfWork,
+    unitOfWork: DatabaseUnitOfWork,
     options: {
       mapper?: OutboxEventMapper;
       /** Trace context of the current operation (traceparent). */
@@ -132,7 +132,7 @@ export class MongoOutbox implements Outbox, ChangeNotifications {
     events: readonly PublishableEvent[],
   ): Promise<void> {
     if (this.#unitOfWork.session === undefined) {
-      throw new MongoOutboxOutsideUnitOfWorkError();
+      throw new DatabaseOutboxOutsideUnitOfWorkError();
     }
     const mapped = events.flatMap((event) => {
       const integration = this.#mapper(aggregate, event);
@@ -174,7 +174,7 @@ export class MongoOutbox implements Outbox, ChangeNotifications {
   ): Promise<void> {
     const session = this.#unitOfWork.session;
     if (session === undefined) {
-      throw new MongoOutboxOutsideUnitOfWorkError();
+      throw new DatabaseOutboxOutsideUnitOfWorkError();
     }
     if (mapped.length === 0) return;
     const traceparent = this.#traceContext().traceparent ?? "";

@@ -13,7 +13,7 @@ from opentelemetry.sdk.metrics.export import (
 )
 from psycopg import errors
 
-from infrastructure.repository import PostgresDatabase, PostgresUnitOfWork
+from infrastructure.repository import Database, DatabaseUnitOfWork
 from infrastructure.repository.database import MAX_ATTEMPTS
 from infrastructure.repository.transactions import TransactionMetrics
 from pkg.application import ConcurrencyConflictError
@@ -26,7 +26,7 @@ RETRIES = "nomnom.uow.retries"
 class Flaky:
     """Work that fails with ``error`` for the first ``failures`` attempts."""
 
-    def __init__(self, database: PostgresDatabase, error: Exception, failures: int = 1) -> None:
+    def __init__(self, database: Database, error: Exception, failures: int = 1) -> None:
         self._database = database
         self._error = error
         self._failures = failures
@@ -44,9 +44,9 @@ class Flaky:
         return self.attempts
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class UnitOfWorkMetricsTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:
@@ -55,7 +55,7 @@ class UnitOfWorkMetricsTest(unittest.TestCase):
         self.reader = InMemoryMetricReader()
         provider = MeterProvider(metric_readers=[self.reader])
         self.sleeps: list[float] = []
-        self.uow = PostgresUnitOfWork(
+        self.uow = DatabaseUnitOfWork(
             self.database, TransactionMetrics(provider.get_meter("test")), self.sleeps.append
         )
 

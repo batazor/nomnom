@@ -8,7 +8,7 @@ import (
 	"nomnom/orders/pkg/config"
 )
 
-func TestNewPostgresStoreRequiresDSN(t *testing.T) {
-	_, _, err := NewPostgresStore(config.PostgresConfig{MaxConns: 1})
+func TestNewStoreRequiresDSN(t *testing.T) {
+	_, _, err := NewStore(config.PostgresConfig{MaxConns: 1})
 	require.ErrorContains(t, err, config.EnvPostgresDSN)
 }

@@ -15,7 +15,7 @@ from di.resources import (
     TelemetryResource,
     create_lifecycle,
     listen_all,
-    postgres_database,
+    migrated_database,
     telemetry_providers,
 )
 from infrastructure.authorization import (
@@ -43,12 +43,12 @@ from infrastructure.provider import (
     create_webhook_handler,
 )
 from infrastructure.repository import (
-    PostgresPaymentOperationRepository,
-    PostgresPaymentOutbox,
-    PostgresPaymentRepository,
-    PostgresPendingOperationQuery,
-    PostgresProviderMessageInbox,
-    PostgresUnitOfWork,
+    DatabasePaymentOperationRepository,
+    DatabasePaymentOutbox,
+    DatabasePaymentRepository,
+    DatabasePendingOperationQuery,
+    DatabaseProviderMessageInbox,
+    DatabaseUnitOfWork,
 )
 from infrastructure.repository.transactions import TransactionMetrics
 from pkg.application import Handler
@@ -140,7 +140,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
     telemetry = TelemetryResource(
         telemetry_providers, config.shutdown.provided.telemetry_flush_timeout
     )
-    database = ProcessResource(postgres_database, config.database)
+    database = ProcessResource(migrated_database, config.database)
     spicedb = ProcessResource(spicedb_client, config.spicedb)
 
     # Ports of the application layer.
@@ -162,19 +162,19 @@ class PaymentsContainer(containers.DeclarativeContainer):
     # Unit of Work: bounded retry on conflicts and nomnom.uow.* per attempt (uow.yaml).
     uow = providers.Singleton(
         ObservedUnitOfWork,
-        providers.Singleton(PostgresUnitOfWork, database, providers.Singleton(TransactionMetrics)),
+        providers.Singleton(DatabaseUnitOfWork, database, providers.Singleton(TransactionMetrics)),
         domain_metrics,
         fsm_metrics,
     )
-    payments = providers.Singleton(PostgresPaymentRepository, database)
-    operations = providers.Singleton(PostgresPaymentOperationRepository, database)
-    pending = providers.Singleton(PostgresPendingOperationQuery, database)
+    payments = providers.Singleton(DatabasePaymentRepository, database)
+    operations = providers.Singleton(DatabasePaymentOperationRepository, database)
+    pending = providers.Singleton(DatabasePendingOperationQuery, database)
     outbox = providers.Singleton(
         ObservedOutbox,
-        providers.Singleton(PostgresPaymentOutbox, database, outbox_mapper),
+        providers.Singleton(DatabasePaymentOutbox, database, outbox_mapper),
         domain_metrics,
     )
-    inbox = providers.Singleton(PostgresProviderMessageInbox, database)
+    inbox = providers.Singleton(DatabaseProviderMessageInbox, database)
     # One applier of final Provider results for synchronous answers and callbacks.
     applier = providers.Singleton(
         ProviderResultApplier, payments, operations, outbox, clock, fsm_metrics

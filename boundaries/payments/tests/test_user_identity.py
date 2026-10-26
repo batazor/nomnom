@@ -40,7 +40,7 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from pkg.application import Subject, SubjectKind
 from pkg.config import IdentitySettings, load_settings
 from slices.payment.domains.payment import PaymentState
@@ -332,11 +332,11 @@ class UserIdentityConfigTest(_ResolverCase):
                     create_subject_resolver(_settings(IDENTITY__USER_JWKS_FILE=str(path)))
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class UserIdentityGrpcTest(unittest.TestCase):
     """AC-525 end to end: the use case sees ``user:<sub>`` from the metadata of BFF."""
 
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

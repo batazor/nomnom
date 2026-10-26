@@ -7,7 +7,7 @@ from payment_fakes import (
     PaymentsTestKit,
 )
 
-from infrastructure.repository import PostgresDatabase, PostgresPaymentRepository
+from infrastructure.repository import Database, DatabasePaymentRepository
 from pkg.application import AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.create_payment import (
     CreatePaymentHandler,
@@ -24,9 +24,9 @@ from slices.payment.domains.payment import (
 )
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class CreatePaymentTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:
@@ -120,10 +120,10 @@ class CreatePaymentTest(unittest.TestCase):
         self.assertEqual(self.kit.payment_ids(), [PaymentId("payment-winner")])
 
 
-class RacingPaymentRepository(PostgresPaymentRepository):
+class RacingPaymentRepository(DatabasePaymentRepository):
     """Another request stores its Payment between the lookup and the insert."""
 
-    def __init__(self, database: PostgresDatabase, winner: Payment) -> None:
+    def __init__(self, database: Database, winner: Payment) -> None:
         super().__init__(database)
         self._winner: Payment | None = winner
 

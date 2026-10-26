@@ -72,7 +72,7 @@ struct Lease {
 }
 
 /// PostgreSQL adapter of every storage port of `delivery`.
-pub struct PostgresStore {
+pub struct Store {
     id: usize,
     pool: Option<Arc<PgPool>>,
     metrics: PoolMetrics,
@@ -84,7 +84,7 @@ pub struct PostgresStore {
     runtime: Option<Runtime>,
 }
 
-impl PostgresStore {
+impl Store {
     /// Opens the pool and checks connectivity. An empty URL fails startup.
     pub fn connect(config: &DatabaseConfig) -> Result<Self, String> {
         if !config.enabled() {
@@ -92,10 +92,10 @@ impl PostgresStore {
         }
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .thread_name("delivery-postgres")
+            .thread_name("delivery-store")
             .enable_all()
             .build()
-            .map_err(|error| format!("postgres runtime: {error}"))?;
+            .map_err(|error| format!("store runtime: {error}"))?;
         let url = config.url.clone();
         let metrics = PoolMetrics::global();
         let options = metrics.instrument(pool_options(config, config.max_conns));
@@ -104,7 +104,7 @@ impl PostgresStore {
             Ok(pool) => pool,
             Err(error) => {
                 runtime.shutdown_background();
-                return Err(format!("connect postgres: {error}"));
+                return Err(format!("connect database: {error}"));
             }
         };
         let pool = Arc::new(pool);
@@ -190,7 +190,7 @@ impl PostgresStore {
     }
 }
 
-impl Drop for PostgresStore {
+impl Drop for Store {
     fn drop(&mut self) {
         if let Some(runtime) = self.runtime.take() {
             {
@@ -252,7 +252,7 @@ fn storage_error(error: sqlx::Error) -> RepositoryError {
             _ => {}
         }
     }
-    RepositoryError::Unavailable(format!("postgres: {error}"))
+    RepositoryError::Unavailable(format!("database: {error}"))
 }
 
 fn corrupt(what: &str, detail: impl std::fmt::Display) -> RepositoryError {

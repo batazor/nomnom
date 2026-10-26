@@ -10,8 +10,8 @@ import type {
 } from "../pkg/infrastructure/messaging/envelope.ts";
 import { MessageProcessor } from "../pkg/infrastructure/messaging/processor.ts";
 import {
+  DatabaseInbox,
   INBOX_COLLECTION,
-  MongoInbox,
 } from "../pkg/infrastructure/repository/inbox.ts";
 import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
@@ -78,7 +78,7 @@ const setup = async () => {
     ids: new SequentialIdGenerator("restaurant-order"),
     clock: infrastructure.clock,
   });
-  const inbox = new MongoInbox(infrastructure.db, infrastructure.unitOfWork);
+  const inbox = new DatabaseInbox(infrastructure.db, infrastructure.unitOfWork);
   const deadLetters: IntegrationMessage[] = [];
   const processor = new MessageProcessor({
     consumer: ORDER_PLACED_CONSUMER,

@@ -21,7 +21,7 @@ import (
 
 // WorkerSet — Activities fulfillment orders-worker и адаптеры соседних
 // контекстов. Store процесса и телеметрию use cases даёт слайс order
-// (PostgresSet, TelemetrySet); роль Store связывает composition root.
+// (RepositorySet, TelemetrySet); роль Store связывает composition root.
 var WorkerSet = wire.NewSet(NewNeighbours, NewActivities)
 
 // Store — роль хранилища Activities: чтение Order для запросов соседям и Unit

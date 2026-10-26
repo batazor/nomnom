@@ -203,7 +203,7 @@ describe("view order", () => {
       screen.getByRole("button", { name: "Отменить заказ" }),
     ).toHaveFocus();
     expect(
-      screen.getByRole("heading", { level: 3, name: "Заказ принят" }),
+      screen.getByRole("heading", { level: 3, name: "Заказ оформлен" }),
     ).toBeInTheDocument();
   });
 
@@ -264,10 +264,10 @@ describe("order updates", () => {
     renderOrder("order-live");
 
     expect(
-      await screen.findByRole("heading", { level: 3, name: "Заказ принят" }),
+      await screen.findByRole("heading", { level: 3, name: "Заказ оформлен" }),
     ).toBeInTheDocument();
     for (const label of [
-      "Ресторан подтвердил",
+      "Ресторан принял заказ",
       "Готовится",
       "Готов",
       "В пути",
@@ -475,7 +475,7 @@ describe("order page quality", () => {
   it("is keyboard reachable and passes axe", async () => {
     const user = userEvent.setup();
     const { container } = renderOrder("order-received");
-    await screen.findByRole("heading", { level: 3, name: "Заказ принят" });
+    await screen.findByRole("heading", { level: 3, name: "Заказ оформлен" });
 
     const cancel = screen.getByRole("button", { name: "Отменить заказ" });
     while (document.activeElement !== cancel) {

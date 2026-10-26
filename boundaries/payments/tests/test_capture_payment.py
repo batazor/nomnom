@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
 from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
@@ -21,9 +21,9 @@ from slices.payment.domains.payment import (
 KEY = "order-1:capture"
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class CapturePaymentTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

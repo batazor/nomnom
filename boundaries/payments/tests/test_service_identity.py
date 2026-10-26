@@ -31,7 +31,7 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from pkg.application import Subject, SubjectKind
 from pkg.config import IdentitySettings, load_settings
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
@@ -338,11 +338,11 @@ def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:
     )
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class ServiceIdentityGrpcTest(unittest.TestCase):
     """AC-459 end to end: the token travels as gRPC metadata and reaches the use case."""
 
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

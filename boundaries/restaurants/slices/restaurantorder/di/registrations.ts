@@ -11,7 +11,7 @@ import type { Outbox } from "../../../pkg/application/outbox.ts";
 import type { KitchenConfig } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
-import type { MongoUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
 import type { MenuRepository } from "../../menu/domains/menu/menu.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import {
@@ -58,8 +58,8 @@ import {
 } from "../infrastructure/observability/domain-metrics.ts";
 import {
   createRestaurantOrderCollection,
-  MongoKitchenBoard,
-  MongoRestaurantOrderRepository,
+  DatabaseKitchenBoard,
+  DatabaseRestaurantOrderRepository,
 } from "../infrastructure/repository/restaurant-orders.ts";
 import {
   RepositoryAcceptanceFactsReader,
@@ -74,7 +74,7 @@ export type KitchenAccess = KitchenStaffAccess &
 /** Application-scope dependencies the slice takes from the process. */
 export interface RestaurantOrderDependencies {
   readonly db: Db;
-  readonly unitOfWork: MongoUnitOfWork;
+  readonly unitOfWork: DatabaseUnitOfWork;
   readonly outbox: Outbox;
   /** ADR 36: Change Notification of every Restaurant Order write. */
   readonly kitchenChanges: KitchenChangeNotifier;
@@ -115,7 +115,7 @@ export interface RestaurantOrderCradle {
   readonly reportPreparationDelay: ReportPreparationDelayHandler;
   readonly reportPreparationFailure: ReportPreparationFailureHandler;
   /** Read models of the kitchen board over the restaurant order documents. */
-  readonly kitchenBoard: MongoKitchenBoard;
+  readonly kitchenBoard: DatabaseKitchenBoard;
   readonly getKitchenQueue: GetKitchenQueueHandler;
   readonly listIncomingOrders: ListIncomingOrdersHandler;
   readonly listActiveRestaurantOrders: ListActiveRestaurantOrdersHandler;
@@ -147,7 +147,7 @@ export const registerRestaurantOrder = (
     restaurantOrders: asFunction(
       ({ db, unitOfWork, kitchenChanges, domainMetrics }: Cradle) =>
         new ObservedRestaurantOrderRepository(
-          new MongoRestaurantOrderRepository(
+          new DatabaseRestaurantOrderRepository(
             createRestaurantOrderCollection(db, unitOfWork),
             kitchenChanges,
           ),
@@ -267,7 +267,9 @@ export const registerRestaurantOrder = (
     ).singleton(),
     kitchenBoard: asFunction(
       ({ db, unitOfWork }: Cradle) =>
-        new MongoKitchenBoard(createRestaurantOrderCollection(db, unitOfWork)),
+        new DatabaseKitchenBoard(
+          createRestaurantOrderCollection(db, unitOfWork),
+        ),
     ).singleton(),
     // The order of the queue is the MVP FIFO policy until the scheduling
     // decision.

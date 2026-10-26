@@ -3,13 +3,13 @@
 from slices.payment.applications.list_payment_operations import PaymentOperationView
 from slices.payment.domains.payment import OperationId, OperationKind, OperationState, PaymentId
 
-from .database import PostgresDatabase
+from .database import Database
 
 
-class PostgresPendingOperationQuery:
+class DatabasePendingOperationQuery:
     """Pending operation lookup over ``payment_operations`` (partial unique index)."""
 
-    def __init__(self, database: PostgresDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self._db = database
 
     def pending_operation_id(self, payment_id: PaymentId) -> OperationId | None:
@@ -22,10 +22,10 @@ class PostgresPendingOperationQuery:
         return None if row is None else OperationId(row[0])
 
 
-class PostgresPaymentOperationHistory:
+class DatabasePaymentOperationHistory:
     """Operation history read model over ``payment_operations`` without provider data."""
 
-    def __init__(self, database: PostgresDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self._db = database
 
     def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperationView]:

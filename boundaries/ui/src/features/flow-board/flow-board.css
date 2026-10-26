@@ -180,24 +180,22 @@
    tablet in either orientation keeps the customer on the left and stacks the kitchen over the courier on the
    right, so the cart can still be dragged to the kitchen without scrolling. */
 
+/* A phone stacks the roles on one page: customer, then kitchen, then
+   courier, with no sideways scroll. */
 .board-columns {
   display: grid;
-  grid-template-columns: minmax(22rem, 1.5fr) minmax(18rem, 1fr) minmax(
-      18rem,
-      1fr
-    );
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
   min-width: 0;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
 }
 
-/* Wide enough for the columns: no sideways scroll, and without a scroll
-   container the cart sticks to the window. */
 @container style(--viewport: xl) {
   .board-columns {
-    overflow-x: visible;
+    grid-template-columns: minmax(22rem, 1.5fr) minmax(18rem, 1fr) minmax(
+        18rem,
+        1fr
+      );
   }
 }
 
@@ -233,7 +231,6 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
-  scroll-snap-align: start;
 }
 
 .board-column-header h2 {

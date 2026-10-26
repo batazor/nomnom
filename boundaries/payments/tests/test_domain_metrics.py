@@ -11,7 +11,7 @@ from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 from psycopg import errors
 
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from pkg.application import AggregateRef
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -45,9 +45,9 @@ AGGREGATE = AggregateRef("Payment", "payment-0", 2)
 AUTHORIZED = PaymentAuthorized(PaymentId("payment-0"), OrderId("order-1"), Money.parse("1", "EUR"))
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class DomainMetricsTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

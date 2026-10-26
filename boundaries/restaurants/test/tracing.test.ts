@@ -41,7 +41,7 @@ const unused = {
 
 /**
  * Open Restaurant over a real HTTP/2 server (createGrpcServer, as
- * cmd/restaurants) with an Outbox that records the trace metadata MongoOutbox
+ * cmd/restaurants) with an Outbox that records the trace metadata DatabaseOutbox
  * would write (pkg/telemetry/trace-context.ts).
  */
 const startServer = async () => {

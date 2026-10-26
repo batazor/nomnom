@@ -11,14 +11,14 @@ import {
 import { MongoError } from "mongodb";
 
 import {
-  connectMongoDb,
-  type MongoDbConnection,
+  connectDatabase,
+  type DatabaseConnection,
 } from "../pkg/infrastructure/repository/client.ts";
-import { mongoUri } from "./support/mongodb.ts";
+import { databaseUri } from "./support/database.ts";
 
 // Runs against a MongoDB replica set, for example
 // the testcontainer of the global setup (test/support/global-containers.ts).
-const uri = mongoUri();
+const uri = databaseUri();
 
 class TestReader extends MetricReader {
   protected async onShutdown(): Promise<void> {}
@@ -30,8 +30,8 @@ const POOL = "db.client.connection.pool.name";
 describe("MongoDB connection pool metrics", () => {
   const reader = new TestReader();
   const provider = new MeterProvider({ readers: [reader] });
-  const database = `restaurants_pool_${randomUUID().slice(0, 8)}`;
-  let mongo: MongoDbConnection;
+  const databaseName = `restaurants_pool_${randomUUID().slice(0, 8)}`;
+  let database: DatabaseConnection;
 
   const points = async (name: string) => {
     const { resourceMetrics } = await reader.collect();
@@ -42,11 +42,11 @@ describe("MongoDB connection pool metrics", () => {
   };
 
   before(async () => {
-    mongo = await connectMongoDb(
+    database = await connectDatabase(
       {
         enabled: true,
         uri,
-        database,
+        database: databaseName,
         timeoutMs: 5000,
         pool: {
           maxPoolSize: 1,
@@ -58,13 +58,13 @@ describe("MongoDB connection pool metrics", () => {
       },
       { meter: provider.getMeter("test") },
     );
-    await mongo.db.collection("probe").insertOne({ _id: "probe" } as never);
+    await database.db.collection("probe").insertOne({ _id: "probe" } as never);
   });
 
   after(async () => {
-    if (mongo === undefined) return;
-    await mongo.db.dropDatabase();
-    await mongo.close();
+    if (database === undefined) return;
+    await database.db.dropDatabase();
+    await database.close();
   });
 
   test("reports max, usage and checkout timeouts of the single-connection pool", async () => {
@@ -76,7 +76,7 @@ describe("MongoDB connection pool metrics", () => {
 
     // A slow query holds the only connection; the second checkout times out
     // after waitQueueTimeoutMS instead of waiting forever.
-    const slow = mongo.db
+    const slow = database.db
       .collection("probe")
       .find({ $where: "sleep(1000) || true" })
       .toArray();
@@ -86,7 +86,7 @@ describe("MongoDB connection pool metrics", () => {
     );
     assert.equal(used?.value, 1);
     await assert.rejects(
-      mongo.db.collection("probe").findOne({ _id: "probe" } as never),
+      database.db.collection("probe").findOne({ _id: "probe" } as never),
       // WaitQueueTimeoutError is not exported by the driver.
       (error) =>
         error instanceof MongoError &&

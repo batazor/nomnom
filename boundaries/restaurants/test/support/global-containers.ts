@@ -108,14 +108,14 @@ async function startValkey(): Promise<StartedTestContainer> {
  */
 export async function globalSetup(): Promise<void> {
   const kafkaPort = await freePort();
-  const [mongo, kafka, spicedb, valkey] = await Promise.all([
+  const [database, kafka, spicedb, valkey] = await Promise.all([
     startMongo(),
     startKafka(kafkaPort),
     startSpiceDb(),
     startValkey(),
   ]);
-  started.push(mongo, kafka, spicedb, valkey);
-  process.env.MONGODB_URI = `${mongo.getConnectionString()}/?directConnection=true`;
+  started.push(database, kafka, spicedb, valkey);
+  process.env.MONGODB_URI = `${database.getConnectionString()}/?directConnection=true`;
   process.env.KAFKA_BROKERS = `localhost:${kafkaPort}`;
   process.env.SPICEDB_ENDPOINT = `${spicedb.getHost()}:${spicedb.getMappedPort(50051)}`;
   process.env.VALKEY_URL = `redis://${valkey.getHost()}:${valkey.getMappedPort(6379)}`;

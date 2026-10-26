@@ -12,14 +12,14 @@ import {
   SIMULATED_REJECTION_REASON,
 } from "../slices/simulator/applications/simulate-kitchen/simulate-kitchen.ts";
 import { chooseKitchenAction } from "../slices/simulator/domains/simulator/simulator.ts";
-import { MongoSimulatorState } from "../slices/simulator/infrastructure/repository/simulator-state.ts";
+import { DatabaseSimulatorState } from "../slices/simulator/infrastructure/repository/simulator-state.ts";
 import { RepositoryRestaurantOwners } from "../slices/simulator/infrastructure/restaurant-owners.ts";
+import { createTestDatabase } from "./support/database.ts";
 import {
   createKitchenWorld,
   minutes,
   PREPARATION_MINUTES,
 } from "./support/kitchen.ts";
-import { createTestDatabase } from "./support/mongodb.ts";
 import { FixedClock, owner, startOfDay } from "./support/restaurants.ts";
 
 const operator: Subject = { type: "user", id: "operator" };
@@ -80,7 +80,7 @@ test("FR-605 outcomes follow the weights of each state", () => {
 });
 
 /** Operator use cases over the MongoDB state with a test access graph. */
-const simulatorUseCases = (state: MongoSimulatorState) => {
+const simulatorUseCases = (state: DatabaseSimulatorState) => {
   const accessControl = {
     canOperateSimulator: async (subject: Subject) => subject.id === operator.id,
   };
@@ -93,7 +93,7 @@ const simulatorUseCases = (state: MongoSimulatorState) => {
 
 test("AC-761 the enabled state survives a restart; a new service is disabled", async () => {
   const { db } = await createTestDatabase();
-  const first = simulatorUseCases(new MongoSimulatorState(db));
+  const first = simulatorUseCases(new DatabaseSimulatorState(db));
   assert.deepEqual(await first.get.execute({ subject: operator }), {
     enabled: false,
   });
@@ -103,7 +103,7 @@ test("AC-761 the enabled state survives a restart; a new service is disabled", a
     { enabled: true },
   );
 
-  const restarted = simulatorUseCases(new MongoSimulatorState(db));
+  const restarted = simulatorUseCases(new DatabaseSimulatorState(db));
   assert.deepEqual(await restarted.get.execute({ subject: operator }), {
     enabled: true,
   });
@@ -115,7 +115,7 @@ test("AC-761 the enabled state survives a restart; a new service is disabled", a
 
 test("AC-762 a non-operator gets PERMISSION_DENIED and the state does not change", async () => {
   const { db } = await createTestDatabase();
-  const state = new MongoSimulatorState(db);
+  const state = new DatabaseSimulatorState(db);
   const useCases = simulatorUseCases(state);
 
   await assert.rejects(
@@ -142,7 +142,7 @@ const DELAY = { minMs: 1_000, maxMs: 2_000 };
 
 const createSimulatorWorld = async (random: () => number) => {
   const world = await createKitchenWorld();
-  const state = new MongoSimulatorState(world.db);
+  const state = new DatabaseSimulatorState(world.db);
   const logged: Record<string, unknown>[] = [];
   const simulator = new KitchenSimulator({
     state,

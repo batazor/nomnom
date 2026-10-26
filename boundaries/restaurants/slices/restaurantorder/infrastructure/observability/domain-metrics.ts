@@ -22,7 +22,7 @@ import type {
   PublishableEvent,
 } from "../../../../pkg/application/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
-import { MongoUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
+import { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
 import type { CancelRestaurantOrderResult } from "../../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import type {
   ReceiveOrderRequest,
@@ -319,10 +319,10 @@ export class ObservedUnitOfWork implements UnitOfWork {
 }
 
 /**
- * {@link MongoUnitOfWork} of the processes: repositories, the Outbox and the
+ * {@link DatabaseUnitOfWork} of the processes: repositories, the Outbox and the
  * Inbox need its session, so the decorator keeps the concrete type.
  */
-export class ObservedMongoUnitOfWork extends MongoUnitOfWork {
+export class ObservedDatabaseUnitOfWork extends DatabaseUnitOfWork {
   readonly #metrics: RestaurantOrderDomainMetrics;
 
   constructor(client: MongoClient, metrics: RestaurantOrderDomainMetrics) {

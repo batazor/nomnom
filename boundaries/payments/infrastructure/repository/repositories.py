@@ -28,7 +28,7 @@ from slices.payment.domains.payment import (
     PaymentState,
 )
 
-from .database import PostgresDatabase
+from .database import Database
 from .outbox import OutboxEventMapper, outbox_event_id, outbox_traceparent
 
 PAYMENT_ORDER_UNIQUE = "payments_order_id_key"
@@ -49,10 +49,10 @@ def _constraint(error: errors.UniqueViolation) -> str | None:
     return error.diag.constraint_name
 
 
-class PostgresPaymentRepository:
+class DatabasePaymentRepository:
     """Payment aggregates in the ``payments`` table with optimistic locking by ``version``."""
 
-    def __init__(self, database: PostgresDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self._db = database
 
     def get(self, payment_id: PaymentId) -> Payment | None:
@@ -122,10 +122,10 @@ class PostgresPaymentRepository:
         )
 
 
-class PostgresPaymentOperationRepository:
+class DatabasePaymentOperationRepository:
     """Payment Operations in the ``payment_operations`` table with optimistic locking."""
 
-    def __init__(self, database: PostgresDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self._db = database
 
     def get(self, operation_id: OperationId) -> PaymentOperation | None:
@@ -234,7 +234,7 @@ def _operation(row: tuple[Any, ...]) -> PaymentOperation:
     )
 
 
-class PostgresPaymentOutbox:
+class DatabasePaymentOutbox:
     """Writes Integration Events into ``payments_outbox`` inside the active Unit of Work.
 
     Debezium reads the inserts from the WAL (ADR 37); a row carries every field of the
@@ -242,7 +242,7 @@ class PostgresPaymentOutbox:
     contract; events it maps to ``None`` are not written.
     """
 
-    def __init__(self, database: PostgresDatabase, mapper: OutboxEventMapper) -> None:
+    def __init__(self, database: Database, mapper: OutboxEventMapper) -> None:
         self._db = database
         self._mapper = mapper
 
@@ -285,10 +285,10 @@ class PostgresPaymentOutbox:
             )
 
 
-class PostgresProviderMessageInbox:
+class DatabaseProviderMessageInbox:
     """Provider callback deduplication in the shared ``inbox`` table."""
 
-    def __init__(self, database: PostgresDatabase, consumer: str = PROVIDER_CONSUMER) -> None:
+    def __init__(self, database: Database, consumer: str = PROVIDER_CONSUMER) -> None:
         self._db = database
         self._consumer = consumer
 

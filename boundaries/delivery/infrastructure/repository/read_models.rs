@@ -1,5 +1,5 @@
 //! Query read models, the courier positions of the locator and the
-//! reconciliation reads of [`PostgresStore`].
+//! reconciliation reads of [`Store`].
 
 use crate::infrastructure::locator::CourierPositions;
 use crate::infrastructure::reconcile::ReconciliationStore;
@@ -25,9 +25,9 @@ use super::rows::{
     DeliveryRow, active_assignment_states, address, courier_status, delivery_from_row,
     delivery_state, offer_state, parse_delivery_state,
 };
-use super::{PostgresStore, corrupt, domain_version, limit, storage_error};
+use super::{Store, corrupt, domain_version, limit, storage_error};
 
-impl CourierCurrentDeliveryReadModel for PostgresStore {
+impl CourierCurrentDeliveryReadModel for Store {
     fn active_delivery_for(
         &self,
         courier_id: &CourierId,
@@ -52,7 +52,7 @@ impl CourierCurrentDeliveryReadModel for PostgresStore {
     }
 }
 
-impl WaitingDeliveries for PostgresStore {
+impl WaitingDeliveries for Store {
     fn list_waiting_without_pending_offer(
         &self,
         after: Option<&DeliveryPosition>,
@@ -84,7 +84,7 @@ impl WaitingDeliveries for PostgresStore {
     }
 }
 
-impl OffersOfDelivery for PostgresStore {
+impl OffersOfDelivery for Store {
     fn offer_ids_of(
         &self,
         delivery_id: &DeliveryId,
@@ -100,7 +100,7 @@ impl OffersOfDelivery for PostgresStore {
     }
 }
 
-impl ExpiredDeliveryOffers for PostgresStore {
+impl ExpiredDeliveryOffers for Store {
     fn expired_pending_offer_ids(
         &self,
         now_epoch_seconds: i64,
@@ -121,7 +121,7 @@ impl ExpiredDeliveryOffers for PostgresStore {
     }
 }
 
-impl PendingDeliveryOffersReadModel for PostgresStore {
+impl PendingDeliveryOffersReadModel for Store {
     fn pending_offers_for(
         &self,
         courier_id: &CourierId,
@@ -148,7 +148,7 @@ impl PendingDeliveryOffersReadModel for PostgresStore {
     }
 }
 
-impl CourierPositions for PostgresStore {
+impl CourierPositions for Store {
     fn available_positions(&self) -> Result<Vec<CourierPosition>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query!(
             "SELECT p.courier_id, p.latitude, p.longitude, p.recorded_at
@@ -171,7 +171,7 @@ impl CourierPositions for PostgresStore {
     }
 }
 
-impl ReconciliationStore for PostgresStore {
+impl ReconciliationStore for Store {
     fn courier_page(
         &self,
         after: &str,

@@ -10,11 +10,11 @@ import type {
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import {
   createRestaurantCollection,
-  MongoRestaurantMemberships,
-  MongoRestaurantRepository,
+  DatabaseRestaurantMemberships,
+  DatabaseRestaurantRepository,
   RESTAURANT_SCHEMA_VERSION,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
-import { createTestDatabase, noKitchenChanges } from "./support/mongodb.ts";
+import { createTestDatabase, noKitchenChanges } from "./support/database.ts";
 import { FakeRelationshipsClient } from "./support/relationships.ts";
 import { FixedClock, owner } from "./support/restaurants.ts";
 
@@ -51,7 +51,7 @@ const setup = async (
   const logs: string[] = [];
   const reconciler = new RelationshipReconciler({
     client,
-    restaurants: new MongoRestaurantMemberships(store),
+    restaurants: new DatabaseRestaurantMemberships(store),
     graceMs: GRACE,
     pageSize: options.pageSize ?? 500,
     timeoutMs: 1000,
@@ -257,7 +257,7 @@ test("a consistent restaurant keeps its revision; an orphan delete stores none",
 });
 
 /** Repository whose save waits for `commit()`: the use case is "in flight". */
-class GatedRestaurantRepository extends MongoRestaurantRepository {
+class GatedRestaurantRepository extends DatabaseRestaurantRepository {
   readonly saving: Promise<void>;
   #saving: () => void = () => {};
   #commit: () => void = () => {};
@@ -383,7 +383,7 @@ test("AC-710 a re-assign and a second revoke between passes restart the grace", 
   await new AssignStaffHandler({
     accessControl,
     staffRelationships: writer,
-    restaurants: new MongoRestaurantRepository(store, noKitchenChanges),
+    restaurants: new DatabaseRestaurantRepository(store, noKitchenChanges),
   }).execute({ subject: owner, restaurantId: "r-1", userId: "bob" });
   const second = revokeInFlight();
   await second.restaurants.saving;

@@ -10,38 +10,41 @@ import {
  * applied in this order: `pkg` (shared collections and service-wide
  * cleanups) first, then every slice its own collections. Each set is a
  * directory of `<NNNN>-<change>` files numbered from 0001 with its own
- * changelog. Append only, never edit an applied file: a validator or index
+ * changelog `migrations_changelog_<id>`. The `id` is a stable storage id
+ * named after the data of the set, part of the schema contract: it never
+ * follows directory or slice renames, and changing it requires a migration.
+ * Append only, never edit an applied file: a validator or index
  * change is a new file of the owning set; a new slice with collections adds
  * its set here.
  */
 export const RESTAURANTS_MIGRATION_SETS: readonly MigrationSet[] = [
   {
-    name: "pkg",
+    id: "messaging",
     dir: new URL("../../pkg/infrastructure/repository/migrations/", import.meta.url),
   },
   {
-    name: "restaurant",
+    id: "restaurants",
     dir: new URL(
       "../../slices/restaurant/infrastructure/repository/migrations/",
       import.meta.url,
     ),
   },
   {
-    name: "menu",
+    id: "menus",
     dir: new URL(
       "../../slices/menu/infrastructure/repository/migrations/",
       import.meta.url,
     ),
   },
   {
-    name: "restaurantorder",
+    id: "restaurant_orders",
     dir: new URL(
       "../../slices/restaurantorder/infrastructure/repository/migrations/",
       import.meta.url,
     ),
   },
   {
-    name: "simulator",
+    id: "simulator",
     dir: new URL(
       "../../slices/simulator/infrastructure/repository/migrations/",
       import.meta.url,
@@ -51,7 +54,7 @@ export const RESTAURANTS_MIGRATION_SETS: readonly MigrationSet[] = [
 
 /**
  * Startup migration of every restaurants process (local ADR 2): returns the
- * applied migrations as `<set>/<fileName>`, empty when the database already
+ * applied migrations as `<id>/<fileName>`, empty when the database already
  * is current.
  */
 export const migrateRestaurantsDatabase = (

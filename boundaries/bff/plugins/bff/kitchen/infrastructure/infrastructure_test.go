@@ -27,7 +27,11 @@ import (
 
 const fixtures = "../../../../../../tests/identity/fixtures"
 
-var receivedAt = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+var (
+	receivedAt      = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	acceptedAt      = receivedAt.Add(time.Minute)
+	expectedReadyAt = receivedAt.Add(16 * time.Minute)
+)
 
 // restaurantsServer answers the kitchen board and commands and records which
 // calls carried a user assertion.
@@ -61,9 +65,19 @@ func (s *restaurantsServer) ListActiveRestaurantOrders(ctx context.Context, requ
 		state = restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_PREPARING
 	}
 	return &restaurantsv1.ListActiveRestaurantOrdersResponse{Orders: []*restaurantsv1.ActiveRestaurantOrder{{
-		RestaurantOrder: &restaurantsv1.RestaurantOrder{RestaurantOrderId: "ro-1", OrderId: "order-1", RestaurantId: request.GetRestaurantId(), State: state},
-		Items:           []*restaurantsv1.RestaurantOrderItem{{MenuItemId: "menu-pho", Quantity: 2}},
-		ReceivedAt:      timestamppb.New(receivedAt),
+		RestaurantOrder: &restaurantsv1.RestaurantOrder{
+			RestaurantOrderId: "ro-1", OrderId: "order-1", RestaurantId: request.GetRestaurantId(), State: state,
+			ExpectedReadyAt: timestamppb.New(expectedReadyAt),
+		},
+		Items:      []*restaurantsv1.RestaurantOrderItem{{MenuItemId: "menu-pho", Quantity: 2}},
+		ReceivedAt: timestamppb.New(receivedAt),
+		AcceptedAt: timestamppb.New(acceptedAt),
+	}, {
+		RestaurantOrder: &restaurantsv1.RestaurantOrder{
+			RestaurantOrderId: "ro-received", OrderId: "order-received", RestaurantId: request.GetRestaurantId(),
+			State: restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_RECEIVED,
+		},
+		ReceivedAt: timestamppb.New(receivedAt),
 	}}}, nil
 }
 
@@ -146,9 +160,15 @@ func TestBoardCarriesTheUserAndPublicReadsDoNot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []applications.ActiveOrder{{
 		ID: "ro-1", OrderID: "order-1", Stage: applications.StagePreparing,
-		Lines:      []applications.ActiveOrderLine{{MenuItemID: "menu-pho", Quantity: 2}},
+		Lines:           []applications.ActiveOrderLine{{MenuItemID: "menu-pho", Quantity: 2}},
+		ReceivedAt:      receivedAt,
+		AcceptedAt:      &acceptedAt,
+		ExpectedReadyAt: &expectedReadyAt,
+	}, {
+		ID: "ro-received", OrderID: "order-received", Stage: applications.StageReceived,
+		Lines:      []applications.ActiveOrderLine{},
 		ReceivedAt: receivedAt,
-	}}, orders)
+	}}, orders, "an order before Acceptance has neither acceptedAt nor expectedReadyAt")
 	queue, err := restaurants.QueueOrder(cookContext(), "restaurant-1")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ro-2", "ro-3"}, queue)

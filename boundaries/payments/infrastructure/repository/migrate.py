@@ -1,10 +1,14 @@
 """Forward-only SQL migrations of the payments database, applied by yoyo-migrations.
 
-The schema is split into migration sets by owner: ``infrastructure`` holds the tables shared
-by every slice (Outbox, Inbox), each slice holds its own tables. A set is the
-``migrations/<version>_<name>.sql`` directory of its package with its own yoyo tables
-``_yoyo_migration_<owner>``, ``_yoyo_log_<owner>`` and ``_yoyo_version_<owner>``, so every
-set numbers its files from 1 independently.
+The schema is split into migration sets by the data they store: ``messaging`` holds the
+tables shared by every slice (Outbox, Inbox), ``payments`` the tables of the payment slice.
+A set is the ``migrations/<version>_<name>.sql`` directory of its package with its own yoyo
+tables ``_yoyo_migration_<storage_id>``, ``_yoyo_log_<storage_id>`` and
+``_yoyo_version_<storage_id>``, so every set numbers its files from 1 independently.
+
+``storage_id`` is part of the database schema contract: a literal that never derives from
+package, directory or slice names and does not change when the code is moved or renamed.
+Changing it renames the yoyo tables of the set and therefore requires a migration.
 Sets are applied in the order the caller lists them; files of a set in file name order,
 each in its own transaction together with its migration row.
 
@@ -44,25 +48,29 @@ class MissingMigrationsError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class MigrationSet:
-    """Migrations of one owner: ``migrations/*.sql`` of ``package``, tracked separately."""
+    """Migrations of one stored data set: ``migrations/*.sql`` of ``package``.
 
-    owner: str
+    ``storage_id`` names the yoyo tables of the set and is a schema contract, independent
+    of the code layout; ``package`` is only where the files are bundled.
+    """
+
+    storage_id: str
     package: str
 
     @property
     def migration_table(self) -> str:
         """Yoyo table of the applied migrations of the set."""
-        return f"_yoyo_migration_{self.owner}"
+        return f"_yoyo_migration_{self.storage_id}"
 
     @property
     def log_table(self) -> str:
         """Yoyo journal of the set."""
-        return f"_yoyo_log_{self.owner}"
+        return f"_yoyo_log_{self.storage_id}"
 
     @property
     def version_table(self) -> str:
         """Yoyo internal schema version of the set."""
-        return f"_yoyo_version_{self.owner}"
+        return f"_yoyo_version_{self.storage_id}"
 
     def migrations(self) -> MigrationList:
         """Return the bundled migrations of the set in the order they are applied."""
@@ -76,7 +84,7 @@ class MigrationSet:
 def migrate(settings: DatabaseSettings, sets: Sequence[MigrationSet]) -> list[str]:
     """Apply pending migrations of ``sets`` in order under one lock.
 
-    Returns ``<owner>/<id>`` of the applied migrations.
+    Returns ``<storage_id>/<migration>`` of the applied migrations.
     """
     # Параметры libpq DSN (URI или key=value) передаются в psycopg.connect как есть.
     params = conninfo_to_dict(
@@ -112,6 +120,6 @@ def _apply(uri: DatabaseURI, migration_set: MigrationSet) -> list[str]:
         backend.init_database()
         pending = backend.to_apply(migration_set.migrations())
         backend.apply_migrations(pending)
-        return [f"{migration_set.owner}/{migration.id}" for migration in pending]
+        return [f"{migration_set.storage_id}/{migration.id}" for migration in pending]
     finally:
         backend.connection.close()

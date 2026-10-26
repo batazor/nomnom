@@ -25,16 +25,16 @@ import {
 } from "../slices/menu/infrastructure/cache/menus.ts";
 import {
   createMenuCollection,
-  MongoMenuReader,
-  MongoMenuRepository,
+  DatabaseMenuReader,
+  DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import type { RestaurantView } from "../slices/restaurant/applications/restaurant-view.ts";
 import {
   CachedRestaurantCatalog,
   restaurantCacheRefreshes,
 } from "../slices/restaurant/infrastructure/cache/restaurants.ts";
+import { createTestDatabase } from "./support/database.ts";
 import { valkeyUrl } from "./support/global-containers.ts";
-import { createTestDatabase } from "./support/mongodb.ts";
 import { testValkeyConfig } from "./support/valkey.ts";
 
 type View = Readonly<{ name: string }>;
@@ -386,7 +386,7 @@ test("the cached menu reader serves the MongoDB menu", async () => {
   const { db, unitOfWork } = await createTestDatabase();
   const collection = createMenuCollection(db, unitOfWork);
   const restaurantId = `r-${randomUUID()}`;
-  await new MongoMenuRepository(collection).save(
+  await new DatabaseMenuRepository(collection).save(
     Menu.create({
       id: `m-${randomUUID()}`,
       restaurantId,
@@ -396,7 +396,7 @@ test("the cached menu reader serves the MongoDB menu", async () => {
   const client = new Valkey(valkeyUrl());
   try {
     await ready(client);
-    const reader = new CachedMenuReader(new MongoMenuReader(collection), {
+    const reader = new CachedMenuReader(new DatabaseMenuReader(collection), {
       client,
       ttlMs: 60_000,
       metrics: new CacheMetrics(),

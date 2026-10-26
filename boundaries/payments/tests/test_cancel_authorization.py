@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from slices.payment.applications.cancel_authorization import (
     CancelAuthorizationHandler,
     CancelAuthorizationInput,
@@ -24,9 +24,9 @@ from slices.payment.domains.payment import (
 KEY = "order-1:cancel-authorization"
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class CancelAuthorizationTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

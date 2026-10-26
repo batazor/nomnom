@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 
 import { AlreadyExistsError } from "../../../../pkg/application/errors.ts";
-import type { MongoUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
@@ -48,7 +48,7 @@ const toSnapshot = (document: MenuDocument): MenuSnapshot => ({
 
 export const createMenuCollection = (
   db: Db,
-  unitOfWork: MongoUnitOfWork,
+  unitOfWork: DatabaseUnitOfWork,
 ): VersionedCollection<MenuDocument> =>
   new VersionedCollection<MenuDocument>({
     db,
@@ -61,7 +61,7 @@ export const createMenuCollection = (
         : undefined,
   });
 
-export class MongoMenuRepository implements MenuRepository {
+export class DatabaseMenuRepository implements MenuRepository {
   readonly #collection: VersionedCollection<MenuDocument>;
 
   constructor(collection: VersionedCollection<MenuDocument>) {
@@ -91,7 +91,7 @@ export class MongoMenuRepository implements MenuRepository {
   }
 }
 
-export class MongoMenuReader implements MenuReader {
+export class DatabaseMenuReader implements MenuReader {
   readonly #collection: VersionedCollection<MenuDocument>;
 
   constructor(collection: VersionedCollection<MenuDocument>) {

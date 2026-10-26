@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ConcurrencyConflictError } from "../pkg/application/errors.ts";
-import { MongoOutboxOutsideUnitOfWorkError } from "../pkg/infrastructure/repository/outbox.ts";
+import { DatabaseOutboxOutsideUnitOfWorkError } from "../pkg/infrastructure/repository/outbox.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
 } from "../pkg/infrastructure/repository/versioned-collection.ts";
-import { createTestDatabase, RecordedOutbox } from "./support/mongodb.ts";
+import { createTestDatabase, RecordedOutbox } from "./support/database.ts";
 
 const aggregate = { type: "Restaurant", id: "r-1", version: 1 };
 const event = { type: "RestaurantOpened", occurredAt: new Date(0) };
@@ -80,7 +80,7 @@ test("outbox rejects records outside a unit of work", async () => {
 
   await assert.rejects(
     outbox.add(aggregate, [event]),
-    MongoOutboxOutsideUnitOfWorkError,
+    DatabaseOutboxOutsideUnitOfWorkError,
   );
 });
 

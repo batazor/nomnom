@@ -13,7 +13,7 @@ use crate::pkg::persistence::RepositoryError;
 struct Harness {
     provider: SdkMeterProvider,
     exporter: InMemoryMetricExporter,
-    store: PostgresStore,
+    store: Store,
 }
 
 fn harness() -> Harness {
@@ -21,7 +21,7 @@ fn harness() -> Harness {
     let provider = SdkMeterProvider::builder()
         .with_reader(PeriodicReader::builder(exporter.clone()).build())
         .build();
-    let store = PostgresStore::connect(&fresh_database())
+    let store = Store::connect(&fresh_database())
         .expect("connect test database")
         .with_transaction_metrics(TransactionMetrics::new(&provider.meter("test")));
     Harness {
@@ -45,13 +45,13 @@ impl From<UnitOfWorkError> for TestError {
 }
 
 /// One statement on the connection of the running transaction.
-fn statement(store: &PostgresStore, statement: &'static str) -> Result<(), RepositoryError> {
+fn statement(store: &Store, statement: &'static str) -> Result<(), RepositoryError> {
     sql!(store, "CREATE", |connection| sqlx::raw_sql(statement)
         .execute(connection))
     .map(drop)
 }
 
-fn execute(store: &PostgresStore, sql: &'static str) -> Result<(), TestError> {
+fn execute(store: &Store, sql: &'static str) -> Result<(), TestError> {
     statement(store, sql).map_err(TestError::Store)
 }
 

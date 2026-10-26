@@ -198,7 +198,7 @@ helm template payments ops/helm \
 
 ## PostgreSQL
 
-Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). DSN передаётся из внешнего Secret `database.urlSecret.name`/`key` (env `DATABASE__URL`); без него переменная не задаётся и процесс не стартует. Процесс сам применяет недостающие forward-only SQL-миграции при старте, до открытия портов, библиотекой yoyo-migrations под одним session advisory lock PostgreSQL — сначала набор общих таблиц `infrastructure`, затем наборы slices ([README](../README.md#статус-реализации)): реплики не мешают друг другу, при ошибке миграции процесс завершается с кодом 1. Отдельного шага или init container нет.
+Хранилище payments ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md), [локальный ADR 1](../docs/adr/0001-use-postgresql-for-payments-storage.md)). DSN передаётся из внешнего Secret `database.urlSecret.name`/`key` (env `DATABASE__URL`); без него переменная не задаётся и процесс не стартует. Процесс сам применяет недостающие forward-only SQL-миграции при старте, до открытия портов, библиотекой yoyo-migrations под одним session advisory lock PostgreSQL — сначала набор общих таблиц `messaging`, затем наборы slices ([README](../README.md#статус-реализации)): реплики не мешают друг другу, при ошибке миграции процесс завершается с кодом 1. Отдельного шага или init container нет.
 
 Пулер перед базой — только session mode; replicas × maxConns должна помещаться в `pool_size` пулера ([README](../README.md#пулер-postgresql)). Длительности — `<int>(ms|s|m)`, chart отклоняет другой формат и `minConns` вне 0–1.
 
@@ -213,7 +213,7 @@ helm template payments ops/helm \
 | `database.connectTimeout` | `5s` | `connect_timeout` libpq (`DATABASE__CONNECT_TIMEOUT`). |
 | `database.acquireTimeout` | `5s` | Ожидание соединения пула (`DATABASE__ACQUIRE_TIMEOUT`). |
 
-Роль базы должна владеть схемой: создаёт таблицы `payments_outbox` (и publication `payments_outbox`) и `inbox` (набор `infrastructure`), `payments` и `payment_operations` (набор `payment`), служебные таблицы yoyo-migrations каждого набора — `_yoyo_migration_infrastructure`, `_yoyo_log_infrastructure`, `_yoyo_version_infrastructure`, `_yoyo_migration_payment`, `_yoyo_log_payment`, `_yoyo_version_payment` — и общую `yoyo_lock` (yoyo держит в ней строку только на время обновления своей внутренней схемы). Пример для kind:
+Роль базы должна владеть схемой: создаёт таблицы `payments_outbox` (и publication `payments_outbox`) и `inbox` (набор `messaging`), `payments` и `payment_operations` (набор `payments`), служебные таблицы yoyo-migrations каждого набора, названные по его storage id (контракт схемы, не зависит от раскладки кода) — `_yoyo_migration_messaging`, `_yoyo_log_messaging`, `_yoyo_version_messaging`, `_yoyo_migration_payments`, `_yoyo_log_payments`, `_yoyo_version_payments` — и общую `yoyo_lock` (yoyo держит в ней строку только на время обновления своей внутренней схемы). Пример для kind:
 
 ```bash
 helm upgrade --install payments ops/helm \

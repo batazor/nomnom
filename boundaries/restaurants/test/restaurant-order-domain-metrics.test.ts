@@ -4,7 +4,7 @@ import test from "node:test";
 import { MeterProvider, MetricReader } from "@opentelemetry/sdk-metrics";
 
 import type { UnitOfWork } from "../pkg/application/unit-of-work.ts";
-import { MongoInbox } from "../pkg/infrastructure/repository/inbox.ts";
+import { DatabaseInbox } from "../pkg/infrastructure/repository/inbox.ts";
 import {
   CancellationRejectionReason,
   type CancelRestaurantOrderResult,
@@ -180,7 +180,7 @@ test("a retried transaction attempt is counted once", async () => {
 test("an idempotent repeat and an Inbox duplicate record nothing more", async () => {
   const { reader, infrastructure, world, unitOfWork, receive } = await setup();
   const { restaurantId, phoId } = await world.givenKitchen();
-  const inbox = new MongoInbox(infrastructure.db, infrastructure.unitOfWork);
+  const inbox = new DatabaseInbox(infrastructure.db, infrastructure.unitOfWork);
   const record = {
     consumer: "restaurants.order-placed",
     eventId: "event-1",
@@ -188,7 +188,7 @@ test("an idempotent repeat and an Inbox duplicate record nothing more", async ()
     aggregateId: "order-a",
     topic: "orders.v1.order-events",
   };
-  // The process Inbox runs on the observed Unit of Work (ObservedMongoUnitOfWork).
+  // The process Inbox runs on the observed Unit of Work (ObservedDatabaseUnitOfWork).
   const deliver = () =>
     unitOfWork.run(() =>
       inbox.runOnce(record, async () => {

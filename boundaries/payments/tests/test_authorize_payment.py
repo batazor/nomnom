@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from pkg.application import AggregateRef, AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -39,9 +39,9 @@ from slices.payment.domains.payment import (
 KEY = "order-1:authorize"
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class AuthorizePaymentTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

@@ -49,18 +49,30 @@ func kitchenService(t *testing.T, get *fakeGetKitchen, action *fakeKitchenAction
 	return svc, metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
 }
 
-var kitchenReceivedAt = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+var (
+	kitchenReceivedAt      = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	kitchenAcceptedAt      = kitchenReceivedAt.Add(time.Minute)
+	kitchenExpectedReadyAt = kitchenReceivedAt.Add(16 * time.Minute)
+)
 
 var preparing = applications.OrderView{
 	ID: "ro-1", OrderID: "order-1", Stage: applications.StagePreparing,
-	Items:      []applications.ItemView{{Name: "Фо бо", Quantity: 2}},
+	Items:           []applications.ItemView{{Name: "Фо бо", Quantity: 2}},
+	ReceivedAt:      kitchenReceivedAt,
+	AcceptedAt:      &kitchenAcceptedAt,
+	ExpectedReadyAt: &kitchenExpectedReadyAt,
+}
+
+var received = applications.OrderView{
+	ID: "ro-2", OrderID: "order-2", Stage: applications.StageReceived,
+	Items:      []applications.ItemView{{Name: "Фо бо", Quantity: 1}},
 	ReceivedAt: kitchenReceivedAt,
 }
 
 func TestKitchenShowsTheBoardOnBehalfOfTheUser(t *testing.T) {
 	get := &fakeGetKitchen{view: applications.KitchenView{
 		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", Address: "ул. Садовая, 8", IsOpen: true},
-		Orders:     []applications.OrderView{preparing},
+		Orders:     []applications.OrderView{preparing, received},
 	}}
 	svc, ctx := kitchenService(t, get, &fakeKitchenAction{})
 
@@ -72,14 +84,19 @@ func TestKitchenShowsTheBoardOnBehalfOfTheUser(t *testing.T) {
 	assert.Equal(t, "Кухня №8", kitchenMessage.GetRestaurant().GetName())
 	assert.True(t, kitchenMessage.GetRestaurant().GetAcceptingOrders())
 	assert.Nil(t, kitchenMessage.GetRestaurant().GetMenu())
-	require.Len(t, kitchenMessage.GetOrders(), 1)
+	require.Len(t, kitchenMessage.GetOrders(), 2)
 	order := kitchenMessage.GetOrders()[0]
 	assert.Equal(t, "ro-1", order.GetId())
 	assert.Equal(t, "order-1", order.GetOrderId())
 	assert.Equal(t, service.KitchenOrderStage_KITCHEN_ORDER_STAGE_PREPARING, order.GetStage())
 	assert.Equal(t, "2026-10-25T12:00:00Z", order.GetReceivedAt())
+	assert.Equal(t, "2026-10-25T12:01:00Z", order.GetAcceptedAt().GetValue())
+	assert.Equal(t, "2026-10-25T12:16:00Z", order.GetExpectedReadyAt().GetValue())
 	assert.Equal(t, "Фо бо", order.GetItems()[0].GetName())
 	assert.Equal(t, int32(2), order.GetItems()[0].GetQuantity())
+	waiting := kitchenMessage.GetOrders()[1]
+	assert.Nil(t, waiting.GetAcceptedAt(), "acceptedAt is null before Acceptance")
+	assert.Nil(t, waiting.GetExpectedReadyAt(), "expectedReadyAt is null before Acceptance")
 }
 
 func TestKitchenNotFoundIsNull(t *testing.T) {

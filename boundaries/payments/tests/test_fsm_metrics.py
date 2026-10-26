@@ -9,7 +9,7 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoi
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.observability import FsmMetrics, ObservedUnitOfWork
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
@@ -34,9 +34,9 @@ from slices.payment.domains.payment import (
 Transitions = dict[tuple[str, str, str, str, bool], float]
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class FsmMetricsTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:

@@ -238,6 +238,7 @@ const ACTIVE: readonly ActiveRestaurantOrder[] = [
     state: DomainRestaurantOrderState.Assembled,
     items: [{ menuItemId: "pho", quantity: 1, options: [] }],
     receivedAt: RECEIVED_AT,
+    acceptedAt: new Date(RECEIVED_AT.getTime() + minutes(1)),
     expectedReadyAt: new Date(RECEIVED_AT.getTime() + minutes(20)),
     version: 4,
   },
@@ -263,7 +264,7 @@ const createActiveService = async (subjects: SubjectResolver | null) => {
   return { service, reads };
 };
 
-test("ListActiveRestaurantOrders answers the orders with state, items, version, received_at and expected_ready_at", async () => {
+test("ListActiveRestaurantOrders answers the orders with state, items, version, received_at, accepted_at and expected_ready_at", async () => {
   const { service, reads } = await createActiveService(resolverOf(cook));
 
   const response = await service.listActiveRestaurantOrders(
@@ -288,7 +289,17 @@ test("ListActiveRestaurantOrders answers the orders with state, items, version, 
     timestampDate(order.receivedAt).getTime(),
     RECEIVED_AT.getTime(),
   );
-  assert.ok(order.restaurantOrder?.expectedReadyAt !== undefined);
+  assert.ok(order.acceptedAt !== undefined);
+  assert.equal(
+    timestampDate(order.acceptedAt).getTime(),
+    RECEIVED_AT.getTime() + minutes(1),
+  );
+  const expectedReadyAt = order.restaurantOrder?.expectedReadyAt;
+  assert.ok(expectedReadyAt !== undefined);
+  assert.equal(
+    timestampDate(expectedReadyAt).getTime(),
+    RECEIVED_AT.getTime() + minutes(20),
+  );
 });
 
 test("ListActiveRestaurantOrders without restaurant#operate_kitchen is PERMISSION_DENIED", async () => {

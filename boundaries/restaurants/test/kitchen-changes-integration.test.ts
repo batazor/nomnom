@@ -9,7 +9,7 @@ import {
   KITCHEN_CHANGES_TOPIC,
   kitchenChangeNotifier,
 } from "../slices/restaurantorder/infrastructure/integration/kitchen-changes.ts";
-import { createTestDatabase, RecordedOutbox } from "./support/mongodb.ts";
+import { createTestDatabase, RecordedOutbox } from "./support/database.ts";
 
 const occurredAt = new Date("2026-10-25T12:00:00Z");
 

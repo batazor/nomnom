@@ -15,7 +15,7 @@ use delivery::infrastructure::memory::{
     ManualClock, RecordingRelationships, SequentialIdGenerator, StaticAuthorization,
     StaticCourierLocator,
 };
-use delivery::infrastructure::repository::PostgresStore;
+use delivery::infrastructure::repository::Store;
 use delivery::pkg::application::Subject;
 use delivery::pkg::persistence::RepositoryError;
 use delivery::slices::courier::domains::courier::{
@@ -38,8 +38,8 @@ use delivery::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 const NOW: i64 = 1_000;
 
 /// Store over the migrated test database.
-fn store() -> PostgresStore {
-    PostgresStore::connect(&support::database())
+fn store() -> Store {
+    Store::connect(&support::database())
         .expect("connect")
         .with_outbox_mapper(Arc::new(DeliveryIntegrationEvents))
 }
@@ -60,7 +60,7 @@ struct Seed {
     courier_id: CourierId,
 }
 
-fn seed(store: &PostgresStore) -> Seed {
+fn seed(store: &Store) -> Seed {
     let seed = Seed {
         delivery_id: DeliveryId::new(unique("delivery")),
         offer_id: DeliveryOfferId::new(unique("offer")),
@@ -89,7 +89,7 @@ fn seed(store: &PostgresStore) -> Seed {
 }
 
 fn accept(
-    store: &PostgresStore,
+    store: &Store,
     seed: &Seed,
     relationships: &RecordingRelationships,
 ) -> Result<(), DeliveryApplicationError> {
@@ -129,21 +129,21 @@ fn accept(
     .map(drop)
 }
 
-fn courier_status(store: &PostgresStore, seed: &Seed) -> CourierStatus {
+fn courier_status(store: &Store, seed: &Seed) -> CourierStatus {
     CourierRepository::get(store, &seed.courier_id)
         .expect("get courier")
         .expect("courier")
         .status()
 }
 
-fn delivery_state(store: &PostgresStore, seed: &Seed) -> State {
+fn delivery_state(store: &Store, seed: &Seed) -> State {
     DeliveryRepository::get(store, &seed.delivery_id)
         .expect("get delivery")
         .expect("delivery")
         .state()
 }
 
-fn offer_state(store: &PostgresStore, seed: &Seed) -> OfferState {
+fn offer_state(store: &Store, seed: &Seed) -> OfferState {
     DeliveryOfferRepository::get(store, &seed.offer_id)
         .expect("get offer")
         .expect("offer")
@@ -188,7 +188,7 @@ fn failed_acceptance_rolls_courier_back_with_offer_and_delivery() {
 /// Batch reads of two dispatchers: both read the batch before either
 /// dispatches it.
 struct SameBatch {
-    store: Arc<PostgresStore>,
+    store: Arc<Store>,
     barrier: Arc<Barrier>,
 }
 

@@ -69,6 +69,11 @@ type ActiveOrder struct {
 	Stage      Stage
 	Lines      []ActiveOrderLine
 	ReceivedAt time.Time
+	// AcceptedAt is nil before Acceptance (StageReceived).
+	AcceptedAt *time.Time
+	// ExpectedReadyAt is nil before Acceptance; it includes the reported
+	// preparation delays.
+	ExpectedReadyAt *time.Time
 }
 
 // KitchenBoard reads the kitchen board of restaurants on behalf of the user
@@ -112,6 +117,10 @@ type OrderView struct {
 	Stage      Stage
 	Items      []ItemView
 	ReceivedAt time.Time
+	// AcceptedAt and ExpectedReadyAt bound the cooking progress; both are nil
+	// before Acceptance.
+	AcceptedAt      *time.Time
+	ExpectedReadyAt *time.Time
 }
 
 // KitchenView is the kitchen screen of one restaurant.
@@ -126,10 +135,12 @@ func orderView(order ActiveOrder, names map[string]string) OrderView {
 		items = append(items, ItemView{Name: names[line.MenuItemID], Quantity: line.Quantity})
 	}
 	return OrderView{
-		ID:         order.ID,
-		OrderID:    order.OrderID,
-		Stage:      order.Stage,
-		Items:      items,
-		ReceivedAt: order.ReceivedAt,
+		ID:              order.ID,
+		OrderID:         order.OrderID,
+		Stage:           order.Stage,
+		Items:           items,
+		ReceivedAt:      order.ReceivedAt,
+		AcceptedAt:      order.AcceptedAt,
+		ExpectedReadyAt: order.ExpectedReadyAt,
 	}
 }

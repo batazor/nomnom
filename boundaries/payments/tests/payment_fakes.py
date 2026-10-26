@@ -19,15 +19,15 @@ from di.resources import sections
 from infrastructure.observability import FsmMetrics
 from infrastructure.repository import (
     PAYMENT_EVENTS_TOPIC,
+    Database,
+    DatabasePaymentOperationHistory,
+    DatabasePaymentOperationRepository,
+    DatabasePaymentOutbox,
+    DatabasePaymentRepository,
+    DatabasePendingOperationQuery,
+    DatabaseProviderMessageInbox,
+    DatabaseUnitOfWork,
     OutboxMessage,
-    PostgresDatabase,
-    PostgresPaymentOperationHistory,
-    PostgresPaymentOperationRepository,
-    PostgresPaymentOutbox,
-    PostgresPaymentRepository,
-    PostgresPendingOperationQuery,
-    PostgresProviderMessageInbox,
-    PostgresUnitOfWork,
     create_database,
 )
 from pkg.application import (
@@ -81,7 +81,7 @@ class PickledEventsMapper:
 class FailingOutbox:
     """Real Outbox whose next write can be made to fail."""
 
-    def __init__(self, outbox: PostgresPaymentOutbox) -> None:
+    def __init__(self, outbox: DatabasePaymentOutbox) -> None:
         self._outbox = outbox
         self.fail_next = False
 
@@ -95,7 +95,7 @@ class FailingOutbox:
 class CountingUnitOfWork:
     """Real Unit of Work that counts outer commits and rollbacks."""
 
-    def __init__(self, uow: PostgresUnitOfWork) -> None:
+    def __init__(self, uow: DatabaseUnitOfWork) -> None:
         self._uow = uow
         self._depth = 0
         self.commits = 0
@@ -116,14 +116,14 @@ class CountingUnitOfWork:
         return result
 
 
-class StaleOperationRepository(PostgresPaymentOperationRepository):
+class StaleOperationRepository(DatabasePaymentOperationRepository):
     """Simulates a concurrent transaction committed after this one read the data.
 
     While ``stale_lookups`` is set, idempotency key lookups miss existing operations
     until the next ``add``.
     """
 
-    def __init__(self, database: PostgresDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         super().__init__(database)
         self.stale_lookups = False
 
@@ -137,10 +137,10 @@ class StaleOperationRepository(PostgresPaymentOperationRepository):
         super().add(operation)
 
 
-class StalePendingOperationQuery(PostgresPendingOperationQuery):
+class StalePendingOperationQuery(DatabasePendingOperationQuery):
     """Pending lookup that misses while the operation repository reads stale data."""
 
-    def __init__(self, database: PostgresDatabase, operations: StaleOperationRepository) -> None:
+    def __init__(self, database: Database, operations: StaleOperationRepository) -> None:
         super().__init__(database)
         self._operations = operations
 
@@ -229,17 +229,17 @@ class SequentialIdentifiers:
 class PaymentsTestKit:
     """Real PostgreSQL adapters over a truncated database plus the non-storage fakes."""
 
-    def __init__(self, database: PostgresDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self.database = database
         with database.connection() as conn:
             conn.execute("TRUNCATE payments, payment_operations, payments_outbox, inbox")
-        self.uow = CountingUnitOfWork(PostgresUnitOfWork(database))
-        self.payments = PostgresPaymentRepository(database)
+        self.uow = CountingUnitOfWork(DatabaseUnitOfWork(database))
+        self.payments = DatabasePaymentRepository(database)
         self.operations = StaleOperationRepository(database)
         self.pending = StalePendingOperationQuery(database, self.operations)
-        self.history = PostgresPaymentOperationHistory(database)
-        self.outbox = FailingOutbox(PostgresPaymentOutbox(database, PickledEventsMapper()))
-        self.inbox = PostgresProviderMessageInbox(database)
+        self.history = DatabasePaymentOperationHistory(database)
+        self.outbox = FailingOutbox(DatabasePaymentOutbox(database, PickledEventsMapper()))
+        self.inbox = DatabaseProviderMessageInbox(database)
         self.provider = FakePaymentProvider()
         self.permissions = FakePermissions()
         self.clock = FixedClock()
@@ -377,7 +377,7 @@ class PaymentsTestKit:
 _STATES_WITH_REFERENCE = {PaymentState.AUTHORIZED, PaymentState.CAPTURED, PaymentState.REFUNDED}
 
 
-def unreachable_database() -> PostgresDatabase:
+def unreachable_database() -> Database:
     """Pool that never connects: for composition tests that stop before storage."""
     return create_database(DatabaseSettings(DATABASE__URL=UNREACHABLE_DATABASE_URL))
 

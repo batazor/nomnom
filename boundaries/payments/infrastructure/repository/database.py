@@ -1,7 +1,7 @@
 """psycopg 3 connection pool and the PostgreSQL Unit of Work.
 
 The connection of the active Unit of Work is kept in a context variable: every
-repository call made inside ``PostgresUnitOfWork.run`` uses it and joins that local
+repository call made inside ``DatabaseUnitOfWork.run`` uses it and joins that local
 transaction. Outside a Unit of Work a call takes its own pooled connection and
 commits on return.
 
@@ -51,11 +51,11 @@ RETRY_BACKOFF = timedelta(milliseconds=10)
 POOL_NAME = "payments"
 
 _active: ContextVar[psycopg.Connection | None] = ContextVar(
-    "payments_postgres_connection", default=None
+    "payments_database_connection", default=None
 )
 
 
-class PostgresDatabase:
+class Database:
     """Connection pool of the payments database, aware of the active Unit of Work."""
 
     def __init__(self, pool: ConnectionPool, pool_metrics: PoolMetrics | None = None) -> None:
@@ -87,7 +87,7 @@ class PostgresDatabase:
         self._pool.close()
 
 
-class PostgresUnitOfWork:
+class DatabaseUnitOfWork:
     """One local PostgreSQL transaction per use case step; nested calls join it.
 
     Every attempt of the outer Unit of Work is recorded by ``TransactionMetrics``.
@@ -95,7 +95,7 @@ class PostgresUnitOfWork:
 
     def __init__(
         self,
-        database: PostgresDatabase,
+        database: Database,
         transaction_metrics: TransactionMetrics | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -172,7 +172,7 @@ class _WorkFailedError(Exception):
 
 def create_database(
     settings: DatabaseSettings, statement_telemetry: StatementTelemetry | None = None
-) -> PostgresDatabase:
+) -> Database:
     """Create the pool without connecting; ``check`` verifies reachability.
 
     Limits come from ``DatabaseSettings``: behind the session-mode pooler every pooled
@@ -199,7 +199,7 @@ def create_database(
         max_idle=settings.max_conn_idle_time.total_seconds(),
     )
     pool.open(wait=False)
-    return PostgresDatabase(pool, pool_metrics)
+    return Database(pool, pool_metrics)
 
 
 def connect_timeout_seconds(timeout: timedelta) -> int:

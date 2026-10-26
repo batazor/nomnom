@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 
 import { ConcurrencyConflictError } from "../../../../pkg/application/errors.ts";
-import type { MongoUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
@@ -68,7 +68,7 @@ const toData = (restaurant: Restaurant) => {
 
 export const createRestaurantCollection = (
   db: Db,
-  unitOfWork: MongoUnitOfWork,
+  unitOfWork: DatabaseUnitOfWork,
 ): VersionedCollection<RestaurantDocument> =>
   new VersionedCollection<RestaurantDocument>({
     db,
@@ -90,7 +90,7 @@ export type RestaurantSaved = (
   }>,
 ) => Promise<number>;
 
-export class MongoRestaurantRepository implements RestaurantRepository {
+export class DatabaseRestaurantRepository implements RestaurantRepository {
   readonly #collection: VersionedCollection<RestaurantDocument>;
   readonly #saved: RestaurantSaved;
 
@@ -147,7 +147,7 @@ const toMembers = (document: RestaurantDocument): RestaurantMembers => ({
 });
 
 /** Business side of the relationship reconciliation (FR-445). */
-export class MongoRestaurantMemberships implements RestaurantMemberships {
+export class DatabaseRestaurantMemberships implements RestaurantMemberships {
   readonly #collection: VersionedCollection<RestaurantDocument>;
 
   constructor(collection: VersionedCollection<RestaurantDocument>) {
@@ -216,7 +216,7 @@ const toView = (document: RestaurantDocument): RestaurantView => ({
 });
 
 /** Query model over the restaurant documents, ordered by restaurant id. */
-export class MongoRestaurantCatalog
+export class DatabaseRestaurantCatalog
   implements
     RestaurantPublicReader,
     RestaurantCatalogReader,

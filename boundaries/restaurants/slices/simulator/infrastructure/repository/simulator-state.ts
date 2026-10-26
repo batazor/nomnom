@@ -18,7 +18,7 @@ export type SimulatorStateDocument = {
  * Single-document Simulator state (FR-604). An absent document is a disabled
  * Simulator, so a new database needs no seed.
  */
-export class MongoSimulatorState implements SimulatorStateRepository {
+export class DatabaseSimulatorState implements SimulatorStateRepository {
   readonly #collection: Collection<SimulatorStateDocument>;
 
   constructor(db: Db) {

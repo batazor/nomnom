@@ -10,7 +10,7 @@ import {
   loadLocalEnv,
   loadSimulatorConfig,
 } from "../../pkg/config/config.ts";
-import { connectMongoDb } from "../../pkg/infrastructure/repository/client.ts";
+import { connectDatabase } from "../../pkg/infrastructure/repository/client.ts";
 import { connectValkey } from "../../pkg/infrastructure/valkey/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
@@ -61,7 +61,7 @@ const subjects = await createSubjectResolver(
   identityLog.warn,
   { audit: identityLog.info },
 );
-const mongo = await connectMongoDb(config.mongodb);
+const database = await connectDatabase(config.mongodb);
 const valkey = connectValkey(config.valkey, {
   connectionName: SERVICE_NAME,
   logger: logger.child({ operation: "valkey" }),
@@ -72,7 +72,7 @@ const container = createRestaurantsContainer({
   reconciler: config.reconciler,
   kitchen: config.kitchen,
   simulator,
-  mongo,
+  database,
   valkeyConfig: config.valkey,
   valkey: valkey.client,
   subjects,
@@ -83,7 +83,7 @@ try {
   // Nothing to change on an already current database; a failed migration
   // stops the process before it serves.
   await migrateRestaurantsDatabase(
-    mongo.db,
+    database.db,
     logger.child({ operation: "migrate" }).info,
   );
   await new Lifecycle({
@@ -101,6 +101,6 @@ try {
   // telemetry is flushed last, within its own deadline.
   await container.dispose();
   await valkey.close();
-  await mongo.close();
+  await database.close();
   await telemetry.shutdown(config.shutdown.telemetryFlushTimeoutMs);
 }

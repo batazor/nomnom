@@ -43,7 +43,7 @@ from infrastructure.provider import (
     WebhookVerifier,
     create_webhook_handler,
 )
-from infrastructure.repository import PostgresDatabase
+from infrastructure.repository import Database
 from infrastructure.repository.outbox import outbox_traceparent
 from pkg import telemetry
 from pkg.lifecycle import HttpWorker
@@ -156,11 +156,11 @@ def _handlers(kit: PaymentsTestKit, use_cases: UseCases) -> PaymentsHandlers:
     )
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class GrpcPropagationTest(unittest.TestCase):
     """Caller context crosses the gRPC hop; spans and RPC metrics follow semconv RPC."""
 
-    database: PostgresDatabase
+    database: Database
 
     @override
     def setUp(self) -> None:
@@ -560,9 +560,9 @@ class RuntimeAndResourceTest(unittest.TestCase):
         self.assertEqual(sorted(s.name for s in signals.finished()), ["SELECT", "usecase x"])
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class WebhookSpanTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     def test_webhook_gets_a_server_span_with_the_route(self) -> None:
         signals = Signals()

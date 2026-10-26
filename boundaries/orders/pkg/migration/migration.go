@@ -1,7 +1,9 @@
 // Package migration applies the schema migrations of the orders database
 // (ADR 38, ADR 39). Every slice with tables has its own Set, next to the
 // repositories of those tables, with its own numbering and version table; the
-// composition root passes them to Apply in order.
+// composition root passes them to Apply in order. The version table is named
+// only by the ID of the Set, never by the package, directory or slice that
+// holds it, so refactoring code never renames a table of the database.
 package migration
 
 import (
@@ -11,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"regexp"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
@@ -36,11 +39,27 @@ const lockKey int64 = 0x6f7264657273
 // fast and the pod retries on restart.
 const lockTimeout = "5s"
 
-// Set is the migrations of one owner: Files holds a migrations/ directory of
-// NNNNN_name.up.sql files, Table is its golang-migrate version table.
+// versionTablePrefix precedes the ID of a Set in its golang-migrate version
+// table: schema_migrations_<id>.
+const versionTablePrefix = "schema_migrations_"
+
+// validID is the form of a Set ID: a lowercase SQL identifier part.
+var validID = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// Set is the migrations of one part of the schema: Files holds a migrations/
+// directory of NNNNN_name.up.sql files. ID names the data the Set stores and
+// is part of the database schema contract: a string literal next to the
+// migrations, never derived from a package, directory or slice name and never
+// changed by refactoring code. Its version table is schema_migrations_<ID>;
+// changing the ID renames that table and requires a migration of it.
 type Set struct {
-	Table string
+	ID    string
 	Files fs.FS
+}
+
+// versionTable is the golang-migrate version table of the Set.
+func (s Set) versionTable() string {
+	return versionTablePrefix + s.ID
 }
 
 // Apply brings the schema to the sets in their order: applied migrations are
@@ -76,29 +95,32 @@ func Apply(ctx context.Context, cfg config.PostgresConfig, sets ...Set) error {
 	migrationConfig.RuntimeParams["lock_timeout"] = lockTimeout
 	for _, set := range sets {
 		if err := applySet(ctx, cfg, migrationConfig, set); err != nil {
-			return fmt.Errorf("migrations %s: %w", set.Table, err)
+			return fmt.Errorf("migrations %s: %w", set.ID, err)
 		}
 	}
 	return nil
 }
 
-// validate rejects a call without sets and sets sharing a version table: two
-// owners in one table would see each other's versions as their own.
+// validate rejects a call without sets, a Set without a valid ID and sets
+// sharing an ID: two sets in one version table would see each other's
+// versions as their own.
 func validate(sets []Set) error {
 	if len(sets) == 0 {
 		return errors.New("no migration sets")
 	}
-	tables := make(map[string]bool, len(sets))
+	ids := make(map[string]bool, len(sets))
 	for _, set := range sets {
 		switch {
-		case set.Table == "":
-			return errors.New("migration set without a version table")
+		case set.ID == "":
+			return errors.New("migration set without an id")
+		case !validID.MatchString(set.ID):
+			return fmt.Errorf("migration set id %q must match %s", set.ID, validID)
 		case set.Files == nil:
-			return fmt.Errorf("migration set %s without files", set.Table)
-		case tables[set.Table]:
-			return fmt.Errorf("migration sets share the version table %s", set.Table)
+			return fmt.Errorf("migration set %s without files", set.ID)
+		case ids[set.ID]:
+			return fmt.Errorf("migration sets share the id %s", set.ID)
 		}
-		tables[set.Table] = true
+		ids[set.ID] = true
 	}
 	return nil
 }
@@ -118,7 +140,7 @@ func applySet(ctx context.Context, cfg config.PostgresConfig, connConfig *pgx.Co
 		return err
 	}
 	defer func() { _, _ = migrator.Close() }()
-	if err := undoIncompleteMigration(ctx, migrator, files, set.Table); err != nil {
+	if err := undoIncompleteMigration(ctx, migrator, files, set.versionTable()); err != nil {
 		return err
 	}
 	err = migrator.Up()
@@ -130,7 +152,7 @@ func applySet(ctx context.Context, cfg config.PostgresConfig, connConfig *pgx.Co
 	if err != nil {
 		return fmt.Errorf("migration version: %w", err)
 	}
-	slog.InfoContext(ctx, "postgres migrations checked", slog.String("table", set.Table),
+	slog.InfoContext(ctx, "postgres migrations checked", slog.String("table", set.versionTable()),
 		slog.Uint64("version", uint64(version)), slog.Bool("applied", applied))
 	return nil
 }
@@ -140,7 +162,7 @@ func newMigrator(db *sql.DB, set Set) (*migrate.Migrate, source.Driver, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("migration files: %w", err)
 	}
-	driver, err := pgxmigrate.WithInstance(db, &pgxmigrate.Config{MigrationsTable: set.Table})
+	driver, err := pgxmigrate.WithInstance(db, &pgxmigrate.Config{MigrationsTable: set.versionTable()})
 	if err != nil {
 		return nil, nil, fmt.Errorf("migration database: %w", err)
 	}

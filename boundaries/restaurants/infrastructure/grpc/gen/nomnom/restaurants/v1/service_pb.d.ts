@@ -835,6 +835,14 @@ export declare type ActiveRestaurantOrder = Message<"nomnom.restaurants.v1.Activ
    * @generated from field: google.protobuf.Timestamp received_at = 3;
    */
   receivedAt?: Timestamp | undefined;
+
+  /**
+   * Time of Acceptance; unset before it (RECEIVED). With expected_ready_at it
+   * bounds the cooking progress of the order.
+   *
+   * @generated from field: google.protobuf.Timestamp accepted_at = 4;
+   */
+  acceptedAt?: Timestamp | undefined;
 };
 
 /**

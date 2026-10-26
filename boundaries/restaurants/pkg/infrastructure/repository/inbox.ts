@@ -1,7 +1,7 @@
 import { type Collection, type Db, MongoServerError } from "mongodb";
 
 import type { Inbox, InboxRecord } from "../messaging/processor.ts";
-import type { MongoUnitOfWork } from "./unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "./unit-of-work.ts";
 
 export const INBOX_COLLECTION = "inbox";
 export const INBOX_SCHEMA_VERSION = 1;
@@ -30,19 +30,19 @@ class InboxDuplicateError extends Error {
 /**
  * Transactional Inbox в базе restaurants: проверка `(consumer, event_id)`,
  * запись Inbox и изменения `work` выполняются в одной MongoDB-транзакции
- * {@link MongoUnitOfWork}; репозитории `work` присоединяются к ней через
+ * {@link DatabaseUnitOfWork}; репозитории `work` присоединяются к ней через
  * async context. Конфликт unique index откатывает транзакцию и считается
  * duplicate. Конкурентная вставка того же `_id` в другой транзакции даёт
  * WriteConflict, и driver повторяет транзакцию — повтор видит запись.
  */
-export class MongoInbox implements Inbox {
+export class DatabaseInbox implements Inbox {
   readonly #collection: Collection<InboxDocument>;
-  readonly #unitOfWork: MongoUnitOfWork;
+  readonly #unitOfWork: DatabaseUnitOfWork;
   readonly #clock: () => Date;
 
   constructor(
     db: Db,
-    unitOfWork: MongoUnitOfWork,
+    unitOfWork: DatabaseUnitOfWork,
     clock: () => Date = () => new Date(),
   ) {
     this.#collection = db.collection<InboxDocument>(INBOX_COLLECTION);

@@ -8,13 +8,13 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository"
 )
 
-// NewPostgresStore — общий store API, worker'а, consumer'а и reconciler'а;
+// NewStore — общий store API, worker'а, consumer'а и reconciler'а;
 // без POSTGRES__DSN процесс не стартует. Сначала процесс приводит схему к
 // встроенным наборам миграций (schema.Migrate): применённые golang-migrate
 // пропускает, недостающие применяет под advisory lock, так что одновременный
 // старт pods сериализуется. Ошибка миграции останавливает процесс до запуска
 // остального. Pool подключается лениво.
-func NewPostgresStore(cfg config.PostgresConfig) (*repository.Store, func(), error) {
+func NewStore(cfg config.PostgresConfig) (*repository.Store, func(), error) {
 	if err := schema.Migrate(context.Background(), cfg); err != nil {
 		return nil, nil, err
 	}

@@ -25,7 +25,7 @@ from payment_fakes import (
 from psycopg import sql
 
 from di.payments import PaymentsContainer, SpiceDBConfigurationError
-from di.resources import MIGRATIONS, ProcessResource, TelemetryResource, postgres_database
+from di.resources import MIGRATIONS, ProcessResource, TelemetryResource, migrated_database
 from entrypoints.payments import main as payments_main
 from infrastructure.authorization import SpiceDBPermissionChecker
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
@@ -38,10 +38,10 @@ from infrastructure.provider import (
     sign_payload,
 )
 from infrastructure.repository import (
+    Database,
+    DatabasePaymentOutbox,
     MigrationSet,
     MissingMigrationsError,
-    PostgresDatabase,
-    PostgresPaymentOutbox,
     migrate,
 )
 from infrastructure.repository.migrate import _LOCK_KEY
@@ -75,9 +75,9 @@ def _shutdown_workers(container: PaymentsContainer) -> None:
     container.grpc_worker().shutdown(time.monotonic() + 1)
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class PaymentsContainerTest(unittest.TestCase):
-    database: PostgresDatabase
+    database: Database
 
     def container(self, **environment: str) -> PaymentsContainer:
         container = payments_container({**SPICEDB_ENV, **PROCESS_ENV, **environment})
@@ -97,7 +97,7 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertIsInstance(container.provider().inner, FakePaymentProvider)
         # Business counters wrap the Outbox and the Unit of Work (ops/semconv domain.yaml).
         self.assertIsInstance(container.outbox(), ObservedOutbox)
-        self.assertIsInstance(container.outbox()._inner, PostgresPaymentOutbox)
+        self.assertIsInstance(container.outbox()._inner, DatabasePaymentOutbox)
         self.assertIsInstance(container.uow(), ObservedUnitOfWork)
         self.assertIsInstance(container.outbox_mapper(), PaymentEventsMapper)
         # Process-wide singletons: one sandbox provider dedupes by idempotency key.
@@ -176,14 +176,14 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertEqual(kit.operation(operation_id).state, OperationState.SUCCEEDED)
 
 
-@pytest.mark.usefixtures("postgres")
+@pytest.mark.usefixtures("database")
 class StartupMigrationTest(unittest.TestCase):
     """The database resource applies pending migrations before the process serves."""
 
     dsn: str
 
     def start(self, dsn: str) -> list[str]:
-        resource = ProcessResource(postgres_database, DatabaseSettings(DATABASE__URL=dsn))
+        resource = ProcessResource(migrated_database, DatabaseSettings(DATABASE__URL=dsn))
         with self.assertLogs("di.resources", logging.INFO) as logs:
             resource.init()
         resource.shutdown()
@@ -201,21 +201,45 @@ class StartupMigrationTest(unittest.TestCase):
         dsn = self._empty_database()
         logs = self.start(dsn)
         self.assertEqual(
-            [migration_set.owner for migration_set in MIGRATIONS], ["infrastructure", "payment"]
+            [migration_set.storage_id for migration_set in MIGRATIONS], ["messaging", "payments"]
         )
         self.assertIn(f"payments migrations applied: {', '.join(_ids())}", logs[-1])
         with psycopg.connect(dsn) as conn:
             self.assertEqual(
-                {owner: [row[0] for row in rows] for owner, rows in _applied(conn).items()},
                 {
-                    migration_set.owner: [m.id for m in migration_set.migrations()]
+                    storage_id: [row[0] for row in rows]
+                    for storage_id, rows in _applied(conn).items()
+                },
+                {
+                    migration_set.storage_id: [m.id for m in migration_set.migrations()]
                     for migration_set in MIGRATIONS
                 },
             )
 
+    def test_yoyo_tables_are_named_by_storage_id_only(self) -> None:
+        dsn = self._empty_database()
+        migrate(DatabaseSettings(DATABASE__URL=dsn), MIGRATIONS)
+        with psycopg.connect(dsn) as conn:
+            tables = conn.execute(
+                "SELECT table_name FROM information_schema.tables"
+                " WHERE table_schema = 'public' AND table_name LIKE '\\_yoyo\\_%'"
+                " ORDER BY table_name"
+            ).fetchall()
+        self.assertEqual(
+            [row[0] for row in tables],
+            [
+                "_yoyo_log_messaging",
+                "_yoyo_log_payments",
+                "_yoyo_migration_messaging",
+                "_yoyo_migration_payments",
+                "_yoyo_version_messaging",
+                "_yoyo_version_payments",
+            ],
+        )
+
     def test_every_set_numbers_its_migrations_from_one(self) -> None:
         for migration_set in MIGRATIONS:
-            with self.subTest(owner=migration_set.owner):
+            with self.subTest(storage_id=migration_set.storage_id):
                 self.assertTrue(migration_set.migrations()[0].id.startswith("00001_"))
 
     def test_set_without_migrations_fails(self) -> None:
@@ -278,18 +302,18 @@ class StartupMigrationTest(unittest.TestCase):
 
 
 def _ids() -> list[str]:
-    """``<owner>/<id>`` of every bundled migration in the order they are applied."""
+    """``<storage_id>/<migration>`` of every bundled migration in the order they are applied."""
     return [
-        f"{migration_set.owner}/{migration.id}"
+        f"{migration_set.storage_id}/{migration.id}"
         for migration_set in MIGRATIONS
         for migration in migration_set.migrations()
     ]
 
 
 def _applied(conn: psycopg.Connection) -> dict[str, list[tuple[object, ...]]]:
-    """Applied migrations and their times by owner, from the yoyo table of each set."""
+    """Applied migrations and their times by storage id, from the yoyo table of each set."""
     return {
-        migration_set.owner: conn.execute(
+        migration_set.storage_id: conn.execute(
             sql.SQL("SELECT migration_id, applied_at_utc FROM {} ORDER BY migration_id").format(
                 sql.Identifier(migration_set.migration_table)
             )

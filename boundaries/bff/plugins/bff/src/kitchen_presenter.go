@@ -57,11 +57,13 @@ func kitchenOrderMessage(order applications.OrderView) (*service.KitchenOrder, e
 		items = append(items, &service.KitchenOrderItem{Name: item.Name, Quantity: int32(item.Quantity)})
 	}
 	return &service.KitchenOrder{
-		Id:         order.ID,
-		OrderId:    order.OrderID,
-		Stage:      stage,
-		Items:      items,
-		ReceivedAt: timestamp(order.ReceivedAt),
+		Id:              order.ID,
+		OrderId:         order.OrderID,
+		Stage:           stage,
+		Items:           items,
+		ReceivedAt:      timestamp(order.ReceivedAt),
+		AcceptedAt:      deadline(order.AcceptedAt),
+		ExpectedReadyAt: deadline(order.ExpectedReadyAt),
 	}, nil
 }
 

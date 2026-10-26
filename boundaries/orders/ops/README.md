@@ -63,8 +63,8 @@ helm uninstall orders
 ## PostgreSQL и Outbox
 
 DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`/`key` (env `POSTGRES__DSN`); без него
-процесс не стартует. Миграции встроены в образ наборами слайсов (`order` и `simulator`, у каждого своя
-таблица версий `schema_migrations_<набор>`): каждый процесс при старте применяет
+процесс не стартует. Миграции встроены в образ наборами слайсов (id `orders` и `simulator`, у каждого своя
+таблица версий `schema_migrations_<id>`; id — часть контракта схемы, от имён кода не зависит): каждый процесс при старте применяет
 недостающие всех наборов (golang-migrate под одним advisory lock, ожидание блокировок DDL ограничено `lock_timeout` 5 с, незавершённая миграция повторяется) и только потом запускает остальное. Пул процесса задают `postgres.maxConns`,
 `minConns`, `maxConnLifetime`, `maxConnLifetimeJitter`, `maxConnIdleTime`, `connectTimeout`,
 `healthCheckPeriod` (env `POSTGRES__*`); values каждой роли задают свой `maxConns` (API 10,

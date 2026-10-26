@@ -2,7 +2,7 @@
 //! binary, a migrated template database and a fresh database per
 //! [`TestStore`], so tests keep their fixed ids and run in parallel.
 //!
-//! [`TestStore`] is [`PostgresStore`] with test hooks: a storage outage
+//! [`TestStore`] is [`Store`] with test hooks: a storage outage
 //! switch, a commit failure, Unit of Work counters and the Outbox messages
 //! the use cases committed (the PostgreSQL Outbox keeps only mapped
 //! Integration Events). Every read and write goes to PostgreSQL.
@@ -46,7 +46,7 @@ use crate::slices::simulator::applications::work::{
 };
 use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
-use super::{PostgresStore, blocking, migrate};
+use super::{Store, blocking, migrate};
 
 /// Image of the platform PostgreSQL (ops).
 const IMAGE_TAG: &str = "18.6-alpine3.24";
@@ -138,9 +138,9 @@ pub(crate) fn fresh_database() -> DatabaseConfig {
     config(format!("{server}/{name}"))
 }
 
-/// [`PostgresStore`] over a fresh database with test hooks.
+/// [`Store`] over a fresh database with test hooks.
 pub struct TestStore {
-    inner: PostgresStore,
+    inner: Store,
     unavailable: AtomicBool,
     fail_next_commit: Mutex<Option<UnitOfWorkError>>,
     outbox: Mutex<Vec<OutboxMessage>>,
@@ -158,7 +158,7 @@ impl TestStore {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            inner: PostgresStore::connect(&fresh_database()).expect("connect test database"),
+            inner: Store::connect(&fresh_database()).expect("connect test database"),
             unavailable: AtomicBool::new(false),
             fail_next_commit: Mutex::new(None),
             outbox: Mutex::new(Vec::new()),
@@ -202,7 +202,7 @@ impl TestStore {
         self.outbox.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    fn available(&self) -> Result<&PostgresStore, RepositoryError> {
+    fn available(&self) -> Result<&Store, RepositoryError> {
         if self.unavailable.load(Ordering::SeqCst) {
             return Err(RepositoryError::Unavailable(
                 "test store offline".to_owned(),

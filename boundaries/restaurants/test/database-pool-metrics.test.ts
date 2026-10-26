@@ -10,7 +10,7 @@ import {
 } from "@opentelemetry/sdk-metrics";
 import type { MongoClient } from "mongodb";
 
-import { MongoPoolMetrics } from "../pkg/infrastructure/repository/pool-metrics.ts";
+import { DatabasePoolMetrics } from "../pkg/infrastructure/repository/pool-metrics.ts";
 
 class TestReader extends MetricReader {
   protected async onShutdown(): Promise<void> {}
@@ -55,7 +55,7 @@ const setup = () => {
   const reader = new TestReader();
   const provider = new MeterProvider({ readers: [reader] });
   let now = 0;
-  const metrics = new MongoPoolMetrics({
+  const metrics = new DatabasePoolMetrics({
     meter: provider.getMeter("test"),
     poolName: (address) => `${address}/restaurants`,
     now: () => now,

@@ -40,14 +40,14 @@ export const MONGODB_POOL_SIZE_LIMIT = 100;
  * Processes of restaurants that open a MongoClient; each sizes its own pool
  * to its concurrency.
  */
-export type MongoDbProcess = "api" | "consumer";
+export type DatabaseProcess = "api" | "consumer";
 /**
  * Default `maxPoolSize` per process: the API serves concurrent RPCs, the
  * consumer processes one message at a time with its Inbox transaction. The
  * startup migration runs sequentially on the same pool.
  */
 export const DEFAULT_MONGODB_MAX_POOL_SIZE: Readonly<
-  Record<MongoDbProcess, number>
+  Record<DatabaseProcess, number>
 > = Object.freeze({ api: 20, consumer: 5 });
 export const RECONCILER_INTERVAL_ENV = "RECONCILER__INTERVAL";
 export const DEFAULT_RECONCILER_INTERVAL = "5m";

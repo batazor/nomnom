@@ -21,7 +21,7 @@ import (
 func InitializeApp(cfg config.Config) (*App, func(), error) {
 	serverConfig := cfg.Server
 	postgresConfig := cfg.Postgres
-	store, cleanup, err := NewPostgresStore(postgresConfig)
+	store, cleanup, err := NewStore(postgresConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -108,7 +108,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 
 func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	postgresConfig := cfg.Postgres
-	store, cleanup, err := NewPostgresStore(postgresConfig)
+	store, cleanup, err := NewStore(postgresConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -133,7 +133,7 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 
 func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	postgresConfig := cfg.Postgres
-	store, cleanup, err := NewPostgresStore(postgresConfig)
+	store, cleanup, err := NewStore(postgresConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -161,7 +161,7 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 
 func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), error) {
 	postgresConfig := cfg.Postgres
-	store, cleanup, err := NewPostgresStore(postgresConfig)
+	store, cleanup, err := NewStore(postgresConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -199,10 +199,10 @@ var (
 	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
 	// spiceDBSet — клиент SpiceDB процесса orders-reconciler.
 	spiceDBSet = wire.NewSet(NewSpiceDBClient)
-	// postgresSet — store процесса на схеме, мигрированной наборами di/schema,
+	// storeSet — store процесса на схеме, мигрированной наборами di/schema,
 	// в ролях портов слайса order.
-	postgresSet = wire.NewSet(NewPostgresStore, di.PostgresSet)
+	storeSet = wire.NewSet(NewStore, di.RepositorySet)
 	// workerStoreSet — store процесса слайса order, в том числе в роли хранилища
 	// Activities fulfillment.
-	workerStoreSet = wire.NewSet(postgresSet, wire.Bind(new(di3.Store), new(*di.ProcessStore)))
+	workerStoreSet = wire.NewSet(storeSet, wire.Bind(new(di3.Store), new(*di.ProcessStore)))
 )

@@ -16,13 +16,13 @@ import {
   loadSimulatorConfig,
 } from "../pkg/config/config.ts";
 import {
-  connectMongoDb,
-  type MongoDbConnection,
+  connectDatabase,
+  type DatabaseConnection,
 } from "../pkg/infrastructure/repository/client.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { databaseUri } from "./support/database.ts";
 import { rejectingSubjects } from "./support/grpc.ts";
-import { mongoUri } from "./support/mongodb.ts";
 import { offlineValkey, testValkeyConfig } from "./support/valkey.ts";
 
 const simulatorEnvironment = {
@@ -38,14 +38,14 @@ const environment = {
 };
 
 /** A client that is never connected: building the graph opens no socket. */
-const offlineMongo = (): MongoDbConnection => {
+const offlineDatabase = (): DatabaseConnection => {
   const client = new MongoClient("mongodb://127.0.0.1:1/");
   return { client, db: client.db("restaurants"), close: () => client.close() };
 };
 
 const resourcesOf = (
   config: AppConfig,
-  mongo: MongoDbConnection,
+  database: DatabaseConnection,
 ): RestaurantsResources => {
   if (!config.spicedb.enabled) throw new Error("SpiceDB must be configured");
   return {
@@ -54,7 +54,7 @@ const resourcesOf = (
     reconciler: config.reconciler,
     kitchen: config.kitchen,
     simulator: loadSimulatorConfig(simulatorEnvironment),
-    mongo,
+    database,
     valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
     valkey: offlineValkey(),
     subjects: rejectingSubjects,
@@ -63,9 +63,9 @@ const resourcesOf = (
 };
 
 test("the restaurants container resolves every registration in the application scope", async () => {
-  const mongo = offlineMongo();
+  const database = offlineDatabase();
   const container = createRestaurantsContainer(
-    resourcesOf(loadConfig(environment), mongo),
+    resourcesOf(loadConfig(environment), database),
   );
   try {
     for (const name of Object.keys(container.registrations)) {
@@ -130,15 +130,15 @@ test("the restaurants container resolves every registration in the application s
     );
   } finally {
     await container.dispose();
-    await mongo.close();
+    await database.close();
   }
 });
 
 test("the kitchen tunables reach the composed handlers from configuration", async () => {
-  const mongo = offlineMongo();
+  const database = offlineDatabase();
   const acceptedAt = new Date(Date.UTC(2026, 9, 25, 9));
   const estimate = async (config: AppConfig) => {
-    const container = createRestaurantsContainer(resourcesOf(config, mongo));
+    const container = createRestaurantsContainer(resourcesOf(config, database));
     try {
       return await container.cradle.readyTimeEstimator.estimate({
         restaurantId: "restaurant",
@@ -164,15 +164,15 @@ test("the kitchen tunables reach the composed handlers from configuration", asyn
       35 * 60_000,
     );
   } finally {
-    await mongo.close();
+    await database.close();
   }
 });
 
 test("the consumer container resolves every registration", async () => {
-  const mongo = offlineMongo();
+  const database = offlineDatabase();
   const container = createConsumerContainer({
     consumer: loadConfig({}).consumer,
-    mongo,
+    database,
     kafkaConsumer: {
       connect: async () => {},
       subscribe: async () => {},
@@ -209,18 +209,18 @@ test("the consumer container resolves every registration", async () => {
     assert.equal("canOperateKitchen" in cradle.fulfillmentAccess, false);
   } finally {
     await container.dispose();
-    await mongo.close();
+    await database.close();
   }
 });
 
 // Runs against the MongoDB testcontainer of the global setup.
-const uri = mongoUri();
+const uri = databaseUri();
 
 describe("composed processes against MongoDB", () => {
-  let mongo: MongoDbConnection;
+  let database: DatabaseConnection;
 
   before(async () => {
-    mongo = await connectMongoDb({
+    database = await connectDatabase({
       enabled: true,
       uri,
       database: `restaurants_test_${randomUUID().slice(0, 8)}`,
@@ -229,16 +229,16 @@ describe("composed processes against MongoDB", () => {
   });
 
   after(async () => {
-    if (mongo === undefined) return;
-    await mongo.db.dropDatabase();
-    await mongo.close();
+    if (database === undefined) return;
+    await database.db.dropDatabase();
+    await database.close();
   });
 
   test("startup migration prepares the database the restaurants graph reads", async () => {
-    await migrateRestaurantsDatabase(mongo.db);
+    await migrateRestaurantsDatabase(database.db);
 
     const container = createRestaurantsContainer(
-      resourcesOf(loadConfig(environment), mongo),
+      resourcesOf(loadConfig(environment), database),
     );
     try {
       const restaurant = Restaurant.register({

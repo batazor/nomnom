@@ -49,7 +49,7 @@ export type UnitOfWorkOutcome = "committed" | "rolled_back" | "commit_failed";
  * (MongoDB has no serialization failures or deadlocks). Instruments live on
  * the global MeterProvider by default and are no-op until telemetry starts.
  */
-export class MongoUnitOfWork implements UnitOfWork {
+export class DatabaseUnitOfWork implements UnitOfWork {
   readonly #client: MongoClient;
   readonly #sessions = new AsyncLocalStorage<ClientSession>();
   readonly #transactions;
