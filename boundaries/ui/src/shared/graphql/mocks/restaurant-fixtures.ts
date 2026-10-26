@@ -12,6 +12,12 @@ export const bffInfoFixture = Object.freeze({
   version: "0.1.0-mock",
 });
 
+// Markets of ListMarkets: by name, then by id.
+export const marketFixtures = Object.freeze([
+  Object.freeze({ id: "berlin", name: "Берлин", currency: "EUR" }),
+  Object.freeze({ id: "hamburg", name: "Гамбург", currency: "EUR" }),
+]);
+
 export type MockMoney = { amount: string; currency: string };
 
 export type MockMenuItem = {
@@ -55,6 +61,9 @@ export type MockOrder = {
   expectedReadyAt: string | null;
   expectedPickupAt: string | null;
   expectedDeliveredAt: string | null;
+  // Courier delivering the order, null until assigned (FR-626); absent on
+  // the fixed scenarios, which have no courier.
+  courier?: { name: string } | null;
 };
 
 const currency = "RUB";

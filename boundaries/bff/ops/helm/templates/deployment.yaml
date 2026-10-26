@@ -70,6 +70,14 @@ spec:
               value: {{ required "kafka.brokers is required (ADR 36)" .Values.kafka.brokers | quote }}
             - name: BFF__INTERNAL_GATEWAY_ADDR
               value: {{ required "internalGateway.address is required" .Values.internalGateway.address | quote }}
+            # ADR 41: период обновления Placement Map из control plane (Go duration).
+            - name: BFF__PLACEMENT_TTL
+              value: {{ required "cellRouter.placementTTL is required (ADR 41)" .Values.cellRouter.placementTTL | quote }}
+            # FR-623: стартовая точка курьеров, которых добавляет диспетчер.
+            - name: BFF__COURIER_START_LATITUDE
+              value: {{ required "courierPool.startLatitude is required" .Values.courierPool.startLatitude | quote }}
+            - name: BFF__COURIER_START_LONGITUDE
+              value: {{ required "courierPool.startLongitude is required" .Values.courierPool.startLongitude | quote }}
             {{- with .Values.identity }}
             {{- if not .providers }}
             {{- fail "identity.providers is required" }}

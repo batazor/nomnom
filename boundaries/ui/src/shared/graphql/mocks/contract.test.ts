@@ -72,6 +72,21 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   BoardOrderChanged: { id: "order-preparing" },
   BoardKitchenChanged: { restaurantId: kitchenEight.id },
   BoardCourierChanged: { id: mockCourierId },
+  HireCook: { restaurantId: kitchenEight.id, name: "Тимур" },
+  SetCookOnLine: {
+    restaurantId: kitchenEight.id,
+    cookId: `cook-${kitchenEight.id}-4`,
+    onLine: true,
+  },
+  RetireCook: {
+    restaurantId: kitchenEight.id,
+    cookId: `cook-${kitchenEight.id}-4`,
+  },
+  BoardCourierPool: {},
+  BoardCourierPoolChanged: {},
+  AddCourier: { name: "Сергей" },
+  SetCourierOnLine: { courierId: "courier-anna", onLine: true },
+  RetireCourier: { courierId: "courier-anna" },
   PlaceOrder: {
     input: {
       restaurantId: kitchenEight.id,
@@ -80,6 +95,26 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
     },
   },
 };
+
+// Fragments an operation spreads, also through other fragments.
+function usedFragments(
+  operation: OperationDefinitionNode,
+  fragments: readonly FragmentDefinitionNode[],
+): FragmentDefinitionNode[] {
+  const used: FragmentDefinitionNode[] = [];
+  let sources = print(operation);
+  for (let grown = true; grown; ) {
+    grown = false;
+    for (const fragment of fragments) {
+      if (used.includes(fragment)) continue;
+      if (!sources.includes(`...${fragment.name.value}`)) continue;
+      used.push(fragment);
+      sources += print(fragment);
+      grown = true;
+    }
+  }
+  return used;
+}
 
 // Each operation goes with the fragments of its file, as codegen sends it.
 const operations = Object.entries(documents).flatMap(([file, source]) => {
@@ -99,12 +134,7 @@ const operations = Object.entries(documents).flatMap(([file, source]) => {
       kind: definition.operation,
       document: {
         kind: Kind.DOCUMENT,
-        definitions: [
-          definition,
-          ...fragments.filter((fragment) =>
-            print(definition).includes(`...${fragment.name.value}`),
-          ),
-        ],
+        definitions: [definition, ...usedFragments(definition, fragments)],
       } as const,
     }));
 });

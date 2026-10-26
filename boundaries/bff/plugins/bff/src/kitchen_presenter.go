@@ -1,6 +1,8 @@
 package main
 
 import (
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 )
@@ -22,6 +24,13 @@ var (
 	}
 	kitchenProblems = map[applications.Problem]service.KitchenActionProblemCode{
 		applications.ProblemOrderStageConflict: service.KitchenActionProblemCode_KITCHEN_ACTION_PROBLEM_CODE_ORDER_STAGE_CONFLICT,
+		applications.ProblemNoCookAvailable:    service.KitchenActionProblemCode_KITCHEN_ACTION_PROBLEM_CODE_NO_COOK_AVAILABLE,
+	}
+	cookPoolProblems = map[applications.CookPoolProblem]service.CookPoolProblemCode{
+		applications.ProblemCookNameInvalid: service.CookPoolProblemCode_COOK_POOL_PROBLEM_CODE_COOK_NAME_INVALID,
+		applications.ProblemCookBusy:        service.CookPoolProblemCode_COOK_POOL_PROBLEM_CODE_COOK_BUSY,
+		applications.ProblemCookOnLine:      service.CookPoolProblemCode_COOK_POOL_PROBLEM_CODE_COOK_ON_LINE,
+		applications.ProblemCookRetired:     service.CookPoolProblemCode_COOK_POOL_PROBLEM_CODE_COOK_RETIRED,
 	}
 )
 
@@ -34,7 +43,8 @@ func kitchenMessage(view applications.KitchenView) (*service.Kitchen, error) {
 			Name:            view.Restaurant.Name,
 			AcceptingOrders: view.Restaurant.IsOpen,
 		},
-		Orders: make([]*service.KitchenOrder, 0, len(view.Orders)),
+		Orders:   make([]*service.KitchenOrder, 0, len(view.Orders)),
+		CookPool: cookPoolMessage(view.CookPool),
 	}
 	for _, order := range view.Orders {
 		kitchenOrder, err := kitchenOrderMessage(order)
@@ -55,7 +65,7 @@ func kitchenOrderMessage(order applications.OrderView) (*service.KitchenOrder, e
 	for _, item := range order.Items {
 		items = append(items, &service.KitchenOrderItem{Name: item.Name, Quantity: int32(item.Quantity)})
 	}
-	return &service.KitchenOrder{
+	message := &service.KitchenOrder{
 		Id:              order.ID,
 		OrderId:         order.OrderID,
 		Stage:           stage,
@@ -63,7 +73,45 @@ func kitchenOrderMessage(order applications.OrderView) (*service.KitchenOrder, e
 		ReceivedAt:      timestamp(order.ReceivedAt),
 		AcceptedAt:      deadline(order.AcceptedAt),
 		ExpectedReadyAt: deadline(order.ExpectedReadyAt),
-	}, nil
+	}
+	if order.Cook != nil {
+		message.Cook = cookMessage(*order.Cook)
+	}
+	return message, nil
+}
+
+func cookMessage(cook applications.Cook) *service.Cook {
+	message := &service.Cook{Id: cook.ID, Name: cook.Name, OnLine: cook.OnLine}
+	if cook.CurrentKitchenOrderID != "" {
+		message.CurrentKitchenOrderId = wrapperspb.String(cook.CurrentKitchenOrderID)
+	}
+	return message
+}
+
+func cookPoolMessage(pool applications.CookPool) *service.CookPool {
+	message := &service.CookPool{
+		Size:   int32(pool.Size),
+		OnLine: int32(pool.OnLine),
+		Busy:   int32(pool.Busy),
+		Queued: int32(pool.Queued),
+		Cooks:  make([]*service.Cook, 0, len(pool.Cooks)),
+	}
+	for _, cook := range pool.Cooks {
+		message.Cooks = append(message.Cooks, cookMessage(cook))
+	}
+	return message
+}
+
+func cookPoolPayload(result applications.CookPoolResult) (*service.CookPoolPayload, error) {
+	payload := &service.CookPoolPayload{CookPool: cookPoolMessage(result.Pool)}
+	if result.Problem != "" {
+		problem, err := enumValue(cookPoolProblems, "cook pool problem", result.Problem)
+		if err != nil {
+			return nil, err
+		}
+		payload.Problem = problem
+	}
+	return payload, nil
 }
 
 // kitchenActionPayload carries either the problem or the order; both stay

@@ -18,6 +18,18 @@ Rust.
 
 `delivery` управляет поиском и назначением курьера, а также ходом доставки. Он не владеет приготовлением, общим жизненным циклом заказа или платёжными операциями; результаты назначения и доставки передаются в `orders` для отражения в состоянии заказа.
 
+## Market
+
+По [ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md) `delivery` работает в Cell и обслуживает размещённые в ней Market. `market_id` — slug `^[a-z][a-z0-9-]{1,31}$` (VO `MarketId` в `slices/courier/domains/courier/market.rs`), обязательный и неизменяемый:
+
+- `Courier` получает Market из `RegisterCourier.market_id`;
+- `Delivery` — из `CreateDelivery.market_id` (Market заказа); повтор Create Delivery по тому же `order_id` с другим Market — ошибка `ALREADY_EXISTS`, а не replay;
+- курьеру предлагается и назначается только Delivery его Market: правило `Courier::ensure_serves` в агрегате курьера (порт `CourierAssignment::ensure_available`/`occupy` принимает Market доставки), причина `OtherMarket` спецификации `CourierEligibleForDelivery`, а поиск кандидатов (`CourierLocator::candidates(market_id)`) фильтрует курьеров по Market в SQL;
+- `GetCourierPool` читает курьеров, Pool Load и backlog ожидающих доставок одного Market;
+- каждое Integration Event несёт `market_id` агрегата.
+
+Пустой или не slug `market_id` — `INVALID_ARGUMENT`. Ячейка не проверяет, что Market размещён в ней. Строки до введения Market получили стартовый Market `berlin` миграциями `couriers/0003_courier_market.sql` и `deliveries/0007_delivery_market.sql`. Demo Simulator Market не выбирает: он не регистрирует курьеров, а действует только от имени уже зарегистрированных курьеров над их offers и доставками, поэтому Market берётся из данных.
+
 ## Use Cases
 
 Статус реализации: все перечисленные Commands и Queries реализованы как application handlers (`Input` / `Output` / `Handler::execute`) по SDD change [`implement-delivery-application-layer`](../../openspec/changes/implement-delivery-application-layer/) ; хранилище — PostgreSQL (см. «Хранилище (PostgreSQL)»), Integration Events из Outbox публикует коннектор Debezium `delivery-outbox` (CDC, см. «Событийная интеграция»); Kafka consumers ещё не подключены. Требования — `FR-300`…`FR-318`, acceptance criteria — `AC-300`…`AC-343`. Командные use cases процесса исполнения заказа (Cancel Delivery, Replan Delivery) и их gRPC-методы добавлены по change [`add-fulfillment-command-rpcs`](../../openspec/changes/add-fulfillment-command-rpcs/) (`FR-429`, `AC-455`, `AC-456`). gRPC API курьера и Register Courier, а также Dispatch Deliveries добавлены по change [`close-order-lifecycle-in-kind`](../../openspec/changes/close-order-lifecycle-in-kind/) (`FR-580`…`FR-582`, `AC-730`…`AC-736`).
@@ -50,6 +62,7 @@ Rust.
 | Use Case | Actor | Intent | Result | Ключевые зависимости и взаимодействия |
 | --- | --- | --- | --- | --- |
 | **Get Courier Pool** | Оператор или диспетчер Courier Pool | Увидеть линию и загрузку курьеров | Размер пула, на линии, занято, Delivery в `Waiting` и невыбывшие курьеры с именем, pending offer и активной доставкой | Query model `delivery`; `platform#manage_couriers` ([FR-621](../../openspec/changes/add-cook-and-courier-pools/)) |
+| **Get Order Courier** | Тот, кто видит заказ (покупатель) | Узнать, кто везёт заказ | Имя курьера доставки в `Assigned`, `PickedUp`, `Delivered` либо пусто | `order#view`; query model `delivery` ([FR-626](../../openspec/changes/add-cook-and-courier-pools/)) |
 | **Get Courier Current Delivery** | Курьер | Получить свою активную доставку | Возвращено текущее назначение и разрешённое представление `Delivery` либо отсутствие активной доставки | Query model `delivery`; проверка принадлежности курьеру |
 | **List Available Delivery Offers** | Курьер | Получить актуальные предложения, доступные этому курьеру | Возвращён список непротухших `Delivery Offer` без изменения состояния | Query model `delivery`; проверка адресата offer |
 | **Get Simulator** | Оператор платформы | Узнать, включён ли демо Simulator | `enabled`; без записи в хранилище — `false` | `platform#operate_simulator`, иначе `PERMISSION_DENIED` (FR-604) |
@@ -92,12 +105,13 @@ RPC сервиса `DeliveryService`:
 | RPC | Use case | Ответ |
 | --- | --- | --- |
 | `GetCourierCurrentDelivery` | Get Courier Current Delivery | `courier_status` и `Delivery` (`ASSIGNED`/`PICKED_UP`) или пусто; незарегистрированный курьер — `NOT_FOUND` |
-| `CreateDelivery` | Create Delivery (`order_id`) | `delivery_id`, `created = false` для повтора по тому же заказу |
+| `CreateDelivery` | Create Delivery (`order_id`, `market_id` — Market заказа) | `delivery_id`, `created = false` для повтора по тому же заказу и Market; повтор с другим `market_id` — `ALREADY_EXISTS`; пустой или не slug `market_id` — `INVALID_ARGUMENT` |
 | `ReplanDelivery` | Replan Delivery (`order_id`) | `delivery_id`, `offered_courier_id` (пусто без кандидата); после Pickup — `FAILED_PRECONDITION` |
 | `CancelDelivery` | Cancel Delivery (`order_id`, `reason`) | `cancelled = true` (включая повтор) или `cancelled = false` + `rejection_reason` (`already_picked_up`, `already_closed`) — бизнес-результат, не gRPC-ошибка |
-| `RegisterCourier` | Register Courier (`courier_id` = user id курьера, `name`) | `courier_id`, `status`, `name`; повтор — `ALREADY_EXISTS`; пустое или длиннее 64 символов имя — `INVALID_ARGUMENT` |
+| `RegisterCourier` | Register Courier (`courier_id` = user id курьера, `name`, `market_id`) | `courier_id`, `status`, `name`; повтор — `ALREADY_EXISTS`; пустое или длиннее 64 символов имя, пустой или не slug `market_id` — `INVALID_ARGUMENT` |
 | `RetireCourier` | Retire Courier (`courier_id`) | `changed = false` при повторе; курьер на линии — `FAILED_PRECONDITION` |
-| `GetCourierPool` | Get Courier Pool | `size`, `on_line`, `busy`, `waiting`, `couriers[]` по имени (`pending_offer_id`, `active_delivery_id` пусты без них) |
+| `GetOrderCourier` | Get Order Courier (`order_id`) | `courier_id`, `name`; пусто без курьера; требует `order:<id>#view` |
+| `GetCourierPool` | Get Courier Pool (`market_id`) | Pool Load и `couriers[]` одного Market: `size`, `on_line`, `busy`, `waiting` (ожидающие доставки этого Market), `couriers[]` по имени (`pending_offer_id`, `active_delivery_id` пусты без них); пустой или не slug `market_id` — `INVALID_ARGUMENT` |
 | `UpdateCourierLocation` | Update Courier Location (`courier_id`, `latitude`, `longitude`) | позиция и `recorded_at_epoch_seconds`; координаты вне диапазона — `INVALID_ARGUMENT` |
 | `SetCourierAvailability` | Set Courier Availability (`courier_id`, `availability`) | `status`, `changed = false`, если доступность уже такая; `COURIER_AVAILABILITY_UNSPECIFIED` — `INVALID_ARGUMENT` |
 | `ListAvailableDeliveryOffers` | List Available Delivery Offers (`courier_id`) | pending и непротухшие `DeliveryOffer` курьера |
@@ -106,6 +120,8 @@ RPC сервиса `DeliveryService`:
 | `ConfirmPickup` | Confirm Pickup (`delivery_id`, `courier_id`, необязательный `expected_delivered_at`) | `delivery_id`, `state`, `changed` |
 | `ConfirmDelivery` | Confirm Delivery (`delivery_id`, `courier_id`) | `delivery_id`, `state = COMPLETED`, `changed` |
 | `ReportDeliveryFailure` | Report Delivery Failure (`delivery_id`, `courier_id` или пусто для диспетчера, `reason` — код каталога, `detail`) | `delivery_id`, `reason`, `detail`, `released_courier_id`; неизвестный код — `INVALID_ARGUMENT` |
+
+`Delivery` в ответах (`GetCourierCurrentDelivery`) несёт `market_id` своего Market.
 
 Неизвестный `order_id` во всех командах — `NOT_FOUND`. Командные RPC авторизуются над ресурсом `Order(order_id)` (`CancelDelivery`, `ReplanDelivery`); Replan дополнительно проходит проверки вложенных use cases над `Delivery(id)`.
 
@@ -164,6 +180,7 @@ Use cases проверяют права через порты `CourierAuthorizat
 | Порт / permission | SpiceDB check |
 | --- | --- |
 | `ManageCouriers` на `Platform` | `platform:nomnom#manage_couriers` |
+| `ViewOrderCourier` на `Order(id)` | `order:<id>#view` (покупатель и все, кто видит заказ) |
 | `CreateDelivery`, `FindCourier`, `OfferDelivery`, `ReassignCourier`, `CancelDelivery`, `ReplanDelivery` (любой resource) | `platform:nomnom#coordinate_delivery` |
 | прочие permissions на `Courier(id)` | `courier:<id>#act` |
 | `ReportDeliveryFailure` на `Delivery(id)` (диспетчер) | `platform:nomnom#dispatch_delivery` (`operator`, AC-694) |
@@ -295,8 +312,8 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test store
 
 | Тип | Минимальные поля | Назначение |
 | --- | --- | --- |
-| `Courier` — aggregate root | `id`, `status` | Хранит доступность курьера для назначения |
-| `Delivery` — aggregate root | `id`, `orderId`, `courierId`, `status`, `failureReason`, `expectedPickupAt`, `expectedDeliveredAt` | Управляет назначением курьера и выполнением доставки |
+| `Courier` — aggregate root | `id`, `name`, `marketId`, `status` | Хранит доступность курьера для назначения в его Market |
+| `Delivery` — aggregate root | `id`, `orderId`, `marketId`, `courierId`, `status`, `failureReason`, `expectedPickupAt`, `expectedDeliveredAt` | Управляет назначением курьера и выполнением доставки |
 | `DeliveryOffer` — aggregate root | `id`, `deliveryId`, `courierId`, `offeredAt`, `expiresAt`, `state` | Ограниченное по времени предложение одному курьеру |
 
 Состояния `Courier`: `available`, `busy`, `unavailable` (вне линии, не получает новых назначений). Состояния `Delivery`: `waiting`, `assigned`, `pickedUp`, `delivered`, `failed`, `cancelled`. В `DeliveryState` контракта `nomnom.delivery.v1` значения для `cancelled` пока нет: отменённая доставка не бывает текущей доставкой курьера. Состояния `DeliveryOffer`: `pending`, `accepted`, `rejected`, `withdrawn`, `expired`. Pending offer после `expiresAt` уже закрыт для принятия и отклонения; переход `Expire` (только из `pending` и только при `now > expiresAt`) сохраняет это как `expired`. Повторный `Expire` — `AlreadyApplied`, `Expire` из других состояний и `Accept`/`Reject`/`Withdraw` из `expired` — `Invalid`.
@@ -304,6 +321,7 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test store
 Инварианты:
 
 - назначить можно только доступного курьера на доставку в состоянии `waiting`;
+- offer и назначение получает только курьер того же Market, что и доставка (ADR 41); Market курьера и доставки не меняется;
 - у доставки одновременно не бывает более одного курьера;
 - забрать заказ можно только после назначения курьера;
 - завершить можно только забранную доставку;
@@ -322,7 +340,8 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 | VO | Значение и инварианты |
 | --- | --- |
 | `DeliveryFailureReason` | Код закрытого каталога `DeliveryFailureCode` — `customer_unreachable`, `address_not_found`, `no_access`, `customer_refused`, `order_damaged`, `courier_incident`, `other` — и необязательное пояснение (`detail`): пробелы нормализуются, не длиннее 500 символов. Неизвестный или пустой код — ошибка валидации, а не `other`. Строки, записанные до каталога свободным текстом, читаются как `other` с прежним текстом в `detail`. Retryability кодов не классифицируется |
-| `ExpectedTime` | Срок, названный курьером (FR-610), целые epoch seconds: `expectedPickupAt` — при Accept Delivery Offer, `expectedDeliveredAt` — при Confirm Pickup. Новый срок строго позже текущего времени (injected `Clock`), иначе `ExpectedTimeNotInFuture` → `INVALID_ARGUMENT`; дробная секунда `Timestamp` округляется вверх. Не назван — пусто, а не подстановка. Срок Pickup принадлежит Courier Assignment: Reassignment и отмена его сбрасывают, новое назначение несёт свой. Хранится в nullable `deliveries.expected_pickup_at`/`expected_delivered_at` (миграция `0007`) |
+| `ExpectedTime` | Срок, названный курьером (FR-610), целые epoch seconds: `expectedPickupAt` — при Accept Delivery Offer, `expectedDeliveredAt` — при Confirm Pickup. Новый срок строго позже текущего времени (injected `Clock`), иначе `ExpectedTimeNotInFuture` → `INVALID_ARGUMENT`; дробная секунда `Timestamp` округляется вверх. Не назван — пусто, а не подстановка. Срок Pickup принадлежит Courier Assignment: Reassignment и отмена его сбрасывают, новое назначение несёт свой. Хранится в nullable `deliveries.expected_pickup_at`/`expected_delivered_at` (миграция `0005`) |
+| `MarketId` | Slug Market `^[a-z][a-z0-9-]{1,31}$` (ADR 41), без trim и приведения регистра; пусто — `Empty`, иначе `InvalidFormat` → `INVALID_ARGUMENT` |
 | `Location` | Широта в [-90, 90] и долгота в [-180, 180], конечные значения; последняя позиция курьера хранится вне aggregate |
 
 Идентификаторы и статусы пока остаются типизированными значениями и перечислениями, а не отдельными value objects. Маршрут, зоны и расчёт расстояния не входят в модель: расстояние до pickup, принадлежность зоне и число активных назначений поставляет порт `CourierLocator`.
@@ -331,7 +350,7 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 
 Переиспользуемые eligibility rules вне state реализованы как:
 
-- `CourierEligibleForDelivery` — зона, расстояние, capacity и наличие активных назначений;
+- `CourierEligibleForDelivery` — Market курьера совпадает с Market доставки (`OtherMarket`, ADR 41), зона, расстояние, capacity и наличие активных назначений;
 - `DeliveryOfferAcceptable` — срок действия offer, расстояние до pickup и лимиты активных назначений.
 
 `Courier.status` и `Delivery.status` являются business state: допустимость назначения, pickup и completion остаётся только в FSM/domain behavior и не дублируется в specs. Application загружает `Courier` и `Delivery`, получает координаты, `now` и assignment snapshot и передаёт их domain service значениями. Общие правила — в [Specification Pattern](../../docs/specification-pattern.md) и [ADR 22](../../docs/adr/0022-specification-pattern-for-domain-policies.md).
@@ -373,6 +392,8 @@ Consumers интеграционных событий `delivery` использ�
 Topic `delivery.v1.delivery-events`, контракт `infrastructure/grpc/nomnom/delivery/v1/events.proto` ([ADR 25](../../docs/adr/0025-integration-event-publication.md), [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md), [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)).
 
 Каждая запись курьера, оффера и доставки, затронувшей курьера, кладёт в тот же Outbox Courier Change Notification — JSON `{"__typename":"Courier","id":…}` в `delivery.v1.courier-changes`. Это не Integration Event: его читает только Cosmo Router BFF для subscription `courierChanged` ([ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md)). Запись курьера и уведомление — один SQL-оператор, поэтому они атомарны и без Unit of Work. Каждая запись курьера, оффера и доставки также кладёт Courier Pool Change Notification — `{"__typename":"CourierPool","id":"nomnom"}` в `delivery.v1.courier-pool-changes` для subscription `courierPoolChanged` ([FR-621](../../openspec/changes/add-cook-and-courier-pools/)); у курьера — в том же SQL-операторе.
+
+Каждое Integration Event несёт `market_id` — Market доставки (ADR 41); Domain Events доставки несут его же.
 
 | Domain Event | Integration Event (`event_type`) |
 | --- | --- |

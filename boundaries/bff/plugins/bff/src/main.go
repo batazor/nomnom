@@ -33,20 +33,29 @@ func main() {
 		log.Fatalf("create router plugin: %v", err)
 	}
 
+	bff.cells.start()
 	plugin.Serve()
+	// Serve returns when the Router stops the plugin.
+	if err := bff.cells.stop(); err != nil {
+		log.Printf("stop cell routing: %v", err)
+	}
 }
 
 type BffService struct {
 	service.UnimplementedBffServiceServer
 	// accessTokens verifies the access token of customer resolvers.
 	accessTokens *identity.AccessTokenVerifier
-	tracking     *orderTracking
-	catalog      *restaurantCatalog
-	checkout     *checkout
-	management   *restaurantManagement
-	kitchen      *kitchen
-	courier      *courier
-	simulator    *simulator
+	// cells routes calls of the slices to the Cell of the request Market.
+	cells       *cellRouting
+	listMarkets listMarketsHandler
+	tracking    *orderTracking
+	catalog     *restaurantCatalog
+	checkout    *checkout
+	management  *restaurantManagement
+	kitchen     *kitchen
+	courier     *courier
+	courierPool *courierPool
+	simulator   *simulator
 }
 
 func (s *BffService) QueryBffInfo(context.Context, *service.QueryBffInfoRequest) (*service.QueryBffInfoResponse, error) {

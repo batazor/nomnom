@@ -120,10 +120,26 @@ readinessProbe:
   timeoutSeconds: 1
   failureThreshold: 1
 
-# ADR 15: адрес internal gateway (BFF__INTERNAL_GATEWAY_ADDR), через который BFF вызывает
-# orders и restaurants. Пустое значение — операции заказа покупателя недоступны.
+# ADR 15, ADR 41: адрес internal gateway (BFF__INTERNAL_GATEWAY_ADDR), через который BFF
+# вызывает control plane; gateways ячеек для orders, restaurants и delivery BFF берёт из его
+# Placement Map. Обязателен: без него chart не рендерится.
 internalGateway:
   address: ""
+
+# ADR 41: router ячеек. placementTTL (BFF__PLACEMENT_TTL, Go duration, например "30s") —
+# период фонового обновления Placement Map; неудачное обновление оставляет последнюю карту.
+# Обязателен: без него chart не рендерится. identity.tokenAudiences должен включать
+# nomnom.controlplane.
+cellRouter:
+  placementTTL: ""
+
+# FR-623: точка, в которой встаёт курьер, добавленный диспетчером на flow-board
+# (BFF__COURIER_START_LATITUDE, BFF__COURIER_START_LONGITUDE): у него нет своей позиции, а
+# delivery предлагает доставку только курьеру с позицией. Обязательна: без неё chart не
+# рендерится.
+courierPool:
+  startLatitude: ""
+  startLongitude: ""
 
 # ADR 36: bootstrap-адрес Kafka (BFF__KAFKA_BROKERS) для Cosmo Streams — Router читает
 # orders.v1.order-changes и отдаёт подписки orderChanged. Обязателен: без него chart не рендерится.

@@ -1,5 +1,6 @@
 import { LayoutGroup, m } from "motion/react";
 import { type ReactNode, useCallback, useState } from "react";
+import type { CourierPoolViewFragment } from "../../shared/graphql/generated/graphql";
 import { useClient, useQuery } from "urql";
 import {
   boardUser,
@@ -21,6 +22,7 @@ import { RestaurantOrdering } from "../view-restaurant";
 import { BoardDragProvider, useDragSource, useDropTarget } from "./board-dnd";
 import { useBoardOrders } from "./board-orders";
 import { CourierColumn } from "./courier-column";
+import { CourierPoolProvider, CourierPoolSource } from "./courier-pool";
 import { KitchenColumn } from "./kitchen-column";
 import { type DetailsSource, orderCardId } from "./order-card-id";
 import { OrderStrip, OrderTimeline } from "./order-flow";
@@ -55,6 +57,9 @@ function Board() {
   const [customerRestaurantId, setCustomerRestaurantId] = useState<
     string | null
   >(null);
+  // Courier Pool for dispatchers: the courier column and the kitchen cards.
+  const [courierPool, setCourierPool] =
+    useState<CourierPoolViewFragment | null>(null);
   const [details, setDetails] = useState<{
     orderId: string;
     from: DetailsSource;
@@ -138,70 +143,83 @@ function Board() {
           ) : null}
         </m.section>
 
-        <m.div className="board-columns" layout="position">
-          <BoardColumn column="customer">
-            {/* The chosen restaurant card opens like an iOS folder: the card
+        {canAct ? (
+          <AsRole as="courier">
+            <CourierPoolSource onPool={setCourierPool} />
+          </AsRole>
+        ) : null}
+        <CourierPoolProvider pool={canAct ? courierPool : null}>
+          <m.div className="board-columns" layout="position">
+            <BoardColumn column="customer">
+              {/* The chosen restaurant card opens like an iOS folder: the card
               becomes the restaurant header and its dish icons fly to their
               places in the menu; going back folds them into the card again. */}
-            {customerRestaurantId ? (
-              <div className="board-restaurant" key={customerRestaurantId}>
-                <Button
-                  className="board-restaurant-back"
-                  onClick={() => setCustomerRestaurantId(null)}
-                  size="sm"
-                  variant="ghost"
-                >
-                  {t("board.customer.back")}
-                </Button>
-                <DraggableOrdering
-                  onPlaced={placed}
-                  restaurantId={customerRestaurantId}
-                />
-              </div>
-            ) : (
-              <>
-                <RestaurantPicker
-                  onSelect={(restaurantId) => void openRestaurant(restaurantId)}
-                />
-                <div className="board-empty-state">
-                  <Illustration name="order-food" size="sm" />
-                  <p className="board-empty">{t("board.customer.pick")}</p>
+              {customerRestaurantId ? (
+                <div className="board-restaurant" key={customerRestaurantId}>
+                  <Button
+                    className="board-restaurant-back"
+                    onClick={() => setCustomerRestaurantId(null)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {t("board.customer.back")}
+                  </Button>
+                  <DraggableOrdering
+                    onPlaced={placed}
+                    restaurantId={customerRestaurantId}
+                  />
                 </div>
-              </>
-            )}
-          </BoardColumn>
+              ) : (
+                <>
+                  <RestaurantPicker
+                    onSelect={(restaurantId) =>
+                      void openRestaurant(restaurantId)
+                    }
+                  />
+                  <div className="board-empty-state">
+                    <Illustration name="order-food" size="sm" />
+                    <p className="board-empty">{t("board.customer.pick")}</p>
+                  </div>
+                </>
+              )}
+            </BoardColumn>
 
-          <KitchenDropColumn>
-            {canAct ? (
-              <KitchenColumn
-                onOpenOrder={(orderId) => openDetails(orderId, "kitchen")}
-                preferredRestaurantId={kitchenRestaurantId}
-                selectedOrderId={selectedOrderId}
-              />
-            ) : (
-              <div className="board-empty-state">
-                <Illustration name="take-out-boxes" size="sm" />
-                <p className="board-empty">{t("board.session.neededSignIn")}</p>
-              </div>
-            )}
-          </KitchenDropColumn>
-
-          <BoardColumn column="courier">
-            {canAct ? (
-              <AsRole as="courier">
-                <CourierColumn
-                  onOpenOrder={(orderId) => openDetails(orderId, "courier")}
+            <KitchenDropColumn>
+              {canAct ? (
+                <KitchenColumn
+                  onOpenOrder={(orderId) => openDetails(orderId, "kitchen")}
+                  preferredRestaurantId={kitchenRestaurantId}
                   selectedOrderId={selectedOrderId}
                 />
-              </AsRole>
-            ) : (
-              <div className="board-empty-state">
-                <Illustration name="delivery-truck" size="sm" />
-                <p className="board-empty">{t("board.session.neededSignIn")}</p>
-              </div>
-            )}
-          </BoardColumn>
-        </m.div>
+              ) : (
+                <div className="board-empty-state">
+                  <Illustration name="take-out-boxes" size="sm" />
+                  <p className="board-empty">
+                    {t("board.session.neededSignIn")}
+                  </p>
+                </div>
+              )}
+            </KitchenDropColumn>
+
+            <BoardColumn column="courier">
+              {canAct ? (
+                <AsRole as="courier">
+                  <CourierColumn
+                    onOpenOrder={(orderId) => openDetails(orderId, "courier")}
+                    selectedOrderId={selectedOrderId}
+                  />
+                </AsRole>
+              ) : (
+                <div className="board-empty-state">
+                  <Illustration name="delivery-truck" size="sm" />
+                  <p className="board-empty">
+                    {t("board.session.neededSignIn")}
+                  </p>
+                </div>
+              )}
+            </BoardColumn>
+          </m.div>
+        </CourierPoolProvider>
 
         <ExpandedCard
           closeLabel={t("board.close")}

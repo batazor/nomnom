@@ -1,5 +1,19 @@
+# Cook Pool of the kitchen: its line, load and cooks (FR-622).
+fragment CookPoolView on CookPool {
+  size
+  onLine
+  busy
+  queued
+  cooks {
+    id
+    name
+    onLine
+    currentKitchenOrderId
+  }
+}
+
 # Kitchen board: the query loads it, kitchenChanged pushes it after every
-# change (ADR 36).
+# change of its orders or cooks (ADR 36).
 fragment KitchenBoardView on Kitchen {
   restaurantId
   restaurant {
@@ -18,6 +32,13 @@ fragment KitchenBoardView on Kitchen {
     receivedAt
     acceptedAt
     expectedReadyAt
+    cook {
+      id
+      name
+    }
+  }
+  cookPool {
+    ...CookPoolView
   }
 }
 
@@ -56,6 +77,93 @@ mutation ApplyKitchenAction($input: KitchenActionInput!) {
         quantity
       }
       receivedAt
+      cook {
+        id
+        name
+      }
+    }
+    problem
+  }
+}
+
+mutation HireCook($restaurantId: ID!, $name: String!) {
+  hireCook(restaurantId: $restaurantId, name: $name) {
+    cookPool {
+      ...CookPoolView
+    }
+    problem
+  }
+}
+
+mutation SetCookOnLine($restaurantId: ID!, $cookId: ID!, $onLine: Boolean!) {
+  setCookOnLine(restaurantId: $restaurantId, cookId: $cookId, onLine: $onLine) {
+    cookPool {
+      ...CookPoolView
+    }
+    problem
+  }
+}
+
+mutation RetireCook($restaurantId: ID!, $cookId: ID!) {
+  retireCook(restaurantId: $restaurantId, cookId: $cookId) {
+    cookPool {
+      ...CookPoolView
+    }
+    problem
+  }
+}
+
+# Courier Pool of the platform for dispatchers: the query loads it,
+# courierPoolChanged pushes it after every change (ADR 36, FR-623).
+fragment CourierPoolView on CourierPool {
+  id
+  size
+  onLine
+  busy
+  waiting
+  couriers {
+    id
+    name
+    availability
+    offeredOrderId
+    currentOrderId
+  }
+}
+
+query BoardCourierPool {
+  courierPool {
+    ...CourierPoolView
+  }
+}
+
+subscription BoardCourierPoolChanged {
+  courierPoolChanged {
+    ...CourierPoolView
+  }
+}
+
+mutation AddCourier($name: String!) {
+  addCourier(name: $name) {
+    courierPool {
+      ...CourierPoolView
+    }
+    problem
+  }
+}
+
+mutation SetCourierOnLine($courierId: ID!, $onLine: Boolean!) {
+  setCourierOnLine(courierId: $courierId, onLine: $onLine) {
+    courierPool {
+      ...CourierPoolView
+    }
+    problem
+  }
+}
+
+mutation RetireCourier($courierId: ID!) {
+  retireCourier(courierId: $courierId) {
+    courierPool {
+      ...CourierPoolView
     }
     problem
   }

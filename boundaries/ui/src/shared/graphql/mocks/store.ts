@@ -10,6 +10,7 @@ import {
   type MockOrder,
   type MockRestaurant,
   managedRestaurantIds,
+  marketFixtures,
   orderLine,
   orderTotal,
   preparationDelayed,
@@ -308,6 +309,7 @@ export function createMockStore({
 
   const rootValue = {
     bffInfo: () => bffInfoFixture,
+    markets: () => marketFixtures,
     // Like ListRestaurants by default, the catalog lists open restaurants only.
     restaurants: (args: PageArgs) =>
       paginate(
@@ -338,6 +340,10 @@ export function createMockStore({
         if (!kitchen) throw bffError("NotFound", "kitchen not found");
         return { kitchenChanged: kitchen };
       }),
+    courierPoolChanged: () =>
+      changes.subscribe(() => ({
+        courierPoolChanged: fulfillment.courierPool(),
+      })),
     courierChanged: ({ id }: { id: string }) => {
       if (id !== mockCourierId) throw bffError("NotFound", "courier not found");
       return changes.subscribe(() => ({
@@ -396,6 +402,37 @@ export function createMockStore({
       }: {
         input: Parameters<typeof fulfillment.applyKitchenAction>[0];
       }) => fulfillment.applyKitchenAction(input),
+    ),
+    hireCook: mutation(
+      ({ restaurantId, name }: { restaurantId: string; name: string }) =>
+        fulfillment.hireCook(restaurantId, name),
+    ),
+    setCookOnLine: mutation(
+      ({
+        restaurantId,
+        cookId,
+        onLine,
+      }: {
+        restaurantId: string;
+        cookId: string;
+        onLine: boolean;
+      }) => fulfillment.setCookOnLine(restaurantId, cookId, onLine),
+    ),
+    retireCook: mutation(
+      ({ restaurantId, cookId }: { restaurantId: string; cookId: string }) =>
+        fulfillment.retireCook(restaurantId, cookId),
+    ),
+    // The mock user is a dispatcher of the Courier Pool too.
+    courierPool: () => fulfillment.courierPool(),
+    addCourier: mutation(({ name }: { name: string }) =>
+      fulfillment.addCourier(name),
+    ),
+    setCourierOnLine: mutation(
+      ({ courierId, onLine }: { courierId: string; onLine: boolean }) =>
+        fulfillment.setCourierOnLine(courierId, onLine),
+    ),
+    retireCourier: mutation(({ courierId }: { courierId: string }) =>
+      fulfillment.retireCourier(courierId),
     ),
     courier: () => fulfillment.courier(),
     setCourierAvailability: mutation(

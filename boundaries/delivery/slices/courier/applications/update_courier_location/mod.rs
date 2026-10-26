@@ -1,4 +1,5 @@
-//! Update Courier Location: the courier application records the last known
+//! Update Courier Location: the courier application, or a dispatcher placing
+//! a new courier of the Courier Pool (FR-620), records the last known
 //! position of a registered courier. Frequency, accuracy and retention are
 //! not constrained by this use case.
 
@@ -6,7 +7,7 @@ use crate::pkg::application::{Clock, Subject};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository, Location};
 
-use super::authorization::{CourierAuthorization, CourierPermission, CourierResource};
+use super::authorization::{CourierAuthorization, CourierPermission, check_courier_or_dispatcher};
 use super::courier_id;
 use super::error::{CourierApplicationError, InvalidCourierRequest};
 
@@ -56,10 +57,11 @@ impl Handler<'_> {
         let location = Location::new(input.latitude, input.longitude).map_err(|error| {
             CourierApplicationError::InvalidRequest(InvalidCourierRequest::Location(error))
         })?;
-        self.authorization.check(
+        check_courier_or_dispatcher(
+            self.authorization,
             subject,
             CourierPermission::UpdateCourierLocation,
-            &CourierResource::Courier(courier_id.clone()),
+            &courier_id,
         )?;
 
         if self.couriers.get(&courier_id)?.is_none() {
@@ -80,6 +82,8 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::{ManualClock, StaticAuthorization};
     use crate::infrastructure::repository::test_support::TestStore;
+    use crate::slices::courier::applications::authorization::CourierResource;
+    use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::courier::domains::courier::{
         Courier, CourierName, CourierStatus, LocationError,
     };
@@ -102,10 +106,42 @@ mod tests {
             .add(&Courier::restore(
                 CourierId::new("courier-1"),
                 CourierName::new("Timur").expect("courier name"),
+                MarketId::new("berlin").expect("market id"),
                 CourierStatus::Unavailable,
             ))
             .expect("seed courier");
         store
+    }
+
+    /// FR-620: a dispatcher places a new courier of the Courier Pool.
+    #[test]
+    fn dispatcher_records_the_position_of_any_courier() {
+        let store = seeded();
+        let dispatcher = Subject::User("dispatcher".to_owned());
+        let authorization = StaticAuthorization::grants_only();
+        authorization.grant_courier(
+            dispatcher.clone(),
+            CourierPermission::ManageCouriers,
+            CourierResource::Platform,
+        );
+        let clock = ManualClock::new(1_000);
+        let handler = Handler {
+            authorization: &authorization,
+            couriers: &store,
+            locations: &store,
+            clock: &clock,
+        };
+
+        handler
+            .execute(&dispatcher, input(52.52, 13.405))
+            .expect("dispatcher records the position");
+
+        assert!(
+            store
+                .latest(&CourierId::new("courier-1"))
+                .expect("read position")
+                .is_some()
+        );
     }
 
     /// AC-307

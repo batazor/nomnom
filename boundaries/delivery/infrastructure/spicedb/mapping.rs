@@ -122,6 +122,15 @@ pub fn delivery_check(
     if coordinates_delivery(permission) {
         return Some(PermissionCheck::platform("coordinate_delivery", subject));
     }
+    // The courier of an order is part of what its viewers see (FR-626).
+    if permission == DeliveryPermission::ViewOrderCourier {
+        return match resource {
+            DeliveryResource::Order(id) => {
+                Some(PermissionCheck::new("order", id.as_str(), "view", subject))
+            }
+            _ => None,
+        };
+    }
     match resource {
         DeliveryResource::Courier(id) => {
             Some(PermissionCheck::new("courier", id.as_str(), "act", subject))
@@ -149,7 +158,7 @@ mod tests {
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId};
 
-    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 12] = [
+    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 13] = [
         DeliveryPermission::CreateDelivery,
         DeliveryPermission::FindCourier,
         DeliveryPermission::OfferDelivery,
@@ -162,6 +171,7 @@ mod tests {
         DeliveryPermission::ListAvailableDeliveryOffers,
         DeliveryPermission::CancelDelivery,
         DeliveryPermission::ReplanDelivery,
+        DeliveryPermission::ViewOrderCourier,
     ];
 
     fn worker() -> Subject {
@@ -263,9 +273,10 @@ mod tests {
 
     #[test]
     fn other_delivery_permissions_check_courier_or_delivery() {
-        let others = ALL_DELIVERY_PERMISSIONS
-            .into_iter()
-            .filter(|permission| !coordinates_delivery(*permission));
+        let others = ALL_DELIVERY_PERMISSIONS.into_iter().filter(|permission| {
+            !coordinates_delivery(*permission)
+                && *permission != DeliveryPermission::ViewOrderCourier
+        });
         for permission in others {
             let on_delivery = if permission == DeliveryPermission::ReportDeliveryFailure {
                 "platform:nomnom#dispatch_delivery@user:user-1"
@@ -299,6 +310,29 @@ mod tests {
                     permission,
                     &DeliveryResource::Order(OrderId::new("order-1"))
                 ),
+                None
+            );
+        }
+    }
+
+    /// FR-626: the courier of an order follows `order#view`; other resources
+    /// are not mapped.
+    #[test]
+    fn order_courier_checks_order_view() {
+        assert_eq!(
+            rendered(delivery_check(
+                &user(),
+                DeliveryPermission::ViewOrderCourier,
+                &DeliveryResource::Order(OrderId::new("order-1"))
+            )),
+            Some("order:order-1#view@user:user-1".to_owned())
+        );
+        for resource in delivery_resources() {
+            if matches!(resource, DeliveryResource::Order(_)) {
+                continue;
+            }
+            assert_eq!(
+                delivery_check(&user(), DeliveryPermission::ViewOrderCourier, &resource),
                 None
             );
         }

@@ -18,6 +18,8 @@ import { AsRole } from "../../shared/session/roles";
 import { Button } from "../../shared/ui";
 import { RestaurantOpening } from "../manage-restaurant";
 import { useDragSource } from "./board-dnd";
+import { CookPoolPanel } from "./cook-pool";
+import { useCourierOf } from "./courier-pool";
 import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
 
@@ -172,7 +174,7 @@ function KitchenOrders({
   selectedOrderId: string | null;
   onOpenOrder: (orderId: string) => void;
 }) {
-  const { t } = useI18n();
+  const { t, formatters } = useI18n();
   const [{ data, error }] = useQuery({
     query: BoardKitchenDocument,
     variables: { restaurantId },
@@ -195,34 +197,55 @@ function KitchenOrders({
   if (!kitchen) {
     return <p className="board-empty">{t("board.kitchen.notPermitted")}</p>;
   }
+  const orderTimes = new Map(
+    kitchen.orders.map((order) => [
+      order.id,
+      formatters.time.format(Date.parse(order.receivedAt)),
+    ]),
+  );
+  const pool = (
+    <CookPoolPanel
+      orderTimes={orderTimes}
+      pool={kitchen.cookPool}
+      restaurantId={restaurantId}
+    />
+  );
   if (kitchen.orders.length === 0) {
-    return <p className="board-empty">{t("board.kitchen.empty")}</p>;
+    return (
+      <>
+        {pool}
+        <p className="board-empty">{t("board.kitchen.empty")}</p>
+      </>
+    );
   }
   return (
-    <ul aria-label={t("board.kitchen.orders")} className="board-cards">
-      {/* Orders arrive with kitchenChanged: new ones slide in, finished
+    <>
+      {pool}
+      <ul aria-label={t("board.kitchen.orders")} className="board-cards">
+        {/* Orders arrive with kitchenChanged: new ones slide in, finished
           ones fade out, and the rest move to their new place. */}
-      <AnimatePresence initial={false}>
-        {kitchen.orders.map((order) => (
-          <m.li
-            key={order.id}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            initial={{ opacity: 0, y: -8 }}
-            layout
-            layoutId={orderCardId("kitchen", order.orderId)}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-          >
-            <KitchenOrderCard
-              onOpen={() => onOpenOrder(order.orderId)}
-              order={order}
-              restaurantId={restaurantId}
-              selected={order.orderId === selectedOrderId}
-            />
-          </m.li>
-        ))}
-      </AnimatePresence>
-    </ul>
+        <AnimatePresence initial={false}>
+          {kitchen.orders.map((order) => (
+            <m.li
+              key={order.id}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              initial={{ opacity: 0, y: -8 }}
+              layout
+              layoutId={orderCardId("kitchen", order.orderId)}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+            >
+              <KitchenOrderCard
+                onOpen={() => onOpenOrder(order.orderId)}
+                order={order}
+                restaurantId={restaurantId}
+                selected={order.orderId === selectedOrderId}
+              />
+            </m.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+    </>
   );
 }
 
@@ -241,6 +264,7 @@ function KitchenOrderCard({
   const [{ fetching }, apply] = useMutation(ApplyKitchenActionDocument);
   const [problem, setProblem] = useState<MessageKey | null>(null);
   const next = nextAction[order.stage];
+  const courier = useCourierOf(order.orderId);
   const cooking = cookingSpan(order);
   const receivedTime = formatters.time.format(Date.parse(order.receivedAt));
 
@@ -251,6 +275,8 @@ function KitchenOrderCard({
     });
     const payload = result.data?.applyKitchenAction;
     if (result.error || !payload) setProblem("board.actionFailed");
+    else if (payload.problem === "NO_COOK_AVAILABLE")
+      setProblem("board.kitchen.noCook");
     else if (payload.problem) setProblem("board.kitchen.conflict");
   }
 
@@ -283,6 +309,23 @@ function KitchenOrderCard({
           </li>
         ))}
       </ul>
+      {order.cook || courier ? (
+        <p className="board-card-people">
+          {order.cook ? (
+            <span>{t("board.kitchen.cook", { name: order.cook.name })}</span>
+          ) : null}
+          {courier ? (
+            <span>
+              {t(
+                courier.delivering
+                  ? "board.kitchen.courier"
+                  : "board.kitchen.courierOffered",
+                { name: courier.name },
+              )}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
       {cooking === null ? null : (
         // Counts locally each second while mounted; no requests (ADR 36).
         <EtaBar

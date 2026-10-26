@@ -92,3 +92,76 @@ func (s *BffService) MutationApplyKitchenAction(ctx context.Context, request *se
 	}
 	return &service.MutationApplyKitchenActionResponse{ApplyKitchenAction: payload}, nil
 }
+
+// changeCookPool runs a Cook Pool command on behalf of the verified user:
+// business refusals are problems of the payload; a missing cook, a missing
+// right and an unknown restaurant are GraphQL errors.
+func (s *BffService) changeCookPool(ctx context.Context, operation string, request applications.CookPoolRequest) (*service.CookPoolPayload, error) {
+	if request.RestaurantID == "" {
+		return nil, status.Error(codes.InvalidArgument, "restaurantId is required")
+	}
+	if request.Command != applications.CookCommandHire && request.CookID == "" {
+		return nil, status.Error(codes.InvalidArgument, "cookId is required")
+	}
+	ctx, err := s.requireCustomer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.kitchen.changeCookPool.Handle(ctx, request)
+	switch {
+	case errors.Is(err, applications.ErrCookNotFound), errors.Is(err, applications.ErrKitchenNotFound):
+		return nil, status.Error(codes.NotFound, "cook not found")
+	case errors.Is(err, applications.ErrNotPermitted):
+		return nil, status.Error(codes.PermissionDenied, "cook pool operation is not permitted")
+	case err != nil:
+		return nil, internalError(operation, err)
+	}
+	payload, err := cookPoolPayload(result)
+	if err != nil {
+		return nil, internalError(operation, err)
+	}
+	return payload, nil
+}
+
+// MutationHireCook adds a cook off line to the Cook Pool (FR-625).
+func (s *BffService) MutationHireCook(ctx context.Context, request *service.MutationHireCookRequest) (*service.MutationHireCookResponse, error) {
+	payload, err := s.changeCookPool(ctx, "hireCook", applications.CookPoolRequest{
+		RestaurantID: request.GetRestaurantId(),
+		Command:      applications.CookCommandHire,
+		Name:         request.GetName(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &service.MutationHireCookResponse{HireCook: payload}, nil
+}
+
+// MutationSetCookOnLine puts a cook on line or takes them off line.
+func (s *BffService) MutationSetCookOnLine(ctx context.Context, request *service.MutationSetCookOnLineRequest) (*service.MutationSetCookOnLineResponse, error) {
+	command := applications.CookCommandTakeOffLine
+	if request.GetOnLine() {
+		command = applications.CookCommandPutOnLine
+	}
+	payload, err := s.changeCookPool(ctx, "setCookOnLine", applications.CookPoolRequest{
+		RestaurantID: request.GetRestaurantId(),
+		Command:      command,
+		CookID:       request.GetCookId(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &service.MutationSetCookOnLineResponse{SetCookOnLine: payload}, nil
+}
+
+// MutationRetireCook takes a cook off line out of the Cook Pool.
+func (s *BffService) MutationRetireCook(ctx context.Context, request *service.MutationRetireCookRequest) (*service.MutationRetireCookResponse, error) {
+	payload, err := s.changeCookPool(ctx, "retireCook", applications.CookPoolRequest{
+		RestaurantID: request.GetRestaurantId(),
+		Command:      applications.CookCommandRetire,
+		CookID:       request.GetCookId(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &service.MutationRetireCookResponse{RetireCook: payload}, nil
+}

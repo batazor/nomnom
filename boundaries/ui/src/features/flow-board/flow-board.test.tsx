@@ -14,6 +14,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -23,9 +24,13 @@ import {
 import { AppProviders } from "../../app/providers";
 import { AppRouter } from "../../app/router";
 import type { RuntimeConfig } from "../../shared/config/runtime-config";
-import { mockStore } from "../../shared/graphql/mocks/handlers";
+import {
+  courierPoolDeniedHandlers,
+  mockStore,
+} from "../../shared/graphql/mocks/handlers";
 import { mockServer } from "../../shared/graphql/mocks/server";
 import { parseBoardOrders } from "./board-orders";
+import { CookPoolPanel } from "./cook-pool";
 
 const config = {
   publicGraphqlUrl: "https://public.example.test/graphql",
@@ -37,6 +42,8 @@ const config = {
 const publicGraphql = graphql.link(/\/graphql$/);
 
 beforeAll(() => mockServer.listen({ onUnhandledFrame: "error" }));
+// The board opens only in a chosen Market (ADR 41).
+beforeEach(() => localStorage.setItem("nomnom.market.v1", "berlin"));
 afterEach(() => {
   mockServer.resetHandlers();
   mockStore.reset();
@@ -449,6 +456,136 @@ describe("kitchen cooking bar", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(result.violations).toEqual([]);
+  });
+});
+
+describe("cook and courier pools", () => {
+  async function openKitchen(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
+    return within(column("Кухня")).findByRole("region", { name: "Повара" });
+  }
+
+  it("AC-796 shows the line, the load and the queue of the kitchen", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+
+    const cooks = await openKitchen(user);
+
+    expect(within(cooks).getByText(/Линия 5 из 6/)).toBeVisible();
+    expect(within(cooks).getByText(/занято \d+\/5/)).toBeVisible();
+    expect(within(cooks).getByText(/В очереди: \d+/)).toBeVisible();
+    expect(
+      within(cooks).getByRole("meter", { name: "Загрузка линии: Повара" }),
+    ).toBeInTheDocument();
+    const members = within(cooks).getByRole("list", {
+      name: "Повара ресторана",
+    });
+    expect(within(members).getByText("Марат")).toBeVisible();
+    expect(within(members).getByText("не на линии")).toBeVisible();
+  });
+
+  it("hires a cook off line and puts them on line", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    const cooks = await openKitchen(user);
+
+    await user.type(within(cooks).getByLabelText("Имя повара"), "Тимур");
+    await user.click(
+      within(cooks).getByRole("button", { name: "Добавить повара" }),
+    );
+    await user.click(
+      await within(cooks).findByRole("button", { name: "На линию: Тимур" }),
+    );
+
+    expect(await within(cooks).findByText(/Линия 6 из 7/)).toBeVisible();
+    expect(within(cooks).getByLabelText("Имя повара")).toHaveValue("");
+  });
+
+  it("AC-797 warns when no cook is on line and orders wait", async () => {
+    render(
+      <AppProviders config={config}>
+        <CookPoolPanel
+          orderTimes={new Map()}
+          pool={{
+            size: 1,
+            onLine: 0,
+            busy: 0,
+            queued: 2,
+            cooks: [
+              {
+                id: "cook-1",
+                name: "Марат",
+                onLine: false,
+                currentKitchenOrderId: null,
+              },
+            ],
+          }}
+          restaurantId="restaurant-1"
+        />
+      </AppProviders>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "На линии нет поваров — заказы ждут в очереди.",
+    );
+  });
+
+  it("AC-800 names the cook of an order in preparation", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await placeOrder(user);
+
+    for (const action of ["Принять", "Начать готовить"]) {
+      const card = await waitFor(selectedKitchenCard);
+      await user.click(within(card).getByRole("button", { name: action }));
+    }
+
+    expect(
+      await within(selectedKitchenCard()).findByText(/^Готовит: /),
+    ).toBeVisible();
+  });
+
+  it("adds a courier to the Courier Pool of a dispatcher", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    // The board renders once the Market list is loaded.
+    const courierColumn = await screen.findByRole("region", { name: "Курьер" });
+    const couriers = await within(courierColumn).findByRole("region", {
+      name: "Курьеры",
+    });
+    expect(within(couriers).getByText(/Линия 1 из 3/)).toBeVisible();
+    expect(within(couriers).getByText(/Ждут курьера: \d+/)).toBeVisible();
+
+    await user.type(within(couriers).getByLabelText("Имя курьера"), "Сергей");
+    await user.click(
+      within(couriers).getByRole("button", { name: "Добавить курьера" }),
+    );
+
+    expect(await within(couriers).findByText("Сергей")).toBeVisible();
+    expect(await within(couriers).findByText(/Линия 2 из 4/)).toBeVisible();
+  });
+
+  it("AC-798 hides the Courier Pool from a user who is no dispatcher", async () => {
+    mockServer.use(...courierPoolDeniedHandlers);
+    renderBoard();
+    await screen.findByRole("region", { name: "Курьер" });
+
+    expect(
+      await within(column("Курьер")).findByText("Не на линии"),
+    ).toBeVisible();
+    expect(
+      within(column("Курьер")).queryByRole("region", { name: "Курьеры" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("passes axe with both pools", async () => {
+    const user = userEvent.setup();
+    const { container } = renderBoard();
+    await openKitchen(user);
+    await within(column("Курьер")).findByRole("region", { name: "Курьеры" });
+
+    const results = await axe.run(container);
+    expect(results.violations).toEqual([]);
   });
 });
 

@@ -4,8 +4,8 @@
 
 - **Тип:** Query.
 - **Actor:** Оператор или диспетчер Courier Pool (`platform#manage_couriers`, FR-620).
-- **Намерение:** Увидеть линию и загрузку курьеров платформы.
-- **Результат:** Pool Load — `size` (невыбывшие курьеры), `on_line` (available и busy), `busy`, `waiting` (Delivery в `Waiting`) — и невыбывшие курьеры по имени с pending offer и активной доставкой; состояние не меняется.
+- **Намерение:** Увидеть линию и загрузку курьеров одного Market (`market_id`, обязательный, ADR 41).
+- **Результат:** Только курьеры и доставки запрошенного Market: Pool Load — `size` (невыбывшие курьеры), `on_line` (available и busy), `busy`, `waiting` (Delivery в `Waiting`) — и невыбывшие курьеры по имени с pending offer и активной доставкой; состояние не меняется.
 
 ## Границы
 
@@ -15,7 +15,7 @@
 
 ## Реализация
 
-- **Handler:** `mod.rs` — `Output`, `Handler::execute(subject)`; требования FR-621.
+- **Handler:** `mod.rs` — `Input` (`market_id`), `Output`, `Handler::execute(subject, input)`; требования FR-621. Пустой или не slug `market_id` — `INVALID_ARGUMENT` до проверки прав.
 - **Порты:** `CourierAuthorization` (`ManageCouriers` над `Platform`), `CourierPoolReadModel`, `Clock` (offer pending, пока не истёк).
 
 ## Acceptance

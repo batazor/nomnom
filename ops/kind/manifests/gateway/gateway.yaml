@@ -464,6 +464,11 @@ spec:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
             method: GetCourierCurrentDelivery
+        # Курьер заказа для того, кто видит заказ (order#view): имя в отслеживании покупателя.
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: GetOrderCourier
         # Courier Pool диспетчера (platform#manage_couriers): линия и загрузка курьеров.
         - method:
             type: Exact
@@ -537,6 +542,56 @@ spec:
           namespace: nomnom-payments
           port: 8084
 ---
+# Control plane (ADR 41): чтения топологии для BFF — Markets и Placement Map.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: controlplane-v1-reads
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.controlplane.v1.ControlPlaneService
+            method: ListMarkets
+        - method:
+            type: Exact
+            service: nomnom.controlplane.v1.ControlPlaneService
+            method: GetPlacementMap
+      backendRefs:
+        - name: controlplane
+          namespace: nomnom-controlplane
+          port: 8086
+---
+# Control plane (ADR 41): команды оператора (platform#manage_markets) — Cell и Market.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: controlplane-v1-commands
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.controlplane.v1.ControlPlaneService
+            method: RegisterCell
+        - method:
+            type: Exact
+            service: nomnom.controlplane.v1.ControlPlaneService
+            method: CreateMarket
+      backendRefs:
+        - name: controlplane
+          namespace: nomnom-controlplane
+          port: 8086
+---
 # Retries идемпотентных чтений (ADR 15). Политика route заменяет политику Gateway, поэтому
 # верхний предел 300s повторяется. Не более 2 повторов на отказы до обработки и UNAVAILABLE;
 # без per-try timeout — все попытки укладываются в deadline клиента; cancelled и
@@ -560,6 +615,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: delivery-v1-courier-reads
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: controlplane-v1-reads
   timeout:
     http:
       requestTimeout: 300s
@@ -614,6 +672,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: payments-v1-commands
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: controlplane-v1-commands
   timeout:
     http:
       requestTimeout: 300s
@@ -684,6 +745,21 @@ spec:
     - group: ""
       kind: Service
       name: payments
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-internal-gateway
+  namespace: nomnom-controlplane
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      namespace: nomnom-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: controlplane
 ---
 # Simulator (platform#operate_simulator): его вызывает BFF от имени оператора (FR-604).
 apiVersion: gateway.networking.k8s.io/v1

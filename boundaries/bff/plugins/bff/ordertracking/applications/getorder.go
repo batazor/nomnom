@@ -3,6 +3,7 @@ package applications
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -10,6 +11,12 @@ import (
 // context; a missing or foreign Order is ErrOrderNotFound.
 type OrderReader interface {
 	GetOrder(ctx context.Context, orderID string) (OrderSnapshot, error)
+}
+
+// Couriers reads the courier of an Order from delivery on behalf of the
+// customer in the request context (order#view); nil without one.
+type Couriers interface {
+	CourierOf(ctx context.Context, orderID string) (*Courier, error)
 }
 
 // Catalog reads public data of restaurants: no customer is involved.
@@ -21,13 +28,14 @@ type Catalog interface {
 // customer with the item names kept at Place Order, restaurants for the
 // restaurant.
 type GetOrder struct {
-	orders  OrderReader
-	catalog Catalog
-	now     func() time.Time
+	orders   OrderReader
+	catalog  Catalog
+	couriers Couriers
+	now      func() time.Time
 }
 
-func NewGetOrder(orders OrderReader, catalog Catalog) GetOrder {
-	return GetOrder{orders: orders, catalog: catalog, now: time.Now}
+func NewGetOrder(orders OrderReader, catalog Catalog, couriers Couriers) GetOrder {
+	return GetOrder{orders: orders, catalog: catalog, couriers: couriers, now: time.Now}
 }
 
 // Handle returns ErrOrderNotFound for a missing or foreign Order.
@@ -40,7 +48,20 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 	if err != nil {
 		return OrderView{}, fmt.Errorf("read restaurant: %w", err)
 	}
-	return compose(order, restaurant, h.now())
+	view, err := compose(order, restaurant, h.now())
+	if err != nil {
+		return OrderView{}, err
+	}
+	// Only an Order with an Assignment has a courier to ask delivery about.
+	if slices.ContainsFunc(view.Milestones, func(milestone Milestone) bool {
+		return milestone.Kind == MilestoneCourierAssigned
+	}) {
+		view.Courier, err = h.couriers.CourierOf(ctx, order.ID)
+		if err != nil {
+			return OrderView{}, fmt.Errorf("read courier: %w", err)
+		}
+	}
+	return view, nil
 }
 
 // compose builds the customer view of an Order and its restaurant at now.

@@ -39,6 +39,10 @@ fragment ViewedOrder on Order {
   expectedReadyAt
   expectedPickupAt
   expectedDeliveredAt
+  # Courier delivering the order, null until assigned (FR-626).
+  courier {
+    name
+  }
 }
 
 query ViewOrder($id: ID!) {

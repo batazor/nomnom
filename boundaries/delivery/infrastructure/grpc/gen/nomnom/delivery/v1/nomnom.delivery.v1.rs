@@ -10,6 +10,9 @@ pub struct Delivery {
     pub courier_id: ::prost::alloc::string::String,
     #[prost(enumeration="DeliveryState", tag="4")]
     pub state: i32,
+    /// Market of the Order (ADR 41); immutable.
+    #[prost(string, tag="7")]
+    pub market_id: ::prost::alloc::string::String,
 }
 /// Pending, not yet expired Delivery Offer addressed to a courier.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -143,6 +146,9 @@ pub struct CourierAssignedToDelivery {
     /// Срок Pickup, названный курьером при принятии оффера; пусто — не назван (FR-610).
     #[prost(message, optional, tag="4")]
     pub expected_pickup_at: ::core::option::Option<::prost_types::Timestamp>,
+    /// Market of the aggregate (ADR 41).
+    #[prost(string, tag="5")]
+    pub market_id: ::prost::alloc::string::String,
 }
 /// Курьер забрал заказ (Pickup).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -154,6 +160,9 @@ pub struct DeliveryPickedUp {
     /// Срок вручения, названный курьером при Pickup; пусто — не назван (FR-610).
     #[prost(message, optional, tag="3")]
     pub expected_delivered_at: ::core::option::Option<::prost_types::Timestamp>,
+    /// Market of the aggregate (ADR 41).
+    #[prost(string, tag="4")]
+    pub market_id: ::prost::alloc::string::String,
 }
 /// Delivery завершена (Delivery Completion).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -162,6 +171,9 @@ pub struct DeliveryCompleted {
     pub order_id: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
     pub delivery_id: ::prost::alloc::string::String,
+    /// Market of the aggregate (ADR 41).
+    #[prost(string, tag="3")]
+    pub market_id: ::prost::alloc::string::String,
 }
 /// Delivery не удалась по бизнес-причине.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -182,6 +194,9 @@ pub struct DeliveryFailed {
     /// основание для бизнес-решений.
     #[prost(string, tag="4")]
     pub detail: ::prost::alloc::string::String,
+    /// Market of the aggregate (ADR 41).
+    #[prost(string, tag="5")]
+    pub market_id: ::prost::alloc::string::String,
 }
 /// Курьер снят с Delivery без замены (Courier Reassignment); Delivery вернулась
 /// в поиск курьера. Доменной причины снятия нет.
@@ -193,6 +208,9 @@ pub struct CourierUnassignedFromDelivery {
     pub delivery_id: ::prost::alloc::string::String,
     #[prost(string, tag="3")]
     pub courier_id: ::prost::alloc::string::String,
+    /// Market of the aggregate (ADR 41).
+    #[prost(string, tag="4")]
+    pub market_id: ::prost::alloc::string::String,
 }
 /// Delivery отменена до Pickup (Cancel Delivery); назначенный курьер, если был,
 /// освобождён. reason пуст, если причина не указана.
@@ -204,6 +222,22 @@ pub struct DeliveryCancelled {
     pub delivery_id: ::prost::alloc::string::String,
     #[prost(string, tag="3")]
     pub reason: ::prost::alloc::string::String,
+    /// Market of the aggregate (ADR 41).
+    #[prost(string, tag="4")]
+    pub market_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetOrderCourierRequest {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetOrderCourierResponse {
+    /// Empty without a courier.
+    #[prost(string, tag="1")]
+    pub courier_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetCourierCurrentDeliveryRequest {
@@ -222,6 +256,9 @@ pub struct GetCourierCurrentDeliveryResponse {
 pub struct CreateDeliveryRequest {
     #[prost(string, tag="1")]
     pub order_id: ::prost::alloc::string::String,
+    /// Required (ADR 41): Market of the Order.
+    #[prost(string, tag="4")]
+    pub market_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CreateDeliveryResponse {
@@ -270,6 +307,9 @@ pub struct RegisterCourierRequest {
     /// Shown on the flow board and to the customer of the courier's order.
     #[prost(string, tag="2")]
     pub name: ::prost::alloc::string::String,
+    /// Required (ADR 41): Market the courier works in; immutable.
+    #[prost(string, tag="3")]
+    pub market_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RegisterCourierResponse {
@@ -293,8 +333,11 @@ pub struct RetireCourierResponse {
     #[prost(bool, tag="2")]
     pub changed: bool,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetCourierPoolRequest {
+    /// Required (ADR 41): the Courier Pool of this Market.
+    #[prost(string, tag="1")]
+    pub market_id: ::prost::alloc::string::String,
 }
 /// Courier of the Courier Pool.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -311,6 +354,12 @@ pub struct PoolCourier {
     /// Assigned or picked up Delivery; empty without one.
     #[prost(string, tag="5")]
     pub active_delivery_id: ::prost::alloc::string::String,
+    /// Order of the active Delivery; empty without one.
+    #[prost(string, tag="6")]
+    pub active_order_id: ::prost::alloc::string::String,
+    /// Order of the pending offer; empty without one.
+    #[prost(string, tag="7")]
+    pub offered_order_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetCourierPoolResponse {

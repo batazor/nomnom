@@ -215,7 +215,9 @@ function OrderProgress({
               </span>
               {state === "current" && courierAssigned ? (
                 <span className="order-courier-note">
-                  {t("order.courierAssigned")}
+                  {order.courier
+                    ? t("order.courierNamed", { name: order.courier.name })
+                    : t("order.courierAssigned")}
                 </span>
               ) : null}
               {state === "current" && eta !== null ? (

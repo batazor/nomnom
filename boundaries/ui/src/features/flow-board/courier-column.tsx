@@ -15,6 +15,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { Button, Illustration } from "../../shared/ui";
 import { useDropTarget } from "./board-dnd";
+import { CourierPoolPanel } from "./courier-pool";
 import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
 
@@ -109,19 +110,28 @@ export function CourierColumn({
 
   if (!data && error) {
     return (
-      <p className="board-error" role="alert">
-        {t("board.courier.error")}
-      </p>
+      <>
+        <CourierPoolPanel />
+        <p className="board-error" role="alert">
+          {t("board.courier.error")}
+        </p>
+      </>
     );
   }
   if (!data) return <p className="board-empty">{t("board.loading")}</p>;
   if (!courier) {
-    return <p className="board-empty">{t("board.courier.notRegistered")}</p>;
+    return (
+      <>
+        <CourierPoolPanel />
+        <p className="board-empty">{t("board.courier.notRegistered")}</p>
+      </>
+    );
   }
   const delivery = courier.currentDelivery;
 
   return (
     <div className="board-courier" {...drop}>
+      <CourierPoolPanel />
       <div className="board-courier-state">
         <p className="board-state" data-availability={courier.availability}>
           <span aria-hidden="true" className="board-state-dot" />

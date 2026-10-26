@@ -32,6 +32,14 @@ type Subscription {
   courierChanged(id: ID!): Courier!
     @edfs__kafkaSubscribe(topics: ["delivery.v1.courier-changes"], providerId: "default")
     @openfed__subscriptionFilter(condition: { IN: { fieldPath: "id", values: ["{{ args.id }}"] } })
+
+  """
+  Courier Pool after each change of a courier, an offer or a delivery; query
+  courierPool first. A user who may not manage couriers gets an error event
+  instead of data.
+  """
+  courierPoolChanged: CourierPool!
+    @edfs__kafkaSubscribe(topics: ["delivery.v1.courier-pool-changes"], providerId: "default")
 }
 
 type Order @key(fields: "id", resolvable: false) {
@@ -43,5 +51,9 @@ type Kitchen @key(fields: "restaurantId", resolvable: false) {
 }
 
 type Courier @key(fields: "id", resolvable: false) {
+  id: ID! @external
+}
+
+type CourierPool @key(fields: "id", resolvable: false) {
   id: ID! @external
 }

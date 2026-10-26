@@ -98,6 +98,9 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 	order.ExpectedReadyAt = deadline(view.Deadlines.ExpectedReadyAt)
 	order.ExpectedPickupAt = deadline(view.Deadlines.ExpectedPickupAt)
 	order.ExpectedDeliveredAt = deadline(view.Deadlines.ExpectedDeliveredAt)
+	if view.Courier != nil {
+		order.Courier = &service.OrderCourier{Name: view.Courier.Name}
+	}
 	return order, nil
 }
 

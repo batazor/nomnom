@@ -31,6 +31,8 @@ type ScenarioSpec = {
   cancellableForMinutes?: number;
   // Minutes after placing for each deadline the kitchen or courier named.
   deadlines?: Readonly<{ ready?: number; pickup?: number; delivered?: number }>;
+  // Name of the assigned courier (FR-626); no courier when unset.
+  courier?: string;
 };
 
 function buildOrder(spec: ScenarioSpec, now: Date): MockOrder {
@@ -57,6 +59,7 @@ function buildOrder(spec: ScenarioSpec, now: Date): MockOrder {
     expectedReadyAt: deadline(now, placed, spec.deadlines?.ready),
     expectedPickupAt: deadline(now, placed, spec.deadlines?.pickup),
     expectedDeliveredAt: deadline(now, placed, spec.deadlines?.delivered),
+    courier: spec.courier ? { name: spec.courier } : null,
   };
 }
 
@@ -119,6 +122,7 @@ const scenarios: readonly ScenarioSpec[] = [
     placedMinutesAgo: 12,
     milestones: preparing,
     deadlines: preparingDeadlines,
+    courier: "Тимур",
   },
   {
     // Readiness in 10 minutes; the kitchen delays it while followed.

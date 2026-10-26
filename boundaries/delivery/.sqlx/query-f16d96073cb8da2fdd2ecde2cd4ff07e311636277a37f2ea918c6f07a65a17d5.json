@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, order_id, state FROM deliveries\n             WHERE courier_id = $1 AND state = ANY($2)\n             ORDER BY id LIMIT 1",
+  "query": "SELECT id, order_id, market_id, state FROM deliveries\n             WHERE courier_id = $1 AND state = ANY($2)\n             ORDER BY id LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "market_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "market_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "state",
         "type_info": "Text",
         "origin": {
@@ -46,8 +57,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "76cb5da8c5cd331ce04cfe454866ff5faf5b7be4a0d60f762ecb4e6a6f2fcc6c"
+  "hash": "f16d96073cb8da2fdd2ecde2cd4ff07e311636277a37f2ea918c6f07a65a17d5"
 }

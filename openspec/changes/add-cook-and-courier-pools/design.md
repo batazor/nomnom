@@ -70,7 +70,7 @@ Acceptance от линии не зависит: заказ принимаетс�
 
 - `Kitchen.cookPool: CookPool!` (`size`, `onLine`, `busy`, `queued`, `cooks[]` с `id`, `name`, `onLine`, `currentOrder`), mutations `hireCook(restaurantId, name)`, `setCookOnLine(cookId, onLine)`, `retireCook(cookId)`; `KitchenOrder.cook: CookRef` в активных и готовых заказах.
 - `courierPool: CourierPool!` (`size`, `onLine`, `busy`, `waiting`, `couriers[]`), `courierPoolChanged: CourierPool!`, mutations `addCourier(name)`, `setCourierOnLine(courierId, onLine)`, `retireCourier(courierId)`; имя курьера в карточке доставки и в `Order` покупателя.
-- Имена разрешает BFF по id; в Integration Events имена не передаются. Имя курьера покупателю `delivery` пока отдаёт только диспетчеру (`GetCourierPool`): для экрана заказа в разделе 4 нужен read, доступный покупателю заказа.
+- Имена разрешает BFF по id; в Integration Events имена не передаются. Имя курьера покупателю отдаёт `GetOrderCourier` `delivery` с правом `order:<id>#view`; BFF читает его в `order(id)` и `orderChanged` только у заказа с milestone `COURIER_ASSIGNED`, история заказов (`customerOrders`) его не читает.
 - Шапка колонки: «Линия N из M · занято B/N» с полосой загрузки, backlog отдельной строкой; при `onLine = 0` и непустой очереди — предупреждение «на линии нет поваров». Список работников: точка статуса, имя, текущая работа, действие. Колонка курьера показывает пул, только если `courierPool` не отвечает `PermissionDenied`; собственная работа курьера-пользователя остаётся как прежде.
 - Покупатель видит имя курьера, имя повара — нет.
 

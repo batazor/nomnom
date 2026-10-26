@@ -71,7 +71,8 @@ describe("view order", () => {
       .getAllByRole("listitem")
       .find((item) => item.getAttribute("aria-current") === "step");
     expect(current).toHaveTextContent("Готовится");
-    expect(current).toHaveTextContent("Курьер назначен");
+    // AC-795: the customer sees the name of the courier, not of the cook.
+    expect(current).toHaveTextContent("Курьер Тимур назначен");
     expect(screen.getByText("Кухня №8")).toBeInTheDocument();
     expect(screen.getByText("Бао с грибами")).toBeInTheDocument();
     expect(screen.getByTestId("order-total")).toHaveTextContent(/1.?530/);

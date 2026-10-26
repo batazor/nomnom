@@ -2,7 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/google/uuid"
 
 	"google.golang.org/grpc"
 
@@ -12,9 +17,14 @@ import (
 	checkoutinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/infrastructure"
 	courierapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/applications"
 	courierinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/infrastructure"
+	poolapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/applications"
+	poolinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/infrastructure"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	kitchenapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 	kitcheninfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/infrastructure"
+	marketsapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/markets/applications"
+	marketsinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/markets/infrastructure"
 	trackingapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 	trackinginfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/infrastructure"
 	managementapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
@@ -24,31 +34,86 @@ import (
 )
 
 // envInternalGateway is the address of the internal gateway (ADR 15) through
-// which BFF calls bounded contexts.
+// which BFF calls the control plane (ADR 41); the gateways of Cells come from
+// its Placement Map.
 const envInternalGateway = "BFF__INTERNAL_GATEWAY_ADDR"
 
-// Audiences of the bounded contexts BFF calls; one connection serves every
-// slice that calls the context.
+// envPlacementTTL is how often the Placement Map is refreshed, a Go duration
+// (ADR 41).
+const envPlacementTTL = "BFF__PLACEMENT_TTL"
+
+// Start point of couriers a dispatcher adds on the flow board (FR-623): a new
+// courier has no position of its own, and delivery offers a delivery only to
+// couriers with one.
 const (
-	audienceOrders      = "nomnom.orders"
-	audienceRestaurants = "nomnom.restaurants"
-	audienceDelivery    = "nomnom.delivery"
+	envCourierStartLatitude  = "BFF__COURIER_START_LATITUDE"
+	envCourierStartLongitude = "BFF__COURIER_START_LONGITUDE"
+)
+
+// Audiences of the bounded contexts BFF calls; one routed connection serves
+// every slice that calls the context. The control plane is global and not
+// routed.
+const (
+	audienceOrders       = "nomnom.orders"
+	audienceRestaurants  = "nomnom.restaurants"
+	audienceDelivery     = "nomnom.delivery"
+	audienceControlPlane = "nomnom.controlplane"
 )
 
 // config is the environment of the plugin, read once at start.
 type config struct {
 	identity        identity.Config
 	internalGateway string
+	// placementTTL is the raw variable: newBffService validates it.
+	placementTTL string
+	// courierStartLatitude and courierStartLongitude are the raw variables:
+	// newBffService validates them.
+	courierStartLatitude  string
+	courierStartLongitude string
 }
 
 func configFromEnv(getenv func(string) string) config {
 	return config{
-		identity:        identity.ConfigFromEnv(getenv),
-		internalGateway: getenv(envInternalGateway),
+		identity:              identity.ConfigFromEnv(getenv),
+		internalGateway:       getenv(envInternalGateway),
+		placementTTL:          getenv(envPlacementTTL),
+		courierStartLatitude:  getenv(envCourierStartLatitude),
+		courierStartLongitude: getenv(envCourierStartLongitude),
 	}
 }
 
-// dialFunc opens a connection to the internal gateway for one audience;
+// courierStart validates the start point of new couriers; both variables are
+// required.
+func (c config) courierStart() (poolapp.Location, error) {
+	latitude, err := strconv.ParseFloat(c.courierStartLatitude, 64)
+	if err != nil {
+		return poolapp.Location{}, fmt.Errorf("%s must be a number: %w", envCourierStartLatitude, err)
+	}
+	longitude, err := strconv.ParseFloat(c.courierStartLongitude, 64)
+	if err != nil {
+		return poolapp.Location{}, fmt.Errorf("%s must be a number: %w", envCourierStartLongitude, err)
+	}
+	location, err := poolapp.NewLocation(latitude, longitude)
+	if err != nil {
+		return poolapp.Location{}, fmt.Errorf("courier start point: %w", err)
+	}
+	return location, nil
+}
+
+// placementTTLDuration validates the refresh period of the Placement Map; it is
+// required.
+func (c config) placementTTLDuration() (time.Duration, error) {
+	ttl, err := time.ParseDuration(c.placementTTL)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a Go duration: %w", envPlacementTTL, err)
+	}
+	if ttl <= 0 {
+		return 0, fmt.Errorf("%s must be positive, got %s", envPlacementTTL, ttl)
+	}
+	return ttl, nil
+}
+
+// dialFunc opens a connection to an internal gateway for one audience;
 // gateway.Dial in production.
 type dialFunc func(address, audience string, credentials identity.OutgoingCredentials) (*grpc.ClientConn, error)
 
@@ -112,8 +177,13 @@ type kitchenActionHandler interface {
 
 // kitchen holds the scenarios of the kitchen screen.
 type kitchen struct {
-	getKitchen  getKitchenHandler
-	applyAction kitchenActionHandler
+	getKitchen     getKitchenHandler
+	applyAction    kitchenActionHandler
+	changeCookPool cookPoolHandler
+}
+
+type cookPoolHandler interface {
+	Handle(ctx context.Context, request kitchenapp.CookPoolRequest) (kitchenapp.CookPoolResult, error)
 }
 
 type getCourierHandler interface {
@@ -140,15 +210,36 @@ type courier struct {
 	applyAction     deliveryActionHandler
 }
 
+// cellRouting is the cell router of BFF (ADR 41): the Placement Map refreshed
+// in the background, the routed connections to Cells and the connection to
+// the control plane.
+type cellRouting struct {
+	placements   *cellrouter.Placements
+	router       *cellrouter.Router
+	controlPlane *grpc.ClientConn
+}
+
+// start begins loading the Placement Map; requests before the first load are
+// UNAVAILABLE.
+func (c *cellRouting) start() { c.placements.Start() }
+
+// stop ends the refresher and closes every connection.
+func (c *cellRouting) stop() error {
+	c.placements.Stop()
+	return errors.Join(c.router.Close(), c.controlPlane.Close())
+}
+
 // simulator holds the scenarios of the demo Simulator switch in the header.
 type simulator struct {
 	getSimulator        getSimulatorHandler
 	setSimulatorEnabled setSimulatorEnabledHandler
 }
 
-// newBffService assembles BFF from cfg. BFF identity and the gateway address
-// are required: customer operations must not run without a verified customer
-// (ADR 32), and every slice calls contexts through the internal gateway.
+// newBffService assembles BFF from cfg. BFF identity, the gateway address and
+// the Placement TTL are required: customer operations must not run without a
+// verified customer (ADR 32), and every slice calls contexts through the
+// gateway of the Cell of the request Market (ADR 41). Only the control plane
+// connection is opened here; cell routing starts with cells.start.
 func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	customers, err := identity.Load(cfg.identity)
 	if err != nil {
@@ -157,34 +248,49 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	if cfg.internalGateway == "" {
 		return nil, fmt.Errorf("%s is required", envInternalGateway)
 	}
-	service := &BffService{accessTokens: customers.AccessTokens}
-	orders, err := dial(cfg.internalGateway, audienceOrders, customers.Outgoing)
+	courierStart, err := cfg.courierStart()
 	if err != nil {
 		return nil, err
 	}
-	restaurants, err := dial(cfg.internalGateway, audienceRestaurants, customers.Outgoing)
+	placementTTL, err := cfg.placementTTLDuration()
 	if err != nil {
 		return nil, err
 	}
-	delivery, err := dial(cfg.internalGateway, audienceDelivery, customers.Outgoing)
+	controlPlane, err := dial(cfg.internalGateway, audienceControlPlane, customers.Outgoing)
 	if err != nil {
 		return nil, err
 	}
-	service.tracking = newOrderTracking(orders, restaurants)
+	placements, err := cellrouter.NewPlacements(controlPlane, placementTTL)
+	if err != nil {
+		return nil, errors.Join(err, controlPlane.Close())
+	}
+	router := cellrouter.NewRouter(placements, func(address, audience string) (*grpc.ClientConn, error) {
+		return dial(address, audience, customers.Outgoing)
+	})
+	service := &BffService{
+		accessTokens: customers.AccessTokens,
+		cells:        &cellRouting{placements: placements, router: router, controlPlane: controlPlane},
+		listMarkets:  marketsapp.NewListMarkets(marketsinfra.NewControlPlane(controlPlane)),
+	}
+	orders := router.Conn(audienceOrders)
+	restaurants := router.Conn(audienceRestaurants)
+	delivery := router.Conn(audienceDelivery)
+	service.tracking = newOrderTracking(orders, restaurants, delivery)
 	service.catalog = newRestaurantCatalog(restaurants)
 	// The payload of checkout reuses the GetOrder scenario of order tracking.
 	service.checkout = newCheckout(orders, service.tracking.getOrder)
 	service.management = newRestaurantManagement(restaurants)
 	service.kitchen = newKitchen(restaurants)
 	service.courier = newCourier(delivery)
+	service.courierPool = newCourierPool(delivery, courierStart)
 	service.simulator = newSimulator(orders, restaurants, delivery)
 	return service, nil
 }
 
-func newOrderTracking(orders, restaurants grpc.ClientConnInterface) *orderTracking {
+func newOrderTracking(orders, restaurants, delivery grpc.ClientConnInterface) *orderTracking {
 	ordersAPI := trackinginfra.NewOrders(orders)
 	catalog := trackinginfra.NewCatalog(restaurants)
-	getOrder := trackingapp.NewGetOrder(ordersAPI, catalog)
+	getOrder := trackingapp.NewGetOrder(ordersAPI, catalog, trackinginfra.NewCouriers(delivery))
 	return &orderTracking{
 		getOrder:            getOrder,
 		requestCancellation: trackingapp.NewRequestCancellation(ordersAPI),
@@ -196,9 +302,28 @@ func newOrderTracking(orders, restaurants grpc.ClientConnInterface) *orderTracki
 func newKitchen(restaurants grpc.ClientConnInterface) *kitchen {
 	restaurantsAPI := kitcheninfra.NewRestaurants(restaurants)
 	return &kitchen{
-		getKitchen:  kitchenapp.NewGetKitchen(restaurantsAPI, restaurantsAPI),
-		applyAction: kitchenapp.NewApplyKitchenAction(restaurantsAPI, restaurantsAPI, restaurantsAPI),
+		getKitchen:     kitchenapp.NewGetKitchen(restaurantsAPI, restaurantsAPI),
+		applyAction:    kitchenapp.NewApplyKitchenAction(restaurantsAPI, restaurantsAPI, restaurantsAPI),
+		changeCookPool: kitchenapp.NewChangeCookPool(restaurantsAPI, restaurantsAPI),
 	}
+}
+
+func newCourierPool(delivery grpc.ClientConnInterface, start poolapp.Location) *courierPool {
+	deliveryAPI := poolinfra.NewDelivery(delivery)
+	return &courierPool{
+		getPool:    poolapp.NewGetPool(deliveryAPI),
+		changePool: poolapp.NewChangePool(deliveryAPI, newCourierID, start),
+	}
+}
+
+// newCourierID names a courier added on the flow board: a UUIDv7, no user
+// stands behind it.
+func newCourierID() (string, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return id.String(), nil
 }
 
 func newCourier(delivery grpc.ClientConnInterface) *courier {

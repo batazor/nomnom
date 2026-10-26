@@ -70,6 +70,15 @@ type OrderView struct {
 	// AvailableUntil is set only while the customer may request cancellation.
 	AvailableUntil *time.Time
 	Deadlines      Deadlines
+	// Courier is the courier delivering the Order (FR-626); nil before an
+	// Assignment and in the order history, which does not read it.
+	Courier *Courier
+}
+
+// Courier names the courier of an Order for its customer; the cook stays
+// unnamed.
+type Courier struct {
+	Name string
 }
 
 type ItemView struct {

@@ -96,7 +96,7 @@ make kind-down
 - Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) и identity ставит chart
   [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, PostgreSQL `orders`,
-  `payments`, `delivery`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
+  `payments`, `delivery`, `controlplane`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
   [ADR 40](../../docs/adr/0040-application-caching-policy.md): без persistence, ACL-пользователь
   `restaurants` с ключами `restaurants:*`, URL — Secret `restaurants-valkey`; пользователь `exporter`
   для Alloy — только INFO и CONFIG GET, пароль — Secret `alloy-valkey`) в `nomnom-data` (`emptyDir`). Secret DSN
@@ -119,6 +119,15 @@ make kind-down
   `tests/identity/fixtures/idp-signing-key.pem` (`scripts/mint-jwt.py`). Фикстура `grpc-caller`
   работает под своим ServiceAccount `nomnom-bff/grpc-caller`: он допущен allowlist `orders`,
   но не делегат.
+- Control plane ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) —
+  artifact `nomnom/controlplane` и release `controlplane` в `nomnom-controlplane` с
+  [`values/controlplane.yaml`](values/controlplane.yaml): своя PostgreSQL и SpiceDB
+  (`manifests/netpol/app-infrastructure.yaml`), бизнес-порт 8086 только через internal gateway.
+  Allowlist: `nomnom-bff/bff` (читает `ListMarkets`, `GetPlacementMap` — `placementReaders`) и
+  `nomnom-bff/demo-seed` (делегат оператора для `RegisterCell`, `CreateMarket`). BFF получает
+  projected token `nomnom.controlplane` и держит Placement Map с TTL `cellRouter.placementTTL`
+  (30s). В kind одна Cell `cell-1` — текущий internal gateway — и один Market `berlin`;
+  их создаёт seed (раздел «Демо-данные»). Запросы GraphQL к BFF несут `X-Nomnom-Market: berlin`.
 - SpiceDB kind получает общий `authorization/bootstrap.yaml` и kind-only grants
   [`authz/bootstrap-kind.yaml`](authz/bootstrap-kind.yaml) (`platform:nomnom#operator@user:kind-operator`
   — оператор e2e пути заказа): chart [`bootstrap`](#bootstrap) получает его `--set-file
@@ -170,7 +179,7 @@ releases с pod template label `skaffold.dev/run-id`, а хранилища де
 | Secret `spicedb-preshared-key` (`preshared-key`) в `nomnom-authz` и неймспейсах контекстов | `lookup` или `randAlphaNum 64` | SpiceDB, контексты |
 | Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-observability/alloy-postgres` | `lookup` или `randAlphaNum 48`; DSN из того же значения | PostgreSQL, приложения, Alloy |
 | Secret `nomnom-data/mongodb-restaurants` (`root-password`, `password`, `keyfile`), `nomnom-restaurants/restaurants-mongodb` (`uri`) | `lookup` или `randAlphaNum` | MongoDB, restaurants |
-| Deployments и Services PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants` | шаблоны chart, `emptyDir` | — |
+| Deployments и Services PostgreSQL `orders`, `payments`, `delivery`, `controlplane` и MongoDB `restaurants` | шаблоны chart, `emptyDir` | — |
 | replica set `rs0` и пользователь `restaurants` MongoDB | Job `mongodb-restaurants-init` (hook): `mongosh`, идемпотентно | restaurants |
 
 `lookup` читает существующий Secret, поэтому повторный deploy и `skaffold dev` учётные данные не
@@ -192,6 +201,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | Неймспейс | Содержимое |
 | --- | --- |
 | `nomnom-orders`, `nomnom-restaurants`, `nomnom-delivery`, `nomnom-payments` | приложения из Helm charts; pod проверок `net-probe` (образ `e2e/probe`) |
+| `nomnom-controlplane` | control plane (release `controlplane`, [ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)): реестр Cell, Market и Market Placement |
 | `nomnom-bff` | BFF (release `bff`, ServiceAccount `bff`), Secret `bff-assertion-key`; pod проверок `grpc-caller` (образ `e2e/probe`, ServiceAccount `grpc-caller`) и `e2e-driver` (образ `e2e/probe`, ServiceAccount `e2e-driver`) |
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
@@ -226,9 +236,11 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `restaurants-v1-administration` | `RegisterRestaurant`, `AssignStaff`, `RevokeStaff` | `commands` |
 | `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
 | `delivery-v1-courier` | `UpdateCourierLocation`, `SetCourierAvailability`, `AcceptDeliveryOffer`, `RejectDeliveryOffer`, `ConfirmPickup`, `ConfirmDelivery`, `ReportDeliveryFailure` | `commands` |
-| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool` | `reads` |
+| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool`, `GetOrderCourier` | `reads` |
 | `delivery-v1-administration` | `RegisterCourier`, `RetireCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
+| `controlplane-v1-reads` | `ListMarkets`, `GetPlacementMap` | `reads` |
+| `controlplane-v1-commands` | `RegisterCell`, `CreateMarket` | `commands` |
 
 `reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и
 `reset-before-request`; `commands` — только на `connect-failure`, `refused-stream` и
@@ -316,6 +328,15 @@ Subject — Dex sub пользователя `nomnom-demo-owner` (`ChFub21ub20tZ
 Рестораны: «Пельменная «Сибирь»», «Чайхана «Самарканд»», «Блинная «Теремок у моста»» (5–7 блюд
 каждая). Данные — [`demo/files/seed.json`](demo/files/seed.json).
 
+**Топология.** Первым seed регистрирует в control plane Cell `cell-1` (gateway
+`internal-gateway.envoy-gateway-system.svc.cluster.local:8080`) и Market `berlin` (Berlin, EUR,
+`cell-1`) от имени `kind-operator` (`platform#manage_markets`); рестораны и курьеры создаются в
+Market `berlin` (`market` в `seed.json`). Не hook chart `bootstrap` ([ADR 34](../../docs/adr/0034-declarative-kind-bootstrap.md)):
+bootstrap ставится до charts приложений, control plane к тому моменту не запущен, а Job seed
+ждёт gateway и control plane повторами (`dependsOn: controlplane`). `RegisterCell` и
+`CreateMarket` идемпотентны (`created = false`); изменённые значения для известного id —
+`ALREADY_EXISTS`, Job падает.
+
 **Seed.** Chart [`demo`](demo) ставит Job `demo-seed-<revision>` в `nomnom-bff` на каждый
 install/upgrade ([`demo/seed/seed.py`](demo/seed/seed.py), образ — стадия `demo-seed` Dockerfile `e2e/probe`: образ проверок с python3 и openssl): те же публичные gRPC-вызовы через internal gateway, что e2e пути заказа, от
 ServiceAccount `demo-seed` с user assertion ключом BFF — `kind-operator` регистрирует рестораны
@@ -372,6 +393,7 @@ workloads (а `orders` и `restaurants` не стартуют без своих 
 | `infra-connectivity` | под политиками Kafka открыт из delivery и payments; чужая БД и Temporal для не-`orders` закрыты |
 | `workloads-healthy-under-policies` | после применения политик deployments неймспейсов приложений, `envoy-gateway-system` и `kube-system` Available, ни один контейнер не перезапускался и нет проваленных kubelet-проб (6a.1–6a.3) |
 | `bff-end-to-end` | BFF Available; из `nomnom-bff` закрыты прямой `orders` и PostgreSQL; `bffInfo`; `order(id)` без `Authorization` — `Unauthenticated` (AC-576); с access token тестового provider для отсутствующего заказа — `{"data":{"order":null}}` (AC-575), то есть orders принял user assertion BFF; тот же user assertion (ключ BFF, aud `nomnom.orders`) от `grpc-caller` — `UNAUTHENTICATED`, log — `service is not an allowed delegate` (7.1, 7.3–7.7, 7.9–7.10) |
+| `controlplane-placement-map` | через gateway с projected token BFF (`kubectl create token bff --audience nomnom.controlplane`) из `grpc-caller`: `GetPlacementMap` — `berlin → cell-1` с адресом gateway (повтор, пока seed не создаст топологию), `ListMarkets` — Berlin, EUR; `RegisterCell` от BFF без оператора — `PERMISSION_DENIED`; `grpc-caller` вне allowlist — `UNAUTHENTICATED` |
 | `order-lifecycle` | путь заказа (AC-740): оператор регистрирует ресторан и курьера, владелец — персонал, меню, открытие; курьер на линии; покупатель оформляет заказ через BFF; кухня находит его в `ListIncomingOrders`, принимает и готовит, курьер принимает предложение Dispatch, забирает и доставляет; в BFF `DELIVERED` с milestones `COURIER_ASSIGNED`, `PICKED_UP`, `DELIVERED`, оплата `captured`. Ids уникальны на прогон; в конце курьер уходит с линии |
 
 Один тест: `cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$CHAINSAW_VERSION test --kube-context kind-nomnom-test --config .chainsaw.yaml --test-dir . --include-test-regex 'chainsaw/gateway-routes-to-backends'`.

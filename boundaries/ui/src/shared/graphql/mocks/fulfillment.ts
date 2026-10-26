@@ -22,6 +22,24 @@ type KitchenOrder = {
   restaurantId: string;
   stage: KitchenOrderStage;
   receivedAt: string;
+  // Cook assigned at the start of preparation (FR-225).
+  cookId?: string;
+};
+
+type MockCook = {
+  id: string;
+  name: string;
+  onLine: boolean;
+  retired: boolean;
+  // Order of the last assignment: the free cook assigned longest ago goes first.
+  lastAssigned: number;
+};
+
+type MockPoolCourier = {
+  id: string;
+  name: string;
+  availability: CourierAvailability;
+  retired: boolean;
 };
 
 type Delivery = {
@@ -70,6 +88,26 @@ const deliveryMs = 15 * 60_000;
 // Courier.id of the mock user, the entity key of courierChanged (ADR 36).
 export const mockCourierId = "courier-demo";
 
+// Cook Pool every mock restaurant starts with: enough cooks on line for the
+// fixed scenarios in preparation, and Марат off line.
+const initialCooks = [
+  { name: "Айгуль", onLine: true },
+  { name: "Олег", onLine: true },
+  { name: "Дильноза", onLine: true },
+  { name: "Марат", onLine: false },
+  { name: "Лейла", onLine: true },
+  { name: "Сергей", onLine: true },
+] as const;
+
+// Like CookName and CourierName: 1..64 characters after trim.
+function poolName(name: string): string | null {
+  const trimmed = name.trim();
+  return trimmed.length === 0 || trimmed.length > 64 ? null : trimmed;
+}
+
+// Cooking and delivering stages that hold the cook.
+const holdingStages = new Set<KitchenOrderStage>(["PREPARING", "ASSEMBLED"]);
+
 export function createFulfillment({
   clock,
   orders,
@@ -82,6 +120,137 @@ export function createFulfillment({
   const kitchenOrders = new Map<string, KitchenOrder>();
   const deliveries = new Map<string, Delivery>();
   let availability: CourierAvailability = "UNAVAILABLE";
+  const cookPools = new Map<string, MockCook[]>();
+  let assignments = 0;
+  let hired = 0;
+  // The mock user is the courier "Илья"; the others act only in the pool.
+  const couriers: MockPoolCourier[] = [
+    {
+      id: "courier-timur",
+      name: "Тимур",
+      availability: "AVAILABLE",
+      retired: false,
+    },
+    {
+      id: "courier-anna",
+      name: "Анна",
+      availability: "UNAVAILABLE",
+      retired: false,
+    },
+  ];
+  let demoRetired = false;
+  let added = 0;
+
+  function cooksOf(restaurantId: string): MockCook[] {
+    let pool = cookPools.get(restaurantId);
+    if (!pool) {
+      pool = initialCooks.map((cook, index) => ({
+        id: `cook-${restaurantId}-${index + 1}`,
+        name: cook.name,
+        onLine: cook.onLine,
+        retired: false,
+        lastAssigned: 0,
+      }));
+      cookPools.set(restaurantId, pool);
+    }
+    return pool;
+  }
+
+  function heldBy(cookId: string): KitchenOrder | undefined {
+    return [...kitchenOrders.values()].find(
+      (order) => order.cookId === cookId && holdingStages.has(order.stage),
+    );
+  }
+
+  // Like Start Preparation: the free cook on line assigned longest ago.
+  function assignCook(order: KitchenOrder): boolean {
+    const cook = cooksOf(order.restaurantId)
+      .filter((candidate) => candidate.onLine && !candidate.retired)
+      .filter((candidate) => heldBy(candidate.id) === undefined)
+      .sort(
+        (a, b) => a.lastAssigned - b.lastAssigned || a.id.localeCompare(b.id),
+      )[0];
+    if (!cook) return false;
+    assignments += 1;
+    cook.lastAssigned = assignments;
+    order.cookId = cook.id;
+    return true;
+  }
+
+  function cookView(cook: MockCook) {
+    return {
+      id: cook.id,
+      name: cook.name,
+      onLine: cook.onLine,
+      currentKitchenOrderId: heldBy(cook.id)?.id ?? null,
+    };
+  }
+
+  function cookPool(restaurantId: string) {
+    const cooks = cooksOf(restaurantId)
+      .filter((cook) => !cook.retired)
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+      .map(cookView);
+    return {
+      size: cooks.length,
+      onLine: cooks.filter((cook) => cook.onLine).length,
+      busy: cooks.filter((cook) => cook.currentKitchenOrderId !== null).length,
+      queued: [...kitchenOrders.values()].filter(
+        (order) =>
+          order.restaurantId === restaurantId && order.stage === "QUEUED",
+      ).length,
+      cooks,
+    };
+  }
+
+  function cookOf(restaurantId: string, cookId: string): MockCook {
+    const cook = cooksOf(restaurantId).find(
+      (candidate) => candidate.id === cookId,
+    );
+    if (!cook) throw new Error("Cook not found");
+    return cook;
+  }
+
+  function hireCook(restaurantId: string, name: string) {
+    const valid = poolName(name);
+    if (valid === null) {
+      return { cookPool: cookPool(restaurantId), problem: "COOK_NAME_INVALID" };
+    }
+    hired += 1;
+    cooksOf(restaurantId).push({
+      id: `cook-hired-${hired}`,
+      name: valid,
+      onLine: false,
+      retired: false,
+      lastAssigned: 0,
+    });
+    return { cookPool: cookPool(restaurantId), problem: null };
+  }
+
+  function setCookOnLine(
+    restaurantId: string,
+    cookId: string,
+    onLine: boolean,
+  ) {
+    const cook = cookOf(restaurantId, cookId);
+    if (onLine && cook.retired) {
+      return { cookPool: cookPool(restaurantId), problem: "COOK_RETIRED" };
+    }
+    if (!onLine && heldBy(cook.id)) {
+      return { cookPool: cookPool(restaurantId), problem: "COOK_BUSY" };
+    }
+    cook.onLine = onLine;
+    return { cookPool: cookPool(restaurantId), problem: null };
+  }
+
+  function retireCook(restaurantId: string, cookId: string) {
+    const cook = cookOf(restaurantId, cookId);
+    if (cook.onLine) {
+      return { cookPool: cookPool(restaurantId), problem: "COOK_ON_LINE" };
+    }
+    cook.retired = true;
+    return { cookPool: cookPool(restaurantId), problem: null };
+  }
 
   function after(ms: number): string {
     return new Date(clock().getTime() + ms).toISOString();
@@ -117,6 +286,7 @@ export function createFulfillment({
       receivedAt: order.placedAt,
     };
     kitchenOrders.set(id, kitchenOrder);
+    if (holdingStages.has(stage)) assignCook(kitchenOrder);
     if (stage !== "RECEIVED") createDelivery(kitchenOrder);
   }
 
@@ -134,6 +304,11 @@ export function createFulfillment({
     const placed = orders.get(order.orderId);
     if (!placed) throw new Error(`Order ${order.orderId} not found`);
     const accepted = order.stage !== "RECEIVED";
+    const cook = order.cookId
+      ? cooksOf(order.restaurantId).find(
+          (candidate) => candidate.id === order.cookId && !candidate.retired,
+        )
+      : undefined;
     const confirmations = placed.milestones.filter(
       (milestone) => milestone.kind === "CONFIRMED",
     );
@@ -145,6 +320,7 @@ export function createFulfillment({
       })),
       acceptedAt: accepted ? (confirmations.at(-1)?.occurredAt ?? null) : null,
       expectedReadyAt: accepted ? placed.expectedReadyAt : null,
+      cook: cook ? cookView(cook) : null,
     };
   }
 
@@ -162,6 +338,7 @@ export function createFulfillment({
       restaurantId,
       restaurant: { ...found, menu: null },
       orders: active.map(kitchenView),
+      cookPool: cookPool(restaurantId),
     };
   }
 
@@ -194,6 +371,9 @@ export function createFulfillment({
     }
     if (order.stage !== from) {
       return { order: kitchenView(order), problem: "ORDER_STAGE_CONFLICT" };
+    }
+    if (action === "START_PREPARATION" && !assignCook(order)) {
+      return { order: kitchenView(order), problem: "NO_COOK_AVAILABLE" };
     }
     order.stage = to;
     if (action === "ACCEPT") {
@@ -267,6 +447,8 @@ export function createFulfillment({
       orders.set(delivery.orderId, {
         ...order,
         expectedPickupAt: after(pickupMs),
+        // The mock user is the courier «Илья» of the Courier Pool.
+        courier: { name: "Илья" },
         milestones: [
           ...order.milestones,
           { kind: "COURIER_ASSIGNED", occurredAt: clock().toISOString() },
@@ -305,9 +487,110 @@ export function createFulfillment({
     return { courier: courier(), problem: null };
   }
 
+  function poolCourierView(courier: MockPoolCourier) {
+    return {
+      id: courier.id,
+      name: courier.name,
+      availability: courier.availability,
+      offeredOrderId: null,
+      currentOrderId: null,
+    };
+  }
+
+  // Like GetCourierPool: the mock user and the other couriers by name.
+  function courierPool() {
+    const own = courier();
+    const searching = [...deliveries.values()].filter(
+      (delivery) => delivery.stage === "SEARCHING",
+    );
+    const members = [
+      ...(demoRetired
+        ? []
+        : [
+            {
+              id: mockCourierId,
+              name: "Илья",
+              availability,
+              offeredOrderId: own.offers[0]?.orderId ?? null,
+              currentOrderId: own.currentDelivery?.orderId ?? null,
+            },
+          ]),
+      ...couriers.filter((courier) => !courier.retired).map(poolCourierView),
+    ].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    return {
+      id: "nomnom",
+      size: members.length,
+      onLine: members.filter((member) => member.availability !== "UNAVAILABLE")
+        .length,
+      busy: members.filter((member) => member.availability === "BUSY").length,
+      waiting: searching.length,
+      couriers: members,
+    };
+  }
+
+  function addCourier(name: string) {
+    const valid = poolName(name);
+    if (valid === null) {
+      return { courierPool: courierPool(), problem: "COURIER_NAME_INVALID" };
+    }
+    added += 1;
+    couriers.push({
+      id: `courier-added-${added}`,
+      name: valid,
+      availability: "AVAILABLE",
+      retired: false,
+    });
+    return { courierPool: courierPool(), problem: null };
+  }
+
+  function setCourierOnLine(courierId: string, onLine: boolean) {
+    const next: CourierAvailability = onLine ? "AVAILABLE" : "UNAVAILABLE";
+    if (courierId === mockCourierId) {
+      if (availability === "BUSY" || (onLine && demoRetired)) {
+        return {
+          courierPool: courierPool(),
+          problem: "COURIER_STATUS_CONFLICT",
+        };
+      }
+      availability = next;
+      return { courierPool: courierPool(), problem: null };
+    }
+    const courier = couriers.find((candidate) => candidate.id === courierId);
+    if (!courier) throw new Error("Courier not found");
+    if (courier.availability === "BUSY" || (onLine && courier.retired)) {
+      return { courierPool: courierPool(), problem: "COURIER_STATUS_CONFLICT" };
+    }
+    courier.availability = next;
+    return { courierPool: courierPool(), problem: null };
+  }
+
+  function retireCourier(courierId: string) {
+    if (courierId === mockCourierId) {
+      if (availability !== "UNAVAILABLE") {
+        return { courierPool: courierPool(), problem: "COURIER_ON_LINE" };
+      }
+      demoRetired = true;
+      return { courierPool: courierPool(), problem: null };
+    }
+    const courier = couriers.find((candidate) => candidate.id === courierId);
+    if (!courier) throw new Error("Courier not found");
+    if (courier.availability !== "UNAVAILABLE") {
+      return { courierPool: courierPool(), problem: "COURIER_ON_LINE" };
+    }
+    courier.retired = true;
+    return { courierPool: courierPool(), problem: null };
+  }
+
   return {
     received,
     kitchen,
+    hireCook,
+    setCookOnLine,
+    retireCook,
+    courierPool,
+    addCourier,
+    setCourierOnLine,
+    retireCourier,
     applyKitchenAction,
     courier,
     setAvailability,

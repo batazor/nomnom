@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
@@ -35,6 +36,7 @@ type ordersServer struct {
 	order  *ordersv1.Order
 	err    error
 	seenMD metadata.MD
+	market string
 }
 
 func (s *ordersServer) GetOrder(ctx context.Context, _ *ordersv1.GetOrderRequest) (*ordersv1.GetOrderResponse, error) {
@@ -55,6 +57,7 @@ func (s *ordersServer) RequestOrderCancellation(ctx context.Context, _ *ordersv1
 
 func (s *ordersServer) ListCustomerOrders(ctx context.Context, request *ordersv1.ListCustomerOrdersRequest) (*ordersv1.ListCustomerOrdersResponse, error) {
 	s.seenMD, _ = metadata.FromIncomingContext(ctx)
+	s.market = request.GetMarketId()
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -94,7 +97,7 @@ func (s *restaurantsServer) GetRestaurant(ctx context.Context, request *restaura
 func credentials(t *testing.T) identity.OutgoingCredentials {
 	t.Helper()
 	dir := t.TempDir()
-	for _, audience := range []string{"nomnom.orders", "nomnom.restaurants"} {
+	for _, audience := range []string{"nomnom.orders", "nomnom.restaurants", "nomnom.delivery"} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, audience), []byte("token-"+audience), 0o600))
 	}
 	signer, err := identity.NewAssertionSigner(filepath.Join(fixtures, "bff-signing-key.pem"), "nomnom-bff-test-key")
@@ -120,8 +123,10 @@ func connect(t *testing.T, audience string, register func(*grpc.Server)) *grpc.C
 	return conn
 }
 
+// customerContext is a request of customer-1 in Market berlin.
 func customerContext() context.Context {
-	return identity.WithUser(context.Background(), identity.User{ID: "customer-1"})
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(cellrouter.MarketMetadata, "berlin"))
+	return identity.WithUser(ctx, identity.User{ID: "customer-1"})
 }
 
 func refusal(reason string) error {
@@ -217,6 +222,7 @@ func TestOrdersListCustomerOrdersCarriesCustomerAndCursors(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Entries, 2)
 	assert.Equal(t, "customer-1/cursor-3/2", page.NextCursor)
+	assert.Equal(t, "berlin", server.market, "the history is of the request Market")
 	assert.Equal(t, "cursor-2", page.Entries[0].Cursor)
 	assert.Equal(t, "order-2", page.Entries[0].Order.ID)
 	assert.Equal(t, []applications.OrderLine{{

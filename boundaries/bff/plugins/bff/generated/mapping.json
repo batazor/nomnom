@@ -11,6 +11,13 @@
     },
     {
       "type": "OPERATION_TYPE_QUERY",
+      "original": "markets",
+      "mapped": "QueryMarkets",
+      "request": "QueryMarketsRequest",
+      "response": "QueryMarketsResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_QUERY",
       "original": "restaurants",
       "mapped": "QueryRestaurants",
       "request": "QueryRestaurantsRequest",
@@ -60,6 +67,13 @@
     },
     {
       "type": "OPERATION_TYPE_QUERY",
+      "original": "courierPool",
+      "mapped": "QueryCourierPool",
+      "request": "QueryCourierPoolRequest",
+      "response": "QueryCourierPoolResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_QUERY",
       "original": "simulator",
       "mapped": "QuerySimulator",
       "request": "QuerySimulatorRequest",
@@ -102,6 +116,27 @@
     },
     {
       "type": "OPERATION_TYPE_MUTATION",
+      "original": "hireCook",
+      "mapped": "MutationHireCook",
+      "request": "MutationHireCookRequest",
+      "response": "MutationHireCookResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "setCookOnLine",
+      "mapped": "MutationSetCookOnLine",
+      "request": "MutationSetCookOnLineRequest",
+      "response": "MutationSetCookOnLineResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "retireCook",
+      "mapped": "MutationRetireCook",
+      "request": "MutationRetireCookRequest",
+      "response": "MutationRetireCookResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
       "original": "setCourierAvailability",
       "mapped": "MutationSetCourierAvailability",
       "request": "MutationSetCourierAvailabilityRequest",
@@ -120,6 +155,27 @@
       "mapped": "MutationApplyCourierDeliveryAction",
       "request": "MutationApplyCourierDeliveryActionRequest",
       "response": "MutationApplyCourierDeliveryActionResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "addCourier",
+      "mapped": "MutationAddCourier",
+      "request": "MutationAddCourierRequest",
+      "response": "MutationAddCourierResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "setCourierOnLine",
+      "mapped": "MutationSetCourierOnLine",
+      "request": "MutationSetCourierOnLineRequest",
+      "response": "MutationSetCourierOnLineResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "retireCourier",
+      "mapped": "MutationRetireCourier",
+      "request": "MutationRetireCourierRequest",
+      "response": "MutationRetireCourierResponse"
     },
     {
       "type": "OPERATION_TYPE_MUTATION",
@@ -153,6 +209,14 @@
       "rpc": "LookupCourierById",
       "request": "LookupCourierByIdRequest",
       "response": "LookupCourierByIdResponse"
+    },
+    {
+      "typeName": "CourierPool",
+      "kind": "entity",
+      "key": "id",
+      "rpc": "LookupCourierPoolById",
+      "request": "LookupCourierPoolByIdRequest",
+      "response": "LookupCourierPoolByIdResponse"
     }
   ],
   "typeFieldMappings": [
@@ -162,6 +226,10 @@
         {
           "original": "bffInfo",
           "mapped": "bff_info"
+        },
+        {
+          "original": "markets",
+          "mapped": "markets"
         },
         {
           "original": "restaurants",
@@ -240,6 +308,10 @@
           "mapped": "courier"
         },
         {
+          "original": "courierPool",
+          "mapped": "courier_pool"
+        },
+        {
           "original": "simulator",
           "mapped": "simulator"
         }
@@ -299,6 +371,52 @@
           ]
         },
         {
+          "original": "hireCook",
+          "mapped": "hire_cook",
+          "argumentMappings": [
+            {
+              "original": "restaurantId",
+              "mapped": "restaurant_id"
+            },
+            {
+              "original": "name",
+              "mapped": "name"
+            }
+          ]
+        },
+        {
+          "original": "setCookOnLine",
+          "mapped": "set_cook_on_line",
+          "argumentMappings": [
+            {
+              "original": "restaurantId",
+              "mapped": "restaurant_id"
+            },
+            {
+              "original": "cookId",
+              "mapped": "cook_id"
+            },
+            {
+              "original": "onLine",
+              "mapped": "on_line"
+            }
+          ]
+        },
+        {
+          "original": "retireCook",
+          "mapped": "retire_cook",
+          "argumentMappings": [
+            {
+              "original": "restaurantId",
+              "mapped": "restaurant_id"
+            },
+            {
+              "original": "cookId",
+              "mapped": "cook_id"
+            }
+          ]
+        },
+        {
           "original": "setCourierAvailability",
           "mapped": "set_courier_availability",
           "argumentMappings": [
@@ -329,6 +447,40 @@
             {
               "original": "action",
               "mapped": "action"
+            }
+          ]
+        },
+        {
+          "original": "addCourier",
+          "mapped": "add_courier",
+          "argumentMappings": [
+            {
+              "original": "name",
+              "mapped": "name"
+            }
+          ]
+        },
+        {
+          "original": "setCourierOnLine",
+          "mapped": "set_courier_on_line",
+          "argumentMappings": [
+            {
+              "original": "courierId",
+              "mapped": "courier_id"
+            },
+            {
+              "original": "onLine",
+              "mapped": "on_line"
+            }
+          ]
+        },
+        {
+          "original": "retireCourier",
+          "mapped": "retire_courier",
+          "argumentMappings": [
+            {
+              "original": "courierId",
+              "mapped": "courier_id"
             }
           ]
         },
@@ -570,6 +722,19 @@
         {
           "original": "expectedDeliveredAt",
           "mapped": "expected_delivered_at"
+        },
+        {
+          "original": "courier",
+          "mapped": "courier"
+        }
+      ]
+    },
+    {
+      "type": "OrderCourier",
+      "fieldMappings": [
+        {
+          "original": "name",
+          "mapped": "name"
         }
       ]
     },
@@ -642,6 +807,69 @@
         {
           "original": "expectedReadyAt",
           "mapped": "expected_ready_at"
+        },
+        {
+          "original": "cook",
+          "mapped": "cook"
+        }
+      ]
+    },
+    {
+      "type": "Cook",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "onLine",
+          "mapped": "on_line"
+        },
+        {
+          "original": "currentKitchenOrderId",
+          "mapped": "current_kitchen_order_id"
+        }
+      ]
+    },
+    {
+      "type": "CookPool",
+      "fieldMappings": [
+        {
+          "original": "size",
+          "mapped": "size"
+        },
+        {
+          "original": "onLine",
+          "mapped": "on_line"
+        },
+        {
+          "original": "busy",
+          "mapped": "busy"
+        },
+        {
+          "original": "queued",
+          "mapped": "queued"
+        },
+        {
+          "original": "cooks",
+          "mapped": "cooks"
+        }
+      ]
+    },
+    {
+      "type": "CookPoolPayload",
+      "fieldMappings": [
+        {
+          "original": "cookPool",
+          "mapped": "cook_pool"
+        },
+        {
+          "original": "problem",
+          "mapped": "problem"
         }
       ]
     },
@@ -659,6 +887,10 @@
         {
           "original": "orders",
           "mapped": "orders"
+        },
+        {
+          "original": "cookPool",
+          "mapped": "cook_pool"
         }
       ]
     },
@@ -761,6 +993,90 @@
         {
           "original": "problem",
           "mapped": "problem"
+        }
+      ]
+    },
+    {
+      "type": "PoolCourier",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "availability",
+          "mapped": "availability"
+        },
+        {
+          "original": "offeredOrderId",
+          "mapped": "offered_order_id"
+        },
+        {
+          "original": "currentOrderId",
+          "mapped": "current_order_id"
+        }
+      ]
+    },
+    {
+      "type": "CourierPool",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "size",
+          "mapped": "size"
+        },
+        {
+          "original": "onLine",
+          "mapped": "on_line"
+        },
+        {
+          "original": "busy",
+          "mapped": "busy"
+        },
+        {
+          "original": "waiting",
+          "mapped": "waiting"
+        },
+        {
+          "original": "couriers",
+          "mapped": "couriers"
+        }
+      ]
+    },
+    {
+      "type": "CourierPoolPayload",
+      "fieldMappings": [
+        {
+          "original": "courierPool",
+          "mapped": "courier_pool"
+        },
+        {
+          "original": "problem",
+          "mapped": "problem"
+        }
+      ]
+    },
+    {
+      "type": "Market",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "currency",
+          "mapped": "currency"
         }
       ]
     },
@@ -1004,6 +1320,27 @@
       ]
     },
     {
+      "type": "CookPoolProblemCode",
+      "values": [
+        {
+          "original": "COOK_NAME_INVALID",
+          "mapped": "COOK_POOL_PROBLEM_CODE_COOK_NAME_INVALID"
+        },
+        {
+          "original": "COOK_BUSY",
+          "mapped": "COOK_POOL_PROBLEM_CODE_COOK_BUSY"
+        },
+        {
+          "original": "COOK_ON_LINE",
+          "mapped": "COOK_POOL_PROBLEM_CODE_COOK_ON_LINE"
+        },
+        {
+          "original": "COOK_RETIRED",
+          "mapped": "COOK_POOL_PROBLEM_CODE_COOK_RETIRED"
+        }
+      ]
+    },
+    {
       "type": "KitchenAction",
       "values": [
         {
@@ -1034,6 +1371,10 @@
         {
           "original": "ORDER_STAGE_CONFLICT",
           "mapped": "KITCHEN_ACTION_PROBLEM_CODE_ORDER_STAGE_CONFLICT"
+        },
+        {
+          "original": "NO_COOK_AVAILABLE",
+          "mapped": "KITCHEN_ACTION_PROBLEM_CODE_NO_COOK_AVAILABLE"
         }
       ]
     },
@@ -1090,6 +1431,23 @@
         {
           "original": "DELIVERY_STAGE_CONFLICT",
           "mapped": "COURIER_PROBLEM_CODE_DELIVERY_STAGE_CONFLICT"
+        }
+      ]
+    },
+    {
+      "type": "CourierPoolProblemCode",
+      "values": [
+        {
+          "original": "COURIER_NAME_INVALID",
+          "mapped": "COURIER_POOL_PROBLEM_CODE_COURIER_NAME_INVALID"
+        },
+        {
+          "original": "COURIER_STATUS_CONFLICT",
+          "mapped": "COURIER_POOL_PROBLEM_CODE_COURIER_STATUS_CONFLICT"
+        },
+        {
+          "original": "COURIER_ON_LINE",
+          "mapped": "COURIER_POOL_PROBLEM_CODE_COURIER_ON_LINE"
         }
       ]
     },

@@ -73,6 +73,8 @@ type ActiveOrder struct {
 	// ExpectedReadyAt is nil before Acceptance; it includes the reported
 	// preparation delays.
 	ExpectedReadyAt *time.Time
+	// CookID is the cook assigned at the start of preparation; empty before.
+	CookID string
 }
 
 // KitchenBoard reads the kitchen board of restaurants on behalf of the user
@@ -85,11 +87,13 @@ type KitchenBoard interface {
 	// QueueOrder returns the ids of the QUEUED orders in the recommended
 	// order of the Kitchen Queue.
 	QueueOrder(ctx context.Context, restaurantID string) ([]string, error)
+	CookPoolReader
 }
 
 // KitchenCommands runs the kitchen commands of restaurants on behalf of the
 // user in the context. Apply returns ErrOrderNotFound, ErrNotPermitted,
-// ErrInvalidCommand or ErrStageConflict for the refusals of restaurants.
+// ErrInvalidCommand or ErrStageConflict for the refusals of restaurants, and
+// ErrNoCookAvailable when no cook on line is free to start preparing.
 type KitchenCommands interface {
 	Apply(ctx context.Context, restaurantID, kitchenOrderID string, action Action) error
 }
@@ -120,20 +124,24 @@ type OrderView struct {
 	// before Acceptance.
 	AcceptedAt      *time.Time
 	ExpectedReadyAt *time.Time
+	// Cook is nil before the start of preparation and for a cook who left
+	// the pool.
+	Cook *Cook
 }
 
 // KitchenView is the kitchen screen of one restaurant.
 type KitchenView struct {
 	Restaurant Restaurant
 	Orders     []OrderView
+	CookPool   CookPool
 }
 
-func orderView(order ActiveOrder, names map[string]string) OrderView {
+func orderView(order ActiveOrder, names map[string]string, cooks map[string]Cook) OrderView {
 	items := make([]ItemView, 0, len(order.Lines))
 	for _, line := range order.Lines {
 		items = append(items, ItemView{Name: names[line.MenuItemID], Quantity: line.Quantity})
 	}
-	return OrderView{
+	view := OrderView{
 		ID:              order.ID,
 		OrderID:         order.OrderID,
 		Stage:           order.Stage,
@@ -142,4 +150,8 @@ func orderView(order ActiveOrder, names map[string]string) OrderView {
 		AcceptedAt:      order.AcceptedAt,
 		ExpectedReadyAt: order.ExpectedReadyAt,
 	}
+	if cook, ok := cooks[order.CookID]; ok {
+		view.Cook = &cook
+	}
+	return view
 }

@@ -16,7 +16,7 @@ use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::testcontainers::runners::SyncRunner;
 use testcontainers_modules::testcontainers::{Container, ImageExt};
 
-use crate::infrastructure::locator::CourierPositions;
+use crate::infrastructure::locator::{CourierPositions, LocatedCourier};
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::application::{UnitOfWork, UnitOfWorkError};
 use crate::pkg::config::database;
@@ -24,7 +24,7 @@ use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::applications::update_courier_location::{
     CourierLocationStore, CourierPosition,
 };
-use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository};
+use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository, MarketId};
 use crate::slices::delivery::applications::dispatch_deliveries::{
     DeliveryPosition, WaitingDeliveries,
 };
@@ -34,6 +34,9 @@ use crate::slices::delivery::applications::get_courier_current_delivery::{
 };
 use crate::slices::delivery::applications::get_courier_pool::{
     CourierPoolReadModel, PoolCourierView,
+};
+use crate::slices::delivery::applications::get_order_courier::{
+    OrderCourierReadModel, OrderCourierView,
 };
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
@@ -346,13 +349,24 @@ impl PendingDeliveryOffersReadModel for TestStore {
 impl CourierPoolReadModel for TestStore {
     fn pool_couriers(
         &self,
+        market_id: &MarketId,
         now_epoch_seconds: i64,
     ) -> Result<Vec<PoolCourierView>, RepositoryError> {
-        self.available()?.pool_couriers(now_epoch_seconds)
+        self.available()?
+            .pool_couriers(market_id, now_epoch_seconds)
     }
 
-    fn waiting_deliveries(&self) -> Result<u64, RepositoryError> {
-        self.available()?.waiting_deliveries()
+    fn waiting_deliveries(&self, market_id: &MarketId) -> Result<u64, RepositoryError> {
+        self.available()?.waiting_deliveries(market_id)
+    }
+}
+
+impl OrderCourierReadModel for TestStore {
+    fn courier_of_order(
+        &self,
+        order_id: &OrderId,
+    ) -> Result<Option<OrderCourierView>, RepositoryError> {
+        self.available()?.courier_of_order(order_id)
     }
 }
 
@@ -368,8 +382,15 @@ impl WaitingDeliveries for TestStore {
 }
 
 impl CourierPositions for TestStore {
-    fn available_positions(&self) -> Result<Vec<CourierPosition>, RepositoryError> {
-        self.available()?.available_positions()
+    fn available_positions(
+        &self,
+        market_id: &MarketId,
+    ) -> Result<Vec<LocatedCourier>, RepositoryError> {
+        self.available()?.available_positions(market_id)
+    }
+
+    fn located(&self, courier_id: &CourierId) -> Result<Option<LocatedCourier>, RepositoryError> {
+        self.available()?.located(courier_id)
     }
 }
 

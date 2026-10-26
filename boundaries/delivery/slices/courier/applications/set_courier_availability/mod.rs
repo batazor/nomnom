@@ -2,12 +2,12 @@
 //! (FR-620) marks the courier available or unavailable for new assignments.
 //! The last known location is not touched; a retired courier stays off line.
 
-use crate::pkg::application::{AuthorizationError, Subject};
+use crate::pkg::application::Subject;
 use crate::slices::courier::domains::courier::{
     CourierError, CourierId, CourierRepository, CourierStatus,
 };
 
-use super::authorization::{CourierAuthorization, CourierPermission, CourierResource};
+use super::authorization::{CourierAuthorization, CourierPermission, check_courier_or_dispatcher};
 use super::courier_id;
 use super::error::CourierApplicationError;
 
@@ -43,20 +43,12 @@ impl Handler<'_> {
         input: Input,
     ) -> Result<Output, CourierApplicationError> {
         let courier_id = courier_id(&input.courier_id)?;
-        // The courier itself (`courier#act`), otherwise a dispatcher.
-        match self.authorization.check(
+        check_courier_or_dispatcher(
+            self.authorization,
             subject,
             CourierPermission::SetCourierAvailability,
-            &CourierResource::Courier(courier_id.clone()),
-        ) {
-            Ok(()) => {}
-            Err(AuthorizationError::Denied) => self.authorization.check(
-                subject,
-                CourierPermission::ManageCouriers,
-                &CourierResource::Platform,
-            )?,
-            Err(error) => return Err(error.into()),
-        }
+            &courier_id,
+        )?;
 
         let mut courier = self
             .couriers
@@ -87,9 +79,11 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::infrastructure::repository::test_support::TestStore;
+    use crate::slices::courier::applications::authorization::CourierResource;
     use crate::slices::courier::applications::update_courier_location::{
         CourierLocationStore, CourierPosition,
     };
+    use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::courier::domains::courier::{Courier, CourierName, Location};
 
     fn courier_subject() -> Subject {
@@ -102,6 +96,7 @@ mod tests {
             .add(&Courier::restore(
                 CourierId::new("courier-1"),
                 CourierName::new("Timur").expect("courier name"),
+                MarketId::new("berlin").expect("market id"),
                 status,
             ))
             .expect("seed courier");
@@ -286,6 +281,7 @@ mod tests {
                 &Courier::restore(
                     CourierId::new("courier-1"),
                     CourierName::new("Timur").expect("courier name"),
+                    MarketId::new("berlin").expect("market id"),
                     CourierStatus::Unavailable,
                 )
                 .with_retired_at(Some(10)),

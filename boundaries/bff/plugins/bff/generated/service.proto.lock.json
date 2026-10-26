@@ -4,6 +4,7 @@
     "Query": {
       "fields": {
         "bffInfo": 2,
+        "markets": 12,
         "restaurants": 3,
         "restaurant": 4,
         "order": 5,
@@ -11,6 +12,7 @@
         "myRestaurants": 7,
         "kitchen": 8,
         "courier": 9,
+        "courierPool": 11,
         "simulator": 10
       },
       "reservedNumbers": [
@@ -123,9 +125,15 @@
         "openRestaurant": 3,
         "closeRestaurant": 4,
         "applyKitchenAction": 5,
+        "hireCook": 10,
+        "setCookOnLine": 11,
+        "retireCook": 12,
         "setCourierAvailability": 6,
         "acceptDeliveryOffer": 7,
         "applyCourierDeliveryAction": 8,
+        "addCourier": 13,
+        "setCourierOnLine": 14,
+        "retireCourier": 15,
         "setSimulatorEnabled": 9
       }
     },
@@ -189,7 +197,8 @@
         "cancellation": 10,
         "expectedReadyAt": 11,
         "expectedPickupAt": 12,
-        "expectedDeliveredAt": 13
+        "expectedDeliveredAt": 13,
+        "courier": 14
       },
       "reservedNumbers": [
         7
@@ -452,7 +461,8 @@
       "fields": {
         "restaurantId": 3,
         "restaurant": 1,
-        "orders": 2
+        "orders": 2,
+        "cookPool": 4
       }
     },
     "Courier": {
@@ -496,7 +506,8 @@
         "items": 4,
         "receivedAt": 5,
         "acceptedAt": 6,
-        "expectedReadyAt": 7
+        "expectedReadyAt": 7,
+        "cook": 8
       }
     },
     "DeliveryOffer": {
@@ -594,6 +605,197 @@
       "fields": {
         "enabled": 1
       }
+    },
+    "LookupCourierPoolByIdRequestKey": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "LookupCourierPoolByIdRequest": {
+      "fields": {
+        "keys": 1
+      }
+    },
+    "LookupCourierPoolByIdResponse": {
+      "fields": {
+        "result": 1
+      }
+    },
+    "QueryCourierPoolRequest": {
+      "fields": {}
+    },
+    "QueryCourierPoolResponse": {
+      "fields": {
+        "courier_pool": 1
+      }
+    },
+    "MutationHireCookRequest": {
+      "fields": {
+        "restaurant_id": 1,
+        "name": 2
+      }
+    },
+    "MutationHireCook": {
+      "fields": {
+        "restaurantId": 1,
+        "name": 2
+      }
+    },
+    "MutationHireCookResponse": {
+      "fields": {
+        "hire_cook": 1
+      }
+    },
+    "MutationSetCookOnLineRequest": {
+      "fields": {
+        "restaurant_id": 1,
+        "cook_id": 2,
+        "on_line": 3
+      }
+    },
+    "MutationSetCookOnLine": {
+      "fields": {
+        "restaurantId": 1,
+        "cookId": 2,
+        "onLine": 3
+      }
+    },
+    "MutationSetCookOnLineResponse": {
+      "fields": {
+        "set_cook_on_line": 1
+      }
+    },
+    "MutationRetireCookRequest": {
+      "fields": {
+        "restaurant_id": 1,
+        "cook_id": 2
+      }
+    },
+    "MutationRetireCook": {
+      "fields": {
+        "restaurantId": 1,
+        "cookId": 2
+      }
+    },
+    "MutationRetireCookResponse": {
+      "fields": {
+        "retire_cook": 1
+      }
+    },
+    "MutationAddCourierRequest": {
+      "fields": {
+        "name": 1
+      }
+    },
+    "MutationAddCourier": {
+      "fields": {
+        "name": 1
+      }
+    },
+    "MutationAddCourierResponse": {
+      "fields": {
+        "add_courier": 1
+      }
+    },
+    "MutationSetCourierOnLineRequest": {
+      "fields": {
+        "courier_id": 1,
+        "on_line": 2
+      }
+    },
+    "MutationSetCourierOnLine": {
+      "fields": {
+        "courierId": 1,
+        "onLine": 2
+      }
+    },
+    "MutationSetCourierOnLineResponse": {
+      "fields": {
+        "set_courier_on_line": 1
+      }
+    },
+    "MutationRetireCourierRequest": {
+      "fields": {
+        "courier_id": 1
+      }
+    },
+    "MutationRetireCourier": {
+      "fields": {
+        "courierId": 1
+      }
+    },
+    "MutationRetireCourierResponse": {
+      "fields": {
+        "retire_courier": 1
+      }
+    },
+    "CourierPool": {
+      "fields": {
+        "id": 1,
+        "size": 2,
+        "onLine": 3,
+        "busy": 4,
+        "waiting": 5,
+        "couriers": 6
+      }
+    },
+    "CookPoolPayload": {
+      "fields": {
+        "cookPool": 1,
+        "problem": 2
+      }
+    },
+    "CourierPoolPayload": {
+      "fields": {
+        "courierPool": 1,
+        "problem": 2
+      }
+    },
+    "Cook": {
+      "fields": {
+        "id": 1,
+        "name": 2,
+        "onLine": 3,
+        "currentKitchenOrderId": 4
+      }
+    },
+    "CookPool": {
+      "fields": {
+        "size": 1,
+        "onLine": 2,
+        "busy": 3,
+        "queued": 4,
+        "cooks": 5
+      }
+    },
+    "PoolCourier": {
+      "fields": {
+        "id": 1,
+        "name": 2,
+        "availability": 3,
+        "offeredOrderId": 4,
+        "currentOrderId": 5
+      }
+    },
+    "QueryMarketsRequest": {
+      "fields": {}
+    },
+    "QueryMarketsResponse": {
+      "fields": {
+        "markets": 1
+      }
+    },
+    "Market": {
+      "fields": {
+        "id": 1,
+        "name": 2,
+        "currency": 3
+      }
+    },
+    "OrderCourier": {
+      "fields": {
+        "name": 1
+      }
     }
   },
   "enums": {
@@ -670,7 +872,8 @@
     },
     "KitchenActionProblemCode": {
       "fields": {
-        "ORDER_STAGE_CONFLICT": 1
+        "ORDER_STAGE_CONFLICT": 1,
+        "NO_COOK_AVAILABLE": 2
       }
     },
     "CourierAvailability": {
@@ -696,6 +899,21 @@
       "fields": {
         "OFFER_NOT_AVAILABLE": 1,
         "DELIVERY_STAGE_CONFLICT": 2
+      }
+    },
+    "CookPoolProblemCode": {
+      "fields": {
+        "COOK_NAME_INVALID": 1,
+        "COOK_BUSY": 2,
+        "COOK_ON_LINE": 3,
+        "COOK_RETIRED": 4
+      }
+    },
+    "CourierPoolProblemCode": {
+      "fields": {
+        "COURIER_NAME_INVALID": 1,
+        "COURIER_STATUS_CONFLICT": 2,
+        "COURIER_ON_LINE": 3
       }
     }
   }

@@ -12,6 +12,7 @@ pub mod expire_delivery_offers;
 pub mod find_courier;
 pub mod get_courier_current_delivery;
 pub mod get_courier_pool;
+pub mod get_order_courier;
 pub mod list_available_delivery_offers;
 pub mod offer_delivery;
 pub mod offers_of_delivery;
@@ -27,7 +28,7 @@ pub mod report_delivery_failure;
 mod test_support;
 
 use crate::pkg::application::{Clock, required_identifier};
-use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::domains::courier::{CourierId, MarketId};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository, ExpectedTime, OrderId,
@@ -57,6 +58,14 @@ fn offer_id(value: &str) -> Result<DeliveryOfferId, DeliveryApplicationError> {
 
 fn order_id(value: &str) -> Result<OrderId, DeliveryApplicationError> {
     identifier(value, "order_id").map(OrderId::new)
+}
+
+/// Required `market_id` of a request (ADR 41): empty or not a slug is an
+/// invalid request.
+fn market_id(value: &str) -> Result<MarketId, DeliveryApplicationError> {
+    MarketId::new(value).map_err(|error| {
+        DeliveryApplicationError::InvalidRequest(InvalidDeliveryRequest::Market(error))
+    })
 }
 
 /// Expected time named by the courier in `field`: in the future by `clock`.

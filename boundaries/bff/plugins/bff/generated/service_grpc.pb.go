@@ -20,21 +20,30 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	BffService_LookupCourierById_FullMethodName                  = "/service.BffService/LookupCourierById"
+	BffService_LookupCourierPoolById_FullMethodName              = "/service.BffService/LookupCourierPoolById"
 	BffService_LookupKitchenByRestaurantId_FullMethodName        = "/service.BffService/LookupKitchenByRestaurantId"
 	BffService_LookupOrderById_FullMethodName                    = "/service.BffService/LookupOrderById"
 	BffService_MutationAcceptDeliveryOffer_FullMethodName        = "/service.BffService/MutationAcceptDeliveryOffer"
+	BffService_MutationAddCourier_FullMethodName                 = "/service.BffService/MutationAddCourier"
 	BffService_MutationApplyCourierDeliveryAction_FullMethodName = "/service.BffService/MutationApplyCourierDeliveryAction"
 	BffService_MutationApplyKitchenAction_FullMethodName         = "/service.BffService/MutationApplyKitchenAction"
 	BffService_MutationCloseRestaurant_FullMethodName            = "/service.BffService/MutationCloseRestaurant"
+	BffService_MutationHireCook_FullMethodName                   = "/service.BffService/MutationHireCook"
 	BffService_MutationOpenRestaurant_FullMethodName             = "/service.BffService/MutationOpenRestaurant"
 	BffService_MutationPlaceOrder_FullMethodName                 = "/service.BffService/MutationPlaceOrder"
 	BffService_MutationRequestOrderCancellation_FullMethodName   = "/service.BffService/MutationRequestOrderCancellation"
+	BffService_MutationRetireCook_FullMethodName                 = "/service.BffService/MutationRetireCook"
+	BffService_MutationRetireCourier_FullMethodName              = "/service.BffService/MutationRetireCourier"
+	BffService_MutationSetCookOnLine_FullMethodName              = "/service.BffService/MutationSetCookOnLine"
 	BffService_MutationSetCourierAvailability_FullMethodName     = "/service.BffService/MutationSetCourierAvailability"
+	BffService_MutationSetCourierOnLine_FullMethodName           = "/service.BffService/MutationSetCourierOnLine"
 	BffService_MutationSetSimulatorEnabled_FullMethodName        = "/service.BffService/MutationSetSimulatorEnabled"
 	BffService_QueryBffInfo_FullMethodName                       = "/service.BffService/QueryBffInfo"
 	BffService_QueryCourier_FullMethodName                       = "/service.BffService/QueryCourier"
+	BffService_QueryCourierPool_FullMethodName                   = "/service.BffService/QueryCourierPool"
 	BffService_QueryCustomerOrders_FullMethodName                = "/service.BffService/QueryCustomerOrders"
 	BffService_QueryKitchen_FullMethodName                       = "/service.BffService/QueryKitchen"
+	BffService_QueryMarkets_FullMethodName                       = "/service.BffService/QueryMarkets"
 	BffService_QueryMyRestaurants_FullMethodName                 = "/service.BffService/QueryMyRestaurants"
 	BffService_QueryOrder_FullMethodName                         = "/service.BffService/QueryOrder"
 	BffService_QueryRestaurant_FullMethodName                    = "/service.BffService/QueryRestaurant"
@@ -51,6 +60,9 @@ type BffServiceClient interface {
 	// Lookup Courier entity by id: Work of the current courier; the entity key lets the Router resolve
 	// courierChanged events (ADR 36)
 	LookupCourierById(ctx context.Context, in *LookupCourierByIdRequest, opts ...grpc.CallOption) (*LookupCourierByIdResponse, error)
+	// Lookup CourierPool entity by id: Couriers of the platform and the load of the line; the entity key lets the
+	// Router resolve courierPoolChanged events (ADR 36)
+	LookupCourierPoolById(ctx context.Context, in *LookupCourierPoolByIdRequest, opts ...grpc.CallOption) (*LookupCourierPoolByIdResponse, error)
 	// Lookup Kitchen entity by restaurantId: Active orders of one restaurant for its kitchen staff; the entity key lets the
 	// Router resolve kitchenChanged events (ADR 36)
 	LookupKitchenByRestaurantId(ctx context.Context, in *LookupKitchenByRestaurantIdRequest, opts ...grpc.CallOption) (*LookupKitchenByRestaurantIdResponse, error)
@@ -59,6 +71,9 @@ type BffServiceClient interface {
 	LookupOrderById(ctx context.Context, in *LookupOrderByIdRequest, opts ...grpc.CallOption) (*LookupOrderByIdResponse, error)
 	// Accept a delivery offer addressed to the current courier
 	MutationAcceptDeliveryOffer(ctx context.Context, in *MutationAcceptDeliveryOfferRequest, opts ...grpc.CallOption) (*MutationAcceptDeliveryOfferResponse, error)
+	// Add an available courier to the Courier Pool at the start point of new couriers; requires
+	// a dispatcher or the operator
+	MutationAddCourier(ctx context.Context, in *MutationAddCourierRequest, opts ...grpc.CallOption) (*MutationAddCourierResponse, error)
 	// Apply a command to the current delivery of the courier
 	MutationApplyCourierDeliveryAction(ctx context.Context, in *MutationApplyCourierDeliveryActionRequest, opts ...grpc.CallOption) (*MutationApplyCourierDeliveryActionResponse, error)
 	// Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
@@ -66,25 +81,41 @@ type BffServiceClient interface {
 	MutationApplyKitchenAction(ctx context.Context, in *MutationApplyKitchenActionRequest, opts ...grpc.CallOption) (*MutationApplyKitchenActionResponse, error)
 	// Close a restaurant of the current user for new orders; repeating it changes nothing
 	MutationCloseRestaurant(ctx context.Context, in *MutationCloseRestaurantRequest, opts ...grpc.CallOption) (*MutationCloseRestaurantResponse, error)
+	// Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
+	MutationHireCook(ctx context.Context, in *MutationHireCookRequest, opts ...grpc.CallOption) (*MutationHireCookResponse, error)
 	// Open a restaurant of the current user for new orders; repeating it changes nothing
 	MutationOpenRestaurant(ctx context.Context, in *MutationOpenRestaurantRequest, opts ...grpc.CallOption) (*MutationOpenRestaurantResponse, error)
 	// Place an order for the current customer
 	MutationPlaceOrder(ctx context.Context, in *MutationPlaceOrderRequest, opts ...grpc.CallOption) (*MutationPlaceOrderResponse, error)
 	// Request cancellation of an order of the current customer
 	MutationRequestOrderCancellation(ctx context.Context, in *MutationRequestOrderCancellationRequest, opts ...grpc.CallOption) (*MutationRequestOrderCancellationResponse, error)
+	// Take a cook off line out of the Cook Pool for good
+	MutationRetireCook(ctx context.Context, in *MutationRetireCookRequest, opts ...grpc.CallOption) (*MutationRetireCookResponse, error)
+	// Take a courier off line out of the Courier Pool for good
+	MutationRetireCourier(ctx context.Context, in *MutationRetireCourierRequest, opts ...grpc.CallOption) (*MutationRetireCourierResponse, error)
+	// Put a cook on line or take them off line; repeating it changes nothing
+	MutationSetCookOnLine(ctx context.Context, in *MutationSetCookOnLineRequest, opts ...grpc.CallOption) (*MutationSetCookOnLineResponse, error)
 	// Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
 	MutationSetCourierAvailability(ctx context.Context, in *MutationSetCourierAvailabilityRequest, opts ...grpc.CallOption) (*MutationSetCourierAvailabilityResponse, error)
+	// Put a courier on line or take them off line; repeating it changes nothing
+	MutationSetCourierOnLine(ctx context.Context, in *MutationSetCourierOnLineRequest, opts ...grpc.CallOption) (*MutationSetCourierOnLineResponse, error)
 	// Switch the demo Simulator in orders, restaurants and delivery; requires the operator
 	MutationSetSimulatorEnabled(ctx context.Context, in *MutationSetSimulatorEnabledRequest, opts ...grpc.CallOption) (*MutationSetSimulatorEnabledResponse, error)
 	// Metadata for the client BFF
 	QueryBffInfo(ctx context.Context, in *QueryBffInfoRequest, opts ...grpc.CallOption) (*QueryBffInfoResponse, error)
 	// Work of the current user as a courier, null if the user is not a registered courier
 	QueryCourier(ctx context.Context, in *QueryCourierRequest, opts ...grpc.CallOption) (*QueryCourierResponse, error)
+	// Couriers of the platform and the load of the line; requires a dispatcher or the operator
+	// (platform#manage_couriers), otherwise a PERMISSION_DENIED error
+	QueryCourierPool(ctx context.Context, in *QueryCourierPoolRequest, opts ...grpc.CallOption) (*QueryCourierPoolResponse, error)
 	// Orders of the current customer, newest first
 	QueryCustomerOrders(ctx context.Context, in *QueryCustomerOrdersRequest, opts ...grpc.CallOption) (*QueryCustomerOrdersResponse, error)
 	// Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
 	// restaurant, null if the restaurant does not exist or the user may not operate its kitchen
 	QueryKitchen(ctx context.Context, in *QueryKitchenRequest, opts ...grpc.CallOption) (*QueryKitchenResponse, error)
+	// Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
+	// other operation requires the header with one of their ids
+	QueryMarkets(ctx context.Context, in *QueryMarketsRequest, opts ...grpc.CallOption) (*QueryMarketsResponse, error)
 	// Restaurants the current user owns, open and closed, ordered by identifier; menu is null
 	QueryMyRestaurants(ctx context.Context, in *QueryMyRestaurantsRequest, opts ...grpc.CallOption) (*QueryMyRestaurantsResponse, error)
 	// Order of the current customer, null if it does not exist or belongs to someone else
@@ -110,6 +141,16 @@ func (c *bffServiceClient) LookupCourierById(ctx context.Context, in *LookupCour
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LookupCourierByIdResponse)
 	err := c.cc.Invoke(ctx, BffService_LookupCourierById_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bffServiceClient) LookupCourierPoolById(ctx context.Context, in *LookupCourierPoolByIdRequest, opts ...grpc.CallOption) (*LookupCourierPoolByIdResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LookupCourierPoolByIdResponse)
+	err := c.cc.Invoke(ctx, BffService_LookupCourierPoolById_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +187,16 @@ func (c *bffServiceClient) MutationAcceptDeliveryOffer(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *bffServiceClient) MutationAddCourier(ctx context.Context, in *MutationAddCourierRequest, opts ...grpc.CallOption) (*MutationAddCourierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationAddCourierResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationAddCourier_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bffServiceClient) MutationApplyCourierDeliveryAction(ctx context.Context, in *MutationApplyCourierDeliveryActionRequest, opts ...grpc.CallOption) (*MutationApplyCourierDeliveryActionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MutationApplyCourierDeliveryActionResponse)
@@ -170,6 +221,16 @@ func (c *bffServiceClient) MutationCloseRestaurant(ctx context.Context, in *Muta
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MutationCloseRestaurantResponse)
 	err := c.cc.Invoke(ctx, BffService_MutationCloseRestaurant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bffServiceClient) MutationHireCook(ctx context.Context, in *MutationHireCookRequest, opts ...grpc.CallOption) (*MutationHireCookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationHireCookResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationHireCook_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -206,10 +267,50 @@ func (c *bffServiceClient) MutationRequestOrderCancellation(ctx context.Context,
 	return out, nil
 }
 
+func (c *bffServiceClient) MutationRetireCook(ctx context.Context, in *MutationRetireCookRequest, opts ...grpc.CallOption) (*MutationRetireCookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationRetireCookResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationRetireCook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bffServiceClient) MutationRetireCourier(ctx context.Context, in *MutationRetireCourierRequest, opts ...grpc.CallOption) (*MutationRetireCourierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationRetireCourierResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationRetireCourier_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bffServiceClient) MutationSetCookOnLine(ctx context.Context, in *MutationSetCookOnLineRequest, opts ...grpc.CallOption) (*MutationSetCookOnLineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationSetCookOnLineResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationSetCookOnLine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bffServiceClient) MutationSetCourierAvailability(ctx context.Context, in *MutationSetCourierAvailabilityRequest, opts ...grpc.CallOption) (*MutationSetCourierAvailabilityResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MutationSetCourierAvailabilityResponse)
 	err := c.cc.Invoke(ctx, BffService_MutationSetCourierAvailability_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bffServiceClient) MutationSetCourierOnLine(ctx context.Context, in *MutationSetCourierOnLineRequest, opts ...grpc.CallOption) (*MutationSetCourierOnLineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationSetCourierOnLineResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationSetCourierOnLine_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -246,6 +347,16 @@ func (c *bffServiceClient) QueryCourier(ctx context.Context, in *QueryCourierReq
 	return out, nil
 }
 
+func (c *bffServiceClient) QueryCourierPool(ctx context.Context, in *QueryCourierPoolRequest, opts ...grpc.CallOption) (*QueryCourierPoolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryCourierPoolResponse)
+	err := c.cc.Invoke(ctx, BffService_QueryCourierPool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bffServiceClient) QueryCustomerOrders(ctx context.Context, in *QueryCustomerOrdersRequest, opts ...grpc.CallOption) (*QueryCustomerOrdersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryCustomerOrdersResponse)
@@ -260,6 +371,16 @@ func (c *bffServiceClient) QueryKitchen(ctx context.Context, in *QueryKitchenReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryKitchenResponse)
 	err := c.cc.Invoke(ctx, BffService_QueryKitchen_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bffServiceClient) QueryMarkets(ctx context.Context, in *QueryMarketsRequest, opts ...grpc.CallOption) (*QueryMarketsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryMarketsResponse)
+	err := c.cc.Invoke(ctx, BffService_QueryMarkets_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -325,6 +446,9 @@ type BffServiceServer interface {
 	// Lookup Courier entity by id: Work of the current courier; the entity key lets the Router resolve
 	// courierChanged events (ADR 36)
 	LookupCourierById(context.Context, *LookupCourierByIdRequest) (*LookupCourierByIdResponse, error)
+	// Lookup CourierPool entity by id: Couriers of the platform and the load of the line; the entity key lets the
+	// Router resolve courierPoolChanged events (ADR 36)
+	LookupCourierPoolById(context.Context, *LookupCourierPoolByIdRequest) (*LookupCourierPoolByIdResponse, error)
 	// Lookup Kitchen entity by restaurantId: Active orders of one restaurant for its kitchen staff; the entity key lets the
 	// Router resolve kitchenChanged events (ADR 36)
 	LookupKitchenByRestaurantId(context.Context, *LookupKitchenByRestaurantIdRequest) (*LookupKitchenByRestaurantIdResponse, error)
@@ -333,6 +457,9 @@ type BffServiceServer interface {
 	LookupOrderById(context.Context, *LookupOrderByIdRequest) (*LookupOrderByIdResponse, error)
 	// Accept a delivery offer addressed to the current courier
 	MutationAcceptDeliveryOffer(context.Context, *MutationAcceptDeliveryOfferRequest) (*MutationAcceptDeliveryOfferResponse, error)
+	// Add an available courier to the Courier Pool at the start point of new couriers; requires
+	// a dispatcher or the operator
+	MutationAddCourier(context.Context, *MutationAddCourierRequest) (*MutationAddCourierResponse, error)
 	// Apply a command to the current delivery of the courier
 	MutationApplyCourierDeliveryAction(context.Context, *MutationApplyCourierDeliveryActionRequest) (*MutationApplyCourierDeliveryActionResponse, error)
 	// Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
@@ -340,25 +467,41 @@ type BffServiceServer interface {
 	MutationApplyKitchenAction(context.Context, *MutationApplyKitchenActionRequest) (*MutationApplyKitchenActionResponse, error)
 	// Close a restaurant of the current user for new orders; repeating it changes nothing
 	MutationCloseRestaurant(context.Context, *MutationCloseRestaurantRequest) (*MutationCloseRestaurantResponse, error)
+	// Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
+	MutationHireCook(context.Context, *MutationHireCookRequest) (*MutationHireCookResponse, error)
 	// Open a restaurant of the current user for new orders; repeating it changes nothing
 	MutationOpenRestaurant(context.Context, *MutationOpenRestaurantRequest) (*MutationOpenRestaurantResponse, error)
 	// Place an order for the current customer
 	MutationPlaceOrder(context.Context, *MutationPlaceOrderRequest) (*MutationPlaceOrderResponse, error)
 	// Request cancellation of an order of the current customer
 	MutationRequestOrderCancellation(context.Context, *MutationRequestOrderCancellationRequest) (*MutationRequestOrderCancellationResponse, error)
+	// Take a cook off line out of the Cook Pool for good
+	MutationRetireCook(context.Context, *MutationRetireCookRequest) (*MutationRetireCookResponse, error)
+	// Take a courier off line out of the Courier Pool for good
+	MutationRetireCourier(context.Context, *MutationRetireCourierRequest) (*MutationRetireCourierResponse, error)
+	// Put a cook on line or take them off line; repeating it changes nothing
+	MutationSetCookOnLine(context.Context, *MutationSetCookOnLineRequest) (*MutationSetCookOnLineResponse, error)
 	// Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
 	MutationSetCourierAvailability(context.Context, *MutationSetCourierAvailabilityRequest) (*MutationSetCourierAvailabilityResponse, error)
+	// Put a courier on line or take them off line; repeating it changes nothing
+	MutationSetCourierOnLine(context.Context, *MutationSetCourierOnLineRequest) (*MutationSetCourierOnLineResponse, error)
 	// Switch the demo Simulator in orders, restaurants and delivery; requires the operator
 	MutationSetSimulatorEnabled(context.Context, *MutationSetSimulatorEnabledRequest) (*MutationSetSimulatorEnabledResponse, error)
 	// Metadata for the client BFF
 	QueryBffInfo(context.Context, *QueryBffInfoRequest) (*QueryBffInfoResponse, error)
 	// Work of the current user as a courier, null if the user is not a registered courier
 	QueryCourier(context.Context, *QueryCourierRequest) (*QueryCourierResponse, error)
+	// Couriers of the platform and the load of the line; requires a dispatcher or the operator
+	// (platform#manage_couriers), otherwise a PERMISSION_DENIED error
+	QueryCourierPool(context.Context, *QueryCourierPoolRequest) (*QueryCourierPoolResponse, error)
 	// Orders of the current customer, newest first
 	QueryCustomerOrders(context.Context, *QueryCustomerOrdersRequest) (*QueryCustomerOrdersResponse, error)
 	// Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
 	// restaurant, null if the restaurant does not exist or the user may not operate its kitchen
 	QueryKitchen(context.Context, *QueryKitchenRequest) (*QueryKitchenResponse, error)
+	// Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
+	// other operation requires the header with one of their ids
+	QueryMarkets(context.Context, *QueryMarketsRequest) (*QueryMarketsResponse, error)
 	// Restaurants the current user owns, open and closed, ordered by identifier; menu is null
 	QueryMyRestaurants(context.Context, *QueryMyRestaurantsRequest) (*QueryMyRestaurantsResponse, error)
 	// Order of the current customer, null if it does not exist or belongs to someone else
@@ -383,6 +526,9 @@ type UnimplementedBffServiceServer struct{}
 func (UnimplementedBffServiceServer) LookupCourierById(context.Context, *LookupCourierByIdRequest) (*LookupCourierByIdResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupCourierById not implemented")
 }
+func (UnimplementedBffServiceServer) LookupCourierPoolById(context.Context, *LookupCourierPoolByIdRequest) (*LookupCourierPoolByIdResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LookupCourierPoolById not implemented")
+}
 func (UnimplementedBffServiceServer) LookupKitchenByRestaurantId(context.Context, *LookupKitchenByRestaurantIdRequest) (*LookupKitchenByRestaurantIdResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupKitchenByRestaurantId not implemented")
 }
@@ -391,6 +537,9 @@ func (UnimplementedBffServiceServer) LookupOrderById(context.Context, *LookupOrd
 }
 func (UnimplementedBffServiceServer) MutationAcceptDeliveryOffer(context.Context, *MutationAcceptDeliveryOfferRequest) (*MutationAcceptDeliveryOfferResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationAcceptDeliveryOffer not implemented")
+}
+func (UnimplementedBffServiceServer) MutationAddCourier(context.Context, *MutationAddCourierRequest) (*MutationAddCourierResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationAddCourier not implemented")
 }
 func (UnimplementedBffServiceServer) MutationApplyCourierDeliveryAction(context.Context, *MutationApplyCourierDeliveryActionRequest) (*MutationApplyCourierDeliveryActionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationApplyCourierDeliveryAction not implemented")
@@ -401,6 +550,9 @@ func (UnimplementedBffServiceServer) MutationApplyKitchenAction(context.Context,
 func (UnimplementedBffServiceServer) MutationCloseRestaurant(context.Context, *MutationCloseRestaurantRequest) (*MutationCloseRestaurantResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationCloseRestaurant not implemented")
 }
+func (UnimplementedBffServiceServer) MutationHireCook(context.Context, *MutationHireCookRequest) (*MutationHireCookResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationHireCook not implemented")
+}
 func (UnimplementedBffServiceServer) MutationOpenRestaurant(context.Context, *MutationOpenRestaurantRequest) (*MutationOpenRestaurantResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationOpenRestaurant not implemented")
 }
@@ -410,8 +562,20 @@ func (UnimplementedBffServiceServer) MutationPlaceOrder(context.Context, *Mutati
 func (UnimplementedBffServiceServer) MutationRequestOrderCancellation(context.Context, *MutationRequestOrderCancellationRequest) (*MutationRequestOrderCancellationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationRequestOrderCancellation not implemented")
 }
+func (UnimplementedBffServiceServer) MutationRetireCook(context.Context, *MutationRetireCookRequest) (*MutationRetireCookResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationRetireCook not implemented")
+}
+func (UnimplementedBffServiceServer) MutationRetireCourier(context.Context, *MutationRetireCourierRequest) (*MutationRetireCourierResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationRetireCourier not implemented")
+}
+func (UnimplementedBffServiceServer) MutationSetCookOnLine(context.Context, *MutationSetCookOnLineRequest) (*MutationSetCookOnLineResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationSetCookOnLine not implemented")
+}
 func (UnimplementedBffServiceServer) MutationSetCourierAvailability(context.Context, *MutationSetCourierAvailabilityRequest) (*MutationSetCourierAvailabilityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationSetCourierAvailability not implemented")
+}
+func (UnimplementedBffServiceServer) MutationSetCourierOnLine(context.Context, *MutationSetCourierOnLineRequest) (*MutationSetCourierOnLineResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationSetCourierOnLine not implemented")
 }
 func (UnimplementedBffServiceServer) MutationSetSimulatorEnabled(context.Context, *MutationSetSimulatorEnabledRequest) (*MutationSetSimulatorEnabledResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationSetSimulatorEnabled not implemented")
@@ -422,11 +586,17 @@ func (UnimplementedBffServiceServer) QueryBffInfo(context.Context, *QueryBffInfo
 func (UnimplementedBffServiceServer) QueryCourier(context.Context, *QueryCourierRequest) (*QueryCourierResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryCourier not implemented")
 }
+func (UnimplementedBffServiceServer) QueryCourierPool(context.Context, *QueryCourierPoolRequest) (*QueryCourierPoolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryCourierPool not implemented")
+}
 func (UnimplementedBffServiceServer) QueryCustomerOrders(context.Context, *QueryCustomerOrdersRequest) (*QueryCustomerOrdersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryCustomerOrders not implemented")
 }
 func (UnimplementedBffServiceServer) QueryKitchen(context.Context, *QueryKitchenRequest) (*QueryKitchenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryKitchen not implemented")
+}
+func (UnimplementedBffServiceServer) QueryMarkets(context.Context, *QueryMarketsRequest) (*QueryMarketsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryMarkets not implemented")
 }
 func (UnimplementedBffServiceServer) QueryMyRestaurants(context.Context, *QueryMyRestaurantsRequest) (*QueryMyRestaurantsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryMyRestaurants not implemented")
@@ -478,6 +648,24 @@ func _BffService_LookupCourierById_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BffServiceServer).LookupCourierById(ctx, req.(*LookupCourierByIdRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BffService_LookupCourierPoolById_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LookupCourierPoolByIdRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).LookupCourierPoolById(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_LookupCourierPoolById_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).LookupCourierPoolById(ctx, req.(*LookupCourierPoolByIdRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -536,6 +724,24 @@ func _BffService_MutationAcceptDeliveryOffer_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_MutationAddCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationAddCourierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationAddCourier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationAddCourier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationAddCourier(ctx, req.(*MutationAddCourierRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BffService_MutationApplyCourierDeliveryAction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MutationApplyCourierDeliveryActionRequest)
 	if err := dec(in); err != nil {
@@ -586,6 +792,24 @@ func _BffService_MutationCloseRestaurant_Handler(srv interface{}, ctx context.Co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BffServiceServer).MutationCloseRestaurant(ctx, req.(*MutationCloseRestaurantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BffService_MutationHireCook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationHireCookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationHireCook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationHireCook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationHireCook(ctx, req.(*MutationHireCookRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -644,6 +868,60 @@ func _BffService_MutationRequestOrderCancellation_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_MutationRetireCook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationRetireCookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationRetireCook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationRetireCook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationRetireCook(ctx, req.(*MutationRetireCookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BffService_MutationRetireCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationRetireCourierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationRetireCourier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationRetireCourier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationRetireCourier(ctx, req.(*MutationRetireCourierRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BffService_MutationSetCookOnLine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationSetCookOnLineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationSetCookOnLine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationSetCookOnLine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationSetCookOnLine(ctx, req.(*MutationSetCookOnLineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BffService_MutationSetCourierAvailability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MutationSetCourierAvailabilityRequest)
 	if err := dec(in); err != nil {
@@ -658,6 +936,24 @@ func _BffService_MutationSetCourierAvailability_Handler(srv interface{}, ctx con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BffServiceServer).MutationSetCourierAvailability(ctx, req.(*MutationSetCourierAvailabilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BffService_MutationSetCourierOnLine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationSetCourierOnLineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationSetCourierOnLine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationSetCourierOnLine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationSetCourierOnLine(ctx, req.(*MutationSetCourierOnLineRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -716,6 +1012,24 @@ func _BffService_QueryCourier_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_QueryCourierPool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryCourierPoolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).QueryCourierPool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_QueryCourierPool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).QueryCourierPool(ctx, req.(*QueryCourierPoolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BffService_QueryCustomerOrders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryCustomerOrdersRequest)
 	if err := dec(in); err != nil {
@@ -748,6 +1062,24 @@ func _BffService_QueryKitchen_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BffServiceServer).QueryKitchen(ctx, req.(*QueryKitchenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BffService_QueryMarkets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryMarketsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).QueryMarkets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_QueryMarkets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).QueryMarkets(ctx, req.(*QueryMarketsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -854,6 +1186,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BffService_LookupCourierById_Handler,
 		},
 		{
+			MethodName: "LookupCourierPoolById",
+			Handler:    _BffService_LookupCourierPoolById_Handler,
+		},
+		{
 			MethodName: "LookupKitchenByRestaurantId",
 			Handler:    _BffService_LookupKitchenByRestaurantId_Handler,
 		},
@@ -864,6 +1200,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MutationAcceptDeliveryOffer",
 			Handler:    _BffService_MutationAcceptDeliveryOffer_Handler,
+		},
+		{
+			MethodName: "MutationAddCourier",
+			Handler:    _BffService_MutationAddCourier_Handler,
 		},
 		{
 			MethodName: "MutationApplyCourierDeliveryAction",
@@ -878,6 +1218,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BffService_MutationCloseRestaurant_Handler,
 		},
 		{
+			MethodName: "MutationHireCook",
+			Handler:    _BffService_MutationHireCook_Handler,
+		},
+		{
 			MethodName: "MutationOpenRestaurant",
 			Handler:    _BffService_MutationOpenRestaurant_Handler,
 		},
@@ -890,8 +1234,24 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BffService_MutationRequestOrderCancellation_Handler,
 		},
 		{
+			MethodName: "MutationRetireCook",
+			Handler:    _BffService_MutationRetireCook_Handler,
+		},
+		{
+			MethodName: "MutationRetireCourier",
+			Handler:    _BffService_MutationRetireCourier_Handler,
+		},
+		{
+			MethodName: "MutationSetCookOnLine",
+			Handler:    _BffService_MutationSetCookOnLine_Handler,
+		},
+		{
 			MethodName: "MutationSetCourierAvailability",
 			Handler:    _BffService_MutationSetCourierAvailability_Handler,
+		},
+		{
+			MethodName: "MutationSetCourierOnLine",
+			Handler:    _BffService_MutationSetCourierOnLine_Handler,
 		},
 		{
 			MethodName: "MutationSetSimulatorEnabled",
@@ -906,12 +1266,20 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BffService_QueryCourier_Handler,
 		},
 		{
+			MethodName: "QueryCourierPool",
+			Handler:    _BffService_QueryCourierPool_Handler,
+		},
+		{
 			MethodName: "QueryCustomerOrders",
 			Handler:    _BffService_QueryCustomerOrders_Handler,
 		},
 		{
 			MethodName: "QueryKitchen",
 			Handler:    _BffService_QueryKitchen_Handler,
+		},
+		{
+			MethodName: "QueryMarkets",
+			Handler:    _BffService_QueryMarkets_Handler,
 		},
 		{
 			MethodName: "QueryMyRestaurants",

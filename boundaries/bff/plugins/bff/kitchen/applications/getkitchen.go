@@ -6,8 +6,9 @@ import (
 	"slices"
 )
 
-// GetKitchen builds the kitchen screen: the board of restaurants on behalf of
-// the user, the restaurant and the names of menu items from the public reads.
+// GetKitchen builds the kitchen screen: the board and the Cook Pool of
+// restaurants on behalf of the user, the restaurant and the names of menu
+// items from the public reads.
 type GetKitchen struct {
 	board   KitchenBoard
 	catalog Catalog
@@ -37,12 +38,17 @@ func (h GetKitchen) Handle(ctx context.Context, restaurantID string) (KitchenVie
 	if err != nil {
 		return KitchenView{}, fmt.Errorf("read menu: %w", err)
 	}
+	pool, err := h.board.CookPool(ctx, restaurantID)
+	if err != nil {
+		return KitchenView{}, fmt.Errorf("read cook pool: %w", err)
+	}
+	cooks := cooksByID(pool)
 	ordered := boardOrder(active, queue)
 	orders := make([]OrderView, 0, len(ordered))
 	for _, order := range ordered {
-		orders = append(orders, orderView(order, names))
+		orders = append(orders, orderView(order, names, cooks))
 	}
-	return KitchenView{Restaurant: restaurant, Orders: orders}, nil
+	return KitchenView{Restaurant: restaurant, Orders: orders, CookPool: pool}, nil
 }
 
 // boardOrder puts RECEIVED orders first by ReceivedAt, then the QUEUED ones in

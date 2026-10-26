@@ -1,6 +1,6 @@
 // Package infrastructure adapts the kitchen ports to restaurants.v1.RestaurantsService
 // through the internal gateway: the kitchen board (ListActiveRestaurantOrders,
-// GetKitchenQueue) and the kitchen commands on behalf of the user — service
+// GetKitchenQueue, GetCookPool), the kitchen and Cook Pool commands on behalf of the user — service
 // token of BFF and user assertion (ADR 32) — and the public GetRestaurant and
 // GetMenu without the user. restaurants authorizes restaurant#operate_kitchen.
 package infrastructure
@@ -33,6 +33,7 @@ var (
 	_ applications.KitchenBoard    = (*Restaurants)(nil)
 	_ applications.KitchenCommands = (*Restaurants)(nil)
 	_ applications.Catalog         = (*Restaurants)(nil)
+	_ applications.CookCommands    = (*Restaurants)(nil)
 )
 
 var stages = map[restaurantsv1.RestaurantOrderState]applications.Stage{
@@ -69,6 +70,7 @@ func (r *Restaurants) ActiveOrders(ctx context.Context, restaurantID string) ([]
 			Lines:           lines,
 			AcceptedAt:      moment(order.GetAcceptedAt()),
 			ExpectedReadyAt: moment(order.GetRestaurantOrder().GetExpectedReadyAt()),
+			CookID:          order.GetRestaurantOrder().GetCookId(),
 		}
 		if order.GetReceivedAt() != nil {
 			active.ReceivedAt = order.GetReceivedAt().AsTime()
@@ -88,6 +90,68 @@ func (r *Restaurants) QueueOrder(ctx context.Context, restaurantID string) ([]st
 		ids = append(ids, entry.GetRestaurantOrder().GetRestaurantOrderId())
 	}
 	return ids, nil
+}
+
+// CookPool keeps the user of ctx: restaurants checks restaurant#view_orders.
+func (r *Restaurants) CookPool(ctx context.Context, restaurantID string) (applications.CookPool, error) {
+	response, err := r.client.GetCookPool(ctx, &restaurantsv1.GetCookPoolRequest{RestaurantId: restaurantID})
+	if err != nil {
+		return applications.CookPool{}, boardError("get cook pool", err)
+	}
+	cooks := make([]applications.Cook, 0, len(response.GetCooks()))
+	for _, cook := range response.GetCooks() {
+		cooks = append(cooks, applications.Cook{
+			ID:                    cook.GetCookId(),
+			Name:                  cook.GetName(),
+			OnLine:                cook.GetOnLine(),
+			CurrentKitchenOrderID: cook.GetCurrentRestaurantOrderId(),
+		})
+	}
+	return applications.CookPool{
+		Size:   int(response.GetSize()),
+		OnLine: int(response.GetOnLine()),
+		Busy:   int(response.GetBusy()),
+		Queued: int(response.GetQueued()),
+		Cooks:  cooks,
+	}, nil
+}
+
+// Hire keeps the user of ctx: restaurants checks restaurant#manage_cooks.
+func (r *Restaurants) Hire(ctx context.Context, restaurantID, name string) error {
+	_, err := r.client.HireCook(ctx, &restaurantsv1.HireCookRequest{RestaurantId: restaurantID, Name: name})
+	return cookError("hire cook", err, codes.InvalidArgument, applications.ErrInvalidCookName)
+}
+
+// SetOnLine: FAILED_PRECONDITION is a busy cook off line and a retired cook
+// on line.
+func (r *Restaurants) SetOnLine(ctx context.Context, restaurantID, cookID string, onLine bool) error {
+	if onLine {
+		_, err := r.client.PutCookOnLine(ctx, &restaurantsv1.PutCookOnLineRequest{RestaurantId: restaurantID, CookId: cookID})
+		return cookError("put cook on line", err, codes.FailedPrecondition, applications.ErrCookRetired)
+	}
+	_, err := r.client.TakeCookOffLine(ctx, &restaurantsv1.TakeCookOffLineRequest{RestaurantId: restaurantID, CookId: cookID})
+	return cookError("take cook off line", err, codes.FailedPrecondition, applications.ErrCookBusy)
+}
+
+func (r *Restaurants) Retire(ctx context.Context, restaurantID, cookID string) error {
+	_, err := r.client.RetireCook(ctx, &restaurantsv1.RetireCookRequest{RestaurantId: restaurantID, CookId: cookID})
+	return cookError("retire cook", err, codes.FailedPrecondition, applications.ErrCookOnLine)
+}
+
+// cookError names the refusals of the Cook Pool commands: refusal is the
+// status of the one business refusal of the command, refused what it means.
+func cookError(operation string, err error, refusal codes.Code, refused error) error {
+	switch status.Code(err) {
+	case codes.OK:
+		return nil
+	case codes.NotFound:
+		return applications.ErrCookNotFound
+	case codes.PermissionDenied:
+		return applications.ErrNotPermitted
+	case refusal:
+		return refused
+	}
+	return fmt.Errorf("%s: %w", operation, err)
 }
 
 // Apply keeps the user of ctx. The reject reason stays empty: the screen has
@@ -159,7 +223,8 @@ func boardError(operation string, err error) error {
 
 // commandError names the refusals of restaurants; FAILED_PRECONDITION covers
 // a forbidden transition and, on accept, a closed restaurant or an
-// unavailable item: restaurants gives them one reason.
+// unavailable item: restaurants gives them one reason. RESOURCE_EXHAUSTED is
+// a start of preparation without a free cook (FR-225).
 func commandError(operation string, err error) error {
 	switch status.Code(err) {
 	case codes.NotFound:
@@ -168,6 +233,8 @@ func commandError(operation string, err error) error {
 		return applications.ErrNotPermitted
 	case codes.FailedPrecondition:
 		return applications.ErrStageConflict
+	case codes.ResourceExhausted:
+		return applications.ErrNoCookAvailable
 	case codes.InvalidArgument:
 		return fmt.Errorf("%w: %s", applications.ErrInvalidCommand, status.Convert(err).Message())
 	}

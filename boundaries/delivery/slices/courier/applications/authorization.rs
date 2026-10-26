@@ -31,3 +31,26 @@ pub trait CourierAuthorization {
         resource: &CourierResource,
     ) -> Result<(), AuthorizationError>;
 }
+
+/// Checks `permission` of the courier itself (`courier#act`); when it is
+/// denied, the dispatcher right of the Courier Pool instead (FR-620). An
+/// unavailable decision fails closed without the second check.
+pub fn check_courier_or_dispatcher(
+    authorization: &dyn CourierAuthorization,
+    subject: &Subject,
+    permission: CourierPermission,
+    courier_id: &CourierId,
+) -> Result<(), AuthorizationError> {
+    match authorization.check(
+        subject,
+        permission,
+        &CourierResource::Courier(courier_id.clone()),
+    ) {
+        Err(AuthorizationError::Denied) => authorization.check(
+            subject,
+            CourierPermission::ManageCouriers,
+            &CourierResource::Platform,
+        ),
+        decision => decision,
+    }
+}

@@ -200,6 +200,17 @@ type Order {
   the courier names it at pickup
   """
   expectedDeliveredAt: String
+  """
+  Courier delivering the order, null before a courier is assigned and after a failed
+  delivery; order(id) and orderChanged resolve it, customerOrders leaves it null
+  """
+  courier: OrderCourier
+}
+
+"""Courier of an order as its customer sees it"""
+type OrderCourier {
+  """Name of the courier"""
+  name: String!
 }
 
 type OrderEdge {
@@ -259,6 +270,58 @@ type KitchenOrder {
   preparation delays; null before Acceptance (RECEIVED)
   """
   expectedReadyAt: String
+  """
+  Cook assigned at the start of preparation; null before it and for a cook who
+  left the Cook Pool
+  """
+  cook: Cook
+}
+
+"""Cook of the Cook Pool of a restaurant"""
+type Cook {
+  """Cook identifier, used by the Cook Pool commands"""
+  id: ID!
+  """Name shown on the kitchen board"""
+  name: String!
+  """Whether the cook takes work: the start of preparation may assign them"""
+  onLine: Boolean!
+  """
+  Kitchen order (KitchenOrder.id) the cook is preparing or assembling; null when free
+  """
+  currentKitchenOrderId: ID
+}
+
+"""Cooks of a restaurant and the load of its kitchen line"""
+type CookPool {
+  """Cooks in the pool"""
+  size: Int!
+  """Cooks on line"""
+  onLine: Int!
+  """Cooks preparing or assembling an order"""
+  busy: Int!
+  """Orders waiting in the kitchen queue"""
+  queued: Int!
+  """Cooks by name"""
+  cooks: [Cook!]!
+}
+
+"""Business reason why a Cook Pool command cannot be applied"""
+enum CookPoolProblemCode {
+  """The name is empty or longer than 64 characters"""
+  COOK_NAME_INVALID
+  """The cook is preparing an order and cannot leave the line"""
+  COOK_BUSY
+  """The cook is on line and cannot leave the pool"""
+  COOK_ON_LINE
+  """The cook left the pool and cannot return"""
+  COOK_RETIRED
+}
+
+type CookPoolPayload {
+  """Cook Pool after the command"""
+  cookPool: CookPool!
+  """Business problem, null on success"""
+  problem: CookPoolProblemCode
 }
 
 """
@@ -275,6 +338,11 @@ type Kitchen {
   receivedAt, then the kitchen queue order, then the rest by ascending receivedAt
   """
   orders: [KitchenOrder!]!
+  """
+  Cooks of the restaurant and the load of its line; changes of cooks push
+  kitchenChanged too
+  """
+  cookPool: CookPool!
 }
 
 """Command of the kitchen over one restaurant order"""
@@ -304,6 +372,10 @@ input KitchenActionInput {
 enum KitchenActionProblemCode {
   """The order is not in a stage that allows this command"""
   ORDER_STAGE_CONFLICT
+  """
+  No cook on line is free to start preparing; the order stays in the queue
+  """
+  NO_COOK_AVAILABLE
 }
 
 type KitchenActionPayload {
@@ -393,9 +465,79 @@ type CourierPayload {
   problem: CourierProblemCode
 }
 
+"""Courier of the Courier Pool"""
+type PoolCourier {
+  """Courier identifier, used by the Courier Pool commands"""
+  id: ID!
+  """Name shown on the flow board"""
+  name: String!
+  """Current availability; AVAILABLE and BUSY are on line"""
+  availability: CourierAvailability!
+  """Customer order of the pending delivery offer; null without one"""
+  offeredOrderId: ID
+  """Customer order the courier is delivering; null without one"""
+  currentOrderId: ID
+}
+
+"""
+Couriers of the platform and the load of the line; the entity key lets the
+Router resolve courierPoolChanged events (ADR 36)
+"""
+type CourierPool {
+  """Identifier of the pool, the platform"""
+  id: ID!
+  """Couriers in the pool"""
+  size: Int!
+  """Couriers on line: available or busy"""
+  onLine: Int!
+  """Couriers on a delivery"""
+  busy: Int!
+  """Deliveries waiting for a courier"""
+  waiting: Int!
+  """Couriers by name"""
+  couriers: [PoolCourier!]!
+}
+
+"""Business reason why a Courier Pool command cannot be applied"""
+enum CourierPoolProblemCode {
+  """The name is empty or longer than 64 characters"""
+  COURIER_NAME_INVALID
+  """
+  The courier status forbids the change: busy couriers stay on line, retired ones off line
+  """
+  COURIER_STATUS_CONFLICT
+  """The courier is on line and cannot leave the pool"""
+  COURIER_ON_LINE
+}
+
+type CourierPoolPayload {
+  """Courier Pool after the command"""
+  courierPool: CourierPool!
+  """Business problem, null on success"""
+  problem: CourierPoolProblemCode
+}
+
+"""
+City where delivery works; restaurants, couriers and orders of one Market are
+served together (ADR 41)
+"""
+type Market {
+  """Market identifier, the value of the X-Nomnom-Market header"""
+  id: ID!
+  """Display name"""
+  name: String!
+  """ISO 4217 currency code"""
+  currency: String!
+}
+
 type Query {
   """Metadata for the client BFF"""
   bffInfo: BffInfo!
+  """
+  Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
+  other operation requires the header with one of their ids
+  """
+  markets: [Market!]!
   """Restaurants available to the customer"""
   restaurants(first: Int!, after: String): RestaurantConnection!
   """Restaurant by identifier, null if it does not exist"""
@@ -419,6 +561,11 @@ type Query {
   Work of the current user as a courier, null if the user is not a registered courier
   """
   courier: Courier
+  """
+  Couriers of the platform and the load of the line; requires a dispatcher or the operator
+  (platform#manage_couriers), otherwise a PERMISSION_DENIED error
+  """
+  courierPool: CourierPool!
   """
   Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
   three; requires the operator (platform#operate_simulator)
@@ -546,6 +693,14 @@ type Mutation {
   """
   applyKitchenAction(input: KitchenActionInput!): KitchenActionPayload!
   """
+  Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
+  """
+  hireCook(restaurantId: ID!, name: String!): CookPoolPayload!
+  """Put a cook on line or take them off line; repeating it changes nothing"""
+  setCookOnLine(restaurantId: ID!, cookId: ID!, onLine: Boolean!): CookPoolPayload!
+  """Take a cook off line out of the Cook Pool for good"""
+  retireCook(restaurantId: ID!, cookId: ID!): CookPoolPayload!
+  """
   Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
   """
   setCourierAvailability(availability: CourierAvailability!): CourierPayload!
@@ -553,6 +708,17 @@ type Mutation {
   acceptDeliveryOffer(offerId: ID!): CourierPayload!
   """Apply a command to the current delivery of the courier"""
   applyCourierDeliveryAction(deliveryId: ID!, action: CourierDeliveryAction!): CourierPayload!
+  """
+  Add an available courier to the Courier Pool at the start point of new couriers; requires
+  a dispatcher or the operator
+  """
+  addCourier(name: String!): CourierPoolPayload!
+  """
+  Put a courier on line or take them off line; repeating it changes nothing
+  """
+  setCourierOnLine(courierId: ID!, onLine: Boolean!): CourierPoolPayload!
+  """Take a courier off line out of the Courier Pool for good"""
+  retireCourier(courierId: ID!): CourierPoolPayload!
   """
   Switch the demo Simulator in orders, restaurants and delivery; requires the operator
   """
@@ -578,4 +744,10 @@ type Subscription {
   yields an error event instead of data.
   """
   courierChanged(id: ID!): Courier!
+  """
+  Courier Pool after each change of a courier, an offer or a delivery; query
+  courierPool first. A user who may not manage couriers gets an error event
+  instead of data.
+  """
+  courierPoolChanged: CourierPool!
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT count(*) AS \"count!\" FROM deliveries WHERE state = $1",
+  "query": "SELECT count(*) AS \"count!\" FROM deliveries\n             WHERE state = $1 AND market_id = $2",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,7 @@
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Text"
       ]
     },
@@ -19,5 +20,5 @@
       null
     ]
   },
-  "hash": "375d0ad4ff56f57f618a88455bdb041e5c9ab28ac56950f1c6d179084d4a5351"
+  "hash": "f892173ff2b45216b02336cf797c195f10e111365fb95ef494a06c104fd8cb3a"
 }

@@ -22,10 +22,12 @@ const (
 )
 
 type Restaurant struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RestaurantId  string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	IsOpen        bool                   `protobuf:"varint,3,opt,name=is_open,json=isOpen,proto3" json:"is_open,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RestaurantId string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	Name         string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	IsOpen       bool                   `protobuf:"varint,3,opt,name=is_open,json=isOpen,proto3" json:"is_open,omitempty"`
+	// Market of the Restaurant (ADR 41); immutable.
+	MarketId      string `protobuf:"bytes,5,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -79,6 +81,13 @@ func (x *Restaurant) GetIsOpen() bool {
 		return x.IsOpen
 	}
 	return false
+}
+
+func (x *Restaurant) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
 }
 
 // Exact amount: a decimal string with a dot separator and an ISO 4217 currency.
@@ -215,12 +224,13 @@ var File_nomnom_restaurants_v1_restaurants_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_restaurants_proto_rawDesc = "" +
 	"\n" +
-	"'nomnom/restaurants/v1/restaurants.proto\x12\x15nomnom.restaurants.v1\"m\n" +
+	"'nomnom/restaurants/v1/restaurants.proto\x12\x15nomnom.restaurants.v1\"\x8a\x01\n" +
 	"\n" +
 	"Restaurant\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
-	"\ais_open\x18\x03 \x01(\bR\x06isOpenJ\x04\b\x04\x10\x05R\aaddress\";\n" +
+	"\ais_open\x18\x03 \x01(\bR\x06isOpen\x12\x1b\n" +
+	"\tmarket_id\x18\x05 \x01(\tR\bmarketIdJ\x04\b\x04\x10\x05R\aaddress\";\n" +
 	"\x05Money\x12\x16\n" +
 	"\x06amount\x18\x01 \x01(\tR\x06amount\x12\x1a\n" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\xb4\x01\n" +

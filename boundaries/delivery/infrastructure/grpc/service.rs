@@ -18,8 +18,9 @@ use crate::slices::courier::di::CourierUseCases;
 use crate::slices::courier::domains::courier::CourierStatus as DomainCourierStatus;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    get_courier_current_delivery, list_available_delivery_offers, reject_delivery_offer,
-    replan_delivery, report_delivery_failure,
+    get_courier_current_delivery, get_courier_pool, get_order_courier,
+    list_available_delivery_offers, reject_delivery_offer, replan_delivery,
+    report_delivery_failure,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 use crate::slices::delivery::domains::delivery::State;
@@ -33,9 +34,9 @@ use super::v1::{
     ConfirmPickupResponse, CourierAvailability, CourierStatus, CreateDeliveryRequest,
     CreateDeliveryResponse, Delivery, DeliveryOffer, DeliveryState,
     GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse, GetCourierPoolRequest,
-    GetCourierPoolResponse, GetSimulatorRequest, GetSimulatorResponse,
-    ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse, PoolCourier,
-    RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
+    GetCourierPoolResponse, GetOrderCourierRequest, GetOrderCourierResponse, GetSimulatorRequest,
+    GetSimulatorResponse, ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse,
+    PoolCourier, RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
     RejectDeliveryOfferResponse, ReplanDeliveryRequest, ReplanDeliveryResponse,
     ReportDeliveryFailureRequest, ReportDeliveryFailureResponse, RetireCourierRequest,
     RetireCourierResponse, SetCourierAvailabilityRequest, SetCourierAvailabilityResponse,
@@ -109,11 +110,31 @@ impl DeliveryService for DeliveryGrpcService {
             order_id: view.order_id.as_str().to_owned(),
             courier_id: output.courier_id.as_str().to_owned(),
             state: delivery_state(view.state) as i32,
+            market_id: view.market_id.as_str().to_owned(),
         });
         Ok(Response::new(GetCourierCurrentDeliveryResponse {
             delivery,
             courier_status: courier_status(output.courier_status) as i32,
         }))
+    }
+
+    async fn get_order_courier(
+        &self,
+        request: Request<GetOrderCourierRequest>,
+    ) -> Result<Response<GetOrderCourierResponse>, Status> {
+        let subject = self.subjects.resolve(request.metadata())?;
+        let order_id = request.into_inner().order_id;
+        let output = self
+            .deliveries()
+            .get_order_courier(&subject, get_order_courier::Input { order_id })
+            .map_err(delivery_transport_error)?;
+        Ok(Response::new(output.courier.map_or_else(
+            GetOrderCourierResponse::default,
+            |courier| GetOrderCourierResponse {
+                courier_id: courier.courier_id.as_str().to_owned(),
+                name: courier.name.as_str().to_owned(),
+            },
+        )))
     }
 
     async fn create_delivery(
@@ -128,6 +149,7 @@ impl DeliveryService for DeliveryGrpcService {
                 &subject,
                 create_delivery::Input {
                     order_id: request.order_id,
+                    market_id: request.market_id,
                 },
             )
             .map_err(delivery_transport_error)?;
@@ -197,6 +219,7 @@ impl DeliveryService for DeliveryGrpcService {
                 register_courier::Input {
                     courier_id: request.courier_id,
                     name: request.name,
+                    market_id: request.market_id,
                 },
             )
             .map_err(courier_transport_error)?;
@@ -228,9 +251,10 @@ impl DeliveryService for DeliveryGrpcService {
         request: Request<GetCourierPoolRequest>,
     ) -> Result<Response<GetCourierPoolResponse>, Status> {
         let subject = self.subjects.resolve(request.metadata())?;
+        let market_id = request.into_inner().market_id;
         let pool = self
             .deliveries()
-            .get_courier_pool(&subject)
+            .get_courier_pool(&subject, get_courier_pool::Input { market_id })
             .map_err(delivery_transport_error)?;
         let count =
             |value: u64| i64::try_from(value).map_err(|_| Status::internal("internal error"));
@@ -252,6 +276,14 @@ impl DeliveryService for DeliveryGrpcService {
                         .unwrap_or_default(),
                     active_delivery_id: courier
                         .active_delivery_id
+                        .map(|id| id.as_str().to_owned())
+                        .unwrap_or_default(),
+                    active_order_id: courier
+                        .active_order_id
+                        .map(|id| id.as_str().to_owned())
+                        .unwrap_or_default(),
+                    offered_order_id: courier
+                        .offered_order_id
                         .map(|id| id.as_str().to_owned())
                         .unwrap_or_default(),
                 })

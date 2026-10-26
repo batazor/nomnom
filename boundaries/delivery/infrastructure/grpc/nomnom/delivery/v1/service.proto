@@ -10,6 +10,11 @@ service DeliveryService {
   // Delivery. Requires courier#act; an unregistered courier
   // is NOT_FOUND.
   rpc GetCourierCurrentDelivery(GetCourierCurrentDeliveryRequest) returns (GetCourierCurrentDeliveryResponse);
+  // Courier of the Delivery of an order for whoever may view the order
+  // (order#view, FR-626): set while the Delivery is assigned, picked up or
+  // delivered, empty before an Assignment and after a failure or a
+  // cancellation. An order without a Delivery answers empty too.
+  rpc GetOrderCourier(GetOrderCourierRequest) returns (GetOrderCourierResponse);
 
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc CreateDelivery(CreateDeliveryRequest) returns (CreateDeliveryResponse);
@@ -30,8 +35,9 @@ service DeliveryService {
 
   // Courier RPCs: the subject needs courier#act on courier_id; the domain
   // rejects actions on a delivery or offer of another courier.
-  // SetCourierAvailability is also allowed with platform#manage_couriers
-  // (FR-620); a retired courier cannot become available (FAILED_PRECONDITION).
+  // UpdateCourierLocation and SetCourierAvailability are also allowed with
+  // platform#manage_couriers (FR-620): a dispatcher places and lines up any
+  // courier; a retired courier cannot become available (FAILED_PRECONDITION).
   rpc UpdateCourierLocation(UpdateCourierLocationRequest) returns (UpdateCourierLocationResponse);
   rpc SetCourierAvailability(SetCourierAvailabilityRequest) returns (SetCourierAvailabilityResponse);
   rpc ListAvailableDeliveryOffers(ListAvailableDeliveryOffersRequest) returns (ListAvailableDeliveryOffersResponse);
@@ -45,6 +51,16 @@ service DeliveryService {
   // Demo Simulator of couriers (FR-604): requires platform#operate_simulator.
   rpc GetSimulator(GetSimulatorRequest) returns (GetSimulatorResponse);
   rpc SetSimulatorEnabled(SetSimulatorEnabledRequest) returns (SetSimulatorEnabledResponse);
+}
+
+message GetOrderCourierRequest {
+  string order_id = 1;
+}
+
+message GetOrderCourierResponse {
+  // Empty without a courier.
+  string courier_id = 1;
+  string name = 2;
 }
 
 message GetCourierCurrentDeliveryRequest {
@@ -62,6 +78,8 @@ message CreateDeliveryRequest {
   // Pickup and dropoff addresses are dropped from the project.
   reserved 2, 3;
   reserved "pickup_address", "dropoff_address";
+  // Required (ADR 41): Market of the Order.
+  string market_id = 4;
 }
 
 message CreateDeliveryResponse {
@@ -98,6 +116,8 @@ message RegisterCourierRequest {
   string courier_id = 1;
   // Shown on the flow board and to the customer of the courier's order.
   string name = 2;
+  // Required (ADR 41): Market the courier works in; immutable.
+  string market_id = 3;
 }
 
 message RegisterCourierResponse {
@@ -116,7 +136,10 @@ message RetireCourierResponse {
   bool changed = 2;
 }
 
-message GetCourierPoolRequest {}
+message GetCourierPoolRequest {
+  // Required (ADR 41): the Courier Pool of this Market.
+  string market_id = 1;
+}
 
 // Courier of the Courier Pool.
 message PoolCourier {
@@ -127,6 +150,10 @@ message PoolCourier {
   string pending_offer_id = 4;
   // Assigned or picked up Delivery; empty without one.
   string active_delivery_id = 5;
+  // Order of the active Delivery; empty without one.
+  string active_order_id = 6;
+  // Order of the pending offer; empty without one.
+  string offered_order_id = 7;
 }
 
 message GetCourierPoolResponse {

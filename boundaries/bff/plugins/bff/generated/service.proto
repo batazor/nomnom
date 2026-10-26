@@ -13,6 +13,11 @@ service BffService {
    */
   rpc LookupCourierById(LookupCourierByIdRequest) returns (LookupCourierByIdResponse) {}
   /*
+   * Lookup CourierPool entity by id: Couriers of the platform and the load of the line; the entity key lets the
+   * Router resolve courierPoolChanged events (ADR 36)
+   */
+  rpc LookupCourierPoolById(LookupCourierPoolByIdRequest) returns (LookupCourierPoolByIdResponse) {}
+  /*
    * Lookup Kitchen entity by restaurantId: Active orders of one restaurant for its kitchen staff; the entity key lets the
    * Router resolve kitchenChanged events (ADR 36)
    */
@@ -24,6 +29,11 @@ service BffService {
   rpc LookupOrderById(LookupOrderByIdRequest) returns (LookupOrderByIdResponse) {}
   // Accept a delivery offer addressed to the current courier
   rpc MutationAcceptDeliveryOffer(MutationAcceptDeliveryOfferRequest) returns (MutationAcceptDeliveryOfferResponse) {}
+  /*
+   * Add an available courier to the Courier Pool at the start point of new couriers; requires
+   * a dispatcher or the operator
+   */
+  rpc MutationAddCourier(MutationAddCourierRequest) returns (MutationAddCourierResponse) {}
   // Apply a command to the current delivery of the courier
   rpc MutationApplyCourierDeliveryAction(MutationApplyCourierDeliveryActionRequest) returns (MutationApplyCourierDeliveryActionResponse) {}
   /*
@@ -33,20 +43,35 @@ service BffService {
   rpc MutationApplyKitchenAction(MutationApplyKitchenActionRequest) returns (MutationApplyKitchenActionResponse) {}
   // Close a restaurant of the current user for new orders; repeating it changes nothing
   rpc MutationCloseRestaurant(MutationCloseRestaurantRequest) returns (MutationCloseRestaurantResponse) {}
+  // Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
+  rpc MutationHireCook(MutationHireCookRequest) returns (MutationHireCookResponse) {}
   // Open a restaurant of the current user for new orders; repeating it changes nothing
   rpc MutationOpenRestaurant(MutationOpenRestaurantRequest) returns (MutationOpenRestaurantResponse) {}
   // Place an order for the current customer
   rpc MutationPlaceOrder(MutationPlaceOrderRequest) returns (MutationPlaceOrderResponse) {}
   // Request cancellation of an order of the current customer
   rpc MutationRequestOrderCancellation(MutationRequestOrderCancellationRequest) returns (MutationRequestOrderCancellationResponse) {}
+  // Take a cook off line out of the Cook Pool for good
+  rpc MutationRetireCook(MutationRetireCookRequest) returns (MutationRetireCookResponse) {}
+  // Take a courier off line out of the Courier Pool for good
+  rpc MutationRetireCourier(MutationRetireCourierRequest) returns (MutationRetireCourierResponse) {}
+  // Put a cook on line or take them off line; repeating it changes nothing
+  rpc MutationSetCookOnLine(MutationSetCookOnLineRequest) returns (MutationSetCookOnLineResponse) {}
   // Change whether the current courier receives delivery offers; AVAILABLE or UNAVAILABLE only
   rpc MutationSetCourierAvailability(MutationSetCourierAvailabilityRequest) returns (MutationSetCourierAvailabilityResponse) {}
+  // Put a courier on line or take them off line; repeating it changes nothing
+  rpc MutationSetCourierOnLine(MutationSetCourierOnLineRequest) returns (MutationSetCourierOnLineResponse) {}
   // Switch the demo Simulator in orders, restaurants and delivery; requires the operator
   rpc MutationSetSimulatorEnabled(MutationSetSimulatorEnabledRequest) returns (MutationSetSimulatorEnabledResponse) {}
   // Metadata for the client BFF
   rpc QueryBffInfo(QueryBffInfoRequest) returns (QueryBffInfoResponse) {}
   // Work of the current user as a courier, null if the user is not a registered courier
   rpc QueryCourier(QueryCourierRequest) returns (QueryCourierResponse) {}
+  /*
+   * Couriers of the platform and the load of the line; requires a dispatcher or the operator
+   * (platform#manage_couriers), otherwise a PERMISSION_DENIED error
+   */
+  rpc QueryCourierPool(QueryCourierPoolRequest) returns (QueryCourierPoolResponse) {}
   // Orders of the current customer, newest first
   rpc QueryCustomerOrders(QueryCustomerOrdersRequest) returns (QueryCustomerOrdersResponse) {}
   /*
@@ -54,6 +79,11 @@ service BffService {
    * restaurant, null if the restaurant does not exist or the user may not operate its kitchen
    */
   rpc QueryKitchen(QueryKitchenRequest) returns (QueryKitchenResponse) {}
+  /*
+   * Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
+   * other operation requires the header with one of their ids
+   */
+  rpc QueryMarkets(QueryMarketsRequest) returns (QueryMarketsResponse) {}
   // Restaurants the current user owns, open and closed, ordered by identifier; menu is null
   rpc QueryMyRestaurants(QueryMyRestaurantsRequest) returns (QueryMyRestaurantsResponse) {}
   // Order of the current customer, null if it does not exist or belongs to someone else
@@ -171,6 +201,40 @@ message LookupCourierByIdResponse {
   repeated Courier result = 1;
 }
 
+// Key message for CourierPool entity lookup
+message LookupCourierPoolByIdRequestKey {
+  // Key field for CourierPool entity lookup.
+  string id = 1;
+}
+
+// Request message for CourierPool entity lookup.
+message LookupCourierPoolByIdRequest {
+  /*
+   * List of keys to look up CourierPool entities.
+   * Order matters - each key maps to one entity in LookupCourierPoolByIdResponse.
+   */
+  repeated LookupCourierPoolByIdRequestKey keys = 1;
+}
+
+// Response message for CourierPool entity lookup.
+message LookupCourierPoolByIdResponse {
+  /*
+   * List of CourierPool entities in the same order as the keys in LookupCourierPoolByIdRequest.
+   * Always return the same number of entities as keys. Use null for entities that cannot be found.
+   * 
+   * Example:
+   *   LookupUserByIdRequest:
+   *     keys:
+   *       - id: 1
+   *       - id: 2
+   *   LookupUserByIdResponse:
+   *     result:
+   *       - id: 1 # User with id 1 found
+   *       - null  # User with id 2 not found
+   */
+  repeated CourierPool result = 1;
+}
+
 // Request message for bffInfo operation: Metadata for the client BFF.
 message QueryBffInfoRequest {
 }
@@ -270,6 +334,40 @@ message QuerySimulatorResponse {
    */
   Simulator simulator = 1;
 }
+/*
+ * Request message for courierPool operation: Couriers of the platform and the load of the line; requires a dispatcher or the operator
+ * (platform#manage_couriers), otherwise a PERMISSION_DENIED error.
+ */
+message QueryCourierPoolRequest {
+}
+/*
+ * Response message for courierPool operation: Couriers of the platform and the load of the line; requires a dispatcher or the operator
+ * (platform#manage_couriers), otherwise a PERMISSION_DENIED error.
+ */
+message QueryCourierPoolResponse {
+  /*
+   * Couriers of the platform and the load of the line; requires a dispatcher or the operator
+   * (platform#manage_couriers), otherwise a PERMISSION_DENIED error
+   */
+  CourierPool courier_pool = 1;
+}
+/*
+ * Request message for markets operation: Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
+ * other operation requires the header with one of their ids.
+ */
+message QueryMarketsRequest {
+}
+/*
+ * Response message for markets operation: Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
+ * other operation requires the header with one of their ids.
+ */
+message QueryMarketsResponse {
+  /*
+   * Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
+   * other operation requires the header with one of their ids
+   */
+  repeated Market markets = 1;
+}
 // Request message for placeOrder operation: Place an order for the current customer.
 message MutationPlaceOrderRequest {
   PlaceOrderInput input = 1;
@@ -361,6 +459,74 @@ message MutationSetSimulatorEnabledResponse {
   // Switch the demo Simulator in orders, restaurants and delivery; requires the operator
   Simulator set_simulator_enabled = 1;
 }
+// Request message for hireCook operation: Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner.
+message MutationHireCookRequest {
+  string restaurant_id = 1;
+  string name = 2;
+}
+// Response message for hireCook operation: Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner.
+message MutationHireCookResponse {
+  // Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
+  CookPoolPayload hire_cook = 1;
+}
+// Request message for setCookOnLine operation: Put a cook on line or take them off line; repeating it changes nothing.
+message MutationSetCookOnLineRequest {
+  string restaurant_id = 1;
+  string cook_id = 2;
+  bool on_line = 3;
+}
+// Response message for setCookOnLine operation: Put a cook on line or take them off line; repeating it changes nothing.
+message MutationSetCookOnLineResponse {
+  // Put a cook on line or take them off line; repeating it changes nothing
+  CookPoolPayload set_cook_on_line = 1;
+}
+// Request message for retireCook operation: Take a cook off line out of the Cook Pool for good.
+message MutationRetireCookRequest {
+  string restaurant_id = 1;
+  string cook_id = 2;
+}
+// Response message for retireCook operation: Take a cook off line out of the Cook Pool for good.
+message MutationRetireCookResponse {
+  // Take a cook off line out of the Cook Pool for good
+  CookPoolPayload retire_cook = 1;
+}
+/*
+ * Request message for addCourier operation: Add an available courier to the Courier Pool at the start point of new couriers; requires
+ * a dispatcher or the operator.
+ */
+message MutationAddCourierRequest {
+  string name = 1;
+}
+/*
+ * Response message for addCourier operation: Add an available courier to the Courier Pool at the start point of new couriers; requires
+ * a dispatcher or the operator.
+ */
+message MutationAddCourierResponse {
+  /*
+   * Add an available courier to the Courier Pool at the start point of new couriers; requires
+   * a dispatcher or the operator
+   */
+  CourierPoolPayload add_courier = 1;
+}
+// Request message for setCourierOnLine operation: Put a courier on line or take them off line; repeating it changes nothing.
+message MutationSetCourierOnLineRequest {
+  string courier_id = 1;
+  bool on_line = 2;
+}
+// Response message for setCourierOnLine operation: Put a courier on line or take them off line; repeating it changes nothing.
+message MutationSetCourierOnLineResponse {
+  // Put a courier on line or take them off line; repeating it changes nothing
+  CourierPoolPayload set_courier_on_line = 1;
+}
+// Request message for retireCourier operation: Take a courier off line out of the Courier Pool for good.
+message MutationRetireCourierRequest {
+  string courier_id = 1;
+}
+// Response message for retireCourier operation: Take a courier off line out of the Courier Pool for good.
+message MutationRetireCourierResponse {
+  // Take a courier off line out of the Courier Pool for good
+  CourierPoolPayload retire_courier = 1;
+}
 
 /*
  * Order of the current customer; the entity key lets the Router resolve
@@ -401,6 +567,11 @@ message Order {
    * the courier names it at pickup
    */
   google.protobuf.StringValue expected_delivered_at = 13;
+  /*
+   * Courier delivering the order, null before a courier is assigned and after a failed
+   * delivery; order(id) and orderChanged resolve it, customerOrders leaves it null
+   */
+  OrderCourier courier = 14;
 }
 
 /*
@@ -417,6 +588,11 @@ message Kitchen {
   repeated KitchenOrder orders = 2;
   // Identifier of the restaurant the kitchen belongs to
   string restaurant_id = 3;
+  /*
+   * Cooks of the restaurant and the load of its line; changes of cooks push
+   * kitchenChanged too
+   */
+  CookPool cook_pool = 4;
 }
 
 /*
@@ -432,6 +608,25 @@ message Courier {
   CourierDelivery current_delivery = 3;
   // Courier identifier, the subject of the current user
   string id = 4;
+}
+
+/*
+ * Couriers of the platform and the load of the line; the entity key lets the
+ * Router resolve courierPoolChanged events (ADR 36)
+ */
+message CourierPool {
+  // Identifier of the pool, the platform
+  string id = 1;
+  // Couriers in the pool
+  int32 size = 2;
+  // Couriers on line: available or busy
+  int32 on_line = 3;
+  // Couriers on a delivery
+  int32 busy = 4;
+  // Deliveries waiting for a courier
+  int32 waiting = 5;
+  // Couriers by name
+  repeated PoolCourier couriers = 6;
 }
 
 message BffInfo {
@@ -472,6 +667,19 @@ message OrderConnection {
 message Simulator {
   // Whether the Simulator is on in orders, restaurants and delivery
   bool enabled = 1;
+}
+
+/*
+ * City where delivery works; restaurants, couriers and orders of one Market are
+ * served together (ADR 41)
+ */
+message Market {
+  // Market identifier, the value of the X-Nomnom-Market header
+  string id = 1;
+  // Display name
+  string name = 2;
+  // ISO 4217 currency code
+  string currency = 3;
 }
 
 message PlaceOrderInput {
@@ -536,6 +744,20 @@ message CourierPayload {
   Courier courier = 1;
   // Business problem, null on success
   CourierProblemCode problem = 2;
+}
+
+message CookPoolPayload {
+  // Cook Pool after the command
+  CookPool cook_pool = 1;
+  // Business problem, null on success
+  CookPoolProblemCode problem = 2;
+}
+
+message CourierPoolPayload {
+  // Courier Pool after the command
+  CourierPool courier_pool = 1;
+  // Business problem, null on success
+  CourierPoolProblemCode problem = 2;
 }
 
 // Exact monetary amount
@@ -668,6 +890,12 @@ message OrderCancellationAvailability {
   string available_until = 1;
 }
 
+// Courier of an order as its customer sees it
+message OrderCourier {
+  // Name of the courier
+  string name = 1;
+}
+
 message OrderEdge {
   // Opaque cursor of this item
   string cursor = 1;
@@ -717,6 +945,50 @@ message KitchenOrder {
    * preparation delays; null before Acceptance (RECEIVED)
    */
   google.protobuf.StringValue expected_ready_at = 7;
+  /*
+   * Cook assigned at the start of preparation; null before it and for a cook who
+   * left the Cook Pool
+   */
+  Cook cook = 8;
+}
+
+// Cook of the Cook Pool of a restaurant
+message Cook {
+  // Cook identifier, used by the Cook Pool commands
+  string id = 1;
+  // Name shown on the kitchen board
+  string name = 2;
+  // Whether the cook takes work: the start of preparation may assign them
+  bool on_line = 3;
+  // Kitchen order (KitchenOrder.id) the cook is preparing or assembling; null when free
+  google.protobuf.StringValue current_kitchen_order_id = 4;
+}
+
+// Cooks of a restaurant and the load of its kitchen line
+message CookPool {
+  // Cooks in the pool
+  int32 size = 1;
+  // Cooks on line
+  int32 on_line = 2;
+  // Cooks preparing or assembling an order
+  int32 busy = 3;
+  // Orders waiting in the kitchen queue
+  int32 queued = 4;
+  // Cooks by name
+  repeated Cook cooks = 5;
+}
+
+// Business reason why a Cook Pool command cannot be applied
+enum CookPoolProblemCode {
+  COOK_POOL_PROBLEM_CODE_UNSPECIFIED = 0;
+  // The name is empty or longer than 64 characters
+  COOK_POOL_PROBLEM_CODE_COOK_NAME_INVALID = 1;
+  // The cook is preparing an order and cannot leave the line
+  COOK_POOL_PROBLEM_CODE_COOK_BUSY = 2;
+  // The cook is on line and cannot leave the pool
+  COOK_POOL_PROBLEM_CODE_COOK_ON_LINE = 3;
+  // The cook left the pool and cannot return
+  COOK_POOL_PROBLEM_CODE_COOK_RETIRED = 4;
 }
 
 // Command of the kitchen over one restaurant order
@@ -739,6 +1011,8 @@ enum KitchenActionProblemCode {
   KITCHEN_ACTION_PROBLEM_CODE_UNSPECIFIED = 0;
   // The order is not in a stage that allows this command
   KITCHEN_ACTION_PROBLEM_CODE_ORDER_STAGE_CONFLICT = 1;
+  // No cook on line is free to start preparing; the order stays in the queue
+  KITCHEN_ACTION_PROBLEM_CODE_NO_COOK_AVAILABLE = 2;
 }
 
 // Availability of a courier for new deliveries
@@ -801,6 +1075,31 @@ enum CourierProblemCode {
   COURIER_PROBLEM_CODE_OFFER_NOT_AVAILABLE = 1;
   // The delivery is not in a stage that allows this command
   COURIER_PROBLEM_CODE_DELIVERY_STAGE_CONFLICT = 2;
+}
+
+// Courier of the Courier Pool
+message PoolCourier {
+  // Courier identifier, used by the Courier Pool commands
+  string id = 1;
+  // Name shown on the flow board
+  string name = 2;
+  // Current availability; AVAILABLE and BUSY are on line
+  CourierAvailability availability = 3;
+  // Customer order of the pending delivery offer; null without one
+  google.protobuf.StringValue offered_order_id = 4;
+  // Customer order the courier is delivering; null without one
+  google.protobuf.StringValue current_order_id = 5;
+}
+
+// Business reason why a Courier Pool command cannot be applied
+enum CourierPoolProblemCode {
+  COURIER_POOL_PROBLEM_CODE_UNSPECIFIED = 0;
+  // The name is empty or longer than 64 characters
+  COURIER_POOL_PROBLEM_CODE_COURIER_NAME_INVALID = 1;
+  // The courier status forbids the change: busy couriers stay on line, retired ones off line
+  COURIER_POOL_PROBLEM_CODE_COURIER_STATUS_CONFLICT = 2;
+  // The courier is on line and cannot leave the pool
+  COURIER_POOL_PROBLEM_CODE_COURIER_ON_LINE = 3;
 }
 
 message OrderLineInput {

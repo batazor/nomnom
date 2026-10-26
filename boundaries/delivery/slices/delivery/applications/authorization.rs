@@ -17,6 +17,9 @@ pub enum DeliveryPermission {
     ListAvailableDeliveryOffers,
     CancelDelivery,
     ReplanDelivery,
+    /// The name of the courier of an order, for whoever may view the order
+    /// (FR-626).
+    ViewOrderCourier,
 }
 
 /// Resource of a delivery permission check.

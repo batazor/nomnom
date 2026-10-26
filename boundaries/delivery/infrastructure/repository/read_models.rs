@@ -1,11 +1,11 @@
 //! Query read models, the courier positions of the locator and the
 //! reconciliation reads of [`Store`].
 
-use crate::infrastructure::locator::CourierPositions;
+use crate::infrastructure::locator::{CourierPositions, LocatedCourier};
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::applications::update_courier_location::CourierPosition;
-use crate::slices::courier::domains::courier::{CourierId, CourierStatus, Location};
+use crate::slices::courier::domains::courier::{CourierId, CourierStatus, Location, MarketId};
 use crate::slices::delivery::applications::dispatch_deliveries::{
     DeliveryPosition, WaitingDeliveries,
 };
@@ -15,6 +15,9 @@ use crate::slices::delivery::applications::get_courier_current_delivery::{
 };
 use crate::slices::delivery::applications::get_courier_pool::{
     CourierPoolReadModel, PoolCourierView,
+};
+use crate::slices::delivery::applications::get_order_courier::{
+    OrderCourierReadModel, OrderCourierView,
 };
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
@@ -26,7 +29,7 @@ use crate::slices::delivery::domains::delivery::{
 
 use super::rows::{
     DeliveryRow, active_assignment_states, courier_name, courier_status, delivery_from_row,
-    delivery_state, offer_state, parse_courier_status, parse_delivery_state,
+    delivery_state, market_id, offer_state, parse_courier_status, parse_delivery_state,
 };
 use super::{Store, corrupt, domain_version, limit, storage_error};
 
@@ -36,7 +39,7 @@ impl CourierCurrentDeliveryReadModel for Store {
         courier_id: &CourierId,
     ) -> Result<Option<CurrentDeliveryView>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query!(
-            "SELECT id, order_id, state FROM deliveries
+            "SELECT id, order_id, market_id, state FROM deliveries
              WHERE courier_id = $1 AND state = ANY($2)
              ORDER BY id LIMIT 1",
             courier_id.as_str(),
@@ -47,6 +50,7 @@ impl CourierCurrentDeliveryReadModel for Store {
             Ok(CurrentDeliveryView {
                 delivery_id: DeliveryId::new(row.id),
                 order_id: OrderId::new(row.order_id),
+                market_id: market_id(&row.market_id)?,
                 state: parse_delivery_state(&row.state)?,
             })
         })
@@ -57,21 +61,29 @@ impl CourierCurrentDeliveryReadModel for Store {
 impl CourierPoolReadModel for Store {
     fn pool_couriers(
         &self,
+        market: &MarketId,
         now_epoch_seconds: i64,
     ) -> Result<Vec<PoolCourierView>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query!(
-            r#"SELECT c.id, c.name, c.status,
-                 (SELECT o.id FROM delivery_offers o
-                  WHERE o.courier_id = c.id AND o.state = $1 AND o.expires_at > $2
-                  ORDER BY o.position LIMIT 1) AS "pending_offer_id?",
-                 (SELECT d.id FROM deliveries d
-                  WHERE d.courier_id = c.id AND d.state = ANY($3)
-                  ORDER BY d.id LIMIT 1) AS "active_delivery_id?"
-             FROM couriers c WHERE c.retired_at IS NULL
+            r#"SELECT c.id, c.name, c.status, o.id AS "pending_offer_id?",
+                 o.order_id AS "offered_order_id?",
+                 d.id AS "active_delivery_id?", d.order_id AS "active_order_id?"
+             FROM couriers c
+             LEFT JOIN LATERAL (
+                 SELECT offer.id, offered.order_id FROM delivery_offers offer
+                 JOIN deliveries offered ON offered.id = offer.delivery_id
+                 WHERE offer.courier_id = c.id AND offer.state = $1 AND offer.expires_at > $2
+                 ORDER BY offer.position LIMIT 1) o ON true
+             LEFT JOIN LATERAL (
+                 SELECT id, order_id FROM deliveries
+                 WHERE courier_id = c.id AND state = ANY($3)
+                 ORDER BY id LIMIT 1) d ON true
+             WHERE c.market_id = $4 AND c.retired_at IS NULL
              ORDER BY c.name, c.id"#,
             offer_state(OfferState::Pending),
             now_epoch_seconds,
-            &active_assignment_states()[..] as &[&str]
+            &active_assignment_states()[..] as &[&str],
+            market.as_str()
         )
         .fetch_all(connection))?
         .into_iter()
@@ -81,19 +93,51 @@ impl CourierPoolReadModel for Store {
                 name: courier_name(&row.name)?,
                 status: parse_courier_status(&row.status)?,
                 pending_offer_id: row.pending_offer_id.map(DeliveryOfferId::new),
+                offered_order_id: row.offered_order_id.map(OrderId::new),
                 active_delivery_id: row.active_delivery_id.map(DeliveryId::new),
+                active_order_id: row.active_order_id.map(OrderId::new),
             })
         })
         .collect()
     }
 
-    fn waiting_deliveries(&self) -> Result<u64, RepositoryError> {
-        let count = sql!(self, "SELECT", |connection| sqlx::query_scalar!(
-            r#"SELECT count(*) AS "count!" FROM deliveries WHERE state = $1"#,
-            delivery_state(State::Waiting)
-        )
-        .fetch_one(connection))?;
+    fn waiting_deliveries(&self, market: &MarketId) -> Result<u64, RepositoryError> {
+        let count = sql!(self, "SELECT", |connection| {
+            sqlx::query_scalar!(
+                r#"SELECT count(*) AS "count!" FROM deliveries
+             WHERE state = $1 AND market_id = $2"#,
+                delivery_state(State::Waiting),
+                market.as_str()
+            )
+            .fetch_one(connection)
+        })?;
         u64::try_from(count).map_err(|error| corrupt("waiting deliveries count", error))
+    }
+}
+
+impl OrderCourierReadModel for Store {
+    fn courier_of_order(
+        &self,
+        order_id: &OrderId,
+    ) -> Result<Option<OrderCourierView>, RepositoryError> {
+        sql!(self, "SELECT", |connection| sqlx::query!(
+            "SELECT c.id, c.name FROM deliveries d JOIN couriers c ON c.id = d.courier_id
+             WHERE d.order_id = $1 AND d.state = ANY($2)",
+            order_id.as_str(),
+            &[
+                delivery_state(State::Assigned),
+                delivery_state(State::PickedUp),
+                delivery_state(State::Delivered),
+            ][..] as &[&str]
+        )
+        .fetch_optional(connection))?
+        .map(|row| {
+            Ok(OrderCourierView {
+                courier_id: CourierId::new(row.id),
+                name: courier_name(&row.name)?,
+            })
+        })
+        .transpose()
     }
 }
 
@@ -108,7 +152,7 @@ impl WaitingDeliveries for Store {
         let (created_at, id) = after.map_or((i64::MIN, ""), DeliveryPosition::key);
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
-            "SELECT id, order_id, courier_id, state, failure_reason,
+            "SELECT id, order_id, market_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
                  expected_pickup_at, expected_delivered_at
              FROM deliveries
@@ -190,26 +234,71 @@ impl PendingDeliveryOffersReadModel for Store {
     }
 }
 
+/// Last position of a courier with its stored Market.
+fn located_courier(
+    courier_id: String,
+    market: &str,
+    latitude: f64,
+    longitude: f64,
+    recorded_at: i64,
+) -> Result<LocatedCourier, RepositoryError> {
+    Ok(LocatedCourier {
+        position: CourierPosition {
+            courier_id: CourierId::new(courier_id),
+            location: Location::new(latitude, longitude)
+                .map_err(|error| corrupt("courier position", error))?,
+            recorded_at_epoch_seconds: recorded_at,
+        },
+        market_id: market_id(market)?,
+    })
+}
+
 impl CourierPositions for Store {
-    fn available_positions(&self) -> Result<Vec<CourierPosition>, RepositoryError> {
+    // Candidate search of ADR 41: available couriers of the Delivery's Market.
+    fn available_positions(
+        &self,
+        market: &MarketId,
+    ) -> Result<Vec<LocatedCourier>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query!(
-            "SELECT p.courier_id, p.latitude, p.longitude, p.recorded_at
+            "SELECT p.courier_id, c.market_id, p.latitude, p.longitude, p.recorded_at
              FROM courier_positions p JOIN couriers c ON c.id = p.courier_id
-             WHERE c.status = $1
+             WHERE c.market_id = $1 AND c.status = $2
              ORDER BY p.courier_id",
+            market.as_str(),
             courier_status(CourierStatus::Available)
         )
         .fetch_all(connection))?
         .into_iter()
         .map(|row| {
-            Ok(CourierPosition {
-                courier_id: CourierId::new(row.courier_id),
-                location: Location::new(row.latitude, row.longitude)
-                    .map_err(|error| corrupt("courier position", error))?,
-                recorded_at_epoch_seconds: row.recorded_at,
-            })
+            located_courier(
+                row.courier_id,
+                &row.market_id,
+                row.latitude,
+                row.longitude,
+                row.recorded_at,
+            )
         })
         .collect()
+    }
+
+    fn located(&self, courier_id: &CourierId) -> Result<Option<LocatedCourier>, RepositoryError> {
+        sql!(self, "SELECT", |connection| sqlx::query!(
+            "SELECT p.courier_id, c.market_id, p.latitude, p.longitude, p.recorded_at
+             FROM courier_positions p JOIN couriers c ON c.id = p.courier_id
+             WHERE p.courier_id = $1",
+            courier_id.as_str()
+        )
+        .fetch_optional(connection))?
+        .map(|row| {
+            located_courier(
+                row.courier_id,
+                &row.market_id,
+                row.latitude,
+                row.longitude,
+                row.recorded_at,
+            )
+        })
+        .transpose()
     }
 }
 

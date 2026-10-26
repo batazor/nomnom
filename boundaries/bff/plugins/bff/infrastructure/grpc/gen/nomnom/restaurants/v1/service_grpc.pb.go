@@ -44,6 +44,11 @@ const (
 	RestaurantsService_AddMenuItem_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/AddMenuItem"
 	RestaurantsService_UpdateMenuItem_FullMethodName               = "/nomnom.restaurants.v1.RestaurantsService/UpdateMenuItem"
 	RestaurantsService_SetMenuItemAvailability_FullMethodName      = "/nomnom.restaurants.v1.RestaurantsService/SetMenuItemAvailability"
+	RestaurantsService_HireCook_FullMethodName                     = "/nomnom.restaurants.v1.RestaurantsService/HireCook"
+	RestaurantsService_PutCookOnLine_FullMethodName                = "/nomnom.restaurants.v1.RestaurantsService/PutCookOnLine"
+	RestaurantsService_TakeCookOffLine_FullMethodName              = "/nomnom.restaurants.v1.RestaurantsService/TakeCookOffLine"
+	RestaurantsService_RetireCook_FullMethodName                   = "/nomnom.restaurants.v1.RestaurantsService/RetireCook"
+	RestaurantsService_GetCookPool_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/GetCookPool"
 	RestaurantsService_GetSimulator_FullMethodName                 = "/nomnom.restaurants.v1.RestaurantsService/GetSimulator"
 	RestaurantsService_SetSimulatorEnabled_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/SetSimulatorEnabled"
 )
@@ -73,6 +78,9 @@ type RestaurantsServiceClient interface {
 	// an order of another restaurant is NOT_FOUND, a forbidden transition is
 	// FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
 	// succeeds without a new fact; other repeats are FAILED_PRECONDITION.
+	// StartPreparation assigns the free cook on line with the earliest last
+	// assignment (FR-225); without a free cook it is RESOURCE_EXHAUSTED and the
+	// order stays QUEUED.
 	AcceptRestaurantOrder(ctx context.Context, in *AcceptRestaurantOrderRequest, opts ...grpc.CallOption) (*AcceptRestaurantOrderResponse, error)
 	RejectRestaurantOrder(ctx context.Context, in *RejectRestaurantOrderRequest, opts ...grpc.CallOption) (*RejectRestaurantOrderResponse, error)
 	StartPreparation(ctx context.Context, in *StartPreparationRequest, opts ...grpc.CallOption) (*StartPreparationResponse, error)
@@ -117,6 +125,21 @@ type RestaurantsServiceClient interface {
 	AddMenuItem(ctx context.Context, in *AddMenuItemRequest, opts ...grpc.CallOption) (*AddMenuItemResponse, error)
 	UpdateMenuItem(ctx context.Context, in *UpdateMenuItemRequest, opts ...grpc.CallOption) (*UpdateMenuItemResponse, error)
 	SetMenuItemAvailability(ctx context.Context, in *SetMenuItemAvailabilityRequest, opts ...grpc.CallOption) (*SetMenuItemAvailabilityResponse, error)
+	// Cook Pool of a restaurant (FR-614..FR-616). Commands require
+	// restaurant#manage_cooks (owner or staff); an unknown restaurant or a cook of
+	// another restaurant is NOT_FOUND, an empty or longer than 64 characters name
+	// is INVALID_ARGUMENT. A new cook is off line. Repeating the current line or
+	// retirement succeeds with changed = false. TakeCookOffLine of a cook holding
+	// a PREPARING or ASSEMBLED order and RetireCook of a cook on line are
+	// FAILED_PRECONDITION; a retired cook cannot go on line (FAILED_PRECONDITION).
+	// Every change pushes kitchenChanged of the restaurant (ADR 36).
+	HireCook(ctx context.Context, in *HireCookRequest, opts ...grpc.CallOption) (*HireCookResponse, error)
+	PutCookOnLine(ctx context.Context, in *PutCookOnLineRequest, opts ...grpc.CallOption) (*PutCookOnLineResponse, error)
+	TakeCookOffLine(ctx context.Context, in *TakeCookOffLineRequest, opts ...grpc.CallOption) (*TakeCookOffLineResponse, error)
+	RetireCook(ctx context.Context, in *RetireCookRequest, opts ...grpc.CallOption) (*RetireCookResponse, error)
+	// Pool Load and cooks of a restaurant (FR-616). Requires
+	// restaurant#view_orders.
+	GetCookPool(ctx context.Context, in *GetCookPoolRequest, opts ...grpc.CallOption) (*GetCookPoolResponse, error)
 	// Demo Simulator (FR-604): state of the kitchen simulator of this service; both
 	// require platform#operate_simulator, otherwise PERMISSION_DENIED.
 	GetSimulator(ctx context.Context, in *GetSimulatorRequest, opts ...grpc.CallOption) (*GetSimulatorResponse, error)
@@ -381,6 +404,56 @@ func (c *restaurantsServiceClient) SetMenuItemAvailability(ctx context.Context, 
 	return out, nil
 }
 
+func (c *restaurantsServiceClient) HireCook(ctx context.Context, in *HireCookRequest, opts ...grpc.CallOption) (*HireCookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HireCookResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_HireCook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) PutCookOnLine(ctx context.Context, in *PutCookOnLineRequest, opts ...grpc.CallOption) (*PutCookOnLineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PutCookOnLineResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_PutCookOnLine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) TakeCookOffLine(ctx context.Context, in *TakeCookOffLineRequest, opts ...grpc.CallOption) (*TakeCookOffLineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TakeCookOffLineResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_TakeCookOffLine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) RetireCook(ctx context.Context, in *RetireCookRequest, opts ...grpc.CallOption) (*RetireCookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RetireCookResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_RetireCook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) GetCookPool(ctx context.Context, in *GetCookPoolRequest, opts ...grpc.CallOption) (*GetCookPoolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCookPoolResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_GetCookPool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *restaurantsServiceClient) GetSimulator(ctx context.Context, in *GetSimulatorRequest, opts ...grpc.CallOption) (*GetSimulatorResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSimulatorResponse)
@@ -426,6 +499,9 @@ type RestaurantsServiceServer interface {
 	// an order of another restaurant is NOT_FOUND, a forbidden transition is
 	// FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
 	// succeeds without a new fact; other repeats are FAILED_PRECONDITION.
+	// StartPreparation assigns the free cook on line with the earliest last
+	// assignment (FR-225); without a free cook it is RESOURCE_EXHAUSTED and the
+	// order stays QUEUED.
 	AcceptRestaurantOrder(context.Context, *AcceptRestaurantOrderRequest) (*AcceptRestaurantOrderResponse, error)
 	RejectRestaurantOrder(context.Context, *RejectRestaurantOrderRequest) (*RejectRestaurantOrderResponse, error)
 	StartPreparation(context.Context, *StartPreparationRequest) (*StartPreparationResponse, error)
@@ -470,6 +546,21 @@ type RestaurantsServiceServer interface {
 	AddMenuItem(context.Context, *AddMenuItemRequest) (*AddMenuItemResponse, error)
 	UpdateMenuItem(context.Context, *UpdateMenuItemRequest) (*UpdateMenuItemResponse, error)
 	SetMenuItemAvailability(context.Context, *SetMenuItemAvailabilityRequest) (*SetMenuItemAvailabilityResponse, error)
+	// Cook Pool of a restaurant (FR-614..FR-616). Commands require
+	// restaurant#manage_cooks (owner or staff); an unknown restaurant or a cook of
+	// another restaurant is NOT_FOUND, an empty or longer than 64 characters name
+	// is INVALID_ARGUMENT. A new cook is off line. Repeating the current line or
+	// retirement succeeds with changed = false. TakeCookOffLine of a cook holding
+	// a PREPARING or ASSEMBLED order and RetireCook of a cook on line are
+	// FAILED_PRECONDITION; a retired cook cannot go on line (FAILED_PRECONDITION).
+	// Every change pushes kitchenChanged of the restaurant (ADR 36).
+	HireCook(context.Context, *HireCookRequest) (*HireCookResponse, error)
+	PutCookOnLine(context.Context, *PutCookOnLineRequest) (*PutCookOnLineResponse, error)
+	TakeCookOffLine(context.Context, *TakeCookOffLineRequest) (*TakeCookOffLineResponse, error)
+	RetireCook(context.Context, *RetireCookRequest) (*RetireCookResponse, error)
+	// Pool Load and cooks of a restaurant (FR-616). Requires
+	// restaurant#view_orders.
+	GetCookPool(context.Context, *GetCookPoolRequest) (*GetCookPoolResponse, error)
 	// Demo Simulator (FR-604): state of the kitchen simulator of this service; both
 	// require platform#operate_simulator, otherwise PERMISSION_DENIED.
 	GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error)
@@ -558,6 +649,21 @@ func (UnimplementedRestaurantsServiceServer) UpdateMenuItem(context.Context, *Up
 }
 func (UnimplementedRestaurantsServiceServer) SetMenuItemAvailability(context.Context, *SetMenuItemAvailabilityRequest) (*SetMenuItemAvailabilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetMenuItemAvailability not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) HireCook(context.Context, *HireCookRequest) (*HireCookResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method HireCook not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) PutCookOnLine(context.Context, *PutCookOnLineRequest) (*PutCookOnLineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PutCookOnLine not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) TakeCookOffLine(context.Context, *TakeCookOffLineRequest) (*TakeCookOffLineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TakeCookOffLine not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) RetireCook(context.Context, *RetireCookRequest) (*RetireCookResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RetireCook not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) GetCookPool(context.Context, *GetCookPoolRequest) (*GetCookPoolResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCookPool not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSimulator not implemented")
@@ -1036,6 +1142,96 @@ func _RestaurantsService_SetMenuItemAvailability_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RestaurantsService_HireCook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HireCookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).HireCook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_HireCook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).HireCook(ctx, req.(*HireCookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_PutCookOnLine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PutCookOnLineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).PutCookOnLine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_PutCookOnLine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).PutCookOnLine(ctx, req.(*PutCookOnLineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_TakeCookOffLine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TakeCookOffLineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).TakeCookOffLine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_TakeCookOffLine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).TakeCookOffLine(ctx, req.(*TakeCookOffLineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_RetireCook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetireCookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).RetireCook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_RetireCook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).RetireCook(ctx, req.(*RetireCookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_GetCookPool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCookPoolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).GetCookPool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_GetCookPool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).GetCookPool(ctx, req.(*GetCookPoolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RestaurantsService_GetSimulator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSimulatorRequest)
 	if err := dec(in); err != nil {
@@ -1178,6 +1374,26 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetMenuItemAvailability",
 			Handler:    _RestaurantsService_SetMenuItemAvailability_Handler,
+		},
+		{
+			MethodName: "HireCook",
+			Handler:    _RestaurantsService_HireCook_Handler,
+		},
+		{
+			MethodName: "PutCookOnLine",
+			Handler:    _RestaurantsService_PutCookOnLine_Handler,
+		},
+		{
+			MethodName: "TakeCookOffLine",
+			Handler:    _RestaurantsService_TakeCookOffLine_Handler,
+		},
+		{
+			MethodName: "RetireCook",
+			Handler:    _RestaurantsService_RetireCook_Handler,
+		},
+		{
+			MethodName: "GetCookPool",
+			Handler:    _RestaurantsService_GetCookPool_Handler,
 		},
 		{
 			MethodName: "GetSimulator",

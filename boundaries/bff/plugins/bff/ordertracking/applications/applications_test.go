@@ -29,6 +29,22 @@ func (f *fakeOrders) RequestCancellation(_ context.Context, request Cancellation
 }
 
 // fakeCatalog counts the restaurant reads; a restaurant in err fails.
+// fakeCouriers names the courier of every Order it is asked about.
+type fakeCouriers struct {
+	asked *[]string
+	err   error
+}
+
+func (f fakeCouriers) CourierOf(_ context.Context, orderID string) (*Courier, error) {
+	if f.asked != nil {
+		*f.asked = append(*f.asked, orderID)
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &Courier{Name: "Тимур"}, nil
+}
+
 type fakeCatalog struct {
 	reads map[string]int
 	err   map[string]error
@@ -55,7 +71,7 @@ func snapshot(state string, facts ...Fact) OrderSnapshot {
 
 func view(t *testing.T, order OrderSnapshot, now time.Time) OrderView {
 	t.Helper()
-	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{})
+	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{}, fakeCouriers{})
 	h.now = func() time.Time { return now }
 	result, err := h.Handle(context.Background(), order.ID)
 	require.NoError(t, err)
@@ -90,7 +106,7 @@ func TestStatusFollowsStateAndFacts(t *testing.T) {
 }
 
 func TestUnknownStateIsAnError(t *testing.T) {
-	h := NewGetOrder(&fakeOrders{order: snapshot("lost")}, fakeCatalog{})
+	h := NewGetOrder(&fakeOrders{order: snapshot("lost")}, fakeCatalog{}, fakeCouriers{})
 	_, err := h.Handle(context.Background(), "order-1")
 	assert.Error(t, err)
 }
@@ -136,6 +152,31 @@ func TestPreparingOrderWithCourierMilestones(t *testing.T) {
 	}, got.Milestones)
 }
 
+// AC-795: an Order with an Assignment names its courier; before it delivery
+// is not asked.
+func TestCourierIsNamedOnceAssigned(t *testing.T) {
+	var asked []string
+	assigned := snapshot("confirmed", Fact{"courier_assigned", at(8)})
+	h := NewGetOrder(&fakeOrders{order: assigned}, fakeCatalog{}, fakeCouriers{asked: &asked})
+
+	got, err := h.Handle(context.Background(), assigned.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, &Courier{Name: "Тимур"}, got.Courier)
+	assert.Equal(t, []string{assigned.ID}, asked)
+
+	asked = nil
+	waiting := snapshot("confirmed")
+	got, err = NewGetOrder(&fakeOrders{order: waiting}, fakeCatalog{}, fakeCouriers{asked: &asked}).Handle(context.Background(), waiting.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.Courier)
+	assert.Empty(t, asked)
+
+	down := errors.New("delivery down")
+	_, err = NewGetOrder(&fakeOrders{order: assigned}, fakeCatalog{}, fakeCouriers{err: down}).Handle(context.Background(), assigned.ID)
+	assert.ErrorIs(t, err, down)
+}
+
 // AC-558: the window is offered only while it is open and the Order is active.
 // FR-611: the view carries the deadlines orders named, unnamed ones stay nil.
 func TestViewCarriesDeadlines(t *testing.T) {
@@ -178,7 +219,7 @@ func TestLineTotalIsExact(t *testing.T) {
 func TestItemNameComesFromTheOrder(t *testing.T) {
 	order := snapshot("placed")
 	order.Items[0].Name = ""
-	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{})
+	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{}, fakeCouriers{})
 	got, err := h.Handle(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.Empty(t, got.Items[0].Name)

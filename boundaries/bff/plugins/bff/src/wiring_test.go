@@ -46,18 +46,21 @@ func TestConfigIsReadOnce(t *testing.T) {
 	})
 	assert.Equal(t, "value-of-"+envInternalGateway, cfg.internalGateway)
 	assert.Equal(t, "value-of-"+identity.EnvIdPProviders, cfg.identity.IdPProviders)
+	assert.Equal(t, "value-of-"+envPlacementTTL, cfg.placementTTL)
 	for name, count := range reads {
 		assert.Equal(t, 1, count, name)
 	}
 }
 
-// FR-551: one connection per audience serves every slice.
-func TestWiringOpensOneConnectionPerAudience(t *testing.T) {
+// ADR 41: only the control plane is dialed at start; connections to Cell
+// gateways open on the first call of their Market (cellrouter).
+func TestWiringDialsOnlyTheControlPlane(t *testing.T) {
 	dial := &recordingDial{}
-	bff, err := newBffService(config{identity: identityConfig(t), internalGateway: "gateway:8080"}, dial.dial)
+	bff, err := newBffService(validConfig(t), dial.dial)
 	require.NoError(t, err)
-	assert.Equal(t, []string{audienceOrders, audienceRestaurants, audienceDelivery}, dial.audiences)
+	assert.Equal(t, []string{audienceControlPlane}, dial.audiences)
 	assert.NotNil(t, bff.accessTokens)
+	assert.NotNil(t, bff.listMarkets)
 	assert.NotNil(t, bff.tracking)
 	assert.NotNil(t, bff.catalog)
 	assert.NotNil(t, bff.checkout)
@@ -65,6 +68,42 @@ func TestWiringOpensOneConnectionPerAudience(t *testing.T) {
 	assert.NotNil(t, bff.simulator)
 	assert.NotNil(t, bff.kitchen)
 	assert.NotNil(t, bff.courier)
+	assert.NotNil(t, bff.courierPool)
+
+	bff.cells.start()
+	require.NoError(t, bff.cells.stop(), "the refresher stops and connections close")
+}
+
+// validConfig is a complete configuration of the plugin.
+func validConfig(t *testing.T) config {
+	t.Helper()
+	return config{
+		identity:              identityConfig(t),
+		internalGateway:       "gateway:8080",
+		placementTTL:          "30s",
+		courierStartLatitude:  "52.5250",
+		courierStartLongitude: "13.4020",
+	}
+}
+
+// FR-623: the start point of new couriers is required and validated.
+func TestWiringRequiresTheCourierStartPoint(t *testing.T) {
+	for _, point := range [][2]string{{"", "13.4"}, {"52.5", ""}, {"north", "13.4"}, {"91", "13.4"}, {"52.5", "181"}} {
+		cfg := validConfig(t)
+		cfg.courierStartLatitude, cfg.courierStartLongitude = point[0], point[1]
+		_, err := newBffService(cfg, (&recordingDial{}).dial)
+		assert.Error(t, err, "%v", point)
+	}
+}
+
+// ADR 41: the Placement TTL is required, a positive Go duration.
+func TestWiringRequiresThePlacementTTL(t *testing.T) {
+	for _, ttl := range []string{"", "soon", "30", "0s", "-5s"} {
+		cfg := validConfig(t)
+		cfg.placementTTL = ttl
+		_, err := newBffService(cfg, (&recordingDial{}).dial)
+		assert.ErrorContains(t, err, envPlacementTTL, ttl)
+	}
 }
 
 func TestWiringRequiresIdentityAndGateway(t *testing.T) {
@@ -80,6 +119,6 @@ func TestWiringReturnsErrorsInsteadOfStopping(t *testing.T) {
 	assert.Error(t, err, "partial identity")
 
 	down := errors.New("dial failed")
-	_, err = newBffService(config{identity: identityConfig(t), internalGateway: "gateway:8080"}, (&recordingDial{err: down}).dial)
+	_, err = newBffService(validConfig(t), (&recordingDial{err: down}).dial)
 	assert.ErrorIs(t, err, down)
 }

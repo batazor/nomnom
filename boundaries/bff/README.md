@@ -19,7 +19,7 @@ BFF — отдельный сервис и единая прикладная т�
 - generated-код и lock-файл контракта коммитятся;
 - минимальный stateless-запрос `bffInfo` подтверждает сборку полного контура.
 
-Реализованы слайсы `catalog`, `checkout`, `ordertracking`, `restaurantmanagement`, `kitchen`, `courier` и `simulator` поверх `restaurants`, `orders` и `delivery` через internal gateway (см. [Customer API](#customer-api)); операций «только схема» не осталось.
+Реализованы слайсы `catalog`, `checkout`, `ordertracking`, `restaurantmanagement`, `kitchen`, `courier`, `simulator` и `markets` поверх `restaurants`, `orders` и `delivery` ячейки Market запроса и control plane через internal gateway ([router ячеек](#router-ячеек)) (см. [Customer API](#customer-api)); операций «только схема» не осталось.
 
 ## Customer API
 
@@ -28,6 +28,7 @@ BFF — отдельный сервис и единая прикладная т�
 | Операция | Назначение | Статус |
 | --- | --- | --- |
 | `bffInfo` | метаданные BFF | реализована |
+| `markets` | Market для выбора в UI (`controlplane.ListMarkets`), по названию; публичная, заголовок `X-Nomnom-Market` не нужен | реализована (`markets`) |
 | `restaurants(first, after)` | рестораны с cursor-пагинацией | реализована (`catalog`) |
 | `restaurant(id)` | ресторан с меню | реализована (`catalog`) |
 | `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | реализована (`ordertracking`) |
@@ -61,6 +62,8 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order
 `customerOrders(first, after)`: `ListCustomerOrders` `orders` от имени покупателя (`customer_id` — subject access token) возвращает полную карточку каждого заказа страницы (`OrderSummary.order`, проекция `OrderDetails` `orders`), каждый узел — тот же `Order`, что у `order(id)`; `GetRestaurant` читается один раз на каждый ресторан страницы, `GetOrder` по заказам не вызывается. `first` — 1..100, иначе error `INVALID_ARGUMENT`; cursor ребра — `OrderSummary.cursor` `orders` (продолжение после этого заказа), `pageInfo.endCursor` — `next_page_token`, на последней странице — cursor последнего ребра, на пустой — `null`; чужой или неизвестный `after` — error `INVALID_ARGUMENT`; запись истории без карточки или с неизвестным состоянием — error, а не пропуск.
 
 Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — тест `bff-end-to-end` в `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
+
+- **Курьер заказа** ([FR-626](../../openspec/changes/add-cook-and-courier-pools/)): `order(id)` и lookup `orderChanged` отдают `courier { name }` — `GetOrderCourier` `delivery` от имени покупателя (`order#view`, GRPCRoute `delivery-v1-courier-reads`), только когда у заказа есть milestone `COURIER_ASSIGNED`; без курьера (до Assignment, после Delivery Failure) — `null`. `customerOrders` его не читает и оставляет `null`. Сбой `delivery` — error, а не заказ без курьера. Имя повара покупателю не отдаётся.
 
 ### Слайс `catalog`
 
@@ -134,6 +137,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 
 - `kitchen(restaurantId)`: заказы в `RECEIVED`…`READY` из `ListActiveRestaurantOrders` (позиции, `received_at`, `accepted_at` и `expected_ready_at` → nullable `acceptedAt`/`expectedReadyAt` в RFC 3339, `null` до Acceptance; их же отдаёт lookup `kitchenChanged`); порядок — `RECEIVED` по `receivedAt`, затем `QUEUED` в порядке `GetKitchenQueue` (заказ, которого нет в очереди из-за гонки двух чтений, — после неё по `receivedAt`), затем остальные по `receivedAt`; названия позиций — из `GetMenu` (позиции, которой нет в меню, — пустое имя), `restaurant.menu = null`. `ListIncomingOrders` не нужен: новый RPC покрывает и `RECEIVED`.
 - `applyKitchenAction`: после команды заказ перечитывается из `ListActiveRestaurantOrders` (ответ команды без позиций и `receivedAt`); у `REJECT` и у заказа, ушедшего с доски, `order = null`. Причина отказа `RejectRestaurantOrder` не передаётся: в схеме её нет.
+- **Cook Pool** ([FR-622, FR-625](../../openspec/changes/add-cook-and-courier-pools/)): `Kitchen.cookPool` — `GetCookPool` (`restaurant#view_orders`): размер, на линии, занято, очередь и повара по имени с текущим заказом; `KitchenOrder.cook` — повар из пула по `cook_id` заказа (`null` до старта и у выбывшего повара). Mutations `hireCook`, `setCookOnLine`, `retireCook` вызывают `HireCook`, `PutCookOnLine`/`TakeCookOffLine`, `RetireCook` (`restaurant#manage_cooks`, GRPCRoute `restaurants-v1-cook-pool`) и отвечают `CookPoolPayload` — пул перечитывается после команды. Изменения поваров приходят тем же `kitchenChanged`.
 
 | Ответ `restaurants` | GraphQL |
 | --- | --- |
@@ -142,6 +146,9 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 | нет gateway или identity | error `UNAVAILABLE` (`kitchen operations are not available`) |
 | доска: `NOT_FOUND`, `PERMISSION_DENIED`; `GetRestaurant`: `NOT_FOUND` | `kitchen = null` |
 | команда: `FAILED_PRECONDITION` | `problem = ORDER_STAGE_CONFLICT`, `order = null`; у `ACCEPT` так же отвечают закрытый ресторан и недоступная позиция — у `restaurants` для них один reason |
+| `StartPreparation`: `RESOURCE_EXHAUSTED` | `problem = NO_COOK_AVAILABLE`: на линии нет свободного повара, заказ в очереди |
+| Cook Pool: `INVALID_ARGUMENT` (`hireCook`), `FAILED_PRECONDITION` | `problem = COOK_NAME_INVALID`; у `setCookOnLine(false)` — `COOK_BUSY`, `setCookOnLine(true)` — `COOK_RETIRED`, `retireCook` — `COOK_ON_LINE` |
+| Cook Pool: `NOT_FOUND` | error `NOT_FOUND` |
 | команда: `NOT_FOUND` | error `NOT_FOUND` |
 | команда: `PERMISSION_DENIED` | error `PERMISSION_DENIED` |
 | команда: `INVALID_ARGUMENT` | error `INVALID_ARGUMENT` без деталей `restaurants` |
@@ -168,15 +175,34 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 | `SetCourierAvailability`: `FAILED_PRECONDITION` | error `FAILED_PRECONDITION`: в `CourierProblemCode` нет кода для отказа по статусу курьера |
 | остальные сбои, в том числе `ABORTED` гонки | error `UNAVAILABLE` без внутренних деталей |
 
+### Слайс `courierpool`
+
+`plugins/bff/courierpool/applications` — сценарии Get Pool и Change Pool диспетчера ([FR-623](../../openspec/changes/add-cook-and-courier-pools/)); `courierpool/infrastructure` вызывает `GetCourierPool`, `RegisterCourier`, `UpdateCourierLocation`, `SetCourierAvailability`, `RetireCourier` `delivery` от имени пользователя. Право `platform#manage_couriers` (оператор или диспетчер) проверяет `delivery`.
+
+- `courierPool`: `CourierPool @key(fields: "id")`, `id = "nomnom"`; размер, на линии, занято, доставки без курьера (`waiting`) и курьеры по имени с заказом оффера (`offeredOrderId`) и текущей доставки (`currentOrderId`). Пользователь без права получает error `PERMISSION_DENIED` — UI не показывает пул.
+- `addCourier(name)`: новый курьер регистрируется под UUIDv7 (за ним не стоит пользователь, действует Simulator) и ставится в стартовую точку `BFF__COURIER_START_LATITUDE`/`BFF__COURIER_START_LONGITUDE` (Helm `courierPool.startLatitude`/`startLongitude`, обязательны: без них плагин не стартует, chart не рендерится) — иначе Dispatch не предложит ему доставку. `setCourierOnLine` и `retireCourier` меняют любого курьера пула.
+- Mutations отвечают `CourierPoolPayload`: `INVALID_ARGUMENT` регистрации — `COURIER_NAME_INVALID`, `FAILED_PRECONDITION` доступности — `COURIER_STATUS_CONFLICT` (busy остаётся на линии, выбывший — вне её), `FAILED_PRECONDITION` выбытия — `COURIER_ON_LINE`; `NOT_FOUND` — error `NOT_FOUND`.
+- Имя курьера покупателю — `Order.courier` слайса `ordertracking` (`GetOrderCourier`, `order#view`).
+
 ## Subscriptions
 
 Решение — [ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md). Подписки обслуживает сам Cosmo Router (Cosmo Streams): у gRPC plugin нет streaming.
 
-- `kitchenChanged(restaurantId)` (`restaurants.v1.kitchen-changes`, `LookupKitchenByRestaurantId`, права кухни проверяет `restaurants`) и `courierChanged(id)` (`delivery.v1.courier-changes`, `LookupCourierById`: только курьер с этим subject) устроены так же; `Kitchen.restaurantId` и `Courier.id` — ключи сущностей.
+- `kitchenChanged(restaurantId)` (`restaurants.v1.kitchen-changes`, `LookupKitchenByRestaurantId`, права кухни проверяет `restaurants`), `courierChanged(id)` (`delivery.v1.courier-changes`, `LookupCourierById`: только курьер с этим subject) и `courierPoolChanged` (`delivery.v1.courier-pool-changes`, `LookupCourierPoolById`: только диспетчер) устроены так же; `Kitchen.restaurantId`, `Courier.id` и `CourierPool.id` — ключи сущностей.
 - `orderChanged(id)` объявлен в event-driven subgraph [`events/schema.graphql`](events/schema.graphql) (`@edfs__kafkaSubscribe`, фильтр по `id`). Router читает `orders.v1.order-changes` (`events.providers.kafka`, `BFF__KAFKA_BROKERS`, Helm `kafka.brokers` обязателен).
 - Событие — только ключ `{"__typename":"Order","id":…}`. Данные Router получает через `LookupOrderById` plugin (`Order @key(fields: "id")`) с `Authorization` подписчика: тот же сценарий, что `order(id)`. Чужой или отсутствующий заказ — error-событие `NOT_FOUND`.
 - Клиенты подписываются по SSE (`POST /graphql`, `Accept: text/event-stream`). Первое событие приходит только после изменения, поэтому текущее состояние берётся query.
 - Клиентская схема — композиция subgraphs: `npm run compose` пишет `config.json` и [`client-schema.graphql`](client-schema.graphql) для codegen UI.
+
+## Router ячеек
+
+BFF — router ячеек ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md), [локальный ADR 2](docs/adr/0002-bff-as-the-client-entry-point.md#маршрутизация-по-ячейкам)); пакет `plugins/bff/infrastructure/cellrouter`.
+
+- **Market запроса.** Каждая операция, кроме `bffInfo` и `markets`, требует заголовок `X-Nomnom-Market` со slug Market (`berlin`). Router пробрасывает его в plugin правилом `headers.all.request: propagate` ([`config.yaml`](config.yaml), [`config.production.yaml`](config.production.yaml)) и разрешает в CORS. `cellrouter.MarketFrom` читает его из входящей metadata `x-nomnom-market`: нет заголовка, он повторён или не совпадает с `^[a-z][a-z0-9-]{1,31}$` — `INVALID_ARGUMENT`.
+- **Соединения.** `Router.Conn(audience)` — `grpc.ClientConnInterface` для `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`; слайсы получают его вместо соединения с одним gateway. На каждый `Invoke`/`NewStream` он выбирает gateway Cell по Market из Placement Map и вызывает кешированное `*grpc.ClientConn` на пару (адрес gateway, audience), созданное `gateway.Dial` при первом вызове (service token, user assertion, otelgrpc). Market не размещён — `NOT_FOUND`, карта ещё не получена — `UNAVAILABLE`; Cell по умолчанию нет. Market не передаётся контекстам metadata: адаптеры `ListRestaurants`, `ListOwnedRestaurants`, `ListCustomerOrders`, `GetCourierPool` и `RegisterCourier` ставят `market_id` в запрос.
+- **Ошибки.** Отказ router — `cellrouter.Refusal`, намеренно не gRPC status: адаптеры переводят коды контекстов в бизнес-ошибки (`NOT_FOUND` ресторана), и отказ router за них не сойдёт. `internalError` отдаёт клиенту код отказа как есть.
+- **Placement Map.** `cellrouter.Placements` читает `controlplane.GetPlacementMap` через internal gateway (`BFF__INTERNAL_GATEWAY_ADDR`, audience `nomnom.controlplane`, без user assertion), держит карту в памяти и обновляет в фоне раз в `BFF__PLACEMENT_TTL` (Go duration, обязателен; Helm `cellRouter.placementTTL`). Первая загрузка — в фоне при старте; до неё операции data plane отвечают `UNAVAILABLE`. Неудачное или невалидное обновление (повтор Market, пустой адрес, неверный slug) оставляет последнюю карту, пишется в лог и в счётчик `bff.placement_map.refreshes{outcome}`. Refresher останавливается, а соединения закрываются после `plugin.Serve()`, когда Router останавливает plugin.
+- **Subscriptions** Cosmo Streams читают Kafka `cell-1` и не маршрутизируются ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md#развёртывание)).
 
 ## Identity покупателя
 
@@ -194,7 +220,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 | `BFF__ASSERTION_KEY_FILE`, `BFF__ASSERTION_KEY_ID` | ключ подписи assertions (P-256, PEM) и его `kid` |
 | `IDENTITY__TOKEN_DIR` | каталог projected ServiceAccount tokens, файл на audience |
 
-Переменные и `BFF__INTERNAL_GATEWAY_ADDR` обязательны: без них или с частичной конфигурацией плагин не стартует. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — providers с JWKS URL, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`).
+Переменные, `BFF__INTERNAL_GATEWAY_ADDR` и `BFF__PLACEMENT_TTL` обязательны: без них или с частичной конфигурацией плагин не стартует. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — providers с JWKS URL, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`).
 
 ## Место в архитектуре
 
@@ -264,7 +290,7 @@ boundaries/bff/
   plugins/bff/
     src/schema.graphql        # публичный GraphQL-контракт
     src/main.go               # запуск plugin и bffInfo; единственный log.Fatalf
-    src/wiring.go             # конфигурация, соединение на audience, сборка слайсов
+    src/wiring.go             # конфигурация, router ячеек, сборка слайсов
     src/auth.go               # requireCustomer и requireSlice
     src/errors.go             # ошибки resolvers без внутренних деталей
     src/*_presenter.go        # перевод представлений в GraphQL-типы, таблицы enum
@@ -275,16 +301,18 @@ boundaries/bff/
     ordertracking/            # слайс отслеживания заказа
     restaurantmanagement/     # слайс открытия ресторана владельцем
     simulator/                # слайс переключателя demo Simulator
+    markets/                  # слайс выбора Market (control plane)
     identity/                 # access token, user assertion, service token
     infrastructure/gateway/   # соединение с internal gateway
+    infrastructure/cellrouter/ # Market запроса, Placement Map, соединения с Cell
     infrastructure/grpcerr/   # ErrorInfo и metadata ошибок контекстов
-    infrastructure/grpc/      # gRPC-клиенты контекстов (generated)
+    infrastructure/grpc/      # gRPC-клиенты контекстов и control plane (generated)
     generated/                # generated gRPC-контракт и mapping
 ```
 
 Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`, `restaurantmanagement`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`, `RestaurantOpener`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
 
-Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и открывает по одному соединению к `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery` на все слайсы; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
+Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз, открывает соединение с control plane и даёт всем слайсам по одному маршрутизируемому соединению (`cellrouter.Router.Conn`) на `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
 
 Внутренние клиенты будут генерироваться из закреплённых BSR commits согласно [общесистемному ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). Интеграция этих клиентов с plugin относится к следующему шагу.
 
@@ -361,7 +389,7 @@ docker run --rm -p 3010:3010 nomnom/bff:local   # /health/live, /health/ready, P
 
 Helm chart и команды его проверки описаны в [ops/README.md](ops/README.md). Probes — штатные `/health/live` и `/health/ready` Router на порту `http`: отдельного технического порта для health у Router нет (исключение из ADR 17).
 
-В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`. Ключ подписи user assertions выпускает cert-manager один раз на кластер (chart `ops/kind/bootstrap`, Secret `bff-assertion-key`, ключ `tls.key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Наружу BFF не опубликован: проверки обращаются к нему через `kubectl port-forward`.
+В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders`, `nomnom.restaurants`, `nomnom.delivery` и `nomnom.controlplane`, `cellRouter.placementTTL`. Ключ подписи user assertions выпускает cert-manager один раз на кластер (chart `ops/kind/bootstrap`, Secret `bff-assertion-key`, ключ `tls.key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Наружу BFF не опубликован: проверки обращаются к нему через `kubectl port-forward`.
 
 ## Следующие шаги
 

@@ -9,7 +9,10 @@ import (
 // Problem is a business reason why a kitchen command cannot be applied.
 type Problem string
 
-const ProblemOrderStageConflict Problem = "order_stage_conflict"
+const (
+	ProblemOrderStageConflict Problem = "order_stage_conflict"
+	ProblemNoCookAvailable    Problem = "no_cook_available"
+)
 
 // ActionRequest is one kitchen command of the screen.
 type ActionRequest struct {
@@ -39,7 +42,8 @@ func NewApplyKitchenAction(commands KitchenCommands, board KitchenBoard, catalog
 	return ApplyKitchenAction{commands: commands, board: board, catalog: catalog}
 }
 
-// Handle answers a stage conflict as a problem; the other refusals of
+// Handle answers a stage conflict and a start without a free cook as
+// problems; the other refusals of
 // restaurants stay errors (ErrOrderNotFound, ErrNotPermitted,
 // ErrInvalidCommand).
 func (h ApplyKitchenAction) Handle(ctx context.Context, request ActionRequest) (ActionResult, error) {
@@ -53,6 +57,9 @@ func (h ApplyKitchenAction) Handle(ctx context.Context, request ActionRequest) (
 	err := h.commands.Apply(ctx, request.RestaurantID, request.KitchenOrderID, request.Action)
 	if errors.Is(err, ErrStageConflict) {
 		return ActionResult{Problem: ProblemOrderStageConflict}, nil
+	}
+	if errors.Is(err, ErrNoCookAvailable) {
+		return ActionResult{Problem: ProblemNoCookAvailable}, nil
 	}
 	if err != nil {
 		return ActionResult{}, err
@@ -72,7 +79,11 @@ func (h ApplyKitchenAction) Handle(ctx context.Context, request ActionRequest) (
 		if err != nil {
 			return ActionResult{}, fmt.Errorf("read menu: %w", err)
 		}
-		view := orderView(order, names)
+		pool, err := h.board.CookPool(ctx, request.RestaurantID)
+		if err != nil {
+			return ActionResult{}, fmt.Errorf("read cook pool: %w", err)
+		}
+		view := orderView(order, names, cooksByID(pool))
 		return ActionResult{Order: &view}, nil
 	}
 	// The order left the kitchen between the command and the read.

@@ -20,10 +20,13 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	DeliveryService_GetCourierCurrentDelivery_FullMethodName   = "/nomnom.delivery.v1.DeliveryService/GetCourierCurrentDelivery"
+	DeliveryService_GetOrderCourier_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/GetOrderCourier"
 	DeliveryService_CreateDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CreateDelivery"
 	DeliveryService_ReplanDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/ReplanDelivery"
 	DeliveryService_CancelDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CancelDelivery"
 	DeliveryService_RegisterCourier_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/RegisterCourier"
+	DeliveryService_RetireCourier_FullMethodName               = "/nomnom.delivery.v1.DeliveryService/RetireCourier"
+	DeliveryService_GetCourierPool_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/GetCourierPool"
 	DeliveryService_UpdateCourierLocation_FullMethodName       = "/nomnom.delivery.v1.DeliveryService/UpdateCourierLocation"
 	DeliveryService_SetCourierAvailability_FullMethodName      = "/nomnom.delivery.v1.DeliveryService/SetCourierAvailability"
 	DeliveryService_ListAvailableDeliveryOffers_FullMethodName = "/nomnom.delivery.v1.DeliveryService/ListAvailableDeliveryOffers"
@@ -44,14 +47,31 @@ type DeliveryServiceClient interface {
 	// Delivery. Requires courier#act; an unregistered courier
 	// is NOT_FOUND.
 	GetCourierCurrentDelivery(ctx context.Context, in *GetCourierCurrentDeliveryRequest, opts ...grpc.CallOption) (*GetCourierCurrentDeliveryResponse, error)
+	// Courier of the Delivery of an order for whoever may view the order
+	// (order#view, FR-626): set while the Delivery is assigned, picked up or
+	// delivered, empty before an Assignment and after a failure or a
+	// cancellation. An order without a Delivery answers empty too.
+	GetOrderCourier(ctx context.Context, in *GetOrderCourierRequest, opts ...grpc.CallOption) (*GetOrderCourierResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(ctx context.Context, in *CreateDeliveryRequest, opts ...grpc.CallOption) (*CreateDeliveryResponse, error)
 	ReplanDelivery(ctx context.Context, in *ReplanDeliveryRequest, opts ...grpc.CallOption) (*ReplanDeliveryResponse, error)
 	CancelDelivery(ctx context.Context, in *CancelDeliveryRequest, opts ...grpc.CallOption) (*CancelDeliveryResponse, error)
-	// Courier administration by a platform operator (platform register_courier).
+	// Courier Pool of the platform (FR-301, FR-619, FR-621): all require
+	// platform#manage_couriers (operator or dispatcher). RegisterCourier needs a
+	// name of 1..64 characters after trim (INVALID_ARGUMENT otherwise); a known
+	// id, retired or not, is ALREADY_EXISTS. RetireCourier takes a courier off
+	// line out of the pool for good: available or busy is FAILED_PRECONDITION,
+	// a repeat succeeds with changed = false. GetCourierPool returns the load
+	// and every courier that is not retired. Every courier, offer and Delivery
+	// write pushes courierPoolChanged (ADR 36).
 	RegisterCourier(ctx context.Context, in *RegisterCourierRequest, opts ...grpc.CallOption) (*RegisterCourierResponse, error)
+	RetireCourier(ctx context.Context, in *RetireCourierRequest, opts ...grpc.CallOption) (*RetireCourierResponse, error)
+	GetCourierPool(ctx context.Context, in *GetCourierPoolRequest, opts ...grpc.CallOption) (*GetCourierPoolResponse, error)
 	// Courier RPCs: the subject needs courier#act on courier_id; the domain
 	// rejects actions on a delivery or offer of another courier.
+	// UpdateCourierLocation and SetCourierAvailability are also allowed with
+	// platform#manage_couriers (FR-620): a dispatcher places and lines up any
+	// courier; a retired courier cannot become available (FAILED_PRECONDITION).
 	UpdateCourierLocation(ctx context.Context, in *UpdateCourierLocationRequest, opts ...grpc.CallOption) (*UpdateCourierLocationResponse, error)
 	SetCourierAvailability(ctx context.Context, in *SetCourierAvailabilityRequest, opts ...grpc.CallOption) (*SetCourierAvailabilityResponse, error)
 	ListAvailableDeliveryOffers(ctx context.Context, in *ListAvailableDeliveryOffersRequest, opts ...grpc.CallOption) (*ListAvailableDeliveryOffersResponse, error)
@@ -78,6 +98,16 @@ func (c *deliveryServiceClient) GetCourierCurrentDelivery(ctx context.Context, i
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetCourierCurrentDeliveryResponse)
 	err := c.cc.Invoke(ctx, DeliveryService_GetCourierCurrentDelivery_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) GetOrderCourier(ctx context.Context, in *GetOrderCourierRequest, opts ...grpc.CallOption) (*GetOrderCourierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOrderCourierResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_GetOrderCourier_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -118,6 +148,26 @@ func (c *deliveryServiceClient) RegisterCourier(ctx context.Context, in *Registe
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterCourierResponse)
 	err := c.cc.Invoke(ctx, DeliveryService_RegisterCourier_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) RetireCourier(ctx context.Context, in *RetireCourierRequest, opts ...grpc.CallOption) (*RetireCourierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RetireCourierResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_RetireCourier_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) GetCourierPool(ctx context.Context, in *GetCourierPoolRequest, opts ...grpc.CallOption) (*GetCourierPoolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCourierPoolResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_GetCourierPool_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -232,14 +282,31 @@ type DeliveryServiceServer interface {
 	// Delivery. Requires courier#act; an unregistered courier
 	// is NOT_FOUND.
 	GetCourierCurrentDelivery(context.Context, *GetCourierCurrentDeliveryRequest) (*GetCourierCurrentDeliveryResponse, error)
+	// Courier of the Delivery of an order for whoever may view the order
+	// (order#view, FR-626): set while the Delivery is assigned, picked up or
+	// delivered, empty before an Assignment and after a failure or a
+	// cancellation. An order without a Delivery answers empty too.
+	GetOrderCourier(context.Context, *GetOrderCourierRequest) (*GetOrderCourierResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error)
 	ReplanDelivery(context.Context, *ReplanDeliveryRequest) (*ReplanDeliveryResponse, error)
 	CancelDelivery(context.Context, *CancelDeliveryRequest) (*CancelDeliveryResponse, error)
-	// Courier administration by a platform operator (platform register_courier).
+	// Courier Pool of the platform (FR-301, FR-619, FR-621): all require
+	// platform#manage_couriers (operator or dispatcher). RegisterCourier needs a
+	// name of 1..64 characters after trim (INVALID_ARGUMENT otherwise); a known
+	// id, retired or not, is ALREADY_EXISTS. RetireCourier takes a courier off
+	// line out of the pool for good: available or busy is FAILED_PRECONDITION,
+	// a repeat succeeds with changed = false. GetCourierPool returns the load
+	// and every courier that is not retired. Every courier, offer and Delivery
+	// write pushes courierPoolChanged (ADR 36).
 	RegisterCourier(context.Context, *RegisterCourierRequest) (*RegisterCourierResponse, error)
+	RetireCourier(context.Context, *RetireCourierRequest) (*RetireCourierResponse, error)
+	GetCourierPool(context.Context, *GetCourierPoolRequest) (*GetCourierPoolResponse, error)
 	// Courier RPCs: the subject needs courier#act on courier_id; the domain
 	// rejects actions on a delivery or offer of another courier.
+	// UpdateCourierLocation and SetCourierAvailability are also allowed with
+	// platform#manage_couriers (FR-620): a dispatcher places and lines up any
+	// courier; a retired courier cannot become available (FAILED_PRECONDITION).
 	UpdateCourierLocation(context.Context, *UpdateCourierLocationRequest) (*UpdateCourierLocationResponse, error)
 	SetCourierAvailability(context.Context, *SetCourierAvailabilityRequest) (*SetCourierAvailabilityResponse, error)
 	ListAvailableDeliveryOffers(context.Context, *ListAvailableDeliveryOffersRequest) (*ListAvailableDeliveryOffersResponse, error)
@@ -265,6 +332,9 @@ type UnimplementedDeliveryServiceServer struct{}
 func (UnimplementedDeliveryServiceServer) GetCourierCurrentDelivery(context.Context, *GetCourierCurrentDeliveryRequest) (*GetCourierCurrentDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCourierCurrentDelivery not implemented")
 }
+func (UnimplementedDeliveryServiceServer) GetOrderCourier(context.Context, *GetOrderCourierRequest) (*GetOrderCourierResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrderCourier not implemented")
+}
 func (UnimplementedDeliveryServiceServer) CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateDelivery not implemented")
 }
@@ -276,6 +346,12 @@ func (UnimplementedDeliveryServiceServer) CancelDelivery(context.Context, *Cance
 }
 func (UnimplementedDeliveryServiceServer) RegisterCourier(context.Context, *RegisterCourierRequest) (*RegisterCourierResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterCourier not implemented")
+}
+func (UnimplementedDeliveryServiceServer) RetireCourier(context.Context, *RetireCourierRequest) (*RetireCourierResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RetireCourier not implemented")
+}
+func (UnimplementedDeliveryServiceServer) GetCourierPool(context.Context, *GetCourierPoolRequest) (*GetCourierPoolResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCourierPool not implemented")
 }
 func (UnimplementedDeliveryServiceServer) UpdateCourierLocation(context.Context, *UpdateCourierLocationRequest) (*UpdateCourierLocationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateCourierLocation not implemented")
@@ -342,6 +418,24 @@ func _DeliveryService_GetCourierCurrentDelivery_Handler(srv interface{}, ctx con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DeliveryServiceServer).GetCourierCurrentDelivery(ctx, req.(*GetCourierCurrentDeliveryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_GetOrderCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOrderCourierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).GetOrderCourier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_GetOrderCourier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).GetOrderCourier(ctx, req.(*GetOrderCourierRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -414,6 +508,42 @@ func _DeliveryService_RegisterCourier_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DeliveryServiceServer).RegisterCourier(ctx, req.(*RegisterCourierRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_RetireCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetireCourierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).RetireCourier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_RetireCourier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).RetireCourier(ctx, req.(*RetireCourierRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_GetCourierPool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCourierPoolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).GetCourierPool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_GetCourierPool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).GetCourierPool(ctx, req.(*GetCourierPoolRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -610,6 +740,10 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DeliveryService_GetCourierCurrentDelivery_Handler,
 		},
 		{
+			MethodName: "GetOrderCourier",
+			Handler:    _DeliveryService_GetOrderCourier_Handler,
+		},
+		{
 			MethodName: "CreateDelivery",
 			Handler:    _DeliveryService_CreateDelivery_Handler,
 		},
@@ -624,6 +758,14 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterCourier",
 			Handler:    _DeliveryService_RegisterCourier_Handler,
+		},
+		{
+			MethodName: "RetireCourier",
+			Handler:    _DeliveryService_RetireCourier_Handler,
+		},
+		{
+			MethodName: "GetCourierPool",
+			Handler:    _DeliveryService_GetCourierPool_Handler,
 		},
 		{
 			MethodName: "UpdateCourierLocation",

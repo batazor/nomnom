@@ -54,3 +54,16 @@ export const simulatorDeniedHandlers = [
     }),
   ),
 ];
+
+// A user who is neither a dispatcher nor the operator: BFF answers courierPool
+// with PermissionDenied (AC-798), so the courier column shows no pool.
+export const courierPoolDeniedHandlers = [
+  publicGraphql.query("BoardCourierPool", () =>
+    HttpResponse.json({
+      data: null,
+      errors: [
+        bffError("PermissionDenied", "courier pool is not permitted").toJSON(),
+      ],
+    }),
+  ),
+];

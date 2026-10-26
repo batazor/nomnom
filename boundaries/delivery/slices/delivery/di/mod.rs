@@ -19,6 +19,7 @@ use crate::slices::delivery::applications::get_courier_current_delivery::{
     self, CourierCurrentDeliveryReadModel,
 };
 use crate::slices::delivery::applications::get_courier_pool::{self, CourierPoolReadModel};
+use crate::slices::delivery::applications::get_order_courier::{self, OrderCourierReadModel};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     self, PendingDeliveryOffersReadModel,
 };
@@ -67,6 +68,7 @@ pub trait DeliveryReadModels:
     PendingDeliveryOffersReadModel
     + CourierCurrentDeliveryReadModel
     + CourierPoolReadModel
+    + OrderCourierReadModel
     + Send
     + Sync
 {
@@ -76,6 +78,7 @@ impl<T> DeliveryReadModels for T where
     T: PendingDeliveryOffersReadModel
         + CourierCurrentDeliveryReadModel
         + CourierPoolReadModel
+        + OrderCourierReadModel
         + Send
         + Sync
 {
@@ -146,7 +149,14 @@ pub trait DeliveryUseCases: Interface {
     fn get_courier_pool(
         &self,
         subject: &Subject,
+        input: get_courier_pool::Input,
     ) -> Result<get_courier_pool::Output, DeliveryApplicationError>;
+
+    fn get_order_courier(
+        &self,
+        subject: &Subject,
+        input: get_order_courier::Input,
+    ) -> Result<get_order_courier::Output, DeliveryApplicationError>;
 
     fn accept_delivery_offer(
         &self,
@@ -307,13 +317,26 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn get_courier_pool(
         &self,
         subject: &Subject,
+        input: get_courier_pool::Input,
     ) -> Result<get_courier_pool::Output, DeliveryApplicationError> {
         get_courier_pool::Handler {
             authorization: self.ports.courier_authorization(),
             pool: self.ports.read_models(),
             clock: self.ports.clock(),
         }
-        .execute(subject)
+        .execute(subject, input)
+    }
+
+    fn get_order_courier(
+        &self,
+        subject: &Subject,
+        input: get_order_courier::Input,
+    ) -> Result<get_order_courier::Output, DeliveryApplicationError> {
+        get_order_courier::Handler {
+            authorization: self.ports.authorization(),
+            couriers: self.ports.read_models(),
+        }
+        .execute(subject, input)
     }
 
     fn accept_delivery_offer(

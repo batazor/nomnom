@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT p.courier_id, p.latitude, p.longitude, p.recorded_at\n             FROM courier_positions p JOIN couriers c ON c.id = p.courier_id\n             WHERE c.status = $1\n             ORDER BY p.courier_id",
+  "query": "SELECT p.courier_id, c.market_id, p.latitude, p.longitude, p.recorded_at\n             FROM courier_positions p JOIN couriers c ON c.id = p.courier_id\n             WHERE c.market_id = $1 AND c.status = $2\n             ORDER BY p.courier_id",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "market_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "couriers",
+            "name": "market_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "latitude",
         "type_info": "Float8",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "longitude",
         "type_info": "Float8",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "recorded_at",
         "type_info": "Int8",
         "origin": {
@@ -50,6 +61,7 @@
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Text"
       ]
     },
@@ -57,8 +69,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "17e1ada0afdf826fe90c278b6f31d5b840ef0a4b9fbc2426ccdbd532775efe33"
+  "hash": "0091d9d81cd3dabd1be808b598f561d3c12f1d847d40d8c568dfa911fc8e2de5"
 }

@@ -6,7 +6,7 @@ image:
 
 # ADR 27: service identity BFF — nomnom-bff/bff; её разрешают allowlist и userDelegates
 # orders, restaurants и delivery (values/orders.yaml, values/restaurants.yaml,
-# values/delivery.yaml).
+# values/delivery.yaml) и allowlist/placementReaders controlplane (values/controlplane.yaml).
 serviceAccount:
   name: bff
 
@@ -15,6 +15,16 @@ serviceAccount:
 # ops/kind/e2e/bff на время прогона открывает ingress к BFF из nomnom-outsider.
 internalGateway:
   address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+
+# FR-623: новые курьеры встают в центре demo-ресторанов (ops/kind/demo/files/seed.json).
+courierPool:
+  startLatitude: "52.5255"
+  startLongitude: "13.4015"
+
+# ADR 41: Placement Map control plane кешируется в памяти BFF (BFF__PLACEMENT_TTL) и
+# обновляется в фоне; неудачное обновление оставляет последнюю карту.
+cellRouter:
+  placementTTL: "30s"
 
 # Router metrics без профиля grafana-cloud не экспортируются: Alloy нет (values/bff-grafana-cloud.yaml).
 env:
@@ -46,6 +56,8 @@ identity:
     - nomnom.orders
     - nomnom.restaurants
     - nomnom.delivery
+    # ADR 41: Placement Map и Markets control plane (values/controlplane.yaml, placementReaders).
+    - nomnom.controlplane
 
 # Burstable без CPU limit: request — доля CPU под конкуренцией, limit троттлит и при
 # свободной ноде. Memory request — steady state в kind, limit — пик e2e (Chainsaw, 54 теста)
