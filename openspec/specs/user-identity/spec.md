@@ -39,16 +39,16 @@ Identity покупателя в вызовах контекстов: BFF под
 - **WHEN** assertion подписан верным ключом, но `exp - iat` равно 10 минутам
 - **THEN** сервер отвечает `UNAUTHENTICATED`
 
-### Requirement: Без конфигурации user assertions отклоняются
+### Requirement: Конфигурация user assertions обязательна
 **ID:** FR-473
 
-Если не заданы `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE` или список делегатов пуст, сервер SHALL отклонять любой вызов с user assertion `UNAUTHENTICATED` и MUST продолжать аутентифицировать service identity по ADR 27. Неразбираемый JWKS BFF MUST останавливать процесс на старте.
+Контекст с gRPC API MUST иметь заданные `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE` и непустой `IDENTITY__USER_DELEGATES`; пустая настройка, нечитаемый или неразбираемый JWKS BFF и неверный список делегатов MUST останавливать процесс на старте. Режима без проверки user assertions нет.
 
 #### Scenario: Контекст без user-конфигурации
 **ID:** AC-529
 
-- **WHEN** контекст запущен без `IDENTITY__USER_JWKS_FILE`, и BFF вызывает его с валидными service token и assertion
-- **THEN** вызов отклоняется `UNAUTHENTICATED`, а тот же вызов без assertion обрабатывается как `Subject{service, bff}`
+- **WHEN** контекст запускается без `IDENTITY__USER_JWKS_FILE` (или без любой другой user-настройки)
+- **THEN** процесс не стартует и сообщает о недостающей настройке
 
 ### Requirement: BFF подписывает assertion из проверенного access token
 **ID:** FR-474

@@ -184,7 +184,8 @@ identity:
   tokenAudiences: []
   tokenExpirationSeconds: 3600
   # User assertions BFF (ADR 32): ConfigMap с JWKS BFF (ключ jwks.json), ожидаемый iss и
-  # services-делегаты через запятую. Пустой userJwksConfigMap — вызовы с assertion отклоняются.
+  # services-делегаты через запятую. Обязательны вместе с jwksConfigMap, issuer и serviceAccounts
+  # для release с gRPC API (service.enabled).
   userJwksConfigMap: ""
   userIssuer: ""
   userDelegates: ""

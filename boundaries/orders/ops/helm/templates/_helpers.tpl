@@ -144,24 +144,15 @@ Usage: {{ include "orders.otelEnv" (dict "context" $ "serviceName" "") }}
 {{- end }}
 
 {{/*
-Service identity (ADR 27): процесс с gRPC API (service.enabled) проверяет token, поэтому JWKS, issuer, audience
-и allowlist обязательны — иначе процесс не стартует. User assertions (ADR 32)
-задаются целиком: JWKS BFF, issuer BFF и делегаты.
+Identity: процесс с gRPC API (service.enabled) проверяет service token (ADR 27) и user assertion BFF
+(ADR 32), поэтому JWKS, issuer, audience, allowlist, JWKS BFF, issuer BFF и делегаты обязательны —
+иначе процесс не стартует.
 */}}
 {{- define "orders.validateIdentity" -}}
 {{- if .Values.service.enabled -}}
-{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" -}}
+{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" -}}
 {{- if not (get $.Values.identity $key) -}}
 {{- fail (printf "identity.%s is required" $key) -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-{{- with .Values.identity -}}
-{{- if or .userJwksConfigMap .userIssuer .userDelegates -}}
-{{- range $key := list "userJwksConfigMap" "userIssuer" "userDelegates" -}}
-{{- if not (get $.Values.identity $key) -}}
-{{- fail (printf "identity.%s is required with the other user assertion settings" $key) -}}
-{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

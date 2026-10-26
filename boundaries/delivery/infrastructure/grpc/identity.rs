@@ -54,8 +54,7 @@ pub fn subject_resolver(
 
 pub struct ServiceTokenSubjectResolver {
     services: ServiceTokenVerifier,
-    /// `None` — user assertions не настроены и отклоняются.
-    users: Option<UserAssertionVerifier>,
+    users: UserAssertionVerifier,
 }
 
 /// Аутентифицированный вызывающий: subject для use cases и, если subject
@@ -67,8 +66,8 @@ pub struct Caller {
 }
 
 impl ServiceTokenSubjectResolver {
-    /// `Ok(None)`, если проверка не настроена (пусты issuer, audience или
-    /// путь к JWKS). Нечитаемый JWKS и невалидный allowlist — ошибка.
+    /// Service identity и user assertions обязательны: пустая настройка,
+    /// нечитаемый JWKS и невалидный allowlist или список делегатов — ошибка.
     pub fn from_config(config: &IdentityConfig) -> Result<Self, IdentityConfigError> {
         let services = ServiceTokenVerifier::from_config(config)?;
         Ok(Self {
@@ -82,17 +81,12 @@ impl ServiceTokenSubjectResolver {
         audience: &str,
         jwks: &str,
         service_accounts: &str,
+        users: UserAssertionVerifier,
     ) -> Result<Self, IdentityConfigError> {
         Ok(Self {
             services: ServiceTokenVerifier::new(issuer, audience, jwks, service_accounts)?,
-            users: None,
+            users,
         })
-    }
-
-    /// Включает приём user assertions; `None` оставляет их отклонение.
-    pub fn with_user_assertions(mut self, users: Option<UserAssertionVerifier>) -> Self {
-        self.users = users;
-        self
     }
 
     /// Порядок ADR 32: service token, затем необязательный user assertion.
@@ -116,10 +110,7 @@ impl ServiceTokenSubjectResolver {
         if token.is_empty() {
             return Err(format!("empty {USER_ASSERTION} from {service:?}"));
         }
-        let users = self.users.as_ref().ok_or_else(|| {
-            format!("user assertion from {service:?} rejected: user assertions are not configured")
-        })?;
-        let user = users.verify(&service, token)?;
+        let user = self.users.verify(&service, token)?;
         tracing::info!(
             operation = "identity.user_assertion",
             outcome = "accepted",

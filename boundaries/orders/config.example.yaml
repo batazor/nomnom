@@ -52,7 +52,7 @@ identity:
   service_accounts: ""
   # Каталог projected tokens по audience целевых контекстов (worker).
   token_dir: ""
-  # User assertions BFF (ADR 32): без user_issuer, user_jwks_file и user_delegates отклоняются.
+  # User assertions BFF (ADR 32): user_issuer, user_jwks_file и user_delegates обязательны для gRPC API.
   user_issuer: ""
   user_jwks_file: ""
   # Services, которым разрешено передавать user, через запятую (в развёртываниях bff).

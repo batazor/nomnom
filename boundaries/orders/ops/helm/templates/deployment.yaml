@@ -85,8 +85,6 @@ spec:
               value: /etc/nomnom/identity/jwks.json
             - name: IDENTITY__SERVICE_ACCOUNTS
               value: {{ .serviceAccounts | quote }}
-            {{- end }}
-            {{- if .userJwksConfigMap }}
             - name: IDENTITY__USER_ISSUER
               value: {{ .userIssuer | quote }}
             - name: IDENTITY__USER_JWKS_FILE
@@ -131,14 +129,12 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap .Values.identity.userJwksConfigMap .Values.identity.tokenAudiences }}
+          {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap .Values.identity.tokenAudiences }}
           volumeMounts:
             {{- if .Values.identity.jwksConfigMap }}
             - name: identity-jwks
               mountPath: /etc/nomnom/identity
               readOnly: true
-            {{- end }}
-            {{- if .Values.identity.userJwksConfigMap }}
             - name: identity-user-jwks
               mountPath: /etc/nomnom/user-identity
               readOnly: true
@@ -152,23 +148,23 @@ spec:
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
           {{- end }}
-      {{- if or .Values.volumes .Values.identity.jwksConfigMap .Values.identity.userJwksConfigMap .Values.identity.tokenAudiences }}
+      {{- if or .Values.volumes .Values.identity.jwksConfigMap .Values.identity.tokenAudiences }}
       volumes:
-        {{- with .Values.identity.jwksConfigMap }}
+        {{- with .Values.identity }}
+        {{- if .jwksConfigMap }}
         - name: identity-jwks
           configMap:
-            name: {{ . }}
+            name: {{ .jwksConfigMap }}
+            items:
+              - key: jwks.json
+                path: jwks.json
+        - name: identity-user-jwks
+          configMap:
+            name: {{ .userJwksConfigMap }}
             items:
               - key: jwks.json
                 path: jwks.json
         {{- end }}
-        {{- with .Values.identity.userJwksConfigMap }}
-        - name: identity-user-jwks
-          configMap:
-            name: {{ . }}
-            items:
-              - key: jwks.json
-                path: jwks.json
         {{- end }}
         {{- with .Values.identity.tokenAudiences }}
         # ADR 27: one projected ServiceAccount token per target context; kubelet rotates them.

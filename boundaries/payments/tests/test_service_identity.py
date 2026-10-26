@@ -21,8 +21,10 @@ from infrastructure.grpc.identity import (
     IdentityConfigError,
     ServiceTokenSubjectResolver,
     ServiceTokenVerifier,
+    UserAssertionVerifier,
     create_subject_resolver,
     load_jwks,
+    load_user_jwks,
 )
 from infrastructure.grpc.service import (
     GrpcWorker,
@@ -46,6 +48,16 @@ from slices.payment.domains.payment import PaymentState
 FIXTURES = Path(__file__).resolve().parents[1].parent.parent / "tests" / "identity" / "fixtures"
 JWKS_FILE = FIXTURES / "jwks.json"
 VECTORS: dict[str, Any] = json.loads((FIXTURES / "vectors.json").read_text(encoding="utf-8"))
+# BFF user assertions (ADR 32) are required alongside service identity.
+BFF_JWKS_FILE = FIXTURES / "bff-jwks.json"
+USER_VECTORS: dict[str, Any] = json.loads(
+    (FIXTURES / "user-vectors.json").read_text(encoding="utf-8")
+)
+USER_IDENTITY_ENV = {
+    "IDENTITY__USER_ISSUER": USER_VECTORS["issuer"],
+    "IDENTITY__USER_JWKS_FILE": str(BFF_JWKS_FILE),
+    "IDENTITY__USER_DELEGATES": USER_VECTORS["delegates"],
+}
 
 ORDERS_WORKER = Subject(SubjectKind.SERVICE, VECTORS["expected_service"])
 VALID_NBF = 1_700_000_000
@@ -86,6 +98,7 @@ def _vector_settings(**overrides: str) -> IdentitySettings:
         "IDENTITY__AUDIENCE": VECTORS["audience"],
         "IDENTITY__JWKS_FILE": str(JWKS_FILE),
         "IDENTITY__SERVICE_ACCOUNTS": VECTORS["service_accounts"],
+        **USER_IDENTITY_ENV,
     }
     values.update(overrides)
     with patch.dict(os.environ, {**REQUIRED_ENV, **values}, clear=True):
@@ -220,7 +233,13 @@ class EcdsaTokenTest(unittest.TestCase):
                 audience=VECTORS["audience"],
                 keys=load_jwks(jwks_file),
                 service_accounts={"system:serviceaccount:nomnom:orders-worker": "orders-worker"},
-            )
+            ),
+            user_assertions=UserAssertionVerifier(
+                issuer=USER_VECTORS["issuer"],
+                audience=VECTORS["audience"],
+                keys=load_user_jwks(BFF_JWKS_FILE),
+            ),
+            user_delegates={USER_VECTORS["delegates"]},
         )
 
     def test_es256_token_is_accepted(self) -> None:
@@ -254,9 +273,23 @@ class EcdsaTokenTest(unittest.TestCase):
 class IdentityConfigTest(unittest.TestCase):
     """FR-432, AC-462: missing or invalid configuration fails startup."""
 
-    def test_identity_is_disabled_by_default(self) -> None:
+    def test_identity_settings_are_empty_by_default(self) -> None:
         with patch.dict(os.environ, REQUIRED_ENV, clear=True):
-            self.assertFalse(load_settings().identity.enabled)
+            identity = load_settings().identity
+        self.assertEqual(
+            identity.missing,
+            [
+                "IDENTITY__ISSUER",
+                "IDENTITY__AUDIENCE",
+                "IDENTITY__JWKS_FILE",
+                "IDENTITY__SERVICE_ACCOUNTS",
+                "IDENTITY__USER_ISSUER",
+                "IDENTITY__USER_JWKS_FILE",
+                "IDENTITY__USER_DELEGATES",
+            ],
+        )
+        with self.assertRaisesRegex(IdentityConfigError, "IDENTITY__ISSUER"):
+            create_subject_resolver(identity)
 
     def test_parses_several_service_accounts(self) -> None:
         settings = _vector_settings(
@@ -276,7 +309,7 @@ class IdentityConfigTest(unittest.TestCase):
                 overrides = {env: ""}
                 if env == "IDENTITY__ISSUER":
                     overrides["IDENTITY__SERVICE_ACCOUNTS"] = ""
-                with self.assertRaises(IdentityConfigError):
+                with self.assertRaisesRegex(IdentityConfigError, env):
                     create_subject_resolver(_vector_settings(**overrides))
 
     def test_issuer_with_empty_allowlist_is_a_config_error(self) -> None:

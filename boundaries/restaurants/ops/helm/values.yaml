@@ -174,9 +174,10 @@ readinessProbe:
   timeoutSeconds: 1
   failureThreshold: 1
 
-# Service identity по projected ServiceAccount token (ADR 27). Для release с gRPC API
-# (service.enabled) jwksConfigMap, issuer и serviceAccounts обязательны; ключ jwks.json
-# ConfigMap монтируется read-only в /etc/nomnom/identity/jwks.json.
+# Service identity по projected ServiceAccount token (ADR 27) и user assertions BFF (ADR 32).
+# Для release с gRPC API (service.enabled) все значения ниже обязательны; ключ jwks.json
+# jwksConfigMap монтируется read-only в /etc/nomnom/identity/jwks.json, ключ jwks.json
+# userJwksConfigMap — в /etc/nomnom/user-identity/jwks.json.
 identity:
   # Issuer токенов кластера (/.well-known/openid-configuration), например
   # https://kubernetes.default.svc.cluster.local.
@@ -188,10 +189,6 @@ identity:
   serviceAccounts: ""
   # ConfigMap с ключом jwks.json — публичные ключи кластера (/openid/v1/jwks).
   jwksConfigMap: ""
-  # User assertions BFF (ADR 32). Пока userJwksConfigMap пуст, IDENTITY__USER_* не
-  # задаются и любой вызов с x-nomnom-user-assertion отклоняется. Если задан, его ключ
-  # jwks.json монтируется read-only в /etc/nomnom/user-identity/jwks.json, а
-  # jwksConfigMap, userIssuer и userDelegates обязательны.
   # ConfigMap с ключом jwks.json — публичные ключи BFF (EC P-256), в kind bff-jwks.
   userJwksConfigMap: ""
   # Ожидаемый iss assertion, например nomnom-bff.

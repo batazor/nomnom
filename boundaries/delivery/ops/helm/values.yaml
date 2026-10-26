@@ -174,10 +174,9 @@ identity:
   serviceAccounts: ""
   # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart.
   jwksConfigMap: ""
-  # User assertions BFF (ADR 32). Пока userJwksConfigMap пуст (или пуст jwksConfigMap),
-  # IDENTITY__USER_* не задаются и любой вызов с x-nomnom-user-assertion отклоняется.
-  # Если задан, его ключ jwks.json (публичные ключи BFF, EC P-256; в kind — bff-jwks)
-  # монтируется read-only в /etc/nomnom/user-identity/jwks.json.
+  # User assertions BFF (ADR 32), обязательны при service.enabled. Ключ jwks.json
+  # ConfigMap (публичные ключи BFF, EC P-256; в kind — bff-jwks) монтируется read-only
+  # в /etc/nomnom/user-identity/jwks.json.
   userJwksConfigMap: ""
   # Ожидаемый iss assertion, например "nomnom-bff".
   userIssuer: ""

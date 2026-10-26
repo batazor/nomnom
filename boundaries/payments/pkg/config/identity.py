@@ -77,9 +77,8 @@ class IdentitySettings(BaseSettings):
     """Verification of callers: service identity and BFF user assertions.
 
     Service identity comes from a projected ServiceAccount token (ADR 27), users from
-    BFF user assertions (ADR 32). While the issuer, audience or JWKS is missing, every
-    call is rejected (fail closed). While the user issuer, user JWKS or delegates are
-    missing, every call carrying a user assertion is rejected.
+    BFF user assertions (ADR 32). All of them are required: the resolver refuses to start
+    while any is empty (see ``missing``).
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -120,19 +119,23 @@ class IdentitySettings(BaseSettings):
         return self
 
     @property
-    def enabled(self) -> bool:
-        """Whether service identity verification is fully configured."""
-        return bool(self.issuer and self.audience and self.jwks_file)
+    def missing(self) -> list[str]:
+        """Environment variables of required identity settings that are empty."""
+        required = {
+            IDENTITY_ISSUER_ENV: self.issuer,
+            IDENTITY_AUDIENCE_ENV: self.audience,
+            IDENTITY_JWKS_FILE_ENV: self.jwks_file,
+            IDENTITY_SERVICE_ACCOUNTS_ENV: self.service_accounts,
+            IDENTITY_USER_ISSUER_ENV: self.user_issuer,
+            IDENTITY_USER_JWKS_FILE_ENV: self.user_jwks_file,
+            IDENTITY_USER_DELEGATES_ENV: self.user_delegates,
+        }
+        return [env for env, value in required.items() if not value]
 
     @property
     def service_account_map(self) -> dict[str, str]:
         """Parsed ServiceAccount allowlist; see ``parse_service_accounts``."""
         return parse_service_accounts(self.service_accounts)
-
-    @property
-    def user_assertions_enabled(self) -> bool:
-        """Whether user assertions can be verified and therefore accepted."""
-        return bool(self.user_issuer and self.user_jwks_file and self.user_delegates)
 
     @property
     def user_delegate_set(self) -> frozenset[str]:

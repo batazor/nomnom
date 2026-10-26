@@ -141,7 +141,7 @@ Issuer, audience и путь к JWKS обязательны: без них пр�
 
 1. service token (выше); без него assertion не рассматривается;
 2. assertion нет → `Subject::Service(<service-name>)`, как раньше;
-3. assertion повторён или пуст, user assertions не настроены или service не входит в `IDENTITY__USER_DELEGATES` → `UNAUTHENTICATED`;
+3. assertion повторён или пуст или service не входит в `IDENTITY__USER_DELEGATES` → `UNAUTHENTICATED`;
 4. `UserAssertionVerifier`: `alg` ровно `ES256`, `kid` есть в JWKS BFF (ключи EC P-256), `iss` равен `IDENTITY__USER_ISSUER`, `aud` содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, `iat` обязателен, `exp - iat ≤ 60 s`, `sub` непустой и без пробелов по краям, `jti` непустой → `Subject::User(<sub>)`.
 
 Service identity делегата остаётся в `Caller::delegate` (`ServiceTokenSubjectResolver::authenticate`); принятие и отказ пишутся в stderr с `jti` и делегатом, без token.
@@ -152,7 +152,7 @@ Service identity делегата остаётся в `Caller::delegate` (`Servi
 | `IDENTITY__USER_JWKS_FILE` | `identity.user_jwks_file` | JWKS BFF; Helm монтирует `/etc/nomnom/user-identity/jwks.json` из `identity.userJwksConfigMap` |
 | `IDENTITY__USER_DELEGATES` | `identity.user_delegates` | Services через запятую, которым разрешено передавать user subject, в развёртываниях `bff` |
 
-User assertions принимаются, только если заданы все три переменные; иначе любой вызов с assertion получает `UNAUTHENTICATED`, вызовы без assertion работают как раньше. Нечитаемый JWKS BFF, JWKS без ES256-ключей и неверный формат списка делегатов завершают startup ошибкой. Ротация ключа BFF: новый `kid` добавляется в ConfigMap, затем rollout restart, затем BFF переключается на новый ключ. Тесты проходят по `tests/identity/fixtures/user-vectors.json` с часами, зафиксированными на `now` (FR-471–FR-473).
+Все три переменные обязательны: пустая завершает startup ошибкой. Нечитаемый JWKS BFF, JWKS без ES256-ключей и неверный формат списка делегатов завершают startup ошибкой. Ротация ключа BFF: новый `kid` добавляется в ConfigMap, затем rollout restart, затем BFF переключается на новый ключ. Тесты проходят по `tests/identity/fixtures/user-vectors.json` с часами, зафиксированными на `now` (FR-471–FR-473).
 
 ## Авторизация (SpiceDB)
 

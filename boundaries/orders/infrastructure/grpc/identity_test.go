@@ -43,6 +43,9 @@ func loadVectors(t *testing.T) (vectors, config.IdentityConfig) {
 		Audience:        v.Audience,
 		JWKSFile:        filepath.Join(fixtures, "jwks.json"),
 		ServiceAccounts: v.ServiceAccounts,
+		UserIssuer:      "nomnom-bff",
+		UserJWKSFile:    filepath.Join(fixtures, "bff-jwks.json"),
+		UserDelegates:   "bff",
 	}
 }
 
@@ -232,23 +235,22 @@ func TestUserAssertionMustBePresentOnce(t *testing.T) {
 	}
 }
 
-// AC-529: without user configuration assertions are rejected, service calls still pass.
-func TestUserAssertionRejectedWithoutConfiguration(t *testing.T) {
-	v, full := loadUserVectors(t)
+// AC-529: user assertion settings are required: a missing one stops the start.
+func TestSubjectResolverRequiresUserSettings(t *testing.T) {
+	_, full := loadUserVectors(t)
 	for name, cfg := range map[string]config.IdentityConfig{
+		"no settings": func() config.IdentityConfig {
+			c := full
+			c.UserIssuer, c.UserJWKSFile, c.UserDelegates = "", "", ""
+			return c
+		}(),
 		"no jwks":      func() config.IdentityConfig { c := full; c.UserJWKSFile = ""; return c }(),
-		"no issuer":    func() config.IdentityConfig { c := full; c.UserIssuer = ""; return c }(),
+		"no issuer":    func() config.IdentityConfig { c := full; c.UserIssuer = " "; return c }(),
 		"no delegates": func() config.IdentityConfig { c := full; c.UserDelegates = " , "; return c }(),
 	} {
 		t.Run(name, func(t *testing.T) {
-			resolver := newUserResolver(t, v, cfg)
-
-			_, err := resolver.Resolve(withAssertion(v.DelegateToken, v.Tokens["valid"]))
-			require.ErrorIs(t, err, ErrUnauthenticated)
-
-			subject, err := resolver.Resolve(withAssertion(v.DelegateToken))
-			require.NoError(t, err)
-			assert.Equal(t, application.Subject{Kind: application.SubjectService, ID: "bff"}, subject)
+			_, err := NewSubjectResolver(cfg)
+			require.ErrorContains(t, err, config.EnvIdentityUserIssuer+", "+config.EnvIdentityUserJWKSFile+" and "+config.EnvIdentityUserDelegates+" are required")
 		})
 	}
 }

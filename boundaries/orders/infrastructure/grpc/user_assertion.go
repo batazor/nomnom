@@ -3,7 +3,6 @@ package grpcadapter
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -20,20 +19,16 @@ type userAssertionVerifier struct {
 	delegates map[string]bool
 }
 
-// newUserAssertionVerifier returns nil when user assertions are not fully
-// configured. A configured but unusable BFF JWKS fails startup.
+// newUserAssertionVerifier requires the BFF issuer, JWKS and delegates; a
+// missing setting or an unusable BFF JWKS fails startup.
 func newUserAssertionVerifier(cfg config.IdentityConfig) (*userAssertionVerifier, error) {
-	var keys jwks
-	if strings.TrimSpace(cfg.UserJWKSFile) != "" {
-		var err error
-		if keys, err = LoadUserJWKS(cfg.UserJWKSFile); err != nil {
-			return nil, err
-		}
-	}
 	if !cfg.UserVerifying() {
-		slog.Warn(fmt.Sprintf("%s, %s or %s is not set: user assertions are rejected",
-			config.EnvIdentityUserIssuer, config.EnvIdentityUserJWKSFile, config.EnvIdentityUserDelegates))
-		return nil, nil
+		return nil, fmt.Errorf("%s, %s and %s are required",
+			config.EnvIdentityUserIssuer, config.EnvIdentityUserJWKSFile, config.EnvIdentityUserDelegates)
+	}
+	keys, err := LoadUserJWKS(cfg.UserJWKSFile)
+	if err != nil {
+		return nil, err
 	}
 	return &userAssertionVerifier{keys: keys, issuer: cfg.UserIssuer, delegates: cfg.Delegates()}, nil
 }

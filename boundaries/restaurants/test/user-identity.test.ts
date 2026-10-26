@@ -214,13 +214,9 @@ test("assertion expiry and not-before honour the 30s clock tolerance", async () 
   );
 });
 
-test("without user settings assertions are rejected and service calls still work (AC-529)", async () => {
-  const resolver = await createResolver(serviceEnvironment, () => {});
+test("a service token without an assertion resolves to the service subject (ADR 32)", async () => {
+  const resolver = await createResolver();
 
-  await assert.rejects(
-    resolver.resolve(call(vectors.delegate_token, valid)),
-    unauthenticated,
-  );
   assert.deepEqual(await resolver.resolve(call(vectors.delegate_token)), {
     type: "service",
     id: "bff",
@@ -235,27 +231,38 @@ test("loads the user assertion settings", () => {
   });
 
   assert.ok(config.enabled);
-  assert.ok(config.user.enabled);
   assert.equal(config.user.issuer, "nomnom-bff");
   assert.equal(config.user.jwksFile, BFF_JWKS_FILE);
   assert.deepEqual([...config.user.delegates], ["bff", "support-console"]);
 });
 
-test("user assertions are disabled without any user setting (FR-473)", () => {
-  const config = loadIdentityConfig(serviceEnvironment);
-  assert.ok(config.enabled);
-  assert.deepEqual(config.user, { enabled: false });
-});
-
-test("partial user assertion settings are a startup error (FR-473)", () => {
-  for (const environment of [
-    { ...userEnvironment, IDENTITY__USER_ISSUER: "" },
-    { ...userEnvironment, IDENTITY__USER_JWKS_FILE: " " },
-    { ...userEnvironment, IDENTITY__USER_DELEGATES: "" },
-  ]) {
+test("missing user assertion settings are a startup error (FR-473)", () => {
+  assert.throws(
+    () => loadIdentityConfig(serviceEnvironment),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message ===
+        "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE, IDENTITY__USER_DELEGATES must be set",
+  );
+  for (const [missing, environment] of [
+    [
+      "IDENTITY__USER_ISSUER",
+      { ...userEnvironment, IDENTITY__USER_ISSUER: "" },
+    ],
+    [
+      "IDENTITY__USER_JWKS_FILE",
+      { ...userEnvironment, IDENTITY__USER_JWKS_FILE: " " },
+    ],
+    [
+      "IDENTITY__USER_DELEGATES",
+      { ...userEnvironment, IDENTITY__USER_DELEGATES: "" },
+    ],
+  ] as const) {
     assert.throws(
       () => loadIdentityConfig(environment),
-      /must be set together/,
+      (error: unknown) =>
+        error instanceof Error && error.message === `${missing} must be set`,
+      missing,
     );
   }
 });

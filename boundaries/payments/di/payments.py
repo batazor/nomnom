@@ -129,7 +129,7 @@ def create_grpc_worker(
 class PaymentsContainer(containers.DeclarativeContainer):
     """One instance per ``payments`` process; ``config`` holds ``pkg.config.Settings``.
 
-    Identity (``IDENTITY__ISSUER``, ``IDENTITY__AUDIENCE``, ``IDENTITY__JWKS_FILE``),
+    Identity (``IDENTITY__*``: service tokens and BFF user assertions),
     ``SPICEDB__ENDPOINT``, ``PROVIDER__KIND`` and ``PROVIDER__WEBHOOK_SECRET`` are
     required: a missing or invalid value stops the process before any port opens.
     """

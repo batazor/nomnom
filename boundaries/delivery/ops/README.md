@@ -174,12 +174,11 @@ helm template delivery boundaries/delivery/ops/helm \
 JWKS читается при старте: после обновления ConfigMap нужен rollout restart.
 
 User assertions BFF ([ADR 32](../../../docs/adr/0032-user-identity-via-bff-signed-assertions.md))
-включает `identity.userJwksConfigMap` вместе с `identity.jwksConfigMap`: ключ `jwks.json` (публичные
+обязательны вместе с service identity: `identity.userJwksConfigMap`, `identity.userIssuer` и
+`identity.userDelegates`, пустое значение — ошибка рендера chart. Ключ `jwks.json` (публичные
 ключи BFF, в kind — ConfigMap `bff-jwks`) монтируется read-only в
-`/etc/nomnom/user-identity/jwks.json`, а контейнер получает `IDENTITY__USER_ISSUER`
-(`identity.userIssuer`), `IDENTITY__USER_JWKS_FILE` и `IDENTITY__USER_DELEGATES`
-(`identity.userDelegates`). По умолчанию значения пусты, и вызовы с `x-nomnom-user-assertion`
-отклоняются.
+`/etc/nomnom/user-identity/jwks.json`, а контейнер получает `IDENTITY__USER_ISSUER`,
+`IDENTITY__USER_JWKS_FILE` и `IDENTITY__USER_DELEGATES`.
 
 ## SpiceDB
 

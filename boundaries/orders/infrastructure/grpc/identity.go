@@ -28,13 +28,13 @@ const (
 // delegate (userAssertionVerifier, ADR 32) yields the asserted user.
 type ServiceTokenSubjectResolver struct {
 	service serviceTokenVerifier
-	// user is nil when user assertions are not configured: every one is rejected.
-	user *userAssertionVerifier
-	now  func() time.Time
+	user    *userAssertionVerifier
+	now     func() time.Time
 }
 
-// NewSubjectResolver returns the token resolver; identity is required, so a
-// missing issuer, audience or JWKS stops the start.
+// NewSubjectResolver returns the token resolver; service identity and user
+// assertions are required, so a missing issuer, audience, JWKS, BFF issuer,
+// BFF JWKS or delegates stops the start.
 func NewSubjectResolver(cfg config.IdentityConfig) (SubjectResolver, error) {
 	if !cfg.Verifying() {
 		return nil, fmt.Errorf("%s, %s and %s are required",
@@ -78,9 +78,6 @@ func (r *ServiceTokenSubjectResolver) resolve(ctx context.Context) (application.
 func (r *ServiceTokenSubjectResolver) resolveUser(delegate string, assertions []string) (application.Subject, error) {
 	if len(assertions) != 1 || assertions[0] == "" {
 		return application.Subject{}, fmt.Errorf("%s metadata must be present once", UserAssertionMetadata)
-	}
-	if r.user == nil {
-		return application.Subject{}, fmt.Errorf("user assertion from %s: user assertions are not configured", delegate)
 	}
 	if !r.user.accepts(delegate) {
 		return application.Subject{}, fmt.Errorf("user assertion from %s: service is not an allowed delegate", delegate)

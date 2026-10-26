@@ -47,25 +47,22 @@ impl ServiceTokenVerifier {
 }
 
 impl UserAssertionVerifier {
-    /// `Ok(None)`, если не заданы user issuer, JWKS BFF, делегаты или
-    /// audience. Нечитаемый JWKS и невалидный список делегатов — ошибка.
-    pub fn from_config(config: &IdentityConfig) -> Result<Option<Self>, IdentityConfigError> {
+    /// User issuer, путь к JWKS BFF и делегаты обязательны; пустое значение,
+    /// нечитаемый JWKS и невалидный список делегатов — ошибка startup.
+    pub fn from_config(config: &IdentityConfig) -> Result<Self, IdentityConfigError> {
         let issuer = config.user_issuer.trim();
         let jwks_file = config.user_jwks_file.trim();
         let delegates = config.user_delegates.trim();
         let audience = config.audience.trim();
         if issuer.is_empty() || jwks_file.is_empty() || delegates.is_empty() {
-            if !(issuer.is_empty() && jwks_file.is_empty() && delegates.is_empty()) {
-                return Err(config_error(
-                    "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE and \
-                     IDENTITY__USER_DELEGATES must be set together",
-                ));
-            }
-            return Ok(None);
+            return Err(config_error(
+                "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE and \
+                 IDENTITY__USER_DELEGATES are required",
+            ));
         }
         let jwks = std::fs::read_to_string(jwks_file)
             .map_err(|error| config_error(format!("read BFF JWKS {jwks_file}: {error}")))?;
-        Self::new(issuer, audience, &jwks, delegates).map(Some)
+        Self::new(issuer, audience, &jwks, delegates)
     }
 }
 

@@ -44,9 +44,9 @@ BFF проверяет access token покупателя (подпись по JW
 1. `authorization: Bearer <projected ServiceAccount token>` — service identity BFF по ADR 27, без изменений;
 2. `x-nomnom-user-assertion: <jwt>` — пользователь, от имени которого действует BFF.
 
-Resolver контекста сначала аутентифицирует service identity. Если assertion присутствует, вызывающий service MUST входить в allowlist делегатов `IDENTITY__USER_DELEGATES` (по умолчанию пуст, в развёртываниях — `bff`); затем assertion проверяется: подпись по JWKS BFF (`IDENTITY__USER_JWKS_FILE`), `iss` равен `IDENTITY__USER_ISSUER`, `aud` содержит audience контекста (`IDENTITY__AUDIENCE`), `exp`/`nbf` с допуском 30 s, `exp - iat ≤ 60 s`, непустой `sub`. Результат — `Subject{user, <sub>}`; service identity BFF остаётся в контексте вызова для audit. Любое нарушение — `UNAUTHENTICATED`. Assertion от service вне allowlist — тоже `UNAUTHENTICATED`, даже если assertion валиден.
+Resolver контекста сначала аутентифицирует service identity. Если assertion присутствует, вызывающий service MUST входить в allowlist делегатов `IDENTITY__USER_DELEGATES` (в развёртываниях — `bff`); затем assertion проверяется: подпись по JWKS BFF (`IDENTITY__USER_JWKS_FILE`), `iss` равен `IDENTITY__USER_ISSUER`, `aud` содержит audience контекста (`IDENTITY__AUDIENCE`), `exp`/`nbf` с допуском 30 s, `exp - iat ≤ 60 s`, непустой `sub`. Результат — `Subject{user, <sub>}`; service identity BFF остаётся в контексте вызова для audit. Любое нарушение — `UNAUTHENTICATED`. Assertion от service вне allowlist — тоже `UNAUTHENTICATED`, даже если assertion валиден.
 
-Без `IDENTITY__USER_ISSUER` и `IDENTITY__USER_JWKS_FILE` контекст не принимает user assertions (fail closed), service-вызовы работают как раньше.
+`IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE` и `IDENTITY__USER_DELEGATES` обязательны для контекста с gRPC API: пустая настройка останавливает процесс на старте, режима без проверки user assertions нет. Вызов service без assertion по-прежнему аутентифицируется как `Subject{service, …}`.
 
 Что разрешено пользователю, по-прежнему решает SpiceDB в use case по `user:<sub>`.
 

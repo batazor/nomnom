@@ -54,6 +54,7 @@ NOW = float(USER_VECTORS["now"])
 CUSTOMER = Subject(SubjectKind.USER, USER_VECTORS["expected_subject"])
 BFF = Subject(SubjectKind.SERVICE, "bff")
 LOGGER = "infrastructure.grpc.identity"
+USER_ENV = ("IDENTITY__USER_ISSUER", "IDENTITY__USER_JWKS_FILE", "IDENTITY__USER_DELEGATES")
 
 
 def _metadata(service_token: str, *assertions: str) -> list[tuple[str, str]]:
@@ -66,28 +67,23 @@ def _context(service_token: str, *assertions: str) -> FakeContext:
     return FakeContext(_metadata(service_token, *assertions))
 
 
-def _settings(*, user: bool = True, **overrides: str) -> IdentitySettings:
+def _settings(**overrides: str) -> IdentitySettings:
     values = {
         "IDENTITY__ISSUER": USER_VECTORS["service_issuer"],
         "IDENTITY__AUDIENCE": USER_VECTORS["audience"],
         "IDENTITY__JWKS_FILE": str(JWKS_FILE),
         "IDENTITY__SERVICE_ACCOUNTS": USER_VECTORS["service_accounts"],
+        "IDENTITY__USER_ISSUER": USER_VECTORS["issuer"],
+        "IDENTITY__USER_JWKS_FILE": str(BFF_JWKS_FILE),
+        "IDENTITY__USER_DELEGATES": USER_VECTORS["delegates"],
     }
-    if user:
-        values.update(
-            {
-                "IDENTITY__USER_ISSUER": USER_VECTORS["issuer"],
-                "IDENTITY__USER_JWKS_FILE": str(BFF_JWKS_FILE),
-                "IDENTITY__USER_DELEGATES": USER_VECTORS["delegates"],
-            }
-        )
     values.update(overrides)
     with patch.dict(os.environ, {**REQUIRED_ENV, **values}, clear=True):
         return IdentitySettings(_env_file=None)  # type: ignore[call-arg]
 
 
-def _resolver(*, user: bool = True, **overrides: str) -> ServiceTokenSubjectResolver:
-    resolver = create_subject_resolver(_settings(user=user, **overrides), clock=lambda: NOW)
+def _resolver(**overrides: str) -> ServiceTokenSubjectResolver:
+    resolver = create_subject_resolver(_settings(**overrides), clock=lambda: NOW)
     assert isinstance(resolver, ServiceTokenSubjectResolver)
     return resolver
 
@@ -273,18 +269,18 @@ class SignedAssertionTest(_ResolverCase):
         self._assert_rejected(_context(USER_VECTORS["delegate_token"], token))
 
 
-class UserIdentityConfigTest(_ResolverCase):
-    """FR-473, AC-529: user assertions are opt-in, an invalid BFF JWKS stops startup."""
+class UserIdentityConfigTest(unittest.TestCase):
+    """FR-473: user assertion settings are required, an invalid BFF JWKS stops startup."""
 
-    def test_user_assertions_are_disabled_by_default(self) -> None:
+    def test_user_settings_are_missing_by_default(self) -> None:
         with patch.dict(os.environ, REQUIRED_ENV, clear=True):
             identity = load_settings().identity
-        self.assertFalse(identity.user_assertions_enabled)
-        self.assertEqual(identity.user_delegate_set, frozenset())
+        for env in USER_ENV:
+            self.assertIn(env, identity.missing)
 
     def test_reads_user_identity_from_environment(self) -> None:
         settings = _settings(IDENTITY__USER_DELEGATES=" bff , admin-bff ")
-        self.assertTrue(settings.user_assertions_enabled)
+        self.assertEqual(settings.missing, [])
         self.assertEqual(settings.user_issuer, "nomnom-bff")
         self.assertEqual(settings.user_jwks_file, str(BFF_JWKS_FILE))
         self.assertEqual(settings.user_delegate_set, frozenset({"bff", "admin-bff"}))
@@ -294,23 +290,20 @@ class UserIdentityConfigTest(_ResolverCase):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 _settings(IDENTITY__USER_DELEGATES=value)
 
-    def test_without_user_settings_assertion_is_rejected_but_service_call_passes(self) -> None:
-        # AC-529: the same delegate call is the service subject bff without an assertion.
-        self.resolver = _resolver(user=False)
-        output = self._assert_rejected(
-            _context(USER_VECTORS["delegate_token"], USER_VECTORS["tokens"]["valid"])
-        )
-        self.assertIn("not configured", "\n".join(output))
-        self.assertEqual(self._resolve(_context(USER_VECTORS["delegate_token"])), BFF)
+    def test_missing_user_settings_are_a_startup_error(self) -> None:
+        with self.assertRaises(IdentityConfigError) as raised:
+            create_subject_resolver(_settings(**dict.fromkeys(USER_ENV, "")))
+        for env in USER_ENV:
+            self.assertIn(env, str(raised.exception))
 
-    def test_partial_user_settings_are_a_config_error(self) -> None:
-        for env in (
-            "IDENTITY__USER_ISSUER",
-            "IDENTITY__USER_JWKS_FILE",
-            "IDENTITY__USER_DELEGATES",
-        ):
-            with self.subTest(empty=env), self.assertRaises(IdentityConfigError):
-                create_subject_resolver(_settings(user=True, **{env: ""}))
+    def test_partial_user_settings_are_a_startup_error(self) -> None:
+        for env in USER_ENV:
+            with self.subTest(empty=env), self.assertRaises(IdentityConfigError) as raised:
+                create_subject_resolver(_settings(**{env: ""}))
+            self.assertIn(env, str(raised.exception))
+            for other in USER_ENV:
+                if other != env:
+                    self.assertNotIn(other, str(raised.exception))
 
     def test_unreadable_or_invalid_user_jwks_is_a_startup_error(self) -> None:
         p384 = json.loads(ECAlgorithm.to_jwk(ec.generate_private_key(ec.SECP384R1()).public_key()))

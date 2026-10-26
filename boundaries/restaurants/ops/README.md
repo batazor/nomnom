@@ -26,10 +26,11 @@ chart сейчас не используется. Решение зафикси�
 
 Service identity ([ADR 27](../../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)) задаётся
 `identity.issuer`, `identity.audience` (по умолчанию `nomnom.restaurants`), `identity.serviceAccounts`
-и `identity.jwksConfigMap`. Пока `identity.jwksConfigMap` пуст, переменные `IDENTITY__*` не задаются и
-приложение отклоняет командные RPC. Если он задан, ключ `jwks.json` этого ConfigMap (chart его не
-создаёт) монтируется read-only в `/etc/nomnom/identity/jwks.json`, а `identity.issuer` и
-`identity.serviceAccounts` обязательны — иначе chart не рендерится.
+и `identity.jwksConfigMap`, user assertions BFF ([ADR 32](../../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)) —
+`identity.userJwksConfigMap`, `identity.userIssuer` и `identity.userDelegates`. Для release с gRPC API
+(`service.enabled`) все они обязательны — иначе chart не рендерится. Ключ `jwks.json` ConfigMap
+`identity.jwksConfigMap` монтируется read-only в `/etc/nomnom/identity/jwks.json`, ключ `jwks.json`
+ConfigMap `identity.userJwksConfigMap` — в `/etc/nomnom/user-identity/jwks.json` (chart их не создаёт).
 
 Authorization через SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-authorization.md)) задаётся `spicedb.endpoint`,
 `spicedb.insecure`, `spicedb.timeout` (по умолчанию `2s`) и `spicedb.presharedKeySecret`

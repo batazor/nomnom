@@ -40,7 +40,7 @@ type IdentityConfig struct {
 	ServiceAccounts string `mapstructure:"service_accounts"`
 	// TokenDir holds one projected token per target audience; empty sends no credentials.
 	TokenDir string `mapstructure:"token_dir"`
-	// UserIssuer is the expected iss of user assertions; empty rejects every assertion.
+	// UserIssuer is the expected iss of user assertions.
 	UserIssuer string `mapstructure:"user_issuer"`
 	// UserJWKSFile holds the BFF assertion keys (EC P-256).
 	UserJWKSFile string `mapstructure:"user_jwks_file"`
@@ -79,8 +79,7 @@ func (cfg IdentityConfig) Verifying() bool {
 	return strings.TrimSpace(cfg.Issuer) != "" && strings.TrimSpace(cfg.Audience) != "" && strings.TrimSpace(cfg.JWKSFile) != ""
 }
 
-// UserVerifying reports whether user assertions are accepted; otherwise every
-// call carrying one is rejected.
+// UserVerifying reports whether the user assertion settings are complete.
 func (cfg IdentityConfig) UserVerifying() bool {
 	return strings.TrimSpace(cfg.UserIssuer) != "" && strings.TrimSpace(cfg.UserJWKSFile) != "" && len(cfg.Delegates()) > 0
 }

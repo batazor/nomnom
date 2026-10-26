@@ -176,11 +176,13 @@ readinessProbe:
   timeoutSeconds: 1
   failureThreshold: 1
 
-# Service identity по projected ServiceAccount token (ADR 27). Проверка включается, только
-# когда задан jwksConfigMap: ConfigMap с ключом jwks.json (публичные ключи кластера,
-# /openid/v1/jwks) монтируется read-only в /etc/nomnom/identity/jwks.json, а значения
-# передаются приложению как IDENTITY__ISSUER, IDENTITY__AUDIENCE, IDENTITY__JWKS_FILE и
-# IDENTITY__SERVICE_ACCOUNTS. jwksConfigMap, issuer и serviceAccounts обязательны.
+# Service identity по projected ServiceAccount token (ADR 27) и user assertions BFF (ADR 32).
+# Все значения обязательны (иначе helm template завершается ошибкой): ConfigMap jwksConfigMap
+# (публичные ключи кластера, /openid/v1/jwks) монтируется read-only в
+# /etc/nomnom/identity/jwks.json, userJwksConfigMap (публичные ES256 ключи BFF) — в
+# /etc/nomnom/user-identity/jwks.json; значения передаются приложению как IDENTITY__ISSUER,
+# IDENTITY__AUDIENCE, IDENTITY__JWKS_FILE, IDENTITY__SERVICE_ACCOUNTS, IDENTITY__USER_ISSUER,
+# IDENTITY__USER_JWKS_FILE и IDENTITY__USER_DELEGATES.
 identity:
   # Issuer токенов кластера (/.well-known/openid-configuration). Обязателен.
   issuer: ""
@@ -189,19 +191,14 @@ identity:
   # Allowlist через запятую: namespace/serviceaccount=service-name,
   # например nomnom/orders-worker=orders-worker. Обязателен.
   serviceAccounts: ""
-  # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart.
+  # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart. Обязателен.
   jwksConfigMap: ""
-  # User assertions BFF (ADR 32). Включаются, только когда задан userJwksConfigMap (вместе с
-  # jwksConfigMap): ConfigMap с ключом jwks.json (публичные ES256 ключи BFF) монтируется в
-  # /etc/nomnom/user-identity/jwks.json, значения передаются как IDENTITY__USER_ISSUER,
-  # IDENTITY__USER_JWKS_FILE и IDENTITY__USER_DELEGATES. Без него вызовы с
-  # x-nomnom-user-assertion отклоняются UNAUTHENTICATED, service-вызовы не затронуты.
-  # Ожидаемый iss assertion, например nomnom-bff. Обязателен вместе с userJwksConfigMap.
+  # Ожидаемый iss user assertion, например nomnom-bff. Обязателен.
   userIssuer: ""
-  # Services, которым разрешено передавать user, через запятую, например bff.
-  # Обязателен вместе с userJwksConfigMap.
+  # Services, которым разрешено передавать user, через запятую, например bff. Обязателен.
   userDelegates: ""
   # Имя ConfigMap с ключом jwks.json (JWKS BFF); создаётся развёртыванием, не этим chart.
+  # Обязателен.
   userJwksConfigMap: ""
 
 # Authorization через SpiceDB (ADR 18). Проверка включается, только когда задан endpoint:

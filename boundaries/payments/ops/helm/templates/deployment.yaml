@@ -86,8 +86,6 @@ spec:
               value: "/etc/nomnom/identity/jwks.json"
             - name: IDENTITY__SERVICE_ACCOUNTS
               value: {{ .Values.identity.serviceAccounts | quote }}
-            {{- end }}
-            {{- if .Values.identity.userJwksConfigMap }}
             - name: IDENTITY__USER_ISSUER
               value: {{ .Values.identity.userIssuer | quote }}
             - name: IDENTITY__USER_JWKS_FILE
@@ -125,14 +123,12 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap .Values.identity.userJwksConfigMap }}
+          {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap }}
           volumeMounts:
             {{- if .Values.identity.jwksConfigMap }}
             - name: identity-jwks
               mountPath: /etc/nomnom/identity
               readOnly: true
-            {{- end }}
-            {{- if .Values.identity.userJwksConfigMap }}
             - name: user-identity-jwks
               mountPath: /etc/nomnom/user-identity
               readOnly: true
@@ -141,7 +137,7 @@ spec:
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
           {{- end }}
-      {{- if or .Values.volumes .Values.identity.jwksConfigMap .Values.identity.userJwksConfigMap }}
+      {{- if or .Values.volumes .Values.identity.jwksConfigMap }}
       volumes:
         {{- if .Values.identity.jwksConfigMap }}
         # Публичные ключи кластера для проверки service identity (ADR 27).
@@ -151,8 +147,6 @@ spec:
             items:
               - key: jwks.json
                 path: jwks.json
-        {{- end }}
-        {{- if .Values.identity.userJwksConfigMap }}
         # Публичные ключи BFF для проверки user assertions (ADR 32).
         - name: user-identity-jwks
           configMap:

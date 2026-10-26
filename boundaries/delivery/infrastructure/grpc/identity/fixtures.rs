@@ -46,6 +46,7 @@ pub(crate) fn resolver() -> super::ServiceTokenSubjectResolver {
         &vectors.audience,
         &jwks(),
         &vectors.service_accounts,
+        users(),
     )
     .expect("resolver from fixtures")
 }
@@ -95,27 +96,34 @@ pub(crate) fn user_vectors() -> UserVectors {
     serde_json::from_str(&raw).expect("parse user-vectors.json")
 }
 
-/// Service identity без user assertions, как контекст без user-конфигурации.
-pub(crate) fn service_resolver_for_users() -> super::ServiceTokenSubjectResolver {
+/// Проверка user assertions по векторам с часами, зафиксированными на `now`.
+pub(crate) fn users() -> super::UserAssertionVerifier {
     let vectors = user_vectors();
-    super::ServiceTokenSubjectResolver::new(
-        &vectors.service_issuer,
-        &vectors.audience,
-        &jwks(),
-        &vectors.service_accounts,
-    )
-    .expect("service resolver from user fixtures")
-}
-
-pub(crate) fn user_resolver() -> super::ServiceTokenSubjectResolver {
-    let vectors = user_vectors();
-    let users = super::UserAssertionVerifier::new(
+    super::UserAssertionVerifier::new(
         &vectors.issuer,
         &vectors.audience,
         &bff_jwks(),
         &vectors.delegates,
     )
     .expect("user verifier from fixtures")
-    .with_clock(vectors.clock());
-    service_resolver_for_users().with_user_assertions(Some(users))
+    .with_clock(vectors.clock())
+}
+
+/// Service identity из `user-vectors.json` с данной проверкой user assertions.
+pub(crate) fn user_resolver_with(
+    users: super::UserAssertionVerifier,
+) -> super::ServiceTokenSubjectResolver {
+    let vectors = user_vectors();
+    super::ServiceTokenSubjectResolver::new(
+        &vectors.service_issuer,
+        &vectors.audience,
+        &jwks(),
+        &vectors.service_accounts,
+        users,
+    )
+    .expect("service resolver from user fixtures")
+}
+
+pub(crate) fn user_resolver() -> super::ServiceTokenSubjectResolver {
+    user_resolver_with(users())
 }

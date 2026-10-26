@@ -59,12 +59,16 @@ SPICEDB_ENV = {
 SECRET = "whsec_test"
 _FIXTURES = Path(__file__).resolve().parents[1].parent.parent / "tests" / "identity" / "fixtures"
 _VECTORS = json.loads((_FIXTURES / "vectors.json").read_text(encoding="utf-8"))
+_USER_VECTORS = json.loads((_FIXTURES / "user-vectors.json").read_text(encoding="utf-8"))
 # Process settings the payments container requires besides SpiceDB.
 PROCESS_ENV = {
     "IDENTITY__ISSUER": _VECTORS["issuer"],
     "IDENTITY__AUDIENCE": _VECTORS["audience"],
     "IDENTITY__JWKS_FILE": str(_FIXTURES / "jwks.json"),
     "IDENTITY__SERVICE_ACCOUNTS": _VECTORS["service_accounts"],
+    "IDENTITY__USER_ISSUER": _USER_VECTORS["issuer"],
+    "IDENTITY__USER_JWKS_FILE": str(_FIXTURES / "bff-jwks.json"),
+    "IDENTITY__USER_DELEGATES": _USER_VECTORS["delegates"],
     "PROVIDER__KIND": "fake",
     "PROVIDER__WEBHOOK_SECRET": SECRET,
 }

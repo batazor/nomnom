@@ -154,23 +154,14 @@ image.tag, остальные атрибуты окружения — telemetry.
 
 {{/*
 Service identity (ADR 27): процесс с gRPC API (service.enabled) проверяет token, поэтому JWKS, issuer, audience
-и allowlist обязательны — иначе процесс не стартует. User assertions (ADR 32)
-задаются целиком: JWKS BFF, issuer BFF и делегаты.
+и allowlist обязательны — иначе процесс не стартует. User assertions (ADR 32) обязательны так же:
+JWKS BFF, issuer BFF и делегаты.
 */}}
 {{- define "delivery.validateIdentity" -}}
 {{- if .Values.service.enabled -}}
-{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" -}}
+{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" -}}
 {{- if not (get $.Values.identity $key) -}}
 {{- fail (printf "identity.%s is required" $key) -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-{{- with .Values.identity -}}
-{{- if or .userJwksConfigMap .userIssuer .userDelegates -}}
-{{- range $key := list "userJwksConfigMap" "userIssuer" "userDelegates" -}}
-{{- if not (get $.Values.identity $key) -}}
-{{- fail (printf "identity.%s is required with the other user assertion settings" $key) -}}
-{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

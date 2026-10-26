@@ -9,9 +9,10 @@ import {
 } from "./env.ts";
 
 /**
- * Проверка service identity по projected ServiceAccount token (ADR 27).
- * `enabled: false`, пока не заданы issuer, audience и JWKS: процесс с gRPC
- * API без них не стартует (`createSubjectResolver`).
+ * Проверка service identity по projected ServiceAccount token (ADR 27) и user
+ * assertions BFF (ADR 32). `enabled: false`, пока не заданы issuer, audience и
+ * JWKS: процесс с gRPC API без них не стартует (`createSubjectResolver`). С
+ * ними user-настройки обязательны: пустая — ошибка старта.
  */
 export type IdentityConfig =
   | Readonly<{ enabled: false }>
@@ -25,20 +26,13 @@ export type IdentityConfig =
       user: UserIdentityConfig;
     }>;
 
-/**
- * Проверка user assertion BFF (ADR 32). `enabled: false`, если не задан ни
- * один из issuer, JWKS и списка делегатов: любой вызов с assertion
- * отклоняется. Частичная настройка — ошибка старта.
- */
-export type UserIdentityConfig =
-  | Readonly<{ enabled: false }>
-  | Readonly<{
-      enabled: true;
-      issuer: string;
-      jwksFile: string;
-      /** Services, которым разрешено передавать user subject. */
-      delegates: ReadonlySet<string>;
-    }>;
+/** Проверка user assertion BFF (ADR 32). */
+export type UserIdentityConfig = Readonly<{
+  issuer: string;
+  jwksFile: string;
+  /** Services, которым разрешено передавать user subject. */
+  delegates: ReadonlySet<string>;
+}>;
 
 /** Сегмент namespace / ServiceAccount: DNS-1123 subdomain. */
 const KUBERNETES_NAME = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/;
@@ -81,15 +75,15 @@ function loadUserIdentityConfig(
   const delegates = parseDelegates(
     environment[IDENTITY_USER_DELEGATES_ENV] ?? "",
   );
-  if (issuer === "" && jwksFile === "" && delegates.size === 0) {
-    return Object.freeze({ enabled: false });
+  const missing = [
+    issuer === "" ? IDENTITY_USER_ISSUER_ENV : "",
+    jwksFile === "" ? IDENTITY_USER_JWKS_FILE_ENV : "",
+    delegates.size === 0 ? IDENTITY_USER_DELEGATES_ENV : "",
+  ].filter((name) => name !== "");
+  if (missing.length > 0) {
+    throw new Error(`${missing.join(", ")} must be set`);
   }
-  if (issuer === "" || jwksFile === "" || delegates.size === 0) {
-    throw new Error(
-      `${IDENTITY_USER_ISSUER_ENV}, ${IDENTITY_USER_JWKS_FILE_ENV} and ${IDENTITY_USER_DELEGATES_ENV} must be set together`,
-    );
-  }
-  return Object.freeze({ enabled: true, issuer, jwksFile, delegates });
+  return Object.freeze({ issuer, jwksFile, delegates });
 }
 
 /** Разбирает имена services через запятую. */

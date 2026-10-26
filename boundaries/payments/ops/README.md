@@ -154,19 +154,19 @@ Chart реализует [runtime contract](../../../docs/cloud-native-runtime.m
 
 ## Service identity
 
-Проверка projected ServiceAccount token ([ADR 27](../../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md), см. раздел «Service identity» в [README](../README.md#service-identity)) включается заданием `identity.jwksConfigMap`. Тогда ConfigMap монтируется read-only каталогом `/etc/nomnom/identity` (только ключ `jwks.json`), а контейнер получает `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE=/etc/nomnom/identity/jwks.json` и `IDENTITY__SERVICE_ACCOUNTS`. Без `jwksConfigMap` переменные не задаются и приложение отклоняет все вызовы (fail closed).
+Проверка projected ServiceAccount token ([ADR 27](../../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md), см. раздел «Service identity» в [README](../README.md#service-identity)) и user assertions BFF ([ADR 32](../../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)) обязательны. ConfigMap `identity.jwksConfigMap` монтируется read-only каталогом `/etc/nomnom/identity`, `identity.userJwksConfigMap` — каталогом `/etc/nomnom/user-identity` (только ключ `jwks.json`); контейнер получает `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE=/etc/nomnom/identity/jwks.json`, `IDENTITY__SERVICE_ACCOUNTS`, `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE=/etc/nomnom/user-identity/jwks.json` и `IDENTITY__USER_DELEGATES`.
 
 | Параметр | По умолчанию | Назначение |
 | --- | --- | --- |
-| `identity.issuer` | `""` | Issuer токенов кластера; обязателен при `jwksConfigMap`. |
+| `identity.issuer` | `""` | Issuer токенов кластера; обязателен. |
 | `identity.audience` | `nomnom.payments` | Audience контекста. |
-| `identity.serviceAccounts` | `""` | Allowlist `namespace/serviceaccount=service-name` через запятую; обязателен при `jwksConfigMap`. |
-| `identity.jwksConfigMap` | `""` | ConfigMap с ключом `jwks.json` (JWKS кластера); создаётся развёртыванием, не chart. |
-| `identity.userIssuer` | `""` | Ожидаемый `iss` user assertions BFF (`nomnom-bff`); обязателен при `userJwksConfigMap`. |
-| `identity.userDelegates` | `""` | Services через запятую, которым разрешено передавать user (`bff`); обязателен при `userJwksConfigMap`. |
-| `identity.userJwksConfigMap` | `""` | ConfigMap с ключом `jwks.json` (JWKS BFF); монтируется в `/etc/nomnom/user-identity`, контейнер получает `IDENTITY__USER_*` ([ADR 32](../../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)). Без него вызовы с user assertion отклоняются. |
+| `identity.serviceAccounts` | `""` | Allowlist `namespace/serviceaccount=service-name` через запятую; обязателен. |
+| `identity.jwksConfigMap` | `""` | ConfigMap с ключом `jwks.json` (JWKS кластера); создаётся развёртыванием, не chart; обязателен. |
+| `identity.userIssuer` | `""` | Ожидаемый `iss` user assertions BFF (`nomnom-bff`); обязателен. |
+| `identity.userDelegates` | `""` | Services через запятую, которым разрешено передавать user (`bff`); обязателен. |
+| `identity.userJwksConfigMap` | `""` | ConfigMap с ключом `jwks.json` (JWKS BFF); создаётся развёртыванием, не chart; обязателен. |
 
-При `jwksConfigMap` без `issuer`, `audience` или `serviceAccounts` `helm template` завершается ошибкой; так же при `userJwksConfigMap` без `jwksConfigMap`, `userIssuer` или `userDelegates`.
+Если любой из этих параметров пуст, `helm template` завершается ошибкой `identity.<параметр> is required`.
 
 ```bash
 helm template payments ops/helm \

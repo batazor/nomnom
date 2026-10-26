@@ -35,6 +35,7 @@ import { createKitchenWorld } from "./support/kitchen.ts";
 /** Общие тестовые векторы ADR 27: `<repo>/tests/identity/fixtures`. */
 const FIXTURES = new URL("../../../tests/identity/fixtures/", import.meta.url);
 const JWKS_FILE = new URL("jwks.json", FIXTURES).pathname;
+const BFF_JWKS_FILE = new URL("bff-jwks.json", FIXTURES).pathname;
 
 type Vectors = Readonly<{
   issuer: string;
@@ -50,6 +51,9 @@ const vectors = JSON.parse(
   await readFile(new URL("vectors.json", FIXTURES), "utf8"),
 ) as Vectors;
 const jwks = JSON.parse(await readFile(JWKS_FILE, "utf8")) as JSONWebKeySet;
+const bffJwks = JSON.parse(
+  await readFile(BFF_JWKS_FILE, "utf8"),
+) as JSONWebKeySet;
 
 /** Конфигурация из векторов; audience векторов — `nomnom.payments`. */
 const identityEnvironment = {
@@ -57,6 +61,9 @@ const identityEnvironment = {
   IDENTITY__AUDIENCE: vectors.audience,
   IDENTITY__JWKS_FILE: JWKS_FILE,
   IDENTITY__SERVICE_ACCOUNTS: vectors.service_accounts,
+  IDENTITY__USER_ISSUER: "nomnom-bff",
+  IDENTITY__USER_JWKS_FILE: BFF_JWKS_FILE,
+  IDENTITY__USER_DELEGATES: "bff",
 };
 
 const contextWith = (headers: Record<string, string> = {}): HandlerContext =>
@@ -140,6 +147,11 @@ test("expiry and not-before honour the 30s clock tolerance", async () => {
       ]),
       log: silent,
       now: () => new Date(milliseconds),
+      userAssertions: {
+        issuer: "nomnom-bff",
+        jwks: bffJwks,
+        delegates: new Set(["bff"]),
+      },
     });
   const valid = bearer(vectors.tokens.valid ?? "");
 

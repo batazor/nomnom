@@ -2,10 +2,7 @@ import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
 import { decodeJwt, type JSONWebKeySet } from "jose";
 
 import type { Subject } from "../../pkg/application/subject.ts";
-import type {
-  IdentityConfig,
-  UserIdentityConfig,
-} from "../../pkg/config/config.ts";
+import type { IdentityConfig } from "../../pkg/config/config.ts";
 import { readJwks, readUserJwks } from "./jwks.ts";
 import { ServiceTokenVerifier } from "./service-token.ts";
 import {
@@ -40,8 +37,8 @@ export interface ServiceTokenSubjectResolverOptions {
   readonly log?: (message: string) => void;
   /** Текущее время для проверки `exp`/`nbf`; по умолчанию системное. */
   readonly now?: () => Date;
-  /** Без настроек любой вызов с user assertion — UNAUTHENTICATED. */
-  readonly userAssertions?: UserAssertionOptions;
+  /** Проверка user assertions BFF (ADR 32). */
+  readonly userAssertions: UserAssertionOptions;
   /** Получает принятые user assertions (delegate и `jti`, без токенов). */
   readonly audit?: (message: string) => void;
 }
@@ -56,7 +53,7 @@ export interface ServiceTokenSubjectResolverOptions {
  */
 export class ServiceTokenSubjectResolver implements SubjectResolver {
   readonly #services: ServiceTokenVerifier;
-  readonly #users: UserAssertionVerifier | undefined;
+  readonly #users: UserAssertionVerifier;
   readonly #log: (message: string) => void;
   readonly #audit: (message: string) => void;
 
@@ -69,15 +66,11 @@ export class ServiceTokenSubjectResolver implements SubjectResolver {
       serviceAccounts: options.serviceAccounts,
       now,
     });
-    const user = options.userAssertions;
-    this.#users =
-      user === undefined
-        ? undefined
-        : new UserAssertionVerifier({
-            ...user,
-            audience: options.audience,
-            now,
-          });
+    this.#users = new UserAssertionVerifier({
+      ...options.userAssertions,
+      audience: options.audience,
+      now,
+    });
     this.#log = options.log ?? (() => {});
     this.#audit = options.audit ?? (() => {});
   }
@@ -97,9 +90,6 @@ export class ServiceTokenSubjectResolver implements SubjectResolver {
       return service;
     }
     try {
-      if (this.#users === undefined) {
-        throw new Error("user assertions are not configured");
-      }
       const user = await this.#users.verify(service.id, assertion);
       this.#audit(
         `user assertion accepted: delegate=${service.id} jti=${loggedJti(assertion)}`,
@@ -143,9 +133,9 @@ export interface CreateSubjectResolverOptions {
 }
 
 /**
- * Builds the resolver from configuration. Issuer, audience and JWKS are
- * required; their absence or an unreadable or invalid JWKS (cluster or BFF)
- * is a startup error. Without user settings assertions are rejected.
+ * Builds the resolver from configuration. Issuer, audience, JWKS and the user
+ * assertion settings are required; their absence or an unreadable or invalid
+ * JWKS (cluster or BFF) is a startup error.
  */
 export async function createSubjectResolver(
   identity: IdentityConfig,
@@ -165,19 +155,10 @@ export async function createSubjectResolver(
     log,
     audit: options.audit,
     now: options.now,
-    userAssertions: await userAssertionOptions(identity.user),
+    userAssertions: {
+      issuer: identity.user.issuer,
+      jwks: await readUserJwks(identity.user.jwksFile),
+      delegates: identity.user.delegates,
+    },
   });
-}
-
-async function userAssertionOptions(
-  user: UserIdentityConfig,
-): Promise<UserAssertionOptions | undefined> {
-  if (!user.enabled) {
-    return undefined;
-  }
-  return {
-    issuer: user.issuer,
-    jwks: await readUserJwks(user.jwksFile),
-    delegates: user.delegates,
-  };
 }

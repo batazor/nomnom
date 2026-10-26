@@ -84,14 +84,12 @@ spec:
               value: {{ include "delivery.identityJwksFile" . | quote }}
             - name: IDENTITY__SERVICE_ACCOUNTS
               value: {{ .Values.identity.serviceAccounts | quote }}
-            {{- if .Values.identity.userJwksConfigMap }}
             - name: IDENTITY__USER_ISSUER
               value: {{ .Values.identity.userIssuer | quote }}
             - name: IDENTITY__USER_JWKS_FILE
               value: {{ include "delivery.identityUserJwksFile" . | quote }}
             - name: IDENTITY__USER_DELEGATES
               value: {{ .Values.identity.userDelegates | quote }}
-            {{- end }}
             {{- end }}
             {{- if .Values.spicedb.endpoint }}
             {{- include "delivery.validateSpiceDb" . }}
@@ -130,11 +128,9 @@ spec:
             - name: identity-jwks
               mountPath: /etc/nomnom/identity
               readOnly: true
-            {{- if .Values.identity.userJwksConfigMap }}
             - name: identity-user-jwks
               mountPath: /etc/nomnom/user-identity
               readOnly: true
-            {{- end }}
             {{- end }}
             {{- with .Values.volumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
@@ -149,14 +145,12 @@ spec:
             items:
               - key: jwks.json
                 path: jwks.json
-        {{- if .Values.identity.userJwksConfigMap }}
         - name: identity-user-jwks
           configMap:
             name: {{ .Values.identity.userJwksConfigMap }}
             items:
               - key: jwks.json
                 path: jwks.json
-        {{- end }}
         {{- end }}
         {{- with .Values.volumes }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}

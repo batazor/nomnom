@@ -21,18 +21,11 @@ func TestLoadReadsUserIdentityFromEnvironment(t *testing.T) {
 	assert.True(t, cfg.Identity.UserVerifying())
 }
 
-func TestUserIdentityIsDisabledByDefault(t *testing.T) {
-	clearConfigEnvironment(t)
-	for _, name := range []string{EnvIdentityUserIssuer, EnvIdentityUserJWKSFile, EnvIdentityUserDelegates} {
-		t.Setenv(name, "")
-	}
-
-	cfg, err := Load()
-	require.NoError(t, err)
-	assert.False(t, cfg.Identity.UserVerifying())
-
+func TestUserVerifyingRequiresEverySetting(t *testing.T) {
 	full := IdentityConfig{UserIssuer: "nomnom-bff", UserJWKSFile: "jwks.json", UserDelegates: "bff"}
+	assert.True(t, full.UserVerifying())
 	for name, mutate := range map[string]func(*IdentityConfig){
+		"no settings":  func(c *IdentityConfig) { *c = IdentityConfig{} },
 		"no issuer":    func(c *IdentityConfig) { c.UserIssuer = " " },
 		"no jwks":      func(c *IdentityConfig) { c.UserJWKSFile = "" },
 		"no delegates": func(c *IdentityConfig) { c.UserDelegates = " , " },

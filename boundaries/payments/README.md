@@ -110,18 +110,18 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 
 1. service token, как выше; отказ — `UNAUTHENTICATED`, assertion не рассматривается;
 2. нет `x-nomnom-user-assertion` — `Subject(service, <service-name>)`, как раньше;
-3. assertion повторяется или пуст, user assertions не настроены или service не входит в `IDENTITY__USER_DELEGATES` — `UNAUTHENTICATED` (AC-526);
+3. assertion повторяется или пуст либо service не входит в `IDENTITY__USER_DELEGATES` — `UNAUTHENTICATED` (AC-526);
 4. `UserAssertionVerifier`: `alg` только `ES256`, `kid` есть в JWKS BFF (EC P-256), `iss` == `IDENTITY__USER_ISSUER`, `aud` содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, `iat` обязателен и `exp − iat ≤ 60 s`, `sub` непуст и без пробелов по краям, `jti` непуст.
 
 Результат — `Subject(user, <sub>)` с `delegate` = имя service BFF (для log и audit, в сравнении и authorization не участвует). Принятие (`INFO`) и отказ (`WARNING`) пишутся в log с `delegate` и `jti`; токены не логируются.
 
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
-| `IDENTITY__USER_ISSUER` | пусто | Ожидаемый `iss` assertion; в кластере `nomnom-bff`. |
-| `IDENTITY__USER_JWKS_FILE` | пусто | Путь к JWKS BFF; в Helm chart — `/etc/nomnom/user-identity/jwks.json`. |
-| `IDENTITY__USER_DELEGATES` | пусто | Имена services через запятую, которым разрешено передавать user; в кластере `bff`. |
+| `IDENTITY__USER_ISSUER` | — (обязательна) | Ожидаемый `iss` assertion; в кластере `nomnom-bff`. |
+| `IDENTITY__USER_JWKS_FILE` | — (обязательна) | Путь к JWKS BFF; в Helm chart — `/etc/nomnom/user-identity/jwks.json`. |
+| `IDENTITY__USER_DELEGATES` | — (обязательна) | Имена services через запятую, которым разрешено передавать user; в кластере `bff`. |
 
-User assertions принимаются, только если заданы все три переменные; иначе любой вызов с assertion — `UNAUTHENTICATED`, а вызовы без него обрабатываются как раньше (AC-529). Ошибки startup: заданный, но нечитаемый JWKS BFF либо JWKS без ключей `ES256` P-256 с `kid`, неверный формат или дубликаты `IDENTITY__USER_DELEGATES`. Тесты — `tests/test_user_identity.py` на `user-vectors.json` с часами, зафиксированными на `now`.
+Все три переменные обязательны, как и service identity: процесс не стартует, если любая из них пуста (ошибка называет пустые переменные). Ошибки startup также: нечитаемый JWKS BFF либо JWKS без ключей `ES256` P-256 с `kid`, неверный формат или дубликаты `IDENTITY__USER_DELEGATES`. Тесты — `tests/test_user_identity.py` на `user-vectors.json` с часами, зафиксированными на `now`.
 
 ## Authorization
 

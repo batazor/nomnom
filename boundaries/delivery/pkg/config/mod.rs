@@ -156,10 +156,8 @@ pub struct ShutdownConfig {
 }
 
 /// Проверка projected ServiceAccount token (ADR 27) и user assertions BFF
-/// (ADR 32). Пустые issuer, audience или jwks_file означают, что проверка
-/// выключена и вызовы отклоняются. Пустые user_issuer, user_jwks_file или
-/// user_delegates выключают только user assertions: вызов с assertion
-/// отклоняется, service-вызовы работают как раньше.
+/// (ADR 32). Все поля обязательны для процесса с gRPC API: пустое значение —
+/// ошибка startup.
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct IdentityConfig {

@@ -46,7 +46,6 @@ __all__ = [
     "SubjectResolver",
     "UserAssertionVerifier",
     "create_subject_resolver",
-    "create_user_assertion_verifier",
     "load_jwks",
     "load_user_jwks",
 ]
@@ -70,16 +69,15 @@ class ServiceTokenSubjectResolver:
     Reads ``authorization: Bearer <jwt>`` and ``x-nomnom-user-assertion`` and composes the
     transport-free verifiers: the service token yields ``Subject(service, name)``; with an
     assertion the authenticated service must be a user delegate and the assertion must
-    verify, and the result is ``Subject(user, sub)`` with the delegate kept. Without
-    ``user_assertions`` every call carrying an assertion is rejected.
+    verify, and the result is ``Subject(user, sub)`` with the delegate kept.
     """
 
     def __init__(
         self,
         service_tokens: ServiceTokenVerifier,
         *,
-        user_assertions: UserAssertionVerifier | None = None,
-        user_delegates: Collection[str] = (),
+        user_assertions: UserAssertionVerifier,
+        user_delegates: Collection[str],
     ) -> None:
         self._service_tokens = service_tokens
         self._user_assertions = user_assertions
@@ -118,8 +116,6 @@ class ServiceTokenSubjectResolver:
             if isinstance(token, bytes) or not token.strip():
                 raise TokenRejectedError(f"{USER_ASSERTION_METADATA} metadata is empty or binary")
             jti = unverified_jti(token)
-            if self._user_assertions is None:
-                raise TokenRejectedError("user assertions are not configured")
             if service.id not in self._user_delegates:
                 raise TokenRejectedError(f"service {service.id!r} is not a user delegate")
             user, jti = self._user_assertions.verify(token.strip())
@@ -162,11 +158,13 @@ def create_subject_resolver(
     settings: IdentitySettings,
     clock: Callable[[], float] = time.time,
 ) -> SubjectResolver:
-    """Build the production resolver; issuer, audience and JWKS are required."""
-    if not settings.enabled:
-        raise IdentityConfigError(
-            "IDENTITY__ISSUER, IDENTITY__AUDIENCE and IDENTITY__JWKS_FILE are required"
-        )
+    """Build the production resolver; service identity and BFF user assertions are required.
+
+    An empty setting, an unusable JWKS or a malformed allowlist is a startup error.
+    """
+    missing = settings.missing
+    if missing:
+        raise IdentityConfigError(f"{', '.join(missing)} must be set")
     return ServiceTokenSubjectResolver(
         ServiceTokenVerifier(
             issuer=settings.issuer,
@@ -175,32 +173,11 @@ def create_subject_resolver(
             service_accounts=settings.service_account_map,
             clock=clock,
         ),
-        user_assertions=create_user_assertion_verifier(settings, clock),
+        user_assertions=UserAssertionVerifier(
+            issuer=settings.user_issuer,
+            audience=settings.audience,
+            keys=load_user_jwks(settings.user_jwks_file),
+            clock=clock,
+        ),
         user_delegates=settings.user_delegate_set,
-    )
-
-
-def create_user_assertion_verifier(
-    settings: IdentitySettings,
-    clock: Callable[[], float] = time.time,
-) -> UserAssertionVerifier | None:
-    """Build the BFF assertion verifier; ``None`` when no delegate passes users.
-
-    User issuer, JWKS and delegates are set together; a partial setting or an unusable
-    user JWKS is a startup error.
-    """
-    configured = (settings.user_issuer, settings.user_jwks_file, settings.user_delegates)
-    if not any(configured):
-        return None
-    if not all(configured):
-        raise IdentityConfigError(
-            "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE and IDENTITY__USER_DELEGATES "
-            "must be set together"
-        )
-    keys = load_user_jwks(settings.user_jwks_file)
-    return UserAssertionVerifier(
-        issuer=settings.user_issuer,
-        audience=settings.audience,
-        keys=keys,
-        clock=clock,
     )

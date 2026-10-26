@@ -28,12 +28,18 @@ fn identity(issuer: &str, audience: &str, jwks_file: &str, accounts: &str) -> Id
 
 fn fixture_identity() -> IdentityConfig {
     let vectors = fixtures::vectors();
-    identity(
-        &vectors.issuer,
-        &vectors.audience,
-        fixtures::jwks_path().to_str().expect("utf-8 path"),
-        &vectors.service_accounts,
-    )
+    let users = fixtures::user_vectors();
+    IdentityConfig {
+        user_issuer: users.issuer.clone(),
+        user_jwks_file: path(fixtures::bff_jwks_path()),
+        user_delegates: users.delegates.clone(),
+        ..identity(
+            &vectors.issuer,
+            &vectors.audience,
+            &path(fixtures::jwks_path()),
+            &vectors.service_accounts,
+        )
+    }
 }
 
 #[test]
@@ -88,6 +94,7 @@ fn token_for_another_audience_is_rejected() {
         "nomnom.delivery",
         &fixtures::jwks(),
         &vectors.service_accounts,
+        fixtures::users(),
     )
     .expect("resolver");
 
@@ -156,7 +163,8 @@ fn invalid_jwks_is_a_startup_error() {
                 &vectors.issuer,
                 &vectors.audience,
                 jwks,
-                &vectors.service_accounts
+                &vectors.service_accounts,
+                fixtures::users(),
             )
             .is_err(),
             "{jwks}"
@@ -192,6 +200,7 @@ fn empty_or_malformed_allowlist_is_a_startup_error() {
             &vectors.audience,
             &fixtures::jwks(),
             " nomnom/orders-worker = orders-worker , jobs/cleanup=cleanup-job ",
+            fixtures::users(),
         )
         .is_ok()
     );
@@ -353,7 +362,7 @@ fn assertion_outside_the_clock_window_is_rejected() {
         )
         .expect("verifier")
         .with_clock(Arc::new(move || now));
-        let resolver = fixtures::service_resolver_for_users().with_user_assertions(Some(users));
+        let resolver = fixtures::user_resolver_with(users);
 
         let result = resolver.authenticate(&with_assertion(&vectors.delegate_token, valid));
         assert_eq!(result.is_ok(), accepted, "now = {now}: {result:?}");
@@ -361,18 +370,16 @@ fn assertion_outside_the_clock_window_is_rejected() {
 }
 
 #[test]
-fn resolver_without_user_settings_rejects_assertions() {
-    // AC-529: без user-конфигурации assertion отклоняется, а тот же
-    // вызов без assertion остаётся Subject{service, bff}.
-    let vectors = fixtures::user_vectors();
-    let full = user_identity();
-    let unconfigured = IdentityConfig {
-        user_issuer: String::new(),
-        user_jwks_file: String::new(),
-        user_delegates: String::new(),
-        ..user_identity()
-    };
-    let partial = [
+fn missing_or_partial_user_settings_are_a_startup_error() {
+    // User assertions обязательны: без любой из настроек процесс не стартует.
+    assert!(UserAssertionVerifier::from_config(&user_identity()).is_ok());
+    for config in [
+        IdentityConfig {
+            user_issuer: String::new(),
+            user_jwks_file: String::new(),
+            user_delegates: String::new(),
+            ..user_identity()
+        },
         IdentityConfig {
             user_jwks_file: String::new(),
             ..user_identity()
@@ -385,38 +392,9 @@ fn resolver_without_user_settings_rejects_assertions() {
             user_delegates: "  ".to_owned(),
             ..user_identity()
         },
-    ];
-    assert!(
-        UserAssertionVerifier::from_config(&full)
-            .expect("valid")
-            .is_some()
-    );
-
-    for config in partial {
+    ] {
         assert!(UserAssertionVerifier::from_config(&config).is_err());
-    }
-
-    {
-        let config = unconfigured;
-        assert!(
-            UserAssertionVerifier::from_config(&config)
-                .expect("not an error")
-                .is_none()
-        );
-        let resolver = subject_resolver(&config).expect("service identity");
-        let status = resolver
-            .resolve(&with_assertion(
-                &vectors.delegate_token,
-                vectors.token("valid"),
-            ))
-            .expect_err("assertion without user configuration");
-        assert_eq!(status.code(), Code::Unauthenticated);
-        assert_eq!(
-            resolver
-                .resolve(&bearer(&vectors.delegate_token))
-                .expect("service token"),
-            Subject::Service("bff".to_owned())
-        );
+        assert!(subject_resolver(&config).is_err());
     }
 }
 
@@ -426,11 +404,8 @@ fn configured_user_verifier_accepts_vectors_with_fixed_clock() {
     let config = user_identity();
     let users = UserAssertionVerifier::from_config(&config)
         .expect("valid")
-        .expect("configured")
         .with_clock(vectors.clock());
-    let resolver = ServiceTokenSubjectResolver::from_config(&config)
-        .expect("valid")
-        .with_user_assertions(Some(users));
+    let resolver = fixtures::user_resolver_with(users);
 
     assert_eq!(
         resolver
