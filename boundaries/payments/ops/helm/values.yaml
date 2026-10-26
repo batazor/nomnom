@@ -23,8 +23,6 @@ imagePullSecrets: []
 
 nameOverride: ""
 fullnameOverride: ""
-# Namespace ресурсов; по умолчанию — namespace release (common.names.namespace).
-namespaceOverride: ""
 # Labels, добавляемые ко всем ресурсам chart.
 commonLabels: {}
 
