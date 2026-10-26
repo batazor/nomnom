@@ -54,7 +54,10 @@ import {
   MongoRestaurantOrderRepository,
 } from "../infrastructure/mongodb/restaurant-orders.ts";
 import {
+  cancellationRejection,
+  ObservedRestaurantOrderRepository,
   observeReceiveOrderRequest,
+  observeTransitionRejections,
   type ReceiveOrderRequestPort,
   type RestaurantOrderDomainMetrics,
 } from "../infrastructure/observability/domain-metrics.ts";
@@ -81,7 +84,10 @@ export interface RestaurantOrderDependencies {
   readonly restaurants: RestaurantRepository;
   readonly menus: MenuRepository;
   readonly kitchenConfig: KitchenConfig;
-  /** Business metrics; the process also decorates its Unit of Work and Outbox. */
+  /**
+   * Business and FSM metrics; the process also decorates its Unit of Work
+   * and Outbox.
+   */
   readonly domainMetrics: RestaurantOrderDomainMetrics;
 }
 
@@ -137,11 +143,15 @@ export const registerRestaurantOrder = (
 ): void => {
   const registrations: Registrations<RestaurantOrderCradle> = {
     restaurantOrderOutboxEventMapper: asValue(restaurantOrderEventMapper),
+    // Applied FSM transitions are recorded by the saves that commit them.
     restaurantOrders: asFunction(
-      ({ db, unitOfWork, kitchenChanges }: Cradle) =>
-        new MongoRestaurantOrderRepository(
-          createRestaurantOrderCollection(db, unitOfWork),
-          kitchenChanges,
+      ({ db, unitOfWork, kitchenChanges, domainMetrics }: Cradle) =>
+        new ObservedRestaurantOrderRepository(
+          new MongoRestaurantOrderRepository(
+            createRestaurantOrderCollection(db, unitOfWork),
+            kitchenChanges,
+          ),
+          domainMetrics,
         ),
     ).singleton(),
     restaurantExistence: asFunction(
@@ -179,56 +189,81 @@ export const registerRestaurantOrder = (
           domainMetrics,
         ),
     ).singleton(),
-    cancelRestaurantOrder: asFunction(
-      (cradle: Cradle) =>
+    // Kitchen commands report the triggers the FSM table rejects.
+    cancelRestaurantOrder: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
         new CancelRestaurantOrderHandler({
           ...commandDependencies(cradle),
           cancellationDuringPreparation:
             cradle.kitchenConfig.cancellationDuringPreparation,
         }),
+        cradle.domainMetrics,
+        cancellationRejection,
+      ),
     ).singleton(),
-    acceptRestaurantOrder: asFunction(
-      (cradle: Cradle) =>
+    acceptRestaurantOrder: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
         new AcceptOrderHandler({
           ...commandDependencies(cradle),
           facts: cradle.acceptanceFacts,
           conditions: cradle.acceptanceConditions,
           readyTimeEstimator: cradle.readyTimeEstimator,
         }),
+        cradle.domainMetrics,
+      ),
     ).singleton(),
-    rejectRestaurantOrder: asFunction(
-      (cradle: Cradle) => new RejectOrderHandler(commandDependencies(cradle)),
+    rejectRestaurantOrder: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
+        new RejectOrderHandler(commandDependencies(cradle)),
+        cradle.domainMetrics,
+      ),
     ).singleton(),
-    startPreparation: asFunction(
-      (cradle: Cradle) =>
+    startPreparation: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
         new StartPreparationHandler({
           ...commandDependencies(cradle),
           onRepeat: cradle.kitchenConfig.repeatPolicy,
         }),
+        cradle.domainMetrics,
+      ),
     ).singleton(),
     // Assembly is a local fact: a single document write without the Outbox.
     markRestaurantOrderAssembled: asFunction(
-      ({ kitchenAccessControl, restaurantOrders, clock }: Cradle) =>
-        new MarkAssembledHandler({
-          accessControl: kitchenAccessControl,
-          restaurantOrders,
-          clock,
-        }),
+      ({
+        kitchenAccessControl,
+        restaurantOrders,
+        clock,
+        domainMetrics,
+      }: Cradle) =>
+        observeTransitionRejections(
+          new MarkAssembledHandler({
+            accessControl: kitchenAccessControl,
+            restaurantOrders,
+            clock,
+          }),
+          domainMetrics,
+        ),
     ).singleton(),
-    markRestaurantOrderReady: asFunction(
-      (cradle: Cradle) =>
+    markRestaurantOrderReady: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
         new MarkReadyForPickupHandler({
           ...commandDependencies(cradle),
           onRepeat: cradle.kitchenConfig.repeatPolicy,
         }),
+        cradle.domainMetrics,
+      ),
     ).singleton(),
-    reportPreparationDelay: asFunction(
-      (cradle: Cradle) =>
+    reportPreparationDelay: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
         new ReportPreparationDelayHandler(commandDependencies(cradle)),
+        cradle.domainMetrics,
+      ),
     ).singleton(),
-    reportPreparationFailure: asFunction(
-      (cradle: Cradle) =>
+    reportPreparationFailure: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
         new ReportPreparationFailureHandler(commandDependencies(cradle)),
+        cradle.domainMetrics,
+      ),
     ).singleton(),
     kitchenBoard: asFunction(
       ({ db, unitOfWork }: Cradle) =>

@@ -6,9 +6,17 @@ import { MeterProvider, MetricReader } from "@opentelemetry/sdk-metrics";
 import type { UnitOfWork } from "../pkg/application/unit-of-work.ts";
 import { MongoInbox } from "../pkg/infrastructure/mongodb/inbox.ts";
 import {
+  CancellationRejectionReason,
+  type CancelRestaurantOrderResult,
+} from "../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import { RestaurantOrder } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import {
+  cancellationRejection,
   ObservedOutbox,
+  ObservedRestaurantOrderRepository,
   ObservedUnitOfWork,
   observeReceiveOrderRequest,
+  observeTransitionRejections,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
 import {
@@ -252,4 +260,188 @@ test("an unknown or missing reason is recorded as other", async () => {
   );
 
   assert.deepEqual(await sums(reader, REJECTED), { other: 2, too_busy: 1 });
+});
+
+const TRANSITIONS_METRIC = "nomnom.fsm.transitions";
+
+/** `from>trigger>to result terminal` of every nomnom.fsm.transitions series. */
+const transitions = async (
+  reader: TestReader,
+): Promise<Record<string, number>> => {
+  const { resourceMetrics } = await reader.collect();
+  const result: Record<string, number> = {};
+  for (const scope of resourceMetrics.scopeMetrics) {
+    for (const metric of scope.metrics) {
+      if (metric.descriptor.name !== TRANSITIONS_METRIC) continue;
+      assert.equal(metric.descriptor.unit, "{transition}");
+      for (const point of metric.dataPoints) {
+        const a = point.attributes;
+        assert.equal(a["nomnom.fsm.aggregate_type"], "restaurant_order");
+        const key = `${a["nomnom.fsm.from_state"]}>${a["nomnom.fsm.trigger"]}>${a["nomnom.fsm.to_state"]} ${a["nomnom.fsm.result"]} ${a["nomnom.fsm.terminal"]}`;
+        result[key] = (result[key] ?? 0) + Number(point.value);
+      }
+    }
+  }
+  return result;
+};
+
+const fsmSetup = () => {
+  const reader = new TestReader();
+  const provider = new MeterProvider({ readers: [reader] });
+  const metrics = new RestaurantOrderDomainMetrics({
+    meter: provider.getMeter("test"),
+  });
+  const saved: RestaurantOrder[] = [];
+  const repository = new ObservedRestaurantOrderRepository(
+    {
+      get: async () => undefined,
+      findByOrderId: async () => undefined,
+      save: async (order) => {
+        saved.push(order);
+        return order.version + 1;
+      },
+    },
+    metrics,
+  );
+  return { reader, metrics, repository, saved };
+};
+
+const at = (minute: number) => new Date(Date.UTC(2026, 9, 25, 9, minute));
+const eligible = { satisfied: true, reasons: [] };
+const newOrder = (id: string) =>
+  RestaurantOrder.receive({
+    id,
+    orderId: `order-${id}`,
+    restaurantId: "r-1",
+    items: [{ menuItemId: "pho", quantity: 1 }],
+    receivedAt: at(0),
+  });
+
+test("saved Restaurant Orders record their applied FSM transitions in order", async () => {
+  const { reader, repository } = fsmSetup();
+  const order = newOrder("ro-1");
+  // Creation is not a transition.
+  await repository.save(order);
+  order.pullEvents();
+  assert.deepEqual(await transitions(reader), {});
+
+  // Accept and Queue in one save, as Accept Order does.
+  order.accept({
+    acceptedAt: at(1),
+    expectedReadyAt: at(30),
+    eligibility: eligible,
+  });
+  order.queue({ queuedAt: at(1) });
+  await repository.save(order);
+  order.pullEvents();
+  order.startPreparation({ startedAt: at(2) });
+  order.reportDelay({ reportedAt: at(3), expectedReadyAt: at(40) });
+  await repository.save(order);
+  order.pullEvents();
+  order.markAssembled({ assembledAt: at(4) });
+  order.markReady({ readyAt: at(5) });
+  await repository.save(order);
+  const cancelled = newOrder("ro-2");
+  cancelled.pullEvents();
+  cancelled.cancel({
+    cancelledAt: at(1),
+    policy: { duringPreparation: "reject" },
+  });
+  await repository.save(cancelled);
+
+  assert.deepEqual(await transitions(reader), {
+    "received>accept>accepted applied false": 1,
+    "accepted>queue>queued applied false": 1,
+    "queued>start_preparation>preparing applied false": 1,
+    "preparing>report_delay>preparing applied false": 1,
+    "preparing>mark_assembled>assembled applied false": 1,
+    "assembled>mark_ready>ready applied true": 1,
+    "received>cancel>cancelled applied true": 1,
+  });
+});
+
+test("FSM transitions inside a Unit of Work are recorded only after it commits", async () => {
+  const { reader, metrics, repository } = fsmSetup();
+  const unitOfWork = new ObservedUnitOfWork({ run: (work) => work() }, metrics);
+  const rejected = newOrder("ro-1");
+  rejected.pullEvents();
+  rejected.reject({ rejectedAt: at(1), reason: "too_busy" });
+  const failed = newOrder("ro-2");
+  failed.pullEvents();
+  failed.accept({
+    acceptedAt: at(1),
+    expectedReadyAt: at(30),
+    eligibility: eligible,
+  });
+
+  await assert.rejects(
+    unitOfWork.run(async () => {
+      await repository.save(failed);
+      throw new Error("abort");
+    }),
+    /abort/,
+  );
+  await unitOfWork.run(async () => {
+    await repository.save(rejected);
+    assert.deepEqual(await transitions(reader), {}, "not before commit");
+  });
+
+  assert.deepEqual(await transitions(reader), {
+    "received>reject>rejected applied true": 1,
+  });
+});
+
+test("an invalid transition and a cancellation of a ready order are rejected transitions", async () => {
+  const { reader, metrics } = fsmSetup();
+  const order = newOrder("ro-1");
+  const markReady = observeTransitionRejections(
+    {
+      execute: async (_command: unknown): Promise<never> => {
+        order.markReady({ readyAt: at(1) });
+        assert.fail("RECEIVED does not allow MarkReady");
+      },
+    },
+    metrics,
+  );
+  const cancel = observeTransitionRejections(
+    {
+      execute: async (
+        _command: unknown,
+      ): Promise<CancelRestaurantOrderResult> => ({
+        outcome: "cancellation_rejected",
+        restaurantOrderId: "ro-2",
+        reason: CancellationRejectionReason.AlreadyReady,
+        state: "READY",
+      }),
+    },
+    metrics,
+    cancellationRejection,
+  );
+  const guarded = observeTransitionRejections(
+    {
+      execute: async (
+        _command: unknown,
+      ): Promise<CancelRestaurantOrderResult> => ({
+        outcome: "cancellation_rejected",
+        restaurantOrderId: "ro-3",
+        reason:
+          CancellationRejectionReason.CancellationDuringPreparationNotAllowed,
+        state: "PREPARING",
+      }),
+    },
+    metrics,
+    cancellationRejection,
+  );
+
+  await assert.rejects(markReady.execute(undefined as never), {
+    name: "InvalidTransitionError",
+  });
+  await cancel.execute(undefined as never);
+  // A guard rejection is not a missing transition.
+  await guarded.execute(undefined as never);
+
+  assert.deepEqual(await transitions(reader), {
+    "received>mark_ready>received rejected false": 1,
+    "ready>cancel>ready rejected true": 1,
+  });
 });

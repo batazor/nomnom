@@ -1,13 +1,15 @@
 // Observability contract of the restaurants processes (docs/observability.md):
 // trace propagation over gRPC (server and grpc-js client), the Outbox and
-// Kafka headers; use case, RPC, MongoDB, runtime and process metrics by name
-// and attributes; JSON logs with trace_id; baggage allowlist; bounded flush.
+// Kafka headers; use case, RPC, MongoDB, Unit of Work, authorization, Kafka
+// consumer, runtime and process metrics by name and attributes; JSON logs
+// with trace_id; baggage allowlist; bounded flush.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 
+import { v1 } from "@authzed/authzed-node";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import * as grpc from "@grpc/grpc-js";
@@ -31,11 +33,17 @@ import {
   SimpleSpanProcessor,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace";
+import { MongoServerError } from "mongodb";
 import { clientTelemetryInterceptor } from "../infrastructure/grpc/client-telemetry.ts";
 import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
+import { checkPermissionRequest } from "../infrastructure/spicedb/access-control.ts";
+import {
+  AUTHZ_DURATION_BUCKETS,
+  ObservedPermissionsClient,
+} from "../infrastructure/spicedb/check-telemetry.ts";
 import { NotFoundError } from "../pkg/application/errors.ts";
 import type { Outbox } from "../pkg/application/outbox.ts";
 import {
@@ -44,6 +52,10 @@ import {
   KafkaConsumerWorker,
 } from "../pkg/infrastructure/kafka/consumer.ts";
 import { MongoCommandTelemetry } from "../pkg/infrastructure/mongodb/command-telemetry.ts";
+import {
+  MongoUnitOfWork,
+  UOW_DURATION_BUCKETS,
+} from "../pkg/infrastructure/mongodb/unit-of-work.ts";
 import { createLogger, REDACTED } from "../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../pkg/telemetry/resource.ts";
 import { RPC_DURATION_BUCKETS } from "../pkg/telemetry/rpc.ts";
@@ -60,6 +72,7 @@ import {
   USECASE_DURATION_BUCKETS,
   UseCaseTelemetry,
 } from "../pkg/telemetry/usecase.ts";
+import { createTestDatabase } from "./support/mongodb.ts";
 import {
   createInfrastructure,
   createRestaurantWorld,
@@ -694,6 +707,263 @@ test("logs are one JSON line with the service identity and trace_id only inside 
   }
 });
 
+test("Unit of Work transactions, duration and driver retries by outcome and reason", async () => {
+  const { telemetry, collect } = startTestTelemetry("restaurants");
+  try {
+    const { mongo, db } = await createTestDatabase();
+    const unitOfWork = new MongoUnitOfWork(mongo.client);
+    const notes = db.collection<{ _id: string }>("uow_notes");
+    const note = (id: string) =>
+      notes.insertOne({ _id: id }, { session: unitOfWork.session });
+
+    await unitOfWork.run(async () => {
+      // A nested run joins the transaction and is not counted.
+      await unitOfWork.run(() => note("committed"));
+    });
+    await assert.rejects(
+      unitOfWork.run(async () => {
+        await note("rolled-back");
+        throw new Error("abort");
+      }),
+      /abort/,
+    );
+    // The driver retries `work` after a transient write conflict.
+    let attempts = 0;
+    await unitOfWork.run(async () => {
+      attempts += 1;
+      await note(`retried-${attempts}`);
+      if (attempts === 1) {
+        throw new MongoServerError({
+          code: 112,
+          codeName: "WriteConflict",
+          errmsg: "write conflict",
+          errorLabels: ["TransientTransactionError"],
+        });
+      }
+    });
+    assert.equal(attempts, 2);
+    assert.deepEqual(
+      (await notes.find().toArray()).map((doc) => doc._id).sort(),
+      ["committed", "retried-2"],
+    );
+
+    const metrics = await collect();
+    const sums = (name: string, label: string) =>
+      Object.fromEntries(
+        pointsOf(metrics, name).map((point) => [
+          point.attributes[label],
+          point.value,
+        ]),
+      );
+    assert.equal(
+      metricNamed(metrics, "nomnom.uow.duration")?.descriptor.unit,
+      "s",
+    );
+    assert.deepEqual(sums("nomnom.uow.transactions", "nomnom.outcome"), {
+      committed: 2,
+      rolled_back: 1,
+    });
+    assert.deepEqual(sums("nomnom.uow.retries", "nomnom.reason"), {
+      write_conflict: 1,
+    });
+    const durations = pointsOf(metrics, "nomnom.uow.duration");
+    assert.deepEqual(
+      durations.map((point) => [
+        point.attributes["nomnom.outcome"],
+        (point.value as Histogram).count,
+      ]),
+      [
+        ["committed", 2],
+        ["rolled_back", 1],
+      ],
+    );
+    const [committed] = durations;
+    assert.ok(committed);
+    assert.deepEqual(
+      (committed.value as Histogram).buckets.boundaries,
+      UOW_DURATION_BUCKETS,
+    );
+  } finally {
+    await telemetry.shutdown();
+  }
+});
+
+test("SpiceDB checks record nomnom.authz.checks and duration by permission, resource type and result", async () => {
+  const { telemetry, collect } = startTestTelemetry("restaurants");
+  try {
+    const responses: Array<() => Promise<v1.CheckPermissionResponse>> = [
+      async () =>
+        v1.CheckPermissionResponse.create({
+          permissionship:
+            v1.CheckPermissionResponse_Permissionship.HAS_PERMISSION,
+        }),
+      async () =>
+        v1.CheckPermissionResponse.create({
+          permissionship:
+            v1.CheckPermissionResponse_Permissionship.CONDITIONAL_PERMISSION,
+        }),
+      async () => {
+        throw Object.assign(new Error("deadline"), {
+          code: grpc.status.DEADLINE_EXCEEDED,
+        });
+      },
+      async () => {
+        throw Object.assign(new Error("unavailable"), {
+          code: grpc.status.UNAVAILABLE,
+        });
+      },
+    ];
+    const client = new ObservedPermissionsClient({
+      checkPermission: () => {
+        const next = responses.shift();
+        assert.ok(next, "unexpected check");
+        return next();
+      },
+    });
+    const subject = { type: "user", id: "u-secret" } as const;
+    const check = (permission: string) =>
+      client.checkPermission(
+        checkPermissionRequest("restaurant", "r-secret", permission, subject),
+      );
+
+    await check("manage");
+    await check("manage");
+    await assert.rejects(check("operate_kitchen"), /deadline/);
+    await assert.rejects(
+      client.checkPermission(
+        checkPermissionRequest(
+          "platform",
+          "nomnom",
+          "register_restaurant",
+          subject,
+        ),
+      ),
+      /unavailable/,
+    );
+
+    const metrics = await collect();
+    const labels = (name: string) =>
+      pointsOf(metrics, name).map((point) => [
+        point.attributes,
+        name === "nomnom.authz.checks"
+          ? point.value
+          : (point.value as Histogram).count,
+      ]);
+    const expected = [
+      [
+        {
+          "nomnom.authz.permission": "manage",
+          "nomnom.authz.resource_type": "restaurant",
+          "nomnom.authz.result": "allowed",
+        },
+        1,
+      ],
+      [
+        {
+          "nomnom.authz.permission": "manage",
+          "nomnom.authz.resource_type": "restaurant",
+          "nomnom.authz.result": "denied",
+        },
+        1,
+      ],
+      [
+        {
+          "nomnom.authz.permission": "operate_kitchen",
+          "nomnom.authz.resource_type": "restaurant",
+          "nomnom.authz.result": "timeout",
+        },
+        1,
+      ],
+      [
+        {
+          "nomnom.authz.permission": "register_restaurant",
+          "nomnom.authz.resource_type": "platform",
+          "nomnom.authz.result": "error",
+        },
+        1,
+      ],
+    ];
+    assert.deepEqual(labels("nomnom.authz.checks"), expected);
+    assert.deepEqual(labels("nomnom.authz.check.duration"), expected);
+    const [duration] = pointsOf(metrics, "nomnom.authz.check.duration");
+    assert.ok(duration);
+    assert.deepEqual(
+      (duration.value as Histogram).buckets.boundaries,
+      AUTHZ_DURATION_BUCKETS,
+    );
+  } finally {
+    await telemetry.shutdown();
+  }
+});
+
+test("the Kafka consumer counts messaging.client.consumed.messages with error.type on failure", async () => {
+  const { telemetry, collect } = startTestTelemetry("restaurants-consumer");
+  try {
+    let eachMessage: ((payload: EachMessage) => Promise<void>) | undefined;
+    const kafka: ConsumerClient = {
+      connect: async () => {},
+      subscribe: async () => {},
+      run: async (config) => {
+        eachMessage = config.eachMessage;
+      },
+      disconnect: async () => {},
+    };
+    const outcomes: Array<() => Promise<"processed">> = [
+      async () => "processed",
+      async () => {
+        throw new TypeError("transient after retries");
+      },
+    ];
+    const consumer = new KafkaConsumerWorker({
+      client: kafka,
+      topics: [TOPIC],
+      groupId: "restaurants.order-placed",
+      handler: {
+        process: () => {
+          const next = outcomes.shift();
+          assert.ok(next, "unexpected message");
+          return next();
+        },
+      },
+    });
+    await consumer.start();
+    const deliver = (offset: string) =>
+      eachMessage?.({
+        topic: TOPIC,
+        partition: 0,
+        message: { key: null, value: Buffer.from([]), offset, headers: {} },
+      });
+    await deliver("1");
+    await assert.rejects(Promise.resolve(deliver("2")), TypeError);
+    await consumer.shutdown(AbortSignal.timeout(1000));
+
+    const metrics = await collect();
+    assert.equal(
+      metricNamed(metrics, "messaging.client.consumed.messages")?.descriptor
+        .unit,
+      "{message}",
+    );
+    const base = {
+      "messaging.system": "kafka",
+      "messaging.destination.name": TOPIC,
+      "messaging.consumer.group.name": "restaurants.order-placed",
+    };
+    assert.deepEqual(
+      pointsOf(metrics, "messaging.client.consumed.messages").map((point) => [
+        point.attributes,
+        point.value,
+      ]),
+      [
+        [base, 1],
+        [{ ...base, "error.type": "TypeError" }, 1],
+      ],
+    );
+  } finally {
+    await telemetry.shutdown();
+  }
+});
+
+// Its shutdown is not awaited, so the tests that read metrics run before it.
 test("baggage passes only by allowlist and an invalid traceparent starts a new trace", () => {
   const { telemetry } = startTestTelemetry("restaurants");
   try {

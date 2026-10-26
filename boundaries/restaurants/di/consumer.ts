@@ -65,6 +65,7 @@ import {
 } from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
 import {
   ObservedMongoUnitOfWork,
+  ObservedRestaurantOrderRepository,
   observeReceiveOrderRequest,
   type ReceiveOrderRequestPort,
   RestaurantOrderDomainMetrics,
@@ -156,10 +157,13 @@ export const createConsumerContainer = (
         new RepositoryRestaurantExistence(restaurants),
     ).singleton(),
     restaurantOrders: asFunction(
-      ({ db, unitOfWork, kitchenChanges }: ConsumerCradle) =>
-        new MongoRestaurantOrderRepository(
-          createRestaurantOrderCollection(db, unitOfWork),
-          kitchenChanges,
+      ({ db, unitOfWork, kitchenChanges, domainMetrics }: ConsumerCradle) =>
+        new ObservedRestaurantOrderRepository(
+          new MongoRestaurantOrderRepository(
+            createRestaurantOrderCollection(db, unitOfWork),
+            kitchenChanges,
+          ),
+          domainMetrics,
         ),
     ).singleton(),
     fulfillmentAccess: asFunction(
