@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
@@ -34,21 +32,4 @@ func (c *Catalog) Restaurant(ctx context.Context, restaurantID string) (applicat
 		Name:   restaurant.GetName(),
 		IsOpen: restaurant.GetIsOpen(),
 	}, nil
-}
-
-// MenuItemNames returns no names for a restaurant without a menu: the order
-// still shows, with neutral item labels.
-func (c *Catalog) MenuItemNames(ctx context.Context, restaurantID string) (map[string]string, error) {
-	response, err := c.client.GetMenu(identity.WithoutUser(ctx), &restaurantsv1.GetMenuRequest{RestaurantId: restaurantID})
-	if status.Code(err) == codes.NotFound {
-		return map[string]string{}, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get menu: %w", err)
-	}
-	names := make(map[string]string, len(response.GetItems()))
-	for _, item := range response.GetItems() {
-		names[item.GetMenuItemId()] = item.GetName()
-	}
-	return names, nil
 }

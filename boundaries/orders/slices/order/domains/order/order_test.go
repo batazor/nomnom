@@ -57,7 +57,7 @@ func TestOrderComputesTotalAndRejectsDuplicateItems(t *testing.T) {
 	require.NoError(t, err)
 	quantity, err := vo.NewQuantity(2)
 	require.NoError(t, err)
-	item := NewItem("menu-1", quantity, price)
+	item := NewItem("menu-1", "Margherita", quantity, price)
 
 	order, err := New("order-1", "customer-1", "restaurant-1", []Item{item})
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func newTestOrder(t *testing.T) *Order {
 		"order-1",
 		"customer-1",
 		"restaurant-1",
-		[]Item{NewItem("menu-1", quantity, price)},
+		[]Item{NewItem("menu-1", "Margherita", quantity, price)},
 	)
 	require.NoError(t, err)
 	return order

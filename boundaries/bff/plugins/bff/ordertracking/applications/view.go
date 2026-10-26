@@ -74,7 +74,7 @@ type OrderView struct {
 
 type ItemView struct {
 	MenuItemID string
-	// Name is empty when the item is no longer in the menu.
+	// Name is the name at Place Order; empty for Orders placed before orders kept it.
 	Name      string
 	Quantity  int
 	UnitPrice Money

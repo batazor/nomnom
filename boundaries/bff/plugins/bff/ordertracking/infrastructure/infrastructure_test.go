@@ -60,17 +60,28 @@ func (s *ordersServer) ListCustomerOrders(ctx context.Context, request *ordersv1
 	}
 	return &ordersv1.ListCustomerOrdersResponse{
 		Orders: []*ordersv1.OrderSummary{
-			{OrderId: "order-2", Cursor: "cursor-2"},
-			{OrderId: "order-1", Cursor: "cursor-1"},
+			{OrderId: "order-2", Cursor: "cursor-2", Order: card("order-2")},
+			{OrderId: "order-1", Cursor: "cursor-1", Order: card("order-1")},
 		},
 		NextPageToken: request.GetCustomerId() + "/" + request.GetPageToken() + "/" + string(rune('0'+request.GetPageSize())),
 	}, nil
 }
 
+// card is the full Order a history entry of orders carries.
+func card(id string) *ordersv1.Order {
+	return &ordersv1.Order{
+		OrderId: id, RestaurantId: "restaurant-1", State: ordersv1.OrderState_ORDER_STATE_PLACED,
+		Items: []*ordersv1.OrderItem{{
+			MenuItemId: "menu-tea", Name: "Чай", Quantity: 1, UnitPrice: &ordersv1.Money{Amount: "0.10", Currency: "EUR"},
+		}},
+		Total:    &ordersv1.Money{Amount: "0.10", Currency: "EUR"},
+		PlacedAt: timestamppb.New(time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)),
+	}
+}
+
 type restaurantsServer struct {
 	restaurantsv1.UnimplementedRestaurantsServiceServer
-	menuErr error
-	seenMD  metadata.MD
+	seenMD metadata.MD
 }
 
 func (s *restaurantsServer) GetRestaurant(ctx context.Context, request *restaurantsv1.GetRestaurantRequest) (*restaurantsv1.GetRestaurantResponse, error) {
@@ -78,13 +89,6 @@ func (s *restaurantsServer) GetRestaurant(ctx context.Context, request *restaura
 	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{
 		RestaurantId: request.GetRestaurantId(), Name: "Кухня №8", IsOpen: true,
 	}}, nil
-}
-
-func (s *restaurantsServer) GetMenu(context.Context, *restaurantsv1.GetMenuRequest) (*restaurantsv1.GetMenuResponse, error) {
-	if s.menuErr != nil {
-		return nil, s.menuErr
-	}
-	return &restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{{MenuItemId: "menu-tea", Name: "Чай"}}}, nil
 }
 
 func credentials(t *testing.T) identity.OutgoingCredentials {
@@ -192,7 +196,7 @@ func TestGetOrderFailedPreconditionIsNotACancellationRefusal(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err), "the cause is kept for the log")
 }
 
-func TestCatalogIsPublicAndToleratesMissingMenu(t *testing.T) {
+func TestCatalogIsPublic(t *testing.T) {
 	server := &restaurantsServer{}
 	catalog := NewCatalog(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1.RegisterRestaurantsServiceServer(s, server) }))
 
@@ -201,15 +205,6 @@ func TestCatalogIsPublicAndToleratesMissingMenu(t *testing.T) {
 	assert.Equal(t, applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, restaurant)
 	assert.Equal(t, []string{"Bearer token-nomnom.restaurants"}, server.seenMD.Get("authorization"))
 	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata), "public read carries no user")
-
-	names, err := catalog.MenuItemNames(customerContext(), "restaurant-1")
-	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"menu-tea": "Чай"}, names)
-
-	server.menuErr = status.Error(codes.NotFound, "no menu")
-	names, err = catalog.MenuItemNames(customerContext(), "restaurant-1")
-	require.NoError(t, err)
-	assert.Empty(t, names)
 }
 
 // The history goes to orders on behalf of the customer, with the customer id.
@@ -220,10 +215,13 @@ func TestOrdersListCustomerOrdersCarriesCustomerAndCursors(t *testing.T) {
 	page, err := orders.ListCustomerOrders(customerContext(), "customer-1", 2, "cursor-3")
 
 	require.NoError(t, err)
-	assert.Equal(t, applications.HistoryPage{
-		Entries:    []applications.HistoryEntry{{OrderID: "order-2", Cursor: "cursor-2"}, {OrderID: "order-1", Cursor: "cursor-1"}},
-		NextCursor: "customer-1/cursor-3/2",
-	}, page)
+	require.Len(t, page.Entries, 2)
+	assert.Equal(t, "customer-1/cursor-3/2", page.NextCursor)
+	assert.Equal(t, "cursor-2", page.Entries[0].Cursor)
+	assert.Equal(t, "order-2", page.Entries[0].Order.ID)
+	assert.Equal(t, []applications.OrderLine{{
+		MenuItemID: "menu-tea", Name: "Чай", Quantity: 1, UnitPrice: applications.Money{Amount: "0.10", Currency: "EUR"},
+	}}, page.Entries[0].Order.Items, "the card carries the item name kept by orders")
 	assert.Len(t, server.seenMD.Get(identity.AssertionMetadata), 1)
 
 	server.err = status.Error(codes.InvalidArgument, "cursor is malformed")

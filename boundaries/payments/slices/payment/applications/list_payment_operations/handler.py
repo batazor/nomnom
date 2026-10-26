@@ -11,7 +11,6 @@ from slices.payment.domains.payment import (
     OperationKind,
     OperationState,
     PaymentId,
-    PaymentRepository,
 )
 
 from ..access import require_permission
@@ -45,8 +44,12 @@ class PaymentOperationView:
 class PaymentOperationHistory(Protocol):
     """Read model of the Payment Operations of a Payment."""
 
-    def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperationView]:
-        """Return the operation views of the Payment ordered by ``requested_at``."""
+    def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperationView] | None:
+        """Return the operation views of the Payment ordered by ``requested_at``.
+
+        ``None`` when the Payment does not exist; an empty list is a Payment without
+        operations.
+        """
         ...
 
 
@@ -63,11 +66,9 @@ class ListPaymentOperationsHandler:
 
     def __init__(
         self,
-        payments: PaymentRepository,
         history: PaymentOperationHistory,
         permissions: PaymentPermissionChecker,
     ) -> None:
-        self._payments = payments
         self._history = history
         self._permissions = permissions
 
@@ -88,8 +89,7 @@ class ListPaymentOperationsHandler:
             PaymentPermission.VIEW_OPERATIONS,
             PaymentResource(payment_id),
         )
-        if self._payments.get(payment_id) is None:
+        operations = self._history.list_for_payment(payment_id)
+        if operations is None:
             raise PaymentNotFoundError(payment_id)
-        return ListPaymentOperationsResult(
-            payment_id, tuple(self._history.list_for_payment(payment_id))
-        )
+        return ListPaymentOperationsResult(payment_id, tuple(operations))

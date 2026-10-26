@@ -189,6 +189,8 @@ class RepositoryIntegrationTest(unittest.TestCase):
         self.operations.add(self._operation("operation-0", "key-0", minutes=0))
 
         history = self.history.list_for_payment(PaymentId("payment-1"))
+        assert history is not None
+        self.assertIsNone(self.history.list_for_payment(PaymentId("missing")))
         self.assertEqual([op.operation_id for op in history], ["operation-0", "operation-1"])
         self.assertEqual(history[1].decline_reason, "insufficient funds")
         declined = self.operations.get_by_idempotency_key("key-1")

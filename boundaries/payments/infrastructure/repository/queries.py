@@ -1,7 +1,15 @@
 """PostgreSQL adapters of the payment slice query ports."""
 
+from slices.payment.applications.get_payment_status import GetPaymentStatusResult
 from slices.payment.applications.list_payment_operations import PaymentOperationView
-from slices.payment.domains.payment import OperationId, OperationKind, OperationState, PaymentId
+from slices.payment.domains.payment import (
+    OperationId,
+    OperationKind,
+    OperationState,
+    OrderId,
+    PaymentId,
+    PaymentState,
+)
 
 from .database import Database
 
@@ -22,15 +30,43 @@ class DatabasePendingOperationQuery:
         return None if row is None else OperationId(row[0])
 
 
+class DatabasePaymentStatusReader:
+    """Payment status read model over ``payments`` without provider data."""
+
+    def __init__(self, database: Database) -> None:
+        self._db = database
+
+    def status(self, payment_id: PaymentId) -> GetPaymentStatusResult | None:
+        """Return the view of the Payment, or ``None`` when it does not exist."""
+        with self._db.connection() as conn:
+            row = conn.execute(
+                "SELECT order_id, amount, currency, state FROM payments WHERE id = %s",
+                (payment_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        order_id, amount, currency, state = row
+        return GetPaymentStatusResult(
+            payment_id=payment_id,
+            order_id=OrderId(order_id),
+            amount=amount,
+            currency=currency,
+            state=PaymentState(state),
+        )
+
+
 class DatabasePaymentOperationHistory:
     """Operation history read model over ``payment_operations`` without provider data."""
 
     def __init__(self, database: Database) -> None:
         self._db = database
 
-    def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperationView]:
-        """Return the operation views of the Payment in request order."""
+    def list_for_payment(self, payment_id: PaymentId) -> list[PaymentOperationView] | None:
+        """Return the operation views of the Payment in request order, ``None`` without it."""
         with self._db.connection() as conn:
+            exists = conn.execute("SELECT 1 FROM payments WHERE id = %s", (payment_id,)).fetchone()
+            if exists is None:
+                return None
             rows = conn.execute(
                 "SELECT id, kind, state, amount, currency, idempotency_key, requested_at, "
                 "completed_at, decline_reason FROM payment_operations "

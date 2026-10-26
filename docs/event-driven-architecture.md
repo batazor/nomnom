@@ -339,7 +339,7 @@ Duplicate не считается бизнес-ошибкой и не уходи
 | Consumer упал до commit | Business state и запись Inbox не сохранены | Kafka повторно доставляет сообщение, consumer выполняет операцию заново |
 | Commit произошёл, consumer упал до acknowledgement | Business state и запись Inbox сохранены, offset не подтверждён | Kafka может повторно доставить событие; Inbox содержит `event_id`, повторная обработка — no-op |
 | Business operation завершилась ошибкой | Транзакция откатывается, запись Inbox не фиксирует событие как обработанное | Сообщение может быть обработано повторно согласно retry policy |
-| Permanent failure | Сообщение не может быть успешно обработано | Inbox не заменяет стратегию poison messages; retry limits, dead-letter handling и ручное восстановление определяются отдельно |
+| Permanent failure | Сообщение не может быть успешно обработано | Inbox не заменяет стратегию poison messages: сообщение уходит в `<stream>.dlq`, после исправления оператор делает redrive или discard ([Разбор DLQ](dlq.md)) |
 
 Для Go-consumers на Watermill действие по классу ошибки фиксирует [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md); остальные языки следуют той же таблице:
 
@@ -350,7 +350,7 @@ Duplicate не считается бизнес-ошибкой и не уходи
 | Business error | domain / application | ack; результат — outbox-событие или лог, не retry |
 | Duplicate (Inbox) | application | ack, no-op |
 
-Business error не уходит в бесконечный transport retry. Процедура восстановления из DLQ определяется отдельно.
+Business error не уходит в бесконечный transport retry. Разбор DLQ — [Разбор DLQ](dlq.md): redrive в исходный стрим или discard, по consumer group.
 
 ## Конкурентная обработка
 
@@ -545,7 +545,7 @@ Inbox не обязан храниться бесконечно. Retention уч�
 - правила именования `consumer` и процедура его переименования;
 - назначение `handler_version` и процедура осознанной повторной обработки событий новой версией handler;
 - retention Inbox и способ очистки;
-- retry policy, dead-letter topics и ручное восстановление poison messages;
+- ~~retry policy, dead-letter topics и ручное восстановление poison messages;~~ — решено [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#восстановление-из-dlq), runbook — [Разбор DLQ](dlq.md); команда разбора есть у `orders`, у `restaurants` — нет;
 - имена метрик, buckets гистограмм и источник времени для message age;
 - состав kind-based integration environment для Kafka, PostgreSQL и MongoDB с поддержкой транзакций.
 

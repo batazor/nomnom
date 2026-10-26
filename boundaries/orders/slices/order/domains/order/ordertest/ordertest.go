@@ -44,7 +44,7 @@ func New(t testing.TB, id order.ID, options ...Option) *order.Order {
 		ID:           id,
 		CustomerID:   "customer-1",
 		RestaurantID: "restaurant-1",
-		Items:        []order.Item{order.NewItem("menu-1", Quantity(t, 2), Money(t, "10"))},
+		Items:        []order.Item{order.NewItem("menu-1", "Margherita", Quantity(t, 2), Money(t, "10"))},
 		PlacedAt:     PlacedAt,
 		State:        order.StatePlaced,
 	}

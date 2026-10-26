@@ -12,6 +12,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
@@ -30,7 +31,7 @@ type SimulatorSwitch interface {
 type OrderHandlers struct {
 	PlaceOrder               application.Handler[placeorder.Input, placeorder.Result]
 	RequestOrderCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
-	GetOrder                 application.Handler[getorder.Query, getorder.OrderView]
+	GetOrder                 application.Handler[getorder.Query, orderdetails.View]
 	ListCustomerOrders       application.Handler[listcustomerorders.Query, listcustomerorders.Page]
 }
 
@@ -164,7 +165,7 @@ func cancellationOutcome(outcome requestordercancellation.Outcome) ordersv1.Canc
 	}
 }
 
-func orderView(view getorder.OrderView) *ordersv1.Order {
+func orderView(view orderdetails.View) *ordersv1.Order {
 	result := &ordersv1.Order{
 		OrderId:          string(view.OrderID),
 		CustomerId:       string(view.CustomerID),
@@ -178,6 +179,7 @@ func orderView(view getorder.OrderView) *ordersv1.Order {
 	for _, item := range view.Items {
 		result.Items = append(result.Items, &ordersv1.OrderItem{
 			MenuItemId: string(item.MenuItemID),
+			Name:       item.Name,
 			Quantity:   int32(item.Quantity),
 			UnitPrice:  money(item.UnitPrice),
 		})
@@ -216,14 +218,15 @@ func expectedTime(at time.Time) *timestamppb.Timestamp {
 	return timestamppb.New(at)
 }
 
-func orderSummary(summary listcustomerorders.OrderSummary) *ordersv1.OrderSummary {
+func orderSummary(entry listcustomerorders.Entry) *ordersv1.OrderSummary {
 	return &ordersv1.OrderSummary{
-		OrderId:      string(summary.OrderID),
-		RestaurantId: string(summary.RestaurantID),
-		State:        orderState(summary.State),
-		Total:        money(summary.Total),
-		PlacedAt:     timestamppb.New(summary.PlacedAt),
-		Cursor:       summary.Cursor,
+		OrderId:      string(entry.OrderID),
+		RestaurantId: string(entry.RestaurantID),
+		State:        orderState(entry.State),
+		Total:        money(entry.Total),
+		PlacedAt:     timestamppb.New(entry.PlacedAt),
+		Cursor:       entry.Cursor,
+		Order:        orderView(entry.View),
 	}
 }
 

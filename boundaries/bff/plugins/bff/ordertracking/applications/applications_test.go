@@ -28,20 +28,26 @@ func (f *fakeOrders) RequestCancellation(_ context.Context, request Cancellation
 	return f.outcome, f.err
 }
 
-type fakeCatalog struct{ names map[string]string }
-
-func (fakeCatalog) Restaurant(_ context.Context, id string) (Restaurant, error) {
-	return Restaurant{ID: id, Name: "Кухня №8", IsOpen: true}, nil
+// fakeCatalog counts the restaurant reads; a restaurant in err fails.
+type fakeCatalog struct {
+	reads map[string]int
+	err   map[string]error
 }
 
-func (f fakeCatalog) MenuItemNames(context.Context, string) (map[string]string, error) {
-	return f.names, nil
+func (f fakeCatalog) Restaurant(_ context.Context, id string) (Restaurant, error) {
+	if f.reads != nil {
+		f.reads[id]++
+	}
+	if err := f.err[id]; err != nil {
+		return Restaurant{}, err
+	}
+	return Restaurant{ID: id, Name: "Кухня №8", IsOpen: true}, nil
 }
 
 func snapshot(state string, facts ...Fact) OrderSnapshot {
 	return OrderSnapshot{
 		ID: "order-1", RestaurantID: "restaurant-1", State: state,
-		Items:    []OrderLine{{MenuItemID: "menu-tea", Quantity: 3, UnitPrice: Money{Amount: "0.10", Currency: "EUR"}}},
+		Items:    []OrderLine{{MenuItemID: "menu-tea", Name: "Чай", Quantity: 3, UnitPrice: Money{Amount: "0.10", Currency: "EUR"}}},
 		Total:    Money{Amount: "0.30", Currency: "EUR"},
 		PlacedAt: placedAt, Facts: facts,
 	}
@@ -49,7 +55,7 @@ func snapshot(state string, facts ...Fact) OrderSnapshot {
 
 func view(t *testing.T, order OrderSnapshot, now time.Time) OrderView {
 	t.Helper()
-	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{names: map[string]string{"menu-tea": "Чай"}})
+	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{})
 	h.now = func() time.Time { return now }
 	result, err := h.Handle(context.Background(), order.ID)
 	require.NoError(t, err)
@@ -167,8 +173,12 @@ func TestLineTotalIsExact(t *testing.T) {
 	assert.Equal(t, "1380", total.Amount)
 }
 
-func TestItemMissingFromMenuHasEmptyName(t *testing.T) {
-	h := NewGetOrder(&fakeOrders{order: snapshot("placed")}, fakeCatalog{names: map[string]string{}})
+// The name is the one orders kept at Place Order: an Order placed before
+// names were kept shows an empty name, not the current menu.
+func TestItemNameComesFromTheOrder(t *testing.T) {
+	order := snapshot("placed")
+	order.Items[0].Name = ""
+	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{})
 	got, err := h.Handle(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.Empty(t, got.Items[0].Name)

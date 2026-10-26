@@ -46,6 +46,7 @@ from infrastructure.repository import (
     DatabasePaymentOperationRepository,
     DatabasePaymentOutbox,
     DatabasePaymentRepository,
+    DatabasePaymentStatusReader,
     DatabasePendingOperationQuery,
     DatabaseProviderMessageInbox,
     DatabaseUnitOfWork,
@@ -169,6 +170,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
     payments = providers.Singleton(DatabasePaymentRepository, database)
     operations = providers.Singleton(DatabasePaymentOperationRepository, database)
     pending = providers.Singleton(DatabasePendingOperationQuery, database)
+    statuses = providers.Singleton(DatabasePaymentStatusReader, database)
     outbox = providers.Singleton(
         ObservedOutbox,
         providers.Singleton(DatabasePaymentOutbox, database, outbox_mapper),
@@ -203,7 +205,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
             instrument,
             use_cases,
             names.GET_PAYMENT_STATUS,
-            providers.Factory(GetPaymentStatusHandler, payments, permissions),
+            providers.Factory(GetPaymentStatusHandler, statuses, permissions),
         ),
         create_payment=providers.Factory(
             instrument,

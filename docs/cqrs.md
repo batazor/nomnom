@@ -13,6 +13,13 @@ gRPC/HTTP/Temporal Activity → Command/Query → Application Handler → Domain
 - Queries: `Query Handler → Read Repository/Projection → DTO`, без Watermill.
 - Orchestration — Temporal, интеграция контекстов — Kafka.
 
+## Query-сторона
+
+- Query handler читает свою модель (Application DTO) из read-порта, а не восстанавливает агрегат через репозиторий: `Repository.get` и `Restore` — инструменты command-стороны. Адаптер read-порта читает таблицы напрямую и собирает DTO; проверку существования делает тот же адаптер.
+- Пока формы чтения и записи близки, read model — запрос к таблицам записи (`payments`: `PaymentStatusReader`, `PaymentOperationHistory`). Когда чтению нужна другая форма — денормализованная проекция в той же базе, обновляемая в транзакции изменения (`orders`: `OrderDetails`, [ADR orders 4](../boundaries/orders/docs/adr/0004-использование-cqrs-в-orders.md#проекция-orderdetails)). Отдельное хранилище чтения — только по измеренной причине.
+- Проекция строится из таблиц записи и перестраивается из них: catch-up при старте по версии формы и ручной rebuild ([ADR orders 4](../boundaries/orders/docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
+- Сквозные действия use case (span, `nomnom.usecase.duration`) — декоратор над handler в composition root (`telemetry.Instrument` в `orders`, `instrument` в `payments`), а не mediator или шина.
+
 ## Watermill CQRS = typed event dispatch для Kafka integration
 
 `EventProcessor` (handler groups) используется только для входящих integration events:
@@ -65,6 +72,8 @@ Custom `CommandEventMarshaler`: имя — `event_type` envelope (полное �
 | Duplicate (Inbox) | application | ack, no-op |
 
 Middleware снаружи внутрь: `Recoverer → OpenTelemetry/metrics → deserialization guard → Retry → dead letter → unknown event_type → handler`. Unmarshaler никогда не возвращает ошибку: в sarama это остановило бы partition. Подробности, Kafka-клиент (ClientID, initial offset, otelsarama, ключ `aggregate_id`) и метрики — [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md).
+
+DLQ разбирает оператор после исправления дефекта: redrive в исходный стрим или discard, по consumer group; состояние разбора — offset группы `<group>.dlq`. Runbook — [Разбор DLQ](dlq.md).
 
 ## Публикация
 

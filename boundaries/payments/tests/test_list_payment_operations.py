@@ -31,9 +31,7 @@ class ListPaymentOperationsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.kit = PaymentsTestKit(self.database)
         self.payment_id = self.kit.given_payment()
-        self.handler = ListPaymentOperationsHandler(
-            self.kit.payments, self.kit.history, self.kit.permissions
-        )
+        self.handler = ListPaymentOperationsHandler(self.kit.history, self.kit.permissions)
 
     def test_ac_430_returns_history_in_start_order_without_provider_data(self) -> None:
         executor = self.kit.executor()

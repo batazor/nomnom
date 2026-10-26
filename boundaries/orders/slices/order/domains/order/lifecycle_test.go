@@ -36,7 +36,7 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 	price := mustPolicyMoney(t, "10")
 	quantity, err := vo.NewQuantity(2)
 	require.NoError(t, err)
-	items := []Item{NewItem("menu-1", quantity, price)}
+	items := []Item{NewItem("menu-1", "Margherita", quantity, price)}
 
 	tests := []struct {
 		name     string

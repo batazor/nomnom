@@ -24,6 +24,7 @@ from infrastructure.repository import (
     DatabasePaymentOperationRepository,
     DatabasePaymentOutbox,
     DatabasePaymentRepository,
+    DatabasePaymentStatusReader,
     DatabasePendingOperationQuery,
     DatabaseProviderMessageInbox,
     DatabaseUnitOfWork,
@@ -238,6 +239,7 @@ class PaymentsTestKit:
         self.operations = StaleOperationRepository(database)
         self.pending = StalePendingOperationQuery(database, self.operations)
         self.history = DatabasePaymentOperationHistory(database)
+        self.statuses = DatabasePaymentStatusReader(database)
         self.outbox = FailingOutbox(DatabasePaymentOutbox(database, PickledEventsMapper()))
         self.inbox = DatabaseProviderMessageInbox(database)
         self.provider = FakePaymentProvider()

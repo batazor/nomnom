@@ -85,7 +85,10 @@ func (o *Orders) ListCustomerOrders(ctx context.Context, customerID string, size
 		NextCursor: response.GetNextPageToken(),
 	}
 	for _, summary := range response.GetOrders() {
-		page.Entries = append(page.Entries, applications.HistoryEntry{OrderID: summary.GetOrderId(), Cursor: summary.GetCursor()})
+		if summary.GetOrder() == nil {
+			return applications.HistoryPage{}, fmt.Errorf("list customer orders: order %s without its card", summary.GetOrderId())
+		}
+		page.Entries = append(page.Entries, applications.HistoryEntry{Order: snapshot(summary.GetOrder()), Cursor: summary.GetCursor()})
 	}
 	return page, nil
 }
@@ -131,6 +134,7 @@ func snapshot(order *ordersv1.Order) applications.OrderSnapshot {
 	for _, item := range order.GetItems() {
 		result.Items = append(result.Items, applications.OrderLine{
 			MenuItemID: item.GetMenuItemId(),
+			Name:       item.GetName(),
 			Quantity:   int(item.GetQuantity()),
 			UnitPrice:  money(item.GetUnitPrice()),
 		})

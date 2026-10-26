@@ -115,11 +115,22 @@ func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
 
 	assert.Equal(t, "EUR", snapshot.Currency)
 	assert.Equal(t, map[order.MenuItemID]placeorder.CatalogItem{
-		"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
-		"gyoza": {UnitPrice: ordertest.Money(t, "6"), Available: false},
-	}, snapshot.Items, "only requested items; unknown ones stay out and are unavailable")
+		"pizza": {Name: "pizza", UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+		"gyoza": {Name: "gyoza", UnitPrice: ordertest.Money(t, "6"), Available: false},
+	}, snapshot.Items, "only requested items with their names; unknown ones stay out and are unavailable")
 	assert.True(t, snapshot.MinimumTotal.Equal(ordertest.Money(t, "5")))
 	assert.True(t, snapshot.MaximumTotal.Equal(ordertest.Money(t, "100")))
+}
+
+// The name is kept in the Order: a requested item without one breaks the
+// contract of restaurants and fails Place Order instead of an empty name.
+func TestSnapshotRefusesItemWithoutName(t *testing.T) {
+	nameless := item("pizza", "12.50", "EUR", true)
+	nameless.Name = ""
+	server := &fakeRestaurants{open: true, items: []*restaurantsv1.MenuItem{nameless}}
+
+	_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
+	require.ErrorContains(t, err, "has no name")
 }
 
 // AC-566: a closed restaurant is refused before the menu is read.

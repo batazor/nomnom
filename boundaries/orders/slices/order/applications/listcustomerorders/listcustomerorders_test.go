@@ -10,11 +10,16 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
+	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
+
+// window is the Cancellation Window of the fixed policy of the tests.
+const window = 5 * time.Minute
 
 var (
 	customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
@@ -33,7 +38,9 @@ func setup(t *testing.T) (listcustomerorders.Handler, *fake.Authorizer) {
 	}
 	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-x", ordertest.WithCustomer("customer-2"))))
 	authorizer := fake.NewAuthorizer()
-	return listcustomerorders.NewHandler(authorizer, store), authorizer
+	policy, err := cancellationpolicy.NewFixed(window)
+	require.NoError(t, err)
+	return listcustomerorders.NewHandler(authorizer, store, policy), authorizer
 }
 
 func ids(page listcustomerorders.Page) []order.ID {
@@ -61,13 +68,19 @@ func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
 	last := second.Orders[0]
 	assert.NotEmpty(t, last.Cursor, "every order carries the cursor that continues after it")
 	last.Cursor = ""
-	assert.Equal(t, listcustomerorders.OrderSummary{
-		OrderID:      "order-a",
-		RestaurantID: "restaurant-1",
-		State:        order.StatePlaced,
-		Total:        ordertest.Money(t, "20"),
-		PlacedAt:     ordertest.PlacedAt,
-	}, last)
+	assert.Equal(t, listcustomerorders.Entry{View: orderdetails.View{
+		Details: orderdetails.Details{
+			OrderID:      "order-a",
+			CustomerID:   "customer-1",
+			RestaurantID: "restaurant-1",
+			Items:        []orderdetails.Item{{MenuItemID: "menu-1", Name: "Margherita", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
+			Total:        ordertest.Money(t, "20"),
+			State:        order.StatePlaced,
+			PlacedAt:     ordertest.PlacedAt,
+			Facts:        []orderdetails.Fact{},
+		},
+		CancellationWindow: &order.CancellationWindow{OpensAt: ordertest.PlacedAt, ClosesAt: ordertest.PlacedAt.Add(window)},
+	}}, last, "the history carries the full card with its Cancellation Window")
 	assert.Empty(t, authorizer.Checks())
 }
 

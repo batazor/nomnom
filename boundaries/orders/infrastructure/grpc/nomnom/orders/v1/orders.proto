@@ -21,6 +21,9 @@ message OrderItem {
   string menu_item_id = 1;
   int32 quantity = 2;
   Money unit_price = 3;
+  // Menu Item name at Place Order, like unit_price; empty for Orders placed
+  // before the name was kept.
+  string name = 4;
 }
 
 message FulfillmentFact {
@@ -70,4 +73,7 @@ message OrderSummary {
   google.protobuf.Timestamp placed_at = 5;
   // page_token of ListCustomerOrders that continues after this Order.
   string cursor = 6;
+  // Full card of the Order, the same as GetOrder returns: a reader of the
+  // history needs no GetOrder per Order.
+  Order order = 7;
 }

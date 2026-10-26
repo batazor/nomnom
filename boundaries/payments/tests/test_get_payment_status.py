@@ -24,7 +24,7 @@ class GetPaymentStatusTest(unittest.TestCase):
     @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit(self.database)
-        self.handler = GetPaymentStatusHandler(self.kit.payments, self.kit.permissions)
+        self.handler = GetPaymentStatusHandler(self.kit.statuses, self.kit.permissions)
 
     def test_ac_428_returns_state_without_provider_data(self) -> None:
         payment_id = self.kit.given_payment(PaymentState.AUTHORIZED)

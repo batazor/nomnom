@@ -45,6 +45,8 @@ type Result struct {
 
 // CatalogItem is the price and availability of one Menu Item at placement time.
 type CatalogItem struct {
+	// Name is the current Menu Item name, kept in the Order as its snapshot.
+	Name      string
 	UnitPrice vo.Money
 	Available bool
 }
@@ -284,7 +286,7 @@ func (r placementRequest) priced(snapshot CatalogSnapshot) ([]order.Item, order.
 			price = unknownPrice
 		}
 		availability[item.menuItemID] = known && entry.Available
-		items = append(items, order.NewItem(item.menuItemID, item.quantity, price))
+		items = append(items, order.NewItem(item.menuItemID, entry.Name, item.quantity, price))
 	}
 	return items, order.OrderabilityContext{
 		Availability: availability,

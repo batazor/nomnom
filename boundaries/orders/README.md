@@ -332,7 +332,7 @@ Kafka(event_id) → orders consumer → Transactional Inbox → application hand
 | Signal | Асинхронный факт, ответ не нужен |
 | Update | Нужен результат validation относительно Workflow Stage — клиентская Cancellation |
 | Query | Только техническая диагностика |
-| CQRS read model | Все клиентские чтения (`GetOrder`, `ListCustomerOrders`) |
+| CQRS read model | Все клиентские чтения (`GetOrder`, `ListCustomerOrders`) — проекция `OrderDetails` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#проекция-orderdetails)) |
 
 Business cancellation — Update `CancellationRequested`: домен `Order` решает допустимость (`CheckCancellation`), workflow — компенсации. Temporal `CancelWorkflow` — аварийная техническая операция, а не Cancellation.
 
@@ -418,6 +418,13 @@ OpenSpec change `add-orders-postgresql` перевёл API, worker и consumer �
 ([`slices/order/infrastructure/repository`](slices/order/infrastructure/repository)): Unit of Work,
 repository с optimistic concurrency, Inbox, idempotency keys, read models, authorization revision
 и Transactional Outbox (доставляет Debezium, ADR 37); миграции каждый процесс применяет при старте.
+Чтения идут из проекции `order_details`: репозиторий пишет её в транзакции каждого `Add`/`Save`, после
+миграций процесс догоняет устаревшие строки (catch-up), полное перестроение —
+`orders-admin projections rebuild order-details` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
+
+Операторская команда `cmd/orders-admin` входит в образ и запускается разово в pod `orders-consumer`
+(`kubectl -n nomnom-orders exec deploy/orders-consumer -- /orders-admin …`): `dlq list|redrive|discard`
+для dead letters группы `orders` ([Разбор DLQ](../../docs/dlq.md)) и `projections catch-up|rebuild order-details`.
 Тесты, которым нужно хранилище, используют этот же store через `repositorytest` (Docker обязателен для `make test`).
 
 OpenSpec change `add-order-command-rpcs-and-relationships` (FR-464…FR-470, AC-508…AC-524)

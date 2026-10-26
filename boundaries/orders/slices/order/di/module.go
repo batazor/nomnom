@@ -6,6 +6,7 @@ import (
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
@@ -16,7 +17,7 @@ import (
 type Module struct {
 	PlaceOrder               application.Handler[placeorder.Input, placeorder.Result]
 	RequestOrderCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
-	GetOrder                 application.Handler[getorder.Query, getorder.OrderView]
+	GetOrder                 application.Handler[getorder.Query, orderdetails.View]
 	ListCustomerOrders       application.Handler[listcustomerorders.Query, listcustomerorders.Page]
 }
 
@@ -86,6 +87,6 @@ func NewModule(deps Dependencies) *Module {
 		RequestOrderCancellation: telemetry.Instrument(uc, observability.RequestOrderCancellation,
 			observability.CancellationRequests(deps.Metrics, requestCancellation.Handle)),
 		GetOrder:           telemetry.Instrument(uc, observability.GetOrder, getorder.NewHandler(authorizer, deps.ReadModels, deps.Policy).Handle),
-		ListCustomerOrders: telemetry.Instrument(uc, observability.ListCustomerOrders, listcustomerorders.NewHandler(authorizer, deps.ReadModels).Handle),
+		ListCustomerOrders: telemetry.Instrument(uc, observability.ListCustomerOrders, listcustomerorders.NewHandler(authorizer, deps.ReadModels, deps.Policy).Handle),
 	}
 }

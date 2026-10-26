@@ -3,11 +3,10 @@ package listcustomerorders
 
 import (
 	"context"
-	"time"
 
 	"nomnom/orders/pkg/application"
+	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
-	"nomnom/orders/slices/order/domains/order/vo"
 )
 
 const (
@@ -27,20 +26,29 @@ type Query struct {
 	Cursor string
 }
 
-// OrderSummary is one row of the history read model.
-type OrderSummary struct {
-	OrderID      order.ID
-	RestaurantID order.RestaurantID
-	State        order.State
-	Total        vo.Money
-	PlacedAt     time.Time
+// Entry is one Order of the history: its full card, so a reader of the
+// history needs no Get Order per Order.
+type Entry struct {
+	orderdetails.View
 	// Cursor continues the history after this Order, like Page.NextCursor.
 	Cursor string
 }
 
 // Page lists orders from newest to oldest; NextCursor is empty on the last page.
 type Page struct {
-	Orders     []OrderSummary
+	Orders     []Entry
+	NextCursor string
+}
+
+// Row is one row of the OrderDetails projection on a history page.
+type Row struct {
+	Details orderdetails.Details
+	Cursor  string
+}
+
+// Rows is a history page as the Reader returns it.
+type Rows struct {
+	Rows       []Row
 	NextCursor string
 }
 
@@ -54,18 +62,20 @@ type Authorizer interface {
 	Check(ctx context.Context, check application.AccessCheck) error
 }
 
-// Reader filters by CustomerID and returns application.ErrInvalidInput for a malformed cursor.
+// Reader pages the OrderDetails projection filtered by CustomerID and returns
+// application.ErrInvalidInput for a malformed cursor.
 type Reader interface {
-	ListCustomerOrders(ctx context.Context, request PageRequest) (Page, error)
+	ListCustomerOrders(ctx context.Context, request PageRequest) (Rows, error)
 }
 
 type Handler struct {
 	authorizer Authorizer
 	reader     Reader
+	policy     orderdetails.CancellationPolicy
 }
 
-func NewHandler(authorizer Authorizer, reader Reader) Handler {
-	return Handler{authorizer: authorizer, reader: reader}
+func NewHandler(authorizer Authorizer, reader Reader, policy orderdetails.CancellationPolicy) Handler {
+	return Handler{authorizer: authorizer, reader: reader, policy: policy}
 }
 
 func (h Handler) Handle(ctx context.Context, q Query) (Page, error) {
@@ -96,5 +106,13 @@ func (h Handler) Handle(ctx context.Context, q Query) (Page, error) {
 			return Page{}, err
 		}
 	}
-	return h.reader.ListCustomerOrders(ctx, PageRequest{CustomerID: q.CustomerID, Limit: limit, Cursor: q.Cursor})
+	rows, err := h.reader.ListCustomerOrders(ctx, PageRequest{CustomerID: q.CustomerID, Limit: limit, Cursor: q.Cursor})
+	if err != nil {
+		return Page{}, err
+	}
+	page := Page{Orders: make([]Entry, 0, len(rows.Rows)), NextCursor: rows.NextCursor}
+	for _, row := range rows.Rows {
+		page.Orders = append(page.Orders, Entry{View: orderdetails.Present(ctx, h.policy, row.Details), Cursor: row.Cursor})
+	}
+	return page, nil
 }

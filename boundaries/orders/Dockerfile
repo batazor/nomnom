@@ -15,7 +15,7 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -o /out/ ./cmd/orders ./cmd/orders-worker ./cmd/orders-consumer ./cmd/orders-reconciler
+    go build -trimpath -o /out/ ./cmd/orders ./cmd/orders-worker ./cmd/orders-consumer ./cmd/orders-reconciler ./cmd/orders-admin
 
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
@@ -27,6 +27,8 @@ COPY --from=build --chown=nonroot:nonroot /out/orders-worker /orders-worker
 COPY --from=build --chown=nonroot:nonroot /out/orders-reconciler /orders-reconciler
 # Kafka consumer того же контекста (ADR 28); command: ["/orders-consumer"].
 COPY --from=build --chown=nonroot:nonroot /out/orders-consumer /orders-consumer
+# Операторские действия: DLQ и перестроение проекций (kubectl exec deploy/orders-consumer -- /orders-admin …).
+COPY --from=build --chown=nonroot:nonroot /out/orders-admin /orders-admin
 
 EXPOSE 8081 9081
 USER nonroot:nonroot

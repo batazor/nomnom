@@ -45,14 +45,17 @@ func (s *Store) Add(ctx context.Context, created *order.Order) error {
 	}
 	for position, item := range snap.Items {
 		_, err := s.exec(ctx, psql.Insert("order_items").
-			Columns("order_id", "position", "menu_item_id", "quantity", "unit_price_amount", "unit_price_currency").
-			Values(snap.ID, position, item.MenuItemID(), item.Quantity().Value(),
+			Columns("order_id", "position", "menu_item_id", "name", "quantity", "unit_price_amount", "unit_price_currency").
+			Values(snap.ID, position, item.MenuItemID(), nullString(item.Name()), item.Quantity().Value(),
 				item.UnitPrice().Amount().String(), item.UnitPrice().Currency()))
 		if err != nil {
 			return fmt.Errorf("insert order item %s/%s: %w", snap.ID, item.MenuItemID(), err)
 		}
 	}
-	return s.saveFacts(ctx, snap)
+	if err := s.saveFacts(ctx, snap); err != nil {
+		return err
+	}
+	return s.projectDetails(ctx, snap, snap.Version+1, created.Total())
 }
 
 // Save updates the Order only if its stored version is the loaded Version();
@@ -84,7 +87,10 @@ func (s *Store) Save(ctx context.Context, changed *order.Order) error {
 		}
 		return fmt.Errorf("%w: order %s version %d", application.ErrConcurrencyConflict, snap.ID, snap.Version)
 	}
-	return s.saveFacts(ctx, snap)
+	if err := s.saveFacts(ctx, snap); err != nil {
+		return err
+	}
+	return s.projectDetails(ctx, snap, snap.Version+1, changed.Total())
 }
 
 func (s *Store) saveFacts(ctx context.Context, snap order.Snapshot) error {
@@ -144,7 +150,7 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 
 func (s *Store) items(ctx context.Context, id order.ID) ([]order.Item, error) {
 	rows, err := s.query(ctx, psql.
-		Select("menu_item_id", "quantity", "unit_price_amount::text", "unit_price_currency").
+		Select("menu_item_id", "name", "quantity", "unit_price_amount::text", "unit_price_currency").
 		From("order_items").Where(sq.Eq{"order_id": id}).OrderBy("position"))
 	if err != nil {
 		return nil, fmt.Errorf("load items of %s: %w", id, err)
@@ -154,10 +160,11 @@ func (s *Store) items(ctx context.Context, id order.ID) ([]order.Item, error) {
 	for rows.Next() {
 		var (
 			menuItemID       order.MenuItemID
+			name             *string
 			quantity         int
 			amount, currency string
 		)
-		if err := rows.Scan(&menuItemID, &quantity, &amount, &currency); err != nil {
+		if err := rows.Scan(&menuItemID, &name, &quantity, &amount, &currency); err != nil {
 			return nil, fmt.Errorf("scan item of %s: %w", id, err)
 		}
 		q, err := vo.NewQuantity(quantity)
@@ -168,7 +175,7 @@ func (s *Store) items(ctx context.Context, id order.ID) ([]order.Item, error) {
 		if err != nil {
 			return nil, fmt.Errorf("item %s/%s price: %w", id, menuItemID, err)
 		}
-		items = append(items, order.NewItem(menuItemID, q, price))
+		items = append(items, order.NewItem(menuItemID, stringValue(name), q, price))
 	}
 	return items, rows.Err()
 }
@@ -206,6 +213,22 @@ func utcTime(t *time.Time) time.Time {
 		return time.Time{}
 	}
 	return t.UTC()
+}
+
+// nullString stores an empty string as NULL: the value was not kept.
+func nullString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+// stringValue reads a nullable text column: NULL is the empty string.
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func nullTime(t time.Time) *time.Time {

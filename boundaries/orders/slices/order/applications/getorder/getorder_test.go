@@ -12,6 +12,7 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/getorder"
+	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
@@ -31,7 +32,7 @@ func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *fake.Author
 	return setupWithPolicy(t, fixedWindow(t, window), seeded...)
 }
 
-func setupWithPolicy(t *testing.T, policy getorder.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *fake.Authorizer) {
+func setupWithPolicy(t *testing.T, policy orderdetails.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *fake.Authorizer) {
 	t.Helper()
 	store := repositorytest.Open(t)
 	authorizer := fake.NewAuthorizer()
@@ -54,21 +55,21 @@ func TestGetOrderReturnsView(t *testing.T) {
 	view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
 
 	require.NoError(t, err)
-	assert.Equal(t, getorder.OrderView{
+	assert.Equal(t, orderdetails.View{Details: orderdetails.Details{
 		OrderID:      "order-1",
 		CustomerID:   "customer-1",
 		RestaurantID: "restaurant-1",
-		Items:        []getorder.ItemView{{MenuItemID: "menu-1", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
+		Items:        []orderdetails.Item{{MenuItemID: "menu-1", Name: "Margherita", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
 		Total:        ordertest.Money(t, "20"),
 		State:        order.StateCancelled,
 		PlacedAt:     ordertest.PlacedAt,
-		Facts:        []getorder.FactView{{Fact: order.FactPickedUp, OccurredAt: pickedUp.OccurredAt}},
-		Cancellation: &getorder.CancellationView{
+		Facts:        []orderdetails.Fact{{Fact: order.FactPickedUp, OccurredAt: pickedUp.OccurredAt}},
+		Cancellation: &orderdetails.Cancellation{
 			Outcome:     order.OutcomeCancellation,
 			ReasonCode:  "customer_requested",
 			CancelledAt: ordertest.PlacedAt,
 		},
-	}, view)
+	}}, view)
 }
 
 // AC-127: denial does not depend on existence; NOT_FOUND only for an authorized subject.

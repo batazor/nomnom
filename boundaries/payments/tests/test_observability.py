@@ -138,7 +138,7 @@ def _handlers(kit: PaymentsTestKit, use_cases: UseCases) -> PaymentsHandlers:
     executor = kit.executor()
     return PaymentsHandlers(
         get_payment_status=use_cases.instrument(
-            names.GET_PAYMENT_STATUS, GetPaymentStatusHandler(kit.payments, kit.permissions)
+            names.GET_PAYMENT_STATUS, GetPaymentStatusHandler(kit.statuses, kit.permissions)
         ),
         create_payment=use_cases.instrument(
             names.CREATE_PAYMENT, CreatePaymentHandler(kit.payments, kit.permissions, kit.ids)

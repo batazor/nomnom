@@ -19,7 +19,11 @@ from .outbox import (
     OutboxMessage,
     outbox_event_id,
 )
-from .queries import DatabasePaymentOperationHistory, DatabasePendingOperationQuery
+from .queries import (
+    DatabasePaymentOperationHistory,
+    DatabasePaymentStatusReader,
+    DatabasePendingOperationQuery,
+)
 from .repositories import (
     DatabasePaymentOperationRepository,
     DatabasePaymentOutbox,
@@ -35,6 +39,7 @@ __all__ = [
     "DatabasePaymentOperationRepository",
     "DatabasePaymentOutbox",
     "DatabasePaymentRepository",
+    "DatabasePaymentStatusReader",
     "DatabasePendingOperationQuery",
     "DatabaseProviderMessageInbox",
     "DatabaseUnitOfWork",

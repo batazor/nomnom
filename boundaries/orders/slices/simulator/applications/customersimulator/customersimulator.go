@@ -14,6 +14,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/getorder"
+	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
@@ -54,7 +55,7 @@ type Dependencies struct {
 	Switch              Switch
 	Catalog             Catalog
 	PlaceOrder          application.Handler[placeorder.Input, placeorder.Result]
-	GetOrder            application.Handler[getorder.Query, getorder.OrderView]
+	GetOrder            application.Handler[getorder.Query, orderdetails.View]
 	RequestCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
 	Random              Random
 	Keys                Keys

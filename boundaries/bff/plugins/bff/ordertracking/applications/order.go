@@ -47,8 +47,11 @@ type Deadlines struct {
 
 type OrderLine struct {
 	MenuItemID string
-	Quantity   int
-	UnitPrice  Money
+	// Name is the menu item name kept at Place Order; empty for Orders placed
+	// before orders kept it.
+	Name      string
+	Quantity  int
+	UnitPrice Money
 }
 
 // Fact is a Fulfillment Fact reflected in the Order, for example picked_up.

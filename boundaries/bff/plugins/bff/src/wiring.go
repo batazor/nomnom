@@ -183,12 +183,13 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 
 func newOrderTracking(orders, restaurants grpc.ClientConnInterface) *orderTracking {
 	ordersAPI := trackinginfra.NewOrders(orders)
-	getOrder := trackingapp.NewGetOrder(ordersAPI, trackinginfra.NewCatalog(restaurants))
+	catalog := trackinginfra.NewCatalog(restaurants)
+	getOrder := trackingapp.NewGetOrder(ordersAPI, catalog)
 	return &orderTracking{
 		getOrder:            getOrder,
 		requestCancellation: trackingapp.NewRequestCancellation(ordersAPI),
 		// Every Order of the history page is the GetOrder view.
-		listCustomerOrders: trackingapp.NewListCustomerOrders(ordersAPI, getOrder),
+		listCustomerOrders: trackingapp.NewListCustomerOrders(ordersAPI, catalog),
 	}
 }
 

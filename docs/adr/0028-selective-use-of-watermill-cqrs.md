@@ -84,7 +84,18 @@ Kafka → Watermill Subscriber → EventProcessor → Watermill handler (infrast
 | Business error | domain / application | ack; результат — через outbox-событие или лог, не retry |
 | Duplicate (Inbox) | application | ack, no-op |
 
-Watermill не превращает business errors в бесконечный transport retry. Исчерпанный transient не уходит в DLQ: зависимость (БД, Temporal) временно недоступна, а не сообщение плохое; head-of-line blocking виден по `nomnom.messaging.retry.attempts` и consumer lag. DLQ — топик `<stream>.dlq` на каждый stream; в metadata — причина, исходный топик и consumer group, потому что один стрим могут читать несколько контекстов. Процедура восстановления из DLQ определяется отдельно.
+Watermill не превращает business errors в бесконечный transport retry. Исчерпанный transient не уходит в DLQ: зависимость (БД, Temporal) временно недоступна, а не сообщение плохое; head-of-line blocking виден по `nomnom.messaging.retry.attempts` и consumer lag. DLQ — топик `<stream>.dlq` на каждый stream; в metadata — причина, исходный топик и consumer group, потому что один стрим могут читать несколько контекстов. Разбор — [ниже](#восстановление-из-dlq).
+
+#### Восстановление из DLQ
+
+В DLQ попадает то, что повтором не лечится: дефект кода или контракта. Поэтому автоматического повтора из DLQ (retry topic, повтор по таймеру) нет: без исправления запись вернётся туда же. Разбирает оператор после исправления; runbook — [Разбор DLQ](../dlq.md).
+
+- Каждая consumer group разбирает только свои dead letters (`consumer_group_poisoned`). Что разобрано, хранит Kafka consumer group `<group>.dlq`: её committed offset на `<stream>.dlq` — первая неразобранная запись. Отдельного хранилища состояния разбора нет; lag `<group>.dlq` — верхняя оценка backlog.
+- **Redrive** — публикация dead letter обратно в исходный стрим с тем же ключом, payload и envelope headers, без метаданных dead letter и с `redriven_from=<stream>.dlq/<partition>@<offset>`. Событие проходит обычный путь: Router, middleware, Inbox, UoW. Второго pipeline обработки «в обход стрима» нет. Цена — событие снова получают все группы стрима; Inbox делает это no-op там, где оно обработано.
+- **Discard** — пометка разобранным без публикации; запись и причина пишутся WARN-логом.
+- Redrive доставляет событие после более новых событий агрегата. Это допустимо, потому что ordering ≠ idempotency: use cases, которым нужен порядок, проверяют `aggregate_version` и признают поздние факты.
+- Записи разбираются по порядку в partition, offset коммитится после каждой: прерванный разбор продолжается с места остановки.
+- Реализация — разовая операторская команда в образе consumer'а (`orders-admin dlq list|redrive|discard`, запуск `kubectl exec` в pod consumer'а с его конфигурацией). Контексты на других языках реализуют тот же контракт своей командой.
 
 #### Десериализация
 
@@ -138,4 +149,4 @@ Queries выполняются напрямую: `Query Handler → Read Reposit
 
 Входящие integration events получают типизированный dispatch, единые middleware и одинаковое поведение ошибок без ручного switch по `event_type`. Граница между application CQRS и транспортом становится явной: use cases не меняют синхронность из-за выбора библиотеки, публикация остаётся атомарной с state.
 
-Цена — custom marshaler и handler groups вместо дефолтов Watermill, обязательная классификация ошибок в каждом Watermill handler и отдельный процесс consumer на boundary. Business error подтверждается, поэтому application обязан явно зафиксировать результат (outbox-событие или лог), иначе факт отказа теряется. DLQ требует процедуры восстановления, которая пока не определена.
+Цена — custom marshaler и handler groups вместо дефолтов Watermill, обязательная классификация ошибок в каждом Watermill handler и отдельный процесс consumer на boundary. Business error подтверждается, поэтому application обязан явно зафиксировать результат (outbox-событие или лог), иначе факт отказа теряется. DLQ разбирается вручную после исправления дефекта ([Разбор DLQ](../dlq.md)): redrive повторно доставляет событие всем группам стрима, retention `<stream>.dlq` должен превышать окно разбора, а у контекстов без своей команды разбора DLQ пока только накапливается.

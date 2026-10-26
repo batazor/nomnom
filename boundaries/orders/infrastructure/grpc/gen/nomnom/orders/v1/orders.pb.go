@@ -130,10 +130,13 @@ func (x *Money) GetCurrency() string {
 }
 
 type OrderItem struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MenuItemId    string                 `protobuf:"bytes,1,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
-	Quantity      int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	UnitPrice     *Money                 `protobuf:"bytes,3,opt,name=unit_price,json=unitPrice,proto3" json:"unit_price,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	MenuItemId string                 `protobuf:"bytes,1,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	Quantity   int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	UnitPrice  *Money                 `protobuf:"bytes,3,opt,name=unit_price,json=unitPrice,proto3" json:"unit_price,omitempty"`
+	// Menu Item name at Place Order, like unit_price; empty for Orders placed
+	// before the name was kept.
+	Name          string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -187,6 +190,13 @@ func (x *OrderItem) GetUnitPrice() *Money {
 		return x.UnitPrice
 	}
 	return nil
+}
+
+func (x *OrderItem) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
 }
 
 type FulfillmentFact struct {
@@ -513,7 +523,10 @@ type OrderSummary struct {
 	Total        *Money                 `protobuf:"bytes,4,opt,name=total,proto3" json:"total,omitempty"`
 	PlacedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
 	// page_token of ListCustomerOrders that continues after this Order.
-	Cursor        string `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Cursor string `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// Full card of the Order, the same as GetOrder returns: a reader of the
+	// history needs no GetOrder per Order.
+	Order         *Order `protobuf:"bytes,7,opt,name=order,proto3" json:"order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -590,6 +603,13 @@ func (x *OrderSummary) GetCursor() string {
 	return ""
 }
 
+func (x *OrderSummary) GetOrder() *Order {
+	if x != nil {
+		return x.Order
+	}
+	return nil
+}
+
 var File_nomnom_orders_v1_orders_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
@@ -597,13 +617,14 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x1dnomnom/orders/v1/orders.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\";\n" +
 	"\x05Money\x12\x16\n" +
 	"\x06amount\x18\x01 \x01(\tR\x06amount\x12\x1a\n" +
-	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\x81\x01\n" +
+	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\x95\x01\n" +
 	"\tOrderItem\x12 \n" +
 	"\fmenu_item_id\x18\x01 \x01(\tR\n" +
 	"menuItemId\x12\x1a\n" +
 	"\bquantity\x18\x02 \x01(\x05R\bquantity\x126\n" +
 	"\n" +
-	"unit_price\x18\x03 \x01(\v2\x17.nomnom.orders.v1.MoneyR\tunitPrice\"z\n" +
+	"unit_price\x18\x03 \x01(\v2\x17.nomnom.orders.v1.MoneyR\tunitPrice\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\"z\n" +
 	"\x0fFulfillmentFact\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12;\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -632,14 +653,15 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindow\x12F\n" +
 	"\x11expected_ready_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\x12H\n" +
 	"\x12expected_pickup_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x10expectedPickupAt\x12N\n" +
-	"\x15expected_delivered_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAtJ\x04\b\x05\x10\x06R\x10delivery_address\"\x82\x02\n" +
+	"\x15expected_delivered_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAtJ\x04\b\x05\x10\x06R\x10delivery_address\"\xb1\x02\n" +
 	"\fOrderSummary\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x122\n" +
 	"\x05state\x18\x03 \x01(\x0e2\x1c.nomnom.orders.v1.OrderStateR\x05state\x12-\n" +
 	"\x05total\x18\x04 \x01(\v2\x17.nomnom.orders.v1.MoneyR\x05total\x127\n" +
 	"\tplaced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\x12\x16\n" +
-	"\x06cursor\x18\x06 \x01(\tR\x06cursor*\x92\x01\n" +
+	"\x06cursor\x18\x06 \x01(\tR\x06cursor\x12-\n" +
+	"\x05order\x18\a \x01(\v2\x17.nomnom.orders.v1.OrderR\x05order*\x92\x01\n" +
 	"\n" +
 	"OrderState\x12\x1b\n" +
 	"\x17ORDER_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -693,11 +715,12 @@ var file_nomnom_orders_v1_orders_proto_depIdxs = []int32{
 	0,  // 15: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
 	1,  // 16: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
 	8,  // 17: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	6,  // 18: nomnom.orders.v1.OrderSummary.order:type_name -> nomnom.orders.v1.Order
+	19, // [19:19] is the sub-list for method output_type
+	19, // [19:19] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_orders_proto_init() }

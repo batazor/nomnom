@@ -15,12 +15,11 @@ type OrderReader interface {
 // Catalog reads public data of restaurants: no customer is involved.
 type Catalog interface {
 	Restaurant(ctx context.Context, restaurantID string) (Restaurant, error)
-	// MenuItemNames returns the current names of menu items by id.
-	MenuItemNames(ctx context.Context, restaurantID string) (map[string]string, error)
 }
 
 // GetOrder builds the customer view of one Order: orders on behalf of the
-// customer, restaurants for the restaurant and the names of menu items.
+// customer with the item names kept at Place Order, restaurants for the
+// restaurant.
 type GetOrder struct {
 	orders  OrderReader
 	catalog Catalog
@@ -37,17 +36,18 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 	if err != nil {
 		return OrderView{}, err
 	}
-	current, err := status(order)
-	if err != nil {
-		return OrderView{}, err
-	}
 	restaurant, err := h.catalog.Restaurant(ctx, order.RestaurantID)
 	if err != nil {
 		return OrderView{}, fmt.Errorf("read restaurant: %w", err)
 	}
-	names, err := h.catalog.MenuItemNames(ctx, order.RestaurantID)
+	return compose(order, restaurant, h.now())
+}
+
+// compose builds the customer view of an Order and its restaurant at now.
+func compose(order OrderSnapshot, restaurant Restaurant, now time.Time) (OrderView, error) {
+	current, err := status(order)
 	if err != nil {
-		return OrderView{}, fmt.Errorf("read menu: %w", err)
+		return OrderView{}, err
 	}
 	items := make([]ItemView, 0, len(order.Items))
 	for _, line := range order.Items {
@@ -57,7 +57,7 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 		}
 		items = append(items, ItemView{
 			MenuItemID: line.MenuItemID,
-			Name:       names[line.MenuItemID],
+			Name:       line.Name,
 			Quantity:   line.Quantity,
 			UnitPrice:  line.UnitPrice,
 			LineTotal:  total,
@@ -72,7 +72,7 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 		Total:          order.Total,
 		PlacedAt:       order.PlacedAt,
 		Milestones:     milestones(order),
-		AvailableUntil: availableUntil(order, current, h.now()),
+		AvailableUntil: availableUntil(order, current, now),
 		Deadlines:      order.Deadlines,
 	}, nil
 }

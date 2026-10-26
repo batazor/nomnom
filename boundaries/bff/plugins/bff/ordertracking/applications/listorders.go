@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 var (
@@ -16,10 +17,11 @@ var (
 // MaxPageSize is the largest page of the order history orders serves.
 const MaxPageSize = 100
 
-// HistoryEntry is one Order of the history; Cursor continues after it.
+// HistoryEntry is one Order of the history with its full card; Cursor
+// continues after it.
 type HistoryEntry struct {
-	OrderID string
-	Cursor  string
+	Order  OrderSnapshot
+	Cursor string
 }
 
 // HistoryPage is one page of the history as orders returns it, newest first;
@@ -33,11 +35,6 @@ type HistoryPage struct {
 // cursor orders rejects is ErrInvalidCursor.
 type OrderHistory interface {
 	ListCustomerOrders(ctx context.Context, customerID string, size int, cursor string) (HistoryPage, error)
-}
-
-// OrderViews builds the customer view of one Order: GetOrder.
-type OrderViews interface {
-	Handle(ctx context.Context, orderID string) (OrderView, error)
 }
 
 // OrderEdge is an Order with its cursor.
@@ -54,20 +51,20 @@ type OrderPage struct {
 	EndCursor string
 }
 
-// ListCustomerOrders pages the history of the customer: the history read of
-// orders gives the ids and cursors, GetOrder the full view of each Order,
-// because the summary carries no items and no Fulfillment Facts.
+// ListCustomerOrders pages the history of the customer: the history of
+// orders carries the full card of every Order, restaurants the restaurant of
+// each distinct restaurant of the page.
 type ListCustomerOrders struct {
 	history OrderHistory
-	orders  OrderViews
+	catalog Catalog
+	now     func() time.Time
 }
 
-func NewListCustomerOrders(history OrderHistory, orders OrderViews) ListCustomerOrders {
-	return ListCustomerOrders{history: history, orders: orders}
+func NewListCustomerOrders(history OrderHistory, catalog Catalog) ListCustomerOrders {
+	return ListCustomerOrders{history: history, catalog: catalog, now: time.Now}
 }
 
-// Handle reads the Orders of a page one by one; an Order that disappears
-// between the two reads is left out.
+// Handle builds the page with one restaurants read per distinct restaurant.
 func (h ListCustomerOrders) Handle(ctx context.Context, customerID string, first int, after string) (OrderPage, error) {
 	if first < 1 || first > MaxPageSize {
 		return OrderPage{}, ErrInvalidPageSize
@@ -80,13 +77,19 @@ func (h ListCustomerOrders) Handle(ctx context.Context, customerID string, first
 		Edges:       make([]OrderEdge, 0, len(page.Entries)),
 		HasNextPage: page.NextCursor != "",
 	}
+	now := h.now()
+	restaurants := map[string]Restaurant{}
 	for _, entry := range page.Entries {
-		view, err := h.orders.Handle(ctx, entry.OrderID)
-		if errors.Is(err, ErrOrderNotFound) {
-			continue
+		restaurant, known := restaurants[entry.Order.RestaurantID]
+		if !known {
+			if restaurant, err = h.catalog.Restaurant(ctx, entry.Order.RestaurantID); err != nil {
+				return OrderPage{}, fmt.Errorf("read restaurant: %w", err)
+			}
+			restaurants[entry.Order.RestaurantID] = restaurant
 		}
+		view, err := compose(entry.Order, restaurant, now)
 		if err != nil {
-			return OrderPage{}, fmt.Errorf("read order %s: %w", entry.OrderID, err)
+			return OrderPage{}, fmt.Errorf("compose order %s: %w", entry.Order.ID, err)
 		}
 		result.Edges = append(result.Edges, OrderEdge{Cursor: entry.Cursor, Order: view})
 	}

@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Protocol
 
 from pkg.application import Subject
-from slices.payment.domains.payment import OrderId, Payment, PaymentId, PaymentState
+from slices.payment.domains.payment import OrderId, PaymentId, PaymentState
 
 from ..access import require_permission
 from ..errors import InvalidPaymentRequestError, PaymentNotFoundError
@@ -32,20 +32,18 @@ class GetPaymentStatusResult:
 
 
 class PaymentStatusReader(Protocol):
-    """Read-only access to Payments needed by the query."""
+    """Read model of the query: the result is read from storage, not from the aggregate."""
 
-    def get(self, payment_id: PaymentId) -> Payment | None:
-        """Return the Payment, or ``None`` when it does not exist."""
+    def status(self, payment_id: PaymentId) -> GetPaymentStatusResult | None:
+        """Return the Payment view, or ``None`` when the Payment does not exist."""
         ...
 
 
 class GetPaymentStatusHandler:
     """Returns the current state of a Payment the subject may view."""
 
-    def __init__(
-        self, payments: PaymentStatusReader, permissions: PaymentPermissionChecker
-    ) -> None:
-        self._payments = payments
+    def __init__(self, reader: PaymentStatusReader, permissions: PaymentPermissionChecker) -> None:
+        self._reader = reader
         self._permissions = permissions
 
     def handle(self, query: GetPaymentStatusInput) -> GetPaymentStatusResult:
@@ -62,13 +60,7 @@ class GetPaymentStatusHandler:
         require_permission(
             self._permissions, query.subject, PaymentPermission.VIEW, PaymentResource(payment_id)
         )
-        payment = self._payments.get(payment_id)
-        if payment is None:
+        view = self._reader.status(payment_id)
+        if view is None:
             raise PaymentNotFoundError(payment_id)
-        return GetPaymentStatusResult(
-            payment_id=payment.id,
-            order_id=payment.order_id,
-            amount=payment.amount.amount,
-            currency=payment.amount.currency,
-            state=payment.state,
-        )
+        return view

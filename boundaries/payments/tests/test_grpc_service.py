@@ -39,7 +39,7 @@ class StaticSubjectResolver(SubjectResolver):
 def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:
     executor = kit.executor()
     return PaymentsHandlers(
-        get_payment_status=GetPaymentStatusHandler(kit.payments, kit.permissions),
+        get_payment_status=GetPaymentStatusHandler(kit.statuses, kit.permissions),
         create_payment=CreatePaymentHandler(kit.payments, kit.permissions, kit.ids),
         authorize_payment=AuthorizePaymentHandler(executor),
         capture_payment=CapturePaymentHandler(executor),

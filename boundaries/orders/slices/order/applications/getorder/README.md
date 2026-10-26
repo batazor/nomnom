@@ -18,8 +18,8 @@
 Handler: [`getorder.go`](getorder.go), unit-тесты: [`getorder_test.go`](getorder_test.go).
 
 - **Вход:** `Query{Subject, OrderID}`.
-- **Порядок:** authorization `view` на `order:<id>` до чтения (fail closed, не раскрывает существование) → `Reader.OrderView`. UoW не используется.
-- **Результат:** `OrderView` — read model и Application DTO: состав, total, Order State, `placedAt`, отражённые факты и причина отрицательного итога.
+- **Порядок:** authorization `view` на `order:<id>` до чтения (fail closed, не раскрывает существование) → `Reader.OrderDetails` — строка проекции `OrderDetails` ([ADR 4](../../../../docs/adr/0004-использование-cqrs-в-orders.md#проекция-orderdetails)) без восстановления агрегата → Cancellation Window политики на момент чтения. UoW не используется.
+- **Результат:** `orderdetails.View` — read model и Application DTO: состав с названиями позиций на момент Place Order, total, Order State, `placedAt`, отражённые факты, сроки, причина отрицательного итога и Cancellation Window.
 - **Требования:** FR-115; AC-126, AC-127 в OpenSpec change `implement-orders-application-layer`.
 
 ## Acceptance

@@ -15,7 +15,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/getorder"
+	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
@@ -63,7 +63,7 @@ type Authorizer interface {
 
 // CancellationPolicy — окно отмены, общее для Get Order и Request Order
 // Cancellation.
-type CancellationPolicy = getorder.CancellationPolicy
+type CancellationPolicy = orderdetails.CancellationPolicy
 
 // NewCancellationPolicy строит production-политику из конфигурации; тестовые
 // тестовая fake.AlwaysOpen сюда не попадает (FR-462).

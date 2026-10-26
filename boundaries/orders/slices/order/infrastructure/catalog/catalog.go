@@ -107,7 +107,10 @@ func (c *Catalog) snapshot(restaurantID order.RestaurantID, items []*restaurants
 		if err != nil {
 			return placeorder.CatalogSnapshot{}, fmt.Errorf("price of menu item %q: %w", id, err)
 		}
-		snapshot.Items[id] = placeorder.CatalogItem{UnitPrice: price, Available: item.GetAvailable()}
+		if item.GetName() == "" {
+			return placeorder.CatalogSnapshot{}, fmt.Errorf("menu item %q has no name", id)
+		}
+		snapshot.Items[id] = placeorder.CatalogItem{Name: item.GetName(), UnitPrice: price, Available: item.GetAvailable()}
 	}
 	return snapshot, nil
 }

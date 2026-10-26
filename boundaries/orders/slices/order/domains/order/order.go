@@ -22,17 +22,22 @@ type CustomerID string
 type RestaurantID string
 type MenuItemID string
 
+// Item is one line of the Order. Name and UnitPrice are the snapshot of the
+// Menu Item at Place Order: later menu changes do not change placed Orders.
+// Name is empty for Orders placed before the name was kept.
 type Item struct {
 	menuItemID MenuItemID
+	name       string
 	quantity   vo.Quantity
 	unitPrice  vo.Money
 }
 
-func NewItem(menuItemID MenuItemID, quantity vo.Quantity, unitPrice vo.Money) Item {
-	return Item{menuItemID: menuItemID, quantity: quantity, unitPrice: unitPrice}
+func NewItem(menuItemID MenuItemID, name string, quantity vo.Quantity, unitPrice vo.Money) Item {
+	return Item{menuItemID: menuItemID, name: name, quantity: quantity, unitPrice: unitPrice}
 }
 
 func (i Item) MenuItemID() MenuItemID { return i.menuItemID }
+func (i Item) Name() string           { return i.name }
 func (i Item) Quantity() vo.Quantity  { return i.quantity }
 func (i Item) UnitPrice() vo.Money    { return i.unitPrice }
 
