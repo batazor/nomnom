@@ -33,7 +33,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use sqlx::postgres::PgPool;
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 
-pub use migrate::{MIGRATOR, migrate};
+pub use migrate::{MIGRATION_SETS, MigrationSet, migrate};
 pub use outbox::{NoIntegrationEvents, OUTBOX_TOPIC, OutboxMapper, OutboxRecord, event_id};
 pub use pool::{
     OPERATION_BUCKETS, ObservedConnection, POOL_METER_NAME, POOL_NAME, POOL_TIME_BUCKETS,

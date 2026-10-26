@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../pkg/infrastructure/mongodb/migrate.ts";
+import { ensureCollection } from "../../../../../pkg/infrastructure/mongodb/migrate.ts";
 
 /** Slice `menu`: aggregate `Menu`, one per restaurant (local ADR 2). */
 export async function up(db: Db): Promise<void> {

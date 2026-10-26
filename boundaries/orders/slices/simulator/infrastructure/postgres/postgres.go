@@ -1,5 +1,5 @@
 // Package postgres stores the Simulator switch in the orders database
-// (table simulator_state, migration 00006 of the order slice store).
+// (table simulator_state, migrations/ of this package).
 package postgres
 
 import (

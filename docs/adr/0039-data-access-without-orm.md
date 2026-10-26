@@ -35,10 +35,18 @@ ORM и ODM не используются. Запросы пишутся на SQL
 | `delivery` (Rust) | sqlx | `sqlx::query!` / `query_as!` / `query_scalar!`, проверка против схемы при компиляции; кеш `.sqlx/` в репозитории, сборка с `SQLX_OFFLINE=true` | `sqlx::migrate!` |
 | `restaurants` (TS) | официальный `mongodb` | BSON-запросы драйвера | [migrate-mongo](https://github.com/seppevs/migrate-mongo) (changelog и lock библиотеки) |
 
-- Блокировку одновременного старта нескольких pods ([ADR 38](0038-schema-migrations-at-process-startup.md))
-  даёт сама библиотека миграций: advisory lock golang-migrate и sqlx, в `payments` — `pg_advisory_lock` вокруг yoyo (lock-строка
-  yoyo после убитого процесса осталась бы и требовала ручного `yoyo break-lock`),
-  lock-коллекция migrate-mongo. У migrate-mongo `up` при занятом lock отказывает, а не ждёт, и
+- Миграциями владеет тот, чьи это таблицы или коллекции: у каждого vertical slice
+  ([ADR 3](0003-use-vertical-slice-architecture-as-the-top-level-architecture.md)) свой набор
+  `slices/<slice>/infrastructure/<postgres|mongodb>/migrations` со своей нумерацией и своей таблицей
+  или коллекцией версий; общие для слайсов таблицы (Outbox с publication CDC, Inbox) — набор `pkg`
+  контекста. Миграции слайса меняют только его таблицы, межслайсовых foreign keys нет, поэтому
+  наборы слайсов независимы друг от друга. Запуск один на процесс: явный упорядоченный список
+  наборов в composition root, `pkg` первым, без автопоиска.
+- Одновременный старт нескольких pods ([ADR 38](0038-schema-migrations-at-process-startup.md))
+  сериализует session `pg_advisory_lock`, который процесс PostgreSQL-контекста берёт сам на всё
+  применение наборов: lock библиотеки (строка yoyo после убитого процесса требовала бы ручного
+  `yoyo break-lock`, advisory lock sqlx попадал бы под `lock_timeout`) не используется или не
+  оспаривается. В `restaurants` — lock-коллекция migrate-mongo. У migrate-mongo `up` при занятом lock отказывает, а не ждёт, и
   вставляет lock без атомарной проверки: `restaurants` делает вставку атомарной unique index'ом
   на lock-коллекции и повторяет `up`, пока lock занят; миграции идемпотентны
   ([локальный ADR 2](../../boundaries/restaurants/docs/adr/0002-mongodb-collections-and-document-boundaries.md#эволюция-схемы)).

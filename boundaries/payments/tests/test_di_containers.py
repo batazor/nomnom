@@ -23,18 +23,22 @@ from payment_fakes import (
     payments_container,
 )
 from psycopg import sql
-from yoyo import read_migrations
-from yoyo.migrations import MigrationList
 
 from di.payments import PaymentsContainer, SpiceDBConfigurationError
-from di.resources import ProcessResource, TelemetryResource, postgres_database
+from di.resources import MIGRATIONS, ProcessResource, TelemetryResource, postgres_database
 from entrypoints.payments import main as payments_main
 from infrastructure.authorization import SpiceDBPermissionChecker
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
-from infrastructure.postgres import PostgresDatabase, PostgresPaymentOutbox
-from infrastructure.postgres.migrate import _LOCK_KEY, migrate, migrations
+from infrastructure.postgres import (
+    MigrationSet,
+    MissingMigrationsError,
+    PostgresDatabase,
+    PostgresPaymentOutbox,
+    migrate,
+)
+from infrastructure.postgres.migrate import _LOCK_KEY
 from infrastructure.provider import (
     SIGNATURE_HEADER,
     WEBHOOK_PATH,
@@ -187,42 +191,51 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_migrated_database_is_left_unchanged(self) -> None:
         with psycopg.connect(self.dsn) as conn:
-            before = conn.execute(
-                "SELECT migration_id, applied_at_utc FROM _yoyo_migration"
-            ).fetchall()
+            before = _applied(conn)
         logs = self.start(self.dsn)
         self.assertIn("payments migrations applied: none pending", logs[-1])
         with psycopg.connect(self.dsn) as conn:
-            after = conn.execute(
-                "SELECT migration_id, applied_at_utc FROM _yoyo_migration"
-            ).fetchall()
-        self.assertEqual(after, before)
+            self.assertEqual(_applied(conn), before)
 
-    def test_empty_database_gets_every_migration(self) -> None:
+    def test_empty_database_gets_every_migration_shared_tables_first(self) -> None:
         dsn = self._empty_database()
         logs = self.start(dsn)
-        ids = [migration.id for migration in migrations()]
-        self.assertIn(f"payments migrations applied: {', '.join(ids)}", logs[-1])
+        self.assertEqual([migration_set.owner for migration_set in MIGRATIONS], ["pkg", "payment"])
+        self.assertIn(f"payments migrations applied: {', '.join(_ids())}", logs[-1])
         with psycopg.connect(dsn) as conn:
-            applied = conn.execute("SELECT migration_id FROM _yoyo_migration ORDER BY migration_id")
-            self.assertEqual([row[0] for row in applied], ids)
+            self.assertEqual(
+                {owner: [row[0] for row in rows] for owner, rows in _applied(conn).items()},
+                {
+                    migration_set.owner: [m.id for m in migration_set.migrations()]
+                    for migration_set in MIGRATIONS
+                },
+            )
+
+    def test_every_set_numbers_its_migrations_from_one(self) -> None:
+        for migration_set in MIGRATIONS:
+            with self.subTest(owner=migration_set.owner):
+                self.assertTrue(migration_set.migrations()[0].id.startswith("00001_"))
+
+    def test_set_without_migrations_fails(self) -> None:
+        with self.assertRaises(MissingMigrationsError):
+            MigrationSet("empty", "pkg").migrations()
 
     def test_replicas_starting_together_apply_migrations_once(self) -> None:
         dsn = self._empty_database()
         settings = DatabaseSettings(DATABASE__URL=dsn)
         results: list[list[str]] = []
         threads = [
-            threading.Thread(target=lambda: results.append(migrate(settings))) for _ in range(4)
+            threading.Thread(target=lambda: results.append(migrate(settings, MIGRATIONS)))
+            for _ in range(4)
         ]
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join()
-        ids = [migration.id for migration in migrations()]
-        self.assertEqual(sorted(results, key=len), [[], [], [], ids])
+        self.assertEqual(sorted(results, key=len), [[], [], [], _ids()])
         with psycopg.connect(dsn) as conn:
-            count = conn.execute("SELECT count(*) FROM _yoyo_migration").fetchone()
-        self.assertEqual(count, (len(ids),))
+            count = sum(len(rows) for rows in _applied(conn).values())
+        self.assertEqual(count, len(_ids()))
 
     def test_lock_of_a_killed_process_is_released_with_its_connection(self) -> None:
         dsn = self._empty_database()
@@ -230,27 +243,24 @@ class StartupMigrationTest(unittest.TestCase):
         holder.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
         results: list[list[str]] = []
         waiting = threading.Thread(
-            target=lambda: results.append(migrate(DatabaseSettings(DATABASE__URL=dsn)))
+            target=lambda: results.append(migrate(DatabaseSettings(DATABASE__URL=dsn), MIGRATIONS))
         )
         waiting.start()
         waiting.join(timeout=1)
         self.assertTrue(waiting.is_alive())
         holder.close()
         waiting.join()
-        self.assertEqual(results, [[migration.id for migration in migrations()]])
+        self.assertEqual(results, [_ids()])
 
     def test_migration_gives_up_on_a_locked_table(self) -> None:
         dsn = self._empty_database()
         settings = DatabaseSettings(DATABASE__URL=dsn)
-        migrate(settings)
+        migrate(settings, MIGRATIONS)
         with psycopg.connect(dsn) as traffic:
             traffic.execute("SELECT * FROM payments")
             started = time.monotonic()
-            with (
-                patch("infrastructure.postgres.migrate.migrations", lambda: _locking_migration()),
-                self.assertRaises(psycopg.errors.LockNotAvailable),
-            ):
-                migrate(settings)
+            with self.assertRaises(psycopg.errors.LockNotAvailable):
+                migrate(settings, [*MIGRATIONS, _LOCK_PROBE])
             self.assertLess(time.monotonic() - started, 30)
 
     def _empty_database(self) -> str:
@@ -265,14 +275,29 @@ class StartupMigrationTest(unittest.TestCase):
             admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
-def _locking_migration() -> MigrationList:
-    """The bundled migrations plus one that needs an exclusive lock on ``payments``."""
-    bundled = migrations()
-    step = read_migrations(_LOCKING_MIGRATION_DIR)
-    return MigrationList([*bundled, *step])
+def _ids() -> list[str]:
+    """``<owner>/<id>`` of every bundled migration in the order they are applied."""
+    return [
+        f"{migration_set.owner}/{migration.id}"
+        for migration_set in MIGRATIONS
+        for migration in migration_set.migrations()
+    ]
 
 
-_LOCKING_MIGRATION_DIR = str(Path(__file__).parent / "fixtures" / "locking_migration")
+def _applied(conn: psycopg.Connection) -> dict[str, list[tuple[object, ...]]]:
+    """Applied migrations and their times by owner, from the yoyo table of each set."""
+    return {
+        migration_set.owner: conn.execute(
+            sql.SQL("SELECT migration_id, applied_at_utc FROM {} ORDER BY migration_id").format(
+                sql.Identifier(migration_set.migration_table)
+            )
+        ).fetchall()
+        for migration_set in MIGRATIONS
+    }
+
+
+# A set of the test fixtures that needs an exclusive lock on ``payments``.
+_LOCK_PROBE = MigrationSet("lock_probe", "fixtures.lock_probe")
 
 
 class _Lifecycle:

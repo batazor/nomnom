@@ -1,4 +1,4 @@
--- Business storage of payments (ADR 8, ADR 20, local ADR 1). References to other
+-- Business storage of the payment slice (ADR 8, ADR 20, local ADR 1). References to other
 -- bounded contexts (order_id) are identifiers without foreign keys.
 CREATE TABLE payments (
     id                 TEXT PRIMARY KEY,
@@ -34,36 +34,3 @@ CREATE UNIQUE INDEX payment_operations_one_pending
     ON payment_operations (payment_id) WHERE state = 'pending';
 
 CREATE INDEX payment_operations_history ON payment_operations (payment_id, requested_at, id);
-
--- Transactional Outbox (ADR 13, ADR 31): Integration Events written in the same local
--- transaction as the Payment change; payments-relay publishes them in seq order.
-CREATE TABLE outbox (
-    seq               BIGSERIAL PRIMARY KEY,
-    -- UUIDv5 of "{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}".
-    event_id          UUID        NOT NULL UNIQUE,
-    -- Full Protobuf message name of the contract.
-    event_type        TEXT        NOT NULL,
-    aggregate_type    TEXT        NOT NULL,
-    aggregate_id      TEXT        NOT NULL,
-    aggregate_version BIGINT      NOT NULL,
-    occurred_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    topic             TEXT        NOT NULL,
-    -- Serialized Protobuf message of the contract.
-    payload           BYTEA       NOT NULL,
-    -- traceparent, causation_id.
-    metadata          JSONB       NOT NULL DEFAULT '{}',
-    published_at      TIMESTAMPTZ,
-    attempts          INT         NOT NULL DEFAULT 0,
-    last_error        TEXT
-);
-
-CREATE INDEX outbox_unpublished ON outbox (seq) WHERE published_at IS NULL;
-
--- Transactional Inbox (ADR 11): Kafka consumers and provider callback deduplication
--- (consumer "payment-provider", event_id = provider_message_id).
-CREATE TABLE inbox (
-    consumer    TEXT        NOT NULL,
-    event_id    TEXT        NOT NULL,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (consumer, event_id)
-);

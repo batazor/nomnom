@@ -25,13 +25,19 @@ test-spicedb:
 	$(CARGO) test --test spicedb_authorization --test spicedb_relationships
 
 # Offline query cache .sqlx compile-time checked sqlx macros: одноразовый PostgreSQL
-# в docker, миграции infrastructure/postgres/migrations, cargo sqlx prepare
+# в docker, миграции всех наборов (порядок MIGRATION_SETS в
+# infrastructure/postgres/migrate.rs: pkg, затем слайсы) через psql, cargo sqlx prepare
 # (sqlx-cli той же версии, что sqlx в Cargo.lock), остановка контейнера.
+# Запросы не читают таблицы истории миграций, поэтому кешу хватает схемы.
 # sqlx-prepare-check сверяет закоммиченный кеш с запросами, не переписывая его.
 SQLX_PG_IMAGE ?= postgres:18.6-alpine3.24
 SQLX_PG_CONTAINER ?= delivery-sqlx-prepare
 SQLX_PG_PORT ?= 55432
 SQLX_DATABASE_URL = postgres://postgres:postgres@127.0.0.1:$(SQLX_PG_PORT)/delivery
+SQLX_MIGRATION_SETS = pkg/infrastructure/postgres/migrations \
+	slices/courier/infrastructure/postgres/migrations \
+	slices/delivery/infrastructure/postgres/migrations \
+	slices/simulator/infrastructure/postgres/migrations
 
 sqlx-prepare: SQLX_PREPARE_FLAGS =
 sqlx-prepare-check: SQLX_PREPARE_FLAGS = --check
@@ -40,8 +46,11 @@ sqlx-prepare sqlx-prepare-check:
 		-e POSTGRES_DB=delivery -p 127.0.0.1:$(SQLX_PG_PORT):5432 $(SQLX_PG_IMAGE) >/dev/null
 	trap 'docker stop $(SQLX_PG_CONTAINER) >/dev/null' EXIT; \
 	until docker exec $(SQLX_PG_CONTAINER) pg_isready -h 127.0.0.1 -U postgres -d delivery >/dev/null; do sleep 1; done; \
+	for migration in $(addsuffix /*.sql,$(SQLX_MIGRATION_SETS)); do \
+		docker exec -i -e PGOPTIONS=--client-min-messages=error $(SQLX_PG_CONTAINER) psql -q -v ON_ERROR_STOP=1 --single-transaction \
+			-h 127.0.0.1 -U postgres -d delivery < $$migration >/dev/null || exit 1; \
+	done; \
 	export DATABASE_URL=$(SQLX_DATABASE_URL) SQLX_OFFLINE=false; \
-	$(CARGO) sqlx migrate run --source infrastructure/postgres/migrations && \
 	$(CARGO) sqlx prepare $(SQLX_PREPARE_FLAGS) -- --all-targets
 
 lint:

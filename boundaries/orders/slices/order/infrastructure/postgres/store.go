@@ -1,50 +1,25 @@
 // Package postgres implements the persistence ports of the order slice on
 // PostgreSQL (ADR 8, ADR 20): Unit of Work, the Order repository with optimistic
 // concurrency, Transactional Inbox, idempotency keys, read models, the
-// authorization revision and the Transactional Outbox (ADR 13).
+// authorization revision and the Transactional Outbox (ADR 13) in orders_outbox
+// of the pkg migration set (pkg/messaging).
 package postgres
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
-	"io/fs"
-	"log/slog"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database"
-	pgxmigrate "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
 	"nomnom/orders/pkg/config"
 )
-
-//go:embed migrations/*.sql
-var migrations embed.FS
-
-// migrateMaxConns bounds the database/sql pool of Migrate: golang-migrate
-// takes its own (uncontended) advisory lock and applies migrations on one
-// connection.
-const migrateMaxConns = 1
-
-// migrateLockKey is the advisory lock shared by every orders migrator: "orders".
-const migrateLockKey int64 = 0x6f7264657273
-
-// migrateLockTimeout bounds every lock wait of a migration. Migrations run
-// during a rolling update next to live traffic: an ALTER TABLE queued behind a
-// long transaction would stall every query of the table behind it, so it fails
-// fast and the pod retries on restart.
-const migrateLockTimeout = "5s"
 
 // psql builds statements with PostgreSQL $n placeholders.
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
@@ -112,104 +87,6 @@ func (s *Store) Close() {
 
 // Pool exposes the pool for test fixtures and read-only checks.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
-
-// Migrate brings the schema to the embedded migrations: applied ones are
-// skipped, missing ones applied. Every process calls it at startup.
-func Migrate(ctx context.Context, cfg config.PostgresConfig) error {
-	return migrateFiles(ctx, cfg, migrations)
-}
-
-// migrateFiles applies the migrations of files (a migrations/ directory) under
-// a session advisory lock of its own connection, so processes starting at once
-// serialize. The lock is taken before lock_timeout applies: the wait for
-// another process must not be cut by it.
-func migrateFiles(ctx context.Context, cfg config.PostgresConfig, files fs.FS) error {
-	if cfg.DSN == "" {
-		return fmt.Errorf("%s is required", config.EnvPostgresDSN)
-	}
-	connConfig, err := pgx.ParseConfig(cfg.DSN)
-	if err != nil {
-		return fmt.Errorf("parse %s: %w", config.EnvPostgresDSN, err)
-	}
-	if cfg.ConnectTimeout > 0 {
-		connConfig.ConnectTimeout = cfg.ConnectTimeout
-	}
-	lock, err := pgx.ConnectConfig(ctx, connConfig.Copy())
-	if err != nil {
-		return fmt.Errorf("connect for the migration lock: %w", err)
-	}
-	// Closing the connection releases the lock with the session.
-	defer func() { _ = lock.Close(context.WithoutCancel(ctx)) }()
-	if _, err := lock.Exec(ctx, "SELECT pg_advisory_lock($1)", migrateLockKey); err != nil {
-		return fmt.Errorf("migration lock: %w", err)
-	}
-
-	migrationConfig := connConfig.Copy()
-	migrationConfig.RuntimeParams["lock_timeout"] = migrateLockTimeout
-	db := stdlib.OpenDB(*migrationConfig)
-	db.SetMaxOpenConns(migrateMaxConns)
-	db.SetMaxIdleConns(migrateMaxConns)
-	db.SetConnMaxLifetime(cfg.MaxConnLifetime)
-	db.SetConnMaxIdleTime(cfg.MaxConnIdleTime)
-	defer func() { _ = db.Close() }()
-
-	source, err := iofs.New(files, "migrations")
-	if err != nil {
-		return fmt.Errorf("migration files: %w", err)
-	}
-	driver, err := pgxmigrate.WithInstance(db, &pgxmigrate.Config{})
-	if err != nil {
-		return fmt.Errorf("migration database: %w", err)
-	}
-	migrator, err := migrate.NewWithInstance("iofs", source, "pgx5", driver)
-	if err != nil {
-		return fmt.Errorf("migration provider: %w", err)
-	}
-	defer func() { _, _ = migrator.Close() }()
-	if err := undoIncompleteMigration(ctx, migrator, source); err != nil {
-		return err
-	}
-	err = migrator.Up()
-	applied := !errors.Is(err, migrate.ErrNoChange)
-	if applied && err != nil {
-		return fmt.Errorf("apply migrations: %w", err)
-	}
-	version, _, err := migrator.Version()
-	if err != nil {
-		return fmt.Errorf("migration version: %w", err)
-	}
-	slog.InfoContext(ctx, "postgres migrations checked", slog.Uint64("version", uint64(version)), slog.Bool("applied", applied))
-	return nil
-}
-
-// undoIncompleteMigration returns a dirty version to the previous one.
-// golang-migrate marks a version dirty before running its file and clean
-// after; the pgx driver sends the file as one simple-protocol query, which
-// PostgreSQL runs as one implicit transaction, so a file that failed or whose
-// process died left no changes and the schema is at the previous version.
-func undoIncompleteMigration(ctx context.Context, migrator *migrate.Migrate, source source.Driver) error {
-	version, dirty, err := migrator.Version()
-	if errors.Is(err, migrate.ErrNilVersion) || (err == nil && !dirty) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("migration version: %w", err)
-	}
-	previous := database.NilVersion
-	prev, err := source.Prev(version)
-	switch {
-	case err == nil:
-		previous = int(prev)
-	case !errors.Is(err, fs.ErrNotExist):
-		return fmt.Errorf("migration before %d: %w", version, err)
-	}
-	if err := migrator.Force(previous); err != nil {
-		return fmt.Errorf("undo incomplete migration %d: %w", version, err)
-	}
-	slog.WarnContext(ctx, "postgres migration did not complete, retrying it",
-		slog.Uint64("version", uint64(version)), slog.Int("previous", previous))
-	return nil
-}
 
 type txKey struct{}
 

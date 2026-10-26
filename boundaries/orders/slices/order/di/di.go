@@ -23,7 +23,6 @@ import (
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/catalog"
 	"nomnom/orders/slices/order/infrastructure/observability"
-	"nomnom/orders/slices/order/infrastructure/postgres"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 	"nomnom/orders/slices/order/infrastructure/system"
 )
@@ -38,7 +37,9 @@ var (
 	// PostgresSet — общий PostgreSQL store процесса (ADR 8) во всех ролях портов:
 	// ProcessStore — PostgreSQL с Outbox из messaging/outbound, Unit of Work и
 	// Outbox под декоратором бизнес-метрик (observability.ObservedStore).
-	PostgresSet = wire.NewSet(NewPostgresStore, observability.NewDomainMetrics, NewProcessStore,
+	// *postgres.Store на мигрированной схеме даёт composition root: он применяет
+	// наборы миграций всех слайсов (di/schema).
+	PostgresSet = wire.NewSet(observability.NewDomainMetrics, NewProcessStore,
 		wire.Bind(new(PlacementStore), new(*ProcessStore)),
 		wire.Bind(new(ReadModels), new(*ProcessStore)),
 		wire.Bind(new(InboxStore), new(*ProcessStore)),
@@ -105,22 +106,6 @@ func NewClock() application.Clock { return system.Clock{} }
 
 // NewOrderIDs — генератор UUIDv7 идентификаторов Order.
 func NewOrderIDs() placeorder.IDGenerator { return system.OrderIDs{} }
-
-// NewPostgresStore — общий store API, worker'а и consumer'а;
-// без POSTGRES__DSN процесс не стартует. Сначала процесс приводит схему к
-// встроенным миграциям: применённые golang-migrate пропускает, недостающие
-// применяет под advisory lock, так что одновременный старт pods сериализуется. Ошибка
-// миграции останавливает процесс до запуска остального. Pool подключается лениво.
-func NewPostgresStore(cfg config.PostgresConfig) (*postgres.Store, func(), error) {
-	if err := postgres.Migrate(context.Background(), cfg); err != nil {
-		return nil, nil, err
-	}
-	store, err := postgres.Open(context.Background(), cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	return store, store.Close, nil
-}
 
 // NewAuthorizer connects the authorization ports to SpiceDB (ADR 18). The
 // endpoint is required: a process that checks permissions does not start

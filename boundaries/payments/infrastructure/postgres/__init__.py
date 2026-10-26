@@ -1,7 +1,7 @@
 """PostgreSQL storage of payments: Unit of Work, repositories, queries, Outbox, Inbox, migrations."""
 
 from .database import PostgresDatabase, PostgresUnitOfWork, create_database
-from .migrate import migrate
+from .migrate import MigrationSet, MissingMigrationsError, migrate
 from .outbox import (
     EVENT_ID_NAMESPACE,
     PAYMENT_EVENTS_TOPIC,
@@ -21,6 +21,8 @@ from .repositories import (
 __all__ = [
     "EVENT_ID_NAMESPACE",
     "PAYMENT_EVENTS_TOPIC",
+    "MigrationSet",
+    "MissingMigrationsError",
     "NoPublishedContracts",
     "OutboxEventMapper",
     "OutboxMessage",

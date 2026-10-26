@@ -16,6 +16,7 @@ from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
+from di.resources import MIGRATIONS
 from infrastructure.postgres import PostgresDatabase, create_database, migrate
 from pkg.config import DatabaseSettings
 
@@ -31,7 +32,7 @@ def postgres_dsn() -> Iterator[str]:
         POSTGRES_IMAGE, username="payments", password="payments", dbname="payments", driver=None
     ) as container:
         dsn = container.get_connection_url()
-        migrate(DatabaseSettings(DATABASE__URL=dsn))
+        migrate(DatabaseSettings(DATABASE__URL=dsn), MIGRATIONS)
         yield dsn
 
 

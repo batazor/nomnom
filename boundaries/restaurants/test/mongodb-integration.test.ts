@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 import { type Db, MongoServerError } from "mongodb";
 import {
-  MIGRATIONS_DIR,
   migrateRestaurantsDatabase,
+  RESTAURANTS_MIGRATION_SETS,
 } from "../infrastructure/mongodb/migrate.ts";
-import { up as dropOutboxRelay } from "../infrastructure/mongodb/migrations/0007-pkg-outbox-drop-polling-relay.ts";
 import {
   AlreadyExistsError,
   ConcurrencyConflictError,
@@ -21,10 +22,12 @@ import {
   type MongoDbConnection,
 } from "../pkg/infrastructure/mongodb/client.ts";
 import {
-  MIGRATIONS_CHANGELOG_COLLECTION,
   MIGRATIONS_LOCK_COLLECTION,
+  type MigrationSet,
   migrate,
+  migrationsChangelogCollection,
 } from "../pkg/infrastructure/mongodb/migrate.ts";
+import { up as dropOutboxRelay } from "../pkg/infrastructure/mongodb/migrations/0003-outbox-drop-polling-relay.ts";
 import {
   MongoOutbox,
   OUTBOX_COLLECTION,
@@ -72,6 +75,9 @@ const testMapper: OutboxEventMapper = (_aggregate, event) => ({
 
 describe("startup migration", () => {
   let mongo: MongoDbConnection;
+  /** File names of every set, in the order of RESTAURANTS_MIGRATION_SETS. */
+  let files: Map<string, string[]>;
+  /** Every migration as `<set>/<fileName>`, in application order. */
   let migrations: string[];
 
   before(async () => {
@@ -81,9 +87,16 @@ describe("startup migration", () => {
       database: "restaurants_test",
       timeoutMs: 5000,
     });
-    migrations = (await readdir(MIGRATIONS_DIR))
-      .filter((name) => name.endsWith(".ts"))
-      .sort();
+    files = new Map();
+    for (const set of RESTAURANTS_MIGRATION_SETS) {
+      files.set(
+        set.name,
+        (await readdir(set.dir)).filter((name) => name.endsWith(".ts")).sort(),
+      );
+    }
+    migrations = [...files].flatMap(([set, names]) =>
+      names.map((name) => `${set}/${name}`),
+    );
   });
 
   after(async () => {
@@ -103,7 +116,15 @@ describe("startup migration", () => {
       (collection) => collection.name,
     );
 
-  test("applies every migration on an empty database and nothing on a migrated one", async (t) => {
+  const changelogOf = async (db: Db, set: MigrationSet) =>
+    (
+      await db
+        .collection<{ fileName: string }>(migrationsChangelogCollection(set))
+        .find()
+        .toArray()
+    ).map((entry) => entry.fileName);
+
+  test("applies every set in order on an empty database and nothing on a migrated one", async (t) => {
     const db = freshDatabase(t);
 
     assert.deepEqual(await migrateRestaurantsDatabase(db), migrations);
@@ -118,15 +139,10 @@ describe("startup migration", () => {
     ]) {
       assert.ok(collections.includes(name), name);
     }
-    assert.deepEqual(
-      (
-        await db
-          .collection<{ fileName: string }>(MIGRATIONS_CHANGELOG_COLLECTION)
-          .find()
-          .toArray()
-      ).map((entry) => entry.fileName),
-      migrations,
-    );
+    // One changelog per set.
+    for (const set of RESTAURANTS_MIGRATION_SETS) {
+      assert.deepEqual(await changelogOf(db, set), files.get(set.name));
+    }
 
     const messages: string[] = [];
     assert.deepEqual(
@@ -156,6 +172,10 @@ describe("startup migration", () => {
       .collection("schema_migrations")
       .insertOne({ _id: "0001-outbox-cdc-drop-relay" as never });
     await db.createCollection("schema_migrations_lock");
+    // The single changelog of migrate-mongo before the per-set changelogs.
+    await db
+      .collection("migrations_changelog")
+      .insertOne({ fileName: "0001-restaurant-restaurants.ts" });
 
     assert.deepEqual(await migrateRestaurantsDatabase(db), migrations);
     const [menus] = await db
@@ -169,32 +189,61 @@ describe("startup migration", () => {
     const collections = await collectionNames(db);
     assert.equal(collections.includes("schema_migrations"), false);
     assert.equal(collections.includes("schema_migrations_lock"), false);
+    assert.equal(collections.includes("migrations_changelog"), false);
   });
 
   test("processes starting together are serialized by the lock", async (t) => {
     const db = freshDatabase(t);
+    // Separate processes: migrate-mongo's configuration is process-wide, so
+    // runs within one process are queued and never meet at the lock.
+    const script = `
+      import { connectMongoDb } from ${JSON.stringify(import.meta.resolve("../pkg/infrastructure/mongodb/client.ts"))};
+      import { migrateRestaurantsDatabase } from ${JSON.stringify(import.meta.resolve("../infrastructure/mongodb/migrate.ts"))};
+      const mongo = await connectMongoDb({
+        enabled: true,
+        uri: process.env.MONGODB_URI,
+        database: process.env.MIGRATE_DATABASE,
+        timeoutMs: 10000,
+      });
+      // Exits without closing the client: migrate-mongo creates the lock's
+      // TTL index without awaiting it, so a close right after a run rejects.
+      const applied = await migrateRestaurantsDatabase(mongo.db);
+      process.stdout.write(JSON.stringify(applied), () => process.exit(0));
+    `;
     const runs = await Promise.all(
-      Array.from({ length: 4 }, () => migrateRestaurantsDatabase(db)),
+      Array.from({ length: 4 }, async () => {
+        const { stdout } = await promisify(execFile)(
+          process.execPath,
+          ["--input-type=module", "--eval", script],
+          {
+            env: { ...process.env, MIGRATE_DATABASE: db.databaseName },
+            timeout: 60_000,
+          },
+        );
+        return JSON.parse(stdout) as string[];
+      }),
     );
-    // The first holder applies everything; the others wait for the lock.
-    assert.ok(runs.some((applied) => applied.length === migrations.length));
-    assert.deepEqual(
-      [
-        ...new Set(
-          (
-            await db
-              .collection<{ fileName: string }>(MIGRATIONS_CHANGELOG_COLLECTION)
-              .find()
-              .toArray()
-          ).map((entry) => entry.fileName),
-        ),
-      ].sort(),
-      migrations,
-    );
+    // Every migration is applied by some process, each set under the lock;
+    // a process that read a changelog before the holder finished repeats it.
+    assert.deepEqual([...new Set(runs.flat())].sort(), [...migrations].sort());
+    for (const set of RESTAURANTS_MIGRATION_SETS) {
+      assert.deepEqual(
+        [...new Set(await changelogOf(db, set))].sort(),
+        files.get(set.name),
+      );
+    }
     assert.equal(
       await db.collection(MIGRATIONS_LOCK_COLLECTION).countDocuments(),
       0,
     );
+  });
+
+  test("runs of one process are queued", async (t) => {
+    const db = freshDatabase(t);
+    const runs = await Promise.all(
+      Array.from({ length: 3 }, () => migrateRestaurantsDatabase(db)),
+    );
+    assert.deepEqual(runs, [migrations, [], []]);
   });
 
   test("the lock of a crashed process expires", async (t) => {
@@ -232,19 +281,24 @@ describe("startup migration", () => {
       'export async function up() { throw new Error("boom"); }\n',
     );
     const db = freshDatabase(t);
+    const failing: MigrationSet = {
+      name: "failing",
+      dir: pathToFileURL(`${dir}/`),
+    };
+    const [pkg] = RESTAURANTS_MIGRATION_SETS;
+    assert.ok(pkg);
 
+    // The sets after the failed one are not applied.
     await assert.rejects(
-      migrate(db, pathToFileURL(`${dir}/`)),
+      migrate(db, [failing, pkg]),
       /Could not migrate up 0001-fails.ts: boom/,
     );
     assert.equal(
       await db.collection(MIGRATIONS_LOCK_COLLECTION).countDocuments(),
       0,
     );
-    assert.equal(
-      await db.collection(MIGRATIONS_CHANGELOG_COLLECTION).countDocuments(),
-      0,
-    );
+    assert.deepEqual(await changelogOf(db, failing), []);
+    assert.deepEqual(await changelogOf(db, pkg), []);
   });
 });
 

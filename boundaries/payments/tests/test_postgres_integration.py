@@ -8,14 +8,12 @@ import contextlib
 import unittest
 import uuid
 from datetime import timedelta
-from pathlib import Path
 from typing import Any, override
 
 import psycopg
 import pytest
 from opentelemetry import trace
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
-from psycopg import sql
 
 from infrastructure.postgres import (
     PAYMENT_EVENTS_TOPIC,
@@ -31,7 +29,6 @@ from infrastructure.postgres import (
     PostgresUnitOfWork,
     outbox_event_id,
 )
-from infrastructure.postgres.migrate import migrations
 from pkg.application import AggregateRef, ConcurrencyConflictError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -403,40 +400,6 @@ class PostgresIntegrationTest(unittest.TestCase):
         self.assertEqual((stored.state, stored.version), (PaymentState.AUTHORIZED, 2))
         rows = self._outbox_rows()
         self.assertEqual([row[4] for row in rows], [AUTHORIZED_TYPE])
-
-
-@pytest.mark.usefixtures("postgres")
-class OutboxMigrationTest(unittest.TestCase):
-    """00002 moves the relay ``outbox`` to ``payments_outbox`` of ADR 37 with its rows."""
-
-    dsn: str
-
-    def test_relay_rows_keep_their_traceparent(self) -> None:
-        name = f"migration_{uuid.uuid4().hex}"
-        with psycopg.connect(self.dsn, autocommit=True) as admin:
-            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
-        self.addCleanup(self._drop, name)
-        dsn = self.dsn.rsplit("/", 1)[0] + f"/{name}"
-        first, second = (Path(migration.path).read_bytes() for migration in migrations()[:2])
-        with psycopg.connect(dsn) as conn:
-            conn.execute(first)
-            conn.execute(
-                "INSERT INTO outbox (event_id, event_type, aggregate_type, aggregate_id, "
-                "aggregate_version, topic, payload, metadata, published_at) VALUES "
-                "(%s, 't', 'Payment', 'traced', 1, 'topic', '', "
-                '\'{"traceparent": "00-trace"}\', now()), '
-                "(%s, 't', 'Payment', 'untraced', 1, 'topic', '', '{}', NULL)",
-                (uuid.uuid4(), uuid.uuid4()),
-            )
-            conn.execute(second)
-            rows = conn.execute(
-                "SELECT aggregate_id, traceparent FROM payments_outbox ORDER BY aggregate_id"
-            ).fetchall()
-        self.assertEqual(rows, [("traced", "00-trace"), ("untraced", "")])
-
-    def _drop(self, name: str) -> None:
-        with psycopg.connect(self.dsn, autocommit=True) as admin:
-            admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
 if __name__ == "__main__":

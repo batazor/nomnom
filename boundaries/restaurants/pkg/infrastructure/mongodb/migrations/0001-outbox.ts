@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../pkg/infrastructure/mongodb/migrate.ts";
+import { ensureCollection } from "../migrate.ts";
 
 /** Transactional Outbox in the CDC contract (ADR 31, ADR 37). */
 export async function up(db: Db): Promise<void> {

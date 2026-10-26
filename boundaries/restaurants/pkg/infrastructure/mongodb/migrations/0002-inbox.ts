@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../pkg/infrastructure/mongodb/migrate.ts";
+import { ensureCollection } from "../migrate.ts";
 
 /** Transactional Inbox (ADR 11). */
 export async function up(db: Db): Promise<void> {

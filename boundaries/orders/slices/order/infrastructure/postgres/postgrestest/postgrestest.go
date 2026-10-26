@@ -1,8 +1,9 @@
 // Package postgrestest gives tests of other packages the real PostgreSQL store
-// of orders. The container starts on the first Open of the
-// test binary and is migrated once into a template database; every Open
-// clones the template, so each test starts from an empty, isolated database
-// and may use fixed identifiers such as "order-1".
+// of orders. The container starts on the first Open of the test binary and is
+// migrated once into a template database with the migration sets of the
+// processes (di/schema); every Open clones the template, so each test starts
+// from an empty, isolated database and may use fixed identifiers such as
+// "order-1".
 //
 //	func TestMain(m *testing.M) { postgrestest.Main(m) }
 //
@@ -22,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
+	"nomnom/orders/di/schema"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/pkg/testfixture"
@@ -62,7 +64,7 @@ func start() {
 	if startErr = exec(ctx, "CREATE DATABASE "+pgx.Identifier{template}.Sanitize()); startErr != nil {
 		return
 	}
-	startErr = postgres.Migrate(ctx, config.PostgresConfig{DSN: withDatabase(server.DSN, template), MaxConns: maxConns})
+	startErr = schema.Migrate(ctx, config.PostgresConfig{DSN: withDatabase(server.DSN, template), MaxConns: maxConns})
 }
 
 // exec runs an administrative statement on the server's own database.

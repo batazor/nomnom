@@ -1,8 +1,11 @@
 import type { Db } from "mongodb";
 
 /**
- * Removes the applied-migrations and lease collections of the migrator that
- * migrate-mongo replaced (ADR 39). Idempotent: a missing collection is skipped.
+ * Removes what the previous migrators left behind: the applied-migrations
+ * and lease collections of the home-grown migrator that migrate-mongo
+ * replaced (ADR 39) and the single changelog of migrate-mongo that the
+ * per-set changelogs replaced (local ADR 2). Idempotent: a missing
+ * collection is skipped.
  */
 export async function up(db: Db): Promise<void> {
   const collections = new Set(
@@ -10,7 +13,11 @@ export async function up(db: Db): Promise<void> {
       (collection) => collection.name,
     ),
   );
-  for (const name of ["schema_migrations", "schema_migrations_lock"]) {
+  for (const name of [
+    "schema_migrations",
+    "schema_migrations_lock",
+    "migrations_changelog",
+  ]) {
     if (collections.has(name)) await db.dropCollection(name);
   }
 }

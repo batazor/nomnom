@@ -51,21 +51,3 @@ CREATE TABLE idempotency_keys (
     PRIMARY KEY (customer_id, key)
 );
 
--- Transactional Outbox (ADR 13): watermill-sql PostgreSQL schema and offsets
--- adapters for the forwarder topic orders_outbox.
-CREATE TABLE "watermill_orders_outbox" (
-    "offset"         BIGSERIAL,
-    "uuid"           VARCHAR(36) NOT NULL,
-    "created_at"     TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "payload"        JSON DEFAULT NULL,
-    "metadata"       JSON DEFAULT NULL,
-    "transaction_id" xid8        NOT NULL,
-    PRIMARY KEY ("transaction_id", "offset")
-);
-
-CREATE TABLE "watermill_offsets_orders_outbox" (
-    consumer_group                VARCHAR(255) NOT NULL,
-    offset_acked                  BIGINT,
-    last_processed_transaction_id xid8         NOT NULL,
-    PRIMARY KEY (consumer_group)
-);

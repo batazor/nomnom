@@ -27,7 +27,7 @@ from typing import Any
 
 from dependency_injector import providers
 
-from infrastructure.postgres import PostgresDatabase, create_database, migrate
+from infrastructure.postgres import MigrationSet, PostgresDatabase, create_database, migrate
 from pkg import telemetry
 from pkg.config import (
     DatabaseSettings,
@@ -47,6 +47,13 @@ class TelemetryResource[T](providers.Resource[T]):
 class ProcessResource[T](providers.Resource[T]):
     """Process-wide client or pool, owned for the lifetime of the workers."""
 
+
+# Migration sets of the process in the order they are applied: the shared tables of
+# ``pkg`` first, then every slice its own tables. A new slice adds its set here.
+MIGRATIONS = (
+    MigrationSet("pkg", "pkg.postgres"),
+    MigrationSet("payment", "slices.payment.infrastructure.postgres"),
+)
 
 # ``Configuration.provider`` is the provider's own attribute, so the section is renamed.
 _SECTION_KEYS = {"provider": "payment_provider"}
@@ -78,11 +85,11 @@ def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetr
 def postgres_database(settings: DatabaseSettings) -> Iterator[PostgresDatabase]:
     """The psycopg pool over the migrated schema; any failure stops the process before ports open.
 
-    Pending migrations are applied first, under the session advisory lock of ``migrate``:
-    replicas starting together apply them once, the rest find nothing to change. The pool
-    opens only after the migration connections are closed.
+    Pending migrations of ``MIGRATIONS`` are applied first, under the session advisory lock
+    of ``migrate``: replicas starting together apply them once, the rest find nothing to
+    change. The pool opens only after the migration connections are closed.
     """
-    applied = migrate(settings)
+    applied = migrate(settings, MIGRATIONS)
     logger.info("payments migrations applied: %s", ", ".join(applied) or "none pending")
     database = create_database(settings)
     try:
