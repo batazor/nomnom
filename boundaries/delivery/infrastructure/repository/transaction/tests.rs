@@ -6,8 +6,8 @@ use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
 use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
 
 use super::*;
-use crate::infrastructure::postgres::storage_error;
-use crate::infrastructure::postgres::test_support::fresh_database;
+use crate::infrastructure::repository::storage_error;
+use crate::infrastructure::repository::test_support::fresh_database;
 use crate::pkg::persistence::RepositoryError;
 
 struct Harness {
