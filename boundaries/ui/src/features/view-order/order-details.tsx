@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { useI18n } from "../../shared/i18n/i18n";
 import { Button, Illustration } from "../../shared/ui";
 import { CancelOrder } from "./cancel-order";
-import { FulfillmentProgress } from "./fulfillment-progress";
+import { activeStepEta } from "./fulfillment-eta";
+import { HeaderEta, StepEtaBar } from "./order-eta";
 import {
   endPresentation,
   milestoneLabel,
@@ -81,6 +82,7 @@ function OrderView({
           <div>
             <h3 id="order-title">{t(status.label)}</h3>
             <p>{t(status.detail)}</p>
+            <HeaderEta order={order} />
             <p className="order-placed">
               {t("order.placedAt", { time: time(order.placedAt) })}
             </p>
@@ -112,7 +114,6 @@ function OrderView({
           ) : (
             <OrderProgress current={status.step} order={order} />
           )}
-          <FulfillmentProgress order={order} />
 
           {status.final ? null : (
             <CancelOrder
@@ -180,6 +181,8 @@ function OrderProgress({
 }) {
   const { t } = useI18n();
   const courierAssigned = showsCourierAssigned(order.status, order.milestones);
+  // Only the active step counts towards its deadline.
+  const eta = activeStepEta(order);
 
   return (
     <section aria-labelledby="order-progress-title" className="order-card">
@@ -214,6 +217,9 @@ function OrderProgress({
                 <span className="order-courier-note">
                   {t("order.courierAssigned")}
                 </span>
+              ) : null}
+              {state === "current" && eta !== null ? (
+                <StepEtaBar eta={eta} key={eta.stage} />
               ) : null}
             </li>
           );

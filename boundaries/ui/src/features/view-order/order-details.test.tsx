@@ -287,7 +287,7 @@ describe("order updates", () => {
   });
 });
 
-describe("fulfillment progress", () => {
+describe("fulfillment eta", () => {
   function fakeClock() {
     vi.useFakeTimers({
       shouldAdvanceTime: true,
@@ -303,82 +303,172 @@ describe("fulfillment progress", () => {
     mockStore.reset();
   }
 
+  const time = String.raw`\d\d:\d\d`;
+  // Attributes keep the no-break spaces of the messages; text queries see
+  // them normalized to plain spaces.
+  const nb = "\u00a0";
+
   function bar(name: string) {
     return screen.getByRole("progressbar", { name });
   }
 
-  it("AC-772: grows the cooking bar by a local timer, without requests", async () => {
+  // The header line under the status, checked against its whole text.
+  function header(text: RegExp) {
+    const found = document.querySelector(".order-header-eta");
+    if (!(found instanceof HTMLElement)) throw new Error("no header eta");
+    expect(found).toHaveTextContent(text);
+    return found;
+  }
+
+  function currentStep() {
+    const found = document.querySelector("[aria-current='step']");
+    if (!(found instanceof HTMLElement)) throw new Error("no current step");
+    return found;
+  }
+
+  it("AC-772: grows the cooking bar of the active step locally, without requests", async () => {
     fakeClock();
     const requests = countOrderRequests();
     renderOrder("order-preparing");
 
     const cooking = await screen.findByRole("progressbar", { name: "Готовка" });
-    expect(cooking).toHaveAttribute("aria-valuetext", "Осталось ~10 мин");
+    expect(currentStep()).toContainElement(cooking);
+    expect(screen.getAllByRole("progressbar")).toHaveLength(1);
     expect(cooking).toHaveAttribute("aria-valuemin", "0");
     expect(cooking).toHaveAttribute("aria-valuemax", "100");
-    expect(screen.getByText("Осталось ~10 мин")).toBeVisible();
-    const started = Number(cooking.getAttribute("aria-valuenow"));
+    expect(cooking).toHaveAttribute(
+      "aria-valuetext",
+      expect.stringMatching(new RegExp(`^Осталось ~10${nb}мин, к${nb}${time}$`)),
+    );
+    expect(cooking).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByText(`~10 мин`)).toBeVisible();
+    // Pickup is the best known deadline of a cooking order with a courier.
+    expect(
+      header(new RegExp(`^Курьер заберёт заказ к ${time}$`)),
+    ).toBeVisible();
     const loaded = requests.value;
 
     await act(() => vi.advanceTimersByTimeAsync(5 * 60_000));
-    expect(bar("Готовка")).toHaveAttribute("aria-valuetext", "Осталось ~5 мин");
-    expect(
-      Number(bar("Готовка").getAttribute("aria-valuenow")),
-    ).toBeGreaterThan(started);
+    expect(bar("Готовка")).toHaveAttribute(
+      "aria-valuetext",
+      expect.stringMatching(/^Осталось ~5\u00a0мин/),
+    );
+    expect(bar("Готовка")).toHaveAttribute("aria-valuenow", "75");
     expect(requests.value).toBe(loaded);
   });
 
-  it("says a missed deadline is delayed", async () => {
+  it("counts down m:ss in the last five minutes, not in aria-valuetext", async () => {
     fakeClock();
-    renderOrder("order-preparing");
-    await screen.findByRole("progressbar", { name: "Готовка" });
+    const requests = countOrderRequests();
+    renderOrder("order-short");
 
-    await act(() => vi.advanceTimersByTimeAsync(11 * 60_000));
-    expect(bar("Готовка")).toHaveAttribute("aria-valuetext", "Задерживается");
-    expect(bar("Готовка")).toHaveAttribute("aria-valuenow", "100");
-  });
-
-  it("heads the courier to the pickup before it", async () => {
-    fakeClock();
-    renderOrder("order-preparing");
-
+    const delivery = await screen.findByRole("progressbar", {
+      name: "Доставка",
+    });
+    expect(screen.getByText("3:00")).toBeVisible();
     expect(
-      await screen.findByRole("progressbar", {
-        name: "Курьер едет за заказом",
-      }),
-    ).toHaveAttribute("aria-valuetext", "Осталось ~12 мин");
-    expect(screen.queryByRole("progressbar", { name: "Доставка" })).toBeNull();
+      header(new RegExp(`^Привезём к ${time} · 3:00$`)),
+    ).toBeVisible();
+    const valueText = delivery.getAttribute("aria-valuetext");
+    expect(valueText).toMatch(/^Осталось ~3\u00a0мин/);
+    const loaded = requests.value;
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    expect(screen.getByText("2:59")).toBeVisible();
+    expect(bar("Доставка")).toHaveAttribute("aria-valuetext", valueText);
+
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(screen.getByText("2:49")).toBeVisible();
+    expect(requests.value).toBe(loaded);
   });
 
-  it("shows finished cooking and the delivery bar after the pickup", async () => {
+  it("shows a +N min chip for a few seconds when the deadline moves later", async () => {
+    fakeClock();
+    renderOrder("order-delayed");
+
+    const cooking = await screen.findByRole("progressbar", { name: "Готовка" });
+    expect(cooking.getAttribute("aria-valuetext")).toMatch(/^Осталось ~10/);
+    const before = header(/^Будет готов к/).textContent;
+    expect(screen.queryByText(`+6 мин`)).toBeNull();
+
+    // The stream connects after the load; the kitchen delays one step later.
+    await act(() => vi.advanceTimersByTimeAsync(liveStepMs + 500));
+    expect(await screen.findByText(`+6 мин`)).toBeVisible();
+    expect(
+      screen.getByText(
+        new RegExp(`^Срок сдвинулся на 6 мин, теперь к ${time}$`),
+      ),
+    ).toBeInTheDocument();
+    expect(bar("Готовка").getAttribute("aria-valuetext")).toMatch(
+      /^Осталось ~16/,
+    );
+    expect(header(/^Будет готов к/).textContent).not.toBe(before);
+
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(screen.queryByText(`+6 мин`)).toBeNull();
+    expect(screen.queryByText(/^Срок сдвинулся/)).toBeNull();
+  });
+
+  it("says a missed deadline is late in the header and the bar", async () => {
+    fakeClock();
+    renderOrder("order-overdue");
+
+    const cooking = await screen.findByRole("progressbar", { name: "Готовка" });
+    expect(cooking).toHaveAttribute("aria-valuenow", "100");
+    expect(cooking.getAttribute("aria-valuetext")).toMatch(
+      new RegExp(`^Задерживается на ~3${nb}мин, ожидали к${nb}${time}$`),
+    );
+    expect(cooking.closest(".order-step-eta")).toHaveAttribute(
+      "data-state",
+      "overdue",
+    );
+    const late = header(
+      new RegExp(`^Задерживается · ожидали к ${time}$`),
+    );
+    expect(late).toHaveAttribute("data-state", "overdue");
+
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    expect(screen.getByText(`Задерживается на ~4 мин`)).toBeVisible();
+  });
+
+  it("moves the bar to the courier step after the pickup", async () => {
     fakeClock();
     renderOrder("order-picked-up");
 
+    const delivery = await screen.findByRole("progressbar", {
+      name: "Доставка",
+    });
+    expect(currentStep()).toContainElement(delivery);
+    expect(delivery.getAttribute("aria-valuetext")).toMatch(/^Осталось ~10/);
+    expect(screen.getAllByRole("progressbar")).toHaveLength(1);
     expect(
-      await screen.findByRole("progressbar", { name: "Доставка" }),
-    ).toHaveAttribute("aria-valuetext", "Осталось ~10 мин");
-    expect(screen.queryByRole("progressbar", { name: "Готовка" })).toBeNull();
-    expect(screen.getByText(/^Готово в \d\d:\d\d$/)).toBeVisible();
+      header(new RegExp(`^Привезём к ${time} · ~10 мин$`)),
+    ).toBeVisible();
   });
 
-  it.each(["order-received", "order-delivered"])(
-    "shows no bars without named deadlines or after the end: %s",
+  it.each(["order-received", "order-delivered", "order-cancelled"])(
+    "shows no bar and no header line without a deadline or after the end: %s",
     async (id) => {
       renderOrder(id);
       await screen.findByRole("heading", { level: 3 });
       expect(screen.queryByRole("progressbar")).toBeNull();
+      expect(document.querySelector(".order-header-eta")).toBeNull();
+      expect(screen.queryByText("Срок пока не назван")).toBeNull();
     },
   );
 
-  it("passes axe with the bars", async () => {
-    const { container } = renderOrder("order-preparing");
-    await screen.findByRole("progressbar", { name: "Готовка" });
+  it.each(["order-preparing", "order-short", "order-overdue"])(
+    "passes axe with the eta of %s",
+    async (id) => {
+      const { container } = renderOrder(id);
+      await screen.findByRole("progressbar");
 
-    const result = await axe.run(container, {
-      rules: { "color-contrast": { enabled: false } },
-    });
-    expect(result.violations).toEqual([]);
-  });
+      const result = await axe.run(container, {
+        rules: { "color-contrast": { enabled: false } },
+      });
+      expect(result.violations).toEqual([]);
+    },
+  );
 });
 
 describe("order page quality", () => {

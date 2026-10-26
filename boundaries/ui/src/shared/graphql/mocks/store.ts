@@ -3,6 +3,7 @@ import { GraphQLError } from "graphql";
 import {
   bffInfoFixture,
   createOrderScenarios,
+  delayedOrderId,
   liveOrderAt,
   liveOrderId,
   liveOrderStepCount,
@@ -11,6 +12,7 @@ import {
   managedRestaurantIds,
   orderLine,
   orderTotal,
+  preparationDelayed,
   restaurantFixtures,
 } from "./fixtures";
 import { createFulfillment, mockCourierId } from "./fulfillment";
@@ -86,6 +88,8 @@ function initialState(now: Date) {
     liveStep: 0,
     liveStartedAt: now,
     liveCancelled: null as MockOrder | null,
+    // order-delayed gets its later readiness once.
+    preparationDelayed: false,
     placed: new Map<string, PlaceOrderPayload>(),
     cancellations: new Map<string, CancellationPayload>(),
     // Opening state changed by openRestaurant/closeRestaurant, by restaurant id.
@@ -109,6 +113,7 @@ export function createMockStore({
   const changes = createChangeFeed();
   let liveTimer: ReturnType<typeof setInterval> | undefined;
   let liveFollowers = 0;
+  let delayTimer: ReturnType<typeof setTimeout> | undefined;
 
   // order-live progresses like a real kitchen and courier, without requests.
   function followLive(): () => void {
@@ -130,6 +135,27 @@ export function createMockStore({
   function stopLive() {
     clearInterval(liveTimer);
     liveTimer = undefined;
+  }
+
+  // order-delayed: one step after someone follows it, the kitchen names a
+  // later readiness, pushed like any other change.
+  function followDelayed(): () => void {
+    if (!state.preparationDelayed) {
+      delayTimer ??= setTimeout(() => {
+        delayTimer = undefined;
+        const order = state.orders.get(delayedOrderId);
+        if (!order || state.preparationDelayed) return;
+        state.preparationDelayed = true;
+        state.orders.set(delayedOrderId, preparationDelayed(order));
+        changes.changed();
+      }, liveStepMs);
+    }
+    return () => {};
+  }
+
+  function stopDelayed() {
+    clearTimeout(delayTimer);
+    delayTimer = undefined;
   }
 
   // Runs a mutation and notifies subscribers of the orders it may change.
@@ -298,7 +324,11 @@ export function createMockStore({
           if (!order) throw bffError("NotFound", "order not found");
           return { orderChanged: order };
         },
-        id === liveOrderId ? followLive() : undefined,
+        id === liveOrderId
+          ? followLive()
+          : id === delayedOrderId
+            ? followDelayed()
+            : undefined,
       ),
     // Like the Router (ADR 36): the board after each change, an error for a
     // kitchen the user may not see or another courier's id.
@@ -396,6 +426,7 @@ export function createMockStore({
     },
     reset() {
       stopLive();
+      stopDelayed();
       clock = now;
       state = initialState(clock());
       fulfillment = newFulfillment();

@@ -85,6 +85,27 @@ const pickedUp = [
   ["PICKED_UP", 21],
 ] as const;
 
+// Cooking without a courier yet: the header heads to readiness.
+const cooking = [
+  ["CONFIRMED", 1],
+  ["PREPARATION_STARTED", 3],
+] as const;
+
+export const delayedOrderId = "order-delayed";
+// order-delayed: the kitchen moves readiness this much later once someone
+// follows the order, like PreparationDelayed (FR-611).
+export const preparationDelayMinutes = 6;
+
+export function preparationDelayed(order: MockOrder): MockOrder {
+  if (order.expectedReadyAt === null) return order;
+  return {
+    ...order,
+    expectedReadyAt: new Date(
+      Date.parse(order.expectedReadyAt) + preparationDelayMinutes * minute,
+    ).toISOString(),
+  };
+}
+
 const scenarios: readonly ScenarioSpec[] = [
   {
     id: "order-received",
@@ -98,6 +119,34 @@ const scenarios: readonly ScenarioSpec[] = [
     placedMinutesAgo: 12,
     milestones: preparing,
     deadlines: preparingDeadlines,
+  },
+  {
+    // Readiness in 10 minutes; the kitchen delays it while followed.
+    id: delayedOrderId,
+    status: "PREPARING",
+    placedMinutesAgo: 8,
+    milestones: cooking,
+    deadlines: { ready: 18 },
+  },
+  {
+    // Readiness was due two and a half minutes ago.
+    id: "order-overdue",
+    status: "PREPARING",
+    placedMinutesAgo: 30,
+    milestones: cooking,
+    deadlines: { ready: 27.5 },
+  },
+  {
+    // Delivery in 3 minutes: the screen counts down m:ss.
+    id: "order-short",
+    status: "PICKED_UP",
+    placedMinutesAgo: 30,
+    milestones: [
+      ...preparing,
+      ["READY_FOR_PICKUP", 18],
+      ["PICKED_UP", 20],
+    ],
+    deadlines: { ready: 18, pickup: 20, delivered: 33 },
   },
   {
     id: "order-picked-up",
