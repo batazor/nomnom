@@ -30,9 +30,12 @@ import type {
   ReceiveOrderRequestResult,
 } from "../../applications/receive-order-request/receive-order-request.ts";
 import {
+  ALL_STATES,
   InvalidTransitionError,
+  isIn,
+  RestaurantOrderCompoundState,
   RestaurantOrderTrigger,
-  TERMINAL_STATES,
+  STAY,
   TRANSITIONS,
 } from "../../domains/restaurantorder/fsm.ts";
 import type {
@@ -104,11 +107,17 @@ export type FsmTransition = Readonly<{
   result: "applied" | "rejected";
 }>;
 
+/** Terminal states: leaves of the compound state Closed. */
+const isTerminal = (state: RestaurantOrderState): boolean =>
+  isIn(state, RestaurantOrderCompoundState.Closed);
+
 /**
  * Applied transitions behind `events`, oldest first, of an order now in
  * `state`. Walks back from `state`: the row of each event's trigger ends in
- * the state after it and starts in the event's `stage`, when it has one. An
- * event outside the table is a defect and throws.
+ * the state after it (a targetless row keeps it) and its source contains the
+ * state before it. A row on a compound state names no single source, so the
+ * event's `stage` gives it. An event outside the statechart is a defect and
+ * throws.
  */
 export const appliedTransitions = (
   state: RestaurantOrderState,
@@ -123,14 +132,23 @@ export const appliedTransitions = (
     const row = TRANSITIONS.find(
       (candidate) =>
         candidate.trigger === trigger &&
-        candidate.to === to &&
-        (stage === undefined || candidate.from === stage),
+        (candidate.target === STAY
+          ? isIn(to, candidate.source)
+          : candidate.target === to) &&
+        (stage === undefined || isIn(stage, candidate.source)),
     );
     if (row === undefined) {
       throw new Error(`${event.type} has no FSM transition into ${to}`);
     }
-    transitions.unshift({ from: row.from, trigger, to, result: "applied" });
-    to = row.from;
+    const from =
+      row.target === STAY
+        ? to
+        : (stage ?? ALL_STATES.find((leaf) => leaf === row.source));
+    if (from === undefined) {
+      throw new Error(`${event.type} into ${to} has no stage of ${row.source}`);
+    }
+    transitions.unshift({ from, trigger, to, result: "applied" });
+    to = from;
   }
   return transitions;
 };
@@ -247,7 +265,7 @@ export class RestaurantOrderDomainMetrics {
         [FSM_TO_STATE]: transition.to.toLowerCase(),
         [FSM_TRIGGER]: snakeCase(transition.trigger),
         [FSM_RESULT]: transition.result,
-        [FSM_TERMINAL]: TERMINAL_STATES.has(transition.to),
+        [FSM_TERMINAL]: isTerminal(transition.to),
       });
     }
   }
@@ -454,7 +472,6 @@ export const observeTransitionRejections = <
 export const cancellationRejection = (
   result: CancelRestaurantOrderResult,
 ): RejectedTrigger | undefined =>
-  result.outcome === "cancellation_rejected" &&
-  TERMINAL_STATES.has(result.state)
+  result.outcome === "cancellation_rejected" && isTerminal(result.state)
     ? { from: result.state, trigger: RestaurantOrderTrigger.Cancel }
     : undefined;
