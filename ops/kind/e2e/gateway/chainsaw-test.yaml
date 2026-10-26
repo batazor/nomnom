@@ -1,128 +1,27 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
-# Реестр маршрутов internal gateway (ADR 15, ops/kind/README.md): каждый опубликованный
-# метод доходит до своего backend'а, неопубликованные получают UNIMPLEMENTED от Envoy.
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: gateway-registry
-spec:
-  description: Все GRPCRoute приняты gateway, ссылки на backend'ы разрешены.
-  steps:
-    - try:
-        - assert:
-            resource:
-              apiVersion: gateway.networking.k8s.io/v1
-              kind: GRPCRoute
-              metadata:
-                namespace: nomnom-gateway
-              status:
-                (parents[0].conditions[?type == 'Accepted'].status): ['True']
-                (parents[0].conditions[?type == 'ResolvedRefs'].status): ['True']
----
+# Реестр маршрутов internal gateway (ADR 15, ops/kind/README.md): опубликованные сервисы
+# доходят до своего backend'а. Accepted и ResolvedRefs всех GRPCRoute ждёт hook Skaffold,
+# маршрут OrdersService и UNIMPLEMENTED для незарегистрированного сервиса — шаги 2.3 и 2.4
+# netpol-blocks-direct-calls, остальные методы вызывает order-lifecycle.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: gateway-routes-to-backends
 spec:
   description: >
-    Опубликованные методы restaurants, delivery и payments (команды Order Fulfillment, кухни,
-    курьера и администрирования) доходят до backend'а: ответ формирует backend, а не Envoy.
-    Token grpc-caller выпущен для audience nomnom.orders, поэтому restaurants, delivery и
-    payments отвечают UNAUTHENTICATED своим текстом.
+    Сервисы restaurants, delivery и payments доходят до backend'а через gateway: ответ
+    формирует backend, а не Envoy. Token grpc-caller выпущен для audience nomnom.orders,
+    поэтому backend'ы отвечают UNAUTHENTICATED своим текстом.
   scenarios:
     - bindings:
         - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest}
         - {name: message, value: verified caller identity is required}
     - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
         - {name: method, value: nomnom.delivery.v1.DeliveryService/CreateDelivery}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/ReplanDelivery}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/CancelDelivery}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RejectRestaurantOrder}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/StartPreparation}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderAssembled}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderReady}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ReportPreparationDelay}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ReportPreparationFailure}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/GetKitchenQueue}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ListIncomingOrders}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/AssignStaff}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RevokeStaff}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/RegisterCourier}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/UpdateCourierLocation}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/SetCourierAvailability}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/ListAvailableDeliveryOffers}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/AcceptDeliveryOffer}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/RejectDeliveryOffer}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/ConfirmPickup}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/ConfirmDelivery}
-        - {name: message, value: verified caller identity is required}
-    - bindings:
-        - {name: method, value: nomnom.delivery.v1.DeliveryService/ReportDeliveryFailure}
         - {name: message, value: verified caller identity is required}
     - bindings:
         - {name: method, value: nomnom.payments.v1.PaymentsService/CreatePayment}
         - {name: message, value: invalid caller identity}
-    - bindings:
-        - {name: method, value: nomnom.payments.v1.PaymentsService/AuthorizePayment}
-        - {name: message, value: invalid caller identity}
-    - bindings:
-        - {name: method, value: nomnom.payments.v1.PaymentsService/CapturePayment}
-        - {name: message, value: invalid caller identity}
-    - bindings:
-        - {name: method, value: nomnom.payments.v1.PaymentsService/CancelAuthorization}
-        - {name: message, value: invalid caller identity}
-    - bindings:
-        - {name: method, value: nomnom.payments.v1.PaymentsService/RefundPayment}
-        - {name: message, value: invalid caller identity}
   steps:
     - use:
         template: ../templates/grpc-call.yaml
@@ -130,40 +29,3 @@ spec:
           bindings:
             - {name: authorize, value: true}
             - {name: code, value: 16}
----
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: gateway-routes-orders
-spec:
-  description: Вызов OrdersService без identity доходит до orders и отклоняется им.
-  steps:
-    - use:
-        template: ../templates/grpc-call.yaml
-        with:
-          bindings:
-            - {name: method, value: nomnom.orders.v1.OrdersService/ListCustomerOrders}
-            - {name: authorize, value: false}
-            - {name: code, value: 16}
-            - {name: message, value: caller identity is not authenticated}
----
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: gateway-rejects-unregistered
-spec:
-  description: >
-    Незарегистрированный сервис получает UNIMPLEMENTED от Envoy и не доходит до backend'а.
-    Метод опубликованного сервиса здесь не берётся: набор опубликованных методов меняется
-    вместе с реестром, а отказ проверяется на сервисе, которого в реестре нет никогда.
-  scenarios:
-    - bindings:
-        - {name: method, value: nomnom.unknown.v1.UnknownService/Call}
-  steps:
-    - use:
-        template: ../templates/grpc-call.yaml
-        with:
-          bindings:
-            - {name: authorize, value: true}
-            - {name: code, value: 12}
-            - {name: message, value: ''}

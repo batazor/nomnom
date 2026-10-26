@@ -43,18 +43,18 @@ Kind E2E пишутся как тесты Kyverno Chainsaw в `ops/kind/e2e/` п
   workspace и `google/rpc` из googleapis (ответ сверяется по `code`, `message` и reason
   `google.rpc.ErrorInfo`), сеть — `nc` и `nslookup`, GraphQL BFF — `curl`;
 - повторяющийся шаг — `StepTemplate` (`templates/`: `grpc-call`, `tcp-connect`,
-  `dns-lookup`, `gateway-retries`, `netpol-applied`), параметры — `scenarios` и bindings, а не
+  `dns-lookup`, `netpol-applied`, `driver-call`, `customer-graphql`), параметры — `scenarios` и bindings, а не
   функции в shell. Шаг `script` — одна команда, утверждения — в `check`;
-- фазы NetworkPolicy описаны тестами: фаза A (`netpol-without-policies`, не `concurrent`, до
-  остальных тестов) удаляет политики и восстанавливает их в `cleanup`, тесты фазы B
-  применяют их сами (`netpol-applied`, политики остаются). Политики — kustomization
+- тесты не повторяют то, что доказывает деплой (readiness workloads в Skaffold status check,
+  `Accepted`/`ResolvedRefs` маршрутов в hook), и не проверяют статический рендер charts;
+- тесты под NetworkPolicy применяют политики сами (`netpol-applied`, политики остаются);
+  что drop вызван политикой, а не неработающим backend'ом, доказывают условия в том же тесте
+  (backend Available, имя резолвится, gateway отвечает), а не прогон без политик, меняющий
+  весь кластер. Политики — kustomization
   `manifests/netpol` (`kubectl apply -k`): базовые политики без namespace размножаются по
   неймспейсам приложений overlays, а операция Chainsaw `apply` помещает ресурс без namespace
-  только в неймспейс теста. Временные fixtures (deny к SpiceDB, ingress к BFF) применяются
-  `apply` и удаляются Chainsaw в конце теста;
-- retries — по счётчику Envoy `upstream_rq_retry` с порта Prometheus Envoy Proxy через proxy
-  API server и `x_metrics_decode` (операция `proxy` в v0.2.15 теряет outputs, поэтому запрос —
-  `kubectl get --raw`); тесты на общих счётчиках и fixture отказа SpiceDB не `concurrent`;
+  только в неймспейс теста. Временные fixtures (ingress к BFF) применяются `apply` и
+  удаляются Chainsaw в конце теста;
 - диагностика при ошибке — `catch` тестов (pod logs, events, describe, Hubble DROPPED);
   полный снимок окружения по-прежнему собирает `make kind-diagnostics`;
 - версия Chainsaw закрепляется в `ops/kind/versions.env` и запускается через `go run` без

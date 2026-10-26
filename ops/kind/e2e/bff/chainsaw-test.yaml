@@ -15,8 +15,8 @@ spec:
   description: >
     BFF Available и изолирован политиками; bffInfo без token; order(id) без Authorization —
     Unauthenticated (AC-576), с access token для отсутствующего заказа — null без ошибок
-    (AC-575), orders принимает user assertion BFF; тот же assertion от другого workload
-    отклоняется (UNAUTHENTICATED: grpc-caller не делегат).
+    (AC-575): orders принял user assertion BFF, иначе ответ был бы Unauthenticated; тот же
+    assertion от другого workload отклоняется (UNAUTHENTICATED: grpc-caller не делегат).
   bindings:
     - name: started
       value: (time_now_utc())
@@ -30,7 +30,7 @@ spec:
     - name: policies applied
       use:
         template: ../templates/netpol-applied.yaml
-    - name: 7.1-7.2 BFF Available with probes on Router /health/*
+    - name: 7.1 BFF Available
       try:
         - assert:
             resource:
@@ -39,12 +39,6 @@ spec:
               metadata:
                 name: bff
                 namespace: nomnom-bff
-              spec:
-                template:
-                  spec:
-                    (containers[0]):
-                      livenessProbe: {httpGet: {path: /health/live}}
-                      readinessProbe: {httpGet: {path: /health/ready}}
               status:
                 (conditions[?type == 'Available'].status): ['True']
     - name: 7.3 nomnom-bff → orders directly is closed
@@ -120,19 +114,6 @@ spec:
             check:
               ($error): ~
               (to_string(json_parse($stdout))): '{"data":{"order":null}}'
-    - name: 7.8 orders accepted the BFF user assertion
-      try:
-        - sleep:
-            duration: 2s
-        - script:
-            env:
-              - name: SINCE
-                value: ($started)
-            content: kubectl -n nomnom-orders logs deploy/orders --since-time="$SINCE"
-            check:
-              ($error): ~
-              # Лог orders — JSON по записи на строку.
-              (split($stdout, '\n')[?contains(@, '"message":"user assertion accepted"') && contains(@, '"delegate":"bff"')] | length(@) > `0`): true
     - name: 7.9-7.10 same user assertion from another workload
       try:
         - script:

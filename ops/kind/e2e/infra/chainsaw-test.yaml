@@ -1,34 +1,16 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
 # Инфраструктурные подключения и здоровье workloads под NetworkPolicy (ADR 16, ADR 17).
+# Подключения, без которых процесс не стартует (PostgreSQL, Kafka и Temporal orders, MongoDB
+# restaurants), доказывает сам деплой: Skaffold status check ждёт readiness.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: infra-connectivity
 spec:
   description: >
-    Под политиками контексты достают свою инфраструктуру через штатные endpoints, а чужие БД
-    и Temporal закрыты: БД доступна только владельцу, Temporal — только orders.
+    Под политиками delivery и payments достают Kafka, а чужие БД и Temporal закрыты: БД
+    доступна только владельцу, Temporal — только orders.
   scenarios:
-    - bindings:
-        - {name: from_namespace, value: nomnom-orders}
-        - {name: host, value: postgres-orders.nomnom-data.svc.cluster.local}
-        - {name: port, value: 5432}
-        - {name: expect, value: open}
-    - bindings:
-        - {name: from_namespace, value: nomnom-orders}
-        - {name: host, value: kafka.nomnom-infra.svc.cluster.local}
-        - {name: port, value: 9092}
-        - {name: expect, value: open}
-    - bindings:
-        - {name: from_namespace, value: nomnom-orders}
-        - {name: host, value: temporal.nomnom-infra.svc.cluster.local}
-        - {name: port, value: 7233}
-        - {name: expect, value: open}
-    - bindings:
-        - {name: from_namespace, value: nomnom-restaurants}
-        - {name: host, value: kafka.nomnom-infra.svc.cluster.local}
-        - {name: port, value: 9092}
-        - {name: expect, value: open}
     - bindings:
         - {name: from_namespace, value: nomnom-delivery}
         - {name: host, value: kafka.nomnom-infra.svc.cluster.local}
@@ -41,11 +23,6 @@ spec:
         - {name: expect, value: open}
     - bindings:
         - {name: from_namespace, value: nomnom-restaurants}
-        - {name: host, value: mongodb-restaurants.nomnom-data.svc.cluster.local}
-        - {name: port, value: 27017}
-        - {name: expect, value: open}
-    - bindings:
-        - {name: from_namespace, value: nomnom-restaurants}
         - {name: host, value: postgres-orders.nomnom-data.svc.cluster.local}
         - {name: port, value: 5432}
         - {name: expect, value: closed}
@@ -54,14 +31,6 @@ spec:
         - {name: host, value: temporal.nomnom-infra.svc.cluster.local}
         - {name: port, value: 7233}
         - {name: expect, value: closed}
-    # Alloy развёрнут только с GRAFANA_CLOUD=1; без него имя не резолвится и порт закрыт. После
-    # make kind-grafana-cloud-stop Service остаётся, но реплик 0 — порт тоже закрыт.
-    - bindings:
-        - {name: from_namespace, value: nomnom-orders}
-        - {name: host, value: alloy.nomnom-observability.svc.cluster.local}
-        - {name: port, value: 4317}
-        - name: expect
-          value: (x_k8s_exists($client, 'v1', 'Service', 'nomnom-observability', 'alloy') && x_k8s_exists($client, 'apps/v1', 'Deployment', 'nomnom-observability', 'alloy') && x_k8s_get($client, 'apps/v1', 'Deployment', 'nomnom-observability', 'alloy').status.readyReplicas > `0` && 'open' || 'closed')
   steps:
     - name: policies applied
       use:
@@ -75,53 +44,6 @@ spec:
   catch:
     - script:
         content: kubectl get networkpolicy -A
----
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: infra-workloads
-spec:
-  description: >
-    Под политиками DNS работает, а orders и orders-consumer Available: они падают на старте
-    без PostgreSQL, Kafka и Temporal, поэтому Available означает реальное подключение.
-  steps:
-    - name: policies applied
-      use:
-        template: ../templates/netpol-applied.yaml
-    - name: 6.1 DNS from orders
-      use:
-        template: ../templates/dns-lookup.yaml
-        with:
-          bindings:
-            - {name: from_namespace, value: nomnom-orders}
-            - {name: host, value: kubernetes.default.svc.cluster.local}
-    - name: 6.8 orders and orders-consumer Available
-      try:
-        - assert:
-            resource:
-              apiVersion: apps/v1
-              kind: Deployment
-              metadata:
-                name: orders
-                namespace: nomnom-orders
-              status:
-                (conditions[?type == 'Available'].status): ['True']
-        - assert:
-            resource:
-              apiVersion: apps/v1
-              kind: Deployment
-              metadata:
-                name: orders-consumer
-                namespace: nomnom-orders
-              status:
-                (conditions[?type == 'Available'].status): ['True']
-  catch:
-    - describe:
-        apiVersion: v1
-        kind: Pod
-        namespace: nomnom-orders
-    - events:
-        namespace: nomnom-orders
 ---
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
@@ -161,31 +83,3 @@ spec:
       catch:
         - events:
             namespace: '*'
----
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: app-probes
-spec:
-  description: Runtime contract (ADR 17) — startup, liveness и readiness на /health/* порта metrics.
-  scenarios:
-    - bindings: [{name: app, value: orders}]
-    - bindings: [{name: app, value: restaurants}]
-    - bindings: [{name: app, value: delivery}]
-    - bindings: [{name: app, value: payments}]
-  steps:
-    - try:
-        - assert:
-            resource:
-              apiVersion: apps/v1
-              kind: Deployment
-              metadata:
-                name: ($app)
-                namespace: (join('-', ['nomnom', $app]))
-              spec:
-                template:
-                  spec:
-                    (containers[0]):
-                      startupProbe: {httpGet: {path: /health/startup, port: metrics}}
-                      livenessProbe: {httpGet: {path: /health/live, port: metrics}}
-                      readinessProbe: {httpGet: {path: /health/ready, port: metrics}}

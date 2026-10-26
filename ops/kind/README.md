@@ -20,7 +20,7 @@ make kind-e2e       # весь цикл для CI: кластер → skaffold r
 make kind-up        # make kind-cluster (single-node кластер из cluster.yaml) и платформа: Cilium (Hubble observer), Envoy Gateway, cert-manager
 make kind-deploy    # skaffold run: сборка образов, загрузка в kind, gateway, charts приложений, readiness
 make kind-dev       # skaffold dev (профиль core): пересборка и передеплой при изменении исходников
-make kind-test      # тесты Chainsaw; NetworkPolicy применяются внутри (фаза A без них, фаза B с ними)
+make kind-test      # тесты Chainsaw; NetworkPolicy применяются внутри и остаются
 make kind-policies  # применить NetworkPolicy (kubectl apply -k manifests/netpol); kind-policies-delete — удалить
 make kind-diagnostics
 make kind-local-ca  # корень локального CA в ops/kind/.artifacts/nomnom-local-ca.crt (выводит путь)
@@ -54,6 +54,12 @@ make kind-down
   [`values/`](values/) и `pullPolicy: Never`, манифесты gateway и pod проверок. Skaffold status
   check ждёт readiness workloads, hook — `Accepted`/`Programmed` у GatewayClass, Gateway и
   `BackendTrafficPolicy`.
+- `before`-hook модуля `apps` до первого workload применяет ValidatingAdmissionPolicy
+  [`manifests/admission/workload-baseline.yaml`](manifests/admission/workload-baseline.yaml)
+  ([ADR 17](../../docs/adr/0017-cloud-native-application-runtime.md)): в неймспейсах с
+  `nomnom.dev/tier` (`app`, `infra`, `gateway`, `outsider`) API server отклоняет workload без
+  memory requests/limits у любого container, с образом без tag или с `latest` и без label
+  `app.kubernetes.io/name`. Ошибка видна сразу в выводе `helm`/`kubectl apply`.
 - `orders-consumer` ([ADR 28](../../docs/adr/0028-selective-use-of-watermill-cqrs.md)) — второй
   release chart `orders` с `values-consumer.yaml` и [`values/orders-consumer.yaml`](values/orders-consumer.yaml):
   тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
@@ -215,7 +221,8 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `restaurants-v1-commands` | `ReceiveOrderRequest`, `CancelRestaurantOrder` | `commands` |
 | `restaurants-v1-management` | `OpenRestaurant`, `CloseRestaurant`, `CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability` | `commands` |
 | `restaurants-v1-kitchen` | `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure` | `commands` |
-| `restaurants-v1-kitchen-reads` | `GetKitchenQueue`, `ListIncomingOrders`, `ListActiveRestaurantOrders` | `reads` |
+| `restaurants-v1-kitchen-reads` | `GetKitchenQueue`, `ListIncomingOrders`, `ListActiveRestaurantOrders`, `GetCookPool` | `reads` |
+| `restaurants-v1-cook-pool` | `HireCook`, `PutCookOnLine`, `TakeCookOffLine`, `RetireCook` | `commands` |
 | `restaurants-v1-administration` | `RegisterRestaurant`, `AssignStaff`, `RevokeStaff` | `commands` |
 | `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
 | `delivery-v1-courier` | `UpdateCourierLocation`, `SetCourierAvailability`, `AcceptDeliveryOffer`, `RejectDeliveryOffer`, `ConfirmPickup`, `ConfirmDelivery`, `ReportDeliveryFailure` | `commands` |
@@ -350,31 +357,24 @@ kubectl -n nomnom-bff port-forward svc/bff 3010
 | `tcp-connect` | TCP из pod: `open`, `closed` или `dropped` (timeout, а не DNS и не refused) |
 | `dns-lookup` | имя резолвится из `net-probe` неймспейса |
 | `netpol-applied` | все NetworkPolicy применены (`kubectl apply -k manifests/netpol`) и действуют |
-| `gateway-retries` | вызов и число его повторов gateway по `upstream_rq_retry` Envoy |
 | `driver-call` | gRPC от имени пользователя из `e2e-driver`: user assertion, выпущенный на хосте `scripts/mint-jwt.py` ключом BFF (`tls.key`); повтор до условия `until` в пределах `wait` секунд, ids — в ConfigMap состояния теста |
 | `customer-graphql` | GraphQL покупателя из `e2e-driver` в Service `bff` с access token тестового identity provider; те же `until`, `wait` и состояние |
 
-Фаза A меняет весь кластер, поэтому `netpol-without-policies` и `gateway-retries-and-deadlines`
-(общие счётчики Envoy, Cilium deny к SpiceDB) не `concurrent`: Chainsaw выполняет их по одному
-до остальных тестов. Фаза A восстанавливает политики в `cleanup`, тесты фазы B применяют их сами;
-после прогона политики остаются.
+Тесты под политиками применяют NetworkPolicy сами (`netpol-applied`); после прогона политики
+остаются. Тесты не повторяют то, что уже доказал деплой: Skaffold status check ждёт readiness
+workloads (а `orders` и `restaurants` не стартуют без своих БД, Kafka и Temporal), hook —
+`Accepted` и `ResolvedRefs` всех `GRPCRoute`.
 
 | Тест | Проверка (прежний id `verify.sh`) |
 | --- | --- |
-| `gateway-registry` | все `GRPCRoute` `Accepted` и `ResolvedRefs` (1) |
-| `gateway-routes-orders` | `OrdersService` без identity доходит до orders: `UNAUTHENTICATED` от backend'а (1) |
-| `gateway-routes-to-backends` | опубликованные методы restaurants, delivery и payments (Order Fulfillment, кухня, курьер, администрирование) доходят до backend'а: ответ backend'а, не Envoy (1) |
-| `gateway-rejects-unregistered` | незарегистрированный сервис: `UNIMPLEMENTED` от Envoy (3) |
-| `netpol-without-policies` | без NetworkPolicy `orders → restaurants` и `outsider → restaurants` напрямую доходят до backend'а (`NOT_FOUND`), gateway доступен (A1–A3) |
-| `netpol-blocks-direct-calls` | с NetworkPolicy при выполненных условиях (restaurants Available, имя резолвится, gateway доступен и Orders RPC через него проходит) прямые `orders ↔ restaurants` получают silent drop; `nomnom-outsider` не достаёт ни backend, ни gateway; Hubble фиксирует `DROPPED` (2.1–2.9) |
-| `infra-connectivity` | под политиками `orders` → свой PostgreSQL, Kafka, Temporal; Kafka из restaurants, delivery, payments; restaurants → своя MongoDB; чужая БД и Temporal для не-`orders` закрыты; `orders` → Alloy OTLP открыт, если Alloy развёрнут (`GRAFANA_CLOUD=1`) (6.2–6.7, 6.9, 6.10) |
-| `infra-workloads` | DNS из `orders` под политиками; `orders` и `orders-consumer` Available — они падают на старте без PostgreSQL, Kafka и Temporal (6.1, 6.8) |
+| `gateway-routes-to-backends` | по одному методу restaurants, delivery и payments доходит через gateway до backend'а: ответ backend'а, не Envoy (1) |
+| `netpol-blocks-direct-calls` | с NetworkPolicy при выполненных условиях (restaurants Available, имя резолвится, gateway доступен и отвечает `UNIMPLEMENTED` на незарегистрированный сервис, Orders RPC через него проходит) прямые `orders ↔ restaurants` получают silent drop; `nomnom-outsider` не достаёт ни backend, ни gateway; при провале `catch` выводит DROPPED flows Hubble (2.1–2.8) |
+| `infra-connectivity` | под политиками Kafka открыт из delivery и payments; чужая БД и Temporal для не-`orders` закрыты |
 | `workloads-healthy-under-policies` | после применения политик deployments неймспейсов приложений, `envoy-gateway-system` и `kube-system` Available, ни один контейнер не перезапускался и нет проваленных kubelet-проб (6a.1–6a.3) |
-| `app-probes` | startup, liveness и readiness `orders`, `restaurants`, `delivery`, `payments` на `/health/*` порта `metrics` (6a.4) |
-| `bff-end-to-end` | BFF Available, probes `/health/live` и `/health/ready`; из `nomnom-bff` закрыты прямой `orders` и PostgreSQL; `bffInfo`; `order(id)` без `Authorization` — `Unauthenticated` (AC-576); с access token тестового provider для отсутствующего заказа — `{"data":{"order":null}}` (AC-575), log `orders` — `user assertion accepted: delegate=bff`; тот же user assertion (ключ BFF, aud `nomnom.orders`) от `grpc-caller` — `UNAUTHENTICATED`, log — `service is not an allowed delegate` (7.1–7.10) |
+| `bff-end-to-end` | BFF Available; из `nomnom-bff` закрыты прямой `orders` и PostgreSQL; `bffInfo`; `order(id)` без `Authorization` — `Unauthenticated` (AC-576); с access token тестового provider для отсутствующего заказа — `{"data":{"order":null}}` (AC-575), то есть orders принял user assertion BFF; тот же user assertion (ключ BFF, aud `nomnom.orders`) от `grpc-caller` — `UNAUTHENTICATED`, log — `service is not an allowed delegate` (7.1, 7.3–7.7, 7.9–7.10) |
 | `order-lifecycle` | путь заказа (AC-740): оператор регистрирует ресторан и курьера, владелец — персонал, меню, открытие; курьер на линии; покупатель оформляет заказ через BFF; кухня находит его в `ListIncomingOrders`, принимает и готовит, курьер принимает предложение Dispatch, забирает и доставляет; в BFF `DELIVERED` с milestones `COURIER_ASSIGNED`, `PICKED_UP`, `DELIVERED`, оплата `captured`. Ids уникальны на прогон; в конце курьер уходит с линии |
 
-Один тест: `cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$CHAINSAW_VERSION test --kube-context kind-nomnom-test --config .chainsaw.yaml --test-dir . --include-test-regex 'chainsaw/gateway-registry'`.
+Один тест: `cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$CHAINSAW_VERSION test --kube-context kind-nomnom-test --config .chainsaw.yaml --test-dir . --include-test-regex 'chainsaw/gateway-routes-to-backends'`.
 
 ### Технические подключения
 
