@@ -53,6 +53,11 @@ import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
+import type { CookPoolAccess } from "../slices/cook/applications/access-control.ts";
+import {
+  type CookCradle,
+  registerCook,
+} from "../slices/cook/di/registrations.ts";
 import type { MenuAccessControl } from "../slices/menu/applications/access-control.ts";
 import {
   type MenuCradle,
@@ -144,6 +149,7 @@ export interface InfrastructureCradle {
   readonly restaurantAccessControl: RestaurantAccessControl;
   readonly menuAccessControl: MenuAccessControl;
   readonly simulatorAccessControl: SimulatorAccess;
+  readonly cookAccessControl: CookPoolAccess;
   readonly relationshipWriter: SpiceDbRelationshipWriter;
   readonly ownerRelationships: OwnerRelationshipWriter;
   readonly staffRelationships: StaffRelationshipWriter;
@@ -164,6 +170,7 @@ export type RestaurantsCradle = InfrastructureCradle &
   RestaurantCradle &
   MenuCradle &
   RestaurantOrderCradle &
+  CookCradle &
   SimulatorCradle &
   ProcessCradle;
 
@@ -175,6 +182,7 @@ export const createRestaurantsContainer = (
   registerRestaurant(container);
   registerMenu(container);
   registerRestaurantOrder(container);
+  registerCook(container);
   registerSimulator(container);
   instrumentUseCases(container, RESTAURANTS_USE_CASES);
   container.register(processRegistrations(resources));
@@ -231,7 +239,7 @@ const infrastructureRegistrations = (
       ),
   ).singleton(),
   // ADR 36: Change Notifications of the kitchen board, in the Outbox of the
-  // same Unit of Work as the Restaurant or Restaurant Order write.
+  // same Unit of Work as the Restaurant, Restaurant Order or Cook write.
   kitchenChanges: asFunction(({ db, unitOfWork, clock }: RestaurantsCradle) =>
     kitchenChangeNotifier(
       unitOfWork,
@@ -261,6 +269,7 @@ const infrastructureRegistrations = (
   restaurantAccessControl: aliasTo("spicedbAccessControl"),
   menuAccessControl: aliasTo("spicedbAccessControl"),
   simulatorAccessControl: aliasTo("spicedbAccessControl"),
+  cookAccessControl: aliasTo("spicedbAccessControl"),
   // Owner/staff relationships are written before the restaurant is saved
   // (dual-write, repaired by the reconciler).
   relationshipWriter: asFunction(
@@ -306,6 +315,11 @@ const processRegistrations = (
       addMenuItem: cradle.addMenuItem,
       updateMenuItem: cradle.updateMenuItem,
       setMenuItemAvailability: cradle.setMenuItemAvailability,
+      hireCook: cradle.hireCook,
+      putCookOnLine: cradle.putCookOnLine,
+      takeCookOffLine: cradle.takeCookOffLine,
+      retireCook: cradle.retireCook,
+      getCookPool: cradle.getCookPool,
       getSimulator: cradle.getSimulator,
       setSimulatorEnabled: cradle.setSimulatorEnabled,
     });

@@ -20,6 +20,8 @@ definition platform {
 	relation fulfillment: service
 	/** Platform operator. */
 	relation operator: user
+	/** Dispatcher of the Courier Pool: manages couriers, not the platform. */
+	relation dispatcher: user
 
 	/** restaurants: receive and cancel Restaurant Orders of an Order. */
 	permission coordinate_fulfillment = fulfillment
@@ -31,6 +33,8 @@ definition platform {
 	permission coordinate_delivery = fulfillment
 	permission register_restaurant = operator
 	permission register_courier = operator
+	/** delivery: Courier Pool — register, retire, read, line of any courier. */
+	permission manage_couriers = operator + dispatcher
 	/** delivery: dispatcher actions on any delivery (Report Delivery Failure). */
 	permission dispatch_delivery = operator
 	/** orders, restaurants, delivery: read and switch the demo Simulator (FR-604). */
@@ -74,6 +78,8 @@ definition restaurant {
 	permission manage = owner
 	permission manage_menu = owner + staff
 	permission operate_kitchen = owner + staff
+	/** Cook Pool: hire, line and retirement of cooks. */
+	permission manage_cooks = owner + staff
 	permission view_orders = owner + staff
 }
 

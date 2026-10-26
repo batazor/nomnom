@@ -7,9 +7,10 @@ token plus a user assertion signed with the BFF key (mint_jwt.py), through the i
 Data: /etc/demo/seed.json (ops/kind/demo/files/seed.json).
 
 Re-running changes nothing that already exists: restaurants are matched by name among
-ListOwnedRestaurants of the owner, menu items by name among GetMenu, staff/open/availability
-calls are idempotent, and RegisterCourier of a known courier is tolerated. SpiceDB relationships
-of seeded objects are not written here: restaurants and delivery reconcile them from storage.
+ListOwnedRestaurants of the owner, menu items by name among GetMenu, cooks by name among
+GetCookPool, staff/open/line/availability calls are idempotent, and RegisterCourier of a known
+courier is tolerated. SpiceDB relationships of seeded objects are not written here: restaurants
+and delivery reconcile them from storage.
 """
 import json
 import os
@@ -109,10 +110,27 @@ def seed_restaurant(driver: Driver, seed: dict, spec: dict, existing: dict) -> d
             "price": {"amount": item["price"], "currency": "EUR"}, "available": True,
         })
         print(f"  added {item['name']}")
+    seed_cooks(driver, owner, restaurant_id, spec["cooks"])
     if not restaurant.get("isOpen"):
         driver.call("nomnom.restaurants", owner, RESTAURANTS + "OpenRestaurant", {"restaurantId": restaurant_id})
         print(f"  opened {spec['name']}")
     return {"id": restaurant_id, "name": spec["name"]}
+
+
+def seed_cooks(driver: Driver, owner: str, restaurant_id: str, names: list) -> None:
+    """Cook Pool ресторана (FR-614): повара seed по имени, все на линии."""
+    pool = driver.call("nomnom.restaurants", owner, RESTAURANTS + "GetCookPool", {"restaurantId": restaurant_id})
+    cooks = {cook["name"]: cook for cook in pool.get("cooks", [])}
+    for name in names:
+        cook = cooks.get(name)
+        if cook is None:
+            cook = driver.call("nomnom.restaurants", owner, RESTAURANTS + "HireCook",
+                               {"restaurantId": restaurant_id, "name": name})["cook"]
+            print(f"  hired cook {name}")
+        if not cook.get("onLine"):
+            driver.call("nomnom.restaurants", owner, RESTAURANTS + "PutCookOnLine",
+                        {"restaurantId": restaurant_id, "cookId": cook["cookId"]})
+            print(f"  cook {name} is on line")
 
 
 def seed_courier(driver: Driver, seed: dict) -> None:

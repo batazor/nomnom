@@ -163,8 +163,8 @@ const createSimulatorWorld = async (random: () => number) => {
     log: (_message, fields) => logged.push(fields ?? {}),
   });
   /** Open kitchen whose owner is kitchen staff (operate_kitchen). */
-  const givenOwnedKitchen = async (name?: string) => {
-    const kitchen = await world.givenKitchen(name);
+  const givenOwnedKitchen = async (name?: string, cooks?: string[]) => {
+    const kitchen = await world.givenKitchen(name, cooks);
     world.kitchenAccessControl.grantStaff(owner, kitchen.restaurantId);
     return kitchen;
   };
@@ -478,4 +478,41 @@ test("AC-764 disabling forgets the schedule", async () => {
     await world.stateOf(restaurantId, order.restaurantOrderId),
     "RECEIVED",
   );
+});
+
+test("AC-786 Preparation waits for a free cook on line and follows the actual start", async () => {
+  // A plan from now (three step delays 0 → 1000 ms each), then outcome 0
+  // (start preparation) on each due pass.
+  const world = await createSimulatorWorld(sequence(0, 0, 0, 0, 0));
+  const { restaurantId, phoId } = await world.givenOwnedKitchen("Pho Bar", []);
+  const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  await world.state.setEnabled(true, world.clock.now());
+  const plannedAt = world.clock.now().getTime();
+
+  await world.simulator.tick();
+  world.clock.advance(DELAY.minMs);
+  await world.simulator.tick();
+
+  assert.equal(
+    await world.stateOf(restaurantId, order.restaurantOrderId),
+    "QUEUED",
+    "no cook on line: the order stays in the queue",
+  );
+  assert.deepEqual(world.logged, [], "a missing cook is not an error");
+
+  world.clock.advance(5_000);
+  const [cookId] = await world.givenCooksOnLine(restaurantId, ["Aigul"]);
+  await world.simulator.tick();
+
+  const started = await world.board.get(restaurantId, order.restaurantOrderId);
+  assert.equal(started?.state, "PREPARING");
+  assert.equal(started?.cookId, cookId);
+  // The remaining steps move by the 5 s the start was late.
+  assert.deepEqual(world.simulator.planOf(order.restaurantOrderId), {
+    steps: [
+      { state: "PREPARING", dueAt: plannedAt + 2_000 + 5_000 },
+      { state: "ASSEMBLED", dueAt: plannedAt + 3_000 + 5_000 },
+    ],
+  });
+  assert.deepEqual(world.logged, []);
 });

@@ -165,6 +165,26 @@ spec:
             - {name: subject, value: $s.owner}
             - {name: method, value: nomnom.restaurants.v1.RestaurantsService/OpenRestaurant}
             - {name: request, value: '{restaurantId: $s.restaurant_id}'}
+    # Start Preparation назначает свободного повара на линии (FR-225): без него заказ ждёт в очереди.
+    - name: owner hires cook
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.owner}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/HireCook}
+            - {name: request, value: '{restaurantId: $s.restaurant_id, name: "Kind e2e cook"}'}
+            - {name: save, value: '{cook_id: .cook.cookId}'}
+    - name: cook goes on line
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.staff}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/PutCookOnLine}
+            - {name: request, value: '{restaurantId: $s.restaurant_id, cookId: $s.cook_id}'}
 
     # 3. Курьер выходит на линию: позиция и доступность. Dispatch предлагает доставку только
     # свободному курьеру с позицией.

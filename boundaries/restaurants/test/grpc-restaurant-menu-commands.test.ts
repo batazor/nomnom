@@ -54,6 +54,11 @@ const createWorld = async () => {
     setMenuItemAvailability: world.setAvailability,
     getSimulator: { execute: () => Promise.reject(new Error("unused")) },
     setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
+    hireCook: { execute: () => Promise.reject(new Error("unused")) },
+    putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },
+    takeCookOffLine: { execute: () => Promise.reject(new Error("unused")) },
+    retireCook: { execute: () => Promise.reject(new Error("unused")) },
+    getCookPool: { execute: () => Promise.reject(new Error("unused")) },
     subjects: { resolve: async () => caller },
   });
   const as = (subject: Subject) => {

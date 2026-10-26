@@ -16,6 +16,8 @@ export type ActivePreparation = Readonly<{
   preparationStartedAt: Date | undefined;
   /** Current expected time, including reported Preparation Delays. */
   expectedReadyAt: Date | undefined;
+  /** Cook holding the order. */
+  cookId: string | undefined;
 }>;
 
 export type ActivePreparationsResult = Readonly<{

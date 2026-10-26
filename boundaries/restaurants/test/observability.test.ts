@@ -177,6 +177,21 @@ test("one trace spans the gRPC call, the use case and, through the Outbox, the K
       setSimulatorEnabled: {
         execute: () => Promise.reject(new Error("unused")),
       },
+      hireCook: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
+      putCookOnLine: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
+      takeCookOffLine: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
+      retireCook: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
+      getCookPool: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
       subjects: { resolve: async () => owner },
     });
     const worker = new GrpcWorker(createGrpcServer(service), 0);

@@ -35,6 +35,7 @@ export {
   DuplicateOrderIdError,
   InvalidRestaurantOrderError,
   InvalidRestaurantOrderReason,
+  NoCookAvailableError,
 } from "./errors.ts";
 export type * from "./events.ts";
 export {
@@ -71,6 +72,8 @@ export type RestaurantOrderSnapshot = Readonly<{
   }>[];
   state: RestaurantOrderState;
   timeline: RestaurantOrderTimeline;
+  /** Cook assigned by Start Preparation; kept after the order is closed. */
+  cookId?: string;
   rejectionReason?: string;
   failureReason?: string;
   cancellation?: Readonly<{ stage: RestaurantOrderState; reason?: string }>;
@@ -90,6 +93,7 @@ export class RestaurantOrder {
   readonly #version: number;
   #state: RestaurantOrderState;
   #timeline: RestaurantOrderTimeline;
+  #cookId: string | undefined;
   #rejectionReason: string | undefined;
   #failureReason: string | undefined;
   #cancellation: RestaurantOrderSnapshot["cancellation"];
@@ -106,6 +110,7 @@ export class RestaurantOrder {
     this.#items = items;
     this.#state = snapshot.state;
     this.#timeline = { ...snapshot.timeline };
+    this.#cookId = snapshot.cookId;
     this.#rejectionReason = snapshot.rejectionReason;
     this.#failureReason = snapshot.failureReason;
     this.#cancellation = snapshot.cancellation;
@@ -134,6 +139,11 @@ export class RestaurantOrder {
 
   get timeline(): RestaurantOrderTimeline {
     return this.#timeline;
+  }
+
+  /** Cook assigned by Start Preparation, if it happened. */
+  get cookId(): string | undefined {
+    return this.#cookId;
   }
 
   get rejectionReason(): string | undefined {
@@ -165,6 +175,7 @@ export class RestaurantOrder {
       })),
       state: this.#state,
       timeline: { ...this.#timeline },
+      ...(this.#cookId === undefined ? {} : { cookId: this.#cookId }),
       ...(this.#rejectionReason === undefined
         ? {}
         : { rejectionReason: this.#rejectionReason }),
@@ -334,8 +345,30 @@ export class RestaurantOrder {
     );
   }
 
-  startPreparation(input: { startedAt: Date }): void {
+  /**
+   * Throws what {@link startPreparation} would throw in the current State,
+   * without changing the order: a cook is assigned only to an order that can
+   * start.
+   */
+  checkStartPreparation(): void {
+    const outcome = resolveTransition(this.#state, {
+      trigger: "StartPreparation",
+    });
+    if (!outcome.ok) {
+      throw outcome.error;
+    }
+  }
+
+  /** Starts Preparation by the cook assigned from the Cook Pool. */
+  startPreparation(input: { startedAt: Date; cookId: string }): void {
+    const cookId = optionalText(input.cookId);
+    if (cookId === undefined) {
+      throw new InvalidRestaurantOrderError(
+        InvalidRestaurantOrderReason.EmptyCookId,
+      );
+    }
     this.apply({ trigger: "StartPreparation" });
+    this.#cookId = cookId;
     this.extendTimeline({ preparationStartedAt: input.startedAt });
     this.record(
       {

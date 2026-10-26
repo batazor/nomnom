@@ -11,6 +11,7 @@
 
 - Принимая заказ, Simulator заранее тянет задержки шагов `QUEUED → start`, `PREPARING → assemble`, `ASSEMBLED → ready` (каждая random в `[MIN_DELAY, MAX_DELAY]`, не меньше 1 мс) и передаёт `expected_ready_at` = момент принятия + их сумма; шаги выполняются в эти моменты.
 - Задержка: новый `expected_ready_at` = max(план `READY`, текущий срок, now) + random-задержка; весь остаток плана сдвигается так, чтобы `READY` попал в новый срок. Отказ — как раньше.
+- Старт приготовления (FR-618): `StartPreparation` назначает свободного повара Cook Pool; без свободного повара (`NoCookAvailable`) шаг остаётся просроченным и повторяется на следующем проходе без записи в лог. После старта оставшиеся шаги сдвигаются на опоздание старта; если `READY` стал позже `expected_ready_at`, Simulator сообщает задержку. Состав пула и линию Simulator не меняет.
 - Заказ без плана (рестарт процесса или принят человеком): оставшиеся шаги планируются от текущего момента; если запланированный `READY` позже `expected_ready_at` заказа, Simulator сообщает задержку (`ReportPreparationDelay`) до него — это доменное действие, а не подстановка значения. Не удалась — план отбрасывается и строится заново на следующем проходе.
 
 ## Границы
@@ -21,6 +22,6 @@
 
 ## Acceptance
 
-FR-605, AC-763, AC-764 change [`add-demo-simulator`](../../../../../../openspec/changes/add-demo-simulator/); FR-609 change [`add-fulfillment-eta`](../../../../../../openspec/changes/add-fulfillment-eta/).
+FR-605, AC-763, AC-764 change [`add-demo-simulator`](../../../../../../openspec/changes/add-demo-simulator/); FR-609 change [`add-fulfillment-eta`](../../../../../../openspec/changes/add-fulfillment-eta/); FR-618, AC-786 change [`add-cook-and-courier-pools`](../../../../../../openspec/changes/add-cook-and-courier-pools/).
 
 Общий каталог: [Restaurants use cases](../../../../README.md#use-cases).

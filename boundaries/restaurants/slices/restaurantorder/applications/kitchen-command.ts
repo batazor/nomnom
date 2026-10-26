@@ -48,7 +48,7 @@ export const executeKitchenCommand = async (
   options: Readonly<{
     action: string;
     published: readonly RestaurantOrderEventType[];
-    change: (order: RestaurantOrder, now: Date) => void;
+    change: (order: RestaurantOrder, now: Date) => void | Promise<void>;
     repeatPolicy?: RepeatPolicy;
   }>,
 ): Promise<RestaurantOrderView> => {
@@ -67,7 +67,7 @@ export const executeKitchenCommand = async (
       command.restaurantOrderId,
     );
     try {
-      options.change(order, now);
+      await options.change(order, now);
     } catch (error) {
       if (
         error instanceof AlreadyInStateError &&

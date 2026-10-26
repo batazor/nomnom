@@ -15,6 +15,9 @@ import {
   OUTBOX_COLLECTION,
 } from "../pkg/infrastructure/repository/outbox.ts";
 import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+import { PoolCookAssigner } from "../slices/cook/applications/assign-cook/assign-cook.ts";
+import { Cook } from "../slices/cook/domains/cook/cook.ts";
+import { DatabaseCookRepository } from "../slices/cook/infrastructure/repository/cooks.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
@@ -126,6 +129,17 @@ describe("kitchen command RPCs over MongoDB", () => {
       addedAt: clock.now(),
     });
     await menus.save(menu);
+    // A line wide enough for every order the tests start at once.
+    const cooks = new DatabaseCookRepository(
+      database.db,
+      unitOfWork,
+      noKitchenChanges,
+    );
+    for (const name of ["Aigul", "Oleg", "Marat", "Timur"]) {
+      const hired = Cook.hire({ id: `cook-${name}`, restaurantId, name });
+      hired.putOnLine();
+      await cooks.save(hired);
+    }
 
     const commands = {
       accessControl,
@@ -165,6 +179,21 @@ describe("kitchen command RPCs over MongoDB", () => {
       setSimulatorEnabled: {
         execute: () => Promise.reject(new Error("unused")),
       },
+      hireCook: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
+      putCookOnLine: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
+      takeCookOffLine: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
+      retireCook: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
+      getCookPool: {
+        execute: () => Promise.reject(new Error("unused")),
+      },
       acceptRestaurantOrder: new AcceptOrderHandler({
         ...commands,
         facts: new RepositoryAcceptanceFactsReader({ restaurants, menus }),
@@ -174,6 +203,7 @@ describe("kitchen command RPCs over MongoDB", () => {
       rejectRestaurantOrder: new RejectOrderHandler(commands),
       startPreparation: new StartPreparationHandler({
         ...commands,
+        cooks: new PoolCookAssigner({ cooks, workload: board }),
         onRepeat: "succeed-without-event",
       }),
       markRestaurantOrderAssembled: new MarkAssembledHandler({

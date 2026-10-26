@@ -238,6 +238,7 @@ const ACTIVE: readonly ActiveRestaurantOrder[] = [
     state: DomainRestaurantOrderState.Assembled,
     items: [{ menuItemId: "pho", quantity: 1, options: [] }],
     receivedAt: RECEIVED_AT,
+    cookId: "cook-1",
     acceptedAt: new Date(RECEIVED_AT.getTime() + minutes(1)),
     expectedReadyAt: new Date(RECEIVED_AT.getTime() + minutes(20)),
     version: 4,

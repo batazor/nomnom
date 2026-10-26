@@ -37,6 +37,11 @@ export const RESTAURANTS_USE_CASES = {
   markRestaurantOrderReady: command("mark_ready_for_pickup"),
   reportPreparationDelay: command("report_preparation_delay"),
   reportPreparationFailure: command("report_preparation_failure"),
+  hireCook: command("hire_cook"),
+  putCookOnLine: command("put_cook_on_line"),
+  takeCookOffLine: command("take_cook_off_line"),
+  retireCook: command("retire_cook"),
+  getCookPool: query("get_cook_pool"),
   getSimulator: query("get_simulator"),
   setSimulatorEnabled: command("set_simulator_enabled"),
 } as const;

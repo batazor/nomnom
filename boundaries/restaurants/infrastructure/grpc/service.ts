@@ -1,5 +1,10 @@
 import { create } from "@bufbuild/protobuf";
 import type { ServiceImpl } from "@connectrpc/connect";
+import type { GetCookPoolHandler } from "../../slices/cook/applications/get-cook-pool/get-cook-pool.ts";
+import type { HireCookHandler } from "../../slices/cook/applications/hire-cook/hire-cook.ts";
+import type { PutCookOnLineHandler } from "../../slices/cook/applications/put-cook-on-line/put-cook-on-line.ts";
+import type { RetireCookHandler } from "../../slices/cook/applications/retire-cook/retire-cook.ts";
+import type { TakeCookOffLineHandler } from "../../slices/cook/applications/take-cook-off-line/take-cook-off-line.ts";
 import type { AddMenuItemHandler } from "../../slices/menu/applications/add-menu-item/add-menu-item.ts";
 import type { CreateMenuHandler } from "../../slices/menu/applications/create-menu/create-menu.ts";
 import type { GetMenuHandler } from "../../slices/menu/applications/get-menu/get-menu.ts";
@@ -27,6 +32,7 @@ import type { ReportPreparationFailureHandler } from "../../slices/restaurantord
 import type { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
 import type { GetSimulatorHandler } from "../../slices/simulator/applications/get-simulator/get-simulator.ts";
 import type { SetSimulatorEnabledHandler } from "../../slices/simulator/applications/set-simulator-enabled/set-simulator-enabled.ts";
+import { createCookPoolRpcs } from "./cook-pool.ts";
 import { requireField, transportError } from "./errors.ts";
 import {
   AssignStaffResponseSchema,
@@ -87,6 +93,11 @@ export type RestaurantsServiceDependencies = Readonly<{
   addMenuItem: Pick<AddMenuItemHandler, "execute">;
   updateMenuItem: Pick<UpdateMenuItemHandler, "execute">;
   setMenuItemAvailability: Pick<SetMenuItemAvailabilityHandler, "execute">;
+  hireCook: Pick<HireCookHandler, "execute">;
+  putCookOnLine: Pick<PutCookOnLineHandler, "execute">;
+  takeCookOffLine: Pick<TakeCookOffLineHandler, "execute">;
+  retireCook: Pick<RetireCookHandler, "execute">;
+  getCookPool: Pick<GetCookPoolHandler, "execute">;
   getSimulator: Pick<GetSimulatorHandler, "execute">;
   setSimulatorEnabled: Pick<SetSimulatorEnabledHandler, "execute">;
   subjects: SubjectResolver;
@@ -279,6 +290,7 @@ export const createRestaurantsService = (
 
     ...createOpeningRpcs(dependencies, subjects),
     ...createMenuRpcs(dependencies, subjects),
+    ...createCookPoolRpcs(dependencies, subjects),
     ...createSimulatorRpcs(dependencies, subjects),
   };
 };

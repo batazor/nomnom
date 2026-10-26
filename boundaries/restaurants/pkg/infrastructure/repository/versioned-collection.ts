@@ -60,6 +60,10 @@ export class VersionedCollection<D extends VersionedDocument> {
       .toArray()) as D[];
   }
 
+  async count(filter: Filter<D>): Promise<number> {
+    return this.collection.countDocuments(filter, { session: this.#session });
+  }
+
   /**
    * Inserts the document for `expectedVersion` 0, otherwise replaces it only
    * if the stored version still equals `expectedVersion`. Returns the new

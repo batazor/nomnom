@@ -17,6 +17,8 @@ export type RestaurantOrderView = Readonly<{
     options: readonly string[];
   }>[];
   timeline: RestaurantOrderTimeline;
+  /** Cook assigned by Start Preparation, if it happened. */
+  cookId: string | undefined;
   rejectionReason: string | undefined;
   failureReason: string | undefined;
   cancelledAtStage: RestaurantOrderState | undefined;
@@ -37,6 +39,7 @@ export const snapshotToView = (
     options: [...item.options],
   })),
   timeline: { ...snapshot.timeline },
+  cookId: snapshot.cookId,
   rejectionReason: snapshot.rejectionReason,
   failureReason: snapshot.failureReason,
   cancelledAtStage: snapshot.cancellation?.stage,

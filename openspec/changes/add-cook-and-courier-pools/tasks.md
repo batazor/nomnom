@@ -2,14 +2,14 @@
 
 ## 1. Общее
 
-- [ ] 1.1 `authorization/schema.zed` и `validation.yaml`: `restaurant#manage_cooks`, `platform#dispatcher`, `platform#manage_couriers` вместо `register_courier` (`FR-614`, `FR-620`); `ops/kind/authz/bootstrap-kind.yaml` — demo-пользователь как `dispatcher`.
-- [ ] 1.2 GRPCRoute новых RPC в `ops/kind/manifests/gateway/gateway.yaml`.
+- [x] 1.1 `authorization/schema.zed` и `validation.yaml`: `restaurant#manage_cooks`, `platform#dispatcher`, `platform#manage_couriers` (`FR-614`, `FR-620`); `register_courier` удаляется в 3.2, когда `delivery` перейдёт на `manage_couriers`; `ops/kind/authz/bootstrap-kind.yaml` — demo-пользователь как `dispatcher`.
+- [x] 1.2 GRPCRoute новых RPC в `ops/kind/manifests/gateway/gateway.yaml` (`restaurants-v1-cook-pool`, `GetCookPool` в `restaurants-v1-kitchen-reads`); `delivery` — в 3.2.
 
 ## 2. restaurants
 
-- [ ] 2.1 Слайс `cook`: aggregate, Hire/Put On Line/Take Off Line/Retire, Get Cook Pool, коллекция `cooks`, RPC (`FR-614`–`FR-616`, `AC-775`–`AC-781`).
-- [ ] 2.2 `restaurantorder`: назначение Cook в Start Preparation, `NoCookAvailable`, `cookId`, validator и partial index (`FR-225`, `FR-617`, `AC-782`–`AC-785`).
-- [ ] 2.3 `simulator`: старт только при свободном Cook, перепланирование от старта (`FR-618`, `AC-786`).
+- [x] 2.1 Слайс `cook`: aggregate, Hire/Put On Line/Take Off Line/Retire, Get Cook Pool, коллекция `cooks`, RPC (`FR-614`–`FR-616`, `AC-775`–`AC-781`).
+- [x] 2.2 `restaurantorder`: назначение Cook в Start Preparation, `NoCookAvailable`, `cookId`, validator и partial index (`FR-225`, `FR-617`, `AC-782`–`AC-785`).
+- [x] 2.3 `simulator`: старт только при свободном Cook, перепланирование от старта (`FR-618`, `AC-786`).
 
 ## 3. delivery
 
@@ -23,5 +23,5 @@
 
 ## 5. Demo и проверка
 
-- [ ] 5.1 `seed.json` и `seed.py`: повара каждого ресторана, курьеры с именами и позициями, имя demo-курьера.
+- [ ] 5.1 `seed.json` и `seed.py`: повара каждого ресторана (сделано в 2.2 вместе с наймом повара в e2e order-lifecycle), курьеры с именами и позициями, имя demo-курьера.
 - [ ] 5.2 Проверки каждого сервиса, `openspec validate add-cook-and-courier-pools --strict`, прогон в kind.

@@ -2,6 +2,7 @@ import { v1 } from "@authzed/authzed-node";
 
 import { AuthorizationUnavailableError } from "../../pkg/application/errors.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
+import type { CookPoolAccess } from "../../slices/cook/applications/access-control.ts";
 import type { MenuAccessControl } from "../../slices/menu/applications/access-control.ts";
 import type { RestaurantAccessControl } from "../../slices/restaurant/applications/access-control.ts";
 import type {
@@ -56,7 +57,8 @@ export class SpiceDbAccessControl
     KitchenStaffAccess,
     FulfillmentCoordinatorAccess,
     RestaurantOrderViewAccess,
-    SimulatorAccess
+    SimulatorAccess,
+    CookPoolAccess
 {
   readonly #client: PermissionsClient;
   readonly #revisions: RevisionReader;
@@ -102,6 +104,10 @@ export class SpiceDbAccessControl
       "coordinate_fulfillment",
       subject,
     );
+  }
+
+  canManageCooks(subject: Subject, restaurantId: string): Promise<boolean> {
+    return this.#check("restaurant", restaurantId, "manage_cooks", subject);
   }
 
   canViewRestaurantOrders(

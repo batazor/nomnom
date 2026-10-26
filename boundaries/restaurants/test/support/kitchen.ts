@@ -1,6 +1,14 @@
 import type { Outbox } from "../../pkg/application/outbox.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
 import type { UnitOfWork } from "../../pkg/application/unit-of-work.ts";
+import type { CookPoolAccess } from "../../slices/cook/applications/access-control.ts";
+import { PoolCookAssigner } from "../../slices/cook/applications/assign-cook/assign-cook.ts";
+import { GetCookPoolHandler } from "../../slices/cook/applications/get-cook-pool/get-cook-pool.ts";
+import { HireCookHandler } from "../../slices/cook/applications/hire-cook/hire-cook.ts";
+import { PutCookOnLineHandler } from "../../slices/cook/applications/put-cook-on-line/put-cook-on-line.ts";
+import { RetireCookHandler } from "../../slices/cook/applications/retire-cook/retire-cook.ts";
+import { TakeCookOffLineHandler } from "../../slices/cook/applications/take-cook-off-line/take-cook-off-line.ts";
+import { DatabaseCookRepository } from "../../slices/cook/infrastructure/repository/cooks.ts";
 import {
   type AcceptanceConditionsProvider,
   AcceptOrderHandler,
@@ -72,6 +80,11 @@ export const createKitchenWorld = async (
     noKitchenChanges,
   );
   const board = new DatabaseKitchenBoard(store);
+  const cooks = new DatabaseCookRepository(
+    infrastructure.db,
+    infrastructure.unitOfWork,
+    noKitchenChanges,
+  );
   const accessControl = new TestKitchenAccessControl();
   const conditions = new StaticAcceptanceConditions();
   const outbox = options.outbox ?? infrastructure.outbox;
@@ -84,6 +97,13 @@ export const createKitchenWorld = async (
     clock: infrastructure.clock,
   };
   const onRepeat = options.onRepeat ?? "succeed-without-event";
+  const cookCommandDependencies = {
+    accessControl,
+    unitOfWork: options.unitOfWork ?? infrastructure.unitOfWork,
+    cooks,
+    workload: board,
+    clock: infrastructure.clock,
+  };
 
   const handlers = {
     receive: new ReceiveOrderRequestHandler({
@@ -108,7 +128,22 @@ export const createKitchenWorld = async (
     }),
     startPreparation: new StartPreparationHandler({
       ...commandDependencies,
+      cooks: new PoolCookAssigner({ cooks, workload: board }),
       onRepeat,
+    }),
+    hireCook: new HireCookHandler({
+      accessControl,
+      restaurants: new RepositoryRestaurantExistence(menuWorld.restaurants),
+      cooks,
+      ids: new SequentialIdGenerator("cook"),
+    }),
+    putCookOnLine: new PutCookOnLineHandler(cookCommandDependencies),
+    takeCookOffLine: new TakeCookOffLineHandler(cookCommandDependencies),
+    retireCook: new RetireCookHandler(cookCommandDependencies),
+    getCookPool: new GetCookPoolHandler({
+      accessControl,
+      cooks,
+      workload: board,
     }),
     markAssembled: new MarkAssembledHandler({
       accessControl,
@@ -145,15 +180,42 @@ export const createKitchenWorld = async (
     }),
   };
 
-  /** Open restaurant with an available "Pho" item, staff and orders access. */
+  /** Hires cooks with the given names and puts them on line. */
+  const givenCooksOnLine = async (
+    restaurantId: string,
+    names: readonly string[],
+  ): Promise<string[]> => {
+    const cookIds: string[] = [];
+    for (const name of names) {
+      const { cookId } = await handlers.hireCook.execute({
+        subject: cook,
+        restaurantId,
+        name,
+      });
+      await handlers.putCookOnLine.execute({
+        subject: cook,
+        restaurantId,
+        cookId,
+      });
+      cookIds.push(cookId);
+    }
+    return cookIds;
+  };
+
+  /**
+   * Open restaurant with an available "Pho" item, staff and orders access and
+   * `cooksOnLine` cooks on line (three unless the test needs another line).
+   */
   const givenKitchen = async (
     name = "Pho Bar",
-  ): Promise<{ restaurantId: string; phoId: string }> => {
+    cooksOnLine: readonly string[] = ["Aigul", "Oleg", "Marat"],
+  ): Promise<{ restaurantId: string; phoId: string; cookIds: string[] }> => {
     const restaurantId = await menuWorld.givenRestaurantWithMenu(name);
     const phoId = await menuWorld.givenMenuItem(restaurantId, "Pho");
     accessControl.grantStaff(cook, restaurantId);
     accessControl.grantFulfillment(ordersService, restaurantId);
-    return { restaurantId, phoId };
+    const cookIds = await givenCooksOnLine(restaurantId, cooksOnLine);
+    return { restaurantId, phoId, cookIds };
   };
 
   let orderSequence = 0;
@@ -208,10 +270,12 @@ export const createKitchenWorld = async (
     orderStore: store,
     restaurantOrders,
     board,
+    cooks,
     kitchenAccessControl: accessControl,
     conditions,
     ...handlers,
     givenKitchen,
+    givenCooksOnLine,
     givenReceivedOrder,
     givenOrderIn,
   };
@@ -272,7 +336,8 @@ export class TestKitchenAccessControl
   implements
     KitchenStaffAccess,
     FulfillmentCoordinatorAccess,
-    RestaurantOrderViewAccess
+    RestaurantOrderViewAccess,
+    CookPoolAccess
 {
   readonly #staff = new Set<string>();
   readonly #fulfillment = new Set<string>();
@@ -292,6 +357,14 @@ export class TestKitchenAccessControl
     restaurantId: string,
   ): Promise<boolean> {
     return this.#staff.has(`${subject.type}:${subject.id}@${restaurantId}`);
+  }
+
+  /** Staff manage the Cook Pool, like `restaurant#manage_cooks`. */
+  async canManageCooks(
+    subject: Subject,
+    restaurantId: string,
+  ): Promise<boolean> {
+    return this.canOperateKitchen(subject, restaurantId);
   }
 
   async canCoordinateFulfillment(

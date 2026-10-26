@@ -340,6 +340,14 @@ export declare type RestaurantOrder = Message<"nomnom.restaurants.v1.RestaurantO
    * @generated from field: int64 version = 6;
    */
   version: bigint;
+
+  /**
+   * Cook assigned by StartPreparation; empty before it. Kept after the order
+   * is closed.
+   *
+   * @generated from field: string cook_id = 7;
+   */
+  cookId: string;
 };
 
 /**
@@ -1413,6 +1421,262 @@ export declare type SetSimulatorEnabledResponse = Message<"nomnom.restaurants.v1
 export declare const SetSimulatorEnabledResponseSchema: GenMessage<SetSimulatorEnabledResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.Cook
+ */
+export declare type Cook = Message<"nomnom.restaurants.v1.Cook"> & {
+  /**
+   * @generated from field: string cook_id = 1;
+   */
+  cookId: string;
+
+  /**
+   * @generated from field: string restaurant_id = 2;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: bool on_line = 4;
+   */
+  onLine: boolean;
+
+  /**
+   * Order in PREPARING or ASSEMBLED held by the cook; empty when free.
+   *
+   * @generated from field: string current_restaurant_order_id = 5;
+   */
+  currentRestaurantOrderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.Cook.
+ * Use `create(CookSchema)` to create a new message.
+ */
+export declare const CookSchema: GenMessage<Cook>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.HireCookRequest
+ */
+export declare type HireCookRequest = Message<"nomnom.restaurants.v1.HireCookRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.HireCookRequest.
+ * Use `create(HireCookRequestSchema)` to create a new message.
+ */
+export declare const HireCookRequestSchema: GenMessage<HireCookRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.HireCookResponse
+ */
+export declare type HireCookResponse = Message<"nomnom.restaurants.v1.HireCookResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Cook cook = 1;
+   */
+  cook?: Cook | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.HireCookResponse.
+ * Use `create(HireCookResponseSchema)` to create a new message.
+ */
+export declare const HireCookResponseSchema: GenMessage<HireCookResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.PutCookOnLineRequest
+ */
+export declare type PutCookOnLineRequest = Message<"nomnom.restaurants.v1.PutCookOnLineRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string cook_id = 2;
+   */
+  cookId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.PutCookOnLineRequest.
+ * Use `create(PutCookOnLineRequestSchema)` to create a new message.
+ */
+export declare const PutCookOnLineRequestSchema: GenMessage<PutCookOnLineRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.PutCookOnLineResponse
+ */
+export declare type PutCookOnLineResponse = Message<"nomnom.restaurants.v1.PutCookOnLineResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Cook cook = 1;
+   */
+  cook?: Cook | undefined;
+
+  /**
+   * @generated from field: bool changed = 2;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.PutCookOnLineResponse.
+ * Use `create(PutCookOnLineResponseSchema)` to create a new message.
+ */
+export declare const PutCookOnLineResponseSchema: GenMessage<PutCookOnLineResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.TakeCookOffLineRequest
+ */
+export declare type TakeCookOffLineRequest = Message<"nomnom.restaurants.v1.TakeCookOffLineRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string cook_id = 2;
+   */
+  cookId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.TakeCookOffLineRequest.
+ * Use `create(TakeCookOffLineRequestSchema)` to create a new message.
+ */
+export declare const TakeCookOffLineRequestSchema: GenMessage<TakeCookOffLineRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.TakeCookOffLineResponse
+ */
+export declare type TakeCookOffLineResponse = Message<"nomnom.restaurants.v1.TakeCookOffLineResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Cook cook = 1;
+   */
+  cook?: Cook | undefined;
+
+  /**
+   * @generated from field: bool changed = 2;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.TakeCookOffLineResponse.
+ * Use `create(TakeCookOffLineResponseSchema)` to create a new message.
+ */
+export declare const TakeCookOffLineResponseSchema: GenMessage<TakeCookOffLineResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.RetireCookRequest
+ */
+export declare type RetireCookRequest = Message<"nomnom.restaurants.v1.RetireCookRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string cook_id = 2;
+   */
+  cookId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RetireCookRequest.
+ * Use `create(RetireCookRequestSchema)` to create a new message.
+ */
+export declare const RetireCookRequestSchema: GenMessage<RetireCookRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.RetireCookResponse
+ */
+export declare type RetireCookResponse = Message<"nomnom.restaurants.v1.RetireCookResponse"> & {
+  /**
+   * @generated from field: bool changed = 1;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RetireCookResponse.
+ * Use `create(RetireCookResponseSchema)` to create a new message.
+ */
+export declare const RetireCookResponseSchema: GenMessage<RetireCookResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.GetCookPoolRequest
+ */
+export declare type GetCookPoolRequest = Message<"nomnom.restaurants.v1.GetCookPoolRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.GetCookPoolRequest.
+ * Use `create(GetCookPoolRequestSchema)` to create a new message.
+ */
+export declare const GetCookPoolRequestSchema: GenMessage<GetCookPoolRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.GetCookPoolResponse
+ */
+export declare type GetCookPoolResponse = Message<"nomnom.restaurants.v1.GetCookPoolResponse"> & {
+  /**
+   * Cooks that are not retired.
+   *
+   * @generated from field: int32 size = 1;
+   */
+  size: number;
+
+  /**
+   * @generated from field: int32 on_line = 2;
+   */
+  onLine: number;
+
+  /**
+   * Cooks holding an order in PREPARING or ASSEMBLED.
+   *
+   * @generated from field: int32 busy = 3;
+   */
+  busy: number;
+
+  /**
+   * Orders of the restaurant in QUEUED: the backlog of the pool.
+   *
+   * @generated from field: int32 queued = 4;
+   */
+  queued: number;
+
+  /**
+   * Not retired cooks by name, then by id.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.Cook cooks = 5;
+   */
+  cooks: Cook[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.GetCookPoolResponse.
+ * Use `create(GetCookPoolResponseSchema)` to create a new message.
+ */
+export declare const GetCookPoolResponseSchema: GenMessage<GetCookPoolResponse>;
+
+/**
  * @generated from enum nomnom.restaurants.v1.RestaurantOrderState
  */
 export enum RestaurantOrderState {
@@ -1544,6 +1808,9 @@ export declare const RestaurantsService: GenService<{
    * an order of another restaurant is NOT_FOUND, a forbidden transition is
    * FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
    * succeeds without a new fact; other repeats are FAILED_PRECONDITION.
+   * StartPreparation assigns the free cook on line with the earliest last
+   * assignment (FR-225); without a free cook it is RESOURCE_EXHAUSTED and the
+   * order stays QUEUED.
    *
    * @generated from rpc nomnom.restaurants.v1.RestaurantsService.AcceptRestaurantOrder
    */
@@ -1726,6 +1993,58 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof SetMenuItemAvailabilityRequestSchema;
     output: typeof SetMenuItemAvailabilityResponseSchema;
+  },
+  /**
+   * Cook Pool of a restaurant (FR-614..FR-616). Commands require
+   * restaurant#manage_cooks (owner or staff); an unknown restaurant or a cook of
+   * another restaurant is NOT_FOUND, an empty or longer than 64 characters name
+   * is INVALID_ARGUMENT. A new cook is off line. Repeating the current line or
+   * retirement succeeds with changed = false. TakeCookOffLine of a cook holding
+   * a PREPARING or ASSEMBLED order and RetireCook of a cook on line are
+   * FAILED_PRECONDITION; a retired cook cannot go on line (FAILED_PRECONDITION).
+   * Every change pushes kitchenChanged of the restaurant (ADR 36).
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.HireCook
+   */
+  hireCook: {
+    methodKind: "unary";
+    input: typeof HireCookRequestSchema;
+    output: typeof HireCookResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.PutCookOnLine
+   */
+  putCookOnLine: {
+    methodKind: "unary";
+    input: typeof PutCookOnLineRequestSchema;
+    output: typeof PutCookOnLineResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.TakeCookOffLine
+   */
+  takeCookOffLine: {
+    methodKind: "unary";
+    input: typeof TakeCookOffLineRequestSchema;
+    output: typeof TakeCookOffLineResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.RetireCook
+   */
+  retireCook: {
+    methodKind: "unary";
+    input: typeof RetireCookRequestSchema;
+    output: typeof RetireCookResponseSchema;
+  },
+  /**
+   * Pool Load and cooks of a restaurant (FR-616). Requires
+   * restaurant#view_orders.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.GetCookPool
+   */
+  getCookPool: {
+    methodKind: "unary";
+    input: typeof GetCookPoolRequestSchema;
+    output: typeof GetCookPoolResponseSchema;
   },
   /**
    * Demo Simulator (FR-604): state of the kitchen simulator of this service; both

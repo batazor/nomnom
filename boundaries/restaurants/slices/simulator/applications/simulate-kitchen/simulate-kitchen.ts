@@ -7,7 +7,10 @@ import type { RejectOrderHandler } from "../../../restaurantorder/applications/r
 import type { ReportPreparationDelayHandler } from "../../../restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import type { ReportPreparationFailureHandler } from "../../../restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import type { StartPreparationHandler } from "../../../restaurantorder/applications/start-preparation/start-preparation.ts";
-import { RestaurantOrderState } from "../../../restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import {
+  NoCookAvailableError,
+  RestaurantOrderState,
+} from "../../../restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   chooseKitchenAction,
   type KitchenAction,
@@ -78,7 +81,10 @@ type KitchenOrderCommand = Readonly<{
  * moments. A delay moves `expectedReadyAt` and shifts the remaining plan to
  * it. An accepted order without a plan (restart, or accepted by a person) is
  * planned from now, and a planned `READY` later than its `expectedReadyAt` is
- * reported as a delay. Every action goes through the real use case on behalf
+ * reported as a delay. Start Preparation waits for a free cook of the Cook
+ * Pool: without one the step stays due for the next pass, and the remaining
+ * steps follow the actual start (FR-618). Every action goes through the real
+ * use case on behalf
  * of the restaurant owner, so the normal `operate_kitchen` check applies. A
  * failed action is logged and its entry dropped; the pass continues.
  */
@@ -237,7 +243,7 @@ export class KitchenSimulator {
         });
         return;
       case "start_preparation":
-        await this.#commands.startPreparation.execute(command);
+        await this.#startPreparation(order, command);
         return;
       case "mark_assembled":
         await this.#commands.markAssembled.execute(command);
@@ -263,6 +269,50 @@ export class KitchenSimulator {
         await this.#reportDelay(order, readyAt);
         return;
       }
+    }
+  }
+
+  /**
+   * Starts Preparation by a free cook (FR-618): without one the planned step
+   * stays due and is tried again on the next pass. The remaining steps move
+   * by how late the start was; a `READY` later than `expectedReadyAt` is
+   * reported as a delay.
+   */
+  async #startPreparation(
+    order: PendingKitchenOrder,
+    command: KitchenOrderCommand,
+  ): Promise<void> {
+    try {
+      await this.#commands.startPreparation.execute(command);
+    } catch (error) {
+      if (error instanceof NoCookAvailableError) return;
+      throw error;
+    }
+    const plan = this.planOf(order.restaurantOrderId);
+    const start = plan?.steps.find(
+      (step) => step.state === RestaurantOrderState.Queued,
+    );
+    if (plan === undefined || start === undefined) {
+      throw new Error(
+        `restaurant order ${order.restaurantOrderId} has no preparation plan`,
+      );
+    }
+    const late = Math.max(0, this.#clock.now().getTime() - start.dueAt);
+    const remaining: PreparationPlan = {
+      steps: plan.steps
+        .filter((step) => step.state !== RestaurantOrderState.Queued)
+        .map((step) => ({ ...step, dueAt: step.dueAt + late })),
+    };
+    this.#schedule.set(order.restaurantOrderId, {
+      kind: "preparation",
+      plan: remaining,
+    });
+    const readyAt = plannedReadyAt(remaining);
+    if (
+      order.expectedReadyAt === undefined ||
+      readyAt > order.expectedReadyAt.getTime()
+    ) {
+      await this.#reportDelay(order, readyAt);
     }
   }
 

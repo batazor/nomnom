@@ -5,6 +5,7 @@ export const InvalidRestaurantOrderReason = {
   DuplicateItem: "duplicate_item",
   EmptyFailureReason: "empty_failure_reason",
   ExpectedReadyAtNotLater: "expected_ready_at_not_later",
+  EmptyCookId: "empty_cook_id",
 } as const;
 
 export type InvalidRestaurantOrderReason =
@@ -30,5 +31,20 @@ export class DuplicateOrderIdError extends Error {
     super(`a restaurant order for order ${orderId} already exists`);
     this.name = "DuplicateOrderIdError";
     this.orderId = orderId;
+  }
+}
+
+/**
+ * Start Preparation found no free cook on line in the Cook Pool of the
+ * restaurant; the order stays in `QUEUED` (FR-225).
+ */
+export class NoCookAvailableError extends Error {
+  readonly code = "no_cook_available";
+  readonly restaurantId: string;
+
+  constructor(restaurantId: string) {
+    super(`restaurant ${restaurantId} has no free cook on line`);
+    this.name = "NoCookAvailableError";
+    this.restaurantId = restaurantId;
   }
 }

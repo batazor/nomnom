@@ -366,6 +366,11 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
     setMenuItemAvailability: world.setAvailability,
     getSimulator: { execute: () => Promise.reject(new Error("unused")) },
     setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
+    hireCook: { execute: () => Promise.reject(new Error("unused")) },
+    putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },
+    takeCookOffLine: { execute: () => Promise.reject(new Error("unused")) },
+    retireCook: { execute: () => Promise.reject(new Error("unused")) },
+    getCookPool: { execute: () => Promise.reject(new Error("unused")) },
     subjects: {
       resolve: async (context) => {
         const subject = await resolver.resolve(context);

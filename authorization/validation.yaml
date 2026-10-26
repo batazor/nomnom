@@ -13,6 +13,7 @@ relationships: |-
   order:example-closed-order#customer@user:example-customer
   order:example-closed-order#delivery@delivery:example-closed-delivery
   platform:nomnom#operator@user:example-operator
+  platform:nomnom#dispatcher@user:example-dispatcher
 assertions:
   assertTrue:
     - order:example-order#view@user:example-customer
@@ -25,6 +26,12 @@ assertions:
     - restaurant:example-restaurant#operate_kitchen@user:example-owner
     - restaurant:example-restaurant#operate_kitchen@user:example-cook
     - restaurant:example-restaurant#manage_menu@user:example-cook
+    # AC-775: owner and staff manage the Cook Pool.
+    - restaurant:example-restaurant#manage_cooks@user:example-owner
+    - restaurant:example-restaurant#manage_cooks@user:example-cook
+    # FR-620: operators and dispatchers manage the Courier Pool.
+    - platform:nomnom#manage_couriers@user:example-operator
+    - platform:nomnom#manage_couriers@user:example-dispatcher
     - courier:example-courier#act@user:example-courier
     - delivery:example-delivery#act_as_courier@user:example-courier
     # AC-695: the platform operator dispatches deliveries.
@@ -47,3 +54,9 @@ assertions:
     - platform:nomnom#dispatch_delivery@user:example-stranger
     - platform:nomnom#operate_simulator@user:example-customer
     - platform:nomnom#operate_simulator@user:example-owner
+    # AC-777: a stranger does not manage the Cook Pool.
+    - restaurant:example-restaurant#manage_cooks@user:example-stranger
+    # AC-791: neither a courier nor a stranger manages the Courier Pool.
+    - platform:nomnom#manage_couriers@user:example-courier
+    - platform:nomnom#manage_couriers@user:example-stranger
+    - platform:nomnom#operate_simulator@user:example-dispatcher

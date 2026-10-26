@@ -39,7 +39,10 @@ import {
 import { RejectOrderHandler } from "../applications/reject-order/reject-order.ts";
 import { ReportPreparationDelayHandler } from "../applications/report-preparation-delay/report-preparation-delay.ts";
 import { ReportPreparationFailureHandler } from "../applications/report-preparation-failure/report-preparation-failure.ts";
-import { StartPreparationHandler } from "../applications/start-preparation/start-preparation.ts";
+import {
+  type CookAssigner,
+  StartPreparationHandler,
+} from "../applications/start-preparation/start-preparation.ts";
 import type { RestaurantOrderRepository } from "../domains/restaurantorder/restaurantorder.ts";
 import {
   FixedPreparationTimeEstimator,
@@ -84,6 +87,8 @@ export interface RestaurantOrderDependencies {
   readonly restaurants: RestaurantRepository;
   readonly menus: MenuRepository;
   readonly kitchenConfig: KitchenConfig;
+  /** Cook Pool of the `cook` slice: Start Preparation assigns a free cook. */
+  readonly cookAssigner: CookAssigner;
   /**
    * Business and FSM metrics; the process also decorates its Unit of Work
    * and Outbox.
@@ -222,6 +227,7 @@ export const registerRestaurantOrder = (
       observeTransitionRejections(
         new StartPreparationHandler({
           ...commandDependencies(cradle),
+          cooks: cradle.cookAssigner,
           onRepeat: cradle.kitchenConfig.repeatPolicy,
         }),
         cradle.domainMetrics,

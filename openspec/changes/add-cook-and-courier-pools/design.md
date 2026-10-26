@@ -34,7 +34,7 @@ Start Preparation в одной UoW (ADR 20):
 2. вызывает `cook.assign(now)` — `lastAssignedAt = now`, version растёт;
 3. переводит заказ в `PREPARING` с `cookId` и пишет `PreparationStarted`.
 
-Нет свободного Cook — бизнес-отказ `NoCookAvailable`, заказ остаётся в `QUEUED`, Outbox не меняется. gRPC: `FAILED_PRECONDITION` с причиной `NO_COOK_AVAILABLE`.
+Нет свободного Cook — бизнес-отказ `NoCookAvailable`, заказ остаётся в `QUEUED`, Outbox не меняется. gRPC: `RESOURCE_EXHAUSTED` — `FAILED_PRECONDITION` у `StartPreparation` уже означает недопустимый переход, а BFF различает исходы по коду.
 
 Гонки:
 

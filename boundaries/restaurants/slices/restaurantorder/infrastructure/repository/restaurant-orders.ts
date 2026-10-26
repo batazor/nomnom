@@ -1,10 +1,12 @@
 import type { Db } from "mongodb";
 
+import { ConcurrencyConflictError } from "../../../../pkg/application/errors.ts";
 import type { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
 } from "../../../../pkg/infrastructure/repository/versioned-collection.ts";
+import type { CookWorkload } from "../../../cook/applications/cook-workload.ts";
 import type {
   PendingKitchenOrder,
   PendingKitchenOrdersReader,
@@ -47,7 +49,7 @@ import {
 import type { KitchenChangeNotifier } from "../integration/kitchen-changes.ts";
 
 export const RESTAURANT_ORDERS_COLLECTION = "restaurant_orders";
-export const RESTAURANT_ORDER_SCHEMA_VERSION = 1;
+export const RESTAURANT_ORDER_SCHEMA_VERSION = 2;
 
 /**
  * One document per Restaurant Order with its Preparation Items and timeline
@@ -67,6 +69,8 @@ export type RestaurantOrderDocument = VersionedDocument & {
     expectedReadyAt?: Date;
     readyAt?: Date;
   };
+  /** Since schemaVersion 2; required in `PREPARING` and `ASSEMBLED`. */
+  cookId?: string;
   rejectionReason?: string;
   failureReason?: string;
   cancellation?: { stage: RestaurantOrderState; reason?: string };
@@ -85,6 +89,7 @@ const toSnapshot = (
   })),
   state: document.state,
   timeline: { ...document.timeline },
+  cookId: document.cookId,
   rejectionReason: document.rejectionReason,
   failureReason: document.failureReason,
   cancellation:
@@ -102,10 +107,13 @@ export const createRestaurantOrderCollection = (
     name: RESTAURANT_ORDERS_COLLECTION,
     aggregateType: "RestaurantOrder",
     unitOfWork,
+    // Two active orders of one cook (FR-617) lose like a concurrent write.
     duplicateKey: (keyPattern, document) =>
       "orderId" in keyPattern
         ? new DuplicateOrderIdError(document.orderId)
-        : undefined,
+        : "cookId" in keyPattern
+          ? new ConcurrencyConflictError("RestaurantOrder", document._id)
+          : undefined,
   });
 
 export class DatabaseRestaurantOrderRepository
@@ -149,6 +157,7 @@ export class DatabaseRestaurantOrderRepository
           })),
           state: snapshot.state,
           timeline: { ...snapshot.timeline },
+          cookId: snapshot.cookId,
           rejectionReason: snapshot.rejectionReason,
           failureReason: snapshot.failureReason,
           cancellation:
@@ -187,7 +196,8 @@ export class DatabaseKitchenBoard
     ActivePreparationsReader,
     ReadyOrdersReader,
     ActiveRestaurantOrdersReader,
-    PendingKitchenOrdersReader
+    PendingKitchenOrdersReader,
+    CookWorkload
 {
   readonly #collection: VersionedCollection<RestaurantOrderDocument>;
 
@@ -248,6 +258,7 @@ export class DatabaseKitchenBoard
       receivedAt: document.timeline.receivedAt,
       acceptedAt: document.timeline.acceptedAt,
       expectedReadyAt: document.timeline.expectedReadyAt,
+      cookId: document.cookId,
       version: document.version,
     }));
   }
@@ -290,7 +301,38 @@ export class DatabaseKitchenBoard
       items: boardItems(document),
       preparationStartedAt: document.timeline.preparationStartedAt,
       expectedReadyAt: document.timeline.expectedReadyAt,
+      cookId: document.cookId,
     }));
+  }
+
+  /** Cook Pool (FR-617): cooks holding an order in Active Preparation. */
+  async activeAssignments(
+    restaurantId: string,
+  ): Promise<ReadonlyMap<string, string>> {
+    const documents = await this.#collection.find(
+      {
+        restaurantId,
+        state: {
+          $in: [...leavesOf(RestaurantOrderCompoundState.ActivePreparation)],
+        },
+      },
+      { projection: { _id: 1, cookId: 1 } },
+    );
+    const assignments = new Map<string, string>();
+    for (const document of documents) {
+      if (document.cookId !== undefined) {
+        assignments.set(document.cookId, document._id);
+      }
+    }
+    return assignments;
+  }
+
+  /** Backlog of the Cook Pool: orders of the restaurant in `QUEUED`. */
+  async queuedOrders(restaurantId: string): Promise<number> {
+    return this.#collection.count({
+      restaurantId,
+      state: RestaurantOrderState.Queued,
+    });
   }
 
   /**

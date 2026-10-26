@@ -119,7 +119,7 @@ test("happy path fills the timeline and records each fact", () => {
     eligibility: accepted,
   });
   order.queue({ queuedAt: at(1) });
-  order.startPreparation({ startedAt: at(5) });
+  order.startPreparation({ startedAt: at(5), cookId: "cook-1" });
   order.reportDelay({
     reportedAt: at(10),
     expectedReadyAt: at(40),
@@ -211,7 +211,7 @@ test("failure requires a reason and records the stage", () => {
     eligibility: accepted,
   });
   order.queue({ queuedAt: at(1) });
-  order.startPreparation({ startedAt: at(2) });
+  order.startPreparation({ startedAt: at(2), cookId: "cook-1" });
   order.pullEvents();
 
   assert.throws(
@@ -236,7 +236,7 @@ test("cancel stores the stage and whether preparation started", () => {
     eligibility: accepted,
   });
   order.queue({ queuedAt: at(1) });
-  order.startPreparation({ startedAt: at(2) });
+  order.startPreparation({ startedAt: at(2), cookId: "cook-1" });
   order.markAssembled({ assembledAt: at(3) });
   order.pullEvents();
 
@@ -260,7 +260,7 @@ test("cancel decides the outcome by stage without throwing", () => {
     eligibility: accepted,
   });
   order.queue({ queuedAt: at(1) });
-  order.startPreparation({ startedAt: at(2) });
+  order.startPreparation({ startedAt: at(2), cookId: "cook-1" });
   const policy = { duringPreparation: "reject" } as const;
 
   assert.deepEqual(order.cancel({ cancelledAt: at(3), policy }), {

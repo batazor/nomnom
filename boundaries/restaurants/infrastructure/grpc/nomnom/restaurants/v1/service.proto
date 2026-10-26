@@ -29,6 +29,9 @@ service RestaurantsService {
   // an order of another restaurant is NOT_FOUND, a forbidden transition is
   // FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
   // succeeds without a new fact; other repeats are FAILED_PRECONDITION.
+  // StartPreparation assigns the free cook on line with the earliest last
+  // assignment (FR-225); without a free cook it is RESOURCE_EXHAUSTED and the
+  // order stays QUEUED.
   rpc AcceptRestaurantOrder(AcceptRestaurantOrderRequest) returns (AcceptRestaurantOrderResponse);
   rpc RejectRestaurantOrder(RejectRestaurantOrderRequest) returns (RejectRestaurantOrderResponse);
   rpc StartPreparation(StartPreparationRequest) returns (StartPreparationResponse);
@@ -77,6 +80,22 @@ service RestaurantsService {
   rpc AddMenuItem(AddMenuItemRequest) returns (AddMenuItemResponse);
   rpc UpdateMenuItem(UpdateMenuItemRequest) returns (UpdateMenuItemResponse);
   rpc SetMenuItemAvailability(SetMenuItemAvailabilityRequest) returns (SetMenuItemAvailabilityResponse);
+
+  // Cook Pool of a restaurant (FR-614..FR-616). Commands require
+  // restaurant#manage_cooks (owner or staff); an unknown restaurant or a cook of
+  // another restaurant is NOT_FOUND, an empty or longer than 64 characters name
+  // is INVALID_ARGUMENT. A new cook is off line. Repeating the current line or
+  // retirement succeeds with changed = false. TakeCookOffLine of a cook holding
+  // a PREPARING or ASSEMBLED order and RetireCook of a cook on line are
+  // FAILED_PRECONDITION; a retired cook cannot go on line (FAILED_PRECONDITION).
+  // Every change pushes kitchenChanged of the restaurant (ADR 36).
+  rpc HireCook(HireCookRequest) returns (HireCookResponse);
+  rpc PutCookOnLine(PutCookOnLineRequest) returns (PutCookOnLineResponse);
+  rpc TakeCookOffLine(TakeCookOffLineRequest) returns (TakeCookOffLineResponse);
+  rpc RetireCook(RetireCookRequest) returns (RetireCookResponse);
+  // Pool Load and cooks of a restaurant (FR-616). Requires
+  // restaurant#view_orders.
+  rpc GetCookPool(GetCookPoolRequest) returns (GetCookPoolResponse);
 
   // Demo Simulator (FR-604): state of the kitchen simulator of this service; both
   // require platform#operate_simulator, otherwise PERMISSION_DENIED.
@@ -180,6 +199,9 @@ message RestaurantOrder {
   // Unset until Acceptance.
   google.protobuf.Timestamp expected_ready_at = 5;
   int64 version = 6;
+  // Cook assigned by StartPreparation; empty before it. Kept after the order
+  // is closed.
+  string cook_id = 7;
 }
 
 message AcceptRestaurantOrderRequest {
@@ -451,4 +473,67 @@ message SetSimulatorEnabledRequest {
 
 message SetSimulatorEnabledResponse {
   bool enabled = 1;
+}
+
+message Cook {
+  string cook_id = 1;
+  string restaurant_id = 2;
+  string name = 3;
+  bool on_line = 4;
+  // Order in PREPARING or ASSEMBLED held by the cook; empty when free.
+  string current_restaurant_order_id = 5;
+}
+
+message HireCookRequest {
+  string restaurant_id = 1;
+  string name = 2;
+}
+
+message HireCookResponse {
+  Cook cook = 1;
+}
+
+message PutCookOnLineRequest {
+  string restaurant_id = 1;
+  string cook_id = 2;
+}
+
+message PutCookOnLineResponse {
+  Cook cook = 1;
+  bool changed = 2;
+}
+
+message TakeCookOffLineRequest {
+  string restaurant_id = 1;
+  string cook_id = 2;
+}
+
+message TakeCookOffLineResponse {
+  Cook cook = 1;
+  bool changed = 2;
+}
+
+message RetireCookRequest {
+  string restaurant_id = 1;
+  string cook_id = 2;
+}
+
+message RetireCookResponse {
+  bool changed = 1;
+}
+
+message GetCookPoolRequest {
+  string restaurant_id = 1;
+}
+
+message GetCookPoolResponse {
+  // Cooks that are not retired.
+  int32 size = 1;
+  int32 on_line = 2;
+  // Cooks holding an order in PREPARING or ASSEMBLED.
+  int32 busy = 3;
+  // Orders of the restaurant in QUEUED: the backlog of the pool.
+  int32 queued = 4;
+  // Not retired cooks by name, then by id.
+  repeated Cook cooks = 5;
 }

@@ -23,6 +23,13 @@ const STATUS_BY_ERROR_CODE: Readonly<Record<string, Code>> = {
   invalid_transition: Code.FailedPrecondition,
   guard_failed: Code.FailedPrecondition,
   already_in_state: Code.FailedPrecondition,
+  invalid_cook: Code.InvalidArgument,
+  cook_busy: Code.FailedPrecondition,
+  cook_on_line: Code.FailedPrecondition,
+  cook_retired: Code.FailedPrecondition,
+  cook_not_on_line: Code.FailedPrecondition,
+  // FAILED_PRECONDITION of StartPreparation is a forbidden transition.
+  no_cook_available: Code.ResourceExhausted,
 };
 
 export function transportError(error: unknown): ConnectError {

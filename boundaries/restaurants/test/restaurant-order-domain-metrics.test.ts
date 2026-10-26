@@ -334,7 +334,7 @@ test("saved Restaurant Orders record their applied FSM transitions in order", as
   order.queue({ queuedAt: at(1) });
   await repository.save(order);
   order.pullEvents();
-  order.startPreparation({ startedAt: at(2) });
+  order.startPreparation({ startedAt: at(2), cookId: "cook-1" });
   order.reportDelay({ reportedAt: at(3), expectedReadyAt: at(40) });
   await repository.save(order);
   order.pullEvents();

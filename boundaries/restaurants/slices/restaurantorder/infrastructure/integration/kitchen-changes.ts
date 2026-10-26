@@ -1,7 +1,8 @@
 // Change Notifications of the kitchen board (ADR 36): every write of a
-// Restaurant Order or of its Restaurant changes Kitchen(restaurantId) in the
-// BFF, so the Router pushes kitchenChanged to its subscribers. No state: the
-// Router re-reads the board with the subscriber's rights.
+// Restaurant Order, of its Restaurant or of one of its Cooks changes
+// Kitchen(restaurantId) in the BFF, so the Router pushes kitchenChanged to its
+// subscribers. No state: the Router re-reads the board with the subscriber's
+// rights.
 import type {
   AggregateRef,
   ChangeNotification,

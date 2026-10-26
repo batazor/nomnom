@@ -66,6 +66,7 @@ export const toRestaurantOrderMessage = (view: RestaurantOrderView) =>
     state: STATE_MESSAGES[view.state],
     expectedReadyAt: optionalTimestamp(view.timeline.expectedReadyAt),
     version: BigInt(view.version),
+    cookId: view.cookId ?? "",
   });
 
 export const toKitchenQueueEntryMessage = (
@@ -117,6 +118,7 @@ export const toActiveRestaurantOrderMessage = (
       state: STATE_MESSAGES[order.state],
       expectedReadyAt: optionalTimestamp(order.expectedReadyAt),
       version: BigInt(order.version),
+      cookId: order.cookId ?? "",
     },
     items: order.items.map((item) => ({
       menuItemId: item.menuItemId,

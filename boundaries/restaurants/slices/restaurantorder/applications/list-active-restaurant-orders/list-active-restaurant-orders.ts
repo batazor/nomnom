@@ -19,6 +19,8 @@ export type ActiveRestaurantOrder = Readonly<{
   acceptedAt: Date | undefined;
   /** Unset until Acceptance; includes reported Preparation Delays. */
   expectedReadyAt: Date | undefined;
+  /** Cook assigned by Start Preparation; unset before it. */
+  cookId: string | undefined;
   /** Version of the Restaurant Order the entry was read at. */
   version: number;
 }>;

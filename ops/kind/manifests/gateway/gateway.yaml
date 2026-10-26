@@ -294,6 +294,45 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: ListActiveRestaurantOrders
+        # Cook Pool ресторана (restaurant#view_orders): линия и загрузка кухни.
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: GetCookPool
+      backendRefs:
+        - name: restaurants
+          namespace: nomnom-restaurants
+          port: 8082
+---
+# Cook Pool ресторана (restaurant#manage_cooks): найм, линия и выбытие поваров; их вызывает
+# BFF (flow-board) и в kind — Job demo-seed.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: restaurants-v1-cook-pool
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: HireCook
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: PutCookOnLine
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: TakeCookOffLine
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: RetireCook
       backendRefs:
         - name: restaurants
           namespace: nomnom-restaurants
@@ -547,6 +586,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: restaurants-v1-kitchen
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: restaurants-v1-cook-pool
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: restaurants-v1-administration
