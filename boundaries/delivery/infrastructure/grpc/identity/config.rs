@@ -7,7 +7,6 @@ use std::fmt;
 
 use crate::pkg::config::IdentityConfig;
 
-use super::jwks::parse_user_jwks;
 use super::service_token::ServiceTokenVerifier;
 use super::user_assertion::UserAssertionVerifier;
 
