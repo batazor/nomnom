@@ -212,6 +212,52 @@ aggregate_type, from_state, trigger, to_state, result
 
 Если библиотека скрывает таблицу, требует effectful callbacks или подталкивает к external actions внутри перехода, используется простая собственная реализация над явной таблицей.
 
+## Order
+
+Statechart aggregate `Order` в `orders`; реализация — `boundaries/orders/slices/order/domains/order/fsm.go`. Fulfillment Facts — данные `Order`, а не states; их запись — targetless `record_fact`.
+
+Compound states:
+
+| Compound state | Входит | Смысл |
+| --- | --- | --- |
+| `open` | `placed`, `confirmed` | Open Order: Fulfillment не завершён; Order можно отменить и записать Fulfillment Fact |
+| `closed` | `cancelled`, `completed` | Closed Order: terminal states (`IsFinal()`) |
+
+```mermaid
+stateDiagram-v2
+    [*] --> placed: Place
+    state open {
+        placed --> confirmed: confirm
+    }
+    state closed {
+        cancelled
+        completed
+    }
+    confirmed --> completed: complete
+    open --> cancelled: cancel
+    open --> open: record_fact (stay)
+    closed --> [*]
+```
+
+| source | trigger | guard | target | failure |
+| --- | --- | --- | --- | --- |
+| `placed` | `confirm` | — | `confirmed` | — |
+| `confirmed` | `complete` | `occurred_at` задан | `completed` | `GuardFailed{occurred_at_required}` |
+| `open` | `cancel` | `requested_at` задан | `cancelled` | `GuardFailed{requested_at_required}` |
+| `open` | `record_fact` | `occurred_at` задан | `stay` | `GuardFailed{occurred_at_required}` |
+
+Строгие повторы с явным `AlreadyInState`:
+
+| from_state | trigger | Исход |
+| --- | --- | --- |
+| `confirmed` | `confirm` | `AlreadyInState{confirmed}` |
+| `cancelled` | `cancel` | `AlreadyInState{cancelled}` |
+| `completed` | `complete` | `AlreadyInState{completed}` |
+
+Все остальные пары `state × trigger` дают `InvalidTransition`: `placed × complete` (Completion только после подтверждения), любой trigger из `closed`, кроме повторов. `record_fact` для Closed Order — `InvalidTransition`, который Fulfillment reflector трактует как поздний факт (`IsFinal()`). Failure пока завершается тем же `cancelled` с видом итога `failure`.
+
+`AcceptsCancellation()` и `IsFinal()` — принадлежность к `open` и `closed`, а не ручные списки states.
+
 ## Kitchen / Preparation
 
 Statechart aggregate `RestaurantOrder` в `restaurants`; реализация — `boundaries/restaurants/slices/restaurantorder/domains/restaurantorder/fsm.ts`. Сценарии, use cases и бизнес-смысл states описаны в [Kitchen](kitchen.md); здесь — только модель переходов.

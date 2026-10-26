@@ -11,25 +11,19 @@ import (
 	"nomnom/orders/slices/order/domains/order/vo"
 )
 
-func TestTransitionTableIsComplete(t *testing.T) {
-	for _, state := range allStates {
-		for _, trigger := range allTriggers {
-			_, ok := transitionTable[transitionKey{from: state, trigger: trigger}]
-			assert.True(t, ok, "missing outcome for state=%s trigger=%s", state, trigger)
-		}
-	}
-	assert.Len(t, transitionTable, len(allStates)*len(allTriggers))
-}
-
-// TriggerOf relies on every allowed row of a State having its own target.
+// TriggerOf relies on every allowed transition of a State having its own target.
 func TestTriggerOfNamesEveryAllowedTransition(t *testing.T) {
-	for key, definition := range transitionTable {
-		if definition.outcome != transitionAllowed {
-			continue
+	for _, from := range allStates {
+		for _, trigger := range allTriggers {
+			row, err := resolve(from, trigger)
+			if err != nil {
+				continue
+			}
+			to := row.targetOf(from)
+			named, ok := TriggerOf(from, to)
+			require.True(t, ok, "from=%s to=%s", from, to)
+			assert.Equal(t, trigger, named, "from=%s to=%s", from, to)
 		}
-		trigger, ok := TriggerOf(key.from, definition.to)
-		require.True(t, ok, "from=%s to=%s", key.from, definition.to)
-		assert.Equal(t, key.trigger, trigger, "from=%s to=%s", key.from, definition.to)
 	}
 	_, ok := TriggerOf(StateCompleted, StatePlaced)
 	assert.False(t, ok)
