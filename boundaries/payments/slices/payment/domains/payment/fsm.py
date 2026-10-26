@@ -1,13 +1,18 @@
-"""Pure, data-defined finite state machine of a Payment."""
+"""Pure statechart of a Payment: ``leaf state + trigger + input -> next leaf state | error``.
 
-from collections.abc import Callable
+States form a hierarchy; a transition declared on a compound state applies to every state
+inside it, and the innermost declaration wins. The hierarchy, the transitions and the repeats
+are data and the single source of truth; see docs/fsm.md#payment and ADR 21.
+"""
+
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import NamedTuple, override
 
 
 class PaymentState(StrEnum):
-    """Business state of a Payment; ``refunded`` and ``failed`` are terminal."""
+    """Leaf state of a Payment: persisted, published and used in metrics."""
 
     PENDING = "pending"
     AUTHORIZED = "authorized"
@@ -16,7 +21,53 @@ class PaymentState(StrEnum):
     FAILED = "failed"
 
 
-TERMINAL_STATES: frozenset[PaymentState] = frozenset({PaymentState.REFUNDED, PaymentState.FAILED})
+class PaymentCompoundState(StrEnum):
+    """Named group of Payment states from the Ubiquitous Language.
+
+    Never persisted or published: a Payment is always in exactly one ``PaymentState``.
+    """
+
+    UNCAPTURED = "uncaptured"
+    """No money has been taken yet; the Payment can still fail."""
+    CLOSED = "closed"
+    """Terminal states."""
+
+
+type PaymentNode = PaymentState | PaymentCompoundState
+
+# Parent of every node; ``None`` marks a top-level node.
+PARENT: Mapping[PaymentNode, PaymentCompoundState | None] = {
+    PaymentCompoundState.UNCAPTURED: None,
+    PaymentCompoundState.CLOSED: None,
+    PaymentState.PENDING: PaymentCompoundState.UNCAPTURED,
+    PaymentState.AUTHORIZED: PaymentCompoundState.UNCAPTURED,
+    PaymentState.CAPTURED: None,
+    PaymentState.REFUNDED: PaymentCompoundState.CLOSED,
+    PaymentState.FAILED: PaymentCompoundState.CLOSED,
+}
+
+
+def lineage(node: PaymentNode) -> tuple[PaymentNode, ...]:
+    """``node`` followed by its ancestors up to the top level."""
+    nodes: list[PaymentNode] = []
+    current: PaymentNode | None = node
+    while current is not None:
+        nodes.append(current)
+        current = PARENT[current]
+    return tuple(nodes)
+
+
+def is_in(state: PaymentState, node: PaymentNode) -> bool:
+    """Whether ``state`` is ``node`` or lies inside it."""
+    return any(ancestor is node for ancestor in lineage(state))
+
+
+def leaves_of(node: PaymentNode) -> tuple[PaymentState, ...]:
+    """Leaf states inside ``node``, in declaration order."""
+    return tuple(state for state in PaymentState if is_in(state, node))
+
+
+TERMINAL_STATES: frozenset[PaymentState] = frozenset(leaves_of(PaymentCompoundState.CLOSED))
 
 
 class PaymentTrigger(StrEnum):
@@ -52,7 +103,7 @@ class InvalidTransitionError(Exception):
 
 @dataclass(eq=True)
 class GuardFailedError(Exception):
-    """The transition is allowed by the table, but its guard rejected the input."""
+    """The transition is declared, but its guard rejected the input."""
 
     reason: str
 
@@ -81,20 +132,7 @@ class TransitionInput(NamedTuple):
     provider_reference: str | None = None
 
 
-class _Outcome(Enum):
-    ALLOWED = "allowed"
-    INVALID = "invalid"
-    ALREADY_APPLIED = "already_applied"
-
-
 _Guard = Callable[[TransitionInput], None]
-
-
-@dataclass(frozen=True)
-class _TransitionDefinition:
-    outcome: _Outcome
-    to_state: PaymentState | None = None
-    guard: _Guard | None = None
 
 
 def _provider_reference_is_present(transition_input: TransitionInput) -> None:
@@ -103,50 +141,39 @@ def _provider_reference_is_present(transition_input: TransitionInput) -> None:
         raise GuardFailedError("provider_reference_required")
 
 
-_ALLOWED = _Outcome.ALLOWED
-_INVALID = _TransitionDefinition(_Outcome.INVALID)
-_ALREADY = _TransitionDefinition(_Outcome.ALREADY_APPLIED)
+@dataclass(frozen=True)
+class TransitionRow:
+    """Transition declared on a leaf or compound ``source``."""
 
-# Single source of truth for every PaymentState x PaymentTrigger pair.
-_TRANSITION_TABLE: dict[tuple[PaymentState, PaymentTrigger], _TransitionDefinition] = {
-    (PaymentState.PENDING, PaymentTrigger.AUTHORIZE): _TransitionDefinition(
-        _ALLOWED, PaymentState.AUTHORIZED, _provider_reference_is_present
+    source: PaymentNode
+    trigger: PaymentTrigger
+    target: PaymentState
+    guard: _Guard | None = None
+
+
+TRANSITIONS: tuple[TransitionRow, ...] = (
+    TransitionRow(
+        PaymentState.PENDING,
+        PaymentTrigger.AUTHORIZE,
+        PaymentState.AUTHORIZED,
+        _provider_reference_is_present,
     ),
-    (PaymentState.PENDING, PaymentTrigger.CANCEL_AUTHORIZATION): _ALREADY,
-    (PaymentState.PENDING, PaymentTrigger.CAPTURE): _INVALID,
-    (PaymentState.PENDING, PaymentTrigger.REFUND): _INVALID,
-    (PaymentState.PENDING, PaymentTrigger.FAIL): _TransitionDefinition(
-        _ALLOWED, PaymentState.FAILED
+    TransitionRow(
+        PaymentState.AUTHORIZED, PaymentTrigger.CANCEL_AUTHORIZATION, PaymentState.PENDING
     ),
-    (PaymentState.AUTHORIZED, PaymentTrigger.AUTHORIZE): _ALREADY,
-    (PaymentState.AUTHORIZED, PaymentTrigger.CANCEL_AUTHORIZATION): _TransitionDefinition(
-        _ALLOWED, PaymentState.PENDING
-    ),
-    (PaymentState.AUTHORIZED, PaymentTrigger.CAPTURE): _TransitionDefinition(
-        _ALLOWED, PaymentState.CAPTURED
-    ),
-    (PaymentState.AUTHORIZED, PaymentTrigger.REFUND): _INVALID,
-    (PaymentState.AUTHORIZED, PaymentTrigger.FAIL): _TransitionDefinition(
-        _ALLOWED, PaymentState.FAILED
-    ),
-    (PaymentState.CAPTURED, PaymentTrigger.AUTHORIZE): _INVALID,
-    (PaymentState.CAPTURED, PaymentTrigger.CANCEL_AUTHORIZATION): _INVALID,
-    (PaymentState.CAPTURED, PaymentTrigger.CAPTURE): _ALREADY,
-    (PaymentState.CAPTURED, PaymentTrigger.REFUND): _TransitionDefinition(
-        _ALLOWED, PaymentState.REFUNDED
-    ),
-    (PaymentState.CAPTURED, PaymentTrigger.FAIL): _INVALID,
-    (PaymentState.REFUNDED, PaymentTrigger.AUTHORIZE): _INVALID,
-    (PaymentState.REFUNDED, PaymentTrigger.CANCEL_AUTHORIZATION): _INVALID,
-    (PaymentState.REFUNDED, PaymentTrigger.CAPTURE): _INVALID,
-    (PaymentState.REFUNDED, PaymentTrigger.REFUND): _ALREADY,
-    (PaymentState.REFUNDED, PaymentTrigger.FAIL): _INVALID,
-    (PaymentState.FAILED, PaymentTrigger.AUTHORIZE): _INVALID,
-    (PaymentState.FAILED, PaymentTrigger.CANCEL_AUTHORIZATION): _INVALID,
-    (PaymentState.FAILED, PaymentTrigger.CAPTURE): _INVALID,
-    (PaymentState.FAILED, PaymentTrigger.REFUND): _INVALID,
-    (PaymentState.FAILED, PaymentTrigger.FAIL): _ALREADY,
-}
+    TransitionRow(PaymentState.AUTHORIZED, PaymentTrigger.CAPTURE, PaymentState.CAPTURED),
+    TransitionRow(PaymentState.CAPTURED, PaymentTrigger.REFUND, PaymentState.REFUNDED),
+    TransitionRow(PaymentCompoundState.UNCAPTURED, PaymentTrigger.FAIL, PaymentState.FAILED),
+)
+
+# Strict repeats of an already reached outcome: explicit ``AlreadyInState``, on leaf states only.
+REPEATS: tuple[tuple[PaymentState, PaymentTrigger], ...] = (
+    (PaymentState.PENDING, PaymentTrigger.CANCEL_AUTHORIZATION),
+    (PaymentState.AUTHORIZED, PaymentTrigger.AUTHORIZE),
+    (PaymentState.CAPTURED, PaymentTrigger.CAPTURE),
+    (PaymentState.REFUNDED, PaymentTrigger.REFUND),
+    (PaymentState.FAILED, PaymentTrigger.FAIL),
+)
 
 
 _EMPTY_INPUT = TransitionInput()
@@ -160,24 +187,28 @@ def transition(
     """Compute the transition for ``trigger`` without mutating anything.
 
     Raises:
-        InvalidTransitionError: The table forbids the trigger in ``from_state``.
+        InvalidTransitionError: Neither ``from_state`` nor its ancestors declare ``trigger``.
         AlreadyInStateError: The trigger repeats an already reached outcome.
         GuardFailedError: The guard rejected ``transition_input``, for example an
             Authorization without a Provider Reference.
     """
-    ensure_allowed(from_state, trigger)
-    definition = _TRANSITION_TABLE[(from_state, trigger)]
-    if definition.guard is not None:
-        definition.guard(transition_input)
-    if definition.to_state is None:
-        raise RuntimeError("allowed payment transition must define its target state")
-    return TransitionResult(from_state, trigger, definition.to_state)
+    row = _resolve(from_state, trigger)
+    if row.guard is not None:
+        row.guard(transition_input)
+    return TransitionResult(from_state, trigger, row.target)
 
 
 def ensure_allowed(from_state: PaymentState, trigger: PaymentTrigger) -> None:
-    """Check the table outcome for ``trigger`` without evaluating guards."""
-    definition = _TRANSITION_TABLE.get((from_state, trigger), _INVALID)
-    if definition.outcome is _Outcome.INVALID:
-        raise InvalidTransitionError(from_state, trigger)
-    if definition.outcome is _Outcome.ALREADY_APPLIED:
-        raise AlreadyInStateError(from_state)
+    """Check that ``trigger`` resolves to a transition without evaluating guards."""
+    _resolve(from_state, trigger)
+
+
+def _resolve(from_state: PaymentState, trigger: PaymentTrigger) -> TransitionRow:
+    """Innermost declaration on ``from_state`` or one of its ancestors wins."""
+    for node in lineage(from_state):
+        for row in TRANSITIONS:
+            if row.source is node and row.trigger is trigger:
+                return row
+        if any(state is node and repeated is trigger for state, repeated in REPEATS):
+            raise AlreadyInStateError(from_state)
+    raise InvalidTransitionError(from_state, trigger)

@@ -9,23 +9,131 @@ from slices.payment.domains.payment.events import (
     PaymentRefunded,
 )
 from slices.payment.domains.payment.fsm import (
-    _TRANSITION_TABLE,
+    PARENT,
+    REPEATS,
+    TRANSITIONS,
     AlreadyInStateError,
     GuardFailedError,
     InvalidTransitionError,
+    PaymentCompoundState,
     PaymentState,
     PaymentTrigger,
+    TransitionInput,
+    is_in,
+    leaves_of,
+    lineage,
+    transition,
 )
 from slices.payment.domains.payment.ids import OrderId, PaymentId
 from slices.payment.domains.payment.payment import Payment
 from slices.payment.domains.payment.vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
+_S = PaymentState
+_T = PaymentTrigger
+_C = PaymentCompoundState
+_ALREADY = "already"
+_INVALID = "invalid"
+
+# Complete expected matrix of ``state x trigger``, written independently of the table.
+_EXPECTED: dict[PaymentState, dict[PaymentTrigger, PaymentState | str]] = {
+    _S.PENDING: {
+        _T.AUTHORIZE: _S.AUTHORIZED,
+        _T.CANCEL_AUTHORIZATION: _ALREADY,
+        _T.CAPTURE: _INVALID,
+        _T.REFUND: _INVALID,
+        _T.FAIL: _S.FAILED,
+    },
+    _S.AUTHORIZED: {
+        _T.AUTHORIZE: _ALREADY,
+        _T.CANCEL_AUTHORIZATION: _S.PENDING,
+        _T.CAPTURE: _S.CAPTURED,
+        _T.REFUND: _INVALID,
+        _T.FAIL: _S.FAILED,
+    },
+    _S.CAPTURED: {
+        _T.AUTHORIZE: _INVALID,
+        _T.CANCEL_AUTHORIZATION: _INVALID,
+        _T.CAPTURE: _ALREADY,
+        _T.REFUND: _S.REFUNDED,
+        _T.FAIL: _INVALID,
+    },
+    _S.REFUNDED: {
+        _T.AUTHORIZE: _INVALID,
+        _T.CANCEL_AUTHORIZATION: _INVALID,
+        _T.CAPTURE: _INVALID,
+        _T.REFUND: _ALREADY,
+        _T.FAIL: _INVALID,
+    },
+    _S.FAILED: {
+        _T.AUTHORIZE: _INVALID,
+        _T.CANCEL_AUTHORIZATION: _INVALID,
+        _T.CAPTURE: _INVALID,
+        _T.REFUND: _INVALID,
+        _T.FAIL: _ALREADY,
+    },
+}
+
+# Input that satisfies every guard.
+_PASSING_INPUT = TransitionInput(provider_reference="provider-1")
+
+
+class PaymentStateMachineTest(unittest.TestCase):
+    def test_every_state_trigger_pair_has_the_expected_outcome(self) -> None:
+        self.assertEqual(set(_EXPECTED), set(PaymentState))
+        for state in PaymentState:
+            self.assertEqual(set(_EXPECTED[state]), set(PaymentTrigger), state)
+            for trigger in PaymentTrigger:
+                expected = _EXPECTED[state][trigger]
+                with self.subTest(state=state, trigger=trigger):
+                    if expected == _ALREADY:
+                        with self.assertRaises(AlreadyInStateError) as already:
+                            transition(state, trigger, _PASSING_INPUT)
+                        self.assertEqual(already.exception.state, state)
+                    elif expected == _INVALID:
+                        with self.assertRaises(InvalidTransitionError) as invalid:
+                            transition(state, trigger, _PASSING_INPUT)
+                        self.assertEqual(
+                            (invalid.exception.from_state, invalid.exception.trigger),
+                            (state, trigger),
+                        )
+                    else:
+                        result = transition(state, trigger, _PASSING_INPUT)
+                        self.assertEqual(
+                            (result.from_state, result.trigger, result.to_state),
+                            (state, trigger, expected),
+                        )
+
+    def test_hierarchy_is_acyclic_and_every_compound_state_has_children(self) -> None:
+        self.assertEqual(set(PARENT), set(PaymentState) | set(PaymentCompoundState))
+        self.assertTrue(
+            {state.value for state in PaymentState}.isdisjoint(
+                compound.value for compound in PaymentCompoundState
+            )
+        )
+        for node in PARENT:
+            nodes = lineage(node)
+            self.assertEqual(len(set(nodes)), len(nodes), node)
+        for compound in PaymentCompoundState:
+            self.assertIn(compound, PARENT.values())
+            self.assertTrue(leaves_of(compound), compound)
+
+    def test_table_declares_each_node_trigger_once_and_repeats_only_on_leaves(self) -> None:
+        declared = [(row.source, row.trigger) for row in TRANSITIONS]
+        self.assertEqual(len(set(declared)), len(declared))
+        self.assertEqual(len(set(REPEATS)), len(REPEATS))
+        for state, trigger in REPEATS:
+            self.assertIsInstance(state, PaymentState)
+            self.assertNotIn((state, trigger), declared)
+
+    def test_compound_states_group_the_expected_leaf_states(self) -> None:
+        self.assertEqual(leaves_of(_C.UNCAPTURED), (_S.PENDING, _S.AUTHORIZED))
+        self.assertEqual(leaves_of(_C.CLOSED), (_S.REFUNDED, _S.FAILED))
+        self.assertTrue(is_in(_S.AUTHORIZED, _C.UNCAPTURED))
+        self.assertFalse(is_in(_S.CAPTURED, _C.UNCAPTURED))
+        self.assertFalse(is_in(_S.CAPTURED, _C.CLOSED))
+
 
 class PaymentDomainTest(unittest.TestCase):
-    def test_transition_table_is_complete(self) -> None:
-        expected_pairs = {(state, trigger) for state in PaymentState for trigger in PaymentTrigger}
-        self.assertEqual(set(_TRANSITION_TABLE), expected_pairs)
-
     def test_payment_lifecycle_is_strict(self) -> None:
         payment = self.payment()
 

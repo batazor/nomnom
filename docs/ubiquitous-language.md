@@ -117,6 +117,8 @@
 | Provider | Внешняя платёжная система, исполняющая Payment Operation. | `payments` | Provider Reference | payments context | README/adapters | Вызов вне local UoW. |
 | Provider Reference | ID успешной операции на стороне Provider. | `payments` | Provider, Payment Operation | Payment ID, Order ID | Payments glossary/domain | Не раскрывается без необходимости. |
 | Idempotency Key | Стабильный ключ логической Payment Operation, независимый от retry attempt/run ID. | `payments` принимает; caller формирует | Payment Operation | Event ID | Orchestration SDD/README | Для workflow: Order ID + logical step. |
+| Uncaptured Payment | Compound State `uncaptured`: `pending` и `authorized`. Деньги ещё не списаны; Payment может завершиться Failure (`fail`). | `payments` | Authorization, Cancel Authorization, Capture | `pending`, Payment Operation `pending` | [FSM](fsm.md#payment), `fsm.py` | Не сохраняется и не публикуется: Payment всегда в одном Leaf State. |
+| Closed Payment | Compound State `closed`: Terminal States `refunded` и `failed`. | `payments` | Terminal State, Refund | `captured`, Order Completion | [FSM](fsm.md#payment), `fsm.py` | `captured` не входит: после Capture возможен Refund. |
 
 ## Orchestration (Temporal)
 
