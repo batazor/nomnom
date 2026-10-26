@@ -17,11 +17,14 @@ SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
 # kind-deploy — full (нужен make kind-test).
 skaffold_app_flags = --module apps $(SKAFFOLD_FLAGS) $(if $(filter core,$(or $(KIND_STAND),$(1))),-p core) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
 
-.PHONY: buf-check buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop
-buf-check: ## проверить формат, lint и компилируемость всех Protobuf-модулей
+.PHONY: buf-check buf-breaking buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop
+buf-check: buf-breaking ## проверить формат, lint, компилируемость и совместимость всех Protobuf-модулей
 	@buf format --diff --exit-code
 	@buf lint
 	@buf build
+# Baseline — ветка main, пока модули не опубликованы в BSR (ADR 7).
+buf-breaking: ## проверить обратную совместимость Protobuf-контрактов с main (правило FILE)
+	@buf breaking --against '.git#branch=main'
 buf-generate: ## сгенерировать stubs владельцев для всех Protobuf-модулей
 	@cd boundaries/orders/infrastructure/grpc && buf generate --template buf.gen.yaml
 	@cd boundaries/restaurants/infrastructure/grpc && buf generate --template buf.gen.yaml

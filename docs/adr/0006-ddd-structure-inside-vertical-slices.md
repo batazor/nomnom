@@ -146,6 +146,20 @@ GraphQL используется только в BFF, который не явл
 
 Mapping пишется явным кодом рядом с adapter'ом или use case. Глобальный mapper framework и reflection-based automapping не используются.
 
+### Проверка направления импортов
+
+Направление зависимостей проверяется автоматически — architecture fitness functions в стандартной проверке каждого bounded context. Нарушение роняет тесты или lint, а не ждёт code review:
+
+| Контекст | Проверка | Запуск |
+| --- | --- | --- |
+| `orders` (Go) | `architecture_test.go`: граф пакетов `go list`; `domains` — только stdlib, `decimal` и домены; `vo` не импортирует свой агрегат; `applications` — только домены, use cases, `pkg/application`, `pkg/telemetry`; `pkg` не знает слайсов и процессов; `infrastructure` не импортирует `di` и `cmd`; generated code — только в adapters, composition root и пакете-владельце | `go test ./...`, `make check` |
+| `restaurants` (TypeScript) | `test/architecture.test.ts`: те же правила по import-спецификаторам исходников; `domains` — только `decimal.js`, Node built-ins и домены; `applications` — домены, use cases и `pkg/application` | `npm run architecture`, `npm run check`, `npm test` |
+| `payments` (Python) | import-linter в `pyproject.toml`: слои процесса и слайса, запрет фреймворков и драйверов в `slices` и `pkg.application` | `make imports`, `make check` |
+| `delivery` (Rust) | `tests/slice_boundaries.rs`: направление `delivery → courier` между слайсами | `cargo test`, `make check` |
+| `ui` | `scripts/check-boundaries.mjs`: браузерный код вызывает только публичный GraphQL API | `npm run lint` |
+
+Проверяются прямые импорты production-кода; test-support пакеты и тесты исключены. Allowlist внешних зависимостей слоя расширяется явно в проверке, когда у домена или use case появляется новая допустимая библиотека.
+
 ## Consequences
 
 Внутренняя организация слайсов и направление импортов становятся единообразными для всех языков проекта. Доменные правила остаются независимыми от фреймворков, handlers концентрируются на координации, а технические детали заменяются через явно расположенные контракты и адаптеры.
@@ -154,4 +168,4 @@ Mapping пишется явным кодом рядом с adapter'ом или u
 
 Один use case обслуживает все entrypoints через одну пару Command/handler, поэтому gRPC, Kafka и Temporal не получают расходящихся реализаций сценария. Цена — явный mapping-код в каждом adapter'е; она ограничивается запретом на DTO для каждого domain type и использованием read model как Application DTO. Отказ от mediator оставляет вызовы прозрачными, но cross-cutting поведение (telemetry, authorization, транзакции) остаётся в adapter'ах и composition root.
 
-Структура допускает пустые на раннем этапе части, но не требует создавать каталоги и типы заранее. Соблюдение направления импортов потребуется проверять в code review и, где возможно, архитектурными тестами или правилами линтера.
+Структура допускает пустые на раннем этапе части, но не требует создавать каталоги и типы заранее. Направление импортов проверяют архитектурные тесты и правила линтера каждого bounded context; code review остаётся для того, что граф импортов не выражает: размещения моделей, mapping и ответственности handlers.

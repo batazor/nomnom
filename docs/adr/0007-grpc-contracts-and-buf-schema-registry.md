@@ -219,7 +219,7 @@ buf generate                                     # stubs владельца ил
 git diff --exit-code                             # generated code актуален
 ```
 
-Baseline для `buf breaking` — последний опубликованный commit соответствующего модуля в BSR. До первой публикации используется `.git#branch=main`. После успешных проверок push выполняется только из `main`:
+Baseline для `buf breaking` — последний опубликованный commit соответствующего модуля в BSR. До первой публикации используется `.git#branch=main`: так работает `make buf-breaking`, который входит в `make buf-check`. После успешных проверок push выполняется только из `main`:
 
 ```sh
 buf push --label main
