@@ -1,5 +1,10 @@
 package overview
 
+import (
+	"fmt"
+	"strings"
+)
+
 // ServiceAlerts — правила overview сервиса по тем же Options, что и rows.
 func ServiceAlerts(o Options) (AlertGroup, error) {
 	sc := Scope{Services: o.Services, Literal: true}
@@ -30,9 +35,17 @@ func ServiceAlerts(o Options) (AlertGroup, error) {
 			Value:   ratio("nomnom_usecase_duration_seconds_count", `nomnom_outcome="error"`)})
 	}
 	if o.Kafka.consumes() {
-		alerts = append(alerts, Alert{Slug: slug("kafka-poison"), Title: o.Title + ": messages sent to DLQ", Severity: Warning, For: "0s", Op: ">", Threshold: 0, DashboardID: dash,
-			Summary: "Integration Events ушли в <stream>.dlq: их обработка не повторяется сама.",
-			Value:   Sum("job, messaging_destination_name", sc.Increase("nomnom_messaging_poison_messages_total"))})
+		if len(o.Kafka.DeadLetters) == 0 {
+			return AlertGroup{}, fmt.Errorf("%s: consumer group %s without dead letter topics", o.Context, o.Kafka.ConsumerGroup)
+		}
+		alerts = append(alerts,
+			Alert{Slug: slug("kafka-poison"), Title: o.Title + ": messages sent to DLQ", Severity: Warning, For: "0s", Op: ">", Threshold: 0, DashboardID: dash,
+				Summary: "Integration Events ушли в <stream>.dlq: их обработка не повторяется сама.",
+				Value:   Sum("job, messaging_destination_name", sc.Increase("nomnom_messaging_poison_messages_total"))},
+			Alert{Slug: slug("kafka-dlq-unresolved"), Title: o.Title + ": unresolved dead letters", Severity: Warning, For: "24h", Op: ">", Threshold: 0, DashboardID: dash,
+				Summary: "Dead letters группы не разобраны больше суток (redrive или discard, docs/dlq.md); retention DLQ — 30 дней.",
+				Value:   unresolvedDeadLetters(o.Kafka)},
+		)
 	}
 	if o.Cache {
 		alerts = append(alerts, cacheAlerts(o, sc, dash)...)
@@ -45,4 +58,19 @@ func ServiceAlerts(o Options) (AlertGroup, error) {
 		alerts = append(alerts, o.DomainAlerts(sc)...)
 	}
 	return buildGroup(o.Context, sc, alerts)
+}
+
+// unresolvedDeadLetters — записи <stream>.dlq после первой неразобранной группы: конец
+// partition минус committed offset группы <group>.dlq; partition без commit группы
+// разбирается с начала topic (oldest offset). Записи других групп того же DLQ входят в
+// сумму: это верхняя оценка (docs/dlq.md).
+func unresolvedDeadLetters(k *Kafka) string {
+	quoted := make([]string, 0, len(k.DeadLetters))
+	for _, topic := range k.DeadLetters {
+		quoted = append(quoted, strings.ReplaceAll(topic, ".", `\\.`))
+	}
+	topics := `topic=~"` + strings.Join(quoted, "|") + `"`
+	resolved := `(kafka_consumergroup_current_offset{consumergroup="` + k.ConsumerGroup + `.dlq", ` + topics + `} >= 0)`
+	return `sum by (topic) (kafka_topic_partition_current_offset{` + topics + `} - on (topic, partition) (` +
+		resolved + ` or on (topic, partition) kafka_topic_partition_oldest_offset{` + topics + `}))`
 }

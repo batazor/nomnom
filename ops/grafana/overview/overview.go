@@ -77,6 +77,9 @@ type Kafka struct {
 	// ConsumerGroup и Consumers пусты, когда контекст только публикует Outbox через CDC.
 	ConsumerGroup string
 	Consumers     []string
+	// DeadLetters — <stream>.dlq каждого стрима, который читает ConsumerGroup (ADR 28):
+	// неразобранные записи группы на них считает alert kafka-dlq-unresolved.
+	DeadLetters []string
 	// Connector — коннектор Debezium, который публикует Outbox контекста (ADR 37).
 	Connector string
 }

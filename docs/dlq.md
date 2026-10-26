@@ -6,6 +6,7 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
 
 ## Модель
 
+- `<stream>.dlq` объявлен заранее: retention 30 дней, одна partition, `cleanup.policy=delete`. В kind его создаёт Job `dead-letter-topics` до charts consumers; в production — provisioning topics окружения. Consumer DLQ сам не создаёт.
 - DLQ общий для всех consumer groups стрима. Каждая группа разбирает только свои dead letters — header `consumer_group_poisoned`.
 - Что разобрано, хранит Kafka consumer group `<group>.dlq` (у `orders` — `orders.dlq`, у `restaurants` — `restaurants.dlq`): её committed offset на `<stream>.dlq` — первая неразобранная запись. Чужие dead letters группа проходит, не трогая. Lag `<group>.dlq` — верхняя оценка неразобранного backlog группы: в него входят и чужие записи.
 - Записи разбираются по порядку в partition. Чтобы оставить запись в середине, сначала разбирают всё до неё.
@@ -15,7 +16,7 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
 
 ## Процедура
 
-Сигнал — alert `nomnom-orders-kafka-poison` (`nomnom.messaging.poison.messages`) и лог `integration event sent to DLQ` с `error_class` и `detail`; у `restaurants-consumer` — та же метрика и WARN-лог `restaurants.order-placed dead-lettered …`.
+Сигналы: alert `<context>-kafka-poison` (`nomnom.messaging.poison.messages`) — новый dead letter; лог `integration event sent to DLQ` с `error_class` и `detail`, у `restaurants-consumer` — WARN-лог `restaurants.order-placed dead-lettered …`; alert `<context>-kafka-dlq-unresolved` — записи группы не разобраны сутки. Неразобранное считается как конец partition DLQ минус offset `<group>.dlq` (без commit — минус начало topic).
 
 Команда разбора у каждого контекста своя, контракт один (аргументы, вывод, offset `<group>.dlq`):
 
@@ -68,5 +69,5 @@ kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/
 
 ## Ограничения
 
-- Retention `<stream>.dlq` должен быть больше окна разбора. В kind topics создаются при первой публикации с retention брокера. Для production retention DLQ задаётся явно при создании topic.
+- Окно разбора — 30 дней retention DLQ. Запись старше удаляется брокером без разбора; alert `kafka-dlq-unresolved` горит уже через сутки.
 - Две команды разбора одной группы одновременно не запускаются: offset `<group>.dlq` не защищён от гонки.

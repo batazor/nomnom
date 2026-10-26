@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 140; пар «метрика × сервис» со статусом «есть»: 140.
+Метрик в инвентаре: 143; пар «метрика × сервис» со статусом «есть»: 140.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -149,6 +149,9 @@ Middleware в composition root поверх Watermill (и эквивалент �
 | `nomnom_messaging_message_age_seconds` | OTel middleware | histogram | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается | `now − occurred_at` в момент обработки. |
 | `nomnom_inbox_duplicates_total` | OTel middleware / Inbox adapter | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается | Outcome duplicate Inbox (`(consumer, event_id)` уже обработан). |
 | `kafka_consumergroup_lag` | Alloy `prometheus.exporter.kafka` | gauge | `consumergroup`, `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается | Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join. |
+| `kafka_consumergroup_current_offset` | Alloy `prometheus.exporter.kafka` | gauge | `consumergroup`, `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается | Группы `<group>.dlq` на `<stream>.dlq`: первая неразобранная запись DLQ группы (docs/dlq.md); −1 — у partition нет commit. |
+| `kafka_topic_partition_current_offset` | Alloy `prometheus.exporter.kafka` | gauge | `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается | Только `<stream>.dlq`: конец partition DLQ. |
+| `kafka_topic_partition_oldest_offset` | Alloy `prometheus.exporter.kafka` | gauge | `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается | Только `<stream>.dlq`: начало partition после retention; с него разбирает группа без commit. |
 
 <a id="cdc"></a>
 

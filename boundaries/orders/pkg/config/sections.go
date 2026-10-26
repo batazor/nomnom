@@ -18,11 +18,13 @@ func LoadDatabase() (database.Config, error) {
 	if err != nil {
 		return database.Config{}, err
 	}
-	var cfg database.Config
-	if err := loader.UnmarshalKey("postgres", &cfg); err != nil {
+	var cfg struct {
+		Postgres database.Config `mapstructure:"postgres"`
+	}
+	if err := loader.Unmarshal(&cfg); err != nil {
 		return database.Config{}, fmt.Errorf("decode postgres config: %w", err)
 	}
-	return cfg, cfg.Validate()
+	return cfg.Postgres, cfg.Postgres.Validate()
 }
 
 // LoadKafka reads only the kafka section, for orders-admin dlq.
@@ -31,11 +33,13 @@ func LoadKafka() (KafkaConfig, error) {
 	if err != nil {
 		return KafkaConfig{}, err
 	}
-	var cfg KafkaConfig
-	if err := loader.UnmarshalKey("kafka", &cfg); err != nil {
+	var cfg struct {
+		Kafka KafkaConfig `mapstructure:"kafka"`
+	}
+	if err := loader.Unmarshal(&cfg); err != nil {
 		return KafkaConfig{}, fmt.Errorf("decode kafka config: %w", err)
 	}
-	return cfg, cfg.Validate()
+	return cfg.Kafka, cfg.Kafka.Validate()
 }
 
 func sectionLoader(configure func(*viper.Viper) error) (*viper.Viper, error) {
