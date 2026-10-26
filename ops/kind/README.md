@@ -30,8 +30,7 @@ make kind-down
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
 | `KIND_CLUSTER_NAME` | `nomnom-test` | имя кластера; контекст всегда `kind-${KIND_CLUSTER_NAME}` |
-| `BFF_HOST_PORT` | `18080` | host-порт для NodePort `30080` будущего публичного API BFF (сейчас BFF не публикуется) |
-| `WEBHOOKS_HOST_PORT` | `18085` | host-порт для NodePort `30085` public gateway |
+| `WEBHOOKS_HOST_PORT` | `18085` | host-порт для NodePort `30085` public gateway: webhooks и публичный API клиентов |
 | `KIND_STAND` | `full` для kind-deploy, `core` для kind-dev | `core` — без fixtures проверок (net-probe, grpc-caller); `make kind-test` требует `full` |
 | `KIND_KEEP` | `0` | `1` — не удалять кластер после `make kind-e2e` |
 
@@ -126,11 +125,15 @@ make kind-down
   artifact `nomnom/controlplane` и release `controlplane` в `nomnom-controlplane` с
   [`values/controlplane.yaml`](values/controlplane.yaml): своя PostgreSQL и SpiceDB
   (`manifests/netpol/app-infrastructure.yaml`), бизнес-порт 8086 только через internal gateway.
-  Allowlist: `nomnom-bff/bff` (читает `ListMarkets`, `GetPlacementMap` — `placementReaders`) и
-  `nomnom-bff/demo-seed` (делегат оператора для `RegisterCell`, `CreateMarket`). BFF получает
-  projected token `nomnom.controlplane` и держит Placement Map с TTL `cellRouter.placementTTL`
-  (30s). В kind одна Cell `cell-1` — текущий internal gateway — и один Market `berlin`;
-  их создаёт seed (раздел «Демо-данные»). Запросы GraphQL к BFF несут `X-Nomnom-Market: berlin`.
+  Allowlist: `nomnom-bff/bff`, `nomnom-bff/demo-seed` (делегат оператора для `RegisterCell`,
+  `CreateMarket`) и `nomnom-bff/e2e-driver`; все операции — только оператору
+  (`platform#manage_markets`). После каждой записи и при старте control plane server-side apply
+  пишет в `nomnom-gateway` маршруты публичного gateway: `HTTPRoute market-<market_id>`
+  (`/m/<market_id>` → Service `nomnom-bff/bff`, префикс снимается, `X-Nomnom-Market` ставится из
+  маршрута) и список Market (`ConfigMap`, `HTTPRouteFilter` и `HTTPRoute markets`, Envoy отвечает
+  на `GET /markets` сам). Права — Role chart в `nomnom-gateway`, egress к kube-apiserver —
+  `CiliumNetworkPolicy`. В kind одна Cell `cell-1` (Router — Service `nomnom-bff/bff:3010`) и
+  один Market `berlin`; их создаёт seed (раздел «Демо-данные»).
 - SpiceDB kind получает общий `authorization/bootstrap.yaml` и kind-only grants
   [`authz/bootstrap-kind.yaml`](authz/bootstrap-kind.yaml) (`platform:nomnom#operator@user:kind-operator`
   — оператор e2e пути заказа): chart [`bootstrap`](#bootstrap) получает его `--set-file
@@ -242,7 +245,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool`, `GetOrderCourier` | `reads` |
 | `delivery-v1-administration` | `RegisterCourier`, `RetireCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
-| `controlplane-v1-reads` | `ListMarkets`, `GetPlacementMap` | `reads` |
+| `controlplane-v1-reads` | `ListMarkets` | `reads` |
 | `controlplane-v1-commands` | `RegisterCell`, `CreateMarket` | `commands` |
 
 `reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и
@@ -260,11 +263,12 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 ## Вход в браузере (Dex)
 
 [ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md): customer UI получает access token
-Dex через authorization code + PKCE. Браузер видит Dex и BFF через port-forward:
+Dex через authorization code + PKCE. Браузер видит Dex через port-forward, а BFF — через
+публичный gateway (`https://api.nomnom.localhost:${WEBHOOKS_HOST_PORT}`, раздел «Public gateway и
+TLS»):
 
 ```bash
 kubectl -n nomnom-data port-forward svc/dex 5556
-kubectl -n nomnom-bff port-forward svc/bff 3010
 ```
 
 Issuer — `http://localhost:5556/dex`; Router и BFF читают JWKS по адресу Service
@@ -274,9 +278,13 @@ Issuer — `http://localhost:5556/dex`; Router и BFF читают JWKS по а�
 
 ## Public gateway и TLS
 
-Входящие вызовы внешних систем идут через отдельный Envoy gateway `public`
-(`manifests/gateway/public-gateway.yaml`). Он публикует только `POST /webhooks/provider`
-на порт `webhooks` payments и принимает только HTTPS на `webhooks.nomnom.localhost`.
+Входящие вызовы внешних систем и публичный API клиентов идут через отдельный Envoy gateway
+`public` (`manifests/gateway/public-gateway.yaml`), только HTTPS:
+
+- `webhooks.nomnom.localhost` — только `POST /webhooks/provider` на порт `webhooks` payments;
+- `api.nomnom.localhost` — router ячеек ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)):
+  `GET /markets` и `/m/<market_id>/…` в Cosmo Router Cell Market. Маршруты пишет control plane;
+  здесь — их политики: без request timeout (SSE-подписки) и CORS списка Market.
 
 Сертификат выпускает cert-manager (platform-модуль) по аннотации Gateway от локального CA
 (`bootstrap/templates/certs.yaml`: самоподписанный bootstrap → корень `nomnom-local-ca`) и
@@ -286,6 +294,8 @@ Issuer — `http://localhost:5556/dex`; Router и BFF читают JWKS по а�
 kubectl -n envoy-gateway-system port-forward svc/public-gateway 18085:8443
 curl --cacert "$(make -s kind-local-ca)" --resolve webhooks.nomnom.localhost:18085:127.0.0.1 \
   https://webhooks.nomnom.localhost:18085/webhooks/provider -X POST --data '{}'
+curl --cacert "$(make -s kind-local-ca)" --resolve api.nomnom.localhost:18085:127.0.0.1 \
+  https://api.nomnom.localhost:18085/markets
 ```
 
 На кластере, созданном из текущего `cluster.yaml`, port-forward не нужен: NodePort 30085
@@ -357,11 +367,12 @@ charts, и Job ждёт его повторами; законченный Job у
 забирали бы предложения курьера e2e. Тест проверяет изоляцию шагом «only the run courier is on
 line in the run market» (GetCourierPool Market прогона) до оформления заказа.
 
-Вход в UI — только через Dex (`customer-ui-kind-login` в `.claude/launch.json`, порт 4180):
+Вход в UI — только через Dex (`customer-ui-kind-login` в `.claude/launch.json`, порт 4180); API —
+публичный gateway `https://api.nomnom.localhost:18085` (браузер должен доверять корню
+`make kind-local-ca`):
 
 ```bash
 kubectl -n nomnom-data port-forward svc/dex 5556
-kubectl -n nomnom-bff port-forward svc/bff 3010
 ```
 
 ## Проверки
@@ -399,7 +410,8 @@ workloads (а `orders` и `restaurants` не стартуют без своих 
 | `infra-connectivity` | под политиками Kafka открыт из delivery и payments; чужая БД и Temporal для не-`orders` закрыты |
 | `workloads-healthy-under-policies` | после применения политик deployments неймспейсов приложений, `envoy-gateway-system` и `kube-system` Available, ни один контейнер не перезапускался и нет проваленных kubelet-проб (6a.1–6a.3) |
 | `bff-end-to-end` | BFF Available; из `nomnom-bff` закрыты прямой `orders` и PostgreSQL; `bffInfo`; `order(id)` без `Authorization` — `Unauthenticated` (AC-576); с access token тестового provider для отсутствующего заказа — `{"data":{"order":null}}` (AC-575), то есть orders принял user assertion BFF; тот же user assertion (ключ BFF, aud `nomnom.orders`) от `grpc-caller` — `UNAUTHENTICATED`, log — `service is not an allowed delegate` (7.1, 7.3–7.7, 7.9–7.10) |
-| `controlplane-placement-map` | через gateway с projected token BFF (`kubectl create token bff --audience nomnom.controlplane`) из `grpc-caller`: `GetPlacementMap` — `berlin → cell-1` с адресом gateway (повтор, пока seed не создаст топологию), `ListMarkets` — Berlin, EUR; `RegisterCell` от BFF без оператора — `PERMISSION_DENIED`; `grpc-caller` вне allowlist — `UNAUTHENTICATED` |
+| `controlplane-registry` | control plane опубликовал `HTTPRoute market-berlin` (`/m/berlin` → `nomnom-bff/bff:3010`, listener `api`) и `ConfigMap markets` с Berlin, EUR (повтор, пока seed не создаст топологию); с projected token BFF из `grpc-caller` `ListMarkets` и `RegisterCell` без оператора — `PERMISSION_DENIED`; `grpc-caller` вне allowlist — `UNAUTHENTICATED` |
+| `cell-routing` | из `nomnom-outsider` по HTTPS listener `api`: `GET /markets` — Berlin, EUR; `/m/berlin/graphql` доходит до BFF `cell-1` с Market `berlin`, чужой `X-Nomnom-Market` клиента перезаписан; `/m/atlantis`, `/m/berlinx`, `/graphql` — `404` gateway; при остановленном control plane запросы обслуживаются; удалённый `HTTPRoute market-berlin` control plane восстанавливает при старте (FR-628–FR-633) |
 | `order-lifecycle` | путь заказа (AC-740): оператор регистрирует ресторан и курьера, владелец — персонал, меню, открытие; курьер на линии; покупатель оформляет заказ через BFF; кухня находит его в `ListIncomingOrders`, принимает и готовит, курьер принимает предложение Dispatch, забирает и доставляет; в BFF `DELIVERED` с milestones `COURIER_ASSIGNED`, `PICKED_UP`, `DELIVERED`, оплата `captured`. Ids уникальны на прогон; в конце курьер уходит с линии |
 
 Один тест: `cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$CHAINSAW_VERSION test --kube-context kind-nomnom-test --config .chainsaw.yaml --test-dir . --include-test-regex 'chainsaw/gateway-routes-to-backends'`.

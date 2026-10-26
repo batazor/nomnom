@@ -836,35 +836,11 @@ type CourierPoolPayload {
   problem: CourierPoolProblemCode
 }
 
-"""
-City where delivery works; restaurants, couriers and orders of one Market are
-served together (ADR 41)
-"""
-type Market {
-  """
-  Market identifier, the value of the X-Nomnom-Market header
-  """
-  id: ID!
-  """
-  Display name
-  """
-  name: String!
-  """
-  ISO 4217 currency code
-  """
-  currency: String!
-}
-
 type Query {
   """
   Metadata for the client BFF
   """
   bffInfo: BffInfo!
-  """
-  Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
-  other operation requires the header with one of their ids
-  """
-  markets: [Market!]!
   """
   Restaurants available to the customer
   """

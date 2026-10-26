@@ -92,19 +92,3 @@ type AccessCheck struct {
 type Authorizer interface {
 	Check(ctx context.Context, check AccessCheck) error
 }
-
-// ServiceAllowlist names the calling services allowed to use an operation that
-// is granted to workloads rather than users (the Placement Map reads of BFF).
-type ServiceAllowlist map[string]bool
-
-// Allow grants the call when the authenticated calling service is in the list,
-// whoever the asserted user is.
-func (a ServiceAllowlist) Allow(subject Subject) error {
-	if err := subject.Validate(); err != nil {
-		return err
-	}
-	if !a[subject.Service] {
-		return fmt.Errorf("%w: service %s may not read the topology", ErrPermissionDenied, subject.Service)
-	}
-	return nil
-}

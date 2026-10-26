@@ -517,27 +517,9 @@ type CourierPoolPayload {
   problem: CourierPoolProblemCode
 }
 
-"""
-City where delivery works; restaurants, couriers and orders of one Market are
-served together (ADR 41)
-"""
-type Market {
-  """Market identifier, the value of the X-Nomnom-Market header"""
-  id: ID!
-  """Display name"""
-  name: String!
-  """ISO 4217 currency code"""
-  currency: String!
-}
-
 type Query {
   """Metadata for the client BFF"""
   bffInfo: BffInfo!
-  """
-  Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
-  other operation requires the header with one of their ids
-  """
-  markets: [Market!]!
   """Restaurants available to the customer"""
   restaurants(first: Int!, after: String): RestaurantConnection!
   """Restaurant by identifier, null if it does not exist"""
@@ -746,9 +728,9 @@ type Subscription {
   courierChanged(id: ID!): Courier!
   """
   Courier Pool of a Market after each change of its couriers, offers or
-  deliveries; marketId is CourierPool.id, the Market of X-Nomnom-Market (ADR 41).
+  deliveries; marketId is CourierPool.id, the Market of the request path /m/{marketId} (ADR 41).
   Query courierPool first. A user who may not manage couriers, or a marketId
-  other than the header, gets an error event instead of data.
+  other than the Market of the request, gets an error event instead of data.
   """
   courierPoolChanged(marketId: ID!): CourierPool!
 }

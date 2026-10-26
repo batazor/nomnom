@@ -1,7 +1,0 @@
-query ChooseMarket {
-  markets {
-    id
-    name
-    currency
-  }
-}

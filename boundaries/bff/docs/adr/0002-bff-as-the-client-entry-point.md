@@ -35,7 +35,7 @@ BFF:
 - проверяет общие ограничения доступа к клиентскому сценарию;
 - формирует доверенный пользовательский контекст — subject, роли/scopes и tenant — только из проверенных данных аутентификации; одноимённые клиентские заголовки не являются доверенным источником;
 - передаёт этот контекст внутренним сервисам через gRPC metadata;
-- выбирает Cell, которой адресован вызов, по Market клиентского запроса (router ячеек, [общесистемный ADR 41](../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)), см. «Маршрутизация по ячейкам»;
+- работает внутри одной Cell и передаёт Market клиентского запроса владельцам ([общесистемный ADR 41](../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)), см. «Маршрутизация по ячейкам»;
 - направляет команду сервису-владельцу операции, агрегирует ответы нескольких сервисов и преобразует их в клиентские DTO;
 - задаёт единые форматы ошибок, cursor-based пагинации списков и метаданных ответа;
 - продолжает W3C Trace Context, включая `traceparent`, и передаёт request ID, deadlines и cancellation через соответствующие механизмы HTTP/gRPC; BFF проверяет или создаёт request ID и возвращает его клиенту;
@@ -66,12 +66,12 @@ inputs:
 
 ### Маршрутизация по ячейкам
 
-BFF — router ячеек ([общесистемный ADR 41](../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)); отдельного прокси нет.
+BFF не router ячеек: Cell выбирает публичный gateway по пути `/m/{market_id}/…` ([общесистемный ADR 41](../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)). Cosmo Router с plugin BFF развёрнут в каждой Cell и обслуживает только её.
 
-- Клиент передаёт Market в каждом запросе заголовком `X-Nomnom-Market`; Router пробрасывает его в plugin как gRPC metadata `x-nomnom-market`. Это подсказка маршрутизации, а не утверждение об identity: права и принадлежность ресурса проверяет сервис-владелец.
-- Соединение слайсов с контекстом — `grpc.ClientConnInterface` на audience, который на каждый вызов берёт Market из входящей metadata, проверяет формат `^[a-z][a-z0-9-]{1,31}$` и вызывает gateway Cell из Placement Map. Нет заголовка, он повторён или неверного формата — `INVALID_ARGUMENT`; Market не размещён — `NOT_FOUND`; карта ещё ни разу не получена — `UNAVAILABLE`. Cell «по умолчанию» нет.
+- Gateway снимает префикс пути и выставляет заголовок `X-Nomnom-Market`; Router пробрасывает его в plugin как gRPC metadata `x-nomnom-market`. Это подсказка маршрутизации, а не утверждение об identity: права и принадлежность ресурса проверяет сервис-владелец.
+- BFF берёт Market из входящей metadata и проверяет формат `^[a-z][a-z0-9-]{1,31}$`: нет заголовка, он повторён или неверного формата — `INVALID_ARGUMENT`. Все вызовы контекстов идут в internal gateway своей Cell.
 - Market не уходит во внутренние вызовы metadata; списочные операции (`ListRestaurants`, `ListOwnedRestaurants`, `ListCustomerOrders`, `GetCourierPool`) и `RegisterCourier` передают его полем `market_id`.
-- Placement Map BFF читает у control plane (`GetPlacementMap`) через internal gateway, держит в памяти и обновляет в фоне раз в TTL; неудачное обновление оставляет последнюю карту. Control plane не находится в горячем пути; `markets` (выбор Market) читается у него без заголовка.
+- Списка Market BFF не отдаёт и к control plane не обращается: UI читает его у публичного gateway (`GET /markets`).
 
 ### Организация слайсов
 

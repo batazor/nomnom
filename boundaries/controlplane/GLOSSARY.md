@@ -2,12 +2,13 @@
 
 Глобальный реестр топологии cell-based архитектуры ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)):
 какие Cell есть и в какой Cell размещён каждый Market. Control plane не участвует в обработке
-бизнес-запросов: ячейки к нему не обращаются, BFF кеширует Placement Map.
+бизнес-запросов: из реестра он пишет маршруты публичного gateway, а ни gateway, ни ячейки к нему не
+обращаются.
 
 ## Language
 
 **Cell**:
-Полный изолированный экземпляр data plane со своим internal gateway; `cell_id` — slug, адрес gateway — `host:port`. Неизменяема после регистрации.
+Полный изолированный экземпляр data plane со своим Cosmo Router, BFF и internal gateway; `cell_id` — slug. Неизменяема после регистрации.
 _Avoid_: Cluster, region, shard
 
 **Market**:
@@ -18,9 +19,17 @@ _Avoid_: Tenant, region, city id
 Размещение Market ровно в одной зарегистрированной Cell (`cell_id` Market).
 _Avoid_: Partition, assignment
 
-**Placement Map**:
-Все Market Placement с адресами gateway их Cell — то, по чему BFF выбирает Cell запроса.
-_Avoid_: Routing table, service discovery
+**Router Cell**:
+Kubernetes Service Cosmo Router Cell (`namespace`, `name`, `port`) — точка входа Cell для клиентов, куда публичный gateway ведёт её Market.
+_Avoid_: Gateway address, endpoint
+
+**Маршрут Market**:
+`HTTPRoute market-<market_id>` публичного gateway: `/m/<market_id>` в Router Cell его Market Placement. Пишет только control plane.
+_Avoid_: Placement Map, routing table
+
+**Список Market**:
+JSON `GET /markets`, который Envoy публичного gateway отдаёт сам из `ConfigMap markets`; его строит control plane.
+_Avoid_: Markets query
 
 **Idempotent Repeat**:
 Повтор `RegisterCell`/`CreateMarket` с теми же значениями: успех с `created = false`; другие значения для известного id — `ALREADY_EXISTS`.

@@ -1,0 +1,37 @@
+{{- /*
+ADR 41: control plane применяет server-side apply маршруты Market и список Market публичного
+gateway — только в неймспейсе routes.namespace и только эти ресурсы.
+*/ -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "common.names.fullname" . }}-routes
+  namespace: {{ .Values.routes.namespace }}
+  labels:
+    {{- include "controlplane.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+rules:
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs: ["get", "create", "patch"]
+  - apiGroups: ["gateway.envoyproxy.io"]
+    resources: ["httproutefilters"]
+    verbs: ["get", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "common.names.fullname" . }}-routes
+  namespace: {{ .Values.routes.namespace }}
+  labels:
+    {{- include "controlplane.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "common.names.fullname" . }}-routes
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "controlplane.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

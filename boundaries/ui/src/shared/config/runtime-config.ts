@@ -5,7 +5,9 @@ export type SupportedLocale = (typeof supportedLocales)[number];
 import type { OidcConfig } from "../auth/oidc";
 
 export type RuntimeConfig = Readonly<{
-  publicGraphqlUrl: string;
+  // Base URL of the public API (ADR 41): GET /markets lists the Markets, and
+  // /m/{marketId}/graphql is the BFF of the Cell of a Market. No trailing slash.
+  publicApiUrl: string;
   locale: SupportedLocale;
   enableMocks: boolean;
   // Faro collector (Alloy faro.receiver); without it browser telemetry is off.
@@ -16,7 +18,7 @@ export type RuntimeConfig = Readonly<{
 }>;
 
 type RuntimeEnv = Readonly<{
-  VITE_PUBLIC_GRAPHQL_URL?: string;
+  VITE_PUBLIC_API_URL?: string;
   VITE_LOCALE?: string;
   VITE_ENABLE_MOCKS?: string;
   VITE_FARO_URL?: string;
@@ -40,10 +42,10 @@ function parseHttpUrl(name: string, value: string): string {
 
 function parsePublicUrl(value: string | undefined): string {
   if (!value) {
-    throw new Error("VITE_PUBLIC_GRAPHQL_URL is required");
+    throw new Error("VITE_PUBLIC_API_URL is required");
   }
 
-  return parseHttpUrl("VITE_PUBLIC_GRAPHQL_URL", value);
+  return parseHttpUrl("VITE_PUBLIC_API_URL", value).replace(/\/$/, "");
 }
 
 function required(name: string, value: string | undefined): string {
@@ -71,7 +73,7 @@ function parseTelemetry(env: RuntimeEnv): RuntimeConfig["telemetry"] {
 
 export function parseRuntimeConfig(env: RuntimeEnv): RuntimeConfig {
   return Object.freeze({
-    publicGraphqlUrl: parsePublicUrl(env.VITE_PUBLIC_GRAPHQL_URL),
+    publicApiUrl: parsePublicUrl(env.VITE_PUBLIC_API_URL),
     locale: parseLocale(env.VITE_LOCALE),
     enableMocks: env.VITE_ENABLE_MOCKS === "true",
     telemetry: parseTelemetry(env),

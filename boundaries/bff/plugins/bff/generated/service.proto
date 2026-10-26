@@ -79,11 +79,6 @@ service BffService {
    * restaurant, null if the restaurant does not exist or the user may not operate its kitchen
    */
   rpc QueryKitchen(QueryKitchenRequest) returns (QueryKitchenResponse) {}
-  /*
-   * Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
-   * other operation requires the header with one of their ids
-   */
-  rpc QueryMarkets(QueryMarketsRequest) returns (QueryMarketsResponse) {}
   // Restaurants the current user owns, open and closed, ordered by identifier; menu is null
   rpc QueryMyRestaurants(QueryMyRestaurantsRequest) returns (QueryMyRestaurantsResponse) {}
   // Order of the current customer, null if it does not exist or belongs to someone else
@@ -350,23 +345,6 @@ message QueryCourierPoolResponse {
    * (platform#manage_couriers), otherwise a PERMISSION_DENIED error
    */
   CourierPool courier_pool = 1;
-}
-/*
- * Request message for markets operation: Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
- * other operation requires the header with one of their ids.
- */
-message QueryMarketsRequest {
-}
-/*
- * Response message for markets operation: Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
- * other operation requires the header with one of their ids.
- */
-message QueryMarketsResponse {
-  /*
-   * Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
-   * other operation requires the header with one of their ids
-   */
-  repeated Market markets = 1;
 }
 // Request message for placeOrder operation: Place an order for the current customer.
 message MutationPlaceOrderRequest {
@@ -667,19 +645,6 @@ message OrderConnection {
 message Simulator {
   // Whether the Simulator is on in orders, restaurants and delivery
   bool enabled = 1;
-}
-
-/*
- * City where delivery works; restaurants, couriers and orders of one Market are
- * served together (ADR 41)
- */
-message Market {
-  // Market identifier, the value of the X-Nomnom-Market header
-  string id = 1;
-  // Display name
-  string name = 2;
-  // ISO 4217 currency code
-  string currency = 3;
 }
 
 message PlaceOrderInput {

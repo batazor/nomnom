@@ -21,7 +21,7 @@ spec:
         - protocol: TCP
           port: 3010
 ---
-# BFF принимает GraphQL только от e2e-driver: наружу он в kind не опубликован.
+# e2e-driver вызывает GraphQL BFF напрямую, в обход публичного gateway, с заголовком Market.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

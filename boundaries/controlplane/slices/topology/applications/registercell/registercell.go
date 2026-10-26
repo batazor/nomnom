@@ -1,6 +1,8 @@
 // Package registercell registers a Cell in the control plane (ADR 41). Only
 // platform#manage_markets may do it. A repeat with the same values succeeds
-// with Created false; other values for a registered cell_id are refused.
+// with Created false; other values for a registered cell_id are refused. After
+// the registration, including a repeat, the routes of the public gateway are
+// published from the registry.
 package registercell
 
 import (
@@ -9,14 +11,22 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/permission"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell/vo"
 )
 
 type Command struct {
-	Subject        application.Subject
-	CellID         string
-	GatewayAddress string
+	Subject application.Subject
+	CellID  string
+	Router  Router
+}
+
+// Router is the Service of the Cosmo Router of the Cell.
+type Router struct {
+	Namespace string
+	Name      string
+	Port      int32
 }
 
 type Result struct {
@@ -27,15 +37,27 @@ type Result struct {
 type Handler struct {
 	authorizer application.Authorizer
 	cells      cell.Repository
+	routes     publishroutes.Publisher
 }
 
 var _ application.Handler[Command, Result] = Handler{}
 
-func New(authorizer application.Authorizer, cells cell.Repository) Handler {
-	return Handler{authorizer: authorizer, cells: cells}
+func New(authorizer application.Authorizer, cells cell.Repository, routes publishroutes.Publisher) Handler {
+	return Handler{authorizer: authorizer, cells: cells, routes: routes}
 }
 
 func (h Handler) Handle(ctx context.Context, cmd Command) (Result, error) {
+	result, err := h.register(ctx, cmd)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := h.routes.Publish(ctx); err != nil {
+		return Result{}, fmt.Errorf("publish routes after cell %s: %w", result.Cell.ID(), err)
+	}
+	return result, nil
+}
+
+func (h Handler) register(ctx context.Context, cmd Command) (Result, error) {
 	if err := permission.RequireManageMarkets(ctx, h.authorizer, cmd.Subject); err != nil {
 		return Result{}, err
 	}
@@ -43,11 +65,11 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	gateway, err := vo.NewGatewayAddress(cmd.GatewayAddress)
+	router, err := vo.NewRouter(cmd.Router.Namespace, cmd.Router.Name, cmd.Router.Port)
 	if err != nil {
 		return Result{}, err
 	}
-	candidate := cell.New(id, gateway)
+	candidate := cell.New(id, router)
 	added, err := h.cells.Add(ctx, candidate)
 	if err != nil {
 		return Result{}, fmt.Errorf("register cell %s: %w", id, err)

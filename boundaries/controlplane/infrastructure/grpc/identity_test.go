@@ -39,14 +39,13 @@ func loadVectors(t *testing.T) (vectors, config.IdentityConfig) {
 	var v vectors
 	require.NoError(t, json.Unmarshal(data, &v))
 	return v, config.IdentityConfig{
-		Issuer:           v.Issuer,
-		Audience:         v.Audience,
-		JWKSFile:         filepath.Join(fixtures, "jwks.json"),
-		ServiceAccounts:  v.ServiceAccounts + ",nomnom-bff/bff=bff",
-		UserIssuer:       "nomnom-bff",
-		UserJWKSFile:     filepath.Join(fixtures, "bff-jwks.json"),
-		UserDelegates:    "bff",
-		PlacementReaders: "bff",
+		Issuer:          v.Issuer,
+		Audience:        v.Audience,
+		JWKSFile:        filepath.Join(fixtures, "jwks.json"),
+		ServiceAccounts: v.ServiceAccounts + ",nomnom-bff/bff=bff",
+		UserIssuer:      "nomnom-bff",
+		UserJWKSFile:    filepath.Join(fixtures, "bff-jwks.json"),
+		UserDelegates:   "bff",
 	}
 }
 
@@ -151,14 +150,13 @@ func loadUserVectors(t *testing.T) (userVectors, config.IdentityConfig) {
 	var v userVectors
 	require.NoError(t, json.Unmarshal(data, &v))
 	return v, config.IdentityConfig{
-		Issuer:           v.ServiceIssuer,
-		Audience:         v.Audience,
-		JWKSFile:         filepath.Join(fixtures, "jwks.json"),
-		ServiceAccounts:  v.ServiceAccounts,
-		UserIssuer:       v.Issuer,
-		UserJWKSFile:     filepath.Join(fixtures, "bff-jwks.json"),
-		UserDelegates:    v.Delegates,
-		PlacementReaders: v.Delegates,
+		Issuer:          v.ServiceIssuer,
+		Audience:        v.Audience,
+		JWKSFile:        filepath.Join(fixtures, "jwks.json"),
+		ServiceAccounts: v.ServiceAccounts,
+		UserIssuer:      v.Issuer,
+		UserJWKSFile:    filepath.Join(fixtures, "bff-jwks.json"),
+		UserDelegates:   v.Delegates,
 	}
 }
 
@@ -241,10 +239,9 @@ func TestUserAssertionMustBePresentOnce(t *testing.T) {
 func TestSubjectResolverRequiresUserSettings(t *testing.T) {
 	_, full := loadUserVectors(t)
 	for name, cfg := range map[string]config.IdentityConfig{
-		config.EnvIdentityUserJWKSFile:     func() config.IdentityConfig { c := full; c.UserJWKSFile = ""; return c }(),
-		config.EnvIdentityUserIssuer:       func() config.IdentityConfig { c := full; c.UserIssuer = " "; return c }(),
-		config.EnvIdentityUserDelegates:    func() config.IdentityConfig { c := full; c.UserDelegates = " , "; return c }(),
-		config.EnvIdentityPlacementReaders: func() config.IdentityConfig { c := full; c.PlacementReaders = ""; return c }(),
+		config.EnvIdentityUserJWKSFile:  func() config.IdentityConfig { c := full; c.UserJWKSFile = ""; return c }(),
+		config.EnvIdentityUserIssuer:    func() config.IdentityConfig { c := full; c.UserIssuer = " "; return c }(),
+		config.EnvIdentityUserDelegates: func() config.IdentityConfig { c := full; c.UserDelegates = " , "; return c }(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := NewSubjectResolver(cfg)

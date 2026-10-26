@@ -19,10 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ControlPlaneService_RegisterCell_FullMethodName    = "/nomnom.controlplane.v1.ControlPlaneService/RegisterCell"
-	ControlPlaneService_CreateMarket_FullMethodName    = "/nomnom.controlplane.v1.ControlPlaneService/CreateMarket"
-	ControlPlaneService_ListMarkets_FullMethodName     = "/nomnom.controlplane.v1.ControlPlaneService/ListMarkets"
-	ControlPlaneService_GetPlacementMap_FullMethodName = "/nomnom.controlplane.v1.ControlPlaneService/GetPlacementMap"
+	ControlPlaneService_RegisterCell_FullMethodName = "/nomnom.controlplane.v1.ControlPlaneService/RegisterCell"
+	ControlPlaneService_CreateMarket_FullMethodName = "/nomnom.controlplane.v1.ControlPlaneService/CreateMarket"
+	ControlPlaneService_ListMarkets_FullMethodName  = "/nomnom.controlplane.v1.ControlPlaneService/ListMarkets"
 )
 
 // ControlPlaneServiceClient is the client API for ControlPlaneService service.
@@ -30,16 +29,19 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // Registry of Cells, Markets and Market Placements (ADR 41). Never on the hot
-// path: Cells do not call it, BFF caches the Placement Map.
+// path: it publishes the routes of the public gateway, and neither the gateway
+// nor the Cells call it.
 type ControlPlaneServiceClient interface {
 	// Writes require platform#manage_markets. A repeat with the same values
 	// succeeds with created = false; other values for a known id are
 	// ALREADY_EXISTS. CreateMarket of an unknown cell_id is FAILED_PRECONDITION.
+	// After the write, including a repeat, the routes of the public gateway are
+	// applied from the registry; when that fails the call is UNAVAILABLE
+	// (ROUTES_UNAVAILABLE), the write stays and a repeat applies them again.
 	RegisterCell(ctx context.Context, in *RegisterCellRequest, opts ...grpc.CallOption) (*RegisterCellResponse, error)
 	CreateMarket(ctx context.Context, in *CreateMarketRequest, opts ...grpc.CallOption) (*CreateMarketResponse, error)
-	// Reads for the service identity of BFF.
+	// Requires platform#manage_markets.
 	ListMarkets(ctx context.Context, in *ListMarketsRequest, opts ...grpc.CallOption) (*ListMarketsResponse, error)
-	GetPlacementMap(ctx context.Context, in *GetPlacementMapRequest, opts ...grpc.CallOption) (*GetPlacementMapResponse, error)
 }
 
 type controlPlaneServiceClient struct {
@@ -80,31 +82,24 @@ func (c *controlPlaneServiceClient) ListMarkets(ctx context.Context, in *ListMar
 	return out, nil
 }
 
-func (c *controlPlaneServiceClient) GetPlacementMap(ctx context.Context, in *GetPlacementMapRequest, opts ...grpc.CallOption) (*GetPlacementMapResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetPlacementMapResponse)
-	err := c.cc.Invoke(ctx, ControlPlaneService_GetPlacementMap_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // ControlPlaneServiceServer is the server API for ControlPlaneService service.
 // All implementations must embed UnimplementedControlPlaneServiceServer
 // for forward compatibility.
 //
 // Registry of Cells, Markets and Market Placements (ADR 41). Never on the hot
-// path: Cells do not call it, BFF caches the Placement Map.
+// path: it publishes the routes of the public gateway, and neither the gateway
+// nor the Cells call it.
 type ControlPlaneServiceServer interface {
 	// Writes require platform#manage_markets. A repeat with the same values
 	// succeeds with created = false; other values for a known id are
 	// ALREADY_EXISTS. CreateMarket of an unknown cell_id is FAILED_PRECONDITION.
+	// After the write, including a repeat, the routes of the public gateway are
+	// applied from the registry; when that fails the call is UNAVAILABLE
+	// (ROUTES_UNAVAILABLE), the write stays and a repeat applies them again.
 	RegisterCell(context.Context, *RegisterCellRequest) (*RegisterCellResponse, error)
 	CreateMarket(context.Context, *CreateMarketRequest) (*CreateMarketResponse, error)
-	// Reads for the service identity of BFF.
+	// Requires platform#manage_markets.
 	ListMarkets(context.Context, *ListMarketsRequest) (*ListMarketsResponse, error)
-	GetPlacementMap(context.Context, *GetPlacementMapRequest) (*GetPlacementMapResponse, error)
 	mustEmbedUnimplementedControlPlaneServiceServer()
 }
 
@@ -123,9 +118,6 @@ func (UnimplementedControlPlaneServiceServer) CreateMarket(context.Context, *Cre
 }
 func (UnimplementedControlPlaneServiceServer) ListMarkets(context.Context, *ListMarketsRequest) (*ListMarketsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMarkets not implemented")
-}
-func (UnimplementedControlPlaneServiceServer) GetPlacementMap(context.Context, *GetPlacementMapRequest) (*GetPlacementMapResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetPlacementMap not implemented")
 }
 func (UnimplementedControlPlaneServiceServer) mustEmbedUnimplementedControlPlaneServiceServer() {}
 func (UnimplementedControlPlaneServiceServer) testEmbeddedByValue()                             {}
@@ -202,24 +194,6 @@ func _ControlPlaneService_ListMarkets_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ControlPlaneService_GetPlacementMap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetPlacementMapRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ControlPlaneServiceServer).GetPlacementMap(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ControlPlaneService_GetPlacementMap_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ControlPlaneServiceServer).GetPlacementMap(ctx, req.(*GetPlacementMapRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // ControlPlaneService_ServiceDesc is the grpc.ServiceDesc for ControlPlaneService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -238,10 +212,6 @@ var ControlPlaneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListMarkets",
 			Handler:    _ControlPlaneService_ListMarkets_Handler,
-		},
-		{
-			MethodName: "GetPlacementMap",
-			Handler:    _ControlPlaneService_GetPlacementMap_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

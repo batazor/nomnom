@@ -33,7 +33,7 @@ import { parseBoardOrders } from "./board-orders";
 import { CookPoolPanel } from "./cook-pool";
 
 const config = {
-  publicGraphqlUrl: "https://public.example.test/graphql",
+  publicApiUrl: "https://public.example.test",
   locale: "ru" as const,
   enableMocks: true,
   environment: "test",

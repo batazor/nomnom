@@ -35,9 +35,9 @@ type Subscription {
 
   """
   Courier Pool of a Market after each change of its couriers, offers or
-  deliveries; marketId is CourierPool.id, the Market of X-Nomnom-Market (ADR 41).
+  deliveries; marketId is CourierPool.id, the Market of the request path /m/{marketId} (ADR 41).
   Query courierPool first. A user who may not manage couriers, or a marketId
-  other than the header, gets an error event instead of data.
+  other than the Market of the request, gets an error event instead of data.
   """
   courierPoolChanged(marketId: ID!): CourierPool!
     @edfs__kafkaSubscribe(topics: ["delivery.v1.courier-pool-changes"], providerId: "default")

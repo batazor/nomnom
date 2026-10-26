@@ -1,0 +1,139 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+# Router ячеек — публичный gateway (ADR 41, FR-628–FR-633): /m/{market_id} ведёт в Cosmo Router
+# Cell Market, GET /markets Envoy отдаёт сам, control plane в пути запроса не участвует.
+#
+# Клиент — net-probe в nomnom-outsider, вне прикладного контура: HTTPS на listener api
+# (api.nomnom.localhost) Service public-gateway, сертификат проверяется корнем локального CA
+# (Secret cert-manager/nomnom-local-ca). berlin → cell-1 регистрирует Job chart ops/kind/demo.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cell-routing
+spec:
+  description: >
+    /m/berlin/graphql доходит до BFF cell-1 с X-Nomnom-Market: berlin даже при чужом заголовке
+    клиента; неизвестный Market — 404 gateway; GET /markets — список реестра; при остановленном
+    control plane маршруты работают, а удалённый маршрут control plane восстанавливает при старте.
+  steps:
+    - name: policies applied
+      use:
+        template: ../templates/netpol-applied.yaml
+    - name: Markets list from the gateway
+      try:
+        - script:
+            timeout: 5m
+            content: |
+              set -eu
+              ca="$(kubectl -n cert-manager get secret nomnom-local-ca -o jsonpath='{.data.ca\.crt}' | base64 -d)"
+              deadline=$(($(date +%s) + 240))
+              until body="$(kubectl -n nomnom-outsider exec deploy/net-probe -- sh -c '
+                printf "%s" "$0" > /tmp/nomnom-ca.crt
+                curl -sS --fail-with-body --max-time 10 --cacert /tmp/nomnom-ca.crt \
+                  --connect-to api.nomnom.localhost:443:public-gateway.envoy-gateway-system.svc.cluster.local:8443 \
+                  https://api.nomnom.localhost/markets
+              ' "$ca")" && printf '%s' "$body" | jq -e '[.markets[] | select(.id == "berlin" and .name == "Berlin" and .currency == "EUR")] | length == 1' >/dev/null; do
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "markets without berlin: $body" >&2
+                  exit 1
+                fi
+                sleep 3
+              done
+              printf '%s\n' "$body"
+            check:
+              ($error): ~
+    - name: a Market path reaches its Cell
+      try:
+        - script:
+            timeout: 3m
+            content: &request |
+              set -eu
+              ca="$(kubectl -n cert-manager get secret nomnom-local-ca -o jsonpath='{.data.ca\.crt}' | base64 -d)"
+              # restaurants передаёт market_id из X-Nomnom-Market: без него или с двумя значениями
+              # BFF отвечает INVALID_ARGUMENT. Чужой заголовок клиента маршрут перезаписывает.
+              body='{"query":"{ restaurants(first: 1) { edges { node { id } } } }"}'
+              deadline=$(($(date +%s) + 120))
+              until response="$(kubectl -n nomnom-outsider exec deploy/net-probe -- sh -c '
+                printf "%s" "$0" > /tmp/nomnom-ca.crt
+                curl -sS --max-time 10 --cacert /tmp/nomnom-ca.crt \
+                  --connect-to api.nomnom.localhost:443:public-gateway.envoy-gateway-system.svc.cluster.local:8443 \
+                  -H "content-type: application/json" -H "x-nomnom-market: hamburg" -d "$1" \
+                  https://api.nomnom.localhost/m/berlin/graphql
+              ' "$ca" "$body")" && printf '%s' "$response" | jq -e '.errors == null and (.data.restaurants.edges | type == "array")' >/dev/null; do
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "/m/berlin/graphql: $response" >&2
+                  exit 1
+                fi
+                sleep 3
+              done
+              printf '%s\n' "$response"
+            check:
+              ($error): ~
+    - name: an unknown Market is 404 of the gateway
+      try:
+        - script:
+            content: |
+              set -eu
+              ca="$(kubectl -n cert-manager get secret nomnom-local-ca -o jsonpath='{.data.ca\.crt}' | base64 -d)"
+              for path in /m/atlantis/graphql /m/berlinx/graphql /graphql; do
+                kubectl -n nomnom-outsider exec deploy/net-probe -- sh -c '
+                  printf "%s" "$0" > /tmp/nomnom-ca.crt
+                  curl -sS -o /dev/null -w "%{http_code} " --max-time 10 --cacert /tmp/nomnom-ca.crt \
+                    --connect-to api.nomnom.localhost:443:public-gateway.envoy-gateway-system.svc.cluster.local:8443 \
+                    -H "content-type: application/json" -d "{\"query\":\"{ bffInfo { name } }\"}" \
+                    "https://api.nomnom.localhost$1"
+                ' "$ca" "$path"
+              done
+            check:
+              ($error): ~
+              ($stdout): '404 404 404 '
+    - name: routing does not need the control plane
+      try:
+        - script:
+            content: |
+              set -eu
+              kubectl -n nomnom-controlplane scale deployment controlplane --replicas 0
+              kubectl -n nomnom-controlplane wait --for=delete pod -l app.kubernetes.io/name=controlplane --timeout 2m
+            check:
+              ($error): ~
+        - script:
+            timeout: 3m
+            content: *request
+            check:
+              ($error): ~
+      finally:
+        - script:
+            content: |
+              kubectl -n nomnom-controlplane scale deployment controlplane --replicas 1
+              kubectl -n nomnom-controlplane rollout status deployment controlplane --timeout 3m
+    - name: the control plane restores a deleted route at start
+      try:
+        - script:
+            content: |
+              set -eu
+              kubectl -n nomnom-gateway delete httproute market-berlin
+              kubectl -n nomnom-controlplane rollout restart deployment controlplane
+              kubectl -n nomnom-controlplane rollout status deployment controlplane --timeout 3m
+            check:
+              ($error): ~
+        - assert:
+            timeout: 1m
+            resource:
+              apiVersion: gateway.networking.k8s.io/v1
+              kind: HTTPRoute
+              metadata:
+                name: market-berlin
+                namespace: nomnom-gateway
+        - script:
+            timeout: 3m
+            content: *request
+            check:
+              ($error): ~
+  catch:
+    - podLogs:
+        namespace: nomnom-controlplane
+        selector: app.kubernetes.io/name=controlplane
+        tail: 30
+    - podLogs:
+        namespace: envoy-gateway-system
+        selector: gateway.envoyproxy.io/owning-gateway-name=public
+        tail: 30

@@ -1,0 +1,19 @@
+{{- /*
+ADR 41: маршруты Market публичного gateway (HTTPRoute, их пишет control plane в неймспейсе
+publicGateway.namespace) ведут в Service BFF этой Cell.
+*/ -}}
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ include "common.names.fullname" . }}-public-gateway
+  labels:
+    {{- include "bff.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ required "publicGateway.namespace is required (ADR 41)" .Values.publicGateway.namespace }}
+  to:
+    - group: ""
+      kind: Service
+      name: {{ include "common.names.fullname" . }}

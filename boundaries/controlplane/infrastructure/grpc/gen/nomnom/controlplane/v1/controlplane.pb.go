@@ -21,20 +21,85 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Kubernetes Service of the Cosmo Router of a Cell: the entry of the Cell for
+// clients that the public gateway routes Markets to (ADR 41).
+type ServiceRef struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// DNS-1123 label.
+	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// DNS-1123 label.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// 1..65535.
+	Port          int32 `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceRef) Reset() {
+	*x = ServiceRef{}
+	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceRef) ProtoMessage() {}
+
+func (x *ServiceRef) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceRef.ProtoReflect.Descriptor instead.
+func (*ServiceRef) Descriptor() ([]byte, []int) {
+	return file_nomnom_controlplane_v1_controlplane_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ServiceRef) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *ServiceRef) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ServiceRef) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
 // Cell: a complete isolated instance of the data plane (ADR 41).
 type Cell struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Slug ^[a-z][a-z0-9-]{1,31}$, immutable.
 	CellId string `protobuf:"bytes,1,opt,name=cell_id,json=cellId,proto3" json:"cell_id,omitempty"`
-	// host:port of the internal gateway of the Cell (ADR 15).
-	GatewayAddress string `protobuf:"bytes,2,opt,name=gateway_address,json=gatewayAddress,proto3" json:"gateway_address,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Router of the Cell, immutable.
+	Router        *ServiceRef `protobuf:"bytes,3,opt,name=router,proto3" json:"router,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Cell) Reset() {
 	*x = Cell{}
-	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[0]
+	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +111,7 @@ func (x *Cell) String() string {
 func (*Cell) ProtoMessage() {}
 
 func (x *Cell) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[0]
+	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +124,7 @@ func (x *Cell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cell.ProtoReflect.Descriptor instead.
 func (*Cell) Descriptor() ([]byte, []int) {
-	return file_nomnom_controlplane_v1_controlplane_proto_rawDescGZIP(), []int{0}
+	return file_nomnom_controlplane_v1_controlplane_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Cell) GetCellId() string {
@@ -69,11 +134,11 @@ func (x *Cell) GetCellId() string {
 	return ""
 }
 
-func (x *Cell) GetGatewayAddress() string {
+func (x *Cell) GetRouter() *ServiceRef {
 	if x != nil {
-		return x.GatewayAddress
+		return x.Router
 	}
-	return ""
+	return nil
 }
 
 // Market: a city served by one Cell (ADR 41).
@@ -92,7 +157,7 @@ type Market struct {
 
 func (x *Market) Reset() {
 	*x = Market{}
-	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[1]
+	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -104,7 +169,7 @@ func (x *Market) String() string {
 func (*Market) ProtoMessage() {}
 
 func (x *Market) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[1]
+	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -117,7 +182,7 @@ func (x *Market) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Market.ProtoReflect.Descriptor instead.
 func (*Market) Descriptor() ([]byte, []int) {
-	return file_nomnom_controlplane_v1_controlplane_proto_rawDescGZIP(), []int{1}
+	return file_nomnom_controlplane_v1_controlplane_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Market) GetMarketId() string {
@@ -148,84 +213,24 @@ func (x *Market) GetCellId() string {
 	return ""
 }
 
-// Market Placement with the address the router needs.
-type Placement struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	MarketId       string                 `protobuf:"bytes,1,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
-	CellId         string                 `protobuf:"bytes,2,opt,name=cell_id,json=cellId,proto3" json:"cell_id,omitempty"`
-	GatewayAddress string                 `protobuf:"bytes,3,opt,name=gateway_address,json=gatewayAddress,proto3" json:"gateway_address,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *Placement) Reset() {
-	*x = Placement{}
-	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Placement) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Placement) ProtoMessage() {}
-
-func (x *Placement) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_controlplane_v1_controlplane_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Placement.ProtoReflect.Descriptor instead.
-func (*Placement) Descriptor() ([]byte, []int) {
-	return file_nomnom_controlplane_v1_controlplane_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *Placement) GetMarketId() string {
-	if x != nil {
-		return x.MarketId
-	}
-	return ""
-}
-
-func (x *Placement) GetCellId() string {
-	if x != nil {
-		return x.CellId
-	}
-	return ""
-}
-
-func (x *Placement) GetGatewayAddress() string {
-	if x != nil {
-		return x.GatewayAddress
-	}
-	return ""
-}
-
 var File_nomnom_controlplane_v1_controlplane_proto protoreflect.FileDescriptor
 
 const file_nomnom_controlplane_v1_controlplane_proto_rawDesc = "" +
 	"\n" +
-	")nomnom/controlplane/v1/controlplane.proto\x12\x16nomnom.controlplane.v1\"H\n" +
+	")nomnom/controlplane/v1/controlplane.proto\x12\x16nomnom.controlplane.v1\"R\n" +
+	"\n" +
+	"ServiceRef\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\x05R\x04port\"r\n" +
 	"\x04Cell\x12\x17\n" +
-	"\acell_id\x18\x01 \x01(\tR\x06cellId\x12'\n" +
-	"\x0fgateway_address\x18\x02 \x01(\tR\x0egatewayAddress\"n\n" +
+	"\acell_id\x18\x01 \x01(\tR\x06cellId\x12:\n" +
+	"\x06router\x18\x03 \x01(\v2\".nomnom.controlplane.v1.ServiceRefR\x06routerJ\x04\b\x02\x10\x03R\x0fgateway_address\"n\n" +
 	"\x06Market\x12\x1b\n" +
 	"\tmarket_id\x18\x01 \x01(\tR\bmarketId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12\x17\n" +
-	"\acell_id\x18\x04 \x01(\tR\x06cellId\"j\n" +
-	"\tPlacement\x12\x1b\n" +
-	"\tmarket_id\x18\x01 \x01(\tR\bmarketId\x12\x17\n" +
-	"\acell_id\x18\x02 \x01(\tR\x06cellId\x12'\n" +
-	"\x0fgateway_address\x18\x03 \x01(\tR\x0egatewayAddressB\x9a\x02\n" +
+	"\acell_id\x18\x04 \x01(\tR\x06cellIdB\x9a\x02\n" +
 	"\x1acom.nomnom.controlplane.v1B\x11ControlplaneProtoP\x01Zogithub.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1;controlplanev1\xa2\x02\x03NCX\xaa\x02\x16Nomnom.Controlplane.V1\xca\x02\x16Nomnom\\Controlplane\\V1\xe2\x02\"Nomnom\\Controlplane\\V1\\GPBMetadata\xea\x02\x18Nomnom::Controlplane::V1b\x06proto3"
 
 var (
@@ -242,16 +247,17 @@ func file_nomnom_controlplane_v1_controlplane_proto_rawDescGZIP() []byte {
 
 var file_nomnom_controlplane_v1_controlplane_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_nomnom_controlplane_v1_controlplane_proto_goTypes = []any{
-	(*Cell)(nil),      // 0: nomnom.controlplane.v1.Cell
-	(*Market)(nil),    // 1: nomnom.controlplane.v1.Market
-	(*Placement)(nil), // 2: nomnom.controlplane.v1.Placement
+	(*ServiceRef)(nil), // 0: nomnom.controlplane.v1.ServiceRef
+	(*Cell)(nil),       // 1: nomnom.controlplane.v1.Cell
+	(*Market)(nil),     // 2: nomnom.controlplane.v1.Market
 }
 var file_nomnom_controlplane_v1_controlplane_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: nomnom.controlplane.v1.Cell.router:type_name -> nomnom.controlplane.v1.ServiceRef
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_controlplane_v1_controlplane_proto_init() }

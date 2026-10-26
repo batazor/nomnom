@@ -26,6 +26,7 @@ spec:
       {{- include "controlplane.validateShutdownBudget" . }}
       {{- include "controlplane.validateIdentity" . }}
       {{- include "controlplane.validateSpiceDB" . }}
+      {{- include "controlplane.validateRoutes" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -84,8 +85,14 @@ spec:
               value: /etc/nomnom/user-identity/jwks.json
             - name: IDENTITY__USER_DELEGATES
               value: {{ .userDelegates | quote }}
-            - name: IDENTITY__PLACEMENT_READERS
-              value: {{ .placementReaders | quote }}
+            {{- end }}
+            {{- with .Values.routes }}
+            - name: ROUTES__NAMESPACE
+              value: {{ .namespace | quote }}
+            - name: ROUTES__GATEWAY
+              value: {{ .gateway | quote }}
+            - name: ROUTES__LISTENER
+              value: {{ .listener | quote }}
             {{- end }}
             {{- include "controlplane.postgresEnv" (dict "context" .) | nindent 12 }}
             {{- include "controlplane.otelEnv" (dict "context" .) | nindent 12 }}

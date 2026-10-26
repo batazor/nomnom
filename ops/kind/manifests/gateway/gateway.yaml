@@ -542,7 +542,7 @@ spec:
           namespace: nomnom-payments
           port: 8084
 ---
-# Control plane (ADR 41): чтения топологии для BFF — Markets и Placement Map.
+# Control plane (ADR 41): список Market для оператора (platform#manage_markets).
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -558,10 +558,6 @@ spec:
             type: Exact
             service: nomnom.controlplane.v1.ControlPlaneService
             method: ListMarkets
-        - method:
-            type: Exact
-            service: nomnom.controlplane.v1.ControlPlaneService
-            method: GetPlacementMap
       backendRefs:
         - name: controlplane
           namespace: nomnom-controlplane

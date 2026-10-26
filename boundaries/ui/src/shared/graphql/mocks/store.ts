@@ -10,7 +10,6 @@ import {
   type MockOrder,
   type MockRestaurant,
   managedRestaurantIds,
-  marketFixtures,
   orderLine,
   orderTotal,
   preparationDelayed,
@@ -309,7 +308,6 @@ export function createMockStore({
 
   const rootValue = {
     bffInfo: () => bffInfoFixture,
-    markets: () => marketFixtures,
     // Like ListRestaurants by default, the catalog lists open restaurants only.
     restaurants: (args: PageArgs) =>
       paginate(

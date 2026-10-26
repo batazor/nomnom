@@ -13,8 +13,8 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 )
 
 // Restaurants implements applications.RestaurantLister and
@@ -35,14 +35,14 @@ var (
 // List asks for open restaurants of the Market of the request only:
 // include_closed stays false.
 func (r *Restaurants) List(ctx context.Context, request applications.PageRequest) (applications.Page, error) {
-	market, err := cellrouter.MarketFrom(ctx)
+	marketID, err := market.From(ctx)
 	if err != nil {
 		return applications.Page{}, fmt.Errorf("list restaurants: %w", err)
 	}
 	response, err := r.client.ListRestaurants(identity.WithoutUser(ctx), &restaurantsv1.ListRestaurantsRequest{
 		PageSize:  int32(request.Size), // bounded by MaxPageSize in the scenario
 		PageToken: request.Cursor,
-		MarketId:  market,
+		MarketId:  marketID,
 	})
 	if err != nil {
 		return applications.Page{}, fmt.Errorf("list restaurants: %w", err)

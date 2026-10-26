@@ -31,7 +31,7 @@ describe("redactUrl", () => {
 
 describe("initTelemetry", () => {
   const base = {
-    publicGraphqlUrl: "https://api.test/graphql",
+    publicApiUrl: "https://api.test",
     locale: "ru",
     environment: "test",
   } as const;
@@ -52,12 +52,14 @@ describe("initTelemetry", () => {
 });
 
 describe("bffUrlPattern", () => {
-  it("matches every request to the BFF origin and nothing else", () => {
-    const pattern = bffUrlPattern("http://localhost:3010/graphql");
-    expect(pattern.test("http://localhost:3010/graphql?query=x")).toBe(true);
-    expect(pattern.test("http://localhost:3010/graphql")).toBe(true);
-    expect(pattern.test("http://localhost:30100/graphql")).toBe(false);
-    expect(pattern.test("http://localhostX3010/graphql")).toBe(false);
+  it("matches every request to the public API origin and nothing else", () => {
+    const pattern = bffUrlPattern("http://localhost:3010");
+    expect(pattern.test("http://localhost:3010/m/berlin/graphql?query=x")).toBe(
+      true,
+    );
+    expect(pattern.test("http://localhost:3010/markets")).toBe(true);
+    expect(pattern.test("http://localhost:30100/m/berlin/graphql")).toBe(false);
+    expect(pattern.test("http://localhostX3010/m/berlin/graphql")).toBe(false);
     expect(pattern.test("http://localhost:12347/collect")).toBe(false);
   });
 });

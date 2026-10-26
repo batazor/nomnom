@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/applications"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	deliveryv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 )
 
 // Delivery implements applications.Dispatch.
@@ -37,11 +37,11 @@ var availabilities = map[deliveryv1.CourierStatus]applications.Availability{
 
 // Pool is the Courier Pool of the Market of the request.
 func (d *Delivery) Pool(ctx context.Context) (applications.Pool, error) {
-	market, err := cellrouter.MarketFrom(ctx)
+	marketID, err := market.From(ctx)
 	if err != nil {
 		return applications.Pool{}, fmt.Errorf("get courier pool: %w", err)
 	}
-	response, err := d.client.GetCourierPool(ctx, &deliveryv1.GetCourierPoolRequest{MarketId: market})
+	response, err := d.client.GetCourierPool(ctx, &deliveryv1.GetCourierPoolRequest{MarketId: marketID})
 	if err != nil {
 		return applications.Pool{}, poolError("get courier pool", err, codes.OK, nil)
 	}
@@ -60,7 +60,7 @@ func (d *Delivery) Pool(ctx context.Context) (applications.Pool, error) {
 		})
 	}
 	return applications.Pool{
-		Market:   market,
+		Market:   marketID,
 		Size:     int(response.GetSize()),
 		OnLine:   int(response.GetOnLine()),
 		Busy:     int(response.GetBusy()),
@@ -71,11 +71,11 @@ func (d *Delivery) Pool(ctx context.Context) (applications.Pool, error) {
 
 // Register adds the courier to the Courier Pool of the Market of the request.
 func (d *Delivery) Register(ctx context.Context, courierID, name string) error {
-	market, err := cellrouter.MarketFrom(ctx)
+	marketID, err := market.From(ctx)
 	if err != nil {
 		return fmt.Errorf("register courier: %w", err)
 	}
-	_, err = d.client.RegisterCourier(ctx, &deliveryv1.RegisterCourierRequest{CourierId: courierID, Name: name, MarketId: market})
+	_, err = d.client.RegisterCourier(ctx, &deliveryv1.RegisterCourierRequest{CourierId: courierID, Name: name, MarketId: marketID})
 	return poolError("register courier", err, codes.InvalidArgument, applications.ErrInvalidCourierName)
 }
 

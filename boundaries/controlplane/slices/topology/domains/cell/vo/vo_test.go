@@ -21,13 +21,26 @@ func TestCellIDIsASlug(t *testing.T) {
 	}
 }
 
-func TestGatewayAddressIsHostAndPort(t *testing.T) {
-	for _, valid := range []string{"internal-gateway.envoy-gateway-system.svc.cluster.local:8080", "10.0.0.1:443", "[::1]:8080"} {
-		_, err := vo.NewGatewayAddress(valid)
-		require.NoError(t, err, valid)
-	}
-	for _, invalid := range []string{"", "gateway", ":8080", "gateway:", "gateway:0", "gateway:65536", "gateway:http", "http://gateway:8080"} {
-		_, err := vo.NewGatewayAddress(invalid)
+func TestRouterIsAServiceOfANamespace(t *testing.T) {
+	router, err := vo.NewRouter("nomnom-bff", "bff", 3010)
+	require.NoError(t, err)
+	assert.Equal(t, "nomnom-bff", router.Namespace())
+	assert.Equal(t, "bff", router.Name())
+	assert.Equal(t, int32(3010), router.Port())
+
+	for _, invalid := range []struct {
+		namespace, name string
+		port            int32
+	}{
+		{"", "bff", 3010},
+		{"nomnom-bff", "", 3010},
+		{"nomnom-bff", "Bff_1", 3010},
+		{"nomnom.bff", "bff", 3010},
+		{"nomnom-bff", "-bff", 3010},
+		{"nomnom-bff", "bff", 0},
+		{"nomnom-bff", "bff", 65536},
+	} {
+		_, err := vo.NewRouter(invalid.namespace, invalid.name, invalid.port)
 		assert.ErrorIs(t, err, vo.ErrInvalidValue, invalid)
 	}
 }

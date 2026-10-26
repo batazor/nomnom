@@ -1,7 +1,9 @@
 // Package createmarket creates a Market placed in a registered Cell (ADR 41).
 // Only platform#manage_markets may do it. A repeat with the same values
 // succeeds with Created false; other values for an existing market_id are
-// refused, and an unregistered cell_id is a failed precondition.
+// refused, and an unregistered cell_id is a failed precondition. After the
+// creation, including a repeat, the routes of the public gateway are published
+// from the registry.
 package createmarket
 
 import (
@@ -10,6 +12,7 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/permission"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	cellvo "github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell/vo"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market/vo"
@@ -31,15 +34,27 @@ type Result struct {
 type Handler struct {
 	authorizer application.Authorizer
 	markets    market.Repository
+	routes     publishroutes.Publisher
 }
 
 var _ application.Handler[Command, Result] = Handler{}
 
-func New(authorizer application.Authorizer, markets market.Repository) Handler {
-	return Handler{authorizer: authorizer, markets: markets}
+func New(authorizer application.Authorizer, markets market.Repository, routes publishroutes.Publisher) Handler {
+	return Handler{authorizer: authorizer, markets: markets, routes: routes}
 }
 
 func (h Handler) Handle(ctx context.Context, cmd Command) (Result, error) {
+	result, err := h.create(ctx, cmd)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := h.routes.Publish(ctx); err != nil {
+		return Result{}, fmt.Errorf("publish routes after market %s: %w", result.Market.ID(), err)
+	}
+	return result, nil
+}
+
+func (h Handler) create(ctx context.Context, cmd Command) (Result, error) {
 	if err := permission.RequireManageMarkets(ctx, h.authorizer, cmd.Subject); err != nil {
 		return Result{}, err
 	}

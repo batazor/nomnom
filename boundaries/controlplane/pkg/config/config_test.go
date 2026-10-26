@@ -20,16 +20,18 @@ func requiredEnvironment(t *testing.T) {
 		require.NoError(t, os.Unsetenv(env))
 	}
 	for env, value := range map[string]string{
-		EnvIdentityIssuer:           "https://kubernetes.default.svc.cluster.local",
-		EnvIdentityJWKSFile:         "/etc/nomnom/identity/jwks.json",
-		EnvIdentityServiceAccounts:  "nomnom-bff/bff=bff,nomnom-bff/demo-seed=demo-seed",
-		EnvIdentityUserIssuer:       "nomnom-bff",
-		EnvIdentityUserJWKSFile:     "/etc/nomnom/user-identity/jwks.json",
-		EnvIdentityUserDelegates:    "demo-seed",
-		EnvIdentityPlacementReaders: "bff",
-		EnvSpiceDBEndpoint:          "spicedb:50051",
-		EnvSpiceDBPresharedKey:      "key",
-		database.EnvPostgresDSN:     "postgres://controlplane@db/controlplane",
+		EnvIdentityIssuer:          "https://kubernetes.default.svc.cluster.local",
+		EnvIdentityJWKSFile:        "/etc/nomnom/identity/jwks.json",
+		EnvIdentityServiceAccounts: "nomnom-bff/bff=bff,nomnom-bff/demo-seed=demo-seed",
+		EnvIdentityUserIssuer:      "nomnom-bff",
+		EnvIdentityUserJWKSFile:    "/etc/nomnom/user-identity/jwks.json",
+		EnvIdentityUserDelegates:   "demo-seed",
+		EnvSpiceDBEndpoint:         "spicedb:50051",
+		EnvSpiceDBPresharedKey:     "key",
+		database.EnvPostgresDSN:    "postgres://controlplane@db/controlplane",
+		EnvRoutesNamespace:         "nomnom-gateway",
+		EnvRoutesGateway:           "public",
+		EnvRoutesListener:          "api",
 	} {
 		t.Setenv(env, value)
 	}
@@ -43,7 +45,7 @@ func TestLoadReadsTheRequiredEnvironment(t *testing.T) {
 	assert.Equal(t, DefaultPort, cfg.Server.Port)
 	assert.Equal(t, DefaultManagementPort, cfg.Management.Port)
 	assert.Equal(t, DefaultIdentityAudience, cfg.Identity.Audience)
-	assert.Equal(t, map[string]bool{"bff": true}, cfg.Identity.Readers())
+	assert.Equal(t, RoutesConfig{Namespace: "nomnom-gateway", Gateway: "public", Listener: "api"}, cfg.Routes)
 	assert.Equal(t, map[string]bool{"demo-seed": true}, cfg.Identity.Delegates())
 	assert.Equal(t, DefaultSpiceDBTimeout, cfg.SpiceDB.Timeout)
 }
@@ -73,8 +75,9 @@ func TestLoadReadsDrainTimeoutFromEnvironment(t *testing.T) {
 func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
 	for _, env := range []string{
 		EnvIdentityIssuer, EnvIdentityJWKSFile, EnvIdentityServiceAccounts, EnvIdentityUserIssuer,
-		EnvIdentityUserJWKSFile, EnvIdentityUserDelegates, EnvIdentityPlacementReaders,
+		EnvIdentityUserJWKSFile, EnvIdentityUserDelegates,
 		EnvSpiceDBEndpoint, EnvSpiceDBPresharedKey, database.EnvPostgresDSN,
+		EnvRoutesNamespace, EnvRoutesGateway, EnvRoutesListener,
 	} {
 		t.Run(env, func(t *testing.T) {
 			requiredEnvironment(t)
@@ -86,9 +89,9 @@ func TestLoadRejectsMissingRequiredSettings(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsReadersOutsideTheServiceAllowlist(t *testing.T) {
+func TestLoadRejectsDelegatesOutsideTheServiceAllowlist(t *testing.T) {
 	requiredEnvironment(t)
-	t.Setenv(EnvIdentityPlacementReaders, "bff,grpc-caller")
+	t.Setenv(EnvIdentityUserDelegates, "demo-seed,grpc-caller")
 
 	_, err := Load()
 	require.ErrorContains(t, err, "grpc-caller")

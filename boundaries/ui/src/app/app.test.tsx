@@ -9,7 +9,7 @@ import { AppProviders } from "./providers";
 import { AppRouter } from "./router";
 
 const config = {
-  publicGraphqlUrl: "https://public.example.test/graphql",
+  publicApiUrl: "https://public.example.test",
   locale: "ru" as const,
   enableMocks: true,
   environment: "test",
@@ -103,20 +103,27 @@ describe("customer application shell", () => {
     ).toBeInTheDocument();
   });
 
-  it("sends the chosen Market with every operation", async () => {
-    const markets: (string | null)[] = [];
+  it("addresses every operation to the chosen Market by path", async () => {
+    const requests: { path: string; market: string | null }[] = [];
     mockServer.events.on("request:start", ({ request }) => {
-      markets.push(request.headers.get("x-nomnom-market"));
+      requests.push({
+        path: new URL(request.url).pathname,
+        market: request.headers.get("x-nomnom-market"),
+      });
     });
     renderApp("/");
     await chooseBerlin();
     await screen.findByRole("heading", boardHeading);
 
-    // The markets query of the first render goes out without a Market.
-    expect(markets[0]).toBeNull();
-    const afterChoice = markets.slice(1);
+    // The list of Markets comes from the public gateway, not from a Cell.
+    expect(requests[0]?.path).toBe("/markets");
+    const afterChoice = requests.slice(1);
     expect(afterChoice.length).toBeGreaterThan(0);
-    expect(afterChoice.every((market) => market === "berlin")).toBe(true);
+    expect(
+      afterChoice.every((request) => request.path === "/m/berlin/graphql"),
+    ).toBe(true);
+    // The gateway sets the Market header from the route, never the browser.
+    expect(requests.every((request) => request.market === null)).toBe(true);
     mockServer.events.removeAllListeners();
   });
 

@@ -22,11 +22,11 @@ const (
 )
 
 type RegisterCellRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	CellId         string                 `protobuf:"bytes,1,opt,name=cell_id,json=cellId,proto3" json:"cell_id,omitempty"`
-	GatewayAddress string                 `protobuf:"bytes,2,opt,name=gateway_address,json=gatewayAddress,proto3" json:"gateway_address,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CellId        string                 `protobuf:"bytes,1,opt,name=cell_id,json=cellId,proto3" json:"cell_id,omitempty"`
+	Router        *ServiceRef            `protobuf:"bytes,3,opt,name=router,proto3" json:"router,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterCellRequest) Reset() {
@@ -66,11 +66,11 @@ func (x *RegisterCellRequest) GetCellId() string {
 	return ""
 }
 
-func (x *RegisterCellRequest) GetGatewayAddress() string {
+func (x *RegisterCellRequest) GetRouter() *ServiceRef {
 	if x != nil {
-		return x.GatewayAddress
+		return x.Router
 	}
-	return ""
+	return nil
 }
 
 type RegisterCellResponse struct {
@@ -327,95 +327,14 @@ func (x *ListMarketsResponse) GetMarkets() []*Market {
 	return nil
 }
 
-type GetPlacementMapRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetPlacementMapRequest) Reset() {
-	*x = GetPlacementMapRequest{}
-	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetPlacementMapRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetPlacementMapRequest) ProtoMessage() {}
-
-func (x *GetPlacementMapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetPlacementMapRequest.ProtoReflect.Descriptor instead.
-func (*GetPlacementMapRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_controlplane_v1_service_proto_rawDescGZIP(), []int{6}
-}
-
-type GetPlacementMapResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// One per Market, by market_id.
-	Placements    []*Placement `protobuf:"bytes,1,rep,name=placements,proto3" json:"placements,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetPlacementMapResponse) Reset() {
-	*x = GetPlacementMapResponse{}
-	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetPlacementMapResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetPlacementMapResponse) ProtoMessage() {}
-
-func (x *GetPlacementMapResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetPlacementMapResponse.ProtoReflect.Descriptor instead.
-func (*GetPlacementMapResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_controlplane_v1_service_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *GetPlacementMapResponse) GetPlacements() []*Placement {
-	if x != nil {
-		return x.Placements
-	}
-	return nil
-}
-
 var File_nomnom_controlplane_v1_service_proto protoreflect.FileDescriptor
 
 const file_nomnom_controlplane_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"$nomnom/controlplane/v1/service.proto\x12\x16nomnom.controlplane.v1\x1a)nomnom/controlplane/v1/controlplane.proto\"W\n" +
+	"$nomnom/controlplane/v1/service.proto\x12\x16nomnom.controlplane.v1\x1a)nomnom/controlplane/v1/controlplane.proto\"\x81\x01\n" +
 	"\x13RegisterCellRequest\x12\x17\n" +
-	"\acell_id\x18\x01 \x01(\tR\x06cellId\x12'\n" +
-	"\x0fgateway_address\x18\x02 \x01(\tR\x0egatewayAddress\"b\n" +
+	"\acell_id\x18\x01 \x01(\tR\x06cellId\x12:\n" +
+	"\x06router\x18\x03 \x01(\v2\".nomnom.controlplane.v1.ServiceRefR\x06routerJ\x04\b\x02\x10\x03R\x0fgateway_address\"b\n" +
 	"\x14RegisterCellResponse\x120\n" +
 	"\x04cell\x18\x01 \x01(\v2\x1c.nomnom.controlplane.v1.CellR\x04cell\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"{\n" +
@@ -429,17 +348,11 @@ const file_nomnom_controlplane_v1_service_proto_rawDesc = "" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"\x14\n" +
 	"\x12ListMarketsRequest\"O\n" +
 	"\x13ListMarketsResponse\x128\n" +
-	"\amarkets\x18\x01 \x03(\v2\x1e.nomnom.controlplane.v1.MarketR\amarkets\"\x18\n" +
-	"\x16GetPlacementMapRequest\"\\\n" +
-	"\x17GetPlacementMapResponse\x12A\n" +
-	"\n" +
-	"placements\x18\x01 \x03(\v2!.nomnom.controlplane.v1.PlacementR\n" +
-	"placements2\xc7\x03\n" +
+	"\amarkets\x18\x01 \x03(\v2\x1e.nomnom.controlplane.v1.MarketR\amarkets2\xd3\x02\n" +
 	"\x13ControlPlaneService\x12i\n" +
 	"\fRegisterCell\x12+.nomnom.controlplane.v1.RegisterCellRequest\x1a,.nomnom.controlplane.v1.RegisterCellResponse\x12i\n" +
 	"\fCreateMarket\x12+.nomnom.controlplane.v1.CreateMarketRequest\x1a,.nomnom.controlplane.v1.CreateMarketResponse\x12f\n" +
-	"\vListMarkets\x12*.nomnom.controlplane.v1.ListMarketsRequest\x1a+.nomnom.controlplane.v1.ListMarketsResponse\x12r\n" +
-	"\x0fGetPlacementMap\x12..nomnom.controlplane.v1.GetPlacementMapRequest\x1a/.nomnom.controlplane.v1.GetPlacementMapResponseB\x95\x02\n" +
+	"\vListMarkets\x12*.nomnom.controlplane.v1.ListMarketsRequest\x1a+.nomnom.controlplane.v1.ListMarketsResponseB\x95\x02\n" +
 	"\x1acom.nomnom.controlplane.v1B\fServiceProtoP\x01Zogithub.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1;controlplanev1\xa2\x02\x03NCX\xaa\x02\x16Nomnom.Controlplane.V1\xca\x02\x16Nomnom\\Controlplane\\V1\xe2\x02\"Nomnom\\Controlplane\\V1\\GPBMetadata\xea\x02\x18Nomnom::Controlplane::V1b\x06proto3"
 
 var (
@@ -454,38 +367,34 @@ func file_nomnom_controlplane_v1_service_proto_rawDescGZIP() []byte {
 	return file_nomnom_controlplane_v1_service_proto_rawDescData
 }
 
-var file_nomnom_controlplane_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_nomnom_controlplane_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_nomnom_controlplane_v1_service_proto_goTypes = []any{
-	(*RegisterCellRequest)(nil),     // 0: nomnom.controlplane.v1.RegisterCellRequest
-	(*RegisterCellResponse)(nil),    // 1: nomnom.controlplane.v1.RegisterCellResponse
-	(*CreateMarketRequest)(nil),     // 2: nomnom.controlplane.v1.CreateMarketRequest
-	(*CreateMarketResponse)(nil),    // 3: nomnom.controlplane.v1.CreateMarketResponse
-	(*ListMarketsRequest)(nil),      // 4: nomnom.controlplane.v1.ListMarketsRequest
-	(*ListMarketsResponse)(nil),     // 5: nomnom.controlplane.v1.ListMarketsResponse
-	(*GetPlacementMapRequest)(nil),  // 6: nomnom.controlplane.v1.GetPlacementMapRequest
-	(*GetPlacementMapResponse)(nil), // 7: nomnom.controlplane.v1.GetPlacementMapResponse
-	(*Cell)(nil),                    // 8: nomnom.controlplane.v1.Cell
-	(*Market)(nil),                  // 9: nomnom.controlplane.v1.Market
-	(*Placement)(nil),               // 10: nomnom.controlplane.v1.Placement
+	(*RegisterCellRequest)(nil),  // 0: nomnom.controlplane.v1.RegisterCellRequest
+	(*RegisterCellResponse)(nil), // 1: nomnom.controlplane.v1.RegisterCellResponse
+	(*CreateMarketRequest)(nil),  // 2: nomnom.controlplane.v1.CreateMarketRequest
+	(*CreateMarketResponse)(nil), // 3: nomnom.controlplane.v1.CreateMarketResponse
+	(*ListMarketsRequest)(nil),   // 4: nomnom.controlplane.v1.ListMarketsRequest
+	(*ListMarketsResponse)(nil),  // 5: nomnom.controlplane.v1.ListMarketsResponse
+	(*ServiceRef)(nil),           // 6: nomnom.controlplane.v1.ServiceRef
+	(*Cell)(nil),                 // 7: nomnom.controlplane.v1.Cell
+	(*Market)(nil),               // 8: nomnom.controlplane.v1.Market
 }
 var file_nomnom_controlplane_v1_service_proto_depIdxs = []int32{
-	8,  // 0: nomnom.controlplane.v1.RegisterCellResponse.cell:type_name -> nomnom.controlplane.v1.Cell
-	9,  // 1: nomnom.controlplane.v1.CreateMarketResponse.market:type_name -> nomnom.controlplane.v1.Market
-	9,  // 2: nomnom.controlplane.v1.ListMarketsResponse.markets:type_name -> nomnom.controlplane.v1.Market
-	10, // 3: nomnom.controlplane.v1.GetPlacementMapResponse.placements:type_name -> nomnom.controlplane.v1.Placement
-	0,  // 4: nomnom.controlplane.v1.ControlPlaneService.RegisterCell:input_type -> nomnom.controlplane.v1.RegisterCellRequest
-	2,  // 5: nomnom.controlplane.v1.ControlPlaneService.CreateMarket:input_type -> nomnom.controlplane.v1.CreateMarketRequest
-	4,  // 6: nomnom.controlplane.v1.ControlPlaneService.ListMarkets:input_type -> nomnom.controlplane.v1.ListMarketsRequest
-	6,  // 7: nomnom.controlplane.v1.ControlPlaneService.GetPlacementMap:input_type -> nomnom.controlplane.v1.GetPlacementMapRequest
-	1,  // 8: nomnom.controlplane.v1.ControlPlaneService.RegisterCell:output_type -> nomnom.controlplane.v1.RegisterCellResponse
-	3,  // 9: nomnom.controlplane.v1.ControlPlaneService.CreateMarket:output_type -> nomnom.controlplane.v1.CreateMarketResponse
-	5,  // 10: nomnom.controlplane.v1.ControlPlaneService.ListMarkets:output_type -> nomnom.controlplane.v1.ListMarketsResponse
-	7,  // 11: nomnom.controlplane.v1.ControlPlaneService.GetPlacementMap:output_type -> nomnom.controlplane.v1.GetPlacementMapResponse
-	8,  // [8:12] is the sub-list for method output_type
-	4,  // [4:8] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	6, // 0: nomnom.controlplane.v1.RegisterCellRequest.router:type_name -> nomnom.controlplane.v1.ServiceRef
+	7, // 1: nomnom.controlplane.v1.RegisterCellResponse.cell:type_name -> nomnom.controlplane.v1.Cell
+	8, // 2: nomnom.controlplane.v1.CreateMarketResponse.market:type_name -> nomnom.controlplane.v1.Market
+	8, // 3: nomnom.controlplane.v1.ListMarketsResponse.markets:type_name -> nomnom.controlplane.v1.Market
+	0, // 4: nomnom.controlplane.v1.ControlPlaneService.RegisterCell:input_type -> nomnom.controlplane.v1.RegisterCellRequest
+	2, // 5: nomnom.controlplane.v1.ControlPlaneService.CreateMarket:input_type -> nomnom.controlplane.v1.CreateMarketRequest
+	4, // 6: nomnom.controlplane.v1.ControlPlaneService.ListMarkets:input_type -> nomnom.controlplane.v1.ListMarketsRequest
+	1, // 7: nomnom.controlplane.v1.ControlPlaneService.RegisterCell:output_type -> nomnom.controlplane.v1.RegisterCellResponse
+	3, // 8: nomnom.controlplane.v1.ControlPlaneService.CreateMarket:output_type -> nomnom.controlplane.v1.CreateMarketResponse
+	5, // 9: nomnom.controlplane.v1.ControlPlaneService.ListMarkets:output_type -> nomnom.controlplane.v1.ListMarketsResponse
+	7, // [7:10] is the sub-list for method output_type
+	4, // [4:7] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_controlplane_v1_service_proto_init() }
@@ -500,7 +409,7 @@ func file_nomnom_controlplane_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_controlplane_v1_service_proto_rawDesc), len(file_nomnom_controlplane_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -10,8 +10,10 @@ POSTGRES_DEV_DSN ?= postgres://controlplane:controlplane@localhost:$(POSTGRES_PO
 
 check: proto-check test lint format-check
 
-# API требует SpiceDB (ADR 18, `make spicedb-dev` в корне), PostgreSQL (`make postgres-dev`) и
-# identity (ADR 27, ADR 32): IDENTITY__* задаёт окружение или CONFIG_FILE (config.example.yaml).
+# API требует SpiceDB (ADR 18, `make spicedb-dev` в корне), PostgreSQL (`make postgres-dev`),
+# identity (ADR 27, ADR 32) и маршруты (ROUTES__*, ADR 41): IDENTITY__* и ROUTES__* задаёт
+# окружение или CONFIG_FILE (config.example.yaml). Маршруты применяются через in-cluster config —
+# процесс стартует только в pod кластера.
 run:
 	SPICEDB__ENDPOINT=$${SPICEDB__ENDPOINT:-localhost:50051} SPICEDB__PRESHARED_KEY=$${SPICEDB__PRESHARED_KEY:-devkey} \
 		SPICEDB__INSECURE=$${SPICEDB__INSECURE:-true} POSTGRES__DSN=$${POSTGRES__DSN:-$(POSTGRES_DEV_DSN)} \

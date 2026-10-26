@@ -145,11 +145,11 @@ Usage: {{ include "controlplane.otelEnv" (dict "context" $ "serviceName" "") }}
 
 {{/*
 Identity (ADR 27, ADR 32, ADR 41): у control plane нет анонимных операций — JWKS кластера, issuer,
-audience, allowlist, JWKS BFF, issuer BFF, делегаты и читатели Placement Map обязательны, иначе
+audience, allowlist, JWKS BFF, issuer BFF и делегаты обязательны, иначе
 chart не рендерится (а процесс без них не стартует).
 */}}
 {{- define "controlplane.validateIdentity" -}}
-{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" "placementReaders" -}}
+{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" -}}
 {{- if not (get $.Values.identity $key) -}}
 {{- fail (printf "identity.%s is required" $key) -}}
 {{- end -}}
@@ -168,5 +168,16 @@ SpiceDB (ADR 18): каждая запись проверяет platform#manage_m
 {{- end -}}
 {{- if not .Values.postgres.dsnSecret.name -}}
 {{- fail "postgres.dsnSecret.name is required" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Маршруты публичного gateway (ADR 41): без них control plane не опубликует маршрут созданного Market.
+*/}}
+{{- define "controlplane.validateRoutes" -}}
+{{- range $key := list "namespace" "gateway" "listener" -}}
+{{- if not (get $.Values.routes $key) -}}
+{{- fail (printf "routes.%s is required" $key) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}

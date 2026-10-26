@@ -10,8 +10,10 @@
 #           ответ без errors);
 #   wait  — сколько секунд повторять; 0 — одна попытка;
 #   save  — jq над ответом: объект новых ключей состояния (по умолчанию {});
-#   market — Market запроса (ADR 41): заголовок X-Nomnom-Market, по которому BFF выбирает Cell;
-#            без значения по умолчанию — тест задаёт его явно (berlin из ops/kind/demo/files/seed.json).
+#   market — Market запроса (ADR 41): заголовок X-Nomnom-Market, который перед Cell ставит
+#            публичный gateway по пути /m/{market_id}; запрос идёт в BFF cell-1 напрямую, поэтому
+#            заголовок ставит тест. Без значения по умолчанию — тест задаёт его явно (berlin из
+#            ops/kind/demo/files/seed.json).
 # Access token живёт 120 s, поэтому выпускается на каждую попытку.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: StepTemplate

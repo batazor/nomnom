@@ -43,7 +43,6 @@ const (
 	BffService_QueryCourierPool_FullMethodName                   = "/service.BffService/QueryCourierPool"
 	BffService_QueryCustomerOrders_FullMethodName                = "/service.BffService/QueryCustomerOrders"
 	BffService_QueryKitchen_FullMethodName                       = "/service.BffService/QueryKitchen"
-	BffService_QueryMarkets_FullMethodName                       = "/service.BffService/QueryMarkets"
 	BffService_QueryMyRestaurants_FullMethodName                 = "/service.BffService/QueryMyRestaurants"
 	BffService_QueryOrder_FullMethodName                         = "/service.BffService/QueryOrder"
 	BffService_QueryRestaurant_FullMethodName                    = "/service.BffService/QueryRestaurant"
@@ -113,9 +112,6 @@ type BffServiceClient interface {
 	// Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
 	// restaurant, null if the restaurant does not exist or the user may not operate its kitchen
 	QueryKitchen(ctx context.Context, in *QueryKitchenRequest, opts ...grpc.CallOption) (*QueryKitchenResponse, error)
-	// Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
-	// other operation requires the header with one of their ids
-	QueryMarkets(ctx context.Context, in *QueryMarketsRequest, opts ...grpc.CallOption) (*QueryMarketsResponse, error)
 	// Restaurants the current user owns, open and closed, ordered by identifier; menu is null
 	QueryMyRestaurants(ctx context.Context, in *QueryMyRestaurantsRequest, opts ...grpc.CallOption) (*QueryMyRestaurantsResponse, error)
 	// Order of the current customer, null if it does not exist or belongs to someone else
@@ -377,16 +373,6 @@ func (c *bffServiceClient) QueryKitchen(ctx context.Context, in *QueryKitchenReq
 	return out, nil
 }
 
-func (c *bffServiceClient) QueryMarkets(ctx context.Context, in *QueryMarketsRequest, opts ...grpc.CallOption) (*QueryMarketsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(QueryMarketsResponse)
-	err := c.cc.Invoke(ctx, BffService_QueryMarkets_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *bffServiceClient) QueryMyRestaurants(ctx context.Context, in *QueryMyRestaurantsRequest, opts ...grpc.CallOption) (*QueryMyRestaurantsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryMyRestaurantsResponse)
@@ -499,9 +485,6 @@ type BffServiceServer interface {
 	// Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
 	// restaurant, null if the restaurant does not exist or the user may not operate its kitchen
 	QueryKitchen(context.Context, *QueryKitchenRequest) (*QueryKitchenResponse, error)
-	// Markets the client can choose from, by name; needs no X-Nomnom-Market header. Every
-	// other operation requires the header with one of their ids
-	QueryMarkets(context.Context, *QueryMarketsRequest) (*QueryMarketsResponse, error)
 	// Restaurants the current user owns, open and closed, ordered by identifier; menu is null
 	QueryMyRestaurants(context.Context, *QueryMyRestaurantsRequest) (*QueryMyRestaurantsResponse, error)
 	// Order of the current customer, null if it does not exist or belongs to someone else
@@ -594,9 +577,6 @@ func (UnimplementedBffServiceServer) QueryCustomerOrders(context.Context, *Query
 }
 func (UnimplementedBffServiceServer) QueryKitchen(context.Context, *QueryKitchenRequest) (*QueryKitchenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryKitchen not implemented")
-}
-func (UnimplementedBffServiceServer) QueryMarkets(context.Context, *QueryMarketsRequest) (*QueryMarketsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method QueryMarkets not implemented")
 }
 func (UnimplementedBffServiceServer) QueryMyRestaurants(context.Context, *QueryMyRestaurantsRequest) (*QueryMyRestaurantsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryMyRestaurants not implemented")
@@ -1066,24 +1046,6 @@ func _BffService_QueryKitchen_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _BffService_QueryMarkets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QueryMarketsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BffServiceServer).QueryMarkets(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: BffService_QueryMarkets_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BffServiceServer).QueryMarkets(ctx, req.(*QueryMarketsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _BffService_QueryMyRestaurants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryMyRestaurantsRequest)
 	if err := dec(in); err != nil {
@@ -1276,10 +1238,6 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryKitchen",
 			Handler:    _BffService_QueryKitchen_Handler,
-		},
-		{
-			MethodName: "QueryMarkets",
-			Handler:    _BffService_QueryMarkets_Handler,
 		},
 		{
 			MethodName: "QueryMyRestaurants",

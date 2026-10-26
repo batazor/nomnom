@@ -8,23 +8,21 @@ import (
 )
 
 const (
-	configKeyIdentityIssuer           = "identity.issuer"
-	configKeyIdentityAudience         = "identity.audience"
-	configKeyIdentityJWKSFile         = "identity.jwks_file"
-	configKeyIdentityServiceAccounts  = "identity.service_accounts"
-	configKeyIdentityUserIssuer       = "identity.user_issuer"
-	configKeyIdentityUserJWKSFile     = "identity.user_jwks_file"
-	configKeyIdentityUserDelegates    = "identity.user_delegates"
-	configKeyIdentityPlacementReaders = "identity.placement_readers"
+	configKeyIdentityIssuer          = "identity.issuer"
+	configKeyIdentityAudience        = "identity.audience"
+	configKeyIdentityJWKSFile        = "identity.jwks_file"
+	configKeyIdentityServiceAccounts = "identity.service_accounts"
+	configKeyIdentityUserIssuer      = "identity.user_issuer"
+	configKeyIdentityUserJWKSFile    = "identity.user_jwks_file"
+	configKeyIdentityUserDelegates   = "identity.user_delegates"
 
-	EnvIdentityIssuer           = "IDENTITY__ISSUER"
-	EnvIdentityAudience         = "IDENTITY__AUDIENCE"
-	EnvIdentityJWKSFile         = "IDENTITY__JWKS_FILE"
-	EnvIdentityServiceAccounts  = "IDENTITY__SERVICE_ACCOUNTS"
-	EnvIdentityUserIssuer       = "IDENTITY__USER_ISSUER"
-	EnvIdentityUserJWKSFile     = "IDENTITY__USER_JWKS_FILE"
-	EnvIdentityUserDelegates    = "IDENTITY__USER_DELEGATES"
-	EnvIdentityPlacementReaders = "IDENTITY__PLACEMENT_READERS"
+	EnvIdentityIssuer          = "IDENTITY__ISSUER"
+	EnvIdentityAudience        = "IDENTITY__AUDIENCE"
+	EnvIdentityJWKSFile        = "IDENTITY__JWKS_FILE"
+	EnvIdentityServiceAccounts = "IDENTITY__SERVICE_ACCOUNTS"
+	EnvIdentityUserIssuer      = "IDENTITY__USER_ISSUER"
+	EnvIdentityUserJWKSFile    = "IDENTITY__USER_JWKS_FILE"
+	EnvIdentityUserDelegates   = "IDENTITY__USER_DELEGATES"
 
 	DefaultIdentityAudience = "nomnom.controlplane"
 )
@@ -44,9 +42,6 @@ type IdentityConfig struct {
 	UserJWKSFile string `mapstructure:"user_jwks_file"`
 	// UserDelegates lists services allowed to pass a user assertion: "bff,…".
 	UserDelegates string `mapstructure:"user_delegates"`
-	// PlacementReaders lists services allowed to read Markets and the Placement
-	// Map (ListMarkets, GetPlacementMap): "bff".
-	PlacementReaders string `mapstructure:"placement_readers"`
 }
 
 func configureIdentity(loader *viper.Viper) error {
@@ -57,16 +52,14 @@ func configureIdentity(loader *viper.Viper) error {
 	loader.SetDefault(configKeyIdentityUserIssuer, "")
 	loader.SetDefault(configKeyIdentityUserJWKSFile, "")
 	loader.SetDefault(configKeyIdentityUserDelegates, "")
-	loader.SetDefault(configKeyIdentityPlacementReaders, "")
 	for key, env := range map[string]string{
-		configKeyIdentityIssuer:           EnvIdentityIssuer,
-		configKeyIdentityAudience:         EnvIdentityAudience,
-		configKeyIdentityJWKSFile:         EnvIdentityJWKSFile,
-		configKeyIdentityServiceAccounts:  EnvIdentityServiceAccounts,
-		configKeyIdentityUserIssuer:       EnvIdentityUserIssuer,
-		configKeyIdentityUserJWKSFile:     EnvIdentityUserJWKSFile,
-		configKeyIdentityUserDelegates:    EnvIdentityUserDelegates,
-		configKeyIdentityPlacementReaders: EnvIdentityPlacementReaders,
+		configKeyIdentityIssuer:          EnvIdentityIssuer,
+		configKeyIdentityAudience:        EnvIdentityAudience,
+		configKeyIdentityJWKSFile:        EnvIdentityJWKSFile,
+		configKeyIdentityServiceAccounts: EnvIdentityServiceAccounts,
+		configKeyIdentityUserIssuer:      EnvIdentityUserIssuer,
+		configKeyIdentityUserJWKSFile:    EnvIdentityUserJWKSFile,
+		configKeyIdentityUserDelegates:   EnvIdentityUserDelegates,
 	} {
 		if err := loader.BindEnv(key, env); err != nil {
 			return fmt.Errorf("bind %s: %w", env, err)
@@ -77,9 +70,6 @@ func configureIdentity(loader *viper.Viper) error {
 
 // Delegates parses the comma-separated services allowed to pass user assertions.
 func (cfg IdentityConfig) Delegates() map[string]bool { return services(cfg.UserDelegates) }
-
-// Readers parses the comma-separated services allowed to read the topology.
-func (cfg IdentityConfig) Readers() map[string]bool { return services(cfg.PlacementReaders) }
 
 func services(list string) map[string]bool {
 	set := map[string]bool{}
@@ -134,18 +124,13 @@ func (cfg IdentityConfig) Validate() error {
 	if len(cfg.Delegates()) == 0 {
 		return fmt.Errorf("%s is required", EnvIdentityUserDelegates)
 	}
-	if len(cfg.Readers()) == 0 {
-		return fmt.Errorf("%s is required", EnvIdentityPlacementReaders)
-	}
 	allowed := map[string]bool{}
 	for _, service := range accounts {
 		allowed[service] = true
 	}
-	for name, list := range map[string]map[string]bool{EnvIdentityUserDelegates: cfg.Delegates(), EnvIdentityPlacementReaders: cfg.Readers()} {
-		for service := range list {
-			if !allowed[service] {
-				return fmt.Errorf("%s names %s, which %s does not allow", name, service, EnvIdentityServiceAccounts)
-			}
+	for service := range cfg.Delegates() {
+		if !allowed[service] {
+			return fmt.Errorf("%s names %s, which %s does not allow", EnvIdentityUserDelegates, service, EnvIdentityServiceAccounts)
 		}
 	}
 	return nil

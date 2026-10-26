@@ -2,6 +2,7 @@ package createmarket_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/createmarket"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market/vo"
 )
@@ -52,8 +54,23 @@ func (m *markets) Get(_ context.Context, id vo.MarketID) (market.Market, error) 
 
 func (m *markets) List(context.Context) ([]market.Market, error) { return nil, nil }
 
+// routes is a mock of route publication that counts publications.
+type routes struct {
+	published int
+	err       error
+}
+
+func (r *routes) Publish(context.Context) error {
+	r.published++
+	return r.err
+}
+
 func newHandler() createmarket.Handler {
-	return createmarket.New(granted{}, &markets{cells: map[string]bool{"cell-1": true}, created: map[vo.MarketID]market.Market{}})
+	return newHandlerPublishing(&routes{})
+}
+
+func newHandlerPublishing(published *routes) createmarket.Handler {
+	return createmarket.New(granted{}, &markets{cells: map[string]bool{"cell-1": true}, created: map[vo.MarketID]market.Market{}}, published)
 }
 
 func berlin(name, currency, cell string) createmarket.Command {
@@ -61,7 +78,8 @@ func berlin(name, currency, cell string) createmarket.Command {
 }
 
 func TestCreatesAMarketOnceAndRepeatsIdempotently(t *testing.T) {
-	handler := newHandler()
+	published := &routes{}
+	handler := newHandlerPublishing(published)
 
 	first, err := handler.Handle(context.Background(), berlin(" Berlin ", "EUR", "cell-1"))
 	require.NoError(t, err)
@@ -72,6 +90,21 @@ func TestCreatesAMarketOnceAndRepeatsIdempotently(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, again.Created)
 	assert.Equal(t, first.Market, again.Market)
+	assert.Equal(t, 2, published.published, "routes are published after the creation and after the repeat")
+}
+
+func TestAnUnpublishedRouteKeepsTheMarketAndARepeatPublishesIt(t *testing.T) {
+	published := &routes{err: publishroutes.ErrRoutesUnavailable}
+	handler := newHandlerPublishing(published)
+
+	_, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "cell-1"))
+	assert.ErrorIs(t, err, publishroutes.ErrRoutesUnavailable)
+
+	published.err = nil
+	again, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "cell-1"))
+	require.NoError(t, err)
+	assert.False(t, again.Created, "the market stayed in the registry")
+	assert.Equal(t, 2, published.published)
 }
 
 func TestRefusesOtherValuesForAnExistingMarket(t *testing.T) {
@@ -91,8 +124,17 @@ func TestRefusesAMarketOfAnUnregisteredCell(t *testing.T) {
 func TestRequiresManageMarkets(t *testing.T) {
 	cmd := berlin("Berlin", "EUR", "cell-1")
 	cmd.Subject = application.Subject{Kind: application.SubjectService, ID: "bff", Service: "bff"}
-	_, err := newHandler().Handle(context.Background(), cmd)
+	published := &routes{}
+	_, err := newHandlerPublishing(published).Handle(context.Background(), cmd)
 	assert.ErrorIs(t, err, application.ErrPermissionDenied)
+	assert.Zero(t, published.published)
+}
+
+func TestARefusedMarketPublishesNothing(t *testing.T) {
+	published := &routes{}
+	_, err := newHandlerPublishing(published).Handle(context.Background(), berlin("Berlin", "EUR", "cell-9"))
+	assert.True(t, errors.Is(err, market.ErrUnknownCell))
+	assert.Zero(t, published.published)
 }
 
 func TestRejectsInvalidValues(t *testing.T) {

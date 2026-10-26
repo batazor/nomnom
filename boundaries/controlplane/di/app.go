@@ -18,6 +18,7 @@ import (
 	controlplanev1 "github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/telemetry"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	topologydi "github.com/batazor/nomnom/boundaries/controlplane/slices/topology/di"
 )
 
@@ -27,22 +28,28 @@ const AppServiceName = "controlplane"
 // App — lifecycle.Worker бизнес-порта.
 type App struct {
 	server    *grpc.Server
+	routes    publishroutes.Publisher
 	addr      string
 	listener  net.Listener
 	telemetry *telemetry.Telemetry
 }
 
-func NewApp(cfg config.ServerConfig, server *grpc.Server) *App {
-	return &App{server: server, addr: fmt.Sprintf(":%d", cfg.Port)}
+func NewApp(cfg config.ServerConfig, server *grpc.Server, module *topologydi.Module) *App {
+	return &App{server: server, routes: module.PublishRoutes, addr: fmt.Sprintf(":%d", cfg.Port)}
 }
 
-// Start поднимает telemetry pipeline и открывает бизнес-порт; после него процесс может стать ready.
+// Start поднимает telemetry pipeline, один раз приводит маршруты публичного
+// gateway к реестру (ADR 41) и открывает бизнес-порт; после него процесс может
+// стать ready. Маршруты не применились — процесс не стартует.
 func (a *App) Start(ctx context.Context) error {
 	tel, err := telemetry.Start(ctx, AppServiceName)
 	if err != nil {
 		return fmt.Errorf("start telemetry: %w", err)
 	}
 	a.telemetry = tel
+	if err := a.routes.Publish(ctx); err != nil {
+		return errors.Join(fmt.Errorf("publish routes at start: %w", err), a.telemetry.Shutdown(ctx))
+	}
 	var lc net.ListenConfig
 	listener, err := lc.Listen(ctx, "tcp", a.addr)
 	if err != nil {
@@ -95,10 +102,9 @@ func (a *App) stop(ctx context.Context) error {
 func NewGRPCServer(module *topologydi.Module, subjects grpcadapter.SubjectResolver) *grpc.Server {
 	server := grpc.NewServer(grpc.ConnectionTimeout(2*time.Second), grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	controlplanev1.RegisterControlPlaneServiceServer(server, grpcadapter.NewService(grpcadapter.Handlers{
-		RegisterCell:    module.RegisterCell,
-		CreateMarket:    module.CreateMarket,
-		ListMarkets:     module.ListMarkets,
-		GetPlacementMap: module.GetPlacementMap,
+		RegisterCell: module.RegisterCell,
+		CreateMarket: module.CreateMarket,
+		ListMarkets:  module.ListMarkets,
 	}, subjects))
 	return server
 }

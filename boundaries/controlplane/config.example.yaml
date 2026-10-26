@@ -1,6 +1,7 @@
 # Пример локальной конфигурации controlplane (CONFIG_FILE=config.example.yaml make run).
-# Переменные окружения (SECTION__KEY) перекрывают файл. Все секции identity, spicedb и
-# postgres обязательны: без них процесс не стартует.
+# Переменные окружения (SECTION__KEY) перекрывают файл. Все секции identity, spicedb,
+# postgres и routes обязательны: без них процесс не стартует. Маршруты публичного gateway
+# применяются через in-cluster config ServiceAccount: вне кластера процесс не стартует.
 server:
   port: 8086
 management:
@@ -18,8 +19,6 @@ identity:
   user_issuer: nomnom-bff
   user_jwks_file: ../../tests/identity/fixtures/bff-jwks.json
   user_delegates: bff,demo-seed
-  # ADR 41: ListMarkets и GetPlacementMap — только service identity BFF.
-  placement_readers: bff
 spicedb:
   endpoint: localhost:50051
   preshared_key: devkey
@@ -27,3 +26,8 @@ spicedb:
   timeout: 2s
 postgres:
   dsn: postgres://controlplane:controlplane@localhost:5436/controlplane?sslmode=disable
+routes:
+  # ADR 41: маршруты Market и список Market публичного gateway.
+  namespace: nomnom-gateway
+  gateway: public
+  listener: api

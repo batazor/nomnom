@@ -11,13 +11,6 @@
     },
     {
       "type": "OPERATION_TYPE_QUERY",
-      "original": "markets",
-      "mapped": "QueryMarkets",
-      "request": "QueryMarketsRequest",
-      "response": "QueryMarketsResponse"
-    },
-    {
-      "type": "OPERATION_TYPE_QUERY",
       "original": "restaurants",
       "mapped": "QueryRestaurants",
       "request": "QueryRestaurantsRequest",
@@ -226,10 +219,6 @@
         {
           "original": "bffInfo",
           "mapped": "bff_info"
-        },
-        {
-          "original": "markets",
-          "mapped": "markets"
         },
         {
           "original": "restaurants",
@@ -1060,23 +1049,6 @@
         {
           "original": "problem",
           "mapped": "problem"
-        }
-      ]
-    },
-    {
-      "type": "Market",
-      "fieldMappings": [
-        {
-          "original": "id",
-          "mapped": "id"
-        },
-        {
-          "original": "name",
-          "mapped": "name"
-        },
-        {
-          "original": "currency",
-          "mapped": "currency"
         }
       ]
     },

@@ -1,5 +1,6 @@
-// Package listmarkets returns every Market for the Market choice of the client
-// (ADR 41). Only allowlisted services — the service identity of BFF — read it.
+// Package listmarkets returns every Market of the registry (ADR 41). Only
+// platform#manage_markets — the platform operator — reads it; clients get the
+// Markets from the public gateway, not from the control plane.
 package listmarkets
 
 import (
@@ -7,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/permission"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
 )
 
@@ -20,18 +22,18 @@ type Lister interface {
 }
 
 type Handler struct {
-	readers application.ServiceAllowlist
-	markets Lister
+	authorizer application.Authorizer
+	markets    Lister
 }
 
 var _ application.Handler[Query, []market.Market] = Handler{}
 
-func New(readers application.ServiceAllowlist, markets Lister) Handler {
-	return Handler{readers: readers, markets: markets}
+func New(authorizer application.Authorizer, markets Lister) Handler {
+	return Handler{authorizer: authorizer, markets: markets}
 }
 
 func (h Handler) Handle(ctx context.Context, query Query) ([]market.Market, error) {
-	if err := h.readers.Allow(query.Subject); err != nil {
+	if err := permission.RequireManageMarkets(ctx, h.authorizer, query.Subject); err != nil {
 		return nil, err
 	}
 	markets, err := h.markets.List(ctx)

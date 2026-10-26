@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseRuntimeConfig } from "./runtime-config";
 
 const required = {
-  VITE_PUBLIC_GRAPHQL_URL: "https://api.example.test/graphql",
+  VITE_PUBLIC_API_URL: "https://api.example.test/",
   VITE_LOCALE: "en",
   VITE_DEPLOYMENT_ENVIRONMENT: "development",
 } as const;
@@ -19,7 +19,7 @@ describe("parseRuntimeConfig", () => {
     expect(
       parseRuntimeConfig({ ...required, VITE_ENABLE_MOCKS: "true" }),
     ).toEqual({
-      publicGraphqlUrl: "https://api.example.test/graphql",
+      publicApiUrl: "https://api.example.test",
       locale: "en",
       enableMocks: true,
       telemetry: undefined,
@@ -70,7 +70,7 @@ describe("parseRuntimeConfig", () => {
 
   it("fails fast when the public endpoint is missing", () => {
     expect(() => parseRuntimeConfig({})).toThrow(
-      "VITE_PUBLIC_GRAPHQL_URL is required",
+      "VITE_PUBLIC_API_URL is required",
     );
   });
 
@@ -97,7 +97,7 @@ describe("parseRuntimeConfig", () => {
   it("rejects non-HTTP protocols", () => {
     expect(() =>
       parseRuntimeConfig({
-        VITE_PUBLIC_GRAPHQL_URL: "grpc://orders.internal:9000",
+        VITE_PUBLIC_API_URL: "grpc://orders.internal:9000",
       }),
     ).toThrow("must use http or https");
   });

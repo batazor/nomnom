@@ -5,7 +5,7 @@ import { Button } from "../../shared/ui";
 import { useMarketChoice } from "./use-market-choice";
 import "./choose-market.css";
 
-// Market-scoped screens render only in a chosen Market that BFF lists;
+// Market-scoped screens render only in a chosen Market that is listed;
 // otherwise the viewer picks one. The first Market is never picked for them,
 // not even when it is the only one.
 export function MarketGate({ children }: { children: ReactNode }) {
@@ -70,8 +70,8 @@ export function MarketGate({ children }: { children: ReactNode }) {
   );
 }
 
-// Renders children only in a chosen Market that BFF lists, nothing else:
-// for header parts whose operations are routed to a Cell.
+// Renders children only in a chosen Market that is listed, nothing else:
+// for header parts whose operations go to the Cell of the Market.
 export function WhenMarketChosen({ children }: { children: ReactNode }) {
   const choice = useMarketChoice();
   return choice.kind === "loaded" && choice.chosen ? children : null;

@@ -18,7 +18,7 @@ import { mockStore } from "../../shared/graphql/mocks/handlers";
 import { mockServer } from "../../shared/graphql/mocks/server";
 
 const config = {
-  publicGraphqlUrl: "https://public.example.test/graphql",
+  publicApiUrl: "https://public.example.test",
   locale: "ru" as const,
   enableMocks: true,
   environment: "test",

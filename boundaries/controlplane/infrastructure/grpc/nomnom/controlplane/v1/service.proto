@@ -5,22 +5,28 @@ package nomnom.controlplane.v1;
 import "nomnom/controlplane/v1/controlplane.proto";
 
 // Registry of Cells, Markets and Market Placements (ADR 41). Never on the hot
-// path: Cells do not call it, BFF caches the Placement Map.
+// path: it publishes the routes of the public gateway, and neither the gateway
+// nor the Cells call it.
 service ControlPlaneService {
   // Writes require platform#manage_markets. A repeat with the same values
   // succeeds with created = false; other values for a known id are
   // ALREADY_EXISTS. CreateMarket of an unknown cell_id is FAILED_PRECONDITION.
+  // After the write, including a repeat, the routes of the public gateway are
+  // applied from the registry; when that fails the call is UNAVAILABLE
+  // (ROUTES_UNAVAILABLE), the write stays and a repeat applies them again.
   rpc RegisterCell(RegisterCellRequest) returns (RegisterCellResponse);
   rpc CreateMarket(CreateMarketRequest) returns (CreateMarketResponse);
 
-  // Reads for the service identity of BFF.
+  // Requires platform#manage_markets.
   rpc ListMarkets(ListMarketsRequest) returns (ListMarketsResponse);
-  rpc GetPlacementMap(GetPlacementMapRequest) returns (GetPlacementMapResponse);
 }
 
 message RegisterCellRequest {
+  reserved 2;
+  reserved "gateway_address";
+
   string cell_id = 1;
-  string gateway_address = 2;
+  ServiceRef router = 3;
 }
 
 message RegisterCellResponse {
@@ -46,11 +52,4 @@ message ListMarketsRequest {}
 message ListMarketsResponse {
   // By name, then by market_id.
   repeated Market markets = 1;
-}
-
-message GetPlacementMapRequest {}
-
-message GetPlacementMapResponse {
-  // One per Market, by market_id.
-  repeated Placement placements = 1;
 }

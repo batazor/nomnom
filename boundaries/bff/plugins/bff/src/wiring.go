@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -20,11 +19,9 @@ import (
 	poolapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/applications"
 	poolinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/infrastructure"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	kitchenapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 	kitcheninfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/infrastructure"
-	marketsapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/markets/applications"
-	marketsinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/markets/infrastructure"
 	trackingapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 	trackinginfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/infrastructure"
 	managementapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
@@ -33,14 +30,9 @@ import (
 	simulatorinfra "github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/infrastructure"
 )
 
-// envInternalGateway is the address of the internal gateway (ADR 15) through
-// which BFF calls the control plane (ADR 41); the gateways of Cells come from
-// its Placement Map.
+// envInternalGateway is the address of the internal gateway (ADR 15) of the
+// Cell this BFF serves (ADR 41).
 const envInternalGateway = "BFF__INTERNAL_GATEWAY_ADDR"
-
-// envPlacementTTL is how often the Placement Map is refreshed, a Go duration
-// (ADR 41).
-const envPlacementTTL = "BFF__PLACEMENT_TTL"
 
 // Start point of couriers a dispatcher adds on the flow board (FR-623): a new
 // courier has no position of its own, and delivery offers a delivery only to
@@ -50,22 +42,18 @@ const (
 	envCourierStartLongitude = "BFF__COURIER_START_LONGITUDE"
 )
 
-// Audiences of the bounded contexts BFF calls; one routed connection serves
-// every slice that calls the context. The control plane is global and not
-// routed.
+// Audiences of the bounded contexts BFF calls; one connection serves every
+// slice that calls the context.
 const (
-	audienceOrders       = "nomnom.orders"
-	audienceRestaurants  = "nomnom.restaurants"
-	audienceDelivery     = "nomnom.delivery"
-	audienceControlPlane = "nomnom.controlplane"
+	audienceOrders      = "nomnom.orders"
+	audienceRestaurants = "nomnom.restaurants"
+	audienceDelivery    = "nomnom.delivery"
 )
 
 // config is the environment of the plugin, read once at start.
 type config struct {
 	identity        identity.Config
 	internalGateway string
-	// placementTTL is the raw variable: newBffService validates it.
-	placementTTL string
 	// courierStartLatitude and courierStartLongitude are the raw variables:
 	// newBffService validates them.
 	courierStartLatitude  string
@@ -76,7 +64,6 @@ func configFromEnv(getenv func(string) string) config {
 	return config{
 		identity:              identity.ConfigFromEnv(getenv),
 		internalGateway:       getenv(envInternalGateway),
-		placementTTL:          getenv(envPlacementTTL),
 		courierStartLatitude:  getenv(envCourierStartLatitude),
 		courierStartLongitude: getenv(envCourierStartLongitude),
 	}
@@ -98,19 +85,6 @@ func (c config) courierStart() (poolapp.Location, error) {
 		return poolapp.Location{}, fmt.Errorf("courier start point: %w", err)
 	}
 	return location, nil
-}
-
-// placementTTLDuration validates the refresh period of the Placement Map; it is
-// required.
-func (c config) placementTTLDuration() (time.Duration, error) {
-	ttl, err := time.ParseDuration(c.placementTTL)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be a Go duration: %w", envPlacementTTL, err)
-	}
-	if ttl <= 0 {
-		return 0, fmt.Errorf("%s must be positive, got %s", envPlacementTTL, ttl)
-	}
-	return ttl, nil
 }
 
 // dialFunc opens a connection to an internal gateway for one audience;
@@ -210,23 +184,17 @@ type courier struct {
 	applyAction     deliveryActionHandler
 }
 
-// cellRouting is the cell router of BFF (ADR 41): the Placement Map refreshed
-// in the background, the routed connections to Cells and the connection to
-// the control plane.
-type cellRouting struct {
-	placements   *cellrouter.Placements
-	router       *cellrouter.Router
-	controlPlane *grpc.ClientConn
-}
+// connections are the connections of BFF to the contexts of its Cell, one
+// per audience, all through the internal gateway of the Cell.
+type connections []*grpc.ClientConn
 
-// start begins loading the Placement Map; requests before the first load are
-// UNAVAILABLE.
-func (c *cellRouting) start() { c.placements.Start() }
-
-// stop ends the refresher and closes every connection.
-func (c *cellRouting) stop() error {
-	c.placements.Stop()
-	return errors.Join(c.router.Close(), c.controlPlane.Close())
+// close closes every connection.
+func (c connections) close() error {
+	var errs []error
+	for _, conn := range c {
+		errs = append(errs, conn.Close())
+	}
+	return errors.Join(errs...)
 }
 
 // simulator holds the scenarios of the demo Simulator switch in the header.
@@ -235,11 +203,11 @@ type simulator struct {
 	setSimulatorEnabled setSimulatorEnabledHandler
 }
 
-// newBffService assembles BFF from cfg. BFF identity, the gateway address and
-// the Placement TTL are required: customer operations must not run without a
-// verified customer (ADR 32), and every slice calls contexts through the
-// gateway of the Cell of the request Market (ADR 41). Only the control plane
-// connection is opened here; cell routing starts with cells.start.
+// newBffService assembles BFF from cfg. BFF identity and the gateway address
+// are required: customer operations must not run without a verified customer
+// (ADR 32), and every slice calls contexts through the internal gateway of the
+// Cell (ADR 41). Every call needs the Market of the request; one without it is
+// refused before a context is called. Connections are lazy: no I/O here.
 func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	customers, err := identity.Load(cfg.identity)
 	if err != nil {
@@ -252,29 +220,28 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	if err != nil {
 		return nil, err
 	}
-	placementTTL, err := cfg.placementTTLDuration()
+	var conns connections
+	connect := func(audience string) (grpc.ClientConnInterface, error) {
+		conn, err := dial(cfg.internalGateway, audience, customers.Outgoing)
+		if err != nil {
+			return nil, errors.Join(err, conns.close())
+		}
+		conns = append(conns, conn)
+		return market.Require(conn), nil
+	}
+	orders, err := connect(audienceOrders)
 	if err != nil {
 		return nil, err
 	}
-	controlPlane, err := dial(cfg.internalGateway, audienceControlPlane, customers.Outgoing)
+	restaurants, err := connect(audienceRestaurants)
 	if err != nil {
 		return nil, err
 	}
-	placements, err := cellrouter.NewPlacements(controlPlane, placementTTL)
+	delivery, err := connect(audienceDelivery)
 	if err != nil {
-		return nil, errors.Join(err, controlPlane.Close())
+		return nil, err
 	}
-	router := cellrouter.NewRouter(placements, func(address, audience string) (*grpc.ClientConn, error) {
-		return dial(address, audience, customers.Outgoing)
-	})
-	service := &BffService{
-		accessTokens: customers.AccessTokens,
-		cells:        &cellRouting{placements: placements, router: router, controlPlane: controlPlane},
-		listMarkets:  marketsapp.NewListMarkets(marketsinfra.NewControlPlane(controlPlane)),
-	}
-	orders := router.Conn(audienceOrders)
-	restaurants := router.Conn(audienceRestaurants)
-	delivery := router.Conn(audienceDelivery)
+	service := &BffService{accessTokens: customers.AccessTokens, conns: conns}
 	service.tracking = newOrderTracking(orders, restaurants, delivery)
 	service.catalog = newRestaurantCatalog(restaurants)
 	// The payload of checkout reuses the GetOrder scenario of order tracking.

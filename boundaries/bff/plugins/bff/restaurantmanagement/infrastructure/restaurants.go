@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
 
@@ -36,14 +36,14 @@ var (
 // restaurants of the Market of the request, so the size is already bounded by
 // the scenario.
 func (r *Restaurants) ListOwned(ctx context.Context, size int, cursor string) (applications.OwnedPage, error) {
-	market, err := cellrouter.MarketFrom(ctx)
+	marketID, err := market.From(ctx)
 	if err != nil {
 		return applications.OwnedPage{}, fmt.Errorf("list owned restaurants: %w", err)
 	}
 	response, err := r.client.ListOwnedRestaurants(ctx, &restaurantsv1.ListOwnedRestaurantsRequest{
 		PageSize:  int32(size),
 		PageToken: cursor,
-		MarketId:  market,
+		MarketId:  marketID,
 	})
 	if err != nil {
 		return applications.OwnedPage{}, fmt.Errorf("list owned restaurants: %w", err)

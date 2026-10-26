@@ -7,6 +7,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -20,7 +21,7 @@ import { liveStepMs } from "../../shared/graphql/mocks/store";
 import { OrderDetails } from "./order-details";
 
 const config = {
-  publicGraphqlUrl: "https://public.example.test/graphql",
+  publicApiUrl: "https://public.example.test",
   locale: "ru" as const,
   enableMocks: true,
   environment: "test",
@@ -29,6 +30,8 @@ const config = {
 const publicGraphql = graphql.link(/\/graphql$/);
 
 beforeAll(() => mockServer.listen({ onUnhandledFrame: "error" }));
+// The screens of a Market render in a chosen Market (ADR 41).
+beforeEach(() => localStorage.setItem("nomnom.market.v1", "berlin"));
 afterEach(() => {
   mockServer.resetHandlers();
   mockStore.reset();

@@ -29,9 +29,15 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
+	routesConfig := cfg.Routes
+	applier, err := di.NewRouteApplier(routesConfig)
+	if err != nil {
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	module := di.NewModule(store, authorizer, applier)
 	identityConfig := cfg.Identity
-	serviceAllowlist := di.NewReaders(identityConfig)
-	module := di.NewModule(store, authorizer, serviceAllowlist)
 	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
 	if err != nil {
 		cleanup2()
@@ -39,7 +45,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		return nil, nil, err
 	}
 	server := NewGRPCServer(module, subjectResolver)
-	app := NewApp(serverConfig, server)
+	app := NewApp(serverConfig, server, module)
 	return app, func() {
 		cleanup2()
 		cleanup()
@@ -54,7 +60,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 // `make generate`.
 var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна только своя секция.
-	configSet = wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Database")
+	configSet = wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Database", "Routes")
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
 	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
 )

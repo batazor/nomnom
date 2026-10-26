@@ -1,16 +1,22 @@
 import { execute, getOperationAST, parse, validate } from "graphql";
-import { HttpResponse } from "msw";
+import { HttpResponse, http } from "msw";
 import { graphql } from "msw/graphql";
 
 import { publicSchema } from "./schema";
+import { marketFixtures } from "./restaurant-fixtures";
 import { bffError, createMockStore, type MockStore } from "./store";
 
-const publicGraphql = graphql.link(/\/graphql$/);
+// The BFF of a Market: /m/{marketId}/graphql (ADR 41).
+const publicGraphql = graphql.link(/\/m\/[a-z][a-z0-9-]{1,31}\/graphql$/);
 
 // Every operation is validated and executed against the public schema, so a
 // mock cannot answer with a shape the real BFF would not produce.
 export function createGraphqlHandlers(store: MockStore) {
   return [
+    // The public gateway answers the list of Markets itself.
+    http.get(/\/markets$/, () =>
+      HttpResponse.json({ markets: marketFixtures }),
+    ),
     publicGraphql.operation(async ({ query, variables, operationName }) => {
       const document = parse(query);
       const errors = validate(publicSchema, document);

@@ -239,9 +239,8 @@ spec:
             - {name: request, value: '{marketId: $s.market}'}
             - name: until
               value: '[.couriers[]? | select(.status == "COURIER_STATUS_AVAILABLE") | .courierId] == [$s.courier]'
-    # 4. Покупатель оформляет заказ через BFF; повтор с тем же idempotencyKey идемпотентен.
-    # BFF узнаёт новый Market при обновлении Placement Map (BFF__PLACEMENT_TTL 30 s): до него
-    # запрос отвечает ошибкой и повторяется.
+    # 4. Покупатель оформляет заказ через BFF cell-1 (Market прогона в заголовке); повтор с тем же
+    # idempotencyKey идемпотентен.
     - name: customer places order
       use:
         template: ../templates/customer-graphql.yaml

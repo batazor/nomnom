@@ -9,7 +9,6 @@ import (
 	controlplanev1 "github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/createmarket"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/getplacementmap"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/listmarkets"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/registercell"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell"
@@ -18,10 +17,9 @@ import (
 
 // Handlers are the use cases behind the API.
 type Handlers struct {
-	RegisterCell    application.Handler[registercell.Command, registercell.Result]
-	CreateMarket    application.Handler[createmarket.Command, createmarket.Result]
-	ListMarkets     application.Handler[listmarkets.Query, []market.Market]
-	GetPlacementMap application.Handler[getplacementmap.Query, []getplacementmap.Placement]
+	RegisterCell application.Handler[registercell.Command, registercell.Result]
+	CreateMarket application.Handler[createmarket.Command, createmarket.Result]
+	ListMarkets  application.Handler[listmarkets.Query, []market.Market]
 }
 
 type Service struct {
@@ -40,7 +38,9 @@ func (s *Service) RegisterCell(ctx context.Context, req *controlplanev1.Register
 		return nil, transportError(err)
 	}
 	result, err := s.handlers.RegisterCell.Handle(ctx, registercell.Command{
-		Subject: subject, CellID: req.GetCellId(), GatewayAddress: req.GetGatewayAddress(),
+		Subject: subject, CellID: req.GetCellId(), Router: registercell.Router{
+			Namespace: req.GetRouter().GetNamespace(), Name: req.GetRouter().GetName(), Port: req.GetRouter().GetPort(),
+		},
 	})
 	if err != nil {
 		return nil, transportError(err)
@@ -78,24 +78,11 @@ func (s *Service) ListMarkets(ctx context.Context, _ *controlplanev1.ListMarkets
 	return resp, nil
 }
 
-func (s *Service) GetPlacementMap(ctx context.Context, _ *controlplanev1.GetPlacementMapRequest) (*controlplanev1.GetPlacementMapResponse, error) {
-	subject, err := s.subjects.Resolve(ctx)
-	if err != nil {
-		return nil, transportError(err)
-	}
-	placements, err := s.handlers.GetPlacementMap.Handle(ctx, getplacementmap.Query{Subject: subject})
-	if err != nil {
-		return nil, transportError(err)
-	}
-	resp := &controlplanev1.GetPlacementMapResponse{Placements: make([]*controlplanev1.Placement, 0, len(placements))}
-	for _, p := range placements {
-		resp.Placements = append(resp.Placements, &controlplanev1.Placement{MarketId: p.MarketID, CellId: p.CellID, GatewayAddress: p.GatewayAddress})
-	}
-	return resp, nil
-}
-
 func toCell(c cell.Cell) *controlplanev1.Cell {
-	return &controlplanev1.Cell{CellId: string(c.ID()), GatewayAddress: string(c.GatewayAddress())}
+	router := c.Router()
+	return &controlplanev1.Cell{CellId: string(c.ID()), Router: &controlplanev1.ServiceRef{
+		Namespace: router.Namespace(), Name: router.Name(), Port: router.Port(),
+	}}
 }
 
 func toMarket(m market.Market) *controlplanev1.Market {

@@ -81,7 +81,7 @@ def seed_topology(driver: Driver, seed: dict) -> None:
     """Cells и Markets control plane (ADR 41) от имени оператора; повтор идемпотентен."""
     for cell in seed["cells"]:
         response = driver.call("nomnom.controlplane", seed["operator"], CONTROLPLANE + "RegisterCell",
-                               {"cellId": cell["id"], "gatewayAddress": cell["gatewayAddress"]})
+                               {"cellId": cell["id"], "router": cell["router"]})
         print(f"cell {cell['id']}: {'registered' if response.get('created') else 'already registered'}")
     for market in seed["markets"]:
         response = driver.call("nomnom.controlplane", seed["operator"], CONTROLPLANE + "CreateMarket",

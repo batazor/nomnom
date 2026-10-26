@@ -15,8 +15,9 @@ import (
 	"github.com/batazor/nomnom/boundaries/controlplane/di/schema"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config/database"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/testfixture"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/getplacementmap"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell/vo"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/repository"
 )
@@ -58,15 +59,22 @@ func open(t *testing.T) *repository.Store {
 	return store
 }
 
+func router(t *testing.T, name string) vo.Router {
+	t.Helper()
+	r, err := vo.NewRouter("nomnom-bff", name, 3010)
+	require.NoError(t, err)
+	return r
+}
+
 func TestCellIsAddedOnce(t *testing.T) {
 	ctx := context.Background()
 	cells := repository.NewCells(open(t))
-	first := cell.New("cell-1", "gateway:8080")
+	first := cell.New("cell-1", router(t, "bff"))
 
 	added, err := cells.Add(ctx, first)
 	require.NoError(t, err)
 	assert.True(t, added)
-	added, err = cells.Add(ctx, cell.New("cell-1", "other:8080"))
+	added, err = cells.Add(ctx, cell.New("cell-1", router(t, "other")))
 	require.NoError(t, err)
 	assert.False(t, added, "a known id is not overwritten")
 
@@ -85,7 +93,7 @@ func TestMarketNeedsARegisteredCell(t *testing.T) {
 	_, err := markets.Add(ctx, market.New("berlin", "Berlin", "EUR", "cell-1"))
 	assert.ErrorIs(t, err, market.ErrUnknownCell)
 
-	_, err = repository.NewCells(store).Add(ctx, cell.New("cell-1", "gateway:8080"))
+	_, err = repository.NewCells(store).Add(ctx, cell.New("cell-1", router(t, "bff")))
 	require.NoError(t, err)
 	berlin := market.New("berlin", "Berlin", "EUR", "cell-1")
 	added, err := markets.Add(ctx, berlin)
@@ -102,11 +110,11 @@ func TestMarketNeedsARegisteredCell(t *testing.T) {
 	assert.ErrorIs(t, err, market.ErrNotFound)
 }
 
-func TestMarketsAndPlacementsAreOrdered(t *testing.T) {
+func TestMarketsAndRoutesAreOrdered(t *testing.T) {
 	ctx := context.Background()
 	store := open(t)
 	cells, markets := repository.NewCells(store), repository.NewMarkets(store)
-	for _, c := range []cell.Cell{cell.New("cell-1", "gateway-1:8080"), cell.New("cell-2", "gateway-2:8080")} {
+	for _, c := range []cell.Cell{cell.New("cell-1", router(t, "bff-1")), cell.New("cell-2", router(t, "bff-2"))} {
 		_, err := cells.Add(ctx, c)
 		require.NoError(t, err)
 	}
@@ -127,13 +135,57 @@ func TestMarketsAndPlacementsAreOrdered(t *testing.T) {
 	}
 	assert.Equal(t, []string{"berlin", "berlin-east", "munich"}, ids, "by name, then by market_id")
 
-	placements, err := repository.NewPlacements(store).Placements(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, []getplacementmap.Placement{
-		{MarketID: "berlin", CellID: "cell-1", GatewayAddress: "gateway-1:8080"},
-		{MarketID: "berlin-east", CellID: "cell-1", GatewayAddress: "gateway-1:8080"},
-		{MarketID: "munich", CellID: "cell-2", GatewayAddress: "gateway-2:8080"},
-	}, placements)
+	routes := snapshot(t, store)
+	assert.Equal(t, []publishroutes.MarketRoute{
+		{Market: market.New("berlin", "Berlin", "EUR", "cell-1"), Router: router(t, "bff-1")},
+		{Market: market.New("berlin-east", "Berlin", "EUR", "cell-1"), Router: router(t, "bff-1")},
+		{Market: market.New("munich", "Munich", "EUR", "cell-2"), Router: router(t, "bff-2")},
+	}, routes)
+}
+
+// snapshot reads the routes the way route publication does.
+func snapshot(t *testing.T, store *repository.Store) []publishroutes.MarketRoute {
+	t.Helper()
+	var routes []publishroutes.MarketRoute
+	require.NoError(t, repository.NewRoutes(store).Locked(context.Background(), func(_ context.Context, got []publishroutes.MarketRoute) error {
+		routes = got
+		return nil
+	}))
+	return routes
+}
+
+func TestRoutePublicationIsSerialized(t *testing.T) {
+	store := open(t)
+	registry := repository.NewRoutes(store)
+	entered, release := make(chan struct{}), make(chan struct{})
+	first := make(chan error, 1)
+	go func() {
+		first <- registry.Locked(context.Background(), func(context.Context, []publishroutes.MarketRoute) error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+
+	var order []string
+	var mu sync.Mutex
+	second := make(chan error, 1)
+	go func() {
+		second <- registry.Locked(context.Background(), func(context.Context, []publishroutes.MarketRoute) error {
+			mu.Lock()
+			order = append(order, "second")
+			mu.Unlock()
+			return nil
+		})
+	}()
+	mu.Lock()
+	order = append(order, "first done")
+	mu.Unlock()
+	close(release)
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	assert.Equal(t, []string{"first done", "second"}, order, "the second publisher waits for the lock")
 }
 
 func TestEmptyRegistryReadsAsEmpty(t *testing.T) {
@@ -141,7 +193,5 @@ func TestEmptyRegistryReadsAsEmpty(t *testing.T) {
 	listed, err := repository.NewMarkets(store).List(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, listed)
-	placements, err := repository.NewPlacements(store).Placements(context.Background())
-	require.NoError(t, err)
-	assert.Empty(t, placements)
+	assert.Empty(t, snapshot(t, store))
 }

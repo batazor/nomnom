@@ -56,52 +56,67 @@ func (c *cells) Get(_ context.Context, id vo.CellID) (cell.Cell, error) {
 	return *c.registered, nil
 }
 
-func command(gateway string) registercell.Command {
-	return registercell.Command{Subject: operator, CellID: "cell-1", GatewayAddress: gateway}
+// routes is a mock of route publication that counts publications.
+type routes struct{ published int }
+
+func (r *routes) Publish(context.Context) error {
+	r.published++
+	return nil
+}
+
+func command(port int32) registercell.Command {
+	return registercell.Command{Subject: operator, CellID: "cell-1", Router: registercell.Router{Namespace: "nomnom-bff", Name: "bff", Port: port}}
 }
 
 func TestRegistersACellOnceAndRepeatsIdempotently(t *testing.T) {
-	auth, repo := &authorizer{granted: operator.ID}, &cells{}
-	handler := registercell.New(auth, repo)
+	auth, repo, published := &authorizer{granted: operator.ID}, &cells{}, &routes{}
+	handler := registercell.New(auth, repo, published)
 
-	first, err := handler.Handle(context.Background(), command("gateway:8080"))
+	first, err := handler.Handle(context.Background(), command(3010))
 	require.NoError(t, err)
 	assert.True(t, first.Created)
 	assert.Equal(t, vo.CellID("cell-1"), first.Cell.ID())
 
-	again, err := handler.Handle(context.Background(), command("gateway:8080"))
+	assert.Equal(t, "nomnom-bff/bff:3010", first.Cell.Router().String())
+
+	again, err := handler.Handle(context.Background(), command(3010))
 	require.NoError(t, err)
 	assert.False(t, again.Created)
 	assert.Equal(t, first.Cell, again.Cell)
+	assert.Equal(t, 2, published.published, "routes are published after the registration and after the repeat")
 
 	assert.Equal(t, "manage_markets", string(auth.checks[0].Permission))
 	assert.Equal(t, "platform:nomnom", string(auth.checks[0].Resource.Type)+":"+auth.checks[0].Resource.ID)
 }
 
 func TestRefusesOtherValuesForARegisteredCell(t *testing.T) {
-	handler := registercell.New(&authorizer{granted: operator.ID}, &cells{})
-	_, err := handler.Handle(context.Background(), command("gateway:8080"))
+	published := &routes{}
+	handler := registercell.New(&authorizer{granted: operator.ID}, &cells{}, published)
+	_, err := handler.Handle(context.Background(), command(3010))
 	require.NoError(t, err)
 
-	_, err = handler.Handle(context.Background(), command("other:8080"))
+	_, err = handler.Handle(context.Background(), command(3011))
 	assert.ErrorIs(t, err, cell.ErrAlreadyRegistered)
+	assert.Equal(t, 1, published.published, "a refused registration publishes nothing")
 }
 
 func TestRequiresManageMarketsBeforeAnyChange(t *testing.T) {
 	repo := &cells{}
-	_, err := registercell.New(&authorizer{granted: "someone-else"}, repo).Handle(context.Background(), command("gateway:8080"))
+	_, err := registercell.New(&authorizer{granted: "someone-else"}, repo, &routes{}).Handle(context.Background(), command(3010))
 	assert.ErrorIs(t, err, application.ErrPermissionDenied)
 
 	unavailable := errors.Join(errors.New("spicedb down"), application.ErrDependencyUnavailable)
-	_, err = registercell.New(&authorizer{err: unavailable}, repo).Handle(context.Background(), command("gateway:8080"))
+	_, err = registercell.New(&authorizer{err: unavailable}, repo, &routes{}).Handle(context.Background(), command(3010))
 	assert.ErrorIs(t, err, application.ErrPermissionDenied, "fails closed")
 	assert.Zero(t, repo.adds)
 }
 
 func TestRejectsInvalidValues(t *testing.T) {
-	handler := registercell.New(&authorizer{granted: operator.ID}, &cells{})
-	_, err := handler.Handle(context.Background(), registercell.Command{Subject: operator, CellID: "Cell 1", GatewayAddress: "gateway:8080"})
+	handler := registercell.New(&authorizer{granted: operator.ID}, &cells{}, &routes{})
+	invalidID := command(3010)
+	invalidID.CellID = "Cell 1"
+	_, err := handler.Handle(context.Background(), invalidID)
 	assert.ErrorIs(t, err, vo.ErrInvalidValue)
-	_, err = handler.Handle(context.Background(), command("gateway"))
+	_, err = handler.Handle(context.Background(), command(0))
 	assert.ErrorIs(t, err, vo.ErrInvalidValue)
 }

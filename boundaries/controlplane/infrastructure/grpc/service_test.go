@@ -3,6 +3,7 @@ package grpcadapter_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -27,8 +28,8 @@ import (
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config/database"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/testfixture"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/createmarket"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/getplacementmap"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/listmarkets"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/registercell"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/repository"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/spicedb"
@@ -66,9 +67,25 @@ type userVectors struct {
 
 // caller is the API through bufconn: the real identity resolver, use cases,
 // PostgreSQL and SpiceDB; the asserted user of the vectors is the operator.
+// The gateway is a mock that records the applied routes.
 type caller struct {
-	client controlplanev1.ControlPlaneServiceClient
-	v      userVectors
+	client  controlplanev1.ControlPlaneServiceClient
+	v       userVectors
+	gateway *gateway
+}
+
+// gateway is a mock of the Kubernetes API of the public gateway.
+type gateway struct {
+	applied []publishroutes.MarketRoute
+	down    bool
+}
+
+func (g *gateway) Apply(_ context.Context, routes []publishroutes.MarketRoute) error {
+	if g.down {
+		return errors.New("apiserver down")
+	}
+	g.applied = routes
+	return nil
 }
 
 func newCaller(t *testing.T) caller {
@@ -82,7 +99,7 @@ func newCaller(t *testing.T) caller {
 	resolver, err := grpcadapter.NewSubjectResolver(config.IdentityConfig{
 		Issuer: v.ServiceIssuer, Audience: v.Audience, JWKSFile: filepath.Join(identityFixtures, "jwks.json"),
 		ServiceAccounts: v.ServiceAccounts, UserIssuer: v.Issuer, UserJWKSFile: filepath.Join(identityFixtures, "bff-jwks.json"),
-		UserDelegates: v.Delegates, PlacementReaders: "bff",
+		UserDelegates: v.Delegates,
 	})
 	require.NoError(t, err)
 	grpcadapter.PinClock(resolver, time.Unix(v.Now, 0))
@@ -106,12 +123,12 @@ func newCaller(t *testing.T) caller {
 	store, err := repository.Open(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
-	readers := map[string]bool{"bff": true}
+	public := &gateway{}
+	routes := publishroutes.New(repository.NewRoutes(store), public)
 	service := grpcadapter.NewService(grpcadapter.Handlers{
-		RegisterCell:    registercell.New(authorizer, repository.NewCells(store)),
-		CreateMarket:    createmarket.New(authorizer, repository.NewMarkets(store)),
-		ListMarkets:     listmarkets.New(readers, repository.NewMarkets(store)),
-		GetPlacementMap: getplacementmap.New(readers, repository.NewPlacements(store)),
+		RegisterCell: registercell.New(authorizer, repository.NewCells(store), routes),
+		CreateMarket: createmarket.New(authorizer, repository.NewMarkets(store), routes),
+		ListMarkets:  listmarkets.New(authorizer, repository.NewMarkets(store)),
 	}, resolver)
 
 	listener := bufconn.Listen(1 << 20)
@@ -124,7 +141,7 @@ func newCaller(t *testing.T) caller {
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	return caller{client: controlplanev1.NewControlPlaneServiceClient(conn), v: v}
+	return caller{client: controlplanev1.NewControlPlaneServiceClient(conn), v: v, gateway: public}
 }
 
 // operator calls as the asserted user through BFF.
@@ -155,53 +172,59 @@ func requireStatus(t *testing.T, err error, code codes.Code, reason string) {
 	t.Fatalf("no ErrorInfo in %v", st)
 }
 
+func registerCell(id string, port int32) *controlplanev1.RegisterCellRequest {
+	return &controlplanev1.RegisterCellRequest{CellId: id, Router: &controlplanev1.ServiceRef{Namespace: "nomnom-bff", Name: "bff", Port: port}}
+}
+
 // One test owns the shared database: the topology is global, so the steps run in order.
 func TestTopologyThroughTheAPI(t *testing.T) {
 	c := newCaller(t)
-	const gateway = "internal-gateway.envoy-gateway-system.svc.cluster.local:8080"
 
 	_, err := c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "EUR", CellId: "cell-1"})
 	requireStatus(t, err, codes.FailedPrecondition, "CELL_NOT_FOUND")
 
-	registered, err := c.client.RegisterCell(c.operator(), &controlplanev1.RegisterCellRequest{CellId: "cell-1", GatewayAddress: gateway})
+	registered, err := c.client.RegisterCell(c.operator(), registerCell("cell-1", 3010))
 	require.NoError(t, err)
 	assert.True(t, registered.GetCreated())
-	repeated, err := c.client.RegisterCell(c.operator(), &controlplanev1.RegisterCellRequest{CellId: "cell-1", GatewayAddress: gateway})
+	repeated, err := c.client.RegisterCell(c.operator(), registerCell("cell-1", 3010))
 	require.NoError(t, err)
 	assert.False(t, repeated.GetCreated())
-	assert.Equal(t, gateway, repeated.GetCell().GetGatewayAddress())
-	_, err = c.client.RegisterCell(c.operator(), &controlplanev1.RegisterCellRequest{CellId: "cell-1", GatewayAddress: "other:8080"})
+	assert.Equal(t, "bff", repeated.GetCell().GetRouter().GetName())
+	assert.Equal(t, int32(3010), repeated.GetCell().GetRouter().GetPort())
+	_, err = c.client.RegisterCell(c.operator(), registerCell("cell-1", 3011))
 	requireStatus(t, err, codes.AlreadyExists, "CELL_ALREADY_REGISTERED")
-	_, err = c.client.RegisterCell(c.operator(), &controlplanev1.RegisterCellRequest{CellId: "Cell 1", GatewayAddress: gateway})
+	_, err = c.client.RegisterCell(c.operator(), registerCell("Cell 1", 3010))
+	requireStatus(t, err, codes.InvalidArgument, "INVALID_ARGUMENT")
+	_, err = c.client.RegisterCell(c.operator(), &controlplanev1.RegisterCellRequest{CellId: "cell-2", Router: &controlplanev1.ServiceRef{Namespace: "nomnom-bff", Name: "Bff_1", Port: 3010}})
 	requireStatus(t, err, codes.InvalidArgument, "INVALID_ARGUMENT")
 
-	created, err := c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: " Berlin ", Currency: "EUR", CellId: "cell-1"})
-	require.NoError(t, err)
-	assert.True(t, created.GetCreated())
-	assert.Equal(t, "Berlin", created.GetMarket().GetName())
+	// The routes are applied after the write; a failed apply keeps the Market
+	// and a repeat applies them.
+	c.gateway.down = true
+	_, err = c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: " Berlin ", Currency: "EUR", CellId: "cell-1"})
+	requireStatus(t, err, codes.Unavailable, "ROUTES_UNAVAILABLE")
+	assert.Empty(t, c.gateway.applied)
+	c.gateway.down = false
 	again, err := c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "EUR", CellId: "cell-1"})
 	require.NoError(t, err)
-	assert.False(t, again.GetCreated())
+	assert.False(t, again.GetCreated(), "the Market stayed in the registry")
+	assert.Equal(t, "Berlin", again.GetMarket().GetName())
+	require.Len(t, c.gateway.applied, 1)
+	assert.Equal(t, "berlin", string(c.gateway.applied[0].Market.ID()))
+	assert.Equal(t, "nomnom-bff/bff:3010", c.gateway.applied[0].Router.String())
 	_, err = c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "USD", CellId: "cell-1"})
 	requireStatus(t, err, codes.AlreadyExists, "MARKET_ALREADY_EXISTS")
 
-	// Reads: the service identity of BFF.
-	placements, err := c.client.GetPlacementMap(service(c.v.DelegateToken), &controlplanev1.GetPlacementMapRequest{})
-	require.NoError(t, err)
-	require.Len(t, placements.GetPlacements(), 1)
-	assert.Equal(t, "berlin", placements.GetPlacements()[0].GetMarketId())
-	assert.Equal(t, "cell-1", placements.GetPlacements()[0].GetCellId())
-	assert.Equal(t, gateway, placements.GetPlacements()[0].GetGatewayAddress())
-	markets, err := c.client.ListMarkets(service(c.v.DelegateToken), &controlplanev1.ListMarketsRequest{})
+	markets, err := c.client.ListMarkets(c.operator(), &controlplanev1.ListMarketsRequest{})
 	require.NoError(t, err)
 	require.Len(t, markets.GetMarkets(), 1)
 	assert.Equal(t, "EUR", markets.GetMarkets()[0].GetCurrency())
 
-	// An allowlisted service outside the readers may not read; BFF without an
-	// operator may not write; an unauthenticated caller gets nothing.
-	_, err = c.client.GetPlacementMap(service(c.v.NonDelegateToken), &controlplanev1.GetPlacementMapRequest{})
+	// BFF without an operator may neither read nor write; an unauthenticated
+	// caller gets nothing.
+	_, err = c.client.ListMarkets(service(c.v.DelegateToken), &controlplanev1.ListMarketsRequest{})
 	requireStatus(t, err, codes.PermissionDenied, "OPERATION_NOT_ALLOWED")
-	_, err = c.client.RegisterCell(service(c.v.DelegateToken), &controlplanev1.RegisterCellRequest{CellId: "cell-2", GatewayAddress: gateway})
+	_, err = c.client.RegisterCell(service(c.v.DelegateToken), registerCell("cell-2", 3010))
 	requireStatus(t, err, codes.PermissionDenied, "OPERATION_NOT_ALLOWED")
 	_, err = c.client.ListMarkets(context.Background(), &controlplanev1.ListMarketsRequest{})
 	requireStatus(t, err, codes.Unauthenticated, "AUTHENTICATION_REQUIRED")

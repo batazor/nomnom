@@ -1,6 +1,7 @@
 // Package cell is the Cell of the control plane (ADR 41): a complete isolated
-// instance of the data plane, known by its id and the address of its internal
-// gateway. Both are immutable: a registered Cell is never changed.
+// instance of the data plane, known by its id and its Router — the Service the
+// public gateway routes its Markets to. Both are immutable: a registered Cell
+// is never changed.
 package cell
 
 import (
@@ -19,22 +20,22 @@ var (
 )
 
 type Cell struct {
-	id             vo.CellID
-	gatewayAddress vo.GatewayAddress
+	id     vo.CellID
+	router vo.Router
 }
 
-func New(id vo.CellID, gatewayAddress vo.GatewayAddress) Cell {
-	return Cell{id: id, gatewayAddress: gatewayAddress}
+func New(id vo.CellID, router vo.Router) Cell {
+	return Cell{id: id, router: router}
 }
 
-func (c Cell) ID() vo.CellID                     { return c.id }
-func (c Cell) GatewayAddress() vo.GatewayAddress { return c.gatewayAddress }
+func (c Cell) ID() vo.CellID     { return c.id }
+func (c Cell) Router() vo.Router { return c.router }
 
 // Repeat decides a registration of a Cell whose id is registered already: the
 // same values are the same Cell (an idempotent repeat), other values conflict.
 func (c Cell) Repeat(registered Cell) error {
 	if c != registered {
-		return fmt.Errorf("%w: %s has gateway %s", ErrAlreadyRegistered, registered.id, registered.gatewayAddress)
+		return fmt.Errorf("%w: %s has router %s", ErrAlreadyRegistered, registered.id, registered.router)
 	}
 	return nil
 }

@@ -21,9 +21,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
@@ -125,7 +125,7 @@ func connect(t *testing.T, audience string, register func(*grpc.Server)) *grpc.C
 
 // customerContext is a request of customer-1 in Market berlin.
 func customerContext() context.Context {
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(cellrouter.MarketMetadata, "berlin"))
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(market.Metadata, "berlin"))
 	return identity.WithUser(ctx, identity.User{ID: "customer-1"})
 }
 

@@ -83,7 +83,6 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
     cookId: `cook-${kitchenEight.id}-4`,
   },
   BoardCourierPool: {},
-  ChooseMarket: {},
   BoardCourierPoolChanged: { marketId: "berlin" },
   AddCourier: { name: "Сергей" },
   SetCourierOnLine: { courierId: "courier-anna", onLine: true },

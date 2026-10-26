@@ -313,3 +313,44 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+---
+# BFF (ADR 41): публичный API клиентов — только от Envoy Proxy public gateway по маршрутам
+# Market, которые пишет control plane.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-public-api-from-public-gateway
+  namespace: nomnom-bff
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bff
+      app.kubernetes.io/instance: bff
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: public
+              gateway.envoyproxy.io/owning-gateway-namespace: nomnom-gateway
+      ports:
+        - protocol: TCP
+          port: http
+---
+# controlplane (ADR 41): Kubernetes API — server-side apply маршрутов публичного gateway (Role в
+# nomnom-gateway, chart controlplane). Сущность kube-apiserver есть только в политике Cilium.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-kube-apiserver-egress
+  namespace: nomnom-controlplane
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: controlplane
+  egress:
+    - toEntities:
+        - kube-apiserver

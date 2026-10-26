@@ -1,6 +1,7 @@
 # List Markets
 
-- **Тип:** Query. **Actor:** service identity BFF (`IDENTITY__PLACEMENT_READERS`).
-- **Результат:** все Market по `name`, затем `market_id` — выбор Market в UI.
+- **Тип:** Query. **Actor:** оператор платформы (`platform#manage_markets`).
+- **Результат:** все Market по `name`, затем `market_id`. Клиенты берут список Market у публичного
+  gateway (`GET /markets`), а не у control plane.
 
 Handler: [`listmarkets.go`](listmarkets.go).

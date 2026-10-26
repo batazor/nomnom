@@ -45,7 +45,6 @@ export function AppProviders({
 }) {
   const settings = useMemo(
     () => ({
-      url: config.publicGraphqlUrl,
       subscriptions: config.enableMocks ? mockSubscriptions : undefined,
       reportError(report: Parameters<typeof reportGraphqlError>[1]) {
         if (import.meta.env.DEV) {
@@ -54,7 +53,7 @@ export function AppProviders({
         reportGraphqlError(faro, report);
       },
     }),
-    [config.publicGraphqlUrl, config.enableMocks, faro],
+    [config.enableMocks, faro],
   );
 
   return (
@@ -66,7 +65,7 @@ export function AppProviders({
           <AppToasts>
             <SignInProvider config={config.oidc}>
               <RoleSessionProvider mocks={config.enableMocks}>
-                <MarketProvider>
+                <MarketProvider apiUrl={config.publicApiUrl}>
                   <RoleClientSettings settings={settings}>
                     {/* Outside the board columns the app acts as the customer. */}
                     <AsRole as="customer">{children}</AsRole>

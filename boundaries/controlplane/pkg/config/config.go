@@ -20,6 +20,7 @@ type Config struct {
 	Identity   IdentityConfig   `mapstructure:"identity"`
 	SpiceDB    SpiceDBConfig    `mapstructure:"spicedb"`
 	Database   database.Config  `mapstructure:"postgres"`
+	Routes     RoutesConfig     `mapstructure:"routes"`
 }
 
 func Load() (Config, error) {
@@ -33,6 +34,7 @@ func Load() (Config, error) {
 		"identity":   configureIdentity,
 		"spicedb":    configureSpiceDB,
 		"database":   database.Configure,
+		"routes":     configureRoutes,
 	} {
 		if err := configure(loader); err != nil {
 			return Config{}, fmt.Errorf("configure %s: %w", name, err)
@@ -60,7 +62,7 @@ func Load() (Config, error) {
 func (cfg Config) Validate() error {
 	for _, validate := range []func() error{
 		cfg.Server.Validate, cfg.Management.Validate, cfg.Shutdown.Validate,
-		cfg.Identity.Validate, cfg.SpiceDB.Validate, cfg.Database.Validate,
+		cfg.Identity.Validate, cfg.SpiceDB.Validate, cfg.Database.Validate, cfg.Routes.Validate,
 	} {
 		if err := validate(); err != nil {
 			return err

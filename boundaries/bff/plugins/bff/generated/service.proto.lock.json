@@ -4,7 +4,6 @@
     "Query": {
       "fields": {
         "bffInfo": 2,
-        "markets": 12,
         "restaurants": 3,
         "restaurant": 4,
         "order": 5,
@@ -16,7 +15,8 @@
         "simulator": 10
       },
       "reservedNumbers": [
-        1
+        1,
+        12
       ]
     },
     "QueryHelloRequest": {

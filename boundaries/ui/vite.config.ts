@@ -16,7 +16,7 @@ const publicSchemaPath = resolve(
 // and the OIDC provider (absent only on mocks).
 function connectOrigins(env: Record<string, string>): string[] {
   return [
-    env.VITE_PUBLIC_GRAPHQL_URL,
+    env.VITE_PUBLIC_API_URL,
     env.VITE_FARO_URL,
     env.VITE_OIDC_ISSUER,
   ]

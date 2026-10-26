@@ -1,6 +1,6 @@
 // Package repository implements the persistence ports of the topology slice on
 // PostgreSQL (ADR 8, ADR 39): the Cell and Market repositories and the
-// Placement Map read model. The migrations/ of this package create the tables.
+// registry snapshot of route publication. The migrations/ of this package create the tables.
 package repository
 
 import (

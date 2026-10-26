@@ -25,10 +25,10 @@ k6 измеряет latency и error rate под нагрузкой и во вр
 ## Точка входа
 
 ```text
-k6 → GraphQL (Cosmo Router / BFF) → internal gateway → bounded contexts
+k6 → публичный gateway /m/{market}/graphql → GraphQL (Cosmo Router / BFF Cell) → internal gateway → bounded contexts
 ```
 
-Каждый запрос несёт заголовок `X-Nomnom-Market` (Market, например `berlin` в kind): по нему BFF выбирает Cell ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)); без него BFF отклоняет запрос. Каждый запрос — реальная операция клиентской schema с operation name; каждая операция измеряется отдельно, размер ответа контролируется, в production-like режиме используются persisted operations.
+Каждый запрос идёт на путь Market (`/m/berlin/graphql` в kind): по нему публичный gateway выбирает Cell и ставит заголовок `X-Nomnom-Market` ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)); без пути Market gateway отвечает `404`. Каждый запрос — реальная операция клиентской schema с operation name; каждая операция измеряется отдельно, размер ответа контролируется, в production-like режиме используются persisted operations.
 
 Прямой gRPC через `k6/net/grpc` с proto из закреплённого BSR commit — только для профилирования одного сервиса, в отдельном сценарии с префиксом `grpc-` и без сравнения с клиентскими результатами. Endpoint для тестов не создаётся.
 

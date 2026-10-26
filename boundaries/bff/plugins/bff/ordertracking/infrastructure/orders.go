@@ -12,9 +12,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpcerr"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
@@ -71,7 +71,7 @@ func (o *Orders) RequestCancellation(ctx context.Context, request applications.C
 // ctx: orders lets a customer read their own history, within the Market of
 // the request.
 func (o *Orders) ListCustomerOrders(ctx context.Context, customerID string, size int, cursor string) (applications.HistoryPage, error) {
-	market, err := cellrouter.MarketFrom(ctx)
+	marketID, err := market.From(ctx)
 	if err != nil {
 		return applications.HistoryPage{}, fmt.Errorf("list customer orders: %w", err)
 	}
@@ -79,7 +79,7 @@ func (o *Orders) ListCustomerOrders(ctx context.Context, customerID string, size
 		CustomerId: customerID,
 		PageSize:   int32(size),
 		PageToken:  cursor,
-		MarketId:   market,
+		MarketId:   marketID,
 	})
 	if status.Code(err) == codes.InvalidArgument && cursor != "" {
 		return applications.HistoryPage{}, applications.ErrInvalidCursor

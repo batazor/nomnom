@@ -15,7 +15,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Для локального mock transport в `.env.local` используется `VITE_ENABLE_MOCKS=true`. Единственный business endpoint приложения — `VITE_PUBLIC_GRAPHQL_URL`, адрес публичного GraphQL API BFF.
+Для локального mock transport в `.env.local` используется `VITE_ENABLE_MOCKS=true`. Единственный business endpoint приложения — `VITE_PUBLIC_API_URL`, базовый адрес публичного API ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)): `GET /markets` — список Market, `/m/{market}/graphql` — GraphQL BFF Cell Market. В kind — `https://api.nomnom.localhost:18085` (публичный gateway; браузер должен доверять корню `make kind-local-ca`).
 
 ## Вход через Dex
 
@@ -25,11 +25,11 @@ npm run dev
 
 Система разделена на ячейки по Market — городу доставки ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)). Доска (`/`) открывается только в выбранном Market:
 
-- `choose-market` (`src/features/choose-market/`): operation `ChooseMarket` (`markets`) — единственная, которой не нужен Market. Пока Market не выбран или выбранного больше нет в списке, вместо доски — пустое состояние со списком Market; первый Market не выбирается за пользователя, даже если он один. Загрузка и ошибка списка показаны явно, ошибка — с повтором.
+- `choose-market` (`src/features/choose-market/`): список Market — `GET {VITE_PUBLIC_API_URL}/markets` публичного gateway, а не GraphQL; `MarketProvider` загружает его один раз на страницу. Пока Market не выбран или выбранного больше нет в списке, вместо доски — пустое состояние со списком Market; первый Market не выбирается за пользователя, даже если он один. Загрузка и ошибка списка показаны явно, ошибка — с повтором.
 - В шапке — переключатель «Город» (`SelectField` из `shared/ui` поверх Headless UI `Select`); эмулятор виден только в выбранном Market: его operations идут в ячейку.
 - Выбор — `src/shared/market/market.tsx` (`MarketProvider`, `useMarketSelection`): id в `localStorage` (`nomnom.market.v1`), каждый доступ в `try/catch`, без storage выбор живёт в памяти страницы.
-- `AsRole` передаёт Market клиенту: каждый запрос и каждый поток SSE несут заголовок `X-Nomnom-Market`; смена Market создаёт новые clients и кеши. Без заголовка BFF отвечает `InvalidArgument`, неразмещённый Market — `NotFound`.
-- Моки отдают `markets` (`berlin`, `hamburg`) и заголовок не проверяют.
+- `AsRole` строит клиент на `/m/{market}/graphql`: каждый запрос и каждый поток SSE идут по пути Market, заголовок `X-Nomnom-Market` ставит публичный gateway, браузер его не шлёт; смена Market создаёт новые clients и кеши. Без выбранного Market клиента нет: GraphQL-экраны открываются только за выбором Market. Неразмещённый Market — `404` gateway.
+- Моки отвечают на `GET /markets` (`berlin`, `hamburg`) и на `/m/{market}/graphql`.
 
 ## Доска заказа
 

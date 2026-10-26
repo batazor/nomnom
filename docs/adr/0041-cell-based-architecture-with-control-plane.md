@@ -31,40 +31,48 @@ Accepted
 ## Decision
 
 Систему делить на **control plane** и **data plane из ячеек (Cells)**; ключ разбиения — **Market**.
+Router ячеек — публичный gateway; всё, что обслуживает клиентский запрос, кроме него, Dex и SpiceDB,
+находится внутри Cell.
 
 ### Термины
 
 - **Market** — город, в котором работает доставка: рестораны, курьеры и заказы одного Market
   обслуживаются вместе. Идентификатор `market_id` — slug `^[a-z][a-z0-9-]{1,31}$` (`berlin`),
   неизменяемый. У Market есть название и валюта ISO 4217.
-- **Cell** — полный изолированный экземпляр data plane: `orders`, `restaurants`, `delivery`,
-  `payments`, их хранилища, Kafka, Debezium, Valkey, Temporal и internal gateway ячейки.
-  Идентификатор `cell_id` — slug (`cell-1`).
-- **Market Placement** — размещение Market в одной Cell. Market в каждый момент обслуживается
-  ровно одной Cell; Cell обслуживает один или несколько Market.
+- **Cell** — полный изолированный экземпляр data plane: Cosmo Router с plugin BFF, `orders`,
+  `restaurants`, `delivery`, `payments`, их хранилища, Kafka, Debezium, Valkey, Temporal и internal
+  gateway ячейки. Идентификатор `cell_id` — slug (`cell-1`).
+- **Market Placement** — текущая Cell Market: в ней создаются все новые агрегаты Market. Cell
+  обслуживает один или несколько Market.
+- **Previous Placement** — Cell, в которой Market был размещён до переноса (Market Migration). Она
+  навсегда хранит и обслуживает агрегаты Market, созданные в ней, но не создаёт новых.
 
 ### Control plane
 
 Глобальный, один на систему: boundary `boundaries/controlplane` (Go, PostgreSQL), gRPC API
 `nomnom.controlplane.v1.ControlPlaneService`.
 
-- Владеет реестром Cell (`cell_id`, адрес internal gateway ячейки), реестром Market и их
-  Market Placement.
+- Владеет реестром Cell (`cell_id` и Kubernetes Service её Cosmo Router — точки входа Cell),
+  реестром Market, их Market Placement и Previous Placement.
 - Записи — `RegisterCell`, `CreateMarket` — только для `platform#manage_markets` (оператор,
   [ADR 18](0018-spicedb-for-authorization.md)). Повтор с теми же значениями идемпотентен, с другими —
   `ALREADY_EXISTS`. Market создаётся сразу размещённым в существующей Cell.
-- Чтения — `ListMarkets` (Market для выбора в UI) и `GetPlacementMap` (Market → Cell и адрес её
-  gateway) — для service identity BFF.
-- Переноса Market между Cell в API нет; как он будет устроен — в «Стратегии расширения».
-- Глобальными, вне ячеек, остаются также identity (Dex, [ADR 35](0035-browser-login-via-dex-and-pkce.md)),
-  BFF и SpiceDB.
+- Чтение `ListMarkets` — для оператора.
+- **Маршруты публичного gateway пишет control plane.** Из реестра он строит ресурсы Gateway API в
+  неймспейсе публичного gateway и применяет их server-side apply: `HTTPRoute` на каждое размещение
+  Market (см. «Маршрутизация») и список Market для выбора в UI — `ConfigMap`, который Envoy отдаёт
+  сам по `GET /markets` через `HTTPRouteFilter` `directResponse`. Права ServiceAccount control plane
+  — только запись `HTTPRoute`, `HTTPRouteFilter` и `ConfigMap` в этом неймспейсе. Запись оператора
+  сначала фиксируется в БД, затем применяются ресурсы; ошибка применения возвращается оператору как
+  `UNAVAILABLE`, и повтор той же команды (идемпотентный) применяет их снова. При старте control
+  plane один раз приводит ресурсы к реестру.
+- Глобальными, вне ячеек, остаются также identity (Dex, [ADR 35](0035-browser-login-via-dex-and-pkce.md))
+  и SpiceDB.
 
-**Control plane не находится в горячем пути.** Ячейки не обращаются к control plane вообще: ни при
-старте, ни на запрос. BFF держит Placement Map в памяти с TTL (`BFF__PLACEMENT_TTL`) и обновляет её в
-фоне; неудачное обновление оставляет последнюю полученную карту (static stability) и пишется в
-метрики и лог. Карта меняется только записями оператора, поэтому устаревшая карта не направляет
-запрос в неверную Cell для уже размещённых Market. Пока карта ни разу не получена, запросы data
-plane завершаются `UNAVAILABLE`. Недоступный control plane останавливает только изменение топологии.
+**Control plane не находится в горячем пути.** Ни ячейки, ни gateway не обращаются к control plane
+на запрос: маршруты и список Market — ресурсы Kubernetes, Envoy держит последнюю полученную
+конфигурацию и при недоступном control plane или контроллере Envoy Gateway продолжает маршрутизировать
+по ней (static stability). Недоступный control plane останавливает только изменение топологии.
 
 ### Data plane и `market_id`
 
@@ -88,7 +96,7 @@ plane завершаются `UNAVAILABLE`. Недоступный control plane
   ([ADR 36](0036-graphql-subscriptions-via-cosmo-streams.md)).
 - Каждое Integration Event несёт `market_id`. Partition key не меняется: Kafka — своя в каждой Cell,
   порядок по aggregate сохраняется как прежде.
-- Синхронные вызовы между контекстами остаются внутри Cell через её internal gateway
+- Синхронные вызовы между контекстами и вызовы BFF остаются внутри Cell через её internal gateway
   ([ADR 15](0015-использовать-internal-gateway-для-синхронных-вызовов-бизнес-api.md)).
   Вызовов из одной Cell в другую нет.
 - Пустой или неизвестный по формату `market_id` — `INVALID_ARGUMENT`. Ячейка не проверяет, что Market
@@ -99,23 +107,39 @@ plane завершаются `UNAVAILABLE`. Недоступный control plane
 
 ### Маршрутизация
 
-Router ячеек — BFF; отдельного прокси нет.
+Router ячеек — публичный gateway (Envoy Gateway): тонкий слой без бизнес-логики, который по пути
+запроса выбирает Cell. Market передаётся в пути, а не заголовком клиента: путь адресует и Market
+Placement, и Previous Placement (`@{cell_id}`) одинаково для запросов, SSE-подписок
+([ADR 36](0036-graphql-subscriptions-via-cosmo-streams.md)) и ссылок, а заголовок Market Cell
+получает от gateway, а не от клиента. Искать Market по пользователю или ресурсу нельзя: у
+пользователя нет одного Market, а глобальный индекс ресурсов вернул бы общее хранилище в горячий путь.
 
-- Клиент выбирает Market и передаёт его в каждом запросе заголовком `X-Nomnom-Market`. Cosmo Router
-  пробрасывает его в plugin как gRPC metadata `x-nomnom-market`, как `Authorization`.
-- Заголовок — подсказка маршрутизации, а не утверждение об identity: права на действие и
+- Клиент выбирает Market и обращается к API по пути `/m/{market_id}/…` (`/m/berlin/graphql`).
+- На каждое размещение Market — `HTTPRoute` с совпадением по префиксу пути и backend — Cosmo Router
+  Cell:
+  - `/m/{market_id}` → Market Placement;
+  - `/m/{market_id}@{cell_id}` → Previous Placement, для агрегатов, созданных там до переноса.
+
+  Маршрут снимает префикс (`URLRewrite`) и выставляет заголовок `X-Nomnom-Market: {market_id}`
+  (`RequestHeaderModifier` `set` — значение клиента перезаписывается). Cell видит обычный путь API, а
+  Cosmo Router пробрасывает заголовок в plugin как gRPC metadata `x-nomnom-market`, как
+  `Authorization`. Ссылку на Service в неймспейсе Cell разрешает `ReferenceGrant` из chart Cell.
+- Неизвестный Market или Cell не совпадает ни с одним маршрутом: gateway отвечает `404`, Cell «по
+  умолчанию» нет.
+- `X-Nomnom-Market` — подсказка маршрутизации, а не утверждение об identity: права на действие и
   принадлежность ресурса по-прежнему проверяет сервис-владелец ([ADR 32](0032-user-identity-via-bff-signed-assertions.md)).
-- Соединение BFF с контекстом — `grpc.ClientConnInterface`, выбирающий на каждый вызов gateway
-  Cell по Market из metadata. Нет заголовка, неверный формат или Market не размещён —
-  ошибка клиенту (`INVALID_ARGUMENT` / `NOT_FOUND`), а не Cell «по умолчанию».
-- Списочные операции BFF передают `market_id` из заголовка в запрос владельцу.
-- Control plane BFF вызывает через internal gateway по адресу `BFF__INTERNAL_GATEWAY_ADDR`.
-- GraphQL `markets` отдаёт список Market для выбора в UI.
+  BFF без заголовка или с заголовком неверного формата отвечает `INVALID_ARGUMENT`.
+- Списочные операции BFF передают `market_id` из заголовка в запрос владельцу; вызовы BFF идут в
+  internal gateway своей Cell (`BFF__INTERNAL_GATEWAY_ADDR`).
+- UI получает список Market из `GET /markets`: `market_id`, название, валюта и Previous Placement
+  каждого Market. По Previous Placement UI строит пути `@{cell_id}` к заказам, созданным до переноса,
+  и собирает историю заказов из всех размещений Market.
 
 ### Развёртывание
 
-- В kind один control plane, одна Cell `cell-1` и один Market `berlin`. Gateway `cell-1` — текущий
-  internal gateway; он же обслуживает маршруты control plane (`controlplane-v1-reads`,
+- В kind один control plane, одна Cell `cell-1` и один Market `berlin`. Публичный API Cosmo Router
+  `cell-1` публикуется через публичный gateway по маршруту `/m/berlin`. Internal gateway `cell-1` —
+  текущий internal gateway; он же обслуживает маршруты control plane (`controlplane-v1-reads`,
   `controlplane-v1-commands`). `cell-1` и `berlin` регистрирует Job seed chart `ops/kind/demo`
   (`files/seed.json`) от имени оператора через `RegisterCell` и `CreateMarket`, идемпотентно; не
   chart bootstrap ([ADR 34](0034-declarative-kind-bootstrap.md)): он ставится до charts
@@ -123,16 +147,17 @@ Router ячеек — BFF; отдельного прокси нет.
   preshared key SpiceDB и JWKS.
 - Второй Cell в kind нет и не будет: стенд её не вытянет, а стратегия расширения ниже не
   реализуется и не проверяется на стенде.
-- Подписки Cosmo Streams ([ADR 36](0036-graphql-subscriptions-via-cosmo-streams.md)) читают Kafka
-  `cell-1`.
+- Подписки Cosmo Streams ([ADR 36](0036-graphql-subscriptions-via-cosmo-streams.md)) Cosmo Router
+  каждой Cell читают Kafka своей Cell.
 
 ### Стратегия расширения
 
 Не реализуется и не проверяется сейчас; записана, чтобы текущие решения её не закрывали.
 
 **Рост — новый Market в новой Cell.** Те же Helm charts
-([ADR 12](0012-helm-charts-per-deployable-application.md)) с values ячейки в своих неймспейсах и свой
-Gateway; затем `RegisterCell` и `CreateMarket` в ней.
+([ADR 12](0012-helm-charts-per-deployable-application.md)) с values ячейки в своих неймспейсах;
+затем `RegisterCell` и `CreateMarket` в ней. Cell в другом кластере — backend маршрута через
+`Backend` Envoy Gateway вместо Service.
 
 **Market не делится между Cell.** Город, который перерос типовой размер Cell, получает свою Cell
 большего размера; масштабирование внутри неё — дело каждого сервиса (реплики, партиции Kafka,
@@ -141,52 +166,64 @@ Gateway; затем `RegisterCell` и `CreateMarket` в ней.
 дороже, чем большая Cell.
 
 **Перенос Market между Cell (Market Migration)** — когда понадобится разгрузить Cell или вынести
-город в свою. С окном обслуживания города, а не живой: Market — один город в одном часовом поясе,
-ночное окно в минуты допустимо, а живой перенос (CDC-копия, двойная запись, перенос незавершённых
-workflow Temporal) многократно сложнее. Шаги по фазам AWS (clone → flip → redirect → forget):
+город в свою. Без простоя: новые заказы сразу идут в целевую Cell, начатые дорабатывают в исходной,
+а созданные в ней агрегаты остаются там навсегда. Копировать незавершённые workflow Temporal,
+Outbox, Inbox и Kafka не нужно — их ничто не переносит.
 
-1. **Drain.** Исходная Cell перестаёт принимать Place Order этого Market; ждать, пока у Market не
-   останется незавершённых Order, Kitchen Order, Delivery, Payment и workflow Temporal. Срок
-   ожидания ограничен; истёк — перенос отменяется.
-2. **Freeze.** Исходная Cell отклоняет все команды и обработку событий Market.
-3. **Copy.** Каждый контекст выгружает агрегаты Market, целевая Cell загружает их замороженными;
-   данных Market в ней до этого быть не должно. Загрузка не публикует событий, read models
-   пересобираются из агрегатов. Outbox, Inbox, Kafka, кеш Valkey и история Temporal не
-   копируются — после дренажа незавершённого в них нет.
-4. **Verify.** Число записей и контрольная сумма по каждому типу агрегата совпадают.
-5. **Switch.** Целевая Cell открывает Market, Placement переключается на неё, исходная отклоняет
-   все запросы Market (`UNAVAILABLE`).
-6. **Forget.** Через заданный срок исходная Cell удаляет данные Market.
+1. **Copy.** Restaurant (с каталогом и владельцами), Cook и Courier Market копируются в целевую
+   Cell. На время копирования исходная Cell отклоняет команды управления ими (каталог, Hire Cook,
+   Register Courier и подобные), заказы продолжают приниматься. Скопированные Cook и Courier в
+   целевой Cell не могут выйти на линию, пока не переведены (шаг 3). Загрузка не публикует событий,
+   read models пересобираются из агрегатов.
+2. **Switch.** Control plane переключает Market Placement на целевую Cell, исходная становится
+   Previous Placement: маршрут `/m/{market_id}` ведёт в целевую, `/m/{market_id}@{source}` — в
+   исходную. Исходная Cell отклоняет создание новых агрегатов Market (Place Order, Register
+   Restaurant, Register Courier, Hire Cook) и команды управления Restaurant; команды над уже
+   существующими в ней Order, Kitchen Order, Delivery и Payment выполняются как обычно.
+3. **Перевод людей — по окончании смены.** Сменой считается отрезок от выхода на линию до ухода с
+   неё; уход с линии и сейчас отклоняется, пока у человека активная работа.
+   - Cook переходит в целевую Cell, когда уходит с линии в исходной (Take Cook Off Line), — если в
+     исходной Cell у его ресторана не осталось Kitchen Order в `QUEUED`. Иначе следующую смену он
+     работает в исходной Cell.
+   - Courier переходит так же, когда уходит с линии в исходной, — если в исходной Cell у Market не
+     осталось Delivery, ждущих курьера.
+   - После перевода Cook или Courier выходит на линию только в целевой Cell. Переход переводит
+     worker переноса control plane: он получает уход с линии из исходной Cell и открывает человека
+     в целевой.
+   - Cook и Courier других ресторанов и Market исходной Cell перенос не затрагивает.
+4. **Done.** У Market в исходной Cell не осталось незавершённых агрегатов, все Cook и Courier
+   переведены. Исходная Cell остаётся Previous Placement навсегда: хранит и отдаёт свои заказы и
+   выполняет команды над ними (например, возврат платежа), но новых агрегатов Market не создаёт.
 
 До Switch перенос отменяется без потерь, после — только обратным переносом.
 
 Что для этого понадобится:
 
-- **Market Hold** — ограничение `draining` / `frozen` / `moved`, которое хранит и проверяет сам
-  контекст, а не router: BFF с устаревшей картой (static stability) может прислать запрос в
-  прежнюю Cell, и отклонить его должна она.
-- Служебный API переноса в каждом контексте — Hold, статус дренажа, выгрузка, загрузка,
-  контрольная сумма, удаление, — только для service identity control plane
-  ([ADR 27](0027-service-identity-via-projected-serviceaccount-tokens.md)).
+- **Market Hold** — ограничение `copying` / `previous`, которое хранит и проверяет сам контекст, а
+  не router: оно отклоняет создание новых агрегатов и команды управления даже на запросе, пришедшем
+  по старому маршруту.
+- Состояние «переведён» у Cook и Courier в обеих Cell: в исходной — больше не выходит на линию, в
+  целевой — до перевода не выходит на линию.
+- Служебный API переноса в каждом контексте — Hold, выгрузка и загрузка Restaurant, Cook и Courier,
+  контрольная сумма, перевод человека, статус незавершённых агрегатов, — только для service
+  identity control plane ([ADR 27](0027-service-identity-via-projected-serviceaccount-tokens.md)).
 - Оркестрация переноса в control plane — workflow Temporal в своём Temporal; ячейки не знают друг
-  о друге, данные идут через worker control plane.
-- Подписки не из Kafka одной Cell: provider у поля subscription один, а Market после переноса
-  публикует уведомления в другой Cell — например, глобальный Kafka уведомлений, куда зеркалируются
-  топики Change Notification всех Cell.
+  о друге, данные и переводы идут через worker control plane.
 
 ## Consequences
 
-Отказ, перегрузка или неудачный деплой Cell задевает только её Market; рост — добавление Cell, а не
-раздувание общих кластеров. Типовая Cell — один и тот же размер, проверенный нагрузочным прогоном
-([ADR 26](0026-k6-for-performance-testing.md)); город крупнее неё получает свою Cell большего размера.
+Отказ, перегрузка или неудачный деплой Cell, включая её Cosmo Router и BFF, задевает только её
+Market; рост — добавление Cell, а не раздувание общих кластеров. Типовая Cell — один и тот же размер,
+проверенный нагрузочным прогоном ([ADR 26](0026-k6-for-performance-testing.md)); город крупнее неё
+получает свою Cell большего размера.
 
-Цена: эксплуатация умножается на число Cell; каждый клиентский запрос обязан нести Market; история
-заказов и пул курьеров видны в пределах Market. BFF и control plane становятся глобальными
-компонентами и должны быть проще и надёжнее ячеек: BFF — stateless и горизонтально масштабируется,
-control plane не участвует в обработке запросов. Перенос Market не реализован: до него Market
-навсегда остаётся в Cell, где создан. Перенос будет стоить простоя города на время дренажа и
-копирования и обязательной выгрузки и загрузки для каждого агрегата. Глобальная аналитика по всем
-Market — отдельное решение.
+Цена: эксплуатация умножается на число Cell; каждый клиентский путь несёт Market; история заказов и
+пул курьеров видны в пределах Market. Глобальные компоненты в пути запроса — публичный gateway, Dex
+и SpiceDB; control plane в нём не участвует, но получает право писать маршруты публичного gateway.
+Перенос Market не реализован: до него Market навсегда остаётся в Cell, где создан. После переноса
+Previous Placement не освобождается никогда: данные Market лежат в нескольких Cell, UI собирает
+историю заказов из всех размещений, и каждый следующий перенос добавляет ещё одно. Глобальная
+аналитика по всем Market — отдельное решение.
 
 ## References
 
@@ -195,8 +232,9 @@ Market — отдельное решение.
   Термин «cell» у WSO2 шире нашего: там Cell — единица разбиения по bounded context и команде
   (у нас это boundary, [ADR 2](0002-define-bounded-contexts-and-implementation-languages.md)), а
   здесь Cell — полная копия data plane для набора Market. Общее, что берём:
-  - gateway — единственная точка входа в Cell, точка политик и наблюдаемости: internal gateway
-    ячейки ([ADR 15](0015-использовать-internal-gateway-для-синхронных-вызовов-бизнес-api.md));
+  - gateway — единственная точка входа в Cell, точка политик и наблюдаемости: Cosmo Router для
+    клиентов и internal gateway ячейки ([ADR 15](0015-использовать-internal-gateway-для-синхронных-вызовов-бизнес-api.md))
+    для вызовов между контекстами;
   - разделение на data plane внутри ячеек и глобальные control/management plane вне их;
   - федеративная безопасность: IdP (Dex) и SpiceDB в глобальном контуре, а не STS в каждой Cell;
   - Cell — неизменяемая единица развёртывания по версионированному процессу (Helm charts,
@@ -209,17 +247,24 @@ Market — отдельное решение.
 
   Тот же смысл Cell, что и здесь: полная изолированная копия workload, разбиение по partition key,
   тонкий router и control plane вне горячего пути. Соответствие:
-  - partition key по «зерну» предметной области — Market; алгоритм — full mapping (явная
-    Placement Map), он же даёт override конкретного Market на конкретную Cell;
-  - control plane — CP (отказывает, но не отдаёт неверного), data plane и router — AP: router
-    держит карту в памяти и работает на устаревшей при недоступном control plane (static stability);
+  - partition key по «зерну» предметной области — Market; алгоритм — full mapping (явный маршрут на
+    каждое размещение), он же даёт override конкретного Market на конкретную Cell;
+  - router — тонкий слой без бизнес-логики: публичный gateway выбирает Cell по пути;
+  - control plane — CP (отказывает, но не отдаёт неверного), data plane и router — AP: Envoy
+    работает на последней конфигурации при недоступном control plane (static stability);
   - нет вызовов между Cell и общих хранилищ у ячеек;
-  - текущий стек — «cell zero» (`cell-1`), router добавлен поверх;
+  - текущий стек — «cell zero» (`cell-1`), router добавлен перед ним;
   - Cell фиксированного, проверенного нагрузкой размера; рост — новые Cell (scale-out).
 
-  Расхождения: router — BFF, а не «тончайший слой без бизнес-логики»; SpiceDB и Dex — общие для
-  всех Cell зависимости в горячем пути; Market не делится между Cell — крупный город получает Cell
-  большего размера вместо второго измерения ключа; перенос Market и вторая Cell только описаны в
-  стратегии расширения, а не заложены с первого дня; перенос — с окном обслуживания, а не online;
-  развёртывание волнами по Cell, лимиты и load shedding на Cell и метки `cell_id` в телеметрии
-  пока не введены.
+  Расхождения со стороны AWS → у нас:
+  - у Cell нет общих зависимостей в пути запроса → SpiceDB и Dex общие для всех Cell: их отказ
+    задевает все Market. Принято осознанно: оба stateless перед своим хранилищем, масштабируются
+    горизонтально и выдерживают нагрузку всех Cell;
+  - слишком крупный ключ делится дальше → Market не делится, крупный город получает Cell большего
+    размера;
+  - перенос ключа и вторая Cell заложены с первого дня → перенос и вторая Cell только описаны в
+    стратегии расширения и не проверены;
+  - перенесённый ключ целиком живёт в новой Cell → агрегаты, созданные до переноса, навсегда
+    остаются в прежней Cell;
+  - развёртывание волнами по Cell, лимиты и load shedding на Cell, метки `cell_id` в телеметрии →
+    пока не введены.

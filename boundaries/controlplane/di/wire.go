@@ -16,7 +16,7 @@ import (
 // `make generate`.
 var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна только своя секция.
-	configSet = wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Database")
+	configSet = wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Database", "Routes")
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
 	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
 )

@@ -18,8 +18,8 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	deliveryv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 )
 
 const fixtures = "../../../../../../tests/identity/fixtures"
@@ -93,7 +93,7 @@ func connect(t *testing.T, server *deliveryServer) *Delivery {
 
 // dispatcherContext is a request of the dispatcher in Market berlin.
 func dispatcherContext() context.Context {
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(cellrouter.MarketMetadata, "berlin"))
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(market.Metadata, "berlin"))
 	return identity.WithUser(ctx, identity.User{ID: "dispatcher"})
 }
 

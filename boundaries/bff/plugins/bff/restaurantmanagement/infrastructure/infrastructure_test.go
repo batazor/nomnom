@@ -18,8 +18,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
 
@@ -99,7 +99,7 @@ func connect(t *testing.T, server *restaurantsServer) *Restaurants {
 
 // ownerContext is a request of owner-1 in Market berlin.
 func ownerContext() context.Context {
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(cellrouter.MarketMetadata, "berlin"))
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(market.Metadata, "berlin"))
 	return identity.WithUser(ctx, identity.User{ID: "owner-1"})
 }
 

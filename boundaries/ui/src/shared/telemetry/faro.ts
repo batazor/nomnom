@@ -39,9 +39,10 @@ export function redactItem(item: TransportItem): TransportItem {
 }
 
 // OpenTelemetry compares a string with the whole request URL, and urql sends
-// queries as GET with a query string: match the BFF origin as a prefix.
-export function bffUrlPattern(graphqlUrl: string): RegExp {
-  const origin = new URL(graphqlUrl).origin;
+// queries as GET with a query string: match the origin of the public API as
+// a prefix — the BFF of every Market lives under it.
+export function bffUrlPattern(apiUrl: string): RegExp {
+  const origin = new URL(apiUrl).origin;
   return new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/`);
 }
 
@@ -62,9 +63,7 @@ export function initTelemetry(config: RuntimeConfig): Faro | undefined {
       // traceparent only to the BFF: the trace continues in Cosmo Router.
       new TracingInstrumentation({
         instrumentationOptions: {
-          propagateTraceHeaderCorsUrls: [
-            bffUrlPattern(config.publicGraphqlUrl),
-          ],
+          propagateTraceHeaderCorsUrls: [bffUrlPattern(config.publicApiUrl)],
         },
       }),
       // Views are named by route pattern (withFaroRouterInstrumentation in app/router).

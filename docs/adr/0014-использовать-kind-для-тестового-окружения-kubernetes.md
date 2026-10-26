@@ -32,8 +32,9 @@ Kubernetes, и для E2E. Окружение находится в `ops/kind/` 
 
 - Кластер из одного узла: control-plane без taint запускает и workloads, что экономит
   ресурсы локальной машины и CI. Default CNI отключён (`disableDefaultCNI: true`); CNI устанавливается отдельно.
-  `extraPortMappings` публикует NodePort `30080` публичного API BFF на
-  `127.0.0.1:${BFF_HOST_PORT}`.
+  `extraPortMappings` публикует NodePort `30085` публичного gateway — webhooks внешних систем
+  и публичный API клиентов ([ADR 41](0041-cell-based-architecture-with-control-plane.md)) — на
+  `127.0.0.1:${WEBHOOKS_HOST_PORT}`.
 - Имя кластера параметризуется `KIND_CLUSTER_NAME`, по умолчанию `nomnom-test`. Все
   команды явно используют контекст `kind-${KIND_CLUSTER_NAME}` и отказываются работать с
   другим кластером.

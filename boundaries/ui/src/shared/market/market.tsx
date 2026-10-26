@@ -3,13 +3,14 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 
-// Market the viewer chose (ADR 41): every BFF operation except `markets` is
-// routed to the Cell of this Market by the X-Nomnom-Market header. Only the
-// id is kept in the browser; the list of Markets always comes from BFF.
+// Market the viewer chose (ADR 41): the public gateway routes
+// /m/{marketId}/graphql to the Cell of this Market. Only the id is kept in
+// the browser; the list of Markets always comes from the public gateway.
 const storageKey = "nomnom.market.v1";
 
 // Format of market_id (ADR 41); anything else in storage is not a choice.
@@ -17,6 +18,11 @@ const marketIdPattern = /^[a-z][a-z0-9-]{1,31}$/;
 
 export function parseMarketId(raw: string | null): string | undefined {
   return raw !== null && marketIdPattern.test(raw) ? raw : undefined;
+}
+
+// GraphQL endpoint of the BFF of the Cell of a Market.
+export function marketGraphqlUrl(apiUrl: string, marketId: string): string {
+  return `${apiUrl}/m/${marketId}/graphql`;
 }
 
 function readMarketId(): string | undefined {
@@ -35,16 +41,72 @@ function writeMarketId(marketId: string): void {
   }
 }
 
+export type Market = Readonly<{ id: string; name: string; currency: string }>;
+
+export type MarketList =
+  | { kind: "loading" }
+  | { kind: "error"; retry: () => void }
+  | { kind: "loaded"; markets: readonly Market[] };
+
 type MarketSelection = Readonly<{
+  // Base URL of the public API.
+  apiUrl: string;
   // Id of the chosen Market; undefined until the viewer picks one.
   marketId: string | undefined;
   choose: (marketId: string) => void;
+  markets: MarketList;
 }>;
 
 const MarketContext = createContext<MarketSelection | null>(null);
 
-export function MarketProvider({ children }: { children: ReactNode }) {
+function isMarketList(body: unknown): body is { markets: Market[] } {
+  if (typeof body !== "object" || body === null) return false;
+  const markets = (body as { markets?: unknown }).markets;
+  return (
+    Array.isArray(markets) &&
+    markets.every(
+      (market) =>
+        typeof market?.id === "string" &&
+        typeof market?.name === "string" &&
+        typeof market?.currency === "string",
+    )
+  );
+}
+
+// The Markets come from GET /markets of the public gateway once per page
+// (no polling, ADR 36); retry asks again.
+async function fetchMarkets(apiUrl: string, signal: AbortSignal) {
+  const response = await fetch(`${apiUrl}/markets`, { signal });
+  if (!response.ok) throw new Error(`markets: HTTP ${response.status}`);
+  const body: unknown = await response.json();
+  if (!isMarketList(body)) throw new Error("markets: unexpected response");
+  return body.markets;
+}
+
+export function MarketProvider({
+  apiUrl,
+  children,
+}: {
+  apiUrl: string;
+  children: ReactNode;
+}) {
   const [marketId, setMarketId] = useState<string | undefined>(readMarketId);
+  const [attempt, setAttempt] = useState(0);
+  const [markets, setMarkets] = useState<MarketList>({ kind: "loading" });
+
+  // Each attempt asks once; a retry starts the next attempt from loading.
+  useEffect(() => {
+    const abort = new AbortController();
+    if (attempt > 0) setMarkets({ kind: "loading" });
+    const retry = () => setAttempt((current) => current + 1);
+    fetchMarkets(apiUrl, abort.signal).then(
+      (list) => setMarkets({ kind: "loaded", markets: list }),
+      () => {
+        if (!abort.signal.aborted) setMarkets({ kind: "error", retry });
+      },
+    );
+    return () => abort.abort();
+  }, [apiUrl, attempt]);
 
   const choose = useCallback((next: string) => {
     if (!marketIdPattern.test(next)) {
@@ -54,7 +116,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     setMarketId(next);
   }, []);
 
-  const value = useMemo(() => ({ marketId, choose }), [marketId, choose]);
+  const value = useMemo(
+    () => ({ apiUrl, marketId, choose, markets }),
+    [apiUrl, marketId, choose, markets],
+  );
 
   return (
     <MarketContext.Provider value={value}>{children}</MarketContext.Provider>

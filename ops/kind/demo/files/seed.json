@@ -1,7 +1,7 @@
 {
   "operator": "kind-operator",
   "cells": [
-    {"id": "cell-1", "gatewayAddress": "internal-gateway.envoy-gateway-system.svc.cluster.local:8080"}
+    {"id": "cell-1", "router": {"namespace": "nomnom-bff", "name": "bff", "port": 3010}}
   ],
   "markets": [
     {"id": "berlin", "name": "Berlin", "currency": "EUR", "cellId": "cell-1"}

@@ -12,7 +12,7 @@ export const bffInfoFixture = Object.freeze({
   version: "0.1.0-mock",
 });
 
-// Markets of ListMarkets: by name, then by id.
+// Markets of GET /markets of the public gateway: by name, then by id.
 export const marketFixtures = Object.freeze([
   Object.freeze({ id: "berlin", name: "Берлин", currency: "EUR" }),
   Object.freeze({ id: "hamburg", name: "Гамбург", currency: "EUR" }),

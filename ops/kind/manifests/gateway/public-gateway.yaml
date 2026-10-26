@@ -1,13 +1,17 @@
-# Public gateway: входящие вызовы внешних систем (webhooks платёжного провайдера) и
-# browser telemetry customer UI (telemetry.nomnom.localhost, route в
-# manifests/observability/faro-route.yaml — только с profile grafana-cloud).
+# Public gateway: входящие вызовы внешних систем (webhooks платёжного провайдера),
+# публичный API клиентов (api.nomnom.localhost — router ячеек, ADR 41) и browser telemetry
+# customer UI (telemetry.nomnom.localhost, route в manifests/observability/faro-route.yaml —
+# только с profile grafana-cloud).
 # Отдельный от internal gateway data plane: внешний трафик не попадает на listener
 # service-to-service вызовов. Публикуется только явно перечисленные HTTP-пути.
 #
 # Только HTTPS: TLS терминирует Envoy сертификатом, который cert-manager выпускает по
 # аннотации Gateway от локального CA (chart ops/kind/bootstrap, templates/certs.yaml) и продлевает сам.
-# kind: NodePort 30085 → host 127.0.0.1:${WEBHOOKS_HOST_PORT} (cluster.yaml); имя
-# webhooks.nomnom.localhost резолвится в 127.0.0.1.
+# kind: NodePort 30085 → host 127.0.0.1:${WEBHOOKS_HOST_PORT} (cluster.yaml); имена
+# webhooks.nomnom.localhost и api.nomnom.localhost резолвятся в 127.0.0.1.
+#
+# Маршруты listener api (HTTPRoute market-<market_id> и список Market markets) пишет control
+# plane из своего реестра (server-side apply, ADR 41); здесь — только их политики.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
@@ -70,7 +74,22 @@ spec:
         kinds:
           - group: gateway.networking.k8s.io
             kind: HTTPRoute
+    # ADR 41: router ячеек — /m/{market_id} в Cosmo Router Cell Market, GET /markets.
     # Тот же сертификат: cert-manager собирает dnsNames всех listeners с этим Secret.
+    - name: api
+      protocol: HTTPS
+      port: 8443
+      hostname: api.nomnom.localhost
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: public-gateway-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
     - name: telemetry
       protocol: HTTPS
       port: 8443
@@ -101,7 +120,25 @@ spec:
     http:
       requestTimeout: 15s
 ---
-# Ограничение размера тела совпадает с MAX_BODY_BYTES payments (64 KiB).
+# Маршруты Market (метка nomnom.dev/route=market, ставит control plane) — без request timeout:
+# SSE-подписки (ADR 36) длятся, пока клиент открыт; политика маршрута сильнее политики Gateway.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: public-gateway-market-routes
+  namespace: nomnom-gateway
+spec:
+  targetSelectors:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      matchLabels:
+        nomnom.dev/route: market
+  timeout:
+    http:
+      requestTimeout: 0s
+---
+# Ограничение размера тела совпадает с MAX_BODY_BYTES payments (64 KiB); публичный API
+# клиентов (listener api) им не ограничен.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: ClientTrafficPolicy
 metadata:
@@ -112,8 +149,35 @@ spec:
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: public
+      sectionName: https
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+      sectionName: telemetry
   connection:
     bufferLimit: 64Ki
+---
+# CORS списка Market: Envoy отвечает на GET /markets сам (HTTPRouteFilter directResponse,
+# HTTPRoute markets пишет control plane), Cosmo Router CORS этого пути не видит. Как у Router —
+# любой origin; Faro добавляет W3C trace context ко всем запросам публичного API.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: public-gateway-markets-cors
+  namespace: nomnom-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: markets
+  cors:
+    allowOrigins:
+      - "*"
+    allowMethods:
+      - GET
+    allowHeaders:
+      - traceparent
+      - tracestate
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

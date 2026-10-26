@@ -32,8 +32,9 @@ serviceAccount:
   # Имя ServiceAccount. Пустое значение — <fullname>.
   name: ""
   annotations: {}
-  # Доступ к Kubernetes API приложению не нужен.
-  automount: false
+  # Токен ServiceAccount для Kubernetes API: control plane применяет маршруты публичного
+  # gateway (ADR 41, routes.*).
+  automount: true
 
 podAnnotations: {}
 podLabels: {}
@@ -123,8 +124,7 @@ affinity: {}
 
 # Service identity (ADR 27) и user assertions BFF (ADR 32). Все поля обязательны: без них chart
 # не рендерится. serviceAccounts — allowlist "namespace/serviceaccount=service-name,…";
-# userDelegates — services, передающие user assertion оператора; placementReaders — services,
-# читающие ListMarkets и GetPlacementMap (ADR 41: service identity BFF).
+# userDelegates — services, передающие user assertion оператора.
 identity:
   issuer: ""
   audience: nomnom.controlplane
@@ -133,7 +133,14 @@ identity:
   userJwksConfigMap: ""
   userIssuer: ""
   userDelegates: ""
-  placementReaders: ""
+
+# Маршруты публичного gateway (ADR 41): неймспейс HTTPRoute, Gateway и listener клиентского
+# трафика. Все поля обязательны. Chart выдаёт ServiceAccount Role в этом неймспейсе — только
+# get/create/patch HTTPRoute, HTTPRouteFilter и ConfigMap (server-side apply).
+routes:
+  namespace: ""
+  gateway: ""
+  listener: ""
 
 # SpiceDB (ADR 18): endpoint и Secret preshared key обязательны.
 spicedb:

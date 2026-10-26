@@ -7,6 +7,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -20,7 +21,7 @@ import { cartStorageKey } from "./cart";
 import { RestaurantOrdering } from "./restaurant-ordering";
 
 const config = {
-  publicGraphqlUrl: "https://public.example.test/graphql",
+  publicApiUrl: "https://public.example.test",
   locale: "ru" as const,
   enableMocks: true,
   environment: "test",
@@ -30,6 +31,8 @@ const kitchen = "restaurant-kitchen-8";
 const publicGraphql = graphql.link(/\/graphql$/);
 
 beforeAll(() => mockServer.listen({ onUnhandledFrame: "error" }));
+// The screens of a Market render in a chosen Market (ADR 41).
+beforeEach(() => localStorage.setItem("nomnom.market.v1", "berlin"));
 afterEach(() => {
   mockServer.resetHandlers();
   mockStore.reset();
@@ -193,7 +196,9 @@ describe("view restaurant", () => {
 
   it("works when the browser storage is unavailable", async () => {
     const user = userEvent.setup();
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    // Only the cart is blocked: the Market of the screen stays chosen.
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation((key) => {
+      if (key === "nomnom.market.v1") return "berlin";
       throw new DOMException("blocked", "SecurityError");
     });
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {

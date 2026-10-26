@@ -5,8 +5,7 @@
 include ops/kind/versions.env
 export GATEWAY_API_VERSION
 export KIND_CLUSTER_NAME ?= nomnom-test
-# Host-порты extraPortMappings ops/kind/cluster.yaml: NodePort 30080 (BFF) и 30085 (public gateway).
-export BFF_HOST_PORT ?= 18080
+# Host-порт extraPortMappings ops/kind/cluster.yaml: NodePort 30085 (public gateway).
 export WEBHOOKS_HOST_PORT ?= 18085
 KIND_SCRIPTS := ops/kind/scripts
 # Skaffold запускается из каталога конфигурации: его пути относительны рабочему каталогу.
@@ -35,7 +34,7 @@ kind-cluster: ## создать single-node кластер kind из ops/kind/cl
 	@test "$$(kind version | cut -d' ' -f2)" = "$(KIND_VERSION)" || { echo "kind $(KIND_VERSION) is required by ops/kind/versions.env" >&2; exit 1; }
 	@test "$$(skaffold version)" = "$(SKAFFOLD_VERSION)" || { echo "skaffold $(SKAFFOLD_VERSION) is required by ops/kind/versions.env" >&2; exit 1; }
 	@kind get clusters | grep -Fxq '$(KIND_CLUSTER_NAME)' || \
-	  sed -e 's|__BFF_HOST_PORT__|$(BFF_HOST_PORT)|' -e 's|__WEBHOOKS_HOST_PORT__|$(WEBHOOKS_HOST_PORT)|' ops/kind/cluster.yaml | \
+	  sed -e 's|__WEBHOOKS_HOST_PORT__|$(WEBHOOKS_HOST_PORT)|' ops/kind/cluster.yaml | \
 	  kind create cluster --name '$(KIND_CLUSTER_NAME)' --image '$(KIND_NODE_IMAGE)' --config=-
 kind-up: kind-cluster ## создать кластер и установить платформу: Cilium (Hubble observer), Envoy Gateway, cert-manager
 	@$(SKAFFOLD) run --module platform $(SKAFFOLD_FLAGS)

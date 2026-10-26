@@ -9,8 +9,7 @@ podLabels:
   nomnom.dev/business-api: "true"
 
 # ADR 27: projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks публикует Job
-# identity-jwks chart ops/kind/bootstrap). Вызывающие: BFF читает Markets и Placement Map
-# (placementReaders); Job demo-seed (chart ops/kind/demo) регистрирует cell-1 и создаёт berlin
+# identity-jwks chart ops/kind/bootstrap). Вызывающие: Job demo-seed (chart ops/kind/demo) регистрирует cell-1 и создаёт berlin
 # от имени оператора kind-operator с user assertion ключом BFF — поэтому он делегат (ADR 32);
 # fixture e2e-driver (ops/kind/e2e/chart) так же создаёт Market каждого прогона e2e.
 identity:
@@ -20,7 +19,13 @@ identity:
   userJwksConfigMap: bff-jwks
   userIssuer: nomnom-bff
   userDelegates: bff,demo-seed,e2e-driver
-  placementReaders: bff
+
+# ADR 41: маршруты Market и список Market — listener api Gateway public
+# (manifests/gateway/public-gateway.yaml).
+routes:
+  namespace: nomnom-gateway
+  gateway: public
+  listener: api
 
 # ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:

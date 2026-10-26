@@ -9,6 +9,7 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/errorkind"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
 )
@@ -50,6 +51,9 @@ func transportError(err error) error {
 		answer.reason = "MARKET_ALREADY_EXISTS"
 	case errors.Is(err, market.ErrUnknownCell):
 		answer.reason = "CELL_NOT_FOUND"
+	case errors.Is(err, publishroutes.ErrRoutesUnavailable):
+		answer.reason = "ROUTES_UNAVAILABLE"
+		answer.message = "routes of the public gateway not applied; repeat the call"
 	}
 	message := answer.message
 	if message == "" {

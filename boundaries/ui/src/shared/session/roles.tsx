@@ -7,7 +7,7 @@ import {
   type GraphqlErrorReport,
   type SubscriptionTransport,
 } from "../graphql/client";
-import { useMarketSelection } from "../market/market";
+import { marketGraphqlUrl, useMarketSelection } from "../market/market";
 
 // Roles of the flow board; each column has its own client and cache.
 export const roles = ["customer", "owner", "kitchen", "courier"] as const;
@@ -38,7 +38,6 @@ export function useCanAct(): boolean {
 }
 
 type ClientSettings = Readonly<{
-  url: string;
   reportError?: (report: GraphqlErrorReport) => void;
   subscriptions?: SubscriptionTransport;
 }>;
@@ -59,9 +58,11 @@ export function RoleClientSettings({
   );
 }
 
-// Everything inside calls BFF as the user of role, in the chosen Market. Each
-// role has its own client, so cached data of one user never shows up in
-// another column.
+// Everything inside calls BFF as the user of role, in the chosen Market: the
+// client talks to /m/{marketId}/graphql, which the public gateway routes to
+// the Cell of the Market (ADR 41). Each role has its own client, so cached
+// data of one user never shows up in another column. Without a chosen Market
+// there is no client: GraphQL screens render only behind the Market choice.
 export function AsRole({
   as: role,
   children,
@@ -74,21 +75,23 @@ export function AsRole({
   const mocks = useContext(MocksContext);
   const signedIn = useSignedInToken(boardUser);
   const token = mocks ? `mock-${role}` : signedIn;
-  const { marketId } = useMarketSelection();
+  const { apiUrl, marketId } = useMarketSelection();
 
   // A new Market gets a new client: cached data of one Market never shows
   // up in another.
   const client = useMemo(
     () =>
-      createGraphqlClient({
-        url: settings.url,
-        reportError: settings.reportError,
-        subscriptions: settings.subscriptions,
-        getAccessToken: () => token,
-        getMarket: () => marketId,
-      }),
-    [settings, token, marketId],
+      marketId === undefined
+        ? undefined
+        : createGraphqlClient({
+            url: marketGraphqlUrl(apiUrl, marketId),
+            reportError: settings.reportError,
+            subscriptions: settings.subscriptions,
+            getAccessToken: () => token,
+          }),
+    [settings, token, apiUrl, marketId],
   );
 
+  if (!client) return children;
   return <UrqlProvider value={client}>{children}</UrqlProvider>;
 }

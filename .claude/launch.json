@@ -14,7 +14,7 @@
         "--strictPort"
       ],
       "env": {
-        "VITE_PUBLIC_GRAPHQL_URL": "http://localhost:4173/graphql",
+        "VITE_PUBLIC_API_URL": "http://localhost:4173",
         "VITE_LOCALE": "ru",
         "VITE_ENABLE_MOCKS": "true",
         "VITE_DEPLOYMENT_ENVIRONMENT": "development"
@@ -29,7 +29,7 @@
         "cd boundaries/ui && npx vite build && npx vite preview --port 4187 --strictPort"
       ],
       "env": {
-        "VITE_PUBLIC_GRAPHQL_URL": "http://localhost:4187/graphql",
+        "VITE_PUBLIC_API_URL": "http://localhost:4187",
         "VITE_LOCALE": "ru",
         "VITE_ENABLE_MOCKS": "true",
         "VITE_DEPLOYMENT_ENVIRONMENT": "development"
@@ -49,7 +49,7 @@
         "--strictPort"
       ],
       "env": {
-        "VITE_PUBLIC_GRAPHQL_URL": "http://localhost:3010/graphql",
+        "VITE_PUBLIC_API_URL": "https://api.nomnom.localhost:18085",
         "VITE_LOCALE": "ru",
         "VITE_ENABLE_MOCKS": "false",
         "VITE_OIDC_ISSUER": "http://localhost:5556/dex",

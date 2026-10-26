@@ -1,6 +1,6 @@
 // Package permission is the authorization rule of the topology commands: only
 // a subject with platform#manage_markets (the platform operator, ADR 18 and
-// ADR 41) registers Cells and creates Markets.
+// ADR 41) registers Cells, creates Markets and lists them.
 package permission
 
 import (

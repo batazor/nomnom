@@ -19,7 +19,7 @@ BFF — отдельный сервис и единая прикладная т�
 - generated-код и lock-файл контракта коммитятся;
 - минимальный stateless-запрос `bffInfo` подтверждает сборку полного контура.
 
-Реализованы слайсы `catalog`, `checkout`, `ordertracking`, `restaurantmanagement`, `kitchen`, `courier`, `simulator` и `markets` поверх `restaurants`, `orders` и `delivery` ячейки Market запроса и control plane через internal gateway ([router ячеек](#router-ячеек)) (см. [Customer API](#customer-api)); операций «только схема» не осталось.
+Реализованы слайсы `catalog`, `checkout`, `ordertracking`, `restaurantmanagement`, `kitchen`, `courier`, `courierpool` и `simulator` поверх `restaurants`, `orders` и `delivery` своей Cell через internal gateway ([BFF в Cell](#bff-в-cell)) (см. [Customer API](#customer-api)); операций «только схема» не осталось.
 
 ## Customer API
 
@@ -28,7 +28,6 @@ BFF — отдельный сервис и единая прикладная т�
 | Операция | Назначение | Статус |
 | --- | --- | --- |
 | `bffInfo` | метаданные BFF | реализована |
-| `markets` | Market для выбора в UI (`controlplane.ListMarkets`), по названию; публичная, заголовок `X-Nomnom-Market` не нужен | реализована (`markets`) |
 | `restaurants(first, after)` | рестораны с cursor-пагинацией | реализована (`catalog`) |
 | `restaurant(id)` | ресторан с меню | реализована (`catalog`) |
 | `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | реализована (`ordertracking`) |
@@ -194,15 +193,15 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 - Клиенты подписываются по SSE (`POST /graphql`, `Accept: text/event-stream`). Первое событие приходит только после изменения, поэтому текущее состояние берётся query.
 - Клиентская схема — композиция subgraphs: `npm run compose` пишет `config.json` и [`client-schema.graphql`](client-schema.graphql) для codegen UI.
 
-## Router ячеек
+## BFF в Cell
 
-BFF — router ячеек ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md), [локальный ADR 2](docs/adr/0002-bff-as-the-client-entry-point.md#маршрутизация-по-ячейкам)); пакет `plugins/bff/infrastructure/cellrouter`.
+Router ячеек — публичный gateway, а не BFF ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md), [локальный ADR 2](docs/adr/0002-bff-as-the-client-entry-point.md#маршрутизация-по-ячейкам)): путь `/m/{market_id}/…` ведёт в Cosmo Router Cell Market. Router с plugin BFF развёрнут в каждой Cell и обслуживает только её.
 
-- **Market запроса.** Каждая операция, кроме `bffInfo` и `markets`, требует заголовок `X-Nomnom-Market` со slug Market (`berlin`). Router пробрасывает его в plugin правилом `headers.all.request: propagate` ([`config.yaml`](config.yaml), [`config.production.yaml`](config.production.yaml)) и разрешает в CORS. `cellrouter.MarketFrom` читает его из входящей metadata `x-nomnom-market`: нет заголовка, он повторён или не совпадает с `^[a-z][a-z0-9-]{1,31}$` — `INVALID_ARGUMENT`.
-- **Соединения.** `Router.Conn(audience)` — `grpc.ClientConnInterface` для `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`; слайсы получают его вместо соединения с одним gateway. На каждый `Invoke`/`NewStream` он выбирает gateway Cell по Market из Placement Map и вызывает кешированное `*grpc.ClientConn` на пару (адрес gateway, audience), созданное `gateway.Dial` при первом вызове (service token, user assertion, otelgrpc). Market не размещён — `NOT_FOUND`, карта ещё не получена — `UNAVAILABLE`; Cell по умолчанию нет. Market не передаётся контекстам metadata: адаптеры `ListRestaurants`, `ListOwnedRestaurants`, `ListCustomerOrders`, `GetCourierPool` и `RegisterCourier` ставят `market_id` в запрос.
-- **Ошибки.** Отказ router — `cellrouter.Refusal`, намеренно не gRPC status: адаптеры переводят коды контекстов в бизнес-ошибки (`NOT_FOUND` ресторана), и отказ router за них не сойдёт. `internalError` отдаёт клиенту код отказа как есть.
-- **Placement Map.** `cellrouter.Placements` читает `controlplane.GetPlacementMap` через internal gateway (`BFF__INTERNAL_GATEWAY_ADDR`, audience `nomnom.controlplane`, без user assertion), держит карту в памяти и обновляет в фоне раз в `BFF__PLACEMENT_TTL` (Go duration, обязателен; Helm `cellRouter.placementTTL`). Первая загрузка — в фоне при старте; до неё операции data plane отвечают `UNAVAILABLE`. Неудачное или невалидное обновление (повтор Market, пустой адрес, неверный slug) оставляет последнюю карту, пишется в лог и в счётчик `bff.placement_map.refreshes{outcome}`. Refresher останавливается, а соединения закрываются после `plugin.Serve()`, когда Router останавливает plugin.
-- **Subscriptions** Cosmo Streams читают Kafka `cell-1` и не маршрутизируются ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md#развёртывание)).
+- **Market запроса.** Gateway снимает префикс `/m/{market_id}` и ставит заголовок `X-Nomnom-Market` из маршрута; Router пробрасывает его в plugin правилом `headers.all.request: propagate` ([`config.yaml`](config.yaml), [`config.production.yaml`](config.production.yaml)). Браузер заголовок не шлёт, поэтому в CORS его нет. `market.From` (пакет `plugins/bff/infrastructure/market`) читает входящую metadata `x-nomnom-market`: нет заголовка, он повторён или не совпадает с `^[a-z][a-z0-9-]{1,31}$` — `INVALID_ARGUMENT`.
+- **Соединения.** Одно `*grpc.ClientConn` на audience (`nomnom.orders`, `nomnom.restaurants`, `nomnom.delivery`) к internal gateway своей Cell (`BFF__INTERNAL_GATEWAY_ADDR`), `gateway.Dial` (service token, user assertion, otelgrpc). Слайсы получают его через `market.Require`: вызов без валидного Market отклоняется до контекста. Market не передаётся контекстам metadata: адаптеры `ListRestaurants`, `ListOwnedRestaurants`, `ListCustomerOrders`, `GetCourierPool` и `RegisterCourier` ставят `market_id` в запрос. Соединения закрываются после `plugin.Serve()`, когда Router останавливает plugin.
+- **Ошибки.** Отказ по Market — `market.Refusal`, намеренно не gRPC status: адаптеры переводят коды контекстов в бизнес-ошибки (`NOT_FOUND` ресторана), и отказ за них не сойдёт. `internalError` отдаёт клиенту код отказа как есть.
+- **Список Market** BFF не отдаёт и к control plane не обращается: UI читает его у публичного gateway (`GET /markets`).
+- **Subscriptions** Cosmo Streams Router каждой Cell читают Kafka своей Cell ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md#развёртывание)).
 
 ## Identity покупателя
 
@@ -220,7 +219,7 @@ BFF — router ячеек ([ADR 41](../../docs/adr/0041-cell-based-architecture-
 | `BFF__ASSERTION_KEY_FILE`, `BFF__ASSERTION_KEY_ID` | ключ подписи assertions (P-256, PEM) и его `kid` |
 | `IDENTITY__TOKEN_DIR` | каталог projected ServiceAccount tokens, файл на audience |
 
-Переменные, `BFF__INTERNAL_GATEWAY_ADDR` и `BFF__PLACEMENT_TTL` обязательны: без них или с частичной конфигурацией плагин не стартует. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — providers с JWKS URL, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`).
+Переменные и `BFF__INTERNAL_GATEWAY_ADDR` обязательны: без них или с частичной конфигурацией плагин не стартует. Helm: `identity.*` в [`ops/helm/values.yaml`](ops/helm/values.yaml) — providers с JWKS URL, ключ из Secret, projected tokens для `identity.tokenAudiences`. Ротация ключа: новый `kid` сначала в JWKS контекстов, затем в BFF, старый удаляется после 60 s. Тесты используют общие векторы `tests/identity` (`idp-vectors.json`, `bff-signing-key.pem`).
 
 ## Место в архитектуре
 
@@ -290,7 +289,7 @@ boundaries/bff/
   plugins/bff/
     src/schema.graphql        # публичный GraphQL-контракт
     src/main.go               # запуск plugin и bffInfo; единственный log.Fatalf
-    src/wiring.go             # конфигурация, router ячеек, сборка слайсов
+    src/wiring.go             # конфигурация, соединения с контекстами Cell, сборка слайсов
     src/auth.go               # requireCustomer и requireSlice
     src/errors.go             # ошибки resolvers без внутренних деталей
     src/*_presenter.go        # перевод представлений в GraphQL-типы, таблицы enum
@@ -301,18 +300,17 @@ boundaries/bff/
     ordertracking/            # слайс отслеживания заказа
     restaurantmanagement/     # слайс открытия ресторана владельцем
     simulator/                # слайс переключателя demo Simulator
-    markets/                  # слайс выбора Market (control plane)
     identity/                 # access token, user assertion, service token
     infrastructure/gateway/   # соединение с internal gateway
-    infrastructure/cellrouter/ # Market запроса, Placement Map, соединения с Cell
+    infrastructure/market/    # Market запроса и отказ вызова без него
     infrastructure/grpcerr/   # ErrorInfo и metadata ошибок контекстов
-    infrastructure/grpc/      # gRPC-клиенты контекстов и control plane (generated)
+    infrastructure/grpc/      # gRPC-клиенты контекстов (generated)
     generated/                # generated gRPC-контракт и mapping
 ```
 
 Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`, `restaurantmanagement`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`, `RestaurantOpener`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
 
-Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз, открывает соединение с control plane и даёт всем слайсам по одному маршрутизируемому соединению (`cellrouter.Router.Conn`) на `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
+Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и даёт всем слайсам по одному соединению с internal gateway своей Cell (через `market.Require`) на `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
 
 Внутренние клиенты будут генерироваться из закреплённых BSR commits согласно [общесистемному ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). Интеграция этих клиентов с plugin относится к следующему шагу.
 
@@ -389,7 +387,7 @@ docker run --rm -p 3010:3010 nomnom/bff:local   # /health/live, /health/ready, P
 
 Helm chart и команды его проверки описаны в [ops/README.md](ops/README.md). Probes — штатные `/health/live` и `/health/ready` Router на порту `http`: отдельного технического порта для health у Router нет (исключение из ADR 17).
 
-В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders`, `nomnom.restaurants`, `nomnom.delivery` и `nomnom.controlplane`, `cellRouter.placementTTL`. Ключ подписи user assertions выпускает cert-manager один раз на кластер (chart `ops/kind/bootstrap`, Secret `bff-assertion-key`, ключ `tls.key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Наружу BFF не опубликован: проверки обращаются к нему через `kubectl port-forward`.
+В kind ([ops/kind](../../ops/kind/README.md)) Skaffold собирает образ (artifact `nomnom/bff`) и ставит release `bff` в `nomnom-bff` с [`ops/kind/values/bff.yaml`](../../ops/kind/values/bff.yaml): ServiceAccount `bff`, контексты только через internal gateway, projected tokens для `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`, `ReferenceGrant` для маршрутов публичного gateway (`publicGateway.namespace`). Ключ подписи user assertions выпускает cert-manager один раз на кластер (chart `ops/kind/bootstrap`, Secret `bff-assertion-key`, ключ `tls.key`), access tokens выпускает тестовый identity provider из `tests/identity/fixtures` — только для kind. Клиенты приходят через listener `api` публичного gateway (`https://api.nomnom.localhost:18085/m/berlin/graphql`); проверки `ops/kind/e2e/bff` обращаются к Service `bff` напрямую с заголовком `X-Nomnom-Market`.
 
 ## Следующие шаги
 

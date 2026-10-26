@@ -6,8 +6,8 @@
 # Egress BFF ограничен базовыми политиками (DNS, internal gateway, telemetry). Access token
 # выпускает тестовый identity provider (ключ tests/identity/fixtures, только для kind), user
 # assertion — ключ BFF из Secret bff-assertion-key (tls.key, до cert-manager — key.pem); оба
-# подписывает scripts/mint-jwt.py. GraphQL несёт X-Nomnom-Market: berlin (ADR 41): без него BFF
-# не выбирает Cell и отклоняет запрос.
+# подписывает scripts/mint-jwt.py. GraphQL идёт в BFF cell-1 напрямую и несёт X-Nomnom-Market: berlin,
+# который перед Cell ставит публичный gateway (ADR 41): без него BFF отклоняет операции контекстов.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
