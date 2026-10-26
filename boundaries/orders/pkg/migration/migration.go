@@ -1,7 +1,7 @@
 // Package migration applies the schema migrations of the orders database
-// (ADR 38, ADR 39). Every owner of tables — the pkg set of shared tables and
-// each slice — has its own Set with its own numbering and version table; the
-// composition root passes them to Apply in order, pkg first.
+// (ADR 38, ADR 39). Every slice with tables has its own Set, next to the
+// repositories of those tables, with its own numbering and version table; the
+// composition root passes them to Apply in order.
 package migration
 
 import (

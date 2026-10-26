@@ -12,7 +12,7 @@ import { MessageProcessor } from "../pkg/infrastructure/messaging/processor.ts";
 import {
   INBOX_COLLECTION,
   MongoInbox,
-} from "../pkg/infrastructure/mongodb/inbox.ts";
+} from "../pkg/infrastructure/repository/inbox.ts";
 import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {

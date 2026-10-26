@@ -9,7 +9,6 @@ from typing import override
 import pytest
 from payment_fakes import PaymentsTestKit
 
-from infrastructure.postgres import PostgresDatabase
 from infrastructure.provider import (
     MAX_BODY_BYTES,
     SIGNATURE_HEADER,
@@ -18,6 +17,7 @@ from infrastructure.provider import (
     create_webhook_handler,
     sign_payload,
 )
+from infrastructure.repository import PostgresDatabase
 from pkg.lifecycle import HttpWorker, LifecycleError, WorkerGroup
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.domains.payment import OperationKind, OperationState, PaymentState

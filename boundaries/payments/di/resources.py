@@ -27,7 +27,7 @@ from typing import Any
 
 from dependency_injector import providers
 
-from infrastructure.postgres import MigrationSet, PostgresDatabase, create_database, migrate
+from infrastructure.repository import MigrationSet, PostgresDatabase, create_database, migrate
 from pkg import telemetry
 from pkg.config import (
     DatabaseSettings,
@@ -49,10 +49,11 @@ class ProcessResource[T](providers.Resource[T]):
 
 
 # Migration sets of the process in the order they are applied: the shared tables of
-# ``pkg`` first, then every slice its own tables. A new slice adds its set here.
+# ``infrastructure`` (Outbox, Inbox) first, then every slice its own tables. A set lives
+# next to the repository code of its tables. A new slice adds its set here.
 MIGRATIONS = (
-    MigrationSet("pkg", "pkg.postgres"),
-    MigrationSet("payment", "slices.payment.infrastructure.postgres"),
+    MigrationSet("infrastructure", "infrastructure.repository"),
+    MigrationSet("payment", "slices.payment.infrastructure.repository"),
 )
 
 # ``Configuration.provider`` is the provider's own attribute, so the section is renamed.

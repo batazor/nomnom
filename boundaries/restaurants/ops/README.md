@@ -125,7 +125,7 @@ Connect ([ADR 37](../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)): 
 | `cdc.enabled` | Регистрировать коннектор; по умолчанию `false`. |
 | `cdc.connectUrl` | REST Kafka Connect, например `http://kafka-connect.nomnom-infra.svc.cluster.local:8083`. |
 | `cdc.connectionString` | `mongodb.connection.string` коннектора — ссылка config provider Connect, например `${dir:/etc/nomnom/cdc:restaurants-uri}`, не URI с паролем. |
-| `cdc.connector.config` | Контракт Outbox (общий для окружений); меняется вместе с `pkg/infrastructure/mongodb/outbox.ts`. |
+| `cdc.connector.config` | Контракт Outbox (общий для окружений); меняется вместе с `pkg/infrastructure/repository/outbox.ts`. |
 
 Состояние — `GET /connectors/restaurants-outbox/status`; после исправления документа, остановившего
 коннектор, — `POST /connectors/restaurants-outbox/restart?includeTasks=true`.

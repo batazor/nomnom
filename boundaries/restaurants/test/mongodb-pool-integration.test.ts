@@ -13,7 +13,7 @@ import { MongoError } from "mongodb";
 import {
   connectMongoDb,
   type MongoDbConnection,
-} from "../pkg/infrastructure/mongodb/client.ts";
+} from "../pkg/infrastructure/repository/client.ts";
 import { mongoUri } from "./support/mongodb.ts";
 
 // Runs against a MongoDB replica set, for example

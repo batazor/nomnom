@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.postgres import PostgresDatabase
+from infrastructure.repository import PostgresDatabase
 from pkg.application import AggregateRef, AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,

@@ -31,7 +31,7 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
-from infrastructure.postgres import PostgresDatabase
+from infrastructure.repository import PostgresDatabase
 from pkg.application import Subject, SubjectKind
 from pkg.config import IdentitySettings, load_settings
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler

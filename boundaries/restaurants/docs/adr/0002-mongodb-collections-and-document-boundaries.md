@@ -52,19 +52,19 @@ Restaurant вместе с меню и заказами не объединяе�
 
 ### Эволюция схемы
 
-Миграции встроены в приложение и выполняются библиотекой [migrate-mongo](https://github.com/seppevs/migrate-mongo) ([ADR 39](../../../../docs/adr/0039-data-access-without-orm.md)): каждый процесс (`restaurants`, `restaurants-consumer`) при старте, до обслуживания, своим `MongoClient` (с телеметрией команд и пула) вызывает `migrateRestaurantsDatabase` (`infrastructure/mongodb/migrate.ts` поверх `pkg/infrastructure/mongodb/migrate.ts`).
+Миграции встроены в приложение и выполняются библиотекой [migrate-mongo](https://github.com/seppevs/migrate-mongo) ([ADR 39](../../../../docs/adr/0039-data-access-without-orm.md)): каждый процесс (`restaurants`, `restaurants-consumer`) при старте, до обслуживания, своим `MongoClient` (с телеметрией команд и пула) вызывает `migrateRestaurantsDatabase` (`infrastructure/repository/migrate.ts` поверх `pkg/infrastructure/repository/migrate.ts`).
 
 Каждый вертикальный слайс владеет миграциями своих коллекций. Набор миграций — каталог файлов `<NNNN>-<изменение>.ts` с нумерацией с 0001 в каждом наборе и собственным changelog `migrations_changelog_<набор>`:
 
 | Набор | Каталог | Коллекции |
 | --- | --- | --- |
-| `pkg` | `pkg/infrastructure/mongodb/migrations/` | `outbox`, `inbox`; чистки всего сервиса (остатки polling relay ADR 31, коллекции прежних миграторов) |
-| `restaurant` | `slices/restaurant/infrastructure/mongodb/migrations/` | `restaurants` |
-| `menu` | `slices/menu/infrastructure/mongodb/migrations/` | `menus` |
-| `restaurantorder` | `slices/restaurantorder/infrastructure/mongodb/migrations/` | `restaurant_orders` |
-| `simulator` | `slices/simulator/infrastructure/mongodb/migrations/` | `simulator` |
+| `pkg` | `pkg/infrastructure/repository/migrations/` | `outbox`, `inbox`; чистки всего сервиса (остатки polling relay ADR 31, коллекции прежних миграторов) |
+| `restaurant` | `slices/restaurant/infrastructure/repository/migrations/` | `restaurants` |
+| `menu` | `slices/menu/infrastructure/repository/migrations/` | `menus` |
+| `restaurantorder` | `slices/restaurantorder/infrastructure/repository/migrations/` | `restaurant_orders` |
+| `simulator` | `slices/simulator/infrastructure/repository/migrations/` | `simulator` |
 
-Порядок наборов задан одним явным списком `RESTAURANTS_MIGRATION_SETS` в `infrastructure/mongodb/migrate.ts`, каталоги не ищутся: `pkg` первым, затем слайсы. Наборы независимы — слайс не меняет чужие коллекции, миграция не ссылается на другой набор; общее идёт первым, чтобы чистки сервиса предшествовали коллекциям слайсов. Внутри набора библиотека применяет по порядку имён ещё не записанные в его changelog файлы и записывает каждый после успешного `up`; ошибка останавливает старт, следующие наборы не применяются. Новый слайс с коллекциями добавляет свой каталог и элемент списка.
+Порядок наборов задан одним явным списком `RESTAURANTS_MIGRATION_SETS` в `infrastructure/repository/migrate.ts`, каталоги не ищутся: `pkg` первым, затем слайсы. Наборы независимы — слайс не меняет чужие коллекции, миграция не ссылается на другой набор; общее идёт первым, чтобы чистки сервиса предшествовали коллекциям слайсов. Внутри набора библиотека применяет по порядку имён ещё не записанные в его changelog файлы и записывает каждый после успешного `up`; ошибка останавливает старт, следующие наборы не применяются. Новый слайс с коллекциями добавляет свой каталог и элемент списка.
 
 Коллекция с validator и индексами — шаг `ensureCollection`: создаёт коллекцию или заменяет validator существующей (`collMod`) и создаёт индексы (`createIndexes` идемпотентен; индекс с тем же именем и другими опциями — ошибка `IndexOptionsConflict`). Поэтому миграции безопасно применяются и к базе, созданной прежним собственным мигратором или migrate-mongo с единым changelog: changelog наборов на такой базе пусты, и все миграции повторяются идемпотентно; миграция `pkg/0004-drop-previous-migrators` удаляет `schema_migrations`, `schema_migrations_lock` и прежний единый `migrations_changelog`. На актуальной базе изменений нет — процесс пишет `nothing to migrate` и продолжает. Отдельной команды и init container нет. В `dist` те же миграции скомпилированы в `.js` (каталоги `pkg` и `slices` входят в `tsconfig.json`), расширение файлов миграций следует за процессом.
 

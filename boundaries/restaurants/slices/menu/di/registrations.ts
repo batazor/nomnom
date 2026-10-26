@@ -10,8 +10,8 @@ import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
 import type { Outbox } from "../../../pkg/application/outbox.ts";
 import type { ValkeyEnabledConfig } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
-import type { OutboxEventMapper } from "../../../pkg/infrastructure/mongodb/outbox.ts";
-import type { MongoUnitOfWork } from "../../../pkg/infrastructure/mongodb/unit-of-work.ts";
+import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
+import type { MongoUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
 import type { CacheMetrics } from "../../../pkg/infrastructure/valkey/read-cache.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { MenuAccessControl } from "../applications/access-control.ts";
@@ -27,7 +27,7 @@ import {
   createMenuCollection,
   MongoMenuReader,
   MongoMenuRepository,
-} from "../infrastructure/mongodb/menus.ts";
+} from "../infrastructure/repository/menus.ts";
 
 /** Application-scope dependencies the slice takes from the process. */
 export interface MenuDependencies {

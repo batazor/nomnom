@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
-use delivery::infrastructure::postgres::migrate;
+use delivery::infrastructure::repository::migrate;
 use delivery::pkg::config::{DatabaseConfig, SpiceDbConfig};
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::testcontainers::core::{IntoContainerPort, WaitFor};

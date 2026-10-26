@@ -12,7 +12,7 @@ import {
   SIMULATED_REJECTION_REASON,
 } from "../slices/simulator/applications/simulate-kitchen/simulate-kitchen.ts";
 import { chooseKitchenAction } from "../slices/simulator/domains/simulator/simulator.ts";
-import { MongoSimulatorState } from "../slices/simulator/infrastructure/mongodb/simulator-state.ts";
+import { MongoSimulatorState } from "../slices/simulator/infrastructure/repository/simulator-state.ts";
 import { RepositoryRestaurantOwners } from "../slices/simulator/infrastructure/restaurant-owners.ts";
 import {
   createKitchenWorld,

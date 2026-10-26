@@ -4,28 +4,28 @@ import { after, before, describe, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import {
   connectMongoDb,
   type MongoDbConnection,
-} from "../pkg/infrastructure/mongodb/client.ts";
+} from "../pkg/infrastructure/repository/client.ts";
 import {
   MongoOutbox,
   OUTBOX_COLLECTION,
-} from "../pkg/infrastructure/mongodb/outbox.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
+} from "../pkg/infrastructure/repository/outbox.ts";
+import { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
   createMenuCollection,
   MongoMenuRepository,
-} from "../slices/menu/infrastructure/mongodb/menus.ts";
+} from "../slices/menu/infrastructure/repository/menus.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   createRestaurantCollection,
   MongoRestaurantRepository,
-} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+} from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { AcceptOrderHandler } from "../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import { ListActiveRestaurantOrdersHandler } from "../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
@@ -47,7 +47,7 @@ import {
   createRestaurantOrderCollection,
   MongoKitchenBoard,
   MongoRestaurantOrderRepository,
-} from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
+} from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,

@@ -28,10 +28,10 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/observability"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
-	simulatorpostgres "nomnom/orders/slices/simulator/infrastructure/postgres"
+	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
 )
 
 type fixedSubject struct {
@@ -47,10 +47,10 @@ const cancellationWindow = 5 * time.Minute
 
 func newClient(t *testing.T, subjects grpcadapter.SubjectResolver) ordersv1.OrdersServiceClient {
 	t.Helper()
-	return newClientWith(t, subjects, postgrestest.Open(t), fake.NewAuthorizer())
+	return newClientWith(t, subjects, repositorytest.Open(t), fake.NewAuthorizer())
 }
 
-func newClientWith(t *testing.T, subjects grpcadapter.SubjectResolver, store *postgrestest.Store, authorizer *fake.Authorizer) ordersv1.OrdersServiceClient {
+func newClientWith(t *testing.T, subjects grpcadapter.SubjectResolver, store *repositorytest.Store, authorizer *fake.Authorizer) ordersv1.OrdersServiceClient {
 	t.Helper()
 	return newClientWithPorts(t, subjects, store, authorizer, newCommandPorts())
 }
@@ -66,7 +66,7 @@ func newCommandPorts() commandPorts {
 	return commandPorts{catalog: fake.NewCatalog(), workflow: fake.NewWorkflow(), clock: fake.NewClock(ordertest.PlacedAt)}
 }
 
-func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, store *postgrestest.Store, authorizer *fake.Authorizer, ports commandPorts) ordersv1.OrdersServiceClient {
+func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, store *repositorytest.Store, authorizer *fake.Authorizer, ports commandPorts) ordersv1.OrdersServiceClient {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
@@ -82,7 +82,7 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 		Telemetry:  observability.UseCases(),
 	})
 	ordersv1.RegisterOrdersServiceServer(server, grpcadapter.NewService(module,
-		switchsimulator.NewHandlers(authorizer, simulatorpostgres.NewState(store.Pool())), subjects))
+		switchsimulator.NewHandlers(authorizer, simulatorrepository.NewState(store.Pool())), subjects))
 	go func() {
 		_ = server.Serve(listener)
 	}()
@@ -152,7 +152,7 @@ func TestServiceRejectsUnverifiedCaller(t *testing.T) {
 
 // AC-504, AC-505: GetOrder carries the window only while the Order may be cancelled.
 func TestGetOrderMapsCancellationWindow(t *testing.T) {
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	authorizer := fake.NewAuthorizer()
 	for id, state := range map[order.ID]order.State{"order-placed": order.StatePlaced, "order-completed": order.StateCompleted} {
 		o := ordertest.New(t, id, ordertest.WithState(state))
@@ -179,7 +179,7 @@ func TestGetOrderMapsCancellationWindow(t *testing.T) {
 
 // FR-611: GetOrder returns the named deadlines and leaves an unnamed one empty.
 func TestGetOrderMapsExpectedTimes(t *testing.T) {
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	authorizer := fake.NewAuthorizer()
 	expected := order.ExpectedTimes{ReadyAt: ordertest.PlacedAt.Add(20 * time.Minute), PickupAt: ordertest.PlacedAt.Add(25 * time.Minute)}
 	o := ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed), ordertest.WithExpectedTimes(expected))
@@ -219,7 +219,7 @@ func placeRequest() *ordersv1.PlaceOrderRequest {
 
 // AC-508: PlaceOrder places the Order for the verified Customer and starts fulfillment.
 func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
-	store, authorizer, ports := postgrestest.Open(t), fake.NewAuthorizer(), newCommandPorts()
+	store, authorizer, ports := repositorytest.Open(t), fake.NewAuthorizer(), newCommandPorts()
 	catalog := fake.NewCatalog()
 	catalog.Put("restaurant-1", placeorder.CatalogSnapshot{
 		Currency:     "EUR",
@@ -252,7 +252,7 @@ func TestPlaceOrderUnavailableCatalogIsUnavailable(t *testing.T) {
 	catalog := fake.NewCatalog()
 	catalog.Fail(fmt.Errorf("restaurants menu: %w", application.ErrDependencyUnavailable))
 	ports.catalog = catalog
-	client := newClientWithPorts(t, fixedSubject{subject: customer}, postgrestest.Open(t), fake.NewAuthorizer(), ports)
+	client := newClientWithPorts(t, fixedSubject{subject: customer}, repositorytest.Open(t), fake.NewAuthorizer(), ports)
 
 	_, err := client.PlaceOrder(context.Background(), placeRequest())
 	requireReason(t, err, codes.Unavailable, "DEPENDENCY_UNAVAILABLE")
@@ -269,7 +269,7 @@ func TestPlaceOrderMapsRestaurantRefusals(t *testing.T) {
 		"closed restaurant":  {placeorder.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			store, ports := postgrestest.Open(t), newCommandPorts()
+			store, ports := repositorytest.Open(t), newCommandPorts()
 			catalog := fake.NewCatalog()
 			catalog.Fail(tc.err)
 			ports.catalog = catalog
@@ -289,7 +289,7 @@ func catalogClient(t *testing.T, snapshot placeorder.CatalogSnapshot) ordersv1.O
 	catalog := fake.NewCatalog()
 	catalog.Put("restaurant-1", snapshot)
 	ports.catalog = catalog
-	return newClientWithPorts(t, fixedSubject{subject: customer}, postgrestest.Open(t), fake.NewAuthorizer(), ports)
+	return newClientWithPorts(t, fixedSubject{subject: customer}, repositorytest.Open(t), fake.NewAuthorizer(), ports)
 }
 
 // AC-567: an unavailable Menu Item is ORDER_NOT_ORDERABLE with its code and id.
@@ -366,7 +366,7 @@ func TestPlaceOrderMapsInvalidOrder(t *testing.T) {
 
 func cancellationClient(t *testing.T, state order.State, ports commandPorts, authorizer *fake.Authorizer) ordersv1.OrdersServiceClient {
 	t.Helper()
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	o := ordertest.New(t, "order-1", ordertest.WithState(state))
 	require.NoError(t, store.Add(context.Background(), o))
 	_, err := authorizer.GrantOrderRelationships(context.Background(), o.ID(), o.CustomerID(), o.RestaurantID())

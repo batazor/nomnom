@@ -1,7 +1,7 @@
 //! Test doubles of the non-storage ports of `delivery`: a static
 //! authorization, a recording relationship writer, a manual clock with
 //! sequential ids and a static courier locator. Storage has no in-memory
-//! variant: tests run against PostgreSQL (`infrastructure::postgres::test_support`).
+//! variant: tests run against PostgreSQL (`infrastructure::repository::test_support`).
 
 mod authorization;
 mod clock;

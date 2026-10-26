@@ -36,18 +36,18 @@ from infrastructure.observability import (
     classify_payment_error,
 )
 from infrastructure.observability import usecases as names
-from infrastructure.postgres import (
+from infrastructure.provider import (
+    FakePaymentProvider,
+    WebhookVerifier,
+    create_webhook_handler,
+)
+from infrastructure.repository import (
     PostgresPaymentOperationRepository,
     PostgresPaymentOutbox,
     PostgresPaymentRepository,
     PostgresPendingOperationQuery,
     PostgresProviderMessageInbox,
     PostgresUnitOfWork,
-)
-from infrastructure.provider import (
-    FakePaymentProvider,
-    WebhookVerifier,
-    create_webhook_handler,
 )
 from pkg.application import Handler
 from pkg.application.clock import SystemClock

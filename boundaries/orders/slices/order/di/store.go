@@ -7,7 +7,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"nomnom/orders/slices/order/infrastructure/observability"
-	"nomnom/orders/slices/order/infrastructure/postgres"
+	"nomnom/orders/slices/order/infrastructure/repository"
 )
 
 // ProcessStore — общий PostgreSQL store процесса (ADR 8) во всех ролях портов
@@ -17,13 +17,13 @@ import (
 // Wire связывает их с одним ProcessStore. Каждая запись Order (Add, Save)
 // кладёт в тот же Outbox Order Change Notification для подписок BFF (ADR 36).
 type ProcessStore struct {
-	*postgres.Store
+	*repository.Store
 	observed observability.ObservedStore
 	changes  outbound.ChangeNotifier
 }
 
 // NewProcessStore собирает store процесса поверх PostgreSQL.
-func NewProcessStore(store *postgres.Store, metrics *observability.DomainMetrics) *ProcessStore {
+func NewProcessStore(store *repository.Store, metrics *observability.DomainMetrics) *ProcessStore {
 	return &ProcessStore{
 		Store:   store,
 		changes: outbound.NewChangeNotifier(store),

@@ -4,7 +4,7 @@ use crate::infrastructure::memory::{
     ManualClock, RecordingRelationships, RelationshipWrite, SequentialIdGenerator,
     StaticAuthorization, StaticCourierLocator,
 };
-use crate::infrastructure::postgres::test_support::TestStore;
+use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::application::{RelationshipWriteError, Subject};
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{

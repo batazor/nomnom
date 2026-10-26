@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::*;
-use crate::infrastructure::postgres::test_support::TestStore;
+use crate::infrastructure::repository::test_support::TestStore;
 use crate::infrastructure::spicedb::{FakeGraph, courier_self, delivery_courier};
 use crate::pkg::persistence::AuthorizationRevision;
 

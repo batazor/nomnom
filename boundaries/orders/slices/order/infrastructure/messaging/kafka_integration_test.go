@@ -35,7 +35,7 @@ import (
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 // flakyWorkflow fails the first failures notifications of selected Orders, as a
@@ -84,7 +84,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		ordermessaging.RestaurantOrderEventsTopic, messaging.DeadLetterTopic(ordermessaging.RestaurantOrderEventsTopic),
 		ordermessaging.DeliveryEventsTopic, messaging.DeadLetterTopic(ordermessaging.DeliveryEventsTopic))
 
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	for _, o := range []*order.Order{
 		ordertest.New(t, "order-accepted"),
 		ordertest.New(t, "order-retry"),
@@ -190,7 +190,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	}
 }
 
-func handlersOf(store *postgrestest.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
+func handlersOf(store *repositorytest.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
 	return ordermessaging.Handlers{
 		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
@@ -275,7 +275,7 @@ func consumePoison(t *testing.T, cfg config.KafkaConfig) <-chan *message.Message
 	return poison
 }
 
-func state(store *postgrestest.Store, id order.ID) order.State {
+func state(store *repositorytest.Store, id order.ID) order.State {
 	snapshot, _ := store.Snapshot(id)
 	return snapshot.State
 }

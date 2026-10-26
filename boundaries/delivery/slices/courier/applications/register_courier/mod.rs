@@ -73,7 +73,7 @@ mod tests {
     use crate::infrastructure::memory::{
         RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
-    use crate::infrastructure::postgres::test_support::TestStore;
+    use crate::infrastructure::repository::test_support::TestStore;
     use crate::pkg::application::RelationshipWriteError;
     use crate::pkg::persistence::AuthorizationRevision;
     use crate::slices::courier::applications::error::InvalidCourierRequest;

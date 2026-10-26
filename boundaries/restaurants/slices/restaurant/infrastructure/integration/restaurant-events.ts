@@ -9,12 +9,12 @@ import {
   RestaurantClosedSchema,
   RestaurantOpenedSchema,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import type { OutboxEventMapper } from "../../../../pkg/infrastructure/mongodb/outbox.ts";
 import {
   allowlistMapper,
   type EventAllowlist,
   protobufIntegrationEvents,
 } from "../../../../pkg/infrastructure/outbox/integration-event.ts";
+import type { OutboxEventMapper } from "../../../../pkg/infrastructure/repository/outbox.ts";
 import type { RestaurantEvent } from "../../domains/restaurant/events.ts";
 
 export const RESTAURANT_EVENTS_TOPIC = "restaurants.v1.restaurant-events";

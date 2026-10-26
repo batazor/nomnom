@@ -26,7 +26,7 @@ test-spicedb:
 
 # Offline query cache .sqlx compile-time checked sqlx macros: одноразовый PostgreSQL
 # в docker, миграции всех наборов (порядок MIGRATION_SETS в
-# infrastructure/postgres/migrate.rs: pkg, затем слайсы) через psql, cargo sqlx prepare
+# infrastructure/repository/migrate.rs: infrastructure, затем слайсы) через psql, cargo sqlx prepare
 # (sqlx-cli той же версии, что sqlx в Cargo.lock), остановка контейнера.
 # Запросы не читают таблицы истории миграций, поэтому кешу хватает схемы.
 # sqlx-prepare-check сверяет закоммиченный кеш с запросами, не переписывая его.
@@ -34,10 +34,10 @@ SQLX_PG_IMAGE ?= postgres:18.6-alpine3.24
 SQLX_PG_CONTAINER ?= delivery-sqlx-prepare
 SQLX_PG_PORT ?= 55432
 SQLX_DATABASE_URL = postgres://postgres:postgres@127.0.0.1:$(SQLX_PG_PORT)/delivery
-SQLX_MIGRATION_SETS = pkg/infrastructure/postgres/migrations \
-	slices/courier/infrastructure/postgres/migrations \
-	slices/delivery/infrastructure/postgres/migrations \
-	slices/simulator/infrastructure/postgres/migrations
+SQLX_MIGRATION_SETS = infrastructure/repository/migrations \
+	slices/courier/infrastructure/repository/migrations \
+	slices/delivery/infrastructure/repository/migrations \
+	slices/simulator/infrastructure/repository/migrations
 
 sqlx-prepare: SQLX_PREPARE_FLAGS =
 sqlx-prepare-check: SQLX_PREPARE_FLAGS = --check

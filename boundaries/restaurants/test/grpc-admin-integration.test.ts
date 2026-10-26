@@ -25,7 +25,7 @@ import {
   createRestaurantCollection,
   MongoRestaurantCatalog,
   MongoRestaurantRepository,
-} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+} from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { createService } from "./support/grpc.ts";
 import { createTestDatabase, noKitchenChanges } from "./support/mongodb.ts";

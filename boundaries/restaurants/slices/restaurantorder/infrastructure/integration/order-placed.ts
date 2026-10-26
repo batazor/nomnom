@@ -17,7 +17,7 @@ import type {
 import type { FulfillmentCoordinatorAccess } from "../../applications/access-control.ts";
 import type { ReceiveOrderRequestHandler } from "../../applications/receive-order-request/receive-order-request.ts";
 
-/** Стрим Integration Events orders (orders/infrastructure/postgres/outbox.go). */
+/** Стрим Integration Events orders (orders/slices/order/infrastructure/repository/outbox.go). */
 export const ORDER_EVENTS_TOPIC = "orders.v1.order-events";
 export const ORDER_PLACED_EVENT_TYPE = OrderPlacedSchema.typeName;
 /** Имя обработчика в Inbox и label `handler_name`. */

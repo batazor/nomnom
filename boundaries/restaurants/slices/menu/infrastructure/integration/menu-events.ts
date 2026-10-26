@@ -5,12 +5,12 @@
 // MenuItemUpdated stay internal: menu content is read through GetMenu, and
 // only availability is a fact other contexts react to.
 import { MenuItemAvailabilityChangedSchema } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import type { OutboxEventMapper } from "../../../../pkg/infrastructure/mongodb/outbox.ts";
 import {
   allowlistMapper,
   type EventAllowlist,
   protobufIntegrationEvents,
 } from "../../../../pkg/infrastructure/outbox/integration-event.ts";
+import type { OutboxEventMapper } from "../../../../pkg/infrastructure/repository/outbox.ts";
 import type { MenuEvent } from "../../domains/menu/events.ts";
 
 export const MENU_EVENTS_TOPIC = "restaurants.v1.menu-events";

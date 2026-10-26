@@ -319,10 +319,10 @@ var Metrics = []Metric{
 }
 
 // postgresPoolNote — источники пулов PostgreSQL orders и payments.
-const postgresPoolNote = "`orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/postgres/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/postgres/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/postgres/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`."
+const postgresPoolNote = "`orders`: tracer и `Pool.Stat` pgx (`slices/order/infrastructure/repository/pool_metrics.go`), `payments`: `psycopg_pool` (`infrastructure/repository/pool_metrics.py`), `delivery`: sqlx-пул (`infrastructure/repository/pool.rs`; `create_time` — от начала acquire до `after_connect`, ожидание свободного слота включено; пишут `delivery` и `delivery-relay`); `db_client_connection_pool_name` = имя контекста, роль различает `job`."
 
 // mongoPoolNote — источник пула restaurants: CMAP events MongoDB Node.js driver.
-const mongoPoolNote = "`restaurants`: CMAP events драйвера (`pkg/infrastructure/mongodb/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`."
+const mongoPoolNote = "`restaurants`: CMAP events драйвера (`pkg/infrastructure/repository/pool-metrics.ts`), пул на каждый сервер replica set, `db_client_connection_pool_name` = `<host:port>/<database>`; те же метрики пишут `restaurants-relay` и `restaurants-consumer`."
 
 // podStatus — pods ролей, развёрнутых в kind и подтверждённых в Grafana Cloud;
 // orders-worker и BFF в тестовом окружении пока не запускаются.

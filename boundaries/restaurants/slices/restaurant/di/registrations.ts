@@ -15,9 +15,9 @@ import type {
   ValkeyEnabledConfig,
 } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
-import type { OutboxEventMapper } from "../../../pkg/infrastructure/mongodb/outbox.ts";
-import type { MongoUnitOfWork } from "../../../pkg/infrastructure/mongodb/unit-of-work.ts";
-import type { VersionedCollection } from "../../../pkg/infrastructure/mongodb/versioned-collection.ts";
+import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
+import type { MongoUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { VersionedCollection } from "../../../pkg/infrastructure/repository/versioned-collection.ts";
 import type { CacheMetrics } from "../../../pkg/infrastructure/valkey/read-cache.ts";
 import type { Logger } from "../../../pkg/telemetry/logger.ts";
 import type {
@@ -35,6 +35,7 @@ import { RegisterRestaurantHandler } from "../applications/register-restaurant/r
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
 import { CachedRestaurantCatalog } from "../infrastructure/cache/restaurants.ts";
 import { restaurantEventMapper } from "../infrastructure/integration/restaurant-events.ts";
+import { RelationshipReconciler } from "../infrastructure/reconcile/reconcile.ts";
 import {
   createRestaurantCollection,
   MongoRestaurantCatalog,
@@ -42,8 +43,7 @@ import {
   MongoRestaurantRepository,
   type RestaurantDocument,
   type RestaurantSaved,
-} from "../infrastructure/mongodb/restaurants.ts";
-import { RelationshipReconciler } from "../infrastructure/reconcile/reconcile.ts";
+} from "../infrastructure/repository/restaurants.ts";
 
 /** Application-scope dependencies the slice takes from the process. */
 export interface RestaurantDependencies {

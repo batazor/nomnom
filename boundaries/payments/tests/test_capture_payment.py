@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.postgres import PostgresDatabase
+from infrastructure.repository import PostgresDatabase
 from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
 from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus

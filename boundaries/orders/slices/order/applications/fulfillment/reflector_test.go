@@ -14,19 +14,19 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type harness struct {
-	store    *postgrestest.Store
+	store    *repositorytest.Store
 	workflow *fake.Workflow
 }
 
 func newHarness(t *testing.T, seeded ...*order.Order) harness {
 	t.Helper()
-	h := harness{store: postgrestest.Open(t), workflow: fake.NewWorkflow()}
+	h := harness{store: repositorytest.Open(t), workflow: fake.NewWorkflow()}
 	for _, o := range seeded {
 		require.NoError(t, h.store.Add(context.Background(), o))
 	}
@@ -146,7 +146,7 @@ func (r failingSave) Save(context.Context, *order.Order) error { return r.err }
 
 // concurrentWriter changes the same Order between load and save of the handler.
 type concurrentWriter struct {
-	*postgrestest.Store
+	*repositorytest.Store
 }
 
 func (r concurrentWriter) Get(ctx context.Context, id order.ID) (*order.Order, error) {
@@ -169,19 +169,19 @@ func TestFailedTransactionRollsBackWithoutNotification(t *testing.T) {
 	saveFailure := errors.New("disk full")
 	tests := []struct {
 		name    string
-		orders  func(*postgrestest.Store) order.Repository
+		orders  func(*repositorytest.Store) order.Repository
 		wantErr error
 	}{
 		{
 			name: "save fails",
-			orders: func(store *postgrestest.Store) order.Repository {
+			orders: func(store *repositorytest.Store) order.Repository {
 				return failingSave{Repository: store, err: saveFailure}
 			},
 			wantErr: saveFailure,
 		},
 		{
 			name:    "concurrent change",
-			orders:  func(store *postgrestest.Store) order.Repository { return concurrentWriter{Store: store} },
+			orders:  func(store *repositorytest.Store) order.Repository { return concurrentWriter{Store: store} },
 			wantErr: application.ErrConcurrencyConflict,
 		},
 	}

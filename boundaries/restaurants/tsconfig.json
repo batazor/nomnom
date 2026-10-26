@@ -15,7 +15,7 @@
     "cmd/**/*.ts",
     "di/**/*.ts",
     "infrastructure/grpc/*.ts",
-    "infrastructure/mongodb/**/*.ts",
+    "infrastructure/repository/**/*.ts",
     "infrastructure/spicedb/**/*.ts",
     "pkg/**/*.ts",
     "slices/**/*.ts"

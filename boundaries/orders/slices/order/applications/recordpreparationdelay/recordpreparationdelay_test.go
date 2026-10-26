@@ -15,7 +15,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
@@ -27,7 +27,7 @@ func delay(eventID string, readyAt time.Time) recordpreparationdelay.Input {
 // AC-771: after RestaurantOrderAccepted a PreparationDelayed with a later time
 // replaces Order.expected_ready_at; the workflow gets the new time too.
 func TestDelayReplacesExpectedReadyTime(t *testing.T) {
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	workflow := fake.NewWorkflow()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	accepted, delayed := occurredAt.Add(12*time.Minute), occurredAt.Add(20*time.Minute)
@@ -50,7 +50,7 @@ func TestDelayReplacesExpectedReadyTime(t *testing.T) {
 }
 
 func TestDelayOfFinalOrderIsLate(t *testing.T) {
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateCompleted))))
 
 	result, err := recordpreparationdelay.NewHandler(store, store, store, fake.NewWorkflow()).Handle(context.Background(), delay("event-1", occurredAt.Add(time.Hour)))
@@ -63,7 +63,7 @@ func TestDelayOfFinalOrderIsLate(t *testing.T) {
 }
 
 func TestDuplicateDelayIsNotAppliedAgain(t *testing.T) {
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recordpreparationdelay.NewHandler(store, store, store, fake.NewWorkflow())
 	_, err := handler.Handle(context.Background(), delay("event-1", occurredAt.Add(time.Hour)))

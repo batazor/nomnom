@@ -12,7 +12,7 @@ import { type Db, MongoServerError } from "mongodb";
 import {
   migrateRestaurantsDatabase,
   RESTAURANTS_MIGRATION_SETS,
-} from "../infrastructure/mongodb/migrate.ts";
+} from "../infrastructure/repository/migrate.ts";
 import {
   AlreadyExistsError,
   ConcurrencyConflictError,
@@ -20,35 +20,35 @@ import {
 import {
   connectMongoDb,
   type MongoDbConnection,
-} from "../pkg/infrastructure/mongodb/client.ts";
+} from "../pkg/infrastructure/repository/client.ts";
 import {
   MIGRATIONS_LOCK_COLLECTION,
   type MigrationSet,
   migrate,
   migrationsChangelogCollection,
-} from "../pkg/infrastructure/mongodb/migrate.ts";
-import { up as dropOutboxRelay } from "../pkg/infrastructure/mongodb/migrations/0003-outbox-drop-polling-relay.ts";
+} from "../pkg/infrastructure/repository/migrate.ts";
+import { up as dropOutboxRelay } from "../pkg/infrastructure/repository/migrations/0003-outbox-drop-polling-relay.ts";
 import {
   MongoOutbox,
   OUTBOX_COLLECTION,
   type OutboxEventMapper,
   outboxEventId,
-} from "../pkg/infrastructure/mongodb/outbox.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
+} from "../pkg/infrastructure/repository/outbox.ts";
+import { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
   createMenuCollection,
   MongoMenuReader,
   MongoMenuRepository,
-} from "../slices/menu/infrastructure/mongodb/menus.ts";
+} from "../slices/menu/infrastructure/repository/menus.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   createRestaurantCollection,
   MongoRestaurantCatalog,
   MongoRestaurantMemberships,
   MongoRestaurantRepository,
-} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+} from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import {
   DuplicateOrderIdError,
   RestaurantOrder,
@@ -58,7 +58,7 @@ import {
   createRestaurantOrderCollection,
   MongoKitchenBoard,
   MongoRestaurantOrderRepository,
-} from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
+} from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 
 // Runs against a MongoDB replica set (transactions), for example
@@ -197,8 +197,8 @@ describe("startup migration", () => {
     // Separate processes: migrate-mongo's configuration is process-wide, so
     // runs within one process are queued and never meet at the lock.
     const script = `
-      import { connectMongoDb } from ${JSON.stringify(import.meta.resolve("../pkg/infrastructure/mongodb/client.ts"))};
-      import { migrateRestaurantsDatabase } from ${JSON.stringify(import.meta.resolve("../infrastructure/mongodb/migrate.ts"))};
+      import { connectMongoDb } from ${JSON.stringify(import.meta.resolve("../pkg/infrastructure/repository/client.ts"))};
+      import { migrateRestaurantsDatabase } from ${JSON.stringify(import.meta.resolve("../infrastructure/repository/migrate.ts"))};
       const mongo = await connectMongoDb({
         enabled: true,
         uri: process.env.MONGODB_URI,

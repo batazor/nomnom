@@ -4,7 +4,7 @@ import test from "node:test";
 import { MeterProvider, MetricReader } from "@opentelemetry/sdk-metrics";
 
 import type { UnitOfWork } from "../pkg/application/unit-of-work.ts";
-import { MongoInbox } from "../pkg/infrastructure/mongodb/inbox.ts";
+import { MongoInbox } from "../pkg/infrastructure/repository/inbox.ts";
 import {
   ObservedOutbox,
   ObservedUnitOfWork,

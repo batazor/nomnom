@@ -10,7 +10,7 @@ import {
   createMenuCollection,
   MongoMenuReader,
   MongoMenuRepository,
-} from "../../slices/menu/infrastructure/mongodb/menus.ts";
+} from "../../slices/menu/infrastructure/repository/menus.ts";
 import {
   createInfrastructure,
   createRestaurantWorld,

@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.postgres import PostgresDatabase
+from infrastructure.repository import PostgresDatabase
 from slices.payment.applications.apply_provider_operation_result import (
     ApplyProviderOperationResultHandler,
     ApplyProviderOperationResultInput,

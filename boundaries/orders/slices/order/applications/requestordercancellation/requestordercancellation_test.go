@@ -16,13 +16,13 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
 
 type env struct {
-	store      *postgrestest.Store
+	store      *repositorytest.Store
 	authorizer *fake.Authorizer
 	workflow   *fake.Workflow
 	clock      *fake.Clock
@@ -32,7 +32,7 @@ type env struct {
 func newEnv(t *testing.T, state order.State, policy requestordercancellation.CancellationPolicy) env {
 	t.Helper()
 	e := env{
-		store:      postgrestest.Open(t),
+		store:      repositorytest.Open(t),
 		authorizer: fake.NewAuthorizer(),
 		workflow:   fake.NewWorkflow(),
 		clock:      fake.NewClock(ordertest.PlacedAt.Add(5 * time.Minute)),

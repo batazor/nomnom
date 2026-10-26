@@ -26,8 +26,8 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/observability"
-	"nomnom/orders/slices/order/infrastructure/postgres"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 // AC-446: the worker runs the Order Fulfillment Workflow end to end against a
@@ -38,7 +38,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	temporal, err := testfixture.StartTemporal(context.Background())
 	require.NoError(t, err)
 	t.Cleanup(temporal.Close)
-	address, dsn := temporal.Address, postgrestest.Open(t).DSN()
+	address, dsn := temporal.Address, repositorytest.Open(t).DSN()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
@@ -64,13 +64,13 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 
 	orderID := order.ID("order-" + time.Now().UTC().Format("20060102T150405") + "-" + strconv.FormatInt(time.Now().UnixNano(), 36))
 	pg := config.PostgresConfig{DSN: dsn, MaxConns: 5}
-	placing, err := postgres.Open(ctx, pg)
+	placing, err := repository.Open(ctx, pg)
 	require.NoError(t, err)
 	defer placing.Close()
 	require.NoError(t, placing.Add(ctx, ordertest.New(t, orderID)))
 
 	// The worker process has its own pool on the same database.
-	store, err := postgres.Open(ctx, pg)
+	store, err := repository.Open(ctx, pg)
 	require.NoError(t, err)
 	defer store.Close()
 

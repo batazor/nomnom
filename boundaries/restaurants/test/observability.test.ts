@@ -43,7 +43,7 @@ import {
   type EachMessage,
   KafkaConsumerWorker,
 } from "../pkg/infrastructure/kafka/consumer.ts";
-import { MongoCommandTelemetry } from "../pkg/infrastructure/mongodb/command-telemetry.ts";
+import { MongoCommandTelemetry } from "../pkg/infrastructure/repository/command-telemetry.ts";
 import { createLogger, REDACTED } from "../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../pkg/telemetry/resource.ts";
 import { RPC_DURATION_BUCKETS } from "../pkg/telemetry/rpc.ts";

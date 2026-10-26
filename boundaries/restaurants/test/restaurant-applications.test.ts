@@ -18,7 +18,7 @@ import {
   InvalidRestaurantError,
   InvalidRestaurantReason,
 } from "../slices/restaurant/domains/restaurant/restaurant.ts";
-import { RESTAURANT_SCHEMA_VERSION } from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+import { RESTAURANT_SCHEMA_VERSION } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import {
   createInfrastructure,
   createRestaurantWorld,

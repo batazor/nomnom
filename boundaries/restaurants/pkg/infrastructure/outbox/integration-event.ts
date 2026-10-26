@@ -15,7 +15,7 @@ import type {
 import type {
   OutboxEventMapper,
   OutboxIntegrationEvent,
-} from "../mongodb/outbox.ts";
+} from "../repository/outbox.ts";
 
 /**
  * Builder of Integration Events of one stream: `event_type` is the full

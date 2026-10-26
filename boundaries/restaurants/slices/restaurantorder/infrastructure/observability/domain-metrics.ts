@@ -16,7 +16,7 @@ import type {
   PublishableEvent,
 } from "../../../../pkg/application/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
-import { MongoUnitOfWork } from "../../../../pkg/infrastructure/mongodb/unit-of-work.ts";
+import { MongoUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
 import type {
   ReceiveOrderRequest,
   ReceiveOrderRequestHandler,

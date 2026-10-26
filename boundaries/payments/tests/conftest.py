@@ -17,7 +17,7 @@ from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from di.resources import MIGRATIONS
-from infrastructure.postgres import PostgresDatabase, create_database, migrate
+from infrastructure.repository import PostgresDatabase, create_database, migrate
 from pkg.config import DatabaseSettings
 
 POSTGRES_IMAGE = "postgres:18.6-alpine3.24"

@@ -7,7 +7,7 @@ from payment_fakes import (
     PaymentsTestKit,
 )
 
-from infrastructure.postgres import PostgresDatabase, PostgresPaymentRepository
+from infrastructure.repository import PostgresDatabase, PostgresPaymentRepository
 from pkg.application import AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.create_payment import (
     CreatePaymentHandler,

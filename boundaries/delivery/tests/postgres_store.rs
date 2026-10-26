@@ -10,10 +10,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use delivery::di;
 use delivery::infrastructure::locator::CourierPositions;
-use delivery::infrastructure::postgres::{
+use delivery::infrastructure::reconcile::ReconciliationStore;
+use delivery::infrastructure::repository::{
     MIGRATION_SETS, OutboxMapper, OutboxRecord, PostgresStore, event_id, migrate,
 };
-use delivery::infrastructure::reconcile::ReconciliationStore;
 use delivery::pkg::application::{UnitOfWork, UnitOfWorkError};
 use delivery::pkg::config::DatabaseConfig;
 use delivery::pkg::persistence::{AuthorizationRevision, RepositoryError};

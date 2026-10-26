@@ -11,7 +11,7 @@ use opentelemetry::metrics::MeterProvider as _;
 use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
 use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
 
-use delivery::infrastructure::postgres::{PoolMetrics, pool_options};
+use delivery::infrastructure::repository::{PoolMetrics, pool_options};
 use delivery::pkg::config::DatabaseConfig;
 
 fn config() -> DatabaseConfig {

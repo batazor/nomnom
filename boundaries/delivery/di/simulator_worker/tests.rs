@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 
 use super::*;
 use crate::infrastructure::memory::RecordingRelationships;
-use crate::infrastructure::postgres::test_support::TestStore;
+use crate::infrastructure::repository::test_support::TestStore;
 use crate::slices::courier::applications::{register_courier, update_courier_location};
 use crate::slices::delivery::applications::{create_delivery, dispatch_deliveries};
 use crate::slices::delivery::domains::delivery::{ExpectedTime, State};

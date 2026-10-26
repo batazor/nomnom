@@ -56,7 +56,7 @@ pub trait CourierStore: CourierRepository + CourierLocationStore + Send + Sync {
 impl<T: CourierRepository + CourierLocationStore + Send + Sync> CourierStore for T {}
 
 /// Роли хранилища процесса над одним адаптером
-/// ([`PostgresStore`](crate::infrastructure::postgres::PostgresStore); в
+/// ([`PostgresStore`](crate::infrastructure::repository::PostgresStore); в
 /// тестах — он же за тестовыми хуками `TestStore`), поэтому Unit of Work охватывает записи обоих слайсов и Outbox.
 /// Каждый потребитель получает только свою роль; reconciliation и revisions
 /// авторизации composition root разрешает над тем же `Arc` отдельно.

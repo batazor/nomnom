@@ -7,13 +7,13 @@ import type {
   Restaurant,
   StoredRestaurantSnapshot,
 } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import {
   createRestaurantCollection,
   MongoRestaurantMemberships,
   MongoRestaurantRepository,
   RESTAURANT_SCHEMA_VERSION,
-} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
-import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
+} from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { createTestDatabase, noKitchenChanges } from "./support/mongodb.ts";
 import { FakeRelationshipsClient } from "./support/relationships.ts";
 import { FixedClock, owner } from "./support/restaurants.ts";

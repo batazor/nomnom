@@ -18,7 +18,7 @@ import {
   MongoRestaurantCatalog,
   MongoRestaurantMemberships,
   MongoRestaurantRepository,
-} from "../../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+} from "../../slices/restaurant/infrastructure/repository/restaurants.ts";
 import {
   createTestDatabase,
   noKitchenChanges,

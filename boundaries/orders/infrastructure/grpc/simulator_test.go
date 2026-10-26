@@ -12,9 +12,9 @@ import (
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
-	simulatorpostgres "nomnom/orders/slices/simulator/infrastructure/postgres"
+	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 // AC-761: the operator enables the Simulator; the state survives a restart
 // (a new adapter over the same database).
 func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	authorizer := fake.NewAuthorizer()
 	authorizer.Allow(operator, switchsimulator.PermissionOperateSimulator, platform)
 	client := newClientWith(t, fixedSubject{subject: operator}, store, authorizer)
@@ -39,7 +39,7 @@ func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, set.GetEnabled())
 
-	restarted, err := simulatorpostgres.NewState(store.Pool()).Enabled(ctx)
+	restarted, err := simulatorrepository.NewState(store.Pool()).Enabled(ctx)
 	require.NoError(t, err)
 	assert.True(t, restarted)
 	got, err := client.GetSimulator(ctx, &ordersv1.GetSimulatorRequest{})
@@ -55,7 +55,7 @@ func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 
 // AC-762: a customer is denied and the state does not change.
 func TestSimulatorDeniesNonOperator(t *testing.T) {
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	authorizer := fake.NewAuthorizer()
 	customer := application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
 	client := newClientWith(t, fixedSubject{subject: customer}, store, authorizer)
@@ -66,7 +66,7 @@ func TestSimulatorDeniesNonOperator(t *testing.T) {
 	_, err = client.SetSimulatorEnabled(ctx, &ordersv1.SetSimulatorEnabledRequest{Enabled: true})
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 
-	enabled, err := simulatorpostgres.NewState(store.Pool()).Enabled(ctx)
+	enabled, err := simulatorrepository.NewState(store.Pool()).Enabled(ctx)
 	require.NoError(t, err)
 	assert.False(t, enabled)
 }

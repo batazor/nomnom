@@ -32,14 +32,14 @@ import (
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type consumer struct {
 	pubSub     *gochannel.GoChannel
-	store      *postgrestest.Store
+	store      *repositorytest.Store
 	workflow   *fake.Workflow
 	authorizer *fake.Authorizer
 	poison     chan *message.Message
@@ -49,7 +49,7 @@ type consumer struct {
 // policy as orders-consumer, without Kafka.
 func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 	t.Helper()
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	for _, o := range orders {
 		require.NoError(t, store.Add(context.Background(), o))
 	}
