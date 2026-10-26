@@ -1,15 +1,12 @@
+import type { EtaSpan } from "../../shared/eta";
 import type { OrderMilestoneKind } from "../../shared/graphql/generated/graphql";
 import type { MessageKey } from "../../shared/i18n/messages";
 import type { ViewedOrder } from "./use-order-updates";
 
 // Deadlines the kitchen and the courier named, shown on the order screen
 // (FR-612). A deadline is a fact of an event; between events the screen
-// counts the time itself, without requests (ADR 36). Pure functions: the
-// clock comes in as `now`.
-
-const minuteMs = 60_000;
-// Up to this much time left the screen counts down m:ss every second.
-export const countdownMs = 5 * minuteMs;
+// counts the time itself, without requests (ADR 36; shared/eta). Pure
+// functions over the order.
 
 type Milestones = ViewedOrder["milestones"];
 
@@ -53,11 +50,9 @@ export function headerEta(order: ViewedOrder): HeaderEta | null {
 
 export type EtaStage = "cooking" | "toPickup" | "delivery";
 
-export type StepEta = {
+export type StepEta = EtaSpan & {
   stage: EtaStage;
   label: MessageKey;
-  startedAt: number;
-  deadline: number;
 };
 
 const stageLabel: Record<EtaStage, MessageKey> = {
@@ -114,61 +109,4 @@ export function activeStepEta(order: ViewedOrder): StepEta | null {
     case "FAILED":
       return null;
   }
-}
-
-export type EtaRemaining =
-  // More than five minutes left: whole minutes, rounded up.
-  | { kind: "minutes"; minutes: number }
-  // Five minutes or less: a m:ss countdown.
-  | { kind: "countdown"; minutes: number; seconds: number }
-  // The deadline passed this many minutes ago, rounded up.
-  | { kind: "overdue"; minutes: number };
-
-export function etaRemaining(deadline: number, now: number): EtaRemaining {
-  const left = deadline - now;
-  if (left <= 0) {
-    return { kind: "overdue", minutes: Math.max(1, Math.ceil(-left / minuteMs)) };
-  }
-  if (left > countdownMs) {
-    return { kind: "minutes", minutes: Math.ceil(left / minuteMs) };
-  }
-  const totalSeconds = Math.ceil(left / 1_000);
-  return {
-    kind: "countdown",
-    minutes: Math.floor(totalSeconds / 60),
-    seconds: totalSeconds % 60,
-  };
-}
-
-// The m:ss text of a countdown.
-export function countdownText(
-  remaining: Extract<EtaRemaining, { kind: "countdown" }>,
-): string {
-  return `${remaining.minutes}:${String(remaining.seconds).padStart(2, "0")}`;
-}
-
-// Whole minutes left, rounded up, for text that must not change every second.
-export function minutesLeft(deadline: number, now: number): number {
-  return Math.max(1, Math.ceil((deadline - now) / minuteMs));
-}
-
-// Elapsed share of the stage, 0..100, not rounded.
-export function etaPercent(eta: StepEta, now: number): number {
-  const total = eta.deadline - eta.startedAt;
-  if (total <= 0) return 100;
-  return Math.min(100, Math.max(0, ((now - eta.startedAt) / total) * 100));
-}
-
-// aria-valuenow moves in steps of 5%, not with every tick.
-export function ariaPercent(percent: number): number {
-  return Math.min(100, Math.max(0, Math.round(percent / 5) * 5));
-}
-
-// Whole minutes a deadline of the same stage moved later; null if it did not.
-export function deadlineShiftMinutes(
-  previous: number,
-  next: number,
-): number | null {
-  const minutes = Math.round((next - previous) / minuteMs);
-  return minutes > 0 ? minutes : null;
 }

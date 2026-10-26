@@ -2,6 +2,7 @@ import { AnimatePresence, m } from "motion/react";
 import { useState } from "react";
 import { useMutation, useQuery, useSubscription } from "urql";
 
+import { EtaBar, type EtaSpan, type RemainingCopy } from "../../shared/eta";
 import {
   ApplyKitchenActionDocument,
   BoardKitchenChangedDocument,
@@ -47,6 +48,31 @@ const nextAction: Record<
   ASSEMBLED: { action: "MARK_READY", label: "board.kitchen.action.MARK_READY" },
   READY: null,
 };
+
+// Stages that cook towards expectedReadyAt; READY is done, RECEIVED is not
+// accepted yet.
+const cookingStages = new Set<KitchenOrderStage>([
+  "QUEUED",
+  "PREPARING",
+  "ASSEMBLED",
+]);
+
+// The kitchen says how soon the order is ready, short: «Готово через ~6 мин».
+const kitchenCopy: RemainingCopy = {
+  minutes: "board.kitchen.eta.minutes",
+  countdown: "board.kitchen.eta.countdown",
+};
+
+// Cooking of an accepted order, from acceptance to the expected readiness;
+// none without both moments.
+function cookingSpan(order: KitchenOrder): EtaSpan | null {
+  if (!cookingStages.has(order.stage)) return null;
+  if (order.acceptedAt === null || order.expectedReadyAt === null) return null;
+  return {
+    startedAt: Date.parse(order.acceptedAt),
+    deadline: Date.parse(order.expectedReadyAt),
+  };
+}
 
 // Kitchen of the restaurant the board looks at (the owner's first one until
 // then): the owner opens it, the kitchen staff moves its orders.
@@ -215,6 +241,8 @@ function KitchenOrderCard({
   const [{ fetching }, apply] = useMutation(ApplyKitchenActionDocument);
   const [problem, setProblem] = useState<MessageKey | null>(null);
   const next = nextAction[order.stage];
+  const cooking = cookingSpan(order);
+  const receivedTime = formatters.time.format(Date.parse(order.receivedAt));
 
   async function send(action: KitchenAction) {
     setProblem(null);
@@ -242,9 +270,7 @@ function KitchenOrderCard({
     >
       <button className="board-card-head" onClick={onOpen} type="button">
         <span className="board-card-title">
-          {t("board.kitchen.order", {
-            time: formatters.time.format(Date.parse(order.receivedAt)),
-          })}
+          {t("board.kitchen.order", { time: receivedTime })}
         </span>
         <span className="board-badge">{t(stageLabel[order.stage])}</span>
       </button>
@@ -257,6 +283,15 @@ function KitchenOrderCard({
           </li>
         ))}
       </ul>
+      {cooking === null ? null : (
+        // Counts locally each second while mounted; no requests (ADR 36).
+        <EtaBar
+          copy={kitchenCopy}
+          label={t("board.kitchen.eta", { time: receivedTime })}
+          span={cooking}
+          stage="cooking"
+        />
+      )}
       <div className="board-card-actions">
         {next ? (
           <Button

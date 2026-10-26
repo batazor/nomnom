@@ -132,7 +132,34 @@ describe("mock store", () => {
           action,
         },
       });
+    const kitchenTimes = `query ($restaurantId: ID!) { kitchen(restaurantId: $restaurantId) { orders { id acceptedAt expectedReadyAt } } }`;
+    type KitchenTimes = {
+      kitchen: {
+        orders: {
+          id: string;
+          acceptedAt: string | null;
+          expectedReadyAt: string | null;
+        }[];
+      };
+    };
+    const kitchenOrder = async () =>
+      (
+        await run<KitchenTimes>(store, kitchenTimes, {
+          restaurantId: kitchenEight.id,
+        })
+      ).kitchen.orders.find((order) => order.id === `kitchen-${id}`);
+    expect(await kitchenOrder()).toEqual({
+      id: `kitchen-${id}`,
+      acceptedAt: null,
+      expectedReadyAt: null,
+    });
     await act("ACCEPT");
+    // The kitchen counts its cooking from acceptance to the readiness it named.
+    expect(await kitchenOrder()).toEqual({
+      id: `kitchen-${id}`,
+      acceptedAt: start.toISOString(),
+      expectedReadyAt: new Date(start.getTime() + 15 * 60_000).toISOString(),
+    });
     now = new Date(start.getTime() + 60_000);
     await run(
       store,

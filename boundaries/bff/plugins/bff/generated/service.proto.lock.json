@@ -492,7 +492,9 @@
         "orderId": 2,
         "stage": 3,
         "items": 4,
-        "receivedAt": 5
+        "receivedAt": 5,
+        "acceptedAt": 6,
+        "expectedReadyAt": 7
       }
     },
     "DeliveryOffer": {

@@ -128,14 +128,24 @@ export function createFulfillment({
     if (order.status === "PREPARING") received(order, "PREPARING");
   }
 
+  // Acceptance confirms the customer order and names its readiness, so the
+  // kitchen reads both from it, delays included (FR-609, FR-611); before
+  // Acceptance there is neither.
   function kitchenView(order: KitchenOrder) {
     const placed = orders.get(order.orderId);
+    if (!placed) throw new Error(`Order ${order.orderId} not found`);
+    const accepted = order.stage !== "RECEIVED";
+    const confirmations = placed.milestones.filter(
+      (milestone) => milestone.kind === "CONFIRMED",
+    );
     return {
       ...order,
-      items: (placed?.items ?? []).map((item) => ({
+      items: placed.items.map((item) => ({
         name: item.menuItem.name,
         quantity: item.quantity,
       })),
+      acceptedAt: accepted ? (confirmations.at(-1)?.occurredAt ?? null) : null,
+      expectedReadyAt: accepted ? placed.expectedReadyAt : null,
     };
   }
 

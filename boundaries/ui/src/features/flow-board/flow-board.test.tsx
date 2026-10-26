@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -9,7 +10,15 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { HttpResponse } from "msw";
 import { graphql } from "msw/graphql";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { AppProviders } from "../../app/providers";
 import { AppRouter } from "../../app/router";
@@ -294,6 +303,147 @@ describe("flow board", () => {
   it("has no detectable accessibility violations", async () => {
     const { container } = renderBoard();
     await screen.findByRole("button", { name: /^Кухня №8/ });
+
+    const result = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(result.violations).toEqual([]);
+  });
+});
+
+describe("kitchen cooking bar", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The fixed scenarios count from the faked now.
+  function fakeClock() {
+    vi.useFakeTimers({
+      shouldAdvanceTime: true,
+      toFake: [
+        "setTimeout",
+        "clearTimeout",
+        "setInterval",
+        "clearInterval",
+        "Date",
+      ],
+    });
+    mockStore.reset();
+  }
+
+  function countKitchenRequests() {
+    const counter = { value: 0 };
+    mockServer.use(
+      publicGraphql.query("BoardKitchen", () => {
+        counter.value += 1;
+      }),
+    );
+    return counter;
+  }
+
+  async function openKitchen(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
+    return within(column("Кухня")).findByRole("list", {
+      name: "Заказы кухни",
+    });
+  }
+
+  const time = String.raw`\d\d:\d\d`;
+  const nb = "\u00a0";
+
+  it("counts the cooking of accepted orders locally, without requests", async () => {
+    fakeClock();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const requests = countKitchenRequests();
+    renderBoard();
+    const orders = await openKitchen(user);
+
+    // order-preparing and order-delayed are due in 10 minutes, order-overdue
+    // was due two and a half minutes ago; the RECEIVED order has no bar.
+    const bars = await within(orders).findAllByRole("progressbar");
+    expect(bars).toHaveLength(3);
+    const received = orders.querySelector('.board-card[data-stage="RECEIVED"]');
+    expect(received).not.toBeNull();
+    expect(
+      within(received as HTMLElement).queryByRole("progressbar"),
+    ).toBeNull();
+    expect(
+      bars.map((bar) => bar.getAttribute("aria-valuetext")).sort(),
+    ).toEqual([
+      expect.stringMatching(
+        new RegExp(`^Задерживается на ~3${nb}мин, ожидали к${nb}${time}$`),
+      ),
+      expect.stringMatching(
+        new RegExp(`^Осталось ~10${nb}мин, к${nb}${time}$`),
+      ),
+      expect.stringMatching(
+        new RegExp(`^Осталось ~10${nb}мин, к${nb}${time}$`),
+      ),
+    ]);
+    for (const bar of bars) {
+      expect(bar).toHaveAccessibleName(/^Готовка заказа от \d\d:\d\d$/);
+    }
+    expect(within(orders).getAllByText("Готово через ~10 мин")).toHaveLength(2);
+    const late = within(orders).getByText("Задерживается на ~3 мин");
+    expect(late.closest(".eta-bar")).toHaveAttribute("data-state", "overdue");
+    const loaded = requests.value;
+
+    // The last five minutes count down m:ss every second.
+    await act(() => vi.advanceTimersByTimeAsync(5 * 60_000));
+    expect(within(orders).getAllByText("Готово через 5:00")).toHaveLength(2);
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    expect(within(orders).getAllByText("Готово через 4:59")).toHaveLength(2);
+    expect(within(orders).getByText("Задерживается на ~8 мин")).toBeVisible();
+    expect(requests.value).toBe(loaded);
+  });
+
+  it("shows the bar from acceptance until the order is ready", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await placeOrder(user);
+
+    const card = await waitFor(selectedKitchenCard);
+    expect(within(card).queryByRole("progressbar")).toBeNull();
+    await user.click(within(card).getByRole("button", { name: "Принять" }));
+    // The mock kitchen names readiness 15 minutes after acceptance.
+    expect(
+      await within(selectedKitchenCard()).findByRole("progressbar"),
+    ).toHaveAttribute(
+      "aria-valuetext",
+      expect.stringMatching(
+        new RegExp(`^Осталось ~15${nb}мин, к${nb}${time}$`),
+      ),
+    );
+    expect(
+      within(selectedKitchenCard()).getByText("Готово через ~15 мин"),
+    ).toBeVisible();
+
+    for (const action of ["Начать готовить", "Собран"]) {
+      await user.click(
+        await within(selectedKitchenCard()).findByRole("button", {
+          name: action,
+        }),
+      );
+      expect(
+        await within(selectedKitchenCard()).findByRole("progressbar"),
+      ).toBeInTheDocument();
+    }
+    await user.click(
+      await within(selectedKitchenCard()).findByRole("button", {
+        name: "Готов к выдаче",
+      }),
+    );
+    expect(
+      await within(selectedKitchenCard()).findByText("Ждёт курьера"),
+    ).toBeVisible();
+    expect(within(selectedKitchenCard()).queryByRole("progressbar")).toBeNull();
+  });
+
+  it("passes axe with the cooking bars", async () => {
+    const user = userEvent.setup();
+    const { container } = renderBoard();
+    const orders = await openKitchen(user);
+    await within(orders).findAllByRole("progressbar");
 
     const result = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },

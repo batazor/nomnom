@@ -418,7 +418,7 @@ describe("fulfillment eta", () => {
     expect(cooking.getAttribute("aria-valuetext")).toMatch(
       new RegExp(`^Задерживается на ~3${nb}мин, ожидали к${nb}${time}$`),
     );
-    expect(cooking.closest(".order-step-eta")).toHaveAttribute(
+    expect(cooking.closest(".eta-bar")).toHaveAttribute(
       "data-state",
       "overdue",
     );

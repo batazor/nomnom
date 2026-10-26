@@ -711,6 +711,13 @@ message KitchenOrder {
   repeated KitchenOrderItem items = 4;
   // Moment the restaurant received the order in RFC 3339
   string received_at = 5;
+  // Moment the kitchen accepted the order in RFC 3339; null before Acceptance (RECEIVED)
+  google.protobuf.StringValue accepted_at = 6;
+  /*
+   * Moment the order is expected to be ready in RFC 3339, including reported
+   * preparation delays; null before Acceptance (RECEIVED)
+   */
+  google.protobuf.StringValue expected_ready_at = 7;
 }
 
 // Command of the kitchen over one restaurant order

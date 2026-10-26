@@ -638,6 +638,14 @@
         {
           "original": "receivedAt",
           "mapped": "received_at"
+        },
+        {
+          "original": "acceptedAt",
+          "mapped": "accepted_at"
+        },
+        {
+          "original": "expectedReadyAt",
+          "mapped": "expected_ready_at"
         }
       ]
     },

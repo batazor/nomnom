@@ -16,6 +16,8 @@ fragment KitchenBoardView on Kitchen {
       quantity
     }
     receivedAt
+    acceptedAt
+    expectedReadyAt
   }
 }
 

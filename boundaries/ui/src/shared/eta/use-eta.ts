@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { deadlineShiftMinutes } from "./fulfillment-eta";
+import { deadlineShiftMinutes } from "./eta";
 
 // The clock re-renders the deadlines between events; it makes no requests
 // (ADR 36). It ticks only while something counts towards a deadline.
