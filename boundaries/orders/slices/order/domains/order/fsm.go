@@ -129,6 +129,19 @@ var transitionTable = map[transitionKey]transitionDefinition{
 	{StateCompleted, TriggerRecordFact}: {outcome: transitionInvalid},
 }
 
+// TriggerOf names the allowed transition that takes an Order from one State to
+// another. Every allowed row of the table has its own pair of states, so the
+// pair identifies the trigger; false — no allowed transition joins them.
+func TriggerOf(from, to State) (Trigger, bool) {
+	for _, trigger := range allTriggers {
+		definition := transitionTable[transitionKey{from: from, trigger: trigger}]
+		if definition.outcome == transitionAllowed && definition.to == to {
+			return trigger, true
+		}
+	}
+	return "", false
+}
+
 func transition(from State, trigger Trigger, input TransitionInput) (TransitionResult, error) {
 	definition, ok := transitionTable[transitionKey{from: from, trigger: trigger}]
 	if !ok || definition.outcome == transitionInvalid {

@@ -39,11 +39,13 @@ const (
 // Они меняются по Domain Events, записанным в Outbox, и только после commit
 // внешнего Unit of Work: rollback не считается, а повтор без новых событий
 // (AlreadyInState, idempotency replay) не считается дважды. Домен о метриках не
-// знает. Nil-значение — no-op для тестов, собирающих Module без телеметрии.
+// знает. Тот же сбор после commit даёт FSM-переходы Order (раздел fsm,
+// fsm.go). Nil-значение — no-op для тестов, собирающих Module без телеметрии.
 type DomainMetrics struct {
 	placed, completed, cancelled, failed metric.Int64Counter
 	cancellationRequests                 metric.Int64Counter
 	fulfillment                          metric.Float64Histogram
+	transitions                          metric.Int64Counter
 	reasons                              ReasonCodes
 	now                                  func() time.Time
 }
@@ -76,6 +78,11 @@ func newDomainMetrics(meter metric.Meter, now func() time.Time, reasons ReasonCo
 		otel.Handle(err)
 	}
 	m.cancellationRequests = requests
+	m.transitions, err = meter.Int64Counter("nomnom.fsm.transitions",
+		metric.WithUnit("{transition}"), metric.WithDescription("Applied FSM transitions."))
+	if err != nil {
+		otel.Handle(err)
+	}
 	m.fulfillment, err = meter.Float64Histogram("nomnom.orders.fulfillment.duration",
 		metric.WithUnit("s"), metric.WithDescription("placed_at → OrderCompleted commit."),
 		metric.WithExplicitBucketBoundaries(fulfillmentBuckets...))
@@ -88,25 +95,38 @@ func newDomainMetrics(meter metric.Meter, now func() time.Time, reasons ReasonCo
 type collectorKey struct{}
 
 type collector struct {
-	mu     sync.Mutex
-	events []order.DomainEvent
+	mu          sync.Mutex
+	events      []order.DomainEvent
+	loaded      map[*order.Order]order.State
+	transitions []transition
 }
 
-// Track начинает сбор событий Unit of Work. Вложенный Do получает no-op: события
-// записываются один раз, после commit внешнего. done(nil) записывает события,
-// done(err) отбрасывает их.
-func (m *DomainMetrics) Track(ctx context.Context) (context.Context, func(err error)) {
+func (c *collector) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.events, c.loaded, c.transitions = nil, map[*order.Order]order.State{}, nil
+}
+
+// Track начинает сбор событий и FSM-переходов Unit of Work. attempt вызывается в
+// начале каждой попытки транзакции: повтор после rollback собирает заново.
+// Вложенный Do получает no-op: всё записывается один раз, после commit внешнего.
+// done(nil) записывает собранное, done(err) отбрасывает его и считает отклонённый
+// FSM-переход, если err — order.InvalidTransition.
+func (m *DomainMetrics) Track(ctx context.Context) (tracked context.Context, attempt func(), done func(err error)) {
 	if m == nil {
-		return ctx, func(error) {}
+		return ctx, func() {}, func(error) {}
 	}
 	if _, active := ctx.Value(collectorKey{}).(*collector); active {
-		return ctx, func(error) {}
+		return ctx, func() {}, func(error) {}
 	}
-	c := &collector{}
-	return context.WithValue(ctx, collectorKey{}, c), func(err error) {
-		if err == nil {
-			m.record(ctx, c.events)
+	c := &collector{loaded: map[*order.Order]order.State{}}
+	return context.WithValue(ctx, collectorKey{}, c), c.reset, func(err error) {
+		if err != nil {
+			m.rejected(ctx, err)
+			return
 		}
+		m.record(ctx, c.events)
+		m.applied(ctx, c.transitions)
 	}
 }
 

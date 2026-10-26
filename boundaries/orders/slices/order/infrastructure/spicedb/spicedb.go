@@ -50,6 +50,7 @@ type Authorizer struct {
 	permissions v1.PermissionsServiceClient
 	revisions   RevisionReader
 	timeout     time.Duration
+	checks      checkMetrics
 }
 
 // Dial connects lazily to SpiceDB with the preshared key.
@@ -76,12 +77,22 @@ func Dial(cfg config.SpiceDBConfig) (*authzed.Client, error) {
 }
 
 func NewAuthorizer(permissions v1.PermissionsServiceClient, revisions RevisionReader, timeout time.Duration) *Authorizer {
-	return &Authorizer{permissions: permissions, revisions: revisions, timeout: timeout}
+	return &Authorizer{permissions: permissions, revisions: revisions, timeout: timeout, checks: newCheckMetrics()}
 }
 
+// Check answers the AccessCheck and records nomnom.authz.checks and
+// nomnom.authz.check.duration of it (checks.go).
 func (a *Authorizer) Check(ctx context.Context, check application.AccessCheck) error {
 	ctx, cancel := context.WithTimeout(ctx, a.timeout)
 	defer cancel()
+
+	started := time.Now()
+	err := a.check(ctx, check)
+	a.checks.record(ctx, check, checkResult(ctx, err), time.Since(started))
+	return err
+}
+
+func (a *Authorizer) check(ctx context.Context, check application.AccessCheck) error {
 
 	consistency := &v1.Consistency{Requirement: &v1.Consistency_MinimizeLatency{MinimizeLatency: true}}
 	if check.Resource.Type == resourceOrder && a.revisions != nil {

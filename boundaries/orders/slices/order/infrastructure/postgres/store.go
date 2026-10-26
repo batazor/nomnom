@@ -29,6 +29,7 @@ var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 type Store struct {
 	pool    *pgxpool.Pool
 	metrics metric.Registration
+	uow     *unitOfWorkMetrics
 }
 
 // Open creates the pool; it does not connect until the first query.
@@ -51,12 +52,17 @@ func Open(ctx context.Context, cfg config.PostgresConfig) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open postgres pool: %w", err)
 	}
+	uow, err := newUnitOfWorkMetrics(meter)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("unit of work metrics: %w", err)
+	}
 	registration, err := metrics.observe(meter, pool)
 	if err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("postgres pool metrics: %w", err)
 	}
-	return &Store{pool: pool, metrics: registration}, nil
+	return &Store{pool: pool, metrics: registration, uow: uow}, nil
 }
 
 // applyPoolLimits sizes the per-process pool behind the session-mode pooler:
@@ -135,34 +141,6 @@ func (s *Store) queryRow(ctx context.Context, stmt sq.Sqlizer, dest ...any) erro
 func transaction(ctx context.Context) (pgx.Tx, bool) {
 	tx, ok := ctx.Value(txKey{}).(pgx.Tx)
 	return tx, ok
-}
-
-// Do runs fn in one READ COMMITTED transaction; a nested Do joins the outer
-// one. An error or panic rolls back; a panic is re-raised.
-func (s *Store) Do(ctx context.Context, fn func(ctx context.Context) error) (err error) {
-	if _, ok := transaction(ctx); ok {
-		return fn(ctx)
-	}
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			_ = tx.Rollback(context.WithoutCancel(ctx))
-			panic(recovered)
-		}
-		if err != nil {
-			_ = tx.Rollback(context.WithoutCancel(ctx))
-		}
-	}()
-	if err = fn(context.WithValue(ctx, txKey{}, tx)); err != nil {
-		return err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-	return nil
 }
 
 func isUniqueViolation(err error) bool {

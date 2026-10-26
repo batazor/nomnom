@@ -12,8 +12,9 @@ import (
 
 // ProcessStore — общий PostgreSQL store процесса (ADR 8) во всех ролях портов
 // слайса (PlacementStore, ReadModels, InboxStore, Activities fulfillment):
-// Unit of Work и Outbox (messaging/outbound) — под декоратором бизнес-метрик,
-// остальные порты — PostgreSQL напрямую. Роли объявлены рядом с потребителями,
+// Unit of Work, чтение и сохранение Order и Outbox (messaging/outbound) — под
+// декоратором бизнес-метрик и FSM-переходов, остальные порты — PostgreSQL
+// напрямую. Роли объявлены рядом с потребителями,
 // Wire связывает их с одним ProcessStore. Каждая запись Order (Add, Save)
 // кладёт в тот же Outbox Order Change Notification для подписок BFF (ADR 36).
 type ProcessStore struct {
@@ -29,6 +30,7 @@ func NewProcessStore(store *postgres.Store, metrics *observability.DomainMetrics
 		changes: outbound.NewChangeNotifier(store),
 		observed: observability.ObservedStore{
 			UnitOfWork: store,
+			Orders:     store,
 			Outbox:     outbound.NewOutbox(store),
 			Metrics:    metrics,
 		},
@@ -47,8 +49,12 @@ func (s *ProcessStore) Add(ctx context.Context, created *order.Order) error {
 	return s.changes.Notify(ctx, created.ID(), created.Version()+1, time.Now())
 }
 
+func (s *ProcessStore) Get(ctx context.Context, id order.ID) (*order.Order, error) {
+	return s.observed.Get(ctx, id)
+}
+
 func (s *ProcessStore) Save(ctx context.Context, changed *order.Order) error {
-	if err := s.Store.Save(ctx, changed); err != nil {
+	if err := s.observed.Save(ctx, changed); err != nil {
 		return err
 	}
 	// Save stores the loaded Version()+1.

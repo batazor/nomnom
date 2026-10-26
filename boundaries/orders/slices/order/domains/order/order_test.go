@@ -21,6 +21,20 @@ func TestTransitionTableIsComplete(t *testing.T) {
 	assert.Len(t, transitionTable, len(allStates)*len(allTriggers))
 }
 
+// TriggerOf relies on every allowed row of a State having its own target.
+func TestTriggerOfNamesEveryAllowedTransition(t *testing.T) {
+	for key, definition := range transitionTable {
+		if definition.outcome != transitionAllowed {
+			continue
+		}
+		trigger, ok := TriggerOf(key.from, definition.to)
+		require.True(t, ok, "from=%s to=%s", key.from, definition.to)
+		assert.Equal(t, key.trigger, trigger, "from=%s to=%s", key.from, definition.to)
+	}
+	_, ok := TriggerOf(StateCompleted, StatePlaced)
+	assert.False(t, ok)
+}
+
 func TestOrderLifecycleUsesStrictTypedOutcomes(t *testing.T) {
 	order := newTestOrder(t)
 
