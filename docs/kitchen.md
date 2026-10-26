@@ -80,7 +80,8 @@ Restaurant Order → Kitchen Queue → Preparation → Assembly → Ready for Pi
 - `orderId` уникален в пределах `restaurants`; `menuItemId` с одинаковыми options не повторяется внутри одного заказа (повтор выражается `Quantity`).
 - Принять можно только полученный заказ открытого ресторана, все позиции которого доступны (`RestaurantAcceptingOrders`, `MenuItemAvailable`).
 - Состав после Acceptance меняется только явным решением по недоступной позиции, а не правкой меню.
-- Preparation начинается только для заказа в Kitchen Queue.
+- Preparation начинается только для заказа в Kitchen Queue и только со свободным Cook на линии.
+- Cook держит не больше одного заказа в Active Preparation; гарантирует хранилище, см. [Kitchen Capacity](#kitchen-capacity).
 - **Заказ не становится Ready, пока не готовы все required items** — проверяется aggregate, а не handler или UI. Без item-level model эквивалент на уровне заказа: Ready допустим только после Mark Assembled, которым кухня подтверждает, что все required items приготовлены и собраны.
 - Ready не наступает автоматически от завершения последней позиции: Assembly и Mark Ready for Pickup — явные действия кухни.
 - Terminal states (`READY`, `REJECTED`, `CANCELLED`, `FAILED`) не меняются изменяющими переходами; повтор даёт `AlreadyInState` или `InvalidTransition`.
@@ -106,7 +107,7 @@ Restaurant Order received → accepted → queued → preparation started
 
 ## Use cases
 
-Все команды кухни выполняются от verified `Subject`, имеющего permission над `restaurant:<restaurantId>`, выводимую из relation `staff` (`restaurant.staff`, [security](security.md#rebac-model)). Роли cook/manager не моделируются; имя permission определяется при проектировании `authorization/schema.zed`. Команды `orders` выполняет `service` identity worker'а, authorization выполняет `restaurants` ([ADR 18](adr/0018-spicedb-for-authorization.md)). Authorization выполняется до domain operation и не входит в FSM или Specification.
+Все команды кухни выполняются от verified `Subject`, имеющего permission над `restaurant:<restaurantId>`, выводимую из relation `staff` (`restaurant.staff`, [security](security.md#rebac-model)). Роли cook/manager в authorization не моделируются: [Cook](#kitchen-capacity) — единица мощности кухни, а не subject, и команды кухни выполняет subject с `restaurant#operate_kitchen`, а не сам Cook. Команды `orders` выполняет `service` identity worker'а, authorization выполняет `restaurants` ([ADR 18](adr/0018-spicedb-for-authorization.md)). Authorization выполняется до domain operation и не входит в FSM или Specification.
 
 ### Commands
 
@@ -116,7 +117,7 @@ Restaurant Order received → accepted → queued → preparation started
 | **Accept Order** | `AcceptRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | `ACCEPTED`, затем `QUEUED`; `accepted_at`, `expected_ready_at` | `RestaurantOrderAccepted` |
 | **Reject Order** | `RejectRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | `REJECTED` с причиной | `RestaurantOrderRejected` |
 | **Queue Restaurant Order** | `QueueRestaurantOrder` | Система `restaurants` | `ACCEPTED` | `QUEUED`, `queued_at`; место определяется политикой очереди | `RestaurantOrderQueued` |
-| **Start Preparation** | `StartRestaurantOrderPreparation` | Сотрудник кухни | `QUEUED` | `PREPARING`, `preparation_started_at` | `PreparationStarted` |
+| **Start Preparation** | `StartRestaurantOrderPreparation` | Сотрудник кухни | `QUEUED`; есть свободный Cook на линии | `PREPARING`, `preparation_started_at`, `cook_id`; без свободного Cook — `NoCookAvailable` | `PreparationStarted` |
 | **Start Preparation Item** | `StartPreparationItem` | Сотрудник станции | Заказ `PREPARING`, item `PENDING` | Item `PREPARING` | `PreparationItemStarted` |
 | **Complete Preparation Item** | `CompletePreparationItem` | Сотрудник станции | Заказ `PREPARING`, item `PREPARING` | Item `READY` | `PreparationItemCompleted` |
 | **Mark Assembled** | `MarkRestaurantOrderAssembled` | Сотрудник кухни | `PREPARING`; все required items готовы | `ASSEMBLED` | `RestaurantOrderAssembled` |
@@ -134,7 +135,7 @@ Start/Complete Preparation Item существуют только при item-le
 
 #### Start Preparation
 
-Кухня берёт заказ из очереди. Повтор команды для заказа, уже находящегося в `PREPARING`, даёт `AlreadyInState{PREPARING}` ([FSM](fsm.md#transition-table-и-результат)).
+Кухня берёт заказ из очереди, система назначает ему свободного Cook на линии ([Kitchen Capacity](#kitchen-capacity)). Нет свободного Cook — бизнес-отказ `NoCookAvailable`, заказ остаётся в `QUEUED`. Повтор команды для заказа, уже находящегося в `PREPARING`, даёт `AlreadyInState{PREPARING}` ([FSM](fsm.md#transition-table-и-результат)).
 
 **Политика повтора (предложение для MVP):** kitchen board — общий экран нескольких сотрудников, повторное нажатие и повтор запроса после потери ответа являются нормальным UX. Handler превращает `AlreadyInState{PREPARING}` в успешный no-op: возвращает текущее состояние, не создаёт Domain Event и не публикует `PreparationStarted` повторно. Если заказ уже ушёл дальше (`ASSEMBLED`, `READY`) или в terminal state, FSM возвращает `InvalidTransition`, и UI показывает актуальное состояние. BDD-сценарий повтора остаётся `@pending` до подтверждения политики продуктом.
 
@@ -178,6 +179,7 @@ Start/Complete Preparation Item существуют только при item-le
 | **Get Restaurant Order** | `GetRestaurantOrder` | Сотрудник ресторана; авторизованный внутренний actor | Состав, State, timeline одного заказа | Read model `restaurants` |
 | **List Active Preparations** | `ListActivePreparations` | Сотрудник ресторана | Заказы `PREPARING`, `ASSEMBLED` с прогрессом позиций и задержками | Read model kitchen board |
 | **List Ready Orders** | `ListReadyOrders` | Сотрудник ресторана | Заказы `READY`, ожидающие передачи курьеру, с информацией о курьере при наличии | Read model kitchen board |
+| **Get Cook Pool** | `GetCookPool` | Сотрудник ресторана | Pool Load: размер, на линии, занято, в очереди; Cook с текущим заказом | Read model по `cooks` и `restaurant_orders` |
 
 Queries читают собственные read models `restaurants`; kitchen board не восстанавливает aggregate на каждый запрос. Read models обновляются из Domain Events той же UoW или из собственных Integration Events через Inbox — выбор механизма относится к реализации.
 
@@ -254,7 +256,17 @@ drink   PENDING → READY ────────────┘
 
 ## Kitchen Capacity
 
-Будущий concern: сколько заказов кухня готовит параллельно, как загрузка влияет на Acceptance (`RestaurantAcceptingOrders` уже учитывает текущую capacity), на `expected_ready_at` и порядок очереди. Модель capacity не вводится; см. открытые вопросы.
+Мощность кухни — Cook Pool ресторана: change [`add-cook-and-courier-pools`](../openspec/changes/add-cook-and-courier-pools/design.md).
+
+- **Cook** — повар ресторана с именем. Не subject и не relation `staff`: `staff` решает, кто вправе выполнять команды кухни, Cook — кто готовит заказ. Новый Cook вне линии.
+- **Cook Pool** — невыбывшие Cook ресторана. Hire Cook, Put Cook On Line, Take Cook Off Line, Retire Cook требуют `restaurant#manage_cooks` (owner и staff).
+- **Занятость** выводится из заказов: Cook занят, пока Restaurant Order с его `cook_id` в `PREPARING` или `ASSEMBLED`, и освобождается на `READY`, `FAILED` или `CANCELLED` без отдельной команды. Отдельного флага в Cook нет, поэтому переходы заказа не меняют второй aggregate. `cook_id` остаётся в заказе как история.
+- **Назначение** автоматическое: Start Preparation выбирает свободного Cook на линии с самым ранним последним назначением и в той же UoW обновляет его `lastAssignedAt`. Конкурентные назначения одного Cook дают write conflict; инвариант «один Cook — один активный заказ» дополнительно держит unique partial index ([ADR 0002 restaurants](../boundaries/restaurants/docs/adr/0002-mongodb-collections-and-document-boundaries.md)).
+- **Снять с линии** можно только свободного Cook (`CookBusy`), **убрать из пула** — только вне линии (`CookOnLine`).
+- **Acceptance от линии не зависит.** При пустой линии заказы принимаются и ждут в `QUEUED`; если никто не встанет на линию, таймер ожидания Preparation workflow `orders` ведёт к бизнес-ветке отмены. Kitchen board показывает пустую линию предупреждением.
+- **Pool Load** — `busy / on_line` и Kitchen Queue как backlog (Get Cook Pool).
+
+Не решено: ручное назначение Cook, расчёт `expected_ready_at` по очереди и числу Cook на линии, связь Cook с Kitchen Station.
 
 ## События
 
@@ -318,10 +330,10 @@ Kitchen board — projection, а не FSM один в один.
 | Колонка | States | Примечание |
 | --- | --- | --- |
 | `NEW` | `RECEIVED`, `ACCEPTED`, `QUEUED` | Отдельно отмечаются заказы, ожидающие решения, и заказы в очереди |
-| `PREPARING` | `PREPARING`, `ASSEMBLED` | Прогресс позиций при item-level model; задержки по `expected_ready_at` |
+| `PREPARING` | `PREPARING`, `ASSEMBLED` | Имя Cook; прогресс позиций при item-level model; задержки по `expected_ready_at` |
 | `READY` | `READY` | До факта Pickup из `delivery`; данные курьера — информационные |
 
-`REJECTED`, `CANCELLED`, `FAILED` не показываются в рабочих колонках и доступны в истории. Customer-facing Status (`Preparing` в [UI](ui.md)) формирует `orders`/BFF из своих данных, а не из колонок kitchen board.
+Шапка kitchen board показывает Cook Pool: линию, занятых, очередь и список Cook с действиями линии. `REJECTED`, `CANCELLED`, `FAILED` не показываются в рабочих колонках и доступны в истории. Customer-facing Status (`Preparing` в [UI](ui.md)) формирует `orders`/BFF из своих данных, а не из колонок kitchen board.
 
 ## Temporal и persistence
 
@@ -389,7 +401,7 @@ Feature: Order ready for pickup
 - Может ли ресторан отказаться после Acceptance и до какой стадии. Текущее допущение реализации — `InvalidTransition`.
 - Политика unavailable item: cancel, substitution, удаление с компенсацией, ожидание Customer.
 - Порядок Kitchen Queue: FIFO, priority, courier ETA, ручной порядок; ручная перестановка делает очередь aggregate.
-- Kitchen Capacity: параллельность, влияние на Acceptance и `expected_ready_at`.
+- Kitchen Capacity: влияние Cook Pool на `expected_ready_at` и ручное назначение Cook ([Kitchen Capacity](#kitchen-capacity)).
 - Когда начинается поиск курьера относительно Preparation.
 - Нужен ли кухне courier ETA.
 - Как рассчитывается начальное `expected_preparation_time` / `expected_ready_at`.

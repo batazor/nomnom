@@ -22,12 +22,15 @@ Use cases уже работают через порты `RestaurantRepository`, 
 | --- | --- | --- | --- |
 | `restaurants` | aggregate `Restaurant` | профиль, `staff` (множество user id, ограничено командой ресторана), `authorizationRevision` (ZedToken) | — |
 | `menus` | aggregate `Menu` | `items` — Menu Item с ценой `{ amount: decimal string, currency }` | `restaurantId` |
-| `restaurant_orders` | aggregate `RestaurantOrder` | Preparation Items, `timeline`, причины отказа/сбоя/отмены | `restaurantId`, `orderId` (Order контекста `orders`) |
+| `restaurant_orders` | aggregate `RestaurantOrder` | Preparation Items, `timeline`, причины отказа/сбоя/отмены | `restaurantId`, `orderId` (Order контекста `orders`), `cookId` — Cook, назначенный при Start Preparation; обязателен в `PREPARING` и `ASSEMBLED`, остаётся после завершения |
+| `cooks` | aggregate `Cook` — повар Cook Pool ресторана (change `add-cook-and-courier-pools`) | `name`, `onLine`, `lastAssignedAt`, `retiredAt` | `restaurantId` |
 | `outbox` | одно Integration Event или Change Notification ([ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md), контракт CDC — [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)) | `payload` — байты контракта (BinData), `traceparent` (`""` без trace context) | `aggregateType`, `aggregateId`, `aggregateVersion` (Long) |
 | `inbox` | факт обработки Integration Event consumer'ом ([ADR 11](../../../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md)), `_id` — `{consumer}:{eventId}` | — | `eventId`, `aggregateId`, `topic` |
 | `simulator` | единственный документ состояния Demo Simulator (FR-604) | — | — |
-| `migrations_changelog_<id>` | применённая миграция набора migrate-mongo (`fileName`, `appliedAt`, `migrationBlock`); `id` — storage id набора: `messaging`, `restaurants`, `menus`, `restaurant_orders`, `simulator` | — | — |
+| `migrations_changelog_<id>` | применённая миграция набора migrate-mongo (`fileName`, `appliedAt`, `migrationBlock`); `id` — storage id набора: `messaging`, `restaurants`, `menus`, `restaurant_orders`, `cooks`, `simulator` | — | — |
 | `migrations_lock` | lock migrate-mongo: не больше одного документа, пока процесс мигрирует набор | — | `createdAt` |
+
+Занятость Cook не хранится в `cooks`: Cook занят, пока в `restaurant_orders` есть его заказ в `PREPARING` или `ASSEMBLED`. Иначе каждый переход заказа в `READY`, `FAILED` и `CANCELLED` менял бы второй документ, а состояние Cook могло бы разойтись с заказами. Cook Pool не вкладывается в `restaurants`: линия меняется на каждой смене, а Start Preparation пишет только назначенного Cook, не весь ресторан.
 
 Restaurant вместе с меню и заказами не объединяется в один документ: заказы растут неограниченно и меняются с другой частотой. Read models kitchen board и каталога пока читаются запросами к документам aggregate по индексам; отдельные проекции — следующий шаг.
 
@@ -45,6 +48,8 @@ Restaurant вместе с меню и заказами не объединяе�
 | `restaurant_orders` | `{ orderId: 1 }` unique | идемпотентный Receive → `DuplicateOrderIdError` |
 | `restaurant_orders` | `{ restaurantId: 1, state: 1, "timeline.preparationStartedAt": 1 }` | очередь и активные приготовления |
 | `restaurant_orders` | `{ restaurantId: 1, state: 1, "timeline.readyAt": 1 }` | готовые к выдаче |
+| `restaurant_orders` | `{ cookId: 1 }` unique, `partialFilterExpression: { state: { $in: ["PREPARING", "ASSEMBLED"] } }` | один активный заказ на Cook; конфликт — `ConcurrencyConflictError` |
+| `cooks` | `{ restaurantId: 1, retiredAt: 1, onLine: 1, lastAssignedAt: 1 }` | Cook Pool ресторана и выбор свободного Cook |
 | `outbox` | `{ eventId: 1 }` unique | UUIDv5 от `aggregateType:aggregateId:aggregateVersion:eventType`; конфликт откатывает транзакцию |
 | `outbox` | `{ createdAt: 1 }` TTL 1 час | retention Outbox: Debezium читает запись из change stream сразу после commit (ADR 37) |
 | `inbox` | `{ consumer: 1, eventId: 1 }` unique | дедупликация; конфликт откатывает транзакцию и считается duplicate |
@@ -64,6 +69,7 @@ Restaurant вместе с меню и заказами не объединяе�
 | `restaurants` | `slices/restaurant/infrastructure/repository/migrations/` | `restaurants` |
 | `menus` | `slices/menu/infrastructure/repository/migrations/` | `menus` |
 | `restaurant_orders` | `slices/restaurantorder/infrastructure/repository/migrations/` | `restaurant_orders` |
+| `cooks` | `slices/cook/infrastructure/repository/migrations/` | `cooks` |
 | `simulator` | `slices/simulator/infrastructure/repository/migrations/` | `simulator` |
 
 Порядок наборов задан одним явным списком `RESTAURANTS_MIGRATION_SETS` в `infrastructure/repository/migrate.ts`, каталоги не ищутся: `messaging` (общие коллекции `pkg`) первым, затем слайсы. Наборы независимы — слайс не меняет чужие коллекции, миграция не ссылается на другой набор; общее идёт первым, чтобы чистки сервиса предшествовали коллекциям слайсов. Внутри набора библиотека применяет по порядку имён ещё не записанные в его changelog файлы и записывает каждый после успешного `up`; ошибка останавливает старт, следующие наборы не применяются. Новый слайс с коллекциями добавляет свой каталог и элемент списка.
@@ -78,6 +84,7 @@ API и consumer стартуют одновременно. Lock migrate-mongo �
 
 - Изменение одного aggregate без событий (Register Restaurant, Assign/Revoke Staff, запись ZedToken reconciler'ом) опирается на single-document atomicity и `version`.
 - Изменение aggregate вместе с записями Outbox и изменения нескольких aggregate выполняются в `UnitOfWork` = multi-document транзакция MongoDB (`readConcern: snapshot`, `writeConcern: majority`, чтение с primary). Сессия активной транзакции передаётся через `AsyncLocalStorage`, поэтому порты не зависят от драйвера. Driver повторяет `work` при `TransientTransactionError`, что допускает контракт `UnitOfWork`. Outbox вне активной транзакции отклоняет запись. Порядок доставки задаёт change stream (порядок commit), отдельного счётчика нет. Domain Event превращается в запись внедрённым mapper'ом (`eventType` — полное имя Protobuf-сообщения, `topic`, `payload`); `undefined` — запись не создаётся. Пока контрактов нет, используется mapper по умолчанию, не публикующий ничего.
+- Start Preparation — UoW двух aggregate: заказ переходит в `PREPARING` с `cookId`, у Cook обновляется `lastAssignedAt` (растёт `version`). Два старта на одного Cook пишут один документ `cooks`, и snapshot-транзакция проигравшего завершается write conflict; Take Cook Off Line в своей UoW проверяет отсутствие активного заказа и сохраняет Cook по `version`, поэтому не проходит одновременно с назначением.
 - Транзакции требуют replica set (в kind — single-node replica set). Межконтекстных транзакций нет.
 
 ### Подключение
