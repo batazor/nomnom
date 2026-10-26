@@ -122,7 +122,7 @@ Secret-ресурсы chart не создаёт.
 [ADR 0001 контекста](../docs/adr/0001-postgresql-хранилище-delivery.md)). Контейнер получает
 `DATABASE__URI` из Secret `database.uriSecret` (по умолчанию `delivery-postgres`, ключ `dsn`)
 и `DATABASE__MAX_CONNS` (`database.pool.maxConns`). Secret создаёт развёртывание: в kind —
-chart `ops/kind/bootstrap` вместе с базой `postgres-delivery`. Без Secret процесс завершается
+chart `ops/kind/bootstrap` вместе с базой `delivery` общего сервера `postgres`. Без Secret процесс завершается
 ошибкой startup (`DATABASE__URI is required`). Значение — только PostgreSQL connection URI
 (`postgresql://` или `postgres://`); libpq key=value завершает startup.
 
@@ -147,7 +147,7 @@ Connect (`${dir:/etc/nomnom/cdc:delivery-password}`), а не пароль: Secr
 helm template delivery boundaries/delivery/ops/helm \
   --set cdc.enabled=true \
   --set cdc.connectUrl=http://kafka-connect.nomnom-infra.svc.cluster.local:8083 \
-  --set cdc.database.hostname=postgres-delivery.nomnom-data.svc.cluster.local \
+  --set cdc.database.hostname=postgres.nomnom-data.svc.cluster.local \
   --set cdc.database.name=delivery --set cdc.database.user=delivery \
   --set 'cdc.database.password=${dir:/etc/nomnom/cdc:delivery-password}'
 ```

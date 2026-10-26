@@ -295,8 +295,9 @@ data:
       forward_to = [otelcol.receiver.prometheus.infra.receiver]
     }
 
-    // PostgreSQL: по экспортеру на владельца (ADR 8); DSN из Secret alloy-postgres
-    // (chart ops/kind/bootstrap). Только своя база владельца, без pg_settings. replication_slot —
+    // PostgreSQL: по экспортеру на базу владельца (ADR 8) одного сервера postgres; DSN из
+    // Secret alloy-postgres (chart ops/kind/bootstrap) — роль alloy (pg_monitor), не роль
+    // сервиса. Только база владельца, без pg_settings. replication_slot —
     // слот Debezium <owner>_outbox (ADR 37): отставание CDC от WAL и активность слота.
     prometheus.exporter.postgres "orders" {
       data_source_names  = [sys.env("POSTGRES_ORDERS_DSN")]

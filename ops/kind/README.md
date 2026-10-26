@@ -102,7 +102,7 @@ make kind-down
   `manifests/netpol/app-infrastructure.yaml` для всех pod `nomnom-restaurants`.
 - Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) и identity ставит chart
-  [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, PostgreSQL `orders`,
+  [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, один PostgreSQL с базами `orders`,
   `payments`, `delivery`, `controlplane`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
   [ADR 40](../../docs/adr/0040-application-caching-policy.md): без persistence, ACL-пользователь
   `restaurants` с ключами `restaurants:*`, URL — Secret `restaurants-valkey`; пользователь `exporter`
@@ -184,9 +184,9 @@ releases с pod template label `skaffold.dev/run-id`, а хранилища де
 | Deployment, Service и PVC `nomnom-data/dex` ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)) | `templates/dex.yaml`, `dex.*` в values: storage sqlite3 на PVC `dex-data` (ключи подписи и refresh tokens переживают перезапуск pod), staticPasswords (`demo` и `operator` `@nomnom.test`, пароль `nomnom`), public client `nomnom-ui`, audience `nomnom-bff`; **только для kind** | браузер (port-forward), BFF и Router (JWKS) |
 | ConfigMap `spicedb-bootstrap`, Deployment и Service `spicedb` (`nomnom-authz`) | `--set-file` из `authorization/` и kind-only grants `authz/bootstrap-kind.yaml`; checksum в pod template перезапускает SpiceDB только при изменении schema/bootstrap | — |
 | Secret `spicedb-preshared-key` (`preshared-key`) в `nomnom-authz` и неймспейсах контекстов | `lookup` или `randAlphaNum 64` | SpiceDB, контексты |
-| Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-observability/alloy-postgres` | `lookup` или `randAlphaNum 48`; DSN из того же значения | PostgreSQL, приложения, Alloy |
+| Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-data/postgres-admin`, `nomnom-data/postgres-alloy`, `nomnom-observability/alloy-postgres` (DSN роли `alloy`) | `lookup` или `randAlphaNum 48`; DSN из того же значения | PostgreSQL, приложения, Alloy |
 | Secret `nomnom-data/mongodb-restaurants` (`root-password`, `password`, `keyfile`), `nomnom-restaurants/restaurants-mongodb` (`uri`) | `lookup` или `randAlphaNum` | MongoDB, restaurants |
-| Deployments и Services PostgreSQL `orders`, `payments`, `delivery`, `controlplane` и MongoDB `restaurants` | шаблоны chart, `emptyDir` | — |
+| Deployment и Service `postgres` — один сервер с базами и ролями `orders`, `payments`, `delivery`, `controlplane` (init SQL ConfigMap `postgres-config`), MongoDB `restaurants` | шаблоны chart, `emptyDir` | — |
 | replica set `rs0` и пользователь `restaurants` MongoDB | Job `mongodb-restaurants-init` (hook): `mongosh`, идемпотентно | restaurants |
 
 `lookup` читает существующий Secret, поэтому повторный deploy и `skaffold dev` учётные данные не
@@ -213,7 +213,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура: ingress-проверки и внешний клиент BFF |
-| `nomnom-data` | PostgreSQL `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`, каждая база доступна только своему приложению; release `bootstrap` и его hook Jobs |
+| `nomnom-data` | один PostgreSQL `postgres` с базами `orders`, `payments`, `delivery`, `controlplane` и MongoDB `restaurants`; данные в `emptyDir`. Каждая база доступна только своему приложению: своя роль, `CONNECT` только у владельца, `pg_hba` пускает роль только в её базу и не пускает физическую репликацию; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | Alloy — только с `GRAFANA_CLOUD=1` |
 | `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`), Kafka Connect с Debezium для Outbox (release `kafka-connect`, Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера |

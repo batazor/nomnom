@@ -237,7 +237,7 @@ PostgreSQL нужен `wal_level = logical`.
 helm template payments ops/helm \
   --set cdc.enabled=true \
   --set cdc.connectUrl=http://kafka-connect.nomnom-infra.svc.cluster.local:8083 \
-  --set cdc.database.hostname=postgres-payments.nomnom-data.svc.cluster.local \
+  --set cdc.database.hostname=postgres.nomnom-data.svc.cluster.local \
   --set cdc.database.name=payments --set cdc.database.user=payments \
   --set 'cdc.database.password=${dir:/etc/nomnom/cdc:payments-password}'
 ```

@@ -383,7 +383,7 @@ spec:
               order="$(kubectl -n nomnom-bff get configmap "$STATE" -o jsonpath='{.data.order_id}')"
               # psql подставляет переменные только во входной поток, не в -c.
               echo "SELECT state FROM payments WHERE order_id = :'order';" |
-                kubectl -n nomnom-data exec -i deploy/postgres-payments -- \
+                kubectl -n nomnom-data exec -i deploy/postgres -- \
                   psql -U payments -d payments -tA -v ON_ERROR_STOP=1 -v order="$order"
             check:
               ($error): ~

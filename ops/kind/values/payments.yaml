@@ -46,7 +46,7 @@ cdc:
   enabled: true
   connectUrl: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
   database:
-    hostname: postgres-payments.nomnom-data.svc.cluster.local
+    hostname: postgres.nomnom-data.svc.cluster.local
     name: payments
     user: payments
     password: ${dir:/etc/nomnom/cdc:payments-password}

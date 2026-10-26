@@ -1,4 +1,6 @@
 # Инфраструктурные подключения через штатные endpoints, по владельцам.
+# PostgreSQL в kind — один сервер (chart ops/kind/bootstrap): сеть пускает к нему только
+# контексты с базой, а в чужую базу не пускает сам сервер (роль владельца, CONNECT, pg_hba).
 # Доступ к БД есть только у её владельца; фикстура инфраструктуру не использует, BFF читает
 # JWKS identity providers и Kafka (Cosmo Streams, ADR 36).
 ---
@@ -19,7 +21,6 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: postgres
-              app.kubernetes.io/instance: orders
       ports:
         - protocol: TCP
           port: 5432
@@ -148,7 +149,6 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: postgres
-              app.kubernetes.io/instance: delivery
       ports:
         - protocol: TCP
           port: 5432
@@ -202,7 +202,6 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: postgres
-              app.kubernetes.io/instance: payments
       ports:
         - protocol: TCP
           port: 5432
@@ -257,7 +256,6 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: postgres
-              app.kubernetes.io/instance: controlplane
       ports:
         - protocol: TCP
           port: 5432

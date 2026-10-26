@@ -59,7 +59,7 @@ spec:
           bindings:
             - {name: from_namespace, value: nomnom-bff}
             - {name: from, value: grpc-caller}
-            - {name: host, value: postgres-orders.nomnom-data.svc.cluster.local}
+            - {name: host, value: postgres.nomnom-data.svc.cluster.local}
             - {name: port, value: 5432}
             - {name: expect, value: closed}
     - name: BFF reachable for the external client

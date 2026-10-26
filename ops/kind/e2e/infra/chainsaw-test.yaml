@@ -23,7 +23,7 @@ spec:
         - {name: expect, value: open}
     - bindings:
         - {name: from_namespace, value: nomnom-restaurants}
-        - {name: host, value: postgres-orders.nomnom-data.svc.cluster.local}
+        - {name: host, value: postgres.nomnom-data.svc.cluster.local}
         - {name: port, value: 5432}
         - {name: expect, value: closed}
     - bindings:

@@ -1,11 +1,21 @@
-# PostgreSQL владельцев тестового окружения (ADR 8): emptyDir, данные не переживают
-# пересоздание Pod. Пароль — Secret postgres-<owner> (nomnom-data), DSN приложения — Secret
+# PostgreSQL тестового окружения (ADR 8): один сервер ради ресурсов, у каждого владельца своя
+# роль и своя база. Периметр держит сам сервер, а не NetworkPolicy:
+#   - CONNECT к базе есть только у её владельца (REVOKE ... FROM PUBLIC), схема public базы
+#     принадлежит владельцу (PostgreSQL 15+: pg_database_owner);
+#   - pg_hba пускает по TCP роль только в её базу; REPLICATION у роли — для слота Debezium
+#     <owner>_outbox своей базы (CDC Outbox, ADR 37), реплик сервера нет;
+#   - экспортеры Alloy ходят ролью alloy (pg_monitor, CONNECT ко всем базам владельцев), а не
+#     ролями сервисов: pg_monitor видит запросы всех баз, сервисам он не нужен.
+# emptyDir: данные не переживают пересоздание Pod; init SQL выполняется на пустом PGDATA.
+# Пароль владельца — Secret postgres-<owner> (nomnom-data), DSN приложения — Secret
 # <owner>-postgres (nomnom-<owner>, ключ dsn); оба из одного значения, сохраняемого между deploy.
+{{- $host := "postgres.nomnom-data.svc.cluster.local" }}
+{{- $admin := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "postgres-admin" "key" "password" "length" 48) }}
+{{- $alloy := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "postgres-alloy" "key" "password" "length" 48) }}
 {{- $dsns := dict }}
 {{- range $owner := .Values.postgres.owners }}
 {{- $password := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" (printf "postgres-%s" $owner) "key" "password" "length" 48) }}
-{{- $dsn := printf "postgres://%s:%s@postgres-%s.nomnom-data.svc.cluster.local:5432/%s?sslmode=disable" $owner $password $owner $owner }}
-{{- $_ := set $dsns (printf "POSTGRES_%s_DSN" (upper $owner)) $dsn }}
+{{- $_ := set $dsns (printf "POSTGRES_%s_DSN" (upper $owner)) (printf "postgres://alloy:%s@%s:5432/%s?sslmode=disable" $alloy $host $owner) }}
 ---
 apiVersion: v1
 kind: Secret
@@ -27,17 +37,68 @@ metadata:
     {{- include "bootstrap.labels" $ | nindent 4 }}
 type: Opaque
 data:
-  dsn: {{ $dsn | b64enc }}
+  dsn: {{ printf "postgres://%s:%s@%s:5432/%s?sslmode=disable" $owner $password $host $owner | b64enc }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-admin
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  password: {{ $admin | b64enc }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-alloy
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  password: {{ $alloy | b64enc }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+data:
+  # Сокет — только изнутри pod (kubectl exec): psql -U <owner> -d <owner> без пароля.
+  pg_hba.conf: |
+    local all all trust
+    {{- range $owner := .Values.postgres.owners }}
+    host {{ $owner }} {{ $owner }} all scram-sha-256
+    host {{ $owner }} alloy all scram-sha-256
+    {{- end }}
+  # Роли и базы владельцев. Entrypoint образа выполняет файл psql (ON_ERROR_STOP) на пустом
+  # PGDATA; пароли — env PASSWORD_ALLOY и PASSWORD_<OWNER> через \getenv, не в ConfigMap.
+  10-owners.sql: |
+    \getenv password PASSWORD_ALLOY
+    CREATE ROLE alloy LOGIN PASSWORD :'password' IN ROLE pg_monitor;
+    {{- range $owner := .Values.postgres.owners }}
+
+    \getenv password PASSWORD_{{ upper $owner }}
+    CREATE ROLE {{ $owner }} LOGIN REPLICATION PASSWORD :'password';
+    CREATE DATABASE {{ $owner }} OWNER {{ $owner }};
+    REVOKE ALL ON DATABASE {{ $owner }} FROM PUBLIC;
+    GRANT CONNECT ON DATABASE {{ $owner }} TO alloy;
+    {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: postgres-{{ $owner }}
+  name: postgres
   namespace: nomnom-data
   labels:
     app.kubernetes.io/name: postgres
-    app.kubernetes.io/instance: {{ $owner }}
-    {{- include "bootstrap.labels" $ | nindent 4 }}
+    {{- include "bootstrap.labels" . | nindent 4 }}
 spec:
   replicas: 1
   strategy:
@@ -45,12 +106,13 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: postgres
-      app.kubernetes.io/instance: {{ $owner }}
   template:
     metadata:
       labels:
         app.kubernetes.io/name: postgres
-        app.kubernetes.io/instance: {{ $owner }}
+      annotations:
+        # Новые роли или pg_hba — новый Pod: init SQL выполняется только на пустом PGDATA.
+        checksum/config: {{ printf "%v" .Values.postgres.owners | sha256sum }}
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -62,19 +124,40 @@ spec:
           type: RuntimeDefault
       containers:
         - name: postgres
-          image: {{ $.Values.images.postgres }}
-          # ADR 37: Debezium читает Outbox из WAL через pgoutput.
-          args: ["-c", "wal_level=logical", "-c", "max_replication_slots=4", "-c", "max_wal_senders=4"]
+          image: {{ .Values.images.postgres }}
+          # ADR 37: Debezium читает Outbox каждого владельца из WAL через pgoutput — по слоту и
+          # wal sender на коннектор, с запасом.
+          args:
+            - -c
+            - wal_level=logical
+            - -c
+            - max_replication_slots=8
+            - -c
+            - max_wal_senders=8
+            - -c
+            - hba_file=/etc/postgresql/pg_hba.conf
           env:
-            - name: POSTGRES_DB
-              value: {{ $owner }}
             - name: POSTGRES_USER
-              value: {{ $owner }}
+              value: postgres
+            - name: POSTGRES_DB
+              value: postgres
             - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin
+                  key: password
+            - name: PASSWORD_ALLOY
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-alloy
+                  key: password
+            {{- range $owner := .Values.postgres.owners }}
+            - name: PASSWORD_{{ upper $owner }}
               valueFrom:
                 secretKeyRef:
                   name: postgres-{{ $owner }}
                   key: password
+            {{- end }}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           ports:
@@ -82,12 +165,12 @@ spec:
               containerPort: 5432
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "{{ $owner }}", "-d", "{{ $owner }}"]
+              command: ["pg_isready", "-U", "postgres", "-d", "postgres"]
           resources:
             requests:
-              memory: 48Mi
+              memory: 96Mi
             limits:
-              memory: 256Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -100,6 +183,14 @@ spec:
               mountPath: /var/run/postgresql
             - name: tmp
               mountPath: /tmp
+            - name: config
+              mountPath: /etc/postgresql/pg_hba.conf
+              subPath: pg_hba.conf
+              readOnly: true
+            - name: config
+              mountPath: /docker-entrypoint-initdb.d/10-owners.sql
+              subPath: 10-owners.sql
+              readOnly: true
       volumes:
         - name: data
           emptyDir: {}
@@ -107,26 +198,28 @@ spec:
           emptyDir: {}
         - name: tmp
           emptyDir: {}
+        - name: config
+          configMap:
+            name: postgres-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres-{{ $owner }}
+  name: postgres
   namespace: nomnom-data
   labels:
-    {{- include "bootstrap.labels" $ | nindent 4 }}
+    {{- include "bootstrap.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: postgres
-    app.kubernetes.io/instance: {{ $owner }}
   ports:
     - name: postgres
       port: 5432
       targetPort: postgres
-{{- end }}
 ---
-# DSN экспортеров PostgreSQL Alloy (profile grafana-cloud, ADR 9): POSTGRES_<OWNER>_DSN.
+# DSN экспортеров PostgreSQL Alloy (profile grafana-cloud, ADR 9): POSTGRES_<OWNER>_DSN —
+# роль alloy в базе владельца.
 apiVersion: v1
 kind: Secret
 metadata:
