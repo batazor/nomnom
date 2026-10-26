@@ -276,6 +276,28 @@ test("an unreadable or invalid JWKS is a startup error", async () => {
       }),
     ),
     await write(
+      "encryption-key.json",
+      JSON.stringify({
+        keys: [
+          jwks.keys[0],
+          { ...jwks.keys[0], kid: "encryption", use: "enc" },
+        ],
+      }),
+    ),
+    await write(
+      "duplicate-kid.json",
+      JSON.stringify({ keys: [jwks.keys[0], jwks.keys[0]] }),
+    ),
+    await write(
+      "hmac-next-to-rsa.json",
+      JSON.stringify({
+        keys: [
+          jwks.keys[0],
+          { kty: "oct", kid: "shared", alg: "HS256", k: "c2VjcmV0" },
+        ],
+      }),
+    ),
+    await write(
       "broken-key.json",
       JSON.stringify({
         keys: [

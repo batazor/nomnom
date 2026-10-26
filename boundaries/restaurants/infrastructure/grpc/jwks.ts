@@ -20,7 +20,7 @@ export async function readUserJwks(path: string): Promise<JSONWebKeySet> {
   return jwks;
 }
 
-/** Читает JWKS кластера и проверяет, что каждый ключ импортируется. */
+/** Читает JWKS кластера: каждый ключ — подписи, с уникальным kid и импортируется; иначе ошибка. */
 export async function readJwks(
   path: string,
   algorithms: readonly string[] = SERVICE_TOKEN_ALGORITHMS,
@@ -34,9 +34,17 @@ export async function readJwks(
   if (!Array.isArray(jwks?.keys) || jwks.keys.length === 0) {
     throw new Error(`JWKS ${path} has no keys`);
   }
+  const kids = new Set<string>();
   for (const key of jwks.keys) {
     if (typeof key.kid !== "string" || key.kid === "") {
       throw new Error(`JWKS ${path} has a key without kid`);
+    }
+    if (kids.has(key.kid)) {
+      throw new Error(`JWKS ${path} has a duplicate kid ${key.kid}`);
+    }
+    kids.add(key.kid);
+    if (key.use !== undefined && key.use !== "sig") {
+      throw new Error(`JWKS ${path} key ${key.kid} is not a signing key`);
     }
     const algorithm = key.alg ?? (key.kty === "EC" ? "ES256" : "RS256");
     if (!algorithms.includes(algorithm)) {

@@ -26,8 +26,8 @@ Workload доказывает свою `service` identity Kubernetes projected S
 - **Транспорт:** gRPC metadata `authorization: Bearer <jwt>`. Internal gateway пропускает metadata без изменения и не участвует в проверке.
 - **Проверка на сервере:** подпись RS256/ES256 по JWKS кластера (`kid` обязателен, `alg: none` и HMAC отклоняются), `iss` равен настроенному issuer, `aud` содержит audience контекста, `exp`/`nbf` с допуском 30 s.
 - **Subject:** `sub` вида `system:serviceaccount:<namespace>:<name>` переводится в `Subject{service, <service-name>}` только по явному allowlist `namespace/serviceaccount=service-name`. Неизвестный ServiceAccount, как и любой невалидный token, — `UNAUTHENTICATED`. Что разрешено этой identity, решает SpiceDB в use case, не resolver.
-- **JWKS:** публичные ключи кластера (`/openid/v1/jwks`) передаются приложению файлом из ConfigMap, который создаёт развёртывание; приложение не обращается к Kubernetes API и не зависит от него при проверке. Невалидный JWKS — ошибка startup.
-- **Fail closed:** пока не заданы issuer, audience и JWKS, используется `RejectingSubjectResolver`.
+- **JWKS:** публичные ключи кластера (`/openid/v1/jwks`) передаются приложению файлом из ConfigMap, который создаёт развёртывание; приложение не обращается к Kubernetes API и не зависит от него при проверке. Невалидный JWKS — ошибка startup, в том числе любой ключ, который нельзя использовать для проверки: без `kid`, с повторяющимся `kid`, с `use` не `sig`, не RSA и не EC P-256 или с `alg`, не совпадающим с типом ключа. Неподходящие ключи не пропускаются молча.
+- **Fail fast:** без issuer, audience, JWKS или allowlist процесс с gRPC API не стартует; режима с отключённой проверкой нет.
 
 Конфигурация одинакова во всех контекстах: `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE`, `IDENTITY__SERVICE_ACCOUNTS`. Вызывающий читает token из `IDENTITY__TOKEN_DIR/<audience>` при каждом вызове, потому что kubelet обновляет файл.
 
@@ -39,4 +39,4 @@ Workload доказывает свою `service` identity Kubernetes projected S
 
 Activities, consumers и jobs получают проверяемую `service` identity без собственного PKI; ротация ключей подписи и token выполняется кластером. Каждый контекст проверяет одинаковые правила, совместимость реализаций на Go, Python, TypeScript и Rust закреплена общими тестовыми векторами `tests/identity`.
 
-Identity привязана к Kubernetes: вне кластера (локальный запуск) токен и JWKS задаются тестовыми файлами или проверка остаётся выключенной (fail closed). Ротация signing key кластера требует обновить ConfigMap с JWKS; до обновления новые tokens отклоняются. Replay token в пределах его срока жизни внутри одной audience не предотвращается — это компенсируется коротким сроком жизни projected token, NetworkPolicy и authorization в SpiceDB.
+Identity привязана к Kubernetes: вне кластера (локальный запуск) токен и JWKS задаются тестовыми файлами. Ротация signing key кластера требует обновить ConfigMap с JWKS; до обновления новые tokens отклоняются. Replay token в пределах его срока жизни внутри одной audience не предотвращается — это компенсируется коротким сроком жизни projected token, NetworkPolicy и authorization в SpiceDB.

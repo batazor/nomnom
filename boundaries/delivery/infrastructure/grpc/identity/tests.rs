@@ -497,3 +497,55 @@ fn malformed_user_delegates_are_a_startup_error() {
         .is_ok()
     );
 }
+
+/// JWKS из `base` с добавленным ключом `extra`.
+fn with_extra_key(base: &str, extra: serde_json::Value) -> String {
+    let mut set: serde_json::Value = serde_json::from_str(base).expect("jwks json");
+    set["keys"].as_array_mut().expect("keys array").push(extra);
+    set.to_string()
+}
+
+#[test]
+fn unsupported_jwks_key_is_a_startup_error() {
+    let vectors = fixtures::vectors();
+    let cluster: serde_json::Value = serde_json::from_str(&fixtures::jwks()).expect("jwks json");
+    let mut encryption = cluster["keys"][0].clone();
+    encryption["kid"] = "encryption".into();
+    encryption["use"] = "enc".into();
+    let mut no_kid = cluster["keys"][0].clone();
+    no_kid.as_object_mut().expect("key object").remove("kid");
+    for extra in [
+        serde_json::json!({"kty": "oct", "kid": "hmac", "k": "c2VjcmV0"}),
+        encryption,
+        no_kid,
+    ] {
+        let jwks = with_extra_key(&fixtures::jwks(), extra.clone());
+        assert!(
+            ServiceTokenSubjectResolver::new(
+                &vectors.issuer,
+                &vectors.audience,
+                &jwks,
+                &vectors.service_accounts,
+                fixtures::users(),
+            )
+            .is_err(),
+            "{extra}"
+        );
+    }
+}
+
+#[test]
+fn non_es256_key_in_bff_jwks_is_a_startup_error() {
+    let vectors = fixtures::user_vectors();
+    let cluster: serde_json::Value = serde_json::from_str(&fixtures::jwks()).expect("jwks json");
+    let jwks = with_extra_key(&fixtures::bff_jwks(), cluster["keys"][0].clone());
+    assert!(
+        UserAssertionVerifier::new(
+            &vectors.issuer,
+            &vectors.audience,
+            &jwks,
+            &vectors.delegates
+        )
+        .is_err()
+    );
+}

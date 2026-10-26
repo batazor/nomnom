@@ -282,3 +282,47 @@ func TestSubjectResolverRejectsUnusableUserJWKS(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+// withExtraKey writes the JWKS fixture with one more key added.
+func withExtraKey(t *testing.T, fixture string, extra map[string]any) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(fixtures, fixture))
+	require.NoError(t, err)
+	var set struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(data, &set))
+	set.Keys = append(set.Keys, extra)
+	out, err := json.Marshal(set)
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "jwks.json")
+	require.NoError(t, os.WriteFile(path, out, 0o600))
+	return path
+}
+
+func TestLoadJWKSRejectsUnsupportedKeys(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(fixtures, "jwks.json"))
+	require.NoError(t, err)
+	var set struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(data, &set))
+	clone := func(change func(map[string]any)) map[string]any {
+		key := map[string]any{}
+		for name, value := range set.Keys[0] {
+			key[name] = value
+		}
+		change(key)
+		return key
+	}
+	for name, extra := range map[string]map[string]any{
+		"oct":       {"kty": "oct", "kid": "hmac", "k": "c2VjcmV0"},
+		"enc":       clone(func(k map[string]any) { k["kid"], k["use"] = "encryption", "enc" }),
+		"no kid":    clone(func(k map[string]any) { delete(k, "kid") }),
+		"wrong alg": clone(func(k map[string]any) { k["kid"], k["alg"] = "rs512", "RS512" }),
+		"duplicate": clone(func(map[string]any) {}),
+	} {
+		_, err := LoadJWKS(withExtraKey(t, "jwks.json", extra))
+		require.Error(t, err, name)
+	}
+}

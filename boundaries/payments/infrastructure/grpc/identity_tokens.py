@@ -34,35 +34,44 @@ def load_jwks(
     path: str | Path,
     algorithms: Collection[str] = ALLOWED_ALGORITHMS,
 ) -> dict[str, PyJWK]:
-    """Load signing keys by ``kid``; an unreadable or unusable JWKS is a startup error."""
+    """Load signing keys by ``kid``; an unreadable JWKS or any unusable key is a startup error."""
     try:
         document = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise IdentityConfigError(f"cannot read JWKS file {path}: {error}") from error
     if not isinstance(document, dict) or not isinstance(document.get("keys"), list):
         raise IdentityConfigError(f"invalid JWKS file {path}: expected an object with keys")
+    if not document["keys"]:
+        raise IdentityConfigError(f"invalid JWKS file {path}: no keys")
     try:
         key_set = PyJWKSet.from_dict(document)
     except jwt.PyJWTError as error:
         raise IdentityConfigError(f"invalid JWKS file {path}: {error}") from error
+    # PyJWKSet drops keys it cannot use; every key of the file must be usable.
+    if len(key_set.keys) != len(document["keys"]):
+        raise IdentityConfigError(f"invalid JWKS file {path}: unsupported key")
 
+    names = "/".join(sorted(algorithms))
     keys: dict[str, PyJWK] = {}
     for key in key_set.keys:
-        if not key.key_id or key.algorithm_name not in algorithms:
-            continue
+        if not key.key_id:
+            raise IdentityConfigError(f"invalid JWKS file {path}: key without kid")
+        if key.algorithm_name not in algorithms:
+            raise IdentityConfigError(
+                f"invalid JWKS file {path}: key {key.key_id!r} is not {names}"
+            )
         if key.public_key_use not in (None, "sig"):
-            continue
+            raise IdentityConfigError(
+                f"invalid JWKS file {path}: key {key.key_id!r} is not a signing key"
+            )
         if key.key_id in keys:
             raise IdentityConfigError(f"invalid JWKS file {path}: duplicate kid {key.key_id!r}")
         keys[key.key_id] = key
-    if not keys:
-        names = "/".join(sorted(algorithms))
-        raise IdentityConfigError(f"invalid JWKS file {path}: no {names} signing keys with kid")
     return keys
 
 
 def load_user_jwks(path: str | Path) -> dict[str, PyJWK]:
-    """Load the ES256 (EC P-256) keys of BFF user assertions; anything else is skipped."""
+    """Load the ES256 (EC P-256) keys of BFF user assertions; any other key is a startup error."""
     keys = load_jwks(path, algorithms={USER_ASSERTION_ALGORITHM})
     for kid, key in keys.items():
         curve = getattr(key.key, "curve", None)

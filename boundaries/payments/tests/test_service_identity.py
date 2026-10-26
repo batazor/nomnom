@@ -349,6 +349,30 @@ class IdentityConfigTest(unittest.TestCase):
                 with self.subTest(jwks=name), self.assertRaises(IdentityConfigError):
                     create_subject_resolver(_vector_settings(IDENTITY__JWKS_FILE=str(path)))
 
+    def test_unsupported_key_next_to_a_valid_one_is_a_startup_error(self) -> None:
+        valid = json.loads(Path(JWKS_FILE).read_text(encoding="utf-8"))["keys"][0]
+        extras = {
+            "hmac": {"kty": "oct", "kid": "h", "alg": "HS256", "k": "c2VjcmV0"},
+            "encryption": {**valid, "kid": "encryption", "use": "enc"},
+            "no-kid": {name: value for name, value in valid.items() if name != "kid"},
+            "duplicate": valid,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for name, extra in extras.items():
+                path = Path(directory) / f"{name}.json"
+                path.write_text(json.dumps({"keys": [valid, extra]}), encoding="utf-8")
+                with self.subTest(key=name), self.assertRaises(IdentityConfigError):
+                    load_jwks(path)
+
+    def test_non_es256_key_in_bff_jwks_is_a_startup_error(self) -> None:
+        cluster_key = json.loads(Path(JWKS_FILE).read_text(encoding="utf-8"))["keys"][0]
+        bff_keys = json.loads(Path(BFF_JWKS_FILE).read_text(encoding="utf-8"))["keys"]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bff-jwks.json"
+            path.write_text(json.dumps({"keys": [*bff_keys, cluster_key]}), encoding="utf-8")
+            with self.assertRaises(IdentityConfigError):
+                load_user_jwks(path)
+
     def test_default_worker_fails_before_listening_on_invalid_jwks(self) -> None:
         container = payments_container()
         self.addCleanup(close_container, container)

@@ -3,7 +3,9 @@
 
 use std::collections::HashMap;
 
-use jsonwebtoken::jwk::{AlgorithmParameters, EllipticCurve, Jwk, JwkSet, KeyAlgorithm};
+use jsonwebtoken::jwk::{
+    AlgorithmParameters, EllipticCurve, Jwk, JwkSet, KeyAlgorithm, PublicKeyUse,
+};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 
 use super::config::{IdentityConfigError, config_error};
@@ -16,26 +18,21 @@ pub(super) struct VerificationKey {
     pub(super) validation: Validation,
 }
 
-/// JWKS BFF: только ключи EC P-256 для ES256, остальные игнорируются.
+/// JWKS BFF: только ключи EC P-256 для ES256; любой другой ключ — ошибка.
 pub(super) fn parse_user_jwks(
     jwks: &str,
 ) -> Result<HashMap<String, DecodingKey>, IdentityConfigError> {
-    let keys: HashMap<String, DecodingKey> = parse_jwks(jwks)
+    parse_jwks(jwks)
         .map_err(|error| config_error(format!("BFF JWKS: {}", error.0)))?
         .into_iter()
-        .filter_map(|(kid, key)| {
+        .map(|(kid, key)| {
             if key.algorithm == Algorithm::ES256 {
-                Some((kid, key.key))
+                Ok((kid, key.key))
             } else {
-                tracing::warn!(operation = "identity.jwks", kid = ?kid, "BFF JWKS key is not ES256 and is ignored");
-                None
+                Err(config_error(format!("BFF JWKS key {kid:?} is not ES256")))
             }
         })
-        .collect();
-    if keys.is_empty() {
-        return Err(config_error("BFF JWKS has no ES256 keys"));
-    }
-    Ok(keys)
+        .collect()
 }
 
 pub(super) fn parse_jwks(
@@ -51,14 +48,17 @@ pub(super) fn parse_jwks(
             .clone()
             .filter(|kid| !kid.is_empty())
             .ok_or_else(|| config_error("JWKS key without kid"))?;
-        let Some(algorithm) = verification_algorithm(jwk) else {
-            tracing::warn!(
-                operation = "identity.jwks",
-                kid = ?kid,
-                "JWKS key is not usable for RS256/ES256 and is ignored"
-            );
-            continue;
-        };
+        if !matches!(
+            jwk.common.public_key_use,
+            None | Some(PublicKeyUse::Signature)
+        ) {
+            return Err(config_error(format!(
+                "JWKS key {kid:?} is not a signing key"
+            )));
+        }
+        let algorithm = verification_algorithm(jwk).ok_or_else(|| {
+            config_error(format!("JWKS key {kid:?} is not usable for RS256/ES256"))
+        })?;
         let key = DecodingKey::from_jwk(jwk)
             .map_err(|error| config_error(format!("JWKS key {kid:?}: {error}")))?;
         if keys
@@ -76,7 +76,7 @@ pub(super) fn parse_jwks(
         }
     }
     if keys.is_empty() {
-        return Err(config_error("JWKS has no RS256/ES256 keys"));
+        return Err(config_error("JWKS has no keys"));
     }
     Ok(keys)
 }
