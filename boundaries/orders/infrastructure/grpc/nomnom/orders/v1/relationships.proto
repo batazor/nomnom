@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package nomnom.orders.v1;
+
+// Внутреннее событие orders, не Integration Event (ADR 18): связи Order в SpiceDB
+// (order#customer, order#restaurant, order#delivery) надо привести к текущему
+// состоянию Order в PostgreSQL. Use case пишет его в Outbox в транзакции изменения;
+// стрим orders.v1.order-relationships читает только orders-consumer, который
+// синхронизирует связи по состоянию, а не по содержимому события.
+message OrderRelationshipsChanged {
+  string order_id = 1;
+}

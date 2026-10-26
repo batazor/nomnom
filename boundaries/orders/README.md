@@ -240,16 +240,15 @@ CQRS остаётся логическим разделением command- и qu
 | API | `values.yaml` | 10 | 1 |
 | worker | `values-worker.yaml` | 5 | 1 |
 | consumer | `values-consumer.yaml` | 5 | 1 |
-| reconciler | `values-reconciler.yaml` | 2 | 0 |
 | миграции при старте процесса | — | 2 (lock + миграция), закрывается до старта | 0 |
 
-При одной реплике каждой роли это 24 server-соединения плюс 2 на время миграций. Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`; `db.client.connection.pool.name=orders`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
+При одной реплике каждой роли это 22 server-соединения плюс 2 на время миграций. Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`; `db.client.connection.pool.name=orders`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
 
 ## Dependency Injection
 
 В `orders` используется compile-time DI через [`github.com/google/wire`](https://github.com/google/wire). Зависимости передаются обычными Go-конструкторами, а Wire генерирует код их сборки в composition root каждого исполняемого процесса. Provider sets группируются по функциональности и необходимым инфраструктурным компонентам.
 
-Каждый слайс описывает свои provider sets в собственном пакете `slices/<slice>/di`: у `order` это инфраструктурные `RepositorySet` (один `ProcessStore` процесса и его привязка к ролям хранилища) и `TelemetrySet` (инструменты use cases), а также наборы use cases процессов — `APISet` (`Module` API) и `ConsumerSet` (handlers Kafka consumer); у `fulfillment` — `WorkerSet` (адаптеры соседей и Activities). Вместо одного интерфейса хранилища потребители объявляют роли рядом с собой: `PlacementStore` и `ReadModels` у `Module`, `InboxStore` у `Consumer`, `fulfillmentdi.Store` у Activities, `spicedb.RevisionReader` у authorizer; Wire связывает их с одним `ProcessStore` — PostgreSQL, у которого Unit of Work и Outbox идут через декоратор бизнес-метрик `observability.ObservedStore`. Порты набора собираются в структуру зависимостей через `wire.Struct` (`Dependencies`, `Consumer`), поэтому новый порт — это поле структуры и provider, а не новый позиционный параметр у всех вызовов. Итоговая сборка процессов находится в корневом пакете `di`: `wire.go` объявляет provider sets процесса (секции конфигурации, Temporal client API, gRPC, SpiceDB reconciler'а) и по injector'у на каждый процесс — `InitializeApp`, `InitializeWorker`, `InitializeConsumer`, `InitializeReconciler`; store процесса (`NewStore`, `storeSet`) и список наборов миграций (`di/schema`) тоже здесь, потому что схема общая для всех слайсов; `wire_gen.go` генерируется командой `make generate` и коммитится. `cmd/*` только загружают конфигурацию, вызывают свой injector и передают результат в `pkg/lifecycle`. Ресурсы, созданные при сборке (пулы PostgreSQL, клиенты SpiceDB и Temporal API, соединение с internal gateway), освобождает cleanup injector'а; ресурсы, которым нужен контекст `Start` или pipeline метрик процесса (telemetry, Temporal client worker'а и consumer'а, Kafka, Watermill Router), открывает и закрывает сам lifecycle.Worker процесса. Lifecycle реализует [runtime contract](../../docs/cloud-native-runtime.md): `/health/startup`, `/health/live`, `/health/ready` на техническом порту `management.port` (по умолчанию `9081`, `MANAGEMENT__PORT`), а по `SIGTERM`/`SIGINT` переводит readiness в `503`, выжидает `shutdown.readiness_delay` (по умолчанию `5s`), прекращает приём запросов и дожидается начатых в пределах `shutdown.drain_timeout` (по умолчанию `20s`). Штатный shutdown — exit `0`; ошибка startup, остановка сервера до сигнала или превышение drain deadline — non-zero. Поведение проверяется `make runtime-contract` из корня репозитория.
+Каждый слайс описывает свои provider sets в собственном пакете `slices/<slice>/di`: у `order` это инфраструктурные `RepositorySet` (один `ProcessStore` процесса и его привязка к ролям хранилища) и `TelemetrySet` (инструменты use cases), а также наборы use cases процессов — `APISet` (`Module` API) и `ConsumerSet` (handlers Kafka consumer); у `fulfillment` — `WorkerSet` (адаптеры соседей и Activities). Вместо одного интерфейса хранилища потребители объявляют роли рядом с собой: `PlacementStore` и `ReadModels` у `Module`, `InboxStore` у `Consumer`, `fulfillmentdi.Store` у Activities, `spicedb.RevisionReader` у authorizer; Wire связывает их с одним `ProcessStore` — PostgreSQL, у которого Unit of Work и Outbox идут через декоратор бизнес-метрик `observability.ObservedStore`. Порты набора собираются в структуру зависимостей через `wire.Struct` (`Dependencies`, `Consumer`), поэтому новый порт — это поле структуры и provider, а не новый позиционный параметр у всех вызовов. Итоговая сборка процессов находится в корневом пакете `di`: `wire.go` объявляет provider sets процесса (секции конфигурации, Temporal client API, gRPC) и по injector'у на каждый процесс — `InitializeApp`, `InitializeWorker`, `InitializeConsumer`; store процесса (`NewStore`, `storeSet`) и список наборов миграций (`di/schema`) тоже здесь, потому что схема общая для всех слайсов; `wire_gen.go` генерируется командой `make generate` и коммитится. `cmd/*` только загружают конфигурацию, вызывают свой injector и передают результат в `pkg/lifecycle`. Ресурсы, созданные при сборке (пулы PostgreSQL, клиенты SpiceDB и Temporal API, соединение с internal gateway), освобождает cleanup injector'а; ресурсы, которым нужен контекст `Start` или pipeline метрик процесса (telemetry, Temporal client worker'а и consumer'а, Kafka, Watermill Router), открывает и закрывает сам lifecycle.Worker процесса. Lifecycle реализует [runtime contract](../../docs/cloud-native-runtime.md): `/health/startup`, `/health/live`, `/health/ready` на техническом порту `management.port` (по умолчанию `9081`, `MANAGEMENT__PORT`), а по `SIGTERM`/`SIGINT` переводит readiness в `503`, выжидает `shutdown.readiness_delay` (по умолчанию `5s`), прекращает приём запросов и дожидается начатых в пределах `shutdown.drain_timeout` (по умолчанию `20s`). Штатный shutdown — exit `0`; ошибка startup, остановка сервера до сигнала или превышение drain deadline — non-zero. Поведение проверяется `make runtime-contract` из корня репозитория.
 
 Импорты Wire и объявления сборки не входят в доменную модель и обработчики use cases. Composition root явно владеет запуском, остановкой и освобождением ресурсов. Доменные компоненты и обработчики можно создавать в тестах напрямую через конструкторы.
 
@@ -391,14 +390,13 @@ Workflow Stage публикуется низкокардинальным Search 
 
 Для `orders` observability охватывает gRPC, PostgreSQL, Watermill/Kafka, Temporal workflows и Activities, API и workers. W3C Trace Context передаётся через gRPC metadata и Watermill message metadata/Kafka headers; telemetry при replay workflow не должна повторно считаться бизнес-результатом.
 
-`pkg/telemetry` собирает три сигнала каждого процесса с одним resource: `service.namespace=nomnom`, `service.name` роли (`orders`, `orders-worker`, `orders-consumer`, `orders-reconciler`; `OTEL_SERVICE_NAME` переопределяет), `service.version` (VCS revision сборки, Helm — image tag через `OTEL_RESOURCE_ATTRIBUTES`), `deployment.environment.name` и `service.instance.id` из `OTEL_RESOURCE_ATTRIBUTES`.
+`pkg/telemetry` собирает три сигнала каждого процесса с одним resource: `service.namespace=nomnom`, `service.name` роли (`orders`, `orders-worker`, `orders-consumer`; `OTEL_SERVICE_NAME` переопределяет), `service.version` (VCS revision сборки, Helm — image tag через `OTEL_RESOURCE_ATTRIBUTES`), `deployment.environment.name` и `service.instance.id` из `OTEL_RESOURCE_ATTRIBUTES`.
 
 | Процесс | Traces | Metrics | Logs |
 | --- | --- | --- | --- |
 | `orders` (API) | gRPC server, use cases, PostgreSQL, SpiceDB, catalog через internal gateway, Temporal client (start/signal) | gRPC server/client, use cases, domain, `db.client.*`, runtime | JSON |
 | `orders-worker` | Temporal workflow task и Activity, use cases, PostgreSQL, вызовы соседей через gateway | Temporal SDK, use cases, domain, `db.client.*`, gRPC client, runtime | JSON, Temporal SDK |
 | `orders-consumer` | Kafka receive (otelsarama) → process (parent из headers), use cases, PostgreSQL, SpiceDB, Temporal client | Watermill consumer, `nomnom.messaging.*`, use cases, `db.client.*`, Temporal SDK, runtime | JSON, Watermill, Temporal SDK |
-| `orders-reconciler` | span прохода сверки, PostgreSQL, SpiceDB | `db.client.*`, runtime | JSON |
 
 - **Traces** экспортируются по OTLP gRPC, только если задан `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`; без них trace context всё равно передаётся соседям. W3C Trace Context (без baggage для Kafka и Temporal) идёт через gRPC metadata, Temporal headers (`contrib/opentelemetry` interceptor client'а, worker его наследует) и Kafka: Outbox записывает `traceparent`/`tracestate` контекста use case в metadata события (`messaging.InjectTraceContext`), строка Outbox хранит `traceparent`, Debezium отдаёт его заголовком, consumer извлекает его до span обработки. PostgreSQL — `otelpgx` поверх pgx: client spans только внутри trace, без текста statement и bind parameters. SpiceDB — client spans `otelgrpc` без RPC-метрик.
 - **Metrics** — по OTLP при `OTEL_EXPORTER_OTLP_ENDPOINT` (или `..._METRICS_ENDPOINT`). `db.client.operation.duration` (`otelpgx`) — с labels `db.system.name`, `db.operation.name`; пул — `db.client.connection.*` (`repository/pool_metrics.go`).
@@ -434,11 +432,11 @@ Market заказа (ADR 41) хранится в обязательной кол
 читается по индексу `order_details_customer_market_history (customer_id, market_id, placed_at DESC, order_id DESC)`.
 Чтения идут из проекции `order_details`: репозиторий пишет её в транзакции каждого `Add`/`Save`, после
 миграций процесс догоняет устаревшие строки (catch-up), полное перестроение —
-`orders-admin projections rebuild order-details`; строки, изменённые старыми pods во время rolling update, догоняет `cmd/orders-reconciler` каждые `RECONCILER__INTERVAL` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
+`orders-admin projections rebuild order-details`, догон после выкатки — `orders-admin projections catch-up order-details` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
 
 Операторская команда `cmd/orders-admin` входит в образ и запускается разово в pod `orders-consumer`
 (`kubectl -n nomnom-orders exec deploy/orders-consumer -- /orders-admin …`): `dlq list|redrive|discard`
-для dead letters группы `orders` ([Разбор DLQ](../../docs/dlq.md)) и `projections catch-up|rebuild order-details`.
+для dead letters группы `orders` ([Разбор DLQ](../../docs/dlq.md)), `projections catch-up|rebuild order-details` и `authz resync` (связи order всех заказов в SpiceDB заново из PostgreSQL).
 Тесты, которым нужно хранилище, используют этот же store через `repositorytest` (Docker обязателен для `make test`).
 
 OpenSpec change `add-order-command-rpcs-and-relationships` (FR-464…FR-470, AC-508…AC-524)
@@ -467,18 +465,16 @@ redelivery повторяет событие.
 сохранённой, и снимает сохранённого курьера. Снятие сохраняется со своей версией (миграции `00003`, `00004`), даже если
 назначение ещё не обработано, поэтому более старое назначение после него пропускается. См. [Record Courier Release](slices/order/applications/recordcourierrelease/README.md).
 
-Reconciliation `order#customer`, `order#restaurant` и `order#delivery` (relation `courier` не сверяется: её нет в schema) —
-[`slices/order/infrastructure/reconcile`](slices/order/infrastructure/reconcile)
-и процесс `cmd/orders-reconciler` (Helm `values-reconciler.yaml`): для каждой relation orphan и
-stale relationships удаляются, только если остались такими на двух проходах с интервалом не
-меньше `RECONCILER__GRACE` (связь пишется до commit); missing relationship восстанавливается
-`TOUCH` сразу, но только если subject, перечитанный под `FOR SHARE` lock строки заказа, всё ещё
-совпадает: Record Courier Assignment/Release держат row lock от чтения назначения до commit и
-удаляют прежнего курьера в SpiceDB до commit, поэтому перечитывание ждёт их commit и не
-возвращает доступ снятому курьеру. `TOUCH` и `authorization_revision` пишутся в той же транзакции;
-несовпавшие считаются `missing_superseded`. Business-сторона — колонки `customer_id`,
-`restaurant_id`, `courier_id`, `delivery_id`; заказ без курьера не ожидает `courier`/`delivery`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`,
-`missing_repaired`, `missing_superseded`, `unrepairable`. Query handlers зарегистрированы в DI и доступны
+Связи `order#customer`, `order#restaurant` и `order#delivery` в SpiceDB ([ADR 18](../../docs/adr/0018-spicedb-for-authorization.md))
+use cases не пишут. Place Order, Record Courier Assignment (новая Delivery) и Record Courier Release
+(отмена Delivery) кладут `OrderRelationshipsChanged` во внутренний стрим `orders.v1.order-relationships`
+через Outbox своей транзакции. `orders-consumer` (группа `orders.order-relationships`) запускает
+[Sync Order Relationships](slices/order/applications/syncorderrelationships): под `FOR SHARE` строки
+заказа читает `customer_id`, `restaurant_id`, `delivery_id`, одной записью приводит связи в SpiceDB ровно к
+ним (`TOUCH` нужных, `DELETE` лишних) и сохраняет ZedToken в `authorization_revision`. Синхронизация идёт по
+состоянию, а не по событию, поэтому повтор, опоздание и redrive из DLQ сходятся к тем же связям; Inbox не
+нужен. До первой синхронизации Customer читает и отменяет свой заказ по `customer_id` без SpiceDB. После
+потери данных SpiceDB связи всех заказов восстанавливает `orders-admin authz resync`. Query handlers зарегистрированы в DI и доступны
 через gRPC. `.feature` сценарии `confirmorder` и
 `recordcourierassignment` покрыты unit-тестами handlers; Gherkin runner не подключён.
 
@@ -517,7 +513,6 @@ make temporal-dev-stop
 | `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker; API — catalog `restaurants`, его чтения identity не требуют); пусто — без credentials |
 | `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE`, `IDENTITY__USER_DELEGATES` | —, —, — | User assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)): ожидаемый `iss`, JWKS BFF (только EC P-256) и services-делегаты через запятую (в развёртываниях `bff`). Обязательны для gRPC API вместе с `IDENTITY__ISSUER`: пустая настройка или неразбираемый JWKS — ошибка startup |
 | `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
-| `RECONCILER__INTERVAL`, `RECONCILER__GRACE`, `RECONCILER__PAGE_SIZE` | `5m`, `10m`, `500` | `cmd/orders-reconciler`: сверка relations `order` SpiceDB ↔ PostgreSQL |
 | `POSTGRES__DSN`, `POSTGRES__MAX_CONNS` | —, `10` | PostgreSQL orders (обязателен для всех процессов); локально — `make postgres-dev`; схему процесс создаёт сам при старте |
 | `POSTGRES__MIN_CONNS`, `POSTGRES__MAX_CONN_LIFETIME`, `POSTGRES__MAX_CONN_LIFETIME_JITTER`, `POSTGRES__MAX_CONN_IDLE_TIME`, `POSTGRES__CONNECT_TIMEOUT`, `POSTGRES__HEALTH_CHECK_PERIOD` | `0`, `30m`, `5m`, `5m`, `5s`, `1m` | Лимиты пула pgx процесса ([Пулер PostgreSQL](#пулер-postgresql)); `MIN_CONNS` — 0 или 1, длительности положительные |
 | `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_EXPORTER_OTLP_ENDPOINT` | имя роли, —, — | Resource и OTLP export traces/metrics ([Observability](#observability)); Helm задаёт `telemetry.serviceName`, `telemetry.resourceAttributes`, `telemetry.otlpEndpoint` |

@@ -222,7 +222,7 @@ Subject context (`user` или конкретная `service` identity) долж
 
 Authorization port располагается рядом с use case в `applications/`. SpiceDB client и adapter находятся в `infrastructure/`; `domains/` и `domains/<domain>/vo/` не знают о SpiceDB SDK, gRPC, schema или ZedToken. Обычные checks используют `minimize_latency`, read-after-write — `at_least_as_fresh` с ZedToken. State-changing операции fail closed при denial, error и timeout.
 
-Business storage контекста остаётся source of truth, а SpiceDB хранит производный graph. Creation/owner relationships записываются синхронно до local commit; derived relationships — через Outbox и dedicated consumer с Inbox, если use case допускает eventual consistency. Идемпотентные writes используют `TOUCH`, drift исправляет reconciliation. Полный contract — в [документации security](../docs/security.md), решение — в [ADR 18](../docs/adr/0018-spicedb-for-authorization.md).
+Business storage контекста остаётся source of truth, а SpiceDB хранит производный graph. Creation/owner relationships записываются синхронно до local commit; derived relationships — через Outbox и dedicated consumer с Inbox, если use case допускает eventual consistency. `orders` синхронизирует связи `order` по состоянию через Outbox без dual write и reconciliation ([ADR 18](../docs/adr/0018-spicedb-for-authorization.md#relationship-lifecycle-и-dual-write)). Идемпотентные writes используют `TOUCH`, drift исправляет reconciliation. Полный contract — в [документации security](../docs/security.md), решение — в [ADR 18](../docs/adr/0018-spicedb-for-authorization.md).
 
 ## gRPC и Protocol Buffers
 

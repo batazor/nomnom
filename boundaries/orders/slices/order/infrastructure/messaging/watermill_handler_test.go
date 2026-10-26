@@ -2,6 +2,9 @@ package messaging_test
 
 import (
 	"context"
+	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
+	"nomnom/orders/pkg/application"
+	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"testing"
 	"time"
 
@@ -26,6 +29,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
@@ -38,11 +42,11 @@ import (
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type consumer struct {
-	pubSub     *gochannel.GoChannel
-	store      *repositorytest.Store
-	workflow   *fake.Workflow
-	authorizer *fake.Authorizer
-	poison     chan *message.Message
+	pubSub        *gochannel.GoChannel
+	store         *repositorytest.Store
+	workflow      *fake.Workflow
+	relationships *fake.RelationshipSync
+	poison        chan *message.Message
 }
 
 // startConsumer wires the order slice streams to gochannel: the same router
@@ -54,7 +58,7 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		require.NoError(t, store.Add(context.Background(), o))
 	}
 	workflow := fake.NewWorkflow()
-	authorizer := fake.NewAuthorizer()
+	relationships := fake.NewRelationshipSync()
 	handlers := ordermessaging.Handlers{
 		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
@@ -62,11 +66,12 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
 		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, workflow),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
-		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, authorizer),
-		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, authorizer),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, store),
+		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, store),
 		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
+		SyncOrderRelationships:   syncorderrelationships.NewHandler(store, store, relationships, store),
 	}
 
 	pubSub := gochannel.NewGoChannel(gochannel.Config{BlockPublishUntilSubscriberAck: true}, watermill.NopLogger{})
@@ -94,7 +99,7 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		_ = router.Close()
 	})
 	<-router.Running()
-	return consumer{pubSub: pubSub, store: store, workflow: workflow, authorizer: authorizer, poison: poison}
+	return consumer{pubSub: pubSub, store: store, workflow: workflow, relationships: relationships, poison: poison}
 }
 
 func (c consumer) publish(t *testing.T, topic, eventID string, event proto.Message) {
@@ -191,9 +196,11 @@ func TestDeliveryStreamKeepsOrderOfOneAggregate(t *testing.T) {
 	c.noPoison(t)
 }
 
+// linkedDelivery is the stored Delivery: the subject of order#delivery that
+// Sync Order Relationships writes (ADR 18).
 func linkedDelivery(c consumer) string {
-	deliveryID, _ := c.authorizer.DeliveryOf("order-1")
-	return deliveryID
+	stored, _, _ := c.store.CourierAssignment(context.Background(), "order-1")
+	return stored.DeliveryID
 }
 
 // AC-518, AC-534, AC-535: the assignment links order#delivery,
@@ -208,7 +215,7 @@ func TestCourierEventsKeepDeliveryLink(t *testing.T) {
 	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-2", 2,
 		&deliveryv1.CourierUnassignedFromDelivery{OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1"})
 	assert.Equal(t, "delivery-1", linkedDelivery(c), "delivery revokes the courier")
-	assert.Equal(t, 1, c.authorizer.DeliveryWrites())
+	assert.Len(t, c.store.RelationshipChanges(), 1, "the unassignment keeps order#delivery")
 	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-3", 3,
 		&deliveryv1.DeliveryCancelled{OrderId: "order-1", DeliveryId: "delivery-1", Reason: "customer request"})
 	assert.Empty(t, linkedDelivery(c))
@@ -290,4 +297,22 @@ func TestInvalidCommandGoesToDLQ(t *testing.T) {
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.PreparationDelayed{OrderId: "order-1"})
 
 	assert.Equal(t, "event-1", c.poisoned(t).UUID)
+}
+
+// ADR 18: RelationshipsChanged on the internal stream syncs the relationships
+// of the Order from its stored state, without the Inbox.
+func TestRelationshipsChangedSyncsTheOrderState(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1"))
+
+	c.publish(t, outbound.OrderRelationshipsTopic, "event-1", &ordersv1.OrderRelationshipsChanged{OrderId: "order-1"})
+
+	synced, ok := c.relationships.Synced("order-1")
+	require.True(t, ok)
+	assert.Equal(t, syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"}, synced)
+	revision, found, err := c.store.Revision(context.Background(), "order-1")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, application.AuthorizationRevision("fake:order-1:1"), revision)
+	assert.Equal(t, 0, c.store.InboxSize())
+	c.noPoison(t)
 }

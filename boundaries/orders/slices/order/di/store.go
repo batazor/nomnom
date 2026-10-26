@@ -16,18 +16,21 @@ import (
 // декоратором бизнес-метрик и FSM-переходов, остальные порты — PostgreSQL
 // напрямую. Роли объявлены рядом с потребителями,
 // Wire связывает их с одним ProcessStore. Каждая запись Order (Add, Save)
-// кладёт в тот же Outbox Order Change Notification для подписок BFF (ADR 36).
+// кладёт в тот же Outbox Order Change Notification для подписок BFF (ADR 36);
+// изменение субъектов связей SpiceDB — RelationshipsChanged (ADR 18).
 type ProcessStore struct {
 	*repository.Store
-	observed observability.ObservedStore
-	changes  outbound.ChangeNotifier
+	observed      observability.ObservedStore
+	changes       outbound.ChangeNotifier
+	relationships outbound.RelationshipChanges
 }
 
 // NewProcessStore собирает store процесса поверх PostgreSQL.
 func NewProcessStore(store *repository.Store, metrics *observability.DomainMetrics) *ProcessStore {
 	return &ProcessStore{
-		Store:   store,
-		changes: outbound.NewChangeNotifier(store),
+		Store:         store,
+		changes:       outbound.NewChangeNotifier(store),
+		relationships: outbound.NewRelationshipChanges(store),
 		observed: observability.ObservedStore{
 			UnitOfWork: store,
 			Orders:     store,
@@ -59,6 +62,12 @@ func (s *ProcessStore) Save(ctx context.Context, changed *order.Order) error {
 	}
 	// Save stores the loaded Version()+1.
 	return s.changes.Notify(ctx, changed.ID(), changed.Version()+1, time.Now())
+}
+
+// RelationshipsChanged кладёт в Outbox активной транзакции уведомление о том,
+// что связи Order в SpiceDB надо синхронизировать.
+func (s *ProcessStore) RelationshipsChanged(ctx context.Context, orderID order.ID) error {
+	return s.relationships.RelationshipsChanged(ctx, orderID)
 }
 
 func (s *ProcessStore) Append(ctx context.Context, aggregateID order.ID, aggregateVersion uint64, events []order.DomainEvent) error {

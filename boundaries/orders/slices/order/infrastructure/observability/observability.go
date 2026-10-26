@@ -28,6 +28,7 @@ var (
 	RecordPickup             = telemetry.Command("record_pickup")
 	RecordDeliveryCompletion = telemetry.Command("record_delivery_completion")
 	RecordDeliveryFailure    = telemetry.Command("record_delivery_failure")
+	SyncOrderRelationships   = telemetry.Command("sync_order_relationships")
 	CompleteOrder            = telemetry.Command("complete_order")
 	FailOrCancelOrder        = telemetry.Command("fail_or_cancel_order")
 	GetOrder                 = telemetry.Query("get_order")

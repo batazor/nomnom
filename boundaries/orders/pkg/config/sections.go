@@ -27,6 +27,25 @@ func LoadDatabase() (database.Config, error) {
 	return cfg.Postgres, cfg.Postgres.Validate()
 }
 
+// LoadSpiceDB reads only the spicedb section, for orders-admin authz; the
+// endpoint is required.
+func LoadSpiceDB() (SpiceDBConfig, error) {
+	loader, err := sectionLoader(configureSpiceDB)
+	if err != nil {
+		return SpiceDBConfig{}, err
+	}
+	var cfg struct {
+		SpiceDB SpiceDBConfig `mapstructure:"spicedb"`
+	}
+	if err := loader.Unmarshal(&cfg); err != nil {
+		return SpiceDBConfig{}, fmt.Errorf("decode spicedb config: %w", err)
+	}
+	if strings.TrimSpace(cfg.SpiceDB.Endpoint) == "" {
+		return SpiceDBConfig{}, fmt.Errorf("%s is required", EnvSpiceDBEndpoint)
+	}
+	return cfg.SpiceDB, cfg.SpiceDB.Validate()
+}
+
 // LoadKafka reads only the kafka section, for orders-admin dlq.
 func LoadKafka() (KafkaConfig, error) {
 	loader, err := sectionLoader(configureKafka)

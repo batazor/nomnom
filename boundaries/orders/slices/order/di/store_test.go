@@ -42,7 +42,7 @@ func TestExpectedTimeChangesAreAnnounced(t *testing.T) {
 		EventID: "delayed", OrderID: "order-1", OccurredAt: at, ExpectedReadyAt: at.Add(20 * time.Minute),
 	})
 	require.NoError(t, err)
-	assign := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, fake.NewAuthorizer())
+	assign := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, store)
 	for _, version := range []uint64{2, 3} {
 		_, err := assign.Handle(ctx, recordcourierassignment.Input{
 			EventID: fmt.Sprintf("assigned-%d", version), OrderID: "order-1", OccurredAt: at, DeliveryVersion: version,

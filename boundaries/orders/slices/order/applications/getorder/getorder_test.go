@@ -38,8 +38,6 @@ func setupWithPolicy(t *testing.T, policy orderdetails.CancellationPolicy, seede
 	authorizer := fake.NewAuthorizer()
 	for _, o := range seeded {
 		require.NoError(t, store.Add(context.Background(), o))
-		_, err := authorizer.GrantOrderRelationships(context.Background(), o.ID(), o.CustomerID(), o.RestaurantID())
-		require.NoError(t, err)
 	}
 	return getorder.NewHandler(authorizer, store, policy), authorizer
 }
@@ -97,11 +95,24 @@ func TestGetOrderAuthorizesBeforeReading(t *testing.T) {
 	}
 }
 
+// The Customer reads the own Order by customer_id, before orders-consumer
+// synced order#customer (ADR 18): no permission check is made.
+func TestGetOrderLetsTheCustomerReadTheOwnOrderWithoutSpiceDB(t *testing.T) {
+	handler, authorizer := setup(t, ordertest.New(t, "order-1"))
+	authorizer.FailChecks(errors.New("spicedb unavailable"))
+
+	view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
+
+	require.NoError(t, err)
+	assert.Equal(t, order.ID("order-1"), view.OrderID)
+	assert.Empty(t, authorizer.Checks())
+}
+
 func TestGetOrderFailsClosed(t *testing.T) {
 	handler, authorizer := setup(t, ordertest.New(t, "order-1"))
 	authorizer.FailChecks(errors.New("spicedb unavailable"))
 
-	_, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
+	_, err := handler.Handle(context.Background(), getorder.Query{Subject: support, OrderID: "order-1"})
 
 	require.ErrorIs(t, err, application.ErrPermissionDenied)
 }

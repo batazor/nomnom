@@ -25,7 +25,6 @@ type Config struct {
 	Identity        IdentityConfig        `mapstructure:"identity"`
 	SpiceDB         SpiceDBConfig         `mapstructure:"spicedb"`
 	Database        database.Config       `mapstructure:"postgres"`
-	Reconciler      ReconcilerConfig      `mapstructure:"reconciler"`
 	Simulator       SimulatorConfig       `mapstructure:"simulator"`
 }
 
@@ -68,9 +67,6 @@ func Load() (Config, error) {
 	}
 	if err := database.Configure(loader); err != nil {
 		return Config{}, fmt.Errorf("configure database: %w", err)
-	}
-	if err := configureReconciler(loader); err != nil {
-		return Config{}, fmt.Errorf("configure reconciler: %w", err)
 	}
 
 	if err := configureSimulator(loader); err != nil {
@@ -122,9 +118,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := cfg.Database.Validate(); err != nil {
-		return Config{}, err
-	}
-	if err := cfg.Reconciler.Validate(); err != nil {
 		return Config{}, err
 	}
 	if strings.TrimSpace(cfg.InternalGateway.Address) == "" {

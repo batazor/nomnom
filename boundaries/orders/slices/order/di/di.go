@@ -17,9 +17,7 @@ import (
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/placeorder"
-	"nomnom/orders/slices/order/applications/recordcourierassignment"
-	"nomnom/orders/slices/order/applications/recordcourierrelease"
-	"nomnom/orders/slices/order/domains/order"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/catalog"
 	"nomnom/orders/slices/order/infrastructure/observability"
@@ -52,13 +50,13 @@ var (
 		wire.Struct(new(Dependencies), "*"), NewModule)
 	// ConsumerSet — handlers orders-consumer без Notifier workflow: его Temporal
 	// client открывает KafkaConsumer.Start.
-	ConsumerSet = wire.NewSet(NewCourierRelationships, wire.Struct(new(Consumer), "*"))
+	ConsumerSet = wire.NewSet(NewRelationshipSync, wire.Struct(new(Consumer), "*"))
 )
 
-// Authorizer — permission checks use cases и creation-time relationships слайса.
+// Authorizer — permission checks use cases слайса. Связи Order API не пишет:
+// их синхронизирует orders-consumer (ADR 18).
 type Authorizer interface {
 	Check(ctx context.Context, check application.AccessCheck) error
-	GrantOrderRelationships(ctx context.Context, orderID order.ID, customerID order.CustomerID, restaurantID order.RestaurantID) (application.AuthorizationRevision, error)
 }
 
 // CancellationPolicy — окно отмены, общее для Get Order и Request Order
@@ -121,19 +119,16 @@ func NewAuthorizer(cfg config.SpiceDBConfig, revisions spicedb.RevisionReader) (
 	return spicedb.NewAuthorizer(client, revisions, cfg.Timeout), func() { _ = client.Close() }, nil
 }
 
-// CourierRelationships — writer order#delivery процесса orders-consumer:
-// назначение (Record Courier Assignment) и отмена Delivery (Record Courier
-// Release). Доступ курьера к заказу отзывает delivery (delivery#courier).
-type CourierRelationships interface {
-	recordcourierassignment.Relationships
-	recordcourierrelease.Relationships
-}
+// RelationshipSync — writer связей order в SpiceDB процесса orders-consumer:
+// Sync Order Relationships приводит order#customer, order#restaurant и
+// order#delivery к состоянию Order по RelationshipsChanged (ADR 18).
+type RelationshipSync = syncorderrelationships.Relationships
 
-// NewCourierRelationships подключает consumer к SpiceDB: order#delivery пишется
-// в Inbox unit of work до commit, поэтому без SPICEDB__ENDPOINT процесс не стартует.
-func NewCourierRelationships(cfg config.SpiceDBConfig) (CourierRelationships, func(), error) {
+// NewRelationshipSync подключает consumer к SpiceDB: без SPICEDB__ENDPOINT
+// процесс не стартует.
+func NewRelationshipSync(cfg config.SpiceDBConfig) (RelationshipSync, func(), error) {
 	if strings.TrimSpace(cfg.Endpoint) == "" {
-		return nil, nil, fmt.Errorf("%s is required: orders-consumer writes order#delivery to SpiceDB", config.EnvSpiceDBEndpoint)
+		return nil, nil, fmt.Errorf("%s is required: orders-consumer syncs order relationships to SpiceDB", config.EnvSpiceDBEndpoint)
 	}
 	client, err := spicedb.Dial(cfg)
 	if err != nil {

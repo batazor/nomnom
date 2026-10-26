@@ -14,6 +14,7 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/fulfillment"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -54,27 +55,20 @@ type Result struct {
 	Outcome fulfillment.Outcome
 }
 
-// Relationships deletes order#delivery of deliveryID and returns the revision
-// of the write. Deleting an absent relationship is a no-op, so a repeat is
-// idempotent.
-type Relationships interface {
-	UnlinkDelivery(ctx context.Context, orderID order.ID, deliveryID string) (application.AuthorizationRevision, error)
-}
-
 type Handler struct {
-	uow           application.UnitOfWork
-	inbox         application.Inbox
-	assignments   order.CourierAssignments
-	relationships Relationships
+	uow         application.UnitOfWork
+	inbox       application.Inbox
+	assignments order.CourierAssignments
+	changes     syncorderrelationships.Changes
 }
 
 func NewHandler(
 	uow application.UnitOfWork,
 	inbox application.Inbox,
 	assignments order.CourierAssignments,
-	relationships Relationships,
+	changes syncorderrelationships.Changes,
 ) Handler {
-	return Handler{uow: uow, inbox: inbox, assignments: assignments, relationships: relationships}
+	return Handler{uow: uow, inbox: inbox, assignments: assignments, changes: changes}
 }
 
 func (in Input) validate() error {
@@ -94,8 +88,8 @@ func (in Input) validate() error {
 }
 
 // Handle runs application.AcceptOnce { read assignment under row lock →
-// delete relationships → remember the release }. A failed relationship write
-// rolls the Inbox record back and redelivery repeats the event.
+// remember the release → record RelationshipsChanged when order#delivery goes }.
+// orders-consumer then syncs the relationships (ADR 18).
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err := in.validate(); err != nil {
 		return Result{}, err
@@ -134,21 +128,22 @@ func (h Handler) release(ctx context.Context, in Input) (fulfillment.Outcome, er
 		DeliveryVersion:   in.DeliveryVersion,
 	}
 	outcome, kept := OutcomeRememberedAhead, release.Kept()
-	var revision application.AuthorizationRevision
+	unlinked := false
 	if found {
 		var ok bool
 		if kept, ok = stored.Release(release); !ok {
 			return OutcomeIgnoredStale, nil
 		}
 		outcome = OutcomeReleased
-		if stored.HoldsRelationsOf(release) {
-			if revision, err = h.relationships.UnlinkDelivery(ctx, in.OrderID, stored.DeliveryID); err != nil {
-				return "", fmt.Errorf("delete order#delivery: %w", err)
-			}
-		}
+		unlinked = stored.HoldsRelationsOf(release)
 	}
-	if err := h.assignments.RememberCourierAssignment(ctx, in.OrderID, kept, string(revision)); err != nil {
+	if err := h.assignments.RememberCourierAssignment(ctx, in.OrderID, kept); err != nil {
 		return "", fmt.Errorf("remember courier release: %w", err)
+	}
+	if unlinked {
+		if err := h.changes.RelationshipsChanged(ctx, in.OrderID); err != nil {
+			return "", fmt.Errorf("record relationships change: %w", err)
+		}
 	}
 	return outcome, nil
 }

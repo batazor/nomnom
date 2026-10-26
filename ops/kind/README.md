@@ -68,10 +68,6 @@ make kind-down
   Тот же hook после Kafka запускает Job `dead-letter-topics`
   ([`manifests/messaging/dead-letter-topics.yaml`](manifests/messaging/dead-letter-topics.yaml)): DLQ
   consumers объявляются явно — retention 30 дней, одна partition ([Разбор DLQ](../../docs/dlq.md)).
-- `orders-reconciler` — release chart `orders` с `values-reconciler.yaml` и
-  [`values/orders-reconciler.yaml`](values/orders-reconciler.yaml): тот же образ,
-  `command: ["/orders-reconciler"]`, без Service; каждую минуту сверяет relations `order` SpiceDB ↔
-  PostgreSQL и догоняет проекцию `OrderDetails` после rolling update (ADR orders 4).
 - `orders-worker` (Temporal worker Order Fulfillment Workflow) — release chart `orders` с
   `values-worker.yaml` и [`values/orders-worker.yaml`](values/orders-worker.yaml): тот же образ,
   своя `command`, без Service, `dependsOn: [orders]`. Worker опрашивает Temporal в `nomnom-infra` (Search Attribute стадии
@@ -351,7 +347,8 @@ ServiceAccount `demo-seed` с user assertion ключом BFF — `kind-operator
 и выходит на линию. Seed идемпотентен: ресторан ищется по имени в `ListOwnedRestaurants`
 владельца, блюдо — по имени в `GetMenu`, повторный `RegisterCourier` допускается. Relationships
 SpiceDB (`owner`, `staff`, `self`) после перезапуска SpiceDB восстанавливает reconciliation
-restaurants и delivery из своих хранилищ. Job — не Helm hook: internal gateway применяется после
+restaurants и delivery из своих хранилищ, связи `order` — разовая
+`kubectl -n nomnom-orders exec deploy/orders-consumer -- /orders-admin authz resync` (ADR 18). Job — не Helm hook: internal gateway применяется после
 charts, и Job ждёт его повторами; законченный Job удаляется через 10 минут.
 
 Subjects демо-пользователей начинаются с `nomnom-`, а не с `demo-`: dispatch без геокодирования

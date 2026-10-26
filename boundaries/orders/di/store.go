@@ -9,7 +9,7 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository"
 )
 
-// NewStore — общий store API, worker'а, consumer'а и reconciler'а;
+// NewStore — общий store API, worker'а и consumer'а;
 // без POSTGRES__DSN процесс не стартует. Сначала процесс приводит схему к
 // встроенным наборам миграций (schema.Migrate): применённые golang-migrate
 // пропускает, недостающие применяет под advisory lock, так что одновременный

@@ -15,18 +15,23 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
 
 // InboxStore — роль хранилища handlers orders-consumer: Unit of Work,
-// Transactional Inbox, repository и Courier Assignment.
+// Transactional Inbox, repository, Courier Assignment, RelationshipsChanged и
+// чтение субъектов и revision для Sync Order Relationships.
 type InboxStore interface {
 	application.UnitOfWork
 	application.Inbox
 	order.Repository
 	order.CourierAssignments
+	syncorderrelationships.Changes
+	syncorderrelationships.Reader
+	syncorderrelationships.Revisions
 }
 
 // Consumer — порты handlers orders-consumer; Wire заполняет все поля
@@ -35,13 +40,14 @@ type InboxStore interface {
 // собирает Handlers уже после подключения.
 type Consumer struct {
 	Store         InboxStore
-	Relationships CourierRelationships
+	Relationships RelationshipSync
 	Telemetry     *telemetry.UseCases
 }
 
 // Handlers собирает application handlers, которые читают Kafka, под
 // декоратором телеметрии use cases. Record Courier Assignment и Record Courier
-// Release пишут order#delivery в SpiceDB внутри своего Inbox unit of work.
+// Release записывают RelationshipsChanged в своём Inbox unit of work, Sync Order
+// Relationships по нему пишет связи в SpiceDB.
 func (c Consumer) Handlers(workflow fulfillment.Notifier) ordermessaging.Handlers {
 	store, relationships, uc := c.Store, c.Relationships, c.Telemetry
 	return ordermessaging.Handlers{
@@ -51,10 +57,11 @@ func (c Consumer) Handlers(workflow fulfillment.Notifier) ordermessaging.Handler
 		RecordOrderReady:         telemetry.Instrument(uc, observability.RecordOrderReady, recordorderready.NewHandler(store, store, store, workflow).Handle),
 		RecordPreparationDelay:   telemetry.Instrument(uc, observability.RecordPreparationDelay, recordpreparationdelay.NewHandler(store, store, store, workflow).Handle),
 		RelayPreparationIssue:    telemetry.Instrument(uc, observability.RelayPreparationIssue, relaypreparationissue.NewHandler(workflow).Handle),
-		RecordCourierAssignment:  telemetry.Instrument(uc, observability.RecordCourierAssignment, recordcourierassignment.NewHandler(store, store, store, workflow, store, relationships).Handle),
-		RecordCourierRelease:     telemetry.Instrument(uc, observability.RecordCourierRelease, recordcourierrelease.NewHandler(store, store, store, relationships).Handle),
+		RecordCourierAssignment:  telemetry.Instrument(uc, observability.RecordCourierAssignment, recordcourierassignment.NewHandler(store, store, store, workflow, store, store).Handle),
+		RecordCourierRelease:     telemetry.Instrument(uc, observability.RecordCourierRelease, recordcourierrelease.NewHandler(store, store, store, store).Handle),
 		RecordPickup:             telemetry.Instrument(uc, observability.RecordPickup, recordpickup.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryCompletion: telemetry.Instrument(uc, observability.RecordDeliveryCompletion, recorddeliverycompletion.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryFailure:    telemetry.Instrument(uc, observability.RecordDeliveryFailure, recorddeliveryfailure.NewHandler(store, store, store, workflow).Handle),
+		SyncOrderRelationships:   telemetry.Instrument(uc, observability.SyncOrderRelationships, syncorderrelationships.NewHandler(store, store, relationships, store).Handle),
 	}
 }

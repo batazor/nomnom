@@ -75,11 +75,6 @@ postgres:
   max_conn_idle_time: 5m
   connect_timeout: 5s
   health_check_period: 1m
-# Reconciliation order#customer (cmd/orders-reconciler). grace > самой долгой транзакции оформления.
-reconciler:
-  interval: 5m
-  grace: 10m
-  page_size: 500
 # Demo customer Simulator (FR-604..FR-606), только cmd/orders; значений по умолчанию нет,
 # пустое или невалидное значение и min_delay > max_delay останавливают процесс на старте.
 # Включается RPC SetSimulatorEnabled (platform#operate_simulator); новый сервис — выключен.

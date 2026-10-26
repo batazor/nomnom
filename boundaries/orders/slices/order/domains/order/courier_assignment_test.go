@@ -34,9 +34,6 @@ func TestCourierAssignmentConcernsOnlyTheDeliveryRelation(t *testing.T) {
 	assert.False(t, next.LinksDelivery(CourierAssignment{DeliveryID: "delivery-0", CourierID: "courier-1"}))
 	assert.False(t, next.LinksDelivery(CourierAssignment{}))
 
-	assert.Equal(t, "delivery-0", next.DisplacedDelivery(CourierAssignment{DeliveryID: "delivery-0", CourierID: "courier-1"}))
-	assert.Empty(t, next.DisplacedDelivery(CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-1"}))
-	assert.Empty(t, next.DisplacedDelivery(CourierAssignment{}))
 }
 
 func TestCourierAssignmentReleaseKeepsItsTimeAndVersion(t *testing.T) {

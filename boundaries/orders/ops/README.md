@@ -68,7 +68,7 @@ DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`
 недостающие всех наборов (golang-migrate под одним advisory lock, ожидание блокировок DDL ограничено `lock_timeout` 5 с, незавершённая миграция повторяется) и только потом запускает остальное. Пул процесса задают `postgres.maxConns`,
 `minConns`, `maxConnLifetime`, `maxConnLifetimeJitter`, `maxConnIdleTime`, `connectTimeout`,
 `healthCheckPeriod` (env `POSTGRES__*`); values каждой роли задают свой `maxConns` (API 10,
-worker и consumer 5, reconciler 2), миграции при старте — 2 отдельных соединения (advisory lock и сама миграция). Пулер перед
+worker и consumer 5), миграции при старте — 2 отдельных соединения (advisory lock и сама миграция). Пулер перед
 базой — только session mode, Σ(replicas × maxConns) ≤ `pool_size`
 ([README](../README.md#пулер-postgresql)).
 
@@ -129,7 +129,7 @@ env:
 
 OpenTelemetry задаётся секцией `telemetry` (не через `env`: явные переменные chart
 перекрывают `envFrom`). Chart сам выставляет `OTEL_SERVICE_NAME` (`telemetry.serviceName`
-роли: `orders`, `orders-worker`, `orders-consumer`, `orders-reconciler`) и `OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя
+роли: `orders`, `orders-worker`, `orders-consumer`) и `OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя
 pod, `service.version` — image tag, плюс `telemetry.resourceAttributes`) во всех releases:
 
 ```yaml

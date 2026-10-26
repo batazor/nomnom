@@ -11,7 +11,7 @@ func Services() []Options {
 			Services: []string{inventory.Orders, inventory.OrdersWorker, inventory.OrdersConsumer},
 			GRPC:     true, GRPCClients: true, Database: PostgreSQL, DatabasePool: true,
 			Kafka: &Kafka{Watermill: true, ConsumerGroup: "orders", Consumers: []string{inventory.OrdersConsumer}, Connector: "orders-outbox",
-				DeadLetters: []string{"restaurants.v1.restaurant-order-events.dlq", "delivery.v1.delivery-events.dlq"}},
+				DeadLetters: []string{"restaurants.v1.restaurant-order-events.dlq", "delivery.v1.delivery-events.dlq", "orders.v1.order-relationships.dlq"}},
 			UseCases: true, UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Temporal: &Temporal{Worker: inventory.OrdersWorker},
 			Domain:   ordersDomain,

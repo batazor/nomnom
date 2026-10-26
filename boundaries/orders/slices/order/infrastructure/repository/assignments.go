@@ -50,12 +50,11 @@ func deref(s *string) string {
 	return *s
 }
 
-// RememberCourierAssignment replaces the Courier Assignment of an Order and
-// the ZedToken of its relationship write in the active transaction. An empty
-// delivery or courier is stored as NULL, so the relation is absent for the
-// reconciliation. The Delivery version is stored with it and orders later
-// courier events.
-func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment order.CourierAssignment, revision string) error {
+// RememberCourierAssignment replaces the Courier Assignment of an Order in the
+// active transaction. An empty delivery or courier is stored as NULL, so
+// order#delivery is absent for the relationship sync (ADR 18). The Delivery
+// version is stored with it and orders later courier events.
+func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID, assignment order.CourierAssignment) error {
 	if assignment.DeliveryVersion > math.MaxInt64 {
 		return fmt.Errorf("remember courier assignment of %s: delivery version %d overflows BIGINT", orderID, assignment.DeliveryVersion)
 	}
@@ -64,7 +63,6 @@ func (s *Store) RememberCourierAssignment(ctx context.Context, orderID order.ID,
 		Set("courier_id", sq.Expr("NULLIF(?, '')", assignment.CourierID)).
 		Set("courier_assigned_at", assignment.AssignedAt).
 		Set("courier_delivery_version", int64(assignment.DeliveryVersion)).
-		Set("authorization_revision", sq.Expr("COALESCE(NULLIF(?, ''), authorization_revision)", revision)).
 		Where(sq.Eq{"id": orderID}))
 	if err != nil {
 		return fmt.Errorf("remember courier assignment of %s: %w", orderID, err)

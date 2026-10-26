@@ -141,7 +141,7 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	domainMetrics := observability.NewDomainMetrics(reasonCodes)
 	processStore := di.NewProcessStore(store, domainMetrics)
 	spiceDBConfig := cfg.SpiceDB
-	courierRelationships, cleanup2, err := di.NewCourierRelationships(spiceDBConfig)
+	v, cleanup2, err := di.NewRelationshipSync(spiceDBConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -149,30 +149,11 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	useCases := observability.UseCases()
 	consumer := di.Consumer{
 		Store:         processStore,
-		Relationships: courierRelationships,
+		Relationships: v,
 		Telemetry:     useCases,
 	}
 	kafkaConsumer := NewKafkaConsumer(cfg, consumer)
 	return kafkaConsumer, func() {
-		cleanup2()
-		cleanup()
-	}, nil
-}
-
-func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), error) {
-	databaseConfig := cfg.Database
-	store, cleanup, err := NewStore(databaseConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	spiceDBConfig := cfg.SpiceDB
-	client, cleanup2, err := NewSpiceDBClient(spiceDBConfig)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	relationshipReconciler := NewRelationshipReconciler(cfg, store, client)
-	return relationshipReconciler, func() {
 		cleanup2()
 		cleanup()
 	}, nil
@@ -197,8 +178,6 @@ var (
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
 	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
-	// spiceDBSet — клиент SpiceDB процесса orders-reconciler.
-	spiceDBSet = wire.NewSet(NewSpiceDBClient)
 	// storeSet — store процесса на схеме, мигрированной наборами di/schema,
 	// в ролях портов слайса order.
 	storeSet = wire.NewSet(NewStore, di.RepositorySet)

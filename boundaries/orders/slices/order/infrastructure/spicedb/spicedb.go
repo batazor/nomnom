@@ -1,14 +1,16 @@
 // Package spicedb implements the authorization ports of the order slice on
-// SpiceDB (ADR 18): permission checks of the use cases, the creation-time
-// order#customer and order#restaurant relationships and the order#delivery
-// relationship of the Courier Assignment. The schema has no order#courier:
+// SpiceDB (ADR 18): permission checks of the use cases and the sync of the
+// order#customer, order#restaurant and order#delivery relationships with the
+// Order in PostgreSQL. The schema has no order#courier:
 // the courier sees the Order through delivery->act_as_courier.
 // Schema: authorization/schema.zed.
 package spicedb
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
@@ -21,6 +23,7 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -44,8 +47,8 @@ type RevisionReader interface {
 
 // Authorizer checks application.AccessCheck as `<type>:<id>#<permission>` for
 // `user:<id>` or `service:<id>`. An Order with a stored authorization revision
-// (the ZedToken of its creation-time relationship) is checked at least as
-// fresh as that write.
+// (the ZedToken of its last relationship sync) is checked at least as fresh as
+// that write.
 type Authorizer struct {
 	permissions v1.PermissionsServiceClient
 	revisions   RevisionReader
@@ -122,37 +125,69 @@ func (a *Authorizer) check(ctx context.Context, check application.AccessCheck) e
 	return nil
 }
 
-// GrantOrderRelationships writes order#customer and order#restaurant in one
-// atomic request before the local commit and returns the ZedToken of the write;
-// TOUCH is idempotent, so a retried Place Order repeats it safely.
-func (a *Authorizer) GrantOrderRelationships(ctx context.Context, orderID order.ID, customerID order.CustomerID, restaurantID order.RestaurantID) (application.AuthorizationRevision, error) {
+// SyncOrderRelationships makes the order relationships of orderID exactly
+// subjects (ADR 18): it reads the stored ones fully consistently, TOUCHes the
+// wanted and DELETEs the others in one atomic WriteRelationships, and returns
+// its ZedToken. The result depends only on subjects, so a repeated or late
+// sync is idempotent.
+func (a *Authorizer) SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects syncorderrelationships.Subjects) (application.AuthorizationRevision, error) {
 	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
-	return a.write(ctx, fmt.Sprintf("touch order:%s#customer,restaurant", orderID),
-		touch(resource, relationCustomer, objectSubject(subjectUser, string(customerID))),
-		touch(resource, relationRestaurant, objectSubject(subjectRestaurant, string(restaurantID))),
-	)
-}
-
-// LinkDelivery writes order#delivery of deliveryID and deletes that of
-// displacedDeliveryID (when set) in one atomic request: the Order never links
-// both Deliveries or none. The courier sees the Order through
-// delivery->act_as_courier, which delivery owns. TOUCH and DELETE are
-// idempotent, so a redelivered event repeats the request safely.
-func (a *Authorizer) LinkDelivery(ctx context.Context, orderID order.ID, deliveryID, displacedDeliveryID string) (application.AuthorizationRevision, error) {
-	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
-	updates := []*v1.RelationshipUpdate{touch(resource, relationDelivery, objectSubject(subjectDelivery, deliveryID))}
-	if displacedDeliveryID != "" && displacedDeliveryID != deliveryID {
-		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, displacedDeliveryID)))
+	wanted := map[string]*v1.SubjectReference{
+		relationCustomer:   objectSubject(subjectUser, string(subjects.CustomerID)),
+		relationRestaurant: objectSubject(subjectRestaurant, string(subjects.RestaurantID)),
 	}
-	return a.write(ctx, fmt.Sprintf("link delivery of order:%s", orderID), updates...)
+	if subjects.DeliveryID != "" {
+		wanted[relationDelivery] = objectSubject(subjectDelivery, subjects.DeliveryID)
+	}
+	stored, err := a.relationshipsOf(ctx, resource)
+	if err != nil {
+		return "", err
+	}
+	updates := make([]*v1.RelationshipUpdate, 0, len(wanted)+len(stored))
+	for relation, subject := range wanted {
+		updates = append(updates, touch(resource, relation, subject))
+	}
+	for _, relationship := range stored {
+		if want, ok := wanted[relationship.GetRelation()]; ok && sameSubject(want, relationship.GetSubject()) {
+			continue
+		}
+		updates = append(updates, update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationship.GetRelation(), relationship.GetSubject()))
+	}
+	return a.write(ctx, fmt.Sprintf("sync relationships of order:%s", orderID), updates...)
 }
 
-// UnlinkDelivery deletes order#delivery of a cancelled Delivery. DELETE of an
-// absent relationship is a no-op, so a repeat is idempotent.
-func (a *Authorizer) UnlinkDelivery(ctx context.Context, orderID order.ID, deliveryID string) (application.AuthorizationRevision, error) {
-	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
-	return a.write(ctx, fmt.Sprintf("unlink delivery of order:%s", orderID),
-		update(v1.RelationshipUpdate_OPERATION_DELETE, resource, relationDelivery, objectSubject(subjectDelivery, deliveryID)))
+// relationshipsOf reads every stored relationship of resource fully
+// consistently: the sync must see the writes of the previous one.
+func (a *Authorizer) relationshipsOf(ctx context.Context, resource *v1.ObjectReference) ([]*v1.Relationship, error) {
+	ctx, cancel := context.WithTimeout(ctx, a.timeout)
+	defer cancel()
+	stream, err := a.permissions.ReadRelationships(ctx, &v1.ReadRelationshipsRequest{
+		Consistency: &v1.Consistency{Requirement: &v1.Consistency_FullyConsistent{FullyConsistent: true}},
+		RelationshipFilter: &v1.RelationshipFilter{
+			ResourceType:       resource.GetObjectType(),
+			OptionalResourceId: resource.GetObjectId(),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: read relationships of %s:%s: %w", ErrUnavailable, resource.GetObjectType(), resource.GetObjectId(), err)
+	}
+	var relationships []*v1.Relationship
+	for {
+		resp, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return relationships, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: read relationships of %s:%s: %w", ErrUnavailable, resource.GetObjectType(), resource.GetObjectId(), err)
+		}
+		relationships = append(relationships, resp.GetRelationship())
+	}
+}
+
+func sameSubject(a, b *v1.SubjectReference) bool {
+	return a.GetObject().GetObjectType() == b.GetObject().GetObjectType() &&
+		a.GetObject().GetObjectId() == b.GetObject().GetObjectId() &&
+		a.GetOptionalRelation() == b.GetOptionalRelation()
 }
 
 // write applies updates in one WriteRelationships request, which SpiceDB

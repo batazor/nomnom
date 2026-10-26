@@ -12,8 +12,9 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 )
 
-// RememberRevision stores the ZedToken of the creation-time relationship in the
-// Order row, inside the placement transaction (ADR 18).
+// RememberRevision stores the ZedToken of the last relationship sync of the
+// Order in its row (ADR 18): permission checks of the Order read at least as
+// fresh as it.
 func (s *Store) RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error {
 	tag, err := s.exec(ctx, psql.Update("orders").
 		Set("authorization_revision", string(revision)).Where(sq.Eq{"id": orderID}))

@@ -37,19 +37,9 @@ func (a CourierAssignment) Supersedes(stored CourierAssignment) bool {
 // LinksDelivery reports whether previous already links the Order to the
 // Delivery of the assignment: an active assignment of the same Delivery. A
 // reassignment within it changes no relationship. A released or remembered
-// ahead assignment may not have written the relation, so the assignment links
-// the Delivery again (idempotently).
+// ahead assignment records the change again; the sync is idempotent.
 func (a CourierAssignment) LinksDelivery(previous CourierAssignment) bool {
 	return previous.CourierID != "" && previous.DeliveryID == a.DeliveryID
-}
-
-// DisplacedDelivery returns the Delivery of previous that the assignment
-// replaces, or "" when previous has none or the same one.
-func (a CourierAssignment) DisplacedDelivery(previous CourierAssignment) string {
-	if previous.DeliveryID != "" && previous.DeliveryID != a.DeliveryID {
-		return previous.DeliveryID
-	}
-	return ""
 }
 
 // CourierRelease is the end of a Courier Assignment reported by delivery: an
@@ -97,10 +87,8 @@ func (a CourierAssignment) HoldsRelationsOf(release CourierRelease) bool {
 // CourierAssignments is the persistence contract of the Courier Assignment of
 // an Order. Both methods participate in the active Unit of Work from ctx;
 // CourierAssignment locks the assignment until its end, so changes of one
-// Order apply one after another. revision is the opaque revision of the
-// relationship write that made the assignment visible; empty keeps the stored
-// one.
+// Order apply one after another.
 type CourierAssignments interface {
 	CourierAssignment(ctx context.Context, orderID ID) (CourierAssignment, bool, error)
-	RememberCourierAssignment(ctx context.Context, orderID ID, assignment CourierAssignment, revision string) error
+	RememberCourierAssignment(ctx context.Context, orderID ID, assignment CourierAssignment) error
 }

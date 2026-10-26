@@ -197,8 +197,6 @@ func TestGetOrderMapsCancellationWindow(t *testing.T) {
 	for id, state := range map[order.ID]order.State{"order-placed": order.StatePlaced, "order-completed": order.StateCompleted} {
 		o := ordertest.New(t, id, ordertest.WithState(state))
 		require.NoError(t, store.Add(context.Background(), o))
-		_, err := authorizer.GrantOrderRelationships(context.Background(), o.ID(), o.CustomerID(), o.RestaurantID())
-		require.NoError(t, err)
 	}
 	client := newClientWith(t, fixedSubject{subject: application.Subject{
 		Kind: application.SubjectUser,
@@ -224,8 +222,6 @@ func TestGetOrderMapsExpectedTimes(t *testing.T) {
 	expected := order.ExpectedTimes{ReadyAt: ordertest.PlacedAt.Add(20 * time.Minute), PickupAt: ordertest.PlacedAt.Add(25 * time.Minute)}
 	o := ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed), ordertest.WithExpectedTimes(expected))
 	require.NoError(t, store.Add(context.Background(), o))
-	_, err := authorizer.GrantOrderRelationships(context.Background(), o.ID(), o.CustomerID(), o.RestaurantID())
-	require.NoError(t, err)
 	client := newClientWith(t, fixedSubject{subject: customer}, store, authorizer)
 
 	response, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-1"})
@@ -280,7 +276,7 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 	snapshot, ok := store.Snapshot("order-1")
 	require.True(t, ok)
 	assert.Equal(t, order.CustomerID("customer-1"), snapshot.CustomerID)
-	assert.Equal(t, order.RestaurantID("restaurant-1"), authorizer.RestaurantOf("order-1"))
+	assert.Equal(t, []order.ID{"order-1"}, store.RelationshipChanges(), "orders-consumer syncs the relationships of the new Order")
 
 	replayed, err := client.PlaceOrder(context.Background(), placeRequest())
 	require.NoError(t, err)
@@ -413,8 +409,6 @@ func cancellationClient(t *testing.T, state order.State, ports commandPorts, aut
 	store := repositorytest.Open(t)
 	o := ordertest.New(t, "order-1", ordertest.WithState(state))
 	require.NoError(t, store.Add(context.Background(), o))
-	_, err := authorizer.GrantOrderRelationships(context.Background(), o.ID(), o.CustomerID(), o.RestaurantID())
-	require.NoError(t, err)
 	return newClientWithPorts(t, fixedSubject{subject: customer}, store, authorizer, ports)
 }
 
@@ -470,8 +464,12 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 		requireReason(t, err, codes.Unavailable, "DEPENDENCY_UNAVAILABLE")
 	})
 	t.Run("spicedb unavailable", func(t *testing.T) {
+		// Only a subject other than the Customer is checked in SpiceDB.
 		authorizer := fake.NewAuthorizer()
-		client := cancellationClient(t, order.StatePlaced, newCommandPorts(), authorizer)
+		store := repositorytest.Open(t)
+		require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
+		client := newClientWithPorts(t, fixedSubject{subject: application.Subject{Kind: application.SubjectService, ID: "support-console"}},
+			store, authorizer, newCommandPorts())
 		authorizer.FailChecks(spicedb.ErrUnavailable)
 		_, err := client.RequestOrderCancellation(context.Background(), cancellationRequest())
 		requireReason(t, err, codes.Unavailable, "DEPENDENCY_UNAVAILABLE")

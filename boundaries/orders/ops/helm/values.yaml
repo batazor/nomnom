@@ -209,7 +209,7 @@ postgres:
   # Пул процесса (POSTGRES__*). За пулером PostgreSQL в session mode каждое соединение
   # держит server-соединение: Σ(replicas × maxConns) всех ролей должна помещаться в
   # pool_size пулера (README, «Пулер PostgreSQL»). maxConns — по конкурентности роли:
-  # API 10, worker и consumer 5, reconciler 2 (values-<role>.yaml).
+  # API 10, worker и consumer 5 (values-<role>.yaml).
   maxConns: 10
   # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
   minConns: 1
@@ -271,8 +271,8 @@ cdc:
 # deployment.environment.name. Не задавать OTEL_RESOURCE_ATTRIBUTES через env: явная
 # переменная chart её перекроет.
 telemetry:
-  # service.name роли: orders, orders-worker, orders-consumer,
-  # orders-reconciler (values-<role>.yaml). Совпадает с default процесса.
+  # service.name роли: orders, orders-worker, orders-consumer (values-<role>.yaml).
+  # Совпадает с default процесса.
   serviceName: orders
   resourceAttributes: {}
   # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT), например

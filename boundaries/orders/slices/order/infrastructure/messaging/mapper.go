@@ -1,6 +1,8 @@
 package messaging
 
 import (
+	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -123,4 +125,10 @@ func toRecordDeliveryCompletion(e messaging.Envelope, event *deliveryv1.Delivery
 
 func toRecordDeliveryFailure(e messaging.Envelope, event *deliveryv1.DeliveryFailed) recorddeliveryfailure.Input {
 	return recorddeliveryfailure.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt, Reason: event.GetReason()}
+}
+
+// toSyncOrderRelationships takes only the Order id: the sync reads the rest
+// from the Order.
+func toSyncOrderRelationships(_ messaging.Envelope, event *ordersv1.OrderRelationshipsChanged) syncorderrelationships.Input {
+	return syncorderrelationships.Input{OrderID: order.ID(event.GetOrderId())}
 }

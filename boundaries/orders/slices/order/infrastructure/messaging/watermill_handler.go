@@ -27,6 +27,8 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 )
 
 // Stream topics of the source aggregates. Names are provisional until the
@@ -49,6 +51,7 @@ type Handlers struct {
 	RecordPickup             application.Handler[recordpickup.Input, recordpickup.Result]
 	RecordDeliveryCompletion application.Handler[recorddeliverycompletion.Input, recorddeliverycompletion.Result]
 	RecordDeliveryFailure    application.Handler[recorddeliveryfailure.Input, recorddeliveryfailure.Result]
+	SyncOrderRelationships   application.Handler[syncorderrelationships.Input, syncorderrelationships.Result]
 }
 
 // Streams returns one handler group per consumed stream.
@@ -76,6 +79,15 @@ func Streams(h Handlers) []messaging.Stream {
 				handle(h.RecordPickup.Handle, toRecordPickup),
 				handle(h.RecordDeliveryCompletion.Handle, toRecordDeliveryCompletion),
 				handle(h.RecordDeliveryFailure.Handle, toRecordDeliveryFailure),
+			},
+		},
+		{
+			// Internal stream of orders (ADR 18): the sync reads the Order state,
+			// so it needs no Inbox — a repeat writes the same relationships.
+			Group: "orders.order-relationships",
+			Topic: outbound.OrderRelationshipsTopic,
+			Handlers: []cqrs.GroupEventHandler{
+				handle(h.SyncOrderRelationships.Handle, toSyncOrderRelationships),
 			},
 		},
 	}

@@ -27,15 +27,12 @@ var (
 // assignedVersion is the Delivery version of the assignment of newWorld.
 const assignedVersion = 2
 
-// assignedRevision is the revision of the order#delivery write of newWorld.
-const assignedRevision = application.AuthorizationRevision("fake:order-1:delivery:1")
-
 type world struct {
-	store      *repositorytest.Store
-	authorizer *fake.Authorizer
-	workflow   *fake.Workflow
-	assign     recordcourierassignment.Handler
-	release    recordcourierrelease.Handler
+	store    *repositorytest.Store
+	changes  *failingChanges
+	workflow *fake.Workflow
+	assign   recordcourierassignment.Handler
+	release  recordcourierrelease.Handler
 }
 
 // newWorld has order-1 with courier-1 assigned on delivery-1 at assignedAt
@@ -45,17 +42,18 @@ func newWorld(t *testing.T) world {
 	w := newUnassignedWorld(t)
 	w.assignCourier(t, "assigned-1", "courier-1", assignedVersion, assignedAt)
 	require.Equal(t, "delivery-1", w.linkedDelivery())
-	require.Equal(t, 1, w.authorizer.DeliveryWrites())
+	require.Len(t, w.store.RelationshipChanges(), 1)
 	return w
 }
 
 // newUnassignedWorld has order-1 without a stored Courier Assignment.
 func newUnassignedWorld(t *testing.T) world {
 	t.Helper()
-	w := world{store: repositorytest.Open(t), authorizer: fake.NewAuthorizer(), workflow: fake.NewWorkflow()}
+	store := repositorytest.Open(t)
+	w := world{store: store, changes: &failingChanges{Store: store}, workflow: fake.NewWorkflow()}
 	require.NoError(t, w.store.Add(context.Background(), ordertest.New(t, "order-1")))
-	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.authorizer)
-	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.authorizer)
+	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.changes)
+	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.changes)
 	return w
 }
 
@@ -67,9 +65,25 @@ func (w world) assignCourier(t *testing.T, eventID, courierID string, version ui
 	require.NoError(t, err)
 }
 
+// failingChanges fails RelationshipsChanged while failing, otherwise records
+// it in the store.
+type failingChanges struct {
+	*repositorytest.Store
+	failing bool
+}
+
+func (c *failingChanges) RelationshipsChanged(ctx context.Context, orderID order.ID) error {
+	if c.failing {
+		return errors.New("outbox unavailable")
+	}
+	return c.Store.RelationshipsChanged(ctx, orderID)
+}
+
+// linkedDelivery is the stored Delivery: the subject of order#delivery that
+// Sync Order Relationships writes (ADR 18).
 func (w world) linkedDelivery() string {
-	deliveryID, _ := w.authorizer.DeliveryOf("order-1")
-	return deliveryID
+	stored, _, _ := w.store.CourierAssignment(context.Background(), "order-1")
+	return stored.DeliveryID
 }
 
 func (w world) stored(t *testing.T) order.CourierAssignment {
@@ -78,13 +92,6 @@ func (w world) stored(t *testing.T) order.CourierAssignment {
 	require.NoError(t, err)
 	require.True(t, found)
 	return stored
-}
-
-func (w world) revision(t *testing.T) application.AuthorizationRevision {
-	t.Helper()
-	revision, _, err := w.store.Revision(context.Background(), "order-1")
-	require.NoError(t, err)
-	return revision
 }
 
 // unassigned is an unassignment at releasedAt of Delivery version version.
@@ -101,8 +108,9 @@ func cancelled(eventID, deliveryID string, version uint64) recordcourierrelease.
 	}
 }
 
-// AC-534: the unassignment clears the courier and stores the version; there
-// is no SpiceDB request, order#delivery stays and the workflow is left alone.
+// AC-534: the unassignment clears the courier and stores the version; it
+// records no RelationshipsChanged, order#delivery stays and the workflow is
+// left alone.
 func TestUnassignmentClearsCourierOnly(t *testing.T) {
 	w := newWorld(t)
 
@@ -110,15 +118,14 @@ func TestUnassignmentClearsCourierOnly(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
-	assert.Equal(t, 1, w.authorizer.DeliveryWrites(), "no SpiceDB request")
+	assert.Len(t, w.store.RelationshipChanges(), 1, "no RelationshipsChanged")
 	assert.Equal(t, "delivery-1", w.linkedDelivery())
 	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", AssignedAt: releasedAt, DeliveryVersion: 3}, w.stored(t))
-	assert.Equal(t, assignedRevision, w.revision(t))
 	assert.Len(t, w.workflow.Notifications(), 1, "only the assignment notified the workflow")
 }
 
-// AC-535: the cancellation deletes order#delivery, clears the courier and the
-// delivery and stores the revision.
+// AC-535: the cancellation clears the courier and the delivery and records
+// RelationshipsChanged: the sync deletes order#delivery.
 func TestCancellationUnlinksDelivery(t *testing.T) {
 	w := newWorld(t)
 
@@ -128,7 +135,7 @@ func TestCancellationUnlinksDelivery(t *testing.T) {
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
 	assert.Empty(t, w.linkedDelivery())
 	assert.Equal(t, order.CourierAssignment{AssignedAt: releasedAt, DeliveryVersion: 3}, w.stored(t))
-	assert.Equal(t, application.AuthorizationRevision("fake:order-1:delivery:2"), w.revision(t))
+	assert.Len(t, w.store.RelationshipChanges(), 2)
 }
 
 // After an unassignment the cancellation of the same Delivery still unlinks it.
@@ -167,7 +174,7 @@ func TestEventOfAnotherAssignmentIsIgnored(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, recordcourierrelease.OutcomeIgnoredStale, result.Outcome)
 			assert.Equal(t, "delivery-1", w.linkedDelivery())
-			assert.Equal(t, 1, w.authorizer.DeliveryWrites())
+			assert.Len(t, w.store.RelationshipChanges(), 1)
 			assert.Equal(t, order.CourierAssignment{
 				DeliveryID: "delivery-1", CourierID: "courier-1", AssignedAt: assignedAt, DeliveryVersion: assignedVersion,
 			}, w.stored(t))
@@ -236,15 +243,14 @@ func TestReleaseBeforeAssignmentIsRemembered(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, recordcourierrelease.OutcomeRememberedAhead, result.Outcome)
-			assert.Equal(t, 0, w.authorizer.DeliveryWrites(), "nothing to delete")
+			assert.Empty(t, w.store.RelationshipChanges(), "nothing to unlink")
 			remembered := w.stored(t)
 			assert.Equal(t, uint64(3), remembered.DeliveryVersion)
 			assert.Empty(t, remembered.CourierID)
 
 			w.assignCourier(t, "assigned-1", "courier-1", assignedVersion, assignedAt)
-			assert.Equal(t, 0, w.authorizer.DeliveryWrites(), "the older assignment is skipped")
-			assert.Empty(t, w.linkedDelivery())
-			assert.Equal(t, remembered, w.stored(t))
+			assert.Empty(t, w.store.RelationshipChanges(), "the older assignment is skipped")
+			assert.Equal(t, remembered, w.stored(t), "the remembered release stays the state the sync reads")
 		})
 	}
 }
@@ -272,13 +278,14 @@ func TestRedeliveryIsDuplicate(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.OutcomeDuplicate, result.Outcome)
-	assert.Equal(t, 2, w.authorizer.DeliveryWrites())
+	assert.Len(t, w.store.RelationshipChanges(), 2)
 }
 
-// AC-537: a failed delete of order#delivery rolls the Inbox record back.
+// AC-537: RelationshipsChanged commits with the release: a failure rolls the
+// Inbox record and the release back.
 func TestRelationshipFailureRollsBack(t *testing.T) {
 	w := newWorld(t)
-	w.authorizer.FailWrites(errors.New("spicedb unavailable"))
+	w.changes.failing = true
 	in := cancelled("event-1", "delivery-1", 3)
 
 	_, err := w.release.Handle(context.Background(), in)
@@ -287,18 +294,18 @@ func TestRelationshipFailureRollsBack(t *testing.T) {
 	assert.Equal(t, 1, w.store.InboxSize())
 	assert.Equal(t, "courier-1", w.stored(t).CourierID)
 
-	w.authorizer.FailWrites(nil)
+	w.changes.failing = false
 	result, err := w.release.Handle(context.Background(), in)
 	require.NoError(t, err)
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
 	assert.Empty(t, w.linkedDelivery())
 }
 
-// AC-534: an unassignment needs no SpiceDB, so it succeeds while SpiceDB is
-// unavailable.
+// AC-534: an unassignment keeps order#delivery, so it records no
+// RelationshipsChanged and succeeds while the Outbox write would fail.
 func TestUnassignmentDoesNotNeedSpiceDB(t *testing.T) {
 	w := newWorld(t)
-	w.authorizer.FailWrites(errors.New("spicedb unavailable"))
+	w.changes.failing = true
 
 	result, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 3))
 

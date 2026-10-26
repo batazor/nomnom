@@ -29,6 +29,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
@@ -198,11 +199,12 @@ func handlersOf(store *repositorytest.Store, workflow fulfillment.Notifier) orde
 		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
 		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, workflow),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
-		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, fake.NewAuthorizer()),
-		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, fake.NewAuthorizer()),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, store),
+		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, store),
 		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
+		SyncOrderRelationships:   syncorderrelationships.NewHandler(store, store, fake.NewRelationshipSync(), store),
 	}
 }
 

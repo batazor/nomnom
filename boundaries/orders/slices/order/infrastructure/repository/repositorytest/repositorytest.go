@@ -94,7 +94,8 @@ func withDatabase(dsn, database string) string {
 type Store struct {
 	*repository.Store
 	outbound.Outbox
-	t testing.TB
+	relationships outbound.RelationshipChanges
+	t             testing.TB
 }
 
 // Open returns a store on a fresh migrated database, closed with the test.
@@ -119,7 +120,7 @@ func Open(t testing.TB) *Store {
 			t.Logf("drop test database: %v", err)
 		}
 	})
-	return &Store{Store: store, Outbox: outbound.NewOutbox(store), t: t}
+	return &Store{Store: store, Outbox: outbound.NewOutbox(store), relationships: outbound.NewRelationshipChanges(store), t: t}
 }
 
 // DSN is the connection string of the database behind the store.
@@ -162,13 +163,32 @@ type OutboxRecord struct {
 	Payload          []byte
 }
 
-// OutboxRecords returns the Outbox rows in the order they were appended.
+// RelationshipsChanged stores RelationshipsChanged in the Outbox of the
+// active transaction, like the store of the processes.
+func (s *Store) RelationshipsChanged(ctx context.Context, orderID order.ID) error {
+	return s.relationships.RelationshipsChanged(ctx, orderID)
+}
+
+// RelationshipChanges returns the Orders of the committed RelationshipsChanged
+// rows (ADR 18), in the order they were appended.
+func (s *Store) RelationshipChanges() []order.ID {
+	s.t.Helper()
+	rows, err := s.Pool().Query(context.Background(),
+		`SELECT aggregate_id FROM orders_outbox WHERE topic = $1 ORDER BY seq`, outbound.OrderRelationshipsTopic)
+	require.NoError(s.t, err)
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[order.ID])
+	require.NoError(s.t, err)
+	return ids
+}
+
+// OutboxRecords returns the Outbox rows of Integration Events in the order
+// they were appended; RelationshipsChanged rows are RelationshipChanges.
 func (s *Store) OutboxRecords() []OutboxRecord {
 	s.t.Helper()
 	rows, err := s.Pool().Query(context.Background(), `
 		SELECT topic, event_id::text, event_type, occurred_at, aggregate_type, aggregate_id,
 			aggregate_version, payload
-		FROM orders_outbox ORDER BY seq`)
+		FROM orders_outbox WHERE topic <> $1 ORDER BY seq`, outbound.OrderRelationshipsTopic)
 	require.NoError(s.t, err)
 	records, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (OutboxRecord, error) {
 		var (

@@ -1,6 +1,7 @@
 // Package recordcourierassignment records Courier Assignment for the Delivery
-// of an Order and keeps the relationship order#delivery in the same Inbox unit
-// of work. The courier sees the Order through delivery->act_as_courier, which
+// of an Order. A change of the linked Delivery records RelationshipsChanged in
+// the same Inbox unit of work; orders-consumer then syncs order#delivery
+// (ADR 18). The courier sees the Order through delivery->act_as_courier, which
 // delivery owns; orders keeps the assignment as business data.
 package recordcourierassignment
 
@@ -11,6 +12,7 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/fulfillment"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -38,17 +40,10 @@ type Result struct {
 	WorkflowNotified bool
 }
 
-// Relationships writes order#delivery of deliveryID and deletes that of
-// displacedDeliveryID (when set) in one atomic request, returning the revision
-// of the write. Repeating the request is idempotent.
-type Relationships interface {
-	LinkDelivery(ctx context.Context, orderID order.ID, deliveryID, displacedDeliveryID string) (application.AuthorizationRevision, error)
-}
-
 type Handler struct {
-	reflector     fulfillment.Reflector
-	assignments   order.CourierAssignments
-	relationships Relationships
+	reflector   fulfillment.Reflector
+	assignments order.CourierAssignments
+	changes     syncorderrelationships.Changes
 }
 
 func NewHandler(
@@ -57,12 +52,12 @@ func NewHandler(
 	orders order.Repository,
 	workflow fulfillment.Notifier,
 	assignments order.CourierAssignments,
-	relationships Relationships,
+	changes syncorderrelationships.Changes,
 ) Handler {
 	return Handler{
-		reflector:     fulfillment.NewReflector(uow, inbox, orders, workflow),
-		assignments:   assignments,
-		relationships: relationships,
+		reflector:   fulfillment.NewReflector(uow, inbox, orders, workflow),
+		assignments: assignments,
+		changes:     changes,
 	}
 }
 
@@ -90,14 +85,13 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	return Result(reflection), err
 }
 
-// assign runs before the Inbox commit: a failed relationship write rolls the
-// event back and redelivery repeats it. Whether the event supersedes the
-// stored assignment and which Delivery it links or displaces is decided by
-// order.CourierAssignment; the use case only writes and stores the result. A
-// reassignment within the linked Delivery writes nothing to SpiceDB and keeps
-// the stored revision. superseded is false for an out-of-order event, which
-// changes nothing; an event without names has nothing to order by and is the
-// latest one.
+// assign runs in the Inbox unit of work. Whether the event supersedes the
+// stored assignment and whether it links another Delivery is decided by
+// order.CourierAssignment; the use case stores the result and, for another
+// Delivery, records RelationshipsChanged in the same transaction. A
+// reassignment within the linked Delivery leaves the relationships as they
+// are. superseded is false for an out-of-order event, which changes nothing;
+// an event without names has nothing to order by and is the latest one.
 func (h Handler) assign(ctx context.Context, in Input) (superseded bool, err error) {
 	if in.DeliveryID == "" || in.CourierID == "" {
 		return true, nil
@@ -110,15 +104,13 @@ func (h Handler) assign(ctx context.Context, in Input) (superseded bool, err err
 	if found && !next.Supersedes(stored) {
 		return false, nil
 	}
-	var revision application.AuthorizationRevision
-	if !found || !next.LinksDelivery(stored) {
-		revision, err = h.relationships.LinkDelivery(ctx, in.OrderID, next.DeliveryID, next.DisplacedDelivery(stored))
-		if err != nil {
-			return false, fmt.Errorf("write order#delivery: %w", err)
-		}
-	}
-	if err := h.assignments.RememberCourierAssignment(ctx, in.OrderID, next, string(revision)); err != nil {
+	if err := h.assignments.RememberCourierAssignment(ctx, in.OrderID, next); err != nil {
 		return false, fmt.Errorf("remember courier assignment: %w", err)
+	}
+	if !found || !next.LinksDelivery(stored) {
+		if err := h.changes.RelationshipsChanged(ctx, in.OrderID); err != nil {
+			return false, fmt.Errorf("record relationships change: %w", err)
+		}
 	}
 	return true, nil
 }

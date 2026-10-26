@@ -173,7 +173,7 @@ func TestPlaceOrderEndToEndForUserAssertedByBFF(t *testing.T) {
 	require.Len(t, snapshot.Items, 1)
 	assert.Equal(t, order.MenuItemID("pizza"), snapshot.Items[0].MenuItemID())
 	assert.True(t, snapshot.Items[0].UnitPrice().Equal(ordertest.Money(t, "12.50")), "unit price comes from the restaurants menu")
-	assert.Equal(t, order.RestaurantID("restaurant-1"), env.authorizer.RestaurantOf("order-1"))
+	assert.Equal(t, []order.ID{"order-1"}, env.store.RelationshipChanges(), "orders-consumer syncs the relationships of the new Order")
 	assert.Equal(t, []string{"Bearer orders-token"}, restaurants.authorization, "restaurants sees the orders service token, not the BFF one")
 }
 

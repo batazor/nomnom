@@ -106,8 +106,7 @@ func (h Handler) Handle(ctx context.Context, q Query) (Page, error) {
 
 	// The owner is known to domain storage, so the Customer's own history is
 	// filtered by customer_id without the authorization graph.
-	owner := q.Subject.Kind == application.SubjectUser && q.Subject.ID == string(q.CustomerID)
-	if !owner {
+	if !q.Subject.IsUser(string(q.CustomerID)) {
 		err := h.authorizer.Check(ctx, application.AccessCheck{
 			Subject:    q.Subject,
 			Permission: PermissionViewOrders,

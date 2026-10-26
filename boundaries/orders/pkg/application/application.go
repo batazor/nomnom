@@ -111,6 +111,10 @@ func (s Subject) Validate() error {
 
 func (s Subject) String() string { return string(s.Kind) + ":" + s.ID }
 
+// IsUser reports whether the subject is the user id: the owner of a resource
+// whose owner domain storage knows, for example the Customer of an Order.
+func (s Subject) IsUser(id string) bool { return s.Kind == SubjectUser && s.ID == id }
+
 type Permission string
 
 type ResourceType string

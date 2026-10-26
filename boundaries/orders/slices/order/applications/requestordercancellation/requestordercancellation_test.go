@@ -39,8 +39,6 @@ func newEnv(t *testing.T, state order.State, policy requestordercancellation.Can
 	}
 	ctx := context.Background()
 	require.NoError(t, e.store.Add(ctx, ordertest.New(t, "order-1", ordertest.WithState(state))))
-	_, err := e.authorizer.GrantOrderRelationships(ctx, "order-1", "customer-1", "restaurant-1")
-	require.NoError(t, err)
 	e.handler = requestordercancellation.NewHandler(requestordercancellation.Dependencies{
 		Authorizer: e.authorizer,
 		Orders:     e.store,
@@ -88,7 +86,7 @@ func TestRequestCancellationRequiresPermission(t *testing.T) {
 		failure error
 	}{
 		{name: "another customer", subject: stranger},
-		{name: "authorization unavailable", subject: customer, failure: errors.New("spicedb timeout")},
+		{name: "authorization unavailable", subject: stranger, failure: errors.New("spicedb timeout")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -108,6 +106,19 @@ func TestRequestCancellationRequiresPermission(t *testing.T) {
 	missing.OrderID = "missing"
 	_, err := e.handler.Handle(context.Background(), missing)
 	require.ErrorIs(t, err, application.ErrPermissionDenied)
+}
+
+// The Customer cancels the own Order by customer_id, before orders-consumer
+// synced order#customer (ADR 18): no permission check is made.
+func TestRequestCancellationLetsTheCustomerCancelWithoutSpiceDB(t *testing.T) {
+	e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
+	e.authorizer.FailChecks(errors.New("spicedb unavailable"))
+
+	result, err := e.handler.Handle(context.Background(), input(customer))
+
+	require.NoError(t, err)
+	assert.Equal(t, requestordercancellation.OutcomeRequested, result.Outcome)
+	assert.Empty(t, e.authorizer.Checks())
 }
 
 // AC-117, AC-118, AC-119: the Order and the cancellation window decide admissibility.
@@ -171,7 +182,7 @@ func TestRequestCancellationReportsWorkflowRefusalAndInvalidInput(t *testing.T) 
 	noRequestID.RequestID = ""
 	_, err = e.handler.Handle(context.Background(), noRequestID)
 	require.ErrorIs(t, err, application.ErrInvalidInput)
-	assert.Len(t, e.authorizer.Checks(), 1, "invalid input is rejected before authorization")
+	assert.Empty(t, e.authorizer.Checks(), "the Customer is not checked; invalid input is rejected before any read")
 }
 
 // fixedWindow is the production cancellation policy with the given window.

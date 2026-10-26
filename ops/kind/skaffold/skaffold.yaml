@@ -340,7 +340,7 @@ deploy:
           image.tag: "{{.IMAGE_TAG_nomnom_kafka_connect}}"
       # Control plane (ADR 41): глобальный реестр Cell, Market и Market Placement; БД и SpiceDB
       # готовит chart ../bootstrap. Cell cell-1 и Market berlin регистрирует Job chart ../demo.
-      # Индекс 11.
+      # Последний release (индекс 11): индексы в patches профилей не меняются.
       - name: controlplane
         chartPath: ../../../boundaries/controlplane/ops/helm
         namespace: nomnom-controlplane
@@ -349,22 +349,6 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_controlplane}}"
           image.tag: "{{.IMAGE_TAG_nomnom_controlplane}}"
-      # Reconciler orders: сверка relations order SpiceDB ↔ PostgreSQL и catch-up проекции
-      # OrderDetails каждые RECONCILER__INTERVAL — строки, изменённые старыми pods во время
-      # rolling update, догоняются без перезапуска (ADR orders 4). Тот же образ и chart,
-      # command /orders-reconciler. Последний release (индекс 12): индексы в patches профилей
-      # не меняются.
-      - name: orders-reconciler
-        chartPath: ../../../boundaries/orders/ops/helm
-        namespace: nomnom-orders
-        createNamespace: true
-        dependsOn: [orders]
-        valuesFiles:
-          - ../../../boundaries/orders/ops/helm/values-reconciler.yaml
-          - ../values/orders-reconciler.yaml
-        setValueTemplates:
-          image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
-          image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
   # (без release e2e и образа e2e-probe) — make kind-test на нём не проходит.

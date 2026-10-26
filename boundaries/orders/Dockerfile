@@ -15,7 +15,7 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -o /out/ ./cmd/orders ./cmd/orders-worker ./cmd/orders-consumer ./cmd/orders-reconciler ./cmd/orders-admin
+    go build -trimpath -o /out/ ./cmd/orders ./cmd/orders-worker ./cmd/orders-consumer ./cmd/orders-admin
 
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
@@ -23,8 +23,6 @@ COPY --from=build --chown=nonroot:nonroot /out/orders /orders
 # Temporal worker того же контекста; запускается отдельным workload с command: ["/orders-worker"].
 COPY --from=build --chown=nonroot:nonroot /out/orders-worker /orders-worker
 # Миграции встроены в процессы и применяются при старте; Outbox публикует Debezium (ADR 37).
-# Reconciliation order#customer SpiceDB ↔ PostgreSQL (docs/security.md).
-COPY --from=build --chown=nonroot:nonroot /out/orders-reconciler /orders-reconciler
 # Kafka consumer того же контекста (ADR 28); command: ["/orders-consumer"].
 COPY --from=build --chown=nonroot:nonroot /out/orders-consumer /orders-consumer
 # Операторские действия: DLQ и перестроение проекций (kubectl exec deploy/orders-consumer -- /orders-admin …).

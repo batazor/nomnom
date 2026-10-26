@@ -8,124 +8,64 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
-// Relation is an Order relation in SpiceDB whose subject is a column of the
-// Order row: the business association the reconciliation compares with.
-type Relation string
-
-const (
-	RelationCustomer   Relation = "customer"
-	RelationRestaurant Relation = "restaurant"
-	RelationDelivery   Relation = "delivery"
-)
-
-// relationColumns is the closed set of columns a relation may read; it keeps
-// query text out of reach of the caller.
-var relationColumns = map[Relation]string{
-	RelationCustomer:   "customer_id",
-	RelationRestaurant: "restaurant_id",
-	RelationDelivery:   "delivery_id",
-}
-
-func (r Relation) column() (string, error) {
-	column, ok := relationColumns[r]
-	if !ok {
-		return "", fmt.Errorf("unknown order relation %q", r)
+// RelationshipSubjects reads the subjects of the Order relations in SpiceDB
+// (ADR 18) — customer_id, restaurant_id, delivery_id — under FOR SHARE of the
+// row: Place Order, Record Courier Assignment and Record Courier Release
+// change them under FOR UPDATE and wait for the sync to commit, then record
+// RelationshipsChanged again.
+func (s *Store) RelationshipSubjects(ctx context.Context, orderID order.ID) (syncorderrelationships.Subjects, error) {
+	var (
+		subjects   syncorderrelationships.Subjects
+		deliveryID *string
+	)
+	err := s.queryRow(ctx, psql.Select("customer_id", "restaurant_id", "delivery_id").
+		From("orders").Where(sq.Eq{"id": orderID}).Suffix("FOR SHARE"),
+		&subjects.CustomerID, &subjects.RestaurantID, &deliveryID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return syncorderrelationships.Subjects{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
 	}
-	return column, nil
-}
-
-// RelationSubject is one Order and the subject id of its relation.
-type RelationSubject struct {
-	OrderID   string
-	SubjectID string
-}
-
-// SubjectsOf returns the subject id of relation for each Order among ids that
-// has one; an Order without the subject (no Delivery yet) is absent.
-func (s *Store) SubjectsOf(ctx context.Context, relation Relation, ids []string) (map[string]string, error) {
-	column, err := relation.column()
 	if err != nil {
-		return nil, err
+		return syncorderrelationships.Subjects{}, fmt.Errorf("read relationship subjects of %s: %w", orderID, err)
 	}
-	rows, err := s.query(ctx, psql.Select("id", column).From("orders").
-		Where("id = ANY(?)", ids).Where(sq.NotEq{column: nil}))
+	subjects.DeliveryID = deref(deliveryID)
+	return subjects, nil
+}
+
+// OrderVersion is the stored version of the Order: the aggregate_version of
+// the RelationshipsChanged notification of a change that keeps the version,
+// such as a Courier Assignment.
+func (s *Store) OrderVersion(ctx context.Context, orderID order.ID) (uint64, error) {
+	var version uint64
+	err := s.queryRow(ctx, psql.Select("version").From("orders").Where(sq.Eq{"id": orderID}), &version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("read order %s subjects: %w", relation, err)
+		return 0, fmt.Errorf("read version of %s: %w", orderID, err)
+	}
+	return version, nil
+}
+
+// OrderIDs pages the ids of all Orders after afterID: orders-admin authz
+// resync syncs every Order with them.
+func (s *Store) OrderIDs(ctx context.Context, afterID order.ID, limit int) ([]order.ID, error) {
+	rows, err := s.query(ctx, psql.Select("id").From("orders").
+		Where(sq.Gt{"id": afterID}).OrderBy("id").Limit(uint64(limit))) //nolint:gosec // limit is a positive page size.
+	if err != nil {
+		return nil, fmt.Errorf("page order ids: %w", err)
 	}
 	defer rows.Close()
-	subjects := make(map[string]string, len(ids))
+	var ids []order.ID
 	for rows.Next() {
-		var id, subject string
-		if err := rows.Scan(&id, &subject); err != nil {
-			return nil, fmt.Errorf("scan order %s subject: %w", relation, err)
+		var id order.ID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan order id: %w", err)
 		}
-		subjects[id] = subject
+		ids = append(ids, id)
 	}
-	return subjects, rows.Err()
-}
-
-// RelationPage pages Orders with a subject of relation by id after afterID.
-func (s *Store) RelationPage(ctx context.Context, relation Relation, afterID string, limit int) ([]RelationSubject, error) {
-	column, err := relation.column()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.query(ctx, psql.Select("id", column).From("orders").
-		Where(sq.Gt{"id": afterID}).Where(sq.NotEq{column: nil}).OrderBy("id").Suffix("LIMIT ?", limit))
-	if err != nil {
-		return nil, fmt.Errorf("page order %s subjects: %w", relation, err)
-	}
-	defer rows.Close()
-	var page []RelationSubject
-	for rows.Next() {
-		var row RelationSubject
-		if err := rows.Scan(&row.OrderID, &row.SubjectID); err != nil {
-			return nil, fmt.Errorf("scan order %s subject: %w", relation, err)
-		}
-		page = append(page, row)
-	}
-	return page, rows.Err()
-}
-
-// RestoreRelation re-reads the subject of relation under a FOR SHARE row lock
-// and, only if the committed Order still names subject, runs restore and
-// stores its revision in the same transaction. Record Courier Assignment and
-// Record Courier Release hold FOR UPDATE on the row from before their SpiceDB
-// write until commit, so the re-read waits for a writer in flight and a later
-// writer waits for the restore: a relationship such a writer just deleted is
-// never restored for the subject it is replacing. false — the Order is gone or
-// names another subject; nothing is written.
-func (s *Store) RestoreRelation(
-	ctx context.Context, relation Relation, orderID, subject string,
-	restore func(context.Context) (application.AuthorizationRevision, error),
-) (bool, error) {
-	column, err := relation.column()
-	if err != nil {
-		return false, err
-	}
-	restored := false
-	err = s.Do(ctx, func(ctx context.Context) error {
-		var current *string
-		err := s.queryRow(ctx, psql.Select(column).From("orders").Where(sq.Eq{"id": orderID}).Suffix("FOR SHARE"), &current)
-		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (current == nil || *current != subject)) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("re-read order %s %s: %w", orderID, relation, err)
-		}
-		revision, err := restore(ctx)
-		if err != nil {
-			return err
-		}
-		if err := s.RememberRevision(ctx, order.ID(orderID), revision); err != nil {
-			return err
-		}
-		restored = true
-		return nil
-	})
-	return restored, err
+	return ids, rows.Err()
 }

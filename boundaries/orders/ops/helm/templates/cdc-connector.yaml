@@ -3,7 +3,7 @@ ADR 37: коннектор Debezium, который доставляет Outbox 
 cdc.connector (контракт Outbox, общий для окружений) поверх cdc.database (адрес базы и
 ссылка на пароль в Kafka Connect). Hook Job после install/upgrade кладёт её в Kafka Connect
 (PUT /connectors/<name>/config: создаёт или обновляет). Release без cdc.enabled (worker,
-consumer, reconciler) коннектор не трогает.
+consumer) коннектор не трогает.
 */ -}}
 {{- if .Values.cdc.enabled }}
 {{- $name := required "cdc.connector.name is required" .Values.cdc.connector.name }}

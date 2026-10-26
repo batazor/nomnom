@@ -11,7 +11,6 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -25,20 +24,18 @@ var now = time.Date(2026, time.October, 25, 12, 30, 0, 0, time.UTC)
 var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
 
 type env struct {
-	store      *repositorytest.Store
-	catalog    *fake.Catalog
-	authorizer *fake.Authorizer
-	workflow   *fake.Workflow
-	handler    placeorder.Handler
+	store    *repositorytest.Store
+	catalog  *fake.Catalog
+	workflow *fake.Workflow
+	handler  placeorder.Handler
 }
 
 func newEnv(t *testing.T) env {
 	t.Helper()
 	e := env{
-		store:      repositorytest.Open(t),
-		catalog:    fake.NewCatalog(),
-		authorizer: fake.NewAuthorizer(),
-		workflow:   fake.NewWorkflow(),
+		store:    repositorytest.Open(t),
+		catalog:  fake.NewCatalog(),
+		workflow: fake.NewWorkflow(),
 	}
 	e.catalog.Put("restaurant-1", placeorder.CatalogSnapshot{
 		MarketID: ordertest.MarketID(t),
@@ -57,8 +54,7 @@ func newEnv(t *testing.T) env {
 		Outbox:          e.store,
 		IdempotencyKeys: e.store,
 		Catalog:         e.catalog,
-		Relationships:   e.authorizer,
-		Revisions:       e.store,
+		Relationships:   e.store,
 		IDs:             &fake.IDs{},
 		Clock:           fake.NewClock(now),
 		Workflow:        e.workflow,
@@ -103,12 +99,9 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 	})[0], records[0])
 	assert.Equal(t, []fulfillment.StartRequest{{OrderID: "order-1"}}, e.workflow.Starts())
 
-	// The creation relationship lets the Customer read the new Order.
-	require.NoError(t, e.authorizer.Check(context.Background(), application.AccessCheck{
-		Subject:    customer,
-		Permission: getorder.PermissionView,
-		Resource:   application.Resource{Type: getorder.ResourceOrder, ID: "order-1"},
-	}))
+	// ADR 18: the relationships of the new Order are synced by
+	// orders-consumer from RelationshipsChanged committed with it.
+	assert.Equal(t, []order.ID{"order-1"}, e.store.RelationshipChanges())
 }
 
 // ADR 41: the Market comes only from the Restaurant of the catalog snapshot; a
@@ -131,6 +124,7 @@ func TestPlaceOrderRequiresMarketOfRestaurant(t *testing.T) {
 	assert.NotErrorIs(t, err, application.ErrInvalidInput)
 	assert.NotErrorIs(t, err, vo.ErrInvalidValue)
 	assert.Empty(t, e.store.OutboxRecords())
+	assert.Empty(t, e.store.RelationshipChanges())
 	assert.Empty(t, e.workflow.Starts())
 }
 
@@ -246,17 +240,6 @@ func TestPlaceOrderIsIdempotentByKey(t *testing.T) {
 	assert.Equal(t, order.ID("order-2"), third.OrderID)
 }
 
-// AC-104: a failed relationship write cancels the placement.
-func TestPlaceOrderFailsClosedWhenRelationshipWriteFails(t *testing.T) {
-	e := newEnv(t)
-	e.authorizer.FailWrites(errors.New("spicedb unavailable"))
-
-	_, err := e.handler.Handle(context.Background(), validInput())
-
-	require.Error(t, err)
-	assertNothingPlaced(t, e)
-}
-
 // AC-105: a failed start after commit keeps the Order; a replay retries it.
 func TestPlaceOrderKeepsOrderWhenStartFails(t *testing.T) {
 	e := newEnv(t)
@@ -319,8 +302,7 @@ func (e env) handlerWithKeys(keys placeorder.IdempotencyKeys) placeorder.Handler
 		Outbox:          e.store,
 		IdempotencyKeys: keys,
 		Catalog:         e.catalog,
-		Relationships:   e.authorizer,
-		Revisions:       e.store,
+		Relationships:   e.store,
 		IDs:             &fake.IDs{},
 		Clock:           fake.NewClock(now),
 		Workflow:        e.workflow,
@@ -374,17 +356,4 @@ func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true, FulfillmentStarted: true}, result)
 	assertNothingPlaced(t, env{store: e.store, workflow: fake.NewWorkflow()})
-}
-
-// FR-440: the revision of the creation-time relationship is stored with the Order.
-func TestPlaceOrderStoresAuthorizationRevision(t *testing.T) {
-	e := newEnv(t)
-
-	result, err := e.handler.Handle(context.Background(), validInput())
-
-	require.NoError(t, err)
-	revision, found, err := e.store.Revision(context.Background(), string(result.OrderID))
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, application.AuthorizationRevision("fake:"+string(result.OrderID)), revision)
 }

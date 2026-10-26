@@ -3,7 +3,6 @@ package spicedb_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/testfixture"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
@@ -23,7 +23,6 @@ import (
 type fakePermissions struct {
 	v1.PermissionsServiceClient
 	checks         []*v1.CheckPermissionRequest
-	writes         []*v1.WriteRelationshipsRequest
 	permissionship v1.CheckPermissionResponse_Permissionship
 	err            error
 }
@@ -31,11 +30,6 @@ type fakePermissions struct {
 func (f *fakePermissions) CheckPermission(_ context.Context, r *v1.CheckPermissionRequest, _ ...grpc.CallOption) (*v1.CheckPermissionResponse, error) {
 	f.checks = append(f.checks, r)
 	return &v1.CheckPermissionResponse{Permissionship: f.permissionship}, f.err
-}
-
-func (f *fakePermissions) WriteRelationships(_ context.Context, r *v1.WriteRelationshipsRequest, _ ...grpc.CallOption) (*v1.WriteRelationshipsResponse, error) {
-	f.writes = append(f.writes, r)
-	return &v1.WriteRelationshipsResponse{WrittenAt: &v1.ZedToken{Token: "zed-1"}}, f.err
 }
 
 var customerCheck = application.AccessCheck{
@@ -86,81 +80,28 @@ func (r revisions) Revision(_ context.Context, id string) (application.Authoriza
 }
 
 // AC-472: the stored revision of an Order makes the check at least as fresh.
-// AC-516: customer and restaurant are written in one request.
-func TestGrantOrderRelationshipsTouchesAndReadsItsWrite(t *testing.T) {
+func TestCheckReadsAtLeastAsFreshAsTheStoredRevision(t *testing.T) {
 	fake := &fakePermissions{permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION}
-	stored := revisions{}
-	a := spicedb.NewAuthorizer(fake, stored, time.Second)
+	a := spicedb.NewAuthorizer(fake, revisions{"order-1": "zed-1"}, time.Second)
 
-	revision, err := a.GrantOrderRelationships(context.Background(), "order-1", "customer-1", "restaurant-1")
-	require.NoError(t, err)
-	assert.Equal(t, application.AuthorizationRevision("zed-1"), revision)
-	stored["order-1"] = revision
 	require.NoError(t, a.Check(context.Background(), customerCheck))
 
-	require.Len(t, fake.writes, 1, "customer and restaurant are written in one request")
-	updates := fake.writes[0].GetUpdates()
-	require.Len(t, updates, 2)
-	assert.Equal(t, v1.RelationshipUpdate_OPERATION_TOUCH, updates[0].GetOperation())
-	assert.Equal(t, "customer", updates[0].GetRelationship().GetRelation())
-	assert.Equal(t, "customer-1", updates[0].GetRelationship().GetSubject().GetObject().GetObjectId())
-	assert.Equal(t, v1.RelationshipUpdate_OPERATION_TOUCH, updates[1].GetOperation())
-	assert.Equal(t, "restaurant", updates[1].GetRelationship().GetRelation())
-	assert.Equal(t, "restaurant", updates[1].GetRelationship().GetSubject().GetObject().GetObjectType())
-	assert.Equal(t, "restaurant-1", updates[1].GetRelationship().GetSubject().GetObject().GetObjectId())
 	assert.Equal(t, "zed-1", fake.checks[0].GetConsistency().GetAtLeastAsFresh().GetToken())
 }
 
-func relationships(updates []*v1.RelationshipUpdate) []string {
-	var out []string
-	for _, u := range updates {
-		r := u.GetRelationship()
-		out = append(out, fmt.Sprintf("%s %s#%s@%s:%s", u.GetOperation(), r.GetResource().GetObjectId(), r.GetRelation(),
-			r.GetSubject().GetObject().GetObjectType(), r.GetSubject().GetObject().GetObjectId()))
-	}
-	return out
+func (f *fakePermissions) ReadRelationships(context.Context, *v1.ReadRelationshipsRequest, ...grpc.CallOption) (grpc.ServerStreamingClient[v1.ReadRelationshipsResponse], error) {
+	return nil, f.err
 }
 
-// AC-518, AC-519: the assignment writes only order#delivery; a change of
-// Delivery touches the new one and deletes the previous one in one request.
-func TestLinkDeliveryReplacesPreviousInOneRequest(t *testing.T) {
-	fake := &fakePermissions{}
-	a := spicedb.NewAuthorizer(fake, nil, time.Second)
-
-	_, err := a.LinkDelivery(context.Background(), "order-1", "delivery-1", "")
-	require.NoError(t, err)
-	revision, err := a.LinkDelivery(context.Background(), "order-1", "delivery-2", "delivery-1")
-	require.NoError(t, err)
-
-	assert.Equal(t, application.AuthorizationRevision("zed-1"), revision)
-	require.Len(t, fake.writes, 2)
-	assert.Equal(t, []string{"OPERATION_TOUCH order-1#delivery@delivery:delivery-1"}, relationships(fake.writes[0].GetUpdates()))
-	assert.Equal(t, []string{
-		"OPERATION_TOUCH order-1#delivery@delivery:delivery-2",
-		"OPERATION_DELETE order-1#delivery@delivery:delivery-1",
-	}, relationships(fake.writes[1].GetUpdates()))
-}
-
-func TestLinkDeliveryFailsAsUnavailable(t *testing.T) {
+// An unavailable SpiceDB fails the sync as a dependency error: the event is
+// redelivered.
+func TestSyncFailsAsUnavailable(t *testing.T) {
 	a := spicedb.NewAuthorizer(&fakePermissions{err: errors.New("unavailable")}, nil, time.Second)
 
-	_, err := a.LinkDelivery(context.Background(), "order-1", "delivery-1", "")
+	_, err := a.SyncOrderRelationships(context.Background(), "order-1", syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"})
 
 	require.ErrorIs(t, err, spicedb.ErrUnavailable)
 	require.ErrorIs(t, err, application.ErrDependencyUnavailable)
-}
-
-// AC-535: a cancelled Delivery deletes order#delivery.
-func TestUnlinkDeliveryDeletesTheRelationship(t *testing.T) {
-	fake := &fakePermissions{}
-	a := spicedb.NewAuthorizer(fake, nil, time.Second)
-
-	revision, err := a.UnlinkDelivery(context.Background(), "order-1", "delivery-1")
-
-	require.NoError(t, err)
-	assert.Equal(t, application.AuthorizationRevision("zed-1"), revision)
-	require.Len(t, fake.writes, 1)
-	assert.Equal(t, []string{"OPERATION_DELETE order-1#delivery@delivery:delivery-1"}, relationships(fake.writes[0].GetUpdates()))
 }
 
 // AC-465, AC-467, AC-518, AC-519, AC-522, AC-534, AC-535 against SpiceDB in a
@@ -184,21 +125,29 @@ func TestAgainstSpiceDB(t *testing.T) {
 	}
 	customer := application.Subject{Kind: application.SubjectUser, ID: "customer-" + orderID}
 
+	sync := func(restaurantID, deliveryID string) {
+		t.Helper()
+		revision, err := a.SyncOrderRelationships(ctx, order.ID(orderID), syncorderrelationships.Subjects{
+			CustomerID: order.CustomerID(customer.ID), RestaurantID: order.RestaurantID(restaurantID), DeliveryID: deliveryID,
+		})
+		require.NoError(t, err)
+		stored[orderID] = revision
+	}
+
+	// AC-516: the sync writes order#customer and order#restaurant.
 	require.ErrorIs(t, check(customer, "view"), application.ErrPermissionDenied)
-	revision, err := a.GrantOrderRelationships(ctx, order.ID(orderID), order.CustomerID(customer.ID), "restaurant-1")
-	require.NoError(t, err)
-	stored[orderID] = revision
+	sync("restaurant-1", "")
 	require.NoError(t, check(customer, "view"))
 	require.NoError(t, check(customer, "cancel"))
 	require.ErrorIs(t, check(application.Subject{Kind: application.SubjectUser, ID: "stranger"}, "view"), application.ErrPermissionDenied)
 
 	// AC-522: restaurant staff view through order#restaurant; the courier
 	// views while delivery#courier names them; nobody but the customer cancels.
+	// The sync replaces the restaurant of the previous state.
 	restaurantID := "restaurant-" + orderID
 	owner := application.Subject{Kind: application.SubjectUser, ID: "owner-" + orderID}
 	touch(t, client, "restaurant", restaurantID, "owner", "user", owner.ID)
-	stored[orderID], err = a.GrantOrderRelationships(ctx, order.ID(orderID), order.CustomerID(customer.ID), order.RestaurantID(restaurantID))
-	require.NoError(t, err)
+	sync(restaurantID, "")
 	require.NoError(t, check(owner, "view"))
 	require.ErrorIs(t, check(owner, "cancel"), application.ErrPermissionDenied)
 
@@ -210,21 +159,20 @@ func TestAgainstSpiceDB(t *testing.T) {
 	touch(t, client, "delivery", deliveryA, "courier", "user", courier1.ID)
 	touch(t, client, "delivery", deliveryB, "courier", "user", courier2.ID)
 	require.ErrorIs(t, check(courier1, "view"), application.ErrPermissionDenied, "no order#delivery yet")
-	stored[orderID], err = a.LinkDelivery(ctx, order.ID(orderID), deliveryA, "")
-	require.NoError(t, err)
+	sync(restaurantID, deliveryA)
 	require.NoError(t, check(courier1, "view"))
 	require.ErrorIs(t, check(courier1, "cancel"), application.ErrPermissionDenied)
 	require.ErrorIs(t, check(courier2, "view"), application.ErrPermissionDenied, "a courier without delivery#courier of this Delivery")
 
-	// AC-519: a change of Delivery replaces the link in one request.
-	stored[orderID], err = a.LinkDelivery(ctx, order.ID(orderID), deliveryB, deliveryA)
-	require.NoError(t, err)
+	// AC-519: a change of Delivery replaces the link; a repeated sync of the
+	// same state changes nothing.
+	sync(restaurantID, deliveryB)
+	sync(restaurantID, deliveryB)
 	require.ErrorIs(t, check(courier1, "view"), application.ErrPermissionDenied, "the stored revision makes the change visible")
 	require.NoError(t, check(courier2, "view"))
 
 	// AC-535: a cancelled Delivery unlinks the Order.
-	stored[orderID], err = a.UnlinkDelivery(ctx, order.ID(orderID), deliveryB)
-	require.NoError(t, err)
+	sync(restaurantID, "")
 	require.ErrorIs(t, check(courier2, "view"), application.ErrPermissionDenied)
 	require.NoError(t, check(customer, "view"))
 

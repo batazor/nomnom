@@ -6,9 +6,11 @@
 //	orders-admin dlq redrive --stream <topic> [--partition <p> --through <offset>]
 //	orders-admin dlq discard --stream <topic> --partition <p> --through <offset> --reason <text>
 //	orders-admin projections catch-up|rebuild order-details
+//	orders-admin authz resync
 //
 // DLQ — dead letters consumer group процесса (ADR 28, runbook docs/dlq.md);
-// проекции — OrderDetails (ADR orders 4).
+// проекции — OrderDetails (ADR orders 4); authz resync — связи order всех
+// заказов в SpiceDB заново из PostgreSQL, когда SpiceDB потерял данные (ADR 18).
 package main
 
 import (
@@ -29,20 +31,25 @@ import (
 	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/domains/order"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
+	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"nomnom/orders/slices/order/infrastructure/repository"
+	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
 
 const serviceName = "orders-admin"
 
 // streams are the topics orders-consumer reads; only their DLQs are its own.
-var streams = []string{ordermessaging.RestaurantOrderEventsTopic, ordermessaging.DeliveryEventsTopic}
+var streams = []string{ordermessaging.RestaurantOrderEventsTopic, ordermessaging.DeliveryEventsTopic, outbound.OrderRelationshipsTopic}
 
 const usage = `usage:
   orders-admin dlq list --stream <topic>
   orders-admin dlq redrive --stream <topic> [--partition <p> --through <offset>]
   orders-admin dlq discard --stream <topic> --partition <p> --through <offset> --reason <text>
-  orders-admin projections catch-up|rebuild order-details`
+  orders-admin projections catch-up|rebuild order-details
+  orders-admin authz resync`
 
 func main() {
 	telemetry.SetupLogging(serviceName)
@@ -73,6 +80,19 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			return fmt.Errorf("load postgres config: %w", err)
 		}
 		return projections(ctx, cfg, args[1:])
+	case "authz":
+		if args[1] != "resync" {
+			return fmt.Errorf("unknown authz action %q\n%s", args[1], usage)
+		}
+		db, err := config.LoadDatabase()
+		if err != nil {
+			return fmt.Errorf("load postgres config: %w", err)
+		}
+		spice, err := config.LoadSpiceDB()
+		if err != nil {
+			return fmt.Errorf("load spicedb config: %w", err)
+		}
+		return resync(ctx, db, spice)
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}
@@ -198,4 +218,44 @@ func projections(ctx context.Context, cfg database.Config, args []string) error 
 	projected, err := store.ReprojectOrderDetails(ctx, scope)
 	slog.InfoContext(ctx, "order details projected", slog.String("scope", string(scope)), slog.Int("orders", projected))
 	return err
+}
+
+// resyncPage bounds the Orders read at once by authz resync.
+const resyncPage = 500
+
+// resync runs Sync Order Relationships for every Order, the same use case
+// orders-consumer runs for RelationshipsChanged.
+func resync(ctx context.Context, db database.Config, spice config.SpiceDBConfig) error {
+	store, err := repository.Open(ctx, db)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	client, err := spicedb.Dial(spice)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	sync := syncorderrelationships.NewHandler(store, store, spicedb.NewAuthorizer(client, nil, spice.Timeout), store)
+
+	synced := 0
+	var after order.ID
+	for {
+		ids, err := store.OrderIDs(ctx, after, resyncPage)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if _, err := sync.Handle(ctx, syncorderrelationships.Input{OrderID: id}); err != nil {
+				return fmt.Errorf("resync after %d orders: %w", synced, err)
+			}
+			synced++
+		}
+		if len(ids) < resyncPage {
+			break
+		}
+		after = ids[len(ids)-1]
+	}
+	slog.InfoContext(ctx, "order relationships resynced", slog.Int("orders", synced))
+	return nil
 }

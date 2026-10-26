@@ -79,18 +79,26 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, application.InvalidInput("request_id", "is required")
 	}
 
-	err := h.deps.Authorizer.Check(ctx, application.AccessCheck{
-		Subject:    in.Subject,
-		Permission: PermissionCancel,
-		Resource:   application.Resource{Type: ResourceOrder, ID: string(in.OrderID)},
-	})
-	if err := application.FailClosed(err); err != nil {
-		return Result{}, err
+	// The Customer cancels the own Order by customer_id: order#customer is
+	// written after the placement commit (ADR 18). Any other subject, and any
+	// subject of a missing Order, passes the cancel check first.
+	current, readErr := h.deps.Orders.Get(ctx, in.OrderID)
+	missing := errors.Is(readErr, order.ErrOrderNotFound)
+	if readErr != nil && !missing {
+		return Result{}, readErr
 	}
-
-	current, err := h.deps.Orders.Get(ctx, in.OrderID)
-	if err != nil {
-		return Result{}, err
+	if missing || !in.Subject.IsUser(string(current.CustomerID())) {
+		err := h.deps.Authorizer.Check(ctx, application.AccessCheck{
+			Subject:    in.Subject,
+			Permission: PermissionCancel,
+			Resource:   application.Resource{Type: ResourceOrder, ID: string(in.OrderID)},
+		})
+		if err := application.FailClosed(err); err != nil {
+			return Result{}, err
+		}
+		if missing {
+			return Result{}, readErr
+		}
 	}
 	window, err := h.deps.Policy.Window(ctx, current.PlacedAt())
 	if err != nil {

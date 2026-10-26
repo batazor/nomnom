@@ -9,6 +9,7 @@ import (
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/fulfillment"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
@@ -66,19 +67,6 @@ type Catalog interface {
 	Snapshot(ctx context.Context, restaurantID order.RestaurantID, menuItemIDs []order.MenuItemID) (CatalogSnapshot, error)
 }
 
-// Relationships writes the creation relationships order#customer and
-// order#restaurant in one request before commit and returns the revision of
-// that write.
-type Relationships interface {
-	GrantOrderRelationships(ctx context.Context, orderID order.ID, customerID order.CustomerID, restaurantID order.RestaurantID) (application.AuthorizationRevision, error)
-}
-
-// Revisions stores the authorization revision with the Order in the active
-// transaction, so later checks read at least as fresh as the relationship.
-type Revisions interface {
-	RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error
-}
-
 type IDGenerator interface {
 	NewOrderID(ctx context.Context) (order.ID, error)
 }
@@ -107,11 +95,14 @@ type Dependencies struct {
 	Outbox          Outbox
 	IdempotencyKeys IdempotencyKeys
 	Catalog         Catalog
-	Relationships   Relationships
-	Revisions       Revisions
-	IDs             IDGenerator
-	Clock           application.Clock
-	Workflow        fulfillment.Starter
+	// Relationships records RelationshipsChanged of the new Order in the
+	// placement transaction: orders-consumer writes order#customer and
+	// order#restaurant afterwards (ADR 18). The Customer reads and cancels the
+	// own Order by customer_id before that.
+	Relationships syncorderrelationships.Changes
+	IDs           IDGenerator
+	Clock         application.Clock
+	Workflow      fulfillment.Starter
 }
 
 type Handler struct {
@@ -158,17 +149,11 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	revision, err := h.deps.Relationships.GrantOrderRelationships(ctx, orderID, customerID, in.RestaurantID)
-	if err != nil {
-		return Result{}, fmt.Errorf("write order relationships: %w", err)
-	}
-
 	// Events are pulled once so that a retried transaction writes them again.
 	events := placed.PullEvents()
 	result := Result{OrderID: orderID}
 	err = h.deps.UnitOfWork.Do(ctx, func(ctx context.Context) error {
-		// A concurrent request with the same key may have committed meanwhile;
-		// the relationship written above is then left to reconciliation.
+		// A concurrent request with the same key may have committed meanwhile.
 		existing, found, err := h.deps.IdempotencyKeys.FindOrder(ctx, customerID, in.IdempotencyKey)
 		if err != nil {
 			return fmt.Errorf("find idempotency key: %w", err)
@@ -183,17 +168,14 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		if err := h.deps.IdempotencyKeys.RememberOrder(ctx, customerID, in.IdempotencyKey, orderID); err != nil {
 			return fmt.Errorf("remember idempotency key: %w", err)
 		}
-		if revision != "" {
-			if err := h.deps.Revisions.RememberRevision(ctx, orderID, revision); err != nil {
-				return fmt.Errorf("remember authorization revision: %w", err)
-			}
+		if err := h.deps.Relationships.RelationshipsChanged(ctx, orderID); err != nil {
+			return fmt.Errorf("record relationships change: %w", err)
 		}
 		return h.deps.Outbox.Append(ctx, orderID, placed.Version()+1, events)
 	})
 	if errors.Is(err, ErrIdempotencyKeyTaken) {
 		// The concurrent request committed while this one waited on the key:
-		// replay its Order. The relationship written above is left to
-		// reconciliation.
+		// replay its Order.
 		result, err = h.replayConcurrent(ctx, customerID, in.IdempotencyKey)
 	}
 	if err != nil {

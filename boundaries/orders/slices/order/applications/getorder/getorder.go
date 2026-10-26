@@ -3,6 +3,7 @@ package getorder
 
 import (
 	"context"
+	"errors"
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/orderdetails"
@@ -39,8 +40,11 @@ func NewHandler(authorizer Authorizer, reader Reader, policy orderdetails.Cancel
 	return Handler{authorizer: authorizer, reader: reader, policy: policy}
 }
 
-// Handle authorizes before reading, so a denied subject learns nothing about
-// whether the Order exists.
+// Handle lets the Customer read the own Order by customer_id: order#customer
+// is written after the placement commit (ADR 18), and the Customer opens the
+// Order right after placing it. Any other subject, and any subject of a
+// missing Order, passes the view check before the result: a denied subject
+// learns nothing about whether the Order exists.
 func (h Handler) Handle(ctx context.Context, q Query) (orderdetails.View, error) {
 	if err := q.Subject.Validate(); err != nil {
 		return orderdetails.View{}, err
@@ -48,17 +52,23 @@ func (h Handler) Handle(ctx context.Context, q Query) (orderdetails.View, error)
 	if q.OrderID == "" {
 		return orderdetails.View{}, application.InvalidInput("order_id", "is required")
 	}
-	err := h.authorizer.Check(ctx, application.AccessCheck{
-		Subject:    q.Subject,
-		Permission: PermissionView,
-		Resource:   application.Resource{Type: ResourceOrder, ID: string(q.OrderID)},
-	})
-	if err := application.FailClosed(err); err != nil {
-		return orderdetails.View{}, err
+	details, readErr := h.reader.OrderDetails(ctx, q.OrderID)
+	missing := errors.Is(readErr, order.ErrOrderNotFound)
+	if readErr != nil && !missing {
+		return orderdetails.View{}, readErr
 	}
-	details, err := h.reader.OrderDetails(ctx, q.OrderID)
-	if err != nil {
-		return orderdetails.View{}, err
+	if missing || !q.Subject.IsUser(string(details.CustomerID)) {
+		err := h.authorizer.Check(ctx, application.AccessCheck{
+			Subject:    q.Subject,
+			Permission: PermissionView,
+			Resource:   application.Resource{Type: ResourceOrder, ID: string(q.OrderID)},
+		})
+		if err := application.FailClosed(err); err != nil {
+			return orderdetails.View{}, err
+		}
+		if missing {
+			return orderdetails.View{}, readErr
+		}
 	}
 	return orderdetails.Present(ctx, h.policy, details), nil
 }

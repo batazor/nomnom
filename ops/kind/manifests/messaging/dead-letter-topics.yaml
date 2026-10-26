@@ -8,6 +8,7 @@
 #   orders.v1.order-events.dlq               — группа restaurants
 #   restaurants.v1.restaurant-order-events.dlq — группа orders
 #   delivery.v1.delivery-events.dlq          — группа orders
+#   orders.v1.order-relationships.dlq        — группа orders (внутренний стрим, ADR 18)
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -45,6 +46,7 @@ spec:
                 orders.v1.order-events.dlq
                 restaurants.v1.restaurant-order-events.dlq
                 delivery.v1.delivery-events.dlq
+                orders.v1.order-relationships.dlq
             # 30 дней: окно разбора DLQ (docs/dlq.md).
             - name: RETENTION_MS
               value: "2592000000"

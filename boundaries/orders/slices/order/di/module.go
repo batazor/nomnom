@@ -9,6 +9,7 @@ import (
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
+	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
@@ -23,13 +24,13 @@ type Module struct {
 
 // PlacementStore — роль хранилища command use cases API: Unit of Work,
 // repository и Outbox Place Order и Request Order Cancellation, idempotency
-// keys и authorization revision Place Order.
+// keys и RelationshipsChanged нового Order.
 type PlacementStore interface {
 	application.UnitOfWork
 	order.Repository
 	placeorder.Outbox
 	placeorder.IdempotencyKeys
-	placeorder.Revisions
+	syncorderrelationships.Changes
 }
 
 // ReadModels — роль хранилища queries API и gauge состояний.
@@ -65,8 +66,7 @@ func NewModule(deps Dependencies) *Module {
 		Outbox:          store,
 		IdempotencyKeys: store,
 		Catalog:         deps.Catalog,
-		Relationships:   authorizer,
-		Revisions:       store,
+		Relationships:   store,
 		IDs:             deps.IDs,
 		Clock:           deps.Clock,
 		Workflow:        deps.Workflow,

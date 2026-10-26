@@ -29,8 +29,6 @@ var (
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
 	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
-	// spiceDBSet — клиент SpiceDB процесса orders-reconciler.
-	spiceDBSet = wire.NewSet(NewSpiceDBClient)
 	// storeSet — store процесса на схеме, мигрированной наборами di/schema,
 	// в ролях портов слайса order.
 	storeSet = wire.NewSet(NewStore, orderdi.RepositorySet)
@@ -55,10 +53,5 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 
 func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.ConsumerSet, NewKafkaConsumer)
-	return nil, nil, nil
-}
-
-func InitializeReconciler(cfg config.Config) (*RelationshipReconciler, func(), error) {
-	wire.Build(configSet, storeSet, spiceDBSet, NewRelationshipReconciler)
 	return nil, nil, nil
 }
