@@ -87,6 +87,16 @@ Telemetry инициализируется до приложения и заве
 
 Probes используют реальные health interfaces на техническом порту, включая `startupProbe`; `terminationGracePeriodSeconds` соответствует shutdown contract; ServiceAccount token по умолчанию не монтируется; lifecycle hooks не заменяют graceful shutdown приложения, а `preStop` добавляется только позднее и под конкретную необходимость.
 
+### Базовые правила workloads проверяет API server
+
+Часть contract, которую можно проверить по манифесту, проверяется при admission, а не review: [ValidatingAdmissionPolicy](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/) на CEL с `validationActions: [Deny]` для Pods, Deployments, StatefulSets, DaemonSets, Jobs и CronJobs в неймспейсах nomnom (`nomnom.dev/tier`: `app`, `infra`, `gateway`, `outsider`). Правила:
+
+- каждый container и initContainer задаёт `resources.requests.memory` и `resources.limits.memory`. Память не сжимается: без limit один pod вытесняет остальные с узла, а runtime не может согласовать heap с limit. CPU requests и limits не обязательны: CPU сжимается, CPU limit даёт throttling, а значения requests выбираются под окружение;
+- образ закреплён digest или явным tag, кроме `latest`: развёрнутая версия однозначна и воспроизводима;
+- pod template несёт label `app.kubernetes.io/name` — источник `service.name` для Kubernetes в OpenTelemetry semantic conventions; остальные recommended labels charts задаёт [ADR 12](0012-helm-charts-per-deployable-application.md).
+
+Policy встроена в API server: без controller, webhook и отдельных pods, поэтому не нагружает стенд и не становится точкой отказа admission. Kyverno и OPA Gatekeeper не используются: им нужен свой controller, а правила проверяются CEL. Нарушение отклоняет `helm install` или `kubectl apply` сообщением правила, а не всплывает позже ошибкой ReplicaSet. `UPDATE` проверяется только при изменении `spec`, чтобы снятие finalizers у объектов, созданных до policy, не блокировалось. Системные неймспейсы и Envoy Proxy (pods создаёт controller Envoy Gateway) не входят в область. Манифест — [`ops/kind/manifests/admission/workload-baseline.yaml`](../../ops/kind/manifests/admission/workload-baseline.yaml); новое правило добавляется туда же, если его можно выразить по одному объекту без внешних данных.
+
 ## Consequences
 
 Rolling update, drain узла и scale-down становятся штатными операциями без потери принятых запросов и без подтверждения необработанных сообщений. Отказ внешней зависимости проявляется как деградация отдельных операций, а не как restart loop или одновременное исключение всех экземпляров. Одинаковая семантика health и shutdown во всех языках упрощает charts, эксплуатацию и диагностику, а бизнес-код остаётся переносимым и тестируемым без Kubernetes.

@@ -184,6 +184,8 @@ deploy:
         # deploy (ADR 8, ADR 31), JWKS кластера, BFF и тестового identity provider (ADR 27,
         # ADR 32). --wait ждёт readiness хранилищ, затем hook Jobs инициализируют replica set
         # MongoDB и публикуют JWKS. --take-ownership принимает ресурсы, созданные до chart.
+        # Admission-политика workloads (ADR 17) — до первого workload, иначе chart bootstrap и
+        # charts приложений прошли бы мимо неё.
         - host:
             command:
               - sh
@@ -191,6 +193,7 @@ deploy:
               - |
                 set -eu
                 kubectl --context "$SKAFFOLD_KUBE_CONTEXT" apply -f ../manifests/base/namespaces.yaml
+                kubectl --context "$SKAFFOLD_KUBE_CONTEXT" apply -f ../manifests/admission/workload-baseline.yaml
                 helm upgrade --install bootstrap ../bootstrap --kube-context "$SKAFFOLD_KUBE_CONTEXT" \
                   --namespace nomnom-data --take-ownership --server-side=true --force-conflicts \
                   --wait --timeout 10m \

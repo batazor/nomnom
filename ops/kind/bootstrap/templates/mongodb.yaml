@@ -68,6 +68,11 @@ spec:
         - name: keyfile
           image: {{ .Values.images.mongodb }}
           command: ["sh", "-c", "cp /secret/keyfile /keyfile/keyfile && chmod 0400 /keyfile/keyfile"]
+          resources:
+            requests:
+              memory: 16Mi
+            limits:
+              memory: 64Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -218,6 +223,12 @@ spec:
                 secretKeyRef:
                   name: mongodb-restaurants
                   key: password
+          # mongosh — Node.js: heap процесса больше, чем у mongod-утилит.
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

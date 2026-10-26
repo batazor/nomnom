@@ -277,7 +277,8 @@ Telemetry инициализируется первой, чтобы ошибки
 - `terminationGracePeriodSeconds` соответствует бюджету shutdown приложения;
 - ServiceAccount token по умолчанию не монтируется;
 - lifecycle hooks не заменяют graceful shutdown приложения; `preStop` — опционально, позднее и под конкретную необходимость;
-- сервисы с входящим трафиком получают `PodDisruptionBudget` и не менее двух реплик в окружениях, где важна доступность.
+- сервисы с входящим трафиком получают `PodDisruptionBudget` и не менее двух реплик в окружениях, где важна доступность;
+- каждый container и initContainer задаёт `resources.requests.memory` и `resources.limits.memory`, образ закреплён digest или tag кроме `latest`, pod template несёт `app.kubernetes.io/name`. Эти правила отклоняет при admission ValidatingAdmissionPolicy [`nomnom-workload-baseline`](../ops/kind/manifests/admission/workload-baseline.yaml) ([ADR 17](adr/0017-cloud-native-application-runtime.md)).
 
 ## Ответственность слоёв
 

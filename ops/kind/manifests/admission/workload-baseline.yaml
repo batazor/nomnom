@@ -1,0 +1,95 @@
+# Базовые правила workloads (ADR 17): ValidatingAdmissionPolicy на CEL выполняется в API server,
+# без controller и webhook. Нарушение отклоняет create/update — helm install и kubectl apply
+# падают сразу с сообщением правила, а не зависают на status check.
+#
+# Правила:
+#   - каждый container и initContainer задаёт resources.requests.memory и resources.limits.memory:
+#     память не сжимается, без limit один pod вытесняет остальные с узла. CPU не обязателен —
+#     сжимаемый ресурс, CPU limit даёт throttling, а requests на одноузловом стенде не планируют;
+#   - образ закреплён: digest (@sha256:) или явный tag, кроме latest;
+#   - pod template несёт label app.kubernetes.io/name — источник service.name ресурса в
+#     OpenTelemetry semantic conventions для Kubernetes.
+#
+# Область — неймспейсы с label nomnom.dev/tier: app, infra, gateway, outsider. Системные
+# неймспейсы и envoy-gateway-system (pods Envoy Proxy создаёт controller) не входят.
+# Ephemeral containers (kubectl debug) не проверяются: это subresource pods.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: nomnom-workload-baseline
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE]
+        resources: [pods]
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [deployments, statefulsets, daemonsets]
+      - apiGroups: [batch]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [jobs, cronjobs]
+  # UPDATE проверяется только при изменении spec: снятие finalizers и правка metadata у объекта,
+  # созданного до политики, не блокируются.
+  matchConditions:
+    - name: spec-changed
+      expression: request.operation == 'CREATE' || object.spec != oldObject.spec
+  variables:
+    - name: template
+      expression: >-
+        object.kind == 'Pod' ? object :
+        object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template :
+        object.spec.template
+    - name: containers
+      expression: >-
+        variables.template.spec.containers +
+        (has(variables.template.spec.initContainers) ? variables.template.spec.initContainers : [])
+    - name: withoutMemory
+      expression: >-
+        variables.containers.filter(c,
+          !has(c.resources) ||
+          !has(c.resources.requests) || !('memory' in c.resources.requests) ||
+          !has(c.resources.limits) || !('memory' in c.resources.limits)
+        ).map(c, c.name)
+    # Tag — суффикс после последнего ':' без '/': localhost:5000/repo — это порт registry, не tag.
+    - name: unpinnedImages
+      expression: >-
+        variables.containers.filter(c,
+          !c.image.contains('@sha256:') &&
+          (!c.image.matches(':[^:/]+$') || c.image.endsWith(':latest'))
+        ).map(c, c.name + '=' + c.image)
+  validations:
+    - expression: size(variables.withoutMemory) == 0
+      messageExpression: >-
+        'containers must set resources.requests.memory and resources.limits.memory: ' +
+        variables.withoutMemory.join(', ')
+      reason: Invalid
+    - expression: size(variables.unpinnedImages) == 0
+      messageExpression: >-
+        'images must be pinned by digest or an explicit tag other than latest: ' +
+        variables.unpinnedImages.join(', ')
+      reason: Invalid
+    - expression: >-
+        has(variables.template.metadata) && has(variables.template.metadata.labels) &&
+        'app.kubernetes.io/name' in variables.template.metadata.labels &&
+        variables.template.metadata.labels['app.kubernetes.io/name'] != ''
+      message: pod template must carry the app.kubernetes.io/name label
+      reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: nomnom-workload-baseline
+spec:
+  policyName: nomnom-workload-baseline
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: nomnom.dev/tier
+          operator: In
+          values: [app, infra, gateway, outsider]

@@ -163,6 +163,11 @@ spec:
               value: {{ .Values.identity.bffKeyId | quote }}
             - name: JWKS_NAMESPACES
               value: {{ join " " $namespaces | quote }}
+          resources:
+            requests:
+              memory: 32Mi
+            limits:
+              memory: 128Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
