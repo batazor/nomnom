@@ -478,6 +478,131 @@ func (x *RestaurantClosed) GetRestaurantId() string {
 	return ""
 }
 
+// В меню добавлен Menu Item (Add Menu Item). Состав и цену соседи читают через
+// GetMenu: событие несёт только ключи.
+type MenuItemAdded struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MenuId        string                 `protobuf:"bytes,1,opt,name=menu_id,json=menuId,proto3" json:"menu_id,omitempty"`
+	RestaurantId  string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	MenuItemId    string                 `protobuf:"bytes,3,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MenuItemAdded) Reset() {
+	*x = MenuItemAdded{}
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MenuItemAdded) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MenuItemAdded) ProtoMessage() {}
+
+func (x *MenuItemAdded) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MenuItemAdded.ProtoReflect.Descriptor instead.
+func (*MenuItemAdded) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MenuItemAdded) GetMenuId() string {
+	if x != nil {
+		return x.MenuId
+	}
+	return ""
+}
+
+func (x *MenuItemAdded) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *MenuItemAdded) GetMenuItemId() string {
+	if x != nil {
+		return x.MenuItemId
+	}
+	return ""
+}
+
+// Изменились название, описание или цена Menu Item (Update Menu Item). Новые
+// значения соседи читают через GetMenu; заказ хранит снимок цены на момент
+// Place Order, поэтому уже оформленные заказы не меняются.
+type MenuItemUpdated struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MenuId        string                 `protobuf:"bytes,1,opt,name=menu_id,json=menuId,proto3" json:"menu_id,omitempty"`
+	RestaurantId  string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	MenuItemId    string                 `protobuf:"bytes,3,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MenuItemUpdated) Reset() {
+	*x = MenuItemUpdated{}
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MenuItemUpdated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MenuItemUpdated) ProtoMessage() {}
+
+func (x *MenuItemUpdated) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MenuItemUpdated.ProtoReflect.Descriptor instead.
+func (*MenuItemUpdated) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *MenuItemUpdated) GetMenuId() string {
+	if x != nil {
+		return x.MenuId
+	}
+	return ""
+}
+
+func (x *MenuItemUpdated) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *MenuItemUpdated) GetMenuItemId() string {
+	if x != nil {
+		return x.MenuItemId
+	}
+	return ""
+}
+
 // Изменилась доступность Menu Item (Set Menu Item Availability или Update Menu
 // Item с новой доступностью); available — новое значение.
 type MenuItemAvailabilityChanged struct {
@@ -492,7 +617,7 @@ type MenuItemAvailabilityChanged struct {
 
 func (x *MenuItemAvailabilityChanged) Reset() {
 	*x = MenuItemAvailabilityChanged{}
-	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[9]
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -504,7 +629,7 @@ func (x *MenuItemAvailabilityChanged) String() string {
 func (*MenuItemAvailabilityChanged) ProtoMessage() {}
 
 func (x *MenuItemAvailabilityChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[9]
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -517,7 +642,7 @@ func (x *MenuItemAvailabilityChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MenuItemAvailabilityChanged.ProtoReflect.Descriptor instead.
 func (*MenuItemAvailabilityChanged) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{9}
+	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MenuItemAvailabilityChanged) GetMenuId() string {
@@ -576,7 +701,17 @@ const file_nomnom_restaurants_v1_events_proto_rawDesc = "" +
 	"\x10RestaurantOpened\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\"7\n" +
 	"\x10RestaurantClosed\x12#\n" +
-	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\"\x9b\x01\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\"o\n" +
+	"\rMenuItemAdded\x12\x17\n" +
+	"\amenu_id\x18\x01 \x01(\tR\x06menuId\x12#\n" +
+	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x12 \n" +
+	"\fmenu_item_id\x18\x03 \x01(\tR\n" +
+	"menuItemId\"q\n" +
+	"\x0fMenuItemUpdated\x12\x17\n" +
+	"\amenu_id\x18\x01 \x01(\tR\x06menuId\x12#\n" +
+	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x12 \n" +
+	"\fmenu_item_id\x18\x03 \x01(\tR\n" +
+	"menuItemId\"\x9b\x01\n" +
 	"\x1bMenuItemAvailabilityChanged\x12\x17\n" +
 	"\amenu_id\x18\x01 \x01(\tR\x06menuId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x12 \n" +
@@ -597,7 +732,7 @@ func file_nomnom_restaurants_v1_events_proto_rawDescGZIP() []byte {
 	return file_nomnom_restaurants_v1_events_proto_rawDescData
 }
 
-var file_nomnom_restaurants_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_nomnom_restaurants_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_nomnom_restaurants_v1_events_proto_goTypes = []any{
 	(*RestaurantOrderAccepted)(nil),     // 0: nomnom.restaurants.v1.RestaurantOrderAccepted
 	(*RestaurantOrderRejected)(nil),     // 1: nomnom.restaurants.v1.RestaurantOrderRejected
@@ -608,12 +743,14 @@ var file_nomnom_restaurants_v1_events_proto_goTypes = []any{
 	(*RestaurantOrderCancelled)(nil),    // 6: nomnom.restaurants.v1.RestaurantOrderCancelled
 	(*RestaurantOpened)(nil),            // 7: nomnom.restaurants.v1.RestaurantOpened
 	(*RestaurantClosed)(nil),            // 8: nomnom.restaurants.v1.RestaurantClosed
-	(*MenuItemAvailabilityChanged)(nil), // 9: nomnom.restaurants.v1.MenuItemAvailabilityChanged
-	(*timestamppb.Timestamp)(nil),       // 10: google.protobuf.Timestamp
+	(*MenuItemAdded)(nil),               // 9: nomnom.restaurants.v1.MenuItemAdded
+	(*MenuItemUpdated)(nil),             // 10: nomnom.restaurants.v1.MenuItemUpdated
+	(*MenuItemAvailabilityChanged)(nil), // 11: nomnom.restaurants.v1.MenuItemAvailabilityChanged
+	(*timestamppb.Timestamp)(nil),       // 12: google.protobuf.Timestamp
 }
 var file_nomnom_restaurants_v1_events_proto_depIdxs = []int32{
-	10, // 0: nomnom.restaurants.v1.RestaurantOrderAccepted.expected_ready_at:type_name -> google.protobuf.Timestamp
-	10, // 1: nomnom.restaurants.v1.PreparationDelayed.expected_ready_at:type_name -> google.protobuf.Timestamp
+	12, // 0: nomnom.restaurants.v1.RestaurantOrderAccepted.expected_ready_at:type_name -> google.protobuf.Timestamp
+	12, // 1: nomnom.restaurants.v1.PreparationDelayed.expected_ready_at:type_name -> google.protobuf.Timestamp
 	2,  // [2:2] is the sub-list for method output_type
 	2,  // [2:2] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
@@ -632,7 +769,7 @@ func file_nomnom_restaurants_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_restaurants_v1_events_proto_rawDesc), len(file_nomnom_restaurants_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -310,10 +310,11 @@ test("AddMenuItem maps invalid input and a missing menu to gRPC errors", async (
   );
 });
 
-test("FR-214 UpdateMenuItem changes only the set fields and publishes availability", async () => {
+test("FR-214 FR-613 UpdateMenuItem changes only the set fields and publishes its facts", async () => {
   const { world, as, menuFacts } = await createWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
+  assert.deepEqual(await menuFacts(), ["MenuItemAdded"], "AC-773");
 
   const renamed = await as(owner).updateMenuItem(
     create(UpdateMenuItemRequestSchema, {
@@ -326,7 +327,11 @@ test("FR-214 UpdateMenuItem changes only the set fields and publishes availabili
   assert.equal(renamed.changed, true);
   assert.equal(renamed.menuItem?.name, "Pho");
   assert.equal(renamed.menuItem?.price?.amount, "11.00");
-  assert.deepEqual(await menuFacts(), [], "AC-228 no business fact");
+  assert.deepEqual(
+    await menuFacts(),
+    ["MenuItemAdded", "MenuItemUpdated"],
+    "AC-774 price change",
+  );
 
   const unavailable = await as(owner).updateMenuItem(
     create(UpdateMenuItemRequestSchema, {
@@ -339,7 +344,12 @@ test("FR-214 UpdateMenuItem changes only the set fields and publishes availabili
   );
   assert.equal(unavailable.menuItem?.name, "Pho Bo");
   assert.equal(unavailable.menuItem?.available, false);
-  assert.deepEqual(await menuFacts(), ["MenuItemAvailabilityChanged"]);
+  assert.deepEqual(await menuFacts(), [
+    "MenuItemAdded",
+    "MenuItemUpdated",
+    "MenuItemUpdated",
+    "MenuItemAvailabilityChanged",
+  ]);
 
   const repeated = await as(owner).updateMenuItem(
     create(UpdateMenuItemRequestSchema, {
@@ -386,7 +396,10 @@ test("FR-215 AC-714 SetMenuItemAvailability writes the fact once and a repeat is
   );
   assert.equal(changed.changed, true);
   assert.equal(changed.menuItem?.available, false);
-  assert.deepEqual(await menuFacts(), ["MenuItemAvailabilityChanged"]);
+  assert.deepEqual(await menuFacts(), [
+    "MenuItemAdded",
+    "MenuItemAvailabilityChanged",
+  ]);
 
   const repeated = await as(owner).setMenuItemAvailability(
     create(SetMenuItemAvailabilityRequestSchema, {
@@ -398,7 +411,10 @@ test("FR-215 AC-714 SetMenuItemAvailability writes the fact once and a repeat is
   );
   assert.equal(repeated.changed, false, "AC-231");
   assert.equal(repeated.version, changed.version);
-  assert.deepEqual(await menuFacts(), ["MenuItemAvailabilityChanged"]);
+  assert.deepEqual(await menuFacts(), [
+    "MenuItemAdded",
+    "MenuItemAvailabilityChanged",
+  ]);
 });
 
 test("AC-220 AC-715 menu commands without restaurant#manage_menu are PERMISSION_DENIED", async () => {
@@ -441,7 +457,8 @@ test("AC-220 AC-715 menu commands without restaurant#manage_menu are PERMISSION_
     await assert.rejects(call, rejectsWith(Code.PermissionDenied));
   }
   assert.deepEqual(await world.getMenu.execute({ restaurantId }), menuBefore);
-  assert.deepEqual(await menuFacts(), []);
+  // Only the setup's MenuItemAdded: denied commands write nothing.
+  assert.deepEqual(await menuFacts(), ["MenuItemAdded"]);
 });
 
 test("menu commands require restaurant_id and menu_item_id", async () => {

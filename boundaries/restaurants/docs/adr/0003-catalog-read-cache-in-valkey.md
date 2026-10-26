@@ -24,7 +24,7 @@ Order и так читает каталог до своей транзакции
 | Чтение | Ключ Valkey | Обновляется сразу по |
 | --- | --- | --- |
 | `GetRestaurant` (`RestaurantView`) | `restaurants:restaurant:<restaurantId>` | `RestaurantOpened`, `RestaurantClosed` |
-| `GetMenu` (`MenuView`) | `restaurants:menu:<restaurantId>` | `MenuItemAvailabilityChanged` |
+| `GetMenu` (`MenuView`) | `restaurants:menu:<restaurantId>` | `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` |
 | `ListRestaurants` (страница) | `restaurants:list:<поколение>:<open\|all>:<limit>:<after>` | `RestaurantOpened`, `RestaurantClosed` (новое поколение) |
 
 `ListOwnedRestaurants`, кухонные чтения и команды кеш не используют. Отсутствующий ресторан или
@@ -35,10 +35,11 @@ Order и так читает каталог до своей транзакции
 `pkg/infrastructure/valkey/read-cache.ts`: промах читает MongoDB и кладёт JSON результата
 `SET NX` с `CACHE__TTL` (1m), не задерживая ответ.
 
-Открытие, закрытие и доступность блюда пользователь должен видеть сразу, поэтому кеш
-обновляется по Integration Events, которые `restaurants` уже публикует через Outbox и Debezium:
-`RestaurantOpened`/`RestaurantClosed` (`restaurants.v1.restaurant-events`) и
-`MenuItemAvailabilityChanged` (`restaurants.v1.menu-events`). `restaurants-consumer` читает их
+Открытие, закрытие, новое блюдо, цену, название и доступность блюда пользователь должен видеть
+сразу, поэтому кеш обновляется по Integration Events, которые `restaurants` публикует через
+Outbox и Debezium: `RestaurantOpened`/`RestaurantClosed` (`restaurants.v1.restaurant-events`) и
+`MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` (`restaurants.v1.menu-events`;
+`MenuItemAdded` и `MenuItemUpdated` добавлены в контракт ради этого, FR-613). `restaurants-consumer` читает их
 своей consumer group `CACHE__REFRESH_GROUP` (`restaurants-cache`, новая группа начинает с конца
 стрима; `pkg/infrastructure/valkey/refresh.ts`), перечитывает ресторан или меню из MongoDB уже
 после commit и перезаписывает ключ обычным `SET` с TTL. Для ресторана ещё увеличивается
@@ -56,8 +57,8 @@ TTL.
 (закрыли и сразу открыли) безопасны без Inbox. Пока Valkey недоступен, обработка повторяется с
 backoff и offset не коммитится: после восстановления все обновления применяются.
 
-Изменения без Integration Event — цена, название и описание блюда, переименование ресторана,
-новый ресторан — видны не позже TTL. Если это окно станет неприемлемым, нужен контракт события
+Изменения без Integration Event — переименование и адрес ресторана, новый ресторан — видны не
+позже TTL. Если это окно станет неприемлемым, нужен контракт события
 для такого изменения, а не меньший TTL.
 
 ### Valkey и отказ
@@ -76,7 +77,7 @@ backoff и offset не коммитится: после восстановлен
 ## Consequences
 
 - Повторные чтения каталога не обращаются к MongoDB.
-- Открытие, закрытие ресторана и доступность блюда видны в кеше через отставание CDC (alert
+- Открытие, закрытие ресторана и изменения меню видны в кеше через отставание CDC (alert
   `cdc-lag`) плюс обработку consumer'а; остальные изменения — до `CACHE__TTL`.
 - `restaurants-consumer` зависит от Valkey: без него обновления ждут, offsets стоят.
 - Отказ Valkey — рост латентности и нагрузки на MongoDB, не ошибки RPC; доля `bypass` видна в

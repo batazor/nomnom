@@ -88,7 +88,7 @@ test("AC-220 menu changes require the manage-menu permission", async () => {
   );
 });
 
-test("AC-226 add menu item creates an available dish by default", async () => {
+test("AC-226 AC-773 add menu item creates an available dish by default and publishes MenuItemAdded", async () => {
   const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const outboxBefore = (await world.outbox.records()).length;
@@ -111,7 +111,9 @@ test("AC-226 add menu item creates an available dish by default", async () => {
     version: 2,
     changed: true,
   });
-  assert.equal((await world.outbox.records()).length, outboxBefore);
+  const records = await world.outbox.records();
+  assert.equal(records.length, outboxBefore + 1);
+  assert.equal(records.at(-1)?.event.type, "MenuItemAdded");
 });
 
 test("AC-224 negative price is rejected without changing the menu", async () => {
@@ -161,7 +163,7 @@ test("AC-227 add menu item without a menu is not found", async () => {
   );
 });
 
-test("AC-228 update menu item changes the price without a business fact", async () => {
+test("AC-228 AC-774 update menu item changes the price and publishes MenuItemUpdated", async () => {
   const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
@@ -178,7 +180,9 @@ test("AC-228 update menu item changes the price without a business fact", async 
   assert.deepEqual(result.price, { amount: "10.25", currency: "EUR" });
   assert.equal(result.name, "Pho");
   assert.equal(result.isAvailable, true);
-  assert.equal((await world.outbox.records()).length, outboxBefore);
+  const records = await world.outbox.records();
+  assert.equal(records.length, outboxBefore + 1);
+  assert.equal(records.at(-1)?.event.type, "MenuItemUpdated");
 });
 
 test("update menu item availability publishes MenuItemAvailabilityChanged", async () => {
@@ -265,9 +269,14 @@ test("AC-231 setting the current availability is a no-op", async () => {
 });
 
 test("availability change is rolled back when the outbox fails", async () => {
+  // Fails only for the availability fact: the setup's Add Menu Item commits.
   const failingOutbox: Outbox = {
-    add: async () => {
-      throw new Error("outbox unavailable");
+    add: async (_aggregate, events) => {
+      if (
+        events.some((event) => event.type === "MenuItemAvailabilityChanged")
+      ) {
+        throw new Error("outbox unavailable");
+      }
     },
   };
   const world = await createMenuWorld(await createInfrastructure(), {

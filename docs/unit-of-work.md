@@ -439,7 +439,8 @@ Application-слой всех четырёх boundaries уже реализов�
 Реализация application-слоя `restaurants` ([design.md change `implement-restaurants-application-layer`](../openspec/changes/implement-restaurants-application-layer/design.md)) уточняет таблицу:
 
 - `open-restaurant`, `close-restaurant`, `set-menu-item-availability` публикуют бизнес-факт (`RestaurantOpened`, `RestaurantClosed`, `MenuItemAvailabilityChanged`) и используют UoW;
-- `update-menu-item` выполняется в UoW: при изменении доступности он записывает тот же `MenuItemAvailabilityChanged` в Outbox вместе с `Menu`;
+- `update-menu-item` выполняется в UoW: при изменении названия, описания или цены записывает `MenuItemUpdated`, при изменении доступности — тот же `MenuItemAvailabilityChanged` в Outbox вместе с `Menu`;
+- `add-menu-item` выполняется в UoW и записывает `MenuItemAdded` вместе с `Menu`;
 - `report-preparation-delay` и `report-preparation-failure` — UoW: `Kitchen Order` + Outbox;
 - `cancel-restaurant-order` — UoW: `Kitchen Order` + Outbox (`RestaurantOrderCancelled`);
 - `receive-order-request`, `queue-restaurant-order` и `mark-assembled` — без UoW: один save, факты `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled` локальные; идемпотентность Receive — через уникальность `orderId` в repository. В MVP `accept-order` ставит заказ в Kitchen Queue в своей UoW, а `queue-restaurant-order` покрывает заказы, оставшиеся в `ACCEPTED`.

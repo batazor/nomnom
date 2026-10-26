@@ -76,7 +76,7 @@ Add Menu Item SHALL создавать Menu Item с идентификаторо
 ### Requirement: Update Menu Item меняет основные данные блюда
 **ID:** FR-214
 
-Update Menu Item SHALL менять название, описание, цену и доступность существующего Menu Item в пределах инвариантов меню. Изменение MUST NOT затрагивать snapshot уже оформленных `Order`. Если меняется доступность, факт `MenuItemAvailabilityChanged` MUST сохраняться в Outbox атомарно с меню.
+Update Menu Item SHALL менять название, описание, цену и доступность существующего Menu Item в пределах инвариантов меню. Изменение MUST NOT затрагивать snapshot уже оформленных `Order`. Если меняется доступность, факт `MenuItemAvailabilityChanged` MUST сохраняться в Outbox атомарно с меню; если меняются название, описание или цена — факт `MenuItemUpdated` (FR-613).
 
 #### Scenario: Изменение цены
 **ID:** AC-228

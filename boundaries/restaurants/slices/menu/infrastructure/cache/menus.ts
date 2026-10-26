@@ -1,12 +1,15 @@
 // Cached Get Menu (ADR 40, local ADR 3): the public menu of a restaurant is the
 // hottest read of restaurants (UI, BFF, Place Order of orders). Keyed by
-// restaurant id. MenuItemAvailabilityChanged refreshes the menu right after
-// the commit; price and name changes publish no event and are visible within
-// the TTL.
+// restaurant id. MenuItemAdded, MenuItemUpdated and
+// MenuItemAvailabilityChanged refresh the menu right after the commit.
 import { fromBinary } from "@bufbuild/protobuf";
 import type { Valkey } from "iovalkey";
 
-import { MenuItemAvailabilityChangedSchema } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
+import {
+  MenuItemAddedSchema,
+  MenuItemAvailabilityChangedSchema,
+  MenuItemUpdatedSchema,
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 import {
   type CacheMetrics,
   ReadCache,
@@ -50,6 +53,10 @@ export class CachedMenuReader implements MenuReader {
 export const menuCacheRefreshes = (
   menus: CachedMenuReader,
 ): CacheRefreshes => ({
+  [MenuItemAddedSchema.typeName]: (payload) =>
+    menus.refresh(fromBinary(MenuItemAddedSchema, payload).restaurantId),
+  [MenuItemUpdatedSchema.typeName]: (payload) =>
+    menus.refresh(fromBinary(MenuItemUpdatedSchema, payload).restaurantId),
   [MenuItemAvailabilityChangedSchema.typeName]: (payload) =>
     menus.refresh(
       fromBinary(MenuItemAvailabilityChangedSchema, payload).restaurantId,

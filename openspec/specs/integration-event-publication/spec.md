@@ -36,7 +36,7 @@ Mapper Domain Event → Integration Event SHALL находиться в `infrast
 #### Scenario: Внутренние факты restaurants вне allowlist не публикуются
 **ID:** AC-603
 
-- **WHEN** транзакция `restaurants` записывает `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled`, `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged`, `MenuCreated`, `MenuItemAdded` или `MenuItemUpdated` (внутренние события `Restaurant` и `Menu` без контракта; `RestaurantOpened`, `RestaurantClosed` и `MenuItemAvailabilityChanged` публикуются по FR-560 и FR-561)
+- **WHEN** транзакция `restaurants` записывает `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled`, `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged`, или `MenuCreated` (внутренние события `Restaurant` и `Menu` без контракта; `RestaurantOpened`, `RestaurantClosed`, `MenuItemAdded`, `MenuItemUpdated` и `MenuItemAvailabilityChanged` публикуются по FR-560, FR-561 и FR-613)
 - **THEN** коллекция `outbox` не пополняется для этих событий
 
 #### Scenario: Новый Domain Event delivery требует решения о публикации
@@ -250,7 +250,24 @@ Helm chart каждого контекста SHALL содержать конфи
 **ID:** AC-665
 
 - **WHEN** Update Menu Item меняет только название
-- **THEN** новая запись Outbox не создаётся
+- **THEN** Outbox не содержит нового `MenuItemAvailabilityChanged`; изменение публикует `MenuItemUpdated` (FR-613)
+
+### Requirement: Integration Events состава и данных Menu Item
+**ID:** FR-613
+
+`restaurants` SHALL публиковать в topic `restaurants.v1.menu-events` события aggregate `Menu` `MenuItemAdded` (Add Menu Item) и `MenuItemUpdated` (Update Menu Item изменил название, описание или цену) с полями `menu_id`, `restaurant_id` и `menu_item_id`, атомарно с меню. Новые значения соседи и кеш чтения (ADR 40) читают через GetMenu; события MUST NOT нести цену или название. Update Menu Item без изменения этих данных MUST NOT публиковать `MenuItemUpdated`.
+
+#### Scenario: Add Menu Item публикует факт
+**ID:** AC-773
+
+- **WHEN** Add Menu Item добавляет блюдо в меню ресторана
+- **THEN** Outbox содержит `nomnom.restaurants.v1.MenuItemAdded` с `menu_id`, `restaurant_id` и `menu_item_id` в topic `restaurants.v1.menu-events` в той же транзакции, что и меню
+
+#### Scenario: Смена цены публикует MenuItemUpdated
+**ID:** AC-774
+
+- **WHEN** Update Menu Item меняет цену блюда
+- **THEN** Outbox содержит `nomnom.restaurants.v1.MenuItemUpdated` с ключами блюда, а кешированный GetMenu ресторана обновляется после доставки события
 
 ### Requirement: Один стрим на aggregate restaurants
 **ID:** FR-562

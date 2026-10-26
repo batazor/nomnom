@@ -259,12 +259,15 @@ Topic и партиционирование новой версии опреде
 | Domain Event | Маппинг | Integration Event `nomnom.restaurants.v1.*` | Topic | Consumer |
 | --- | --- | --- | --- | --- |
 | `RestaurantRegistered`, `RestaurantRenamed`, `RestaurantAddressChanged` | 1 → 0 | — | — | — |
-| `RestaurantOpened` | 1 → 1 | `RestaurantOpened` (`restaurant_id`) | `restaurants.v1.restaurant-events` | Не определён |
-| `RestaurantClosed` | 1 → 1 | `RestaurantClosed` (`restaurant_id`) | `restaurants.v1.restaurant-events` | Не определён |
-| `MenuCreated`, `MenuItemAdded`, `MenuItemUpdated` | 1 → 0 | — | — | — |
-| `MenuItemAvailabilityChanged` | 1 → 1, `isAvailable` → `available` | `MenuItemAvailabilityChanged` (`menu_id`, `restaurant_id`, `menu_item_id`, `available`) | `restaurants.v1.menu-events` | Не определён |
+| `RestaurantOpened` | 1 → 1 | `RestaurantOpened` (`restaurant_id`) | `restaurants.v1.restaurant-events` | `restaurants-consumer` (кеш каталога, ADR 40) |
+| `RestaurantClosed` | 1 → 1 | `RestaurantClosed` (`restaurant_id`) | `restaurants.v1.restaurant-events` | `restaurants-consumer` (кеш каталога, ADR 40) |
+| `MenuCreated` | 1 → 0 | — | — | — |
+| `MenuItemAdded` | 1 → 1 | `MenuItemAdded` (`menu_id`, `restaurant_id`, `menu_item_id`) | `restaurants.v1.menu-events` | `restaurants-consumer` (кеш GetMenu, ADR 40) |
+| `MenuItemUpdated` | 1 → 1 | `MenuItemUpdated` (`menu_id`, `restaurant_id`, `menu_item_id`) | `restaurants.v1.menu-events` | `restaurants-consumer` (кеш GetMenu, ADR 40) |
+| `MenuItemAvailabilityChanged` | 1 → 1, `isAvailable` → `available` | `MenuItemAvailabilityChanged` (`menu_id`, `restaurant_id`, `menu_item_id`, `available`) | `restaurants.v1.menu-events` | `restaurants-consumer` (кеш GetMenu, ADR 40) |
 
 - `MenuItemAvailabilityChanged` записывают и Set Menu Item Availability, и Update Menu Item при изменении доступности, чтобы факт не зависел от команды.
+- `MenuItemAdded` и `MenuItemUpdated` несут только ключи: новые значения читаются через GetMenu. Update Menu Item, изменивший и данные, и доступность, записывает оба факта.
 - Повтор Open/Close Restaurant — no-op без Domain Event.
 - Назначение и отзыв staff — relationships SpiceDB, Domain Events не порождают.
 

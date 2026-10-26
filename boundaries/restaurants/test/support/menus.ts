@@ -43,7 +43,9 @@ export const createMenuWorld = async (
   });
   const addMenuItem = new AddMenuItemHandler({
     accessControl,
+    unitOfWork: infrastructure.unitOfWork,
     menus,
+    outbox,
     ids,
     clock: infrastructure.clock,
   });

@@ -4,6 +4,8 @@ import type { Menu, MenuRepository } from "../domains/menu/menu.ts";
 
 /** Business facts of the menu that leave the context through the Outbox. */
 const PUBLISHED_MENU_EVENTS: readonly string[] = [
+  "MenuItemAdded",
+  "MenuItemUpdated",
   "MenuItemAvailabilityChanged",
 ];
 

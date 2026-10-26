@@ -4,7 +4,9 @@ import test from "node:test";
 import { fromBinary } from "@bufbuild/protobuf";
 
 import {
+  MenuItemAddedSchema,
   MenuItemAvailabilityChangedSchema,
+  MenuItemUpdatedSchema,
   RestaurantClosedSchema,
   RestaurantOpenedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
@@ -105,12 +107,7 @@ test("internal Restaurant and Menu facts are not published", () => {
       type,
     );
   }
-  for (const type of [
-    "MenuCreated",
-    "MenuItemAdded",
-    "MenuItemUpdated",
-    "hasOwnProperty",
-  ]) {
+  for (const type of ["MenuCreated", "hasOwnProperty"]) {
     assert.equal(menuEventMapper(menu, event({ type })), undefined, type);
   }
 });
@@ -228,7 +225,7 @@ test("Open and Close Restaurant produce restaurant-events records keyed by the r
   );
 });
 
-test("Set Availability and Update Menu Item produce menu-events records keyed by the menu", async () => {
+test("Add, Update and Set Availability produce menu-events records keyed by the menu", async () => {
   const world = await createMenuWorld();
   const restaurantId = await world.givenRestaurantWithMenu();
   const menuItemId = await world.givenMenuItem(restaurantId, "Pho");
@@ -246,8 +243,8 @@ test("Set Availability and Update Menu Item produce menu-events records keyed by
     menuItemId,
     isAvailable: false,
   });
-  // Renaming alone is internal; renaming with availability publishes.
-  await world.updateMenuItem.execute({
+  // Renaming publishes MenuItemUpdated; with availability — both facts.
+  const renamed = await world.updateMenuItem.execute({
     subject: owner,
     restaurantId,
     menuItemId,
@@ -264,26 +261,41 @@ test("Set Availability and Update Menu Item produce menu-events records keyed by
   const records = recordsOf(await world.outbox.records()).filter(
     (record) => record.aggregateType === "Menu",
   );
+  const added = records[0];
+  assert.ok(added);
   assert.deepEqual(
-    records.map((record) => ({
-      topic: record.topic,
-      aggregateId: record.aggregateId,
-      aggregateVersion: record.aggregateVersion,
-      ...fromBinary(MenuItemAvailabilityChangedSchema, record.payload),
-    })),
+    records.map((record) => [record.eventType, record.aggregateVersion]),
     [
-      { version: off.version, available: false },
-      { version: on.version, available: true },
-    ].map(({ version, available }) => ({
-      topic: MENU_EVENTS_TOPIC,
-      aggregateId: off.menuId,
-      aggregateVersion: version,
-      $typeName: "nomnom.restaurants.v1.MenuItemAvailabilityChanged",
-      menuId: off.menuId,
-      restaurantId,
-      menuItemId,
-      available,
-    })),
+      ["nomnom.restaurants.v1.MenuItemAdded", added.aggregateVersion],
+      ["nomnom.restaurants.v1.MenuItemAvailabilityChanged", off.version],
+      ["nomnom.restaurants.v1.MenuItemUpdated", renamed.version],
+      ["nomnom.restaurants.v1.MenuItemUpdated", on.version],
+      ["nomnom.restaurants.v1.MenuItemAvailabilityChanged", on.version],
+    ],
   );
-  assert.notEqual(records[0]?.eventId, records[1]?.eventId);
+  for (const record of records) {
+    assert.equal(record.topic, MENU_EVENTS_TOPIC);
+    assert.equal(record.aggregateId, off.menuId);
+  }
+  const keys = { menuId: off.menuId, restaurantId, menuItemId };
+  const { $typeName: _added, ...addedKeys } = fromBinary(
+    MenuItemAddedSchema,
+    added.payload,
+  );
+  assert.deepEqual(addedKeys, keys);
+  const update = records[2];
+  assert.ok(update);
+  const { $typeName: _updated, ...updatedKeys } = fromBinary(
+    MenuItemUpdatedSchema,
+    update.payload,
+  );
+  assert.deepEqual(updatedKeys, keys);
+  const availability = records[4];
+  assert.ok(availability);
+  assert.equal(
+    fromBinary(MenuItemAvailabilityChangedSchema, availability.payload)
+      .available,
+    true,
+  );
+  assert.equal(new Set(records.map((record) => record.eventId)).size, 5);
 });

@@ -107,13 +107,17 @@ export const registerMenu = (
     addMenuItem: asFunction(
       ({
         menuAccessControl,
+        unitOfWork,
         menus,
+        outbox,
         ids,
         clock,
       }: MenuDependencies & MenuCradle) =>
         new AddMenuItemHandler({
           accessControl: menuAccessControl,
+          unitOfWork,
           menus,
+          outbox,
           ids,
           clock,
         }),

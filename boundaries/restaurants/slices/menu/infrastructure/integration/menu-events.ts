@@ -1,10 +1,15 @@
 // Mapper Domain Event → Integration Event of the Menu slice (ADR 25, ADR 31).
-// Only MenuItemAvailabilityChanged has a contract in
-// nomnom/restaurants/v1/events.proto (stream restaurants.v1.menu-events,
-// key = menu id, the Menu aggregate). MenuCreated, MenuItemAdded and
-// MenuItemUpdated stay internal: menu content is read through GetMenu, and
-// only availability is a fact other contexts react to.
-import { MenuItemAvailabilityChangedSchema } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
+// MenuItemAdded, MenuItemUpdated and MenuItemAvailabilityChanged have a
+// contract in nomnom/restaurants/v1/events.proto (stream
+// restaurants.v1.menu-events, key = menu id, the Menu aggregate): they carry
+// keys only, the content is read through GetMenu. The read cache of GetMenu is
+// refreshed by them (ADR 40). MenuCreated stays internal: an absent menu is
+// not cached.
+import {
+  MenuItemAddedSchema,
+  MenuItemAvailabilityChangedSchema,
+  MenuItemUpdatedSchema,
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 import {
   allowlistMapper,
   type EventAllowlist,
@@ -21,6 +26,18 @@ const integration = protobufIntegrationEvents(MENU_EVENTS_TOPIC);
 
 /** Explicit allowlist: Domain Event type → Integration Event. */
 const MAPPERS: EventAllowlist<MenuEvent> = {
+  MenuItemAdded: (event) =>
+    integration(MenuItemAddedSchema, {
+      menuId: event.menuId,
+      restaurantId: event.restaurantId,
+      menuItemId: event.menuItemId,
+    }),
+  MenuItemUpdated: (event) =>
+    integration(MenuItemUpdatedSchema, {
+      menuId: event.menuId,
+      restaurantId: event.restaurantId,
+      menuItemId: event.menuItemId,
+    }),
   MenuItemAvailabilityChanged: (event) =>
     integration(MenuItemAvailabilityChangedSchema, {
       menuId: event.menuId,
@@ -32,6 +49,8 @@ const MAPPERS: EventAllowlist<MenuEvent> = {
 
 /** Integration Event types of the topic (full Protobuf message names). */
 export const PUBLISHED_MENU_EVENT_TYPES: readonly string[] = [
+  MenuItemAddedSchema.typeName,
+  MenuItemUpdatedSchema.typeName,
   MenuItemAvailabilityChangedSchema.typeName,
 ];
 
